@@ -1,0 +1,74 @@
+# Local UITI_VANO Interpreter
+
+Small local repo for notebook-first analysis of `UITI_VANO` in the CHEC wide dataset.
+
+The workflow covers only steps 1 to 3: select circuits/date window, detect critical
+points from structured data, and build a semantic preliminary diagnosis context. It
+does not use Databricks, Dash, FastAPI, RAG, vector stores, predictive models, masks,
+simulations, or final evidence reports.
+
+## Install
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+## Configure
+
+```bash
+cp .env.example .env
+```
+
+Place a CSV, Parquet, or Excel dataset under `data/`, or set `DATA_PATH`. The notebook
+default is `../data/Indicadores_vano_v3.csv`.
+
+Required columns:
+
+- `CIRCUITO`
+- `FECHA`
+- `UITI_VANO`
+
+Optional columns are used when available and recorded as unavailable when absent.
+
+## Run
+
+```bash
+jupyter notebook notebooks/01_local_uiti_vano_interpretability.ipynb
+```
+
+Set notebook parameters in the first section:
+
+- `DATA_PATH`
+- `SELECTED_CIRCUITOS`
+- `START_DATE`
+- `END_DATE`
+- `MAX_CRITICAL_POINTS`
+- `OUTPUT_DIR`
+- `CALL_LLM`
+- `LLM_MODEL`
+- `LLM_PROVIDER`
+
+`CALL_LLM` is disabled by default. Without an API key, the notebook still saves the
+structured context and final prompt.
+
+## Outputs
+
+Saved under `outputs/`:
+
+- `structured_context_<timestamp>.json`
+- `llm_prompt_<timestamp>.md`
+- `critical_points_<timestamp>.csv`
+- `uiti_vano_timeseries_<timestamp>.png`
+- optional `llm_analysis_<timestamp>.json`
+
+Invalid LLM outputs are saved separately with validation errors and are not presented
+as final analysis.
+
+## Tests
+
+```bash
+pytest -q
+python llm/evals/run_llm_eval.py
+```

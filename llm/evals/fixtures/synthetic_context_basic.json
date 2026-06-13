@@ -1,0 +1,57 @@
+{
+  "analysis_name": "local_uiti_vano_interpretability",
+  "metadata": {
+    "prompt_version": "uiti-vano-explanation-v1",
+    "schema_version": "uiti-vano-output-schema-v1",
+    "generated_at": "2026-01-10T00:00:00+00:00",
+    "row_count": 3,
+    "daily_row_count": 3,
+    "selected_circuitos": ["C1"],
+    "start_date": "2026-01-01",
+    "end_date": "2026-01-03",
+    "unavailable_optional_columns": []
+  },
+  "flow_scope": {
+    "included_steps": [1, 2, 3],
+    "excluded_steps": ["RAG", "bitacoras", "normativa", "modelo_predictivo", "mascaras_relevancia", "what_if", "reporte_final"]
+  },
+  "selected_context": {
+    "circuitos": ["C1"],
+    "start_date": "2026-01-01",
+    "end_date": "2026-01-03",
+    "indicator": "UITI_VANO"
+  },
+  "window_summary": {
+    "row_count": 3,
+    "event_count": 3,
+    "nonzero_days": 2,
+    "total_uiti_vano": 15.0,
+    "max_uiti_vano_date": "2026-01-02",
+    "max_uiti_vano_value": 10.0
+  },
+  "daily_series": [
+    {"fecha_dia": "2026-01-01", "UITI_VANO": 5.0, "event_count": 1},
+    {"fecha_dia": "2026-01-02", "UITI_VANO": 10.0, "event_count": 1},
+    {"fecha_dia": "2026-01-03", "UITI_VANO": 0.0, "event_count": 0}
+  ],
+  "critical_points": [
+    {
+      "critical_point_id": "cp-2026-01-02",
+      "fecha_dia": "2026-01-02",
+      "rank": 1,
+      "criticality_score": 2.0,
+      "criticality_types": ["top_contribution_day"],
+      "selection_reason": "El dia aporta una fraccion alta del UITI_VANO total de la ventana.",
+      "metrics": {"UITI_VANO": 10.0},
+      "daily_aggregates": {"event_count": 1}
+    }
+  ],
+  "critical_periods": [],
+  "domain_context": {"variable_groups": {}, "relationship_rules": []},
+  "guardrails": {
+    "do_not_detect_new_points": true,
+    "do_not_claim_definitive_causality": true,
+    "do_not_use_rag_or_normative_evidence": true,
+    "use_only_structured_data_and_domain_context": true
+  }
+}

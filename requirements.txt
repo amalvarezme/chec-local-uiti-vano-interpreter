@@ -1,0 +1,12 @@
+pandas
+numpy
+matplotlib
+python-dotenv
+pydantic
+openpyxl
+pyarrow
+jupyter
+ipykernel
+pytest
+jsonschema
+openai

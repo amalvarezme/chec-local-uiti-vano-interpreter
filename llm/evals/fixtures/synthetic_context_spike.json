@@ -1,0 +1,60 @@
+{
+  "analysis_name": "local_uiti_vano_interpretability",
+  "metadata": {
+    "prompt_version": "uiti-vano-explanation-v1",
+    "schema_version": "uiti-vano-output-schema-v1",
+    "generated_at": "2026-02-10T00:00:00+00:00",
+    "row_count": 6,
+    "daily_row_count": 6,
+    "selected_circuitos": ["C2"],
+    "start_date": "2026-02-01",
+    "end_date": "2026-02-06",
+    "unavailable_optional_columns": []
+  },
+  "flow_scope": {
+    "included_steps": [1, 2, 3],
+    "excluded_steps": ["RAG", "bitacoras", "normativa", "modelo_predictivo", "mascaras_relevancia", "what_if", "reporte_final"]
+  },
+  "selected_context": {
+    "circuitos": ["C2"],
+    "start_date": "2026-02-01",
+    "end_date": "2026-02-06",
+    "indicator": "UITI_VANO"
+  },
+  "window_summary": {
+    "row_count": 6,
+    "event_count": 6,
+    "nonzero_days": 6,
+    "total_uiti_vano": 125.0,
+    "max_uiti_vano_date": "2026-02-04",
+    "max_uiti_vano_value": 100.0
+  },
+  "daily_series": [
+    {"fecha_dia": "2026-02-01", "UITI_VANO": 5.0, "event_count": 1},
+    {"fecha_dia": "2026-02-02", "UITI_VANO": 4.0, "event_count": 1},
+    {"fecha_dia": "2026-02-03", "UITI_VANO": 6.0, "event_count": 1},
+    {"fecha_dia": "2026-02-04", "UITI_VANO": 100.0, "event_count": 1},
+    {"fecha_dia": "2026-02-05", "UITI_VANO": 5.0, "event_count": 1},
+    {"fecha_dia": "2026-02-06", "UITI_VANO": 5.0, "event_count": 1}
+  ],
+  "critical_points": [
+    {
+      "critical_point_id": "cp-2026-02-04",
+      "fecha_dia": "2026-02-04",
+      "rank": 1,
+      "criticality_score": 5.0,
+      "criticality_types": ["high_robust_z", "sharp_positive_change", "top_contribution_day", "local_peak"],
+      "selection_reason": "UITI_VANO esta por encima de la linea base robusta de la ventana.",
+      "metrics": {"UITI_VANO": 100.0},
+      "daily_aggregates": {"event_count": 1}
+    }
+  ],
+  "critical_periods": [],
+  "domain_context": {"variable_groups": {}, "relationship_rules": []},
+  "guardrails": {
+    "do_not_detect_new_points": true,
+    "do_not_claim_definitive_causality": true,
+    "do_not_use_rag_or_normative_evidence": true,
+    "use_only_structured_data_and_domain_context": true
+  }
+}
