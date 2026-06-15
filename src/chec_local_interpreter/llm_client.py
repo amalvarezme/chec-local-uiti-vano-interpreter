@@ -47,17 +47,91 @@ def call_llm(
     selected_model = model or os.getenv("LLM_MODEL", "gemini-2.5-flash-lite")
     
     try:
+        import time
+        import uuid
+        from IPython.display import display, update_display, Markdown
+
         response = client.chat.completions.create(
             model=selected_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
+            stream=True,
         )
-        output_text = response.choices[0].message.content
+        
+        start_time = time.time()
+        output_text = ""
+        tokens = 0
+        
+        # Display handle for dynamic updates
+        d_id = str(uuid.uuid4())
+        display(Markdown("⏳ **Iniciando conexión con LLM...**"), display_id=d_id)
+        
+        for chunk in response:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+            content = delta.content if hasattr(delta, 'content') else ""
+            if content:
+                output_text += content
+                tokens += 1
+                
+                # Update UI periodically to avoid overwhelming the notebook frontend
+                if tokens % 8 == 0:
+                    elapsed = time.time() - start_time
+                    tps = tokens / elapsed if elapsed > 0 else 0
+                    
+                    # Assume an average response size of 3000 tokens for ETA
+                    assumed_total = 3000
+                    if tokens > assumed_total:
+                        assumed_total = tokens + 1000
+                        
+                    remaining = (assumed_total - tokens) / tps if tps > 0 else 0
+                    
+                    # Format <think> blocks nicely for markdown
+                    parts = output_text.split("<think>")
+                    if len(parts) > 1:
+                        pre = parts[0]
+                        rest = parts[1]
+                        think_parts = rest.split("</think>")
+                        think_content = think_parts[0]
+                        
+                        formatted_think = "\n\n🤔 **Cadena de Pensamiento (CoT):**\n```text\n" + think_content + "\n```\n\n"
+                        
+                        if len(think_parts) > 1:
+                            post = think_parts[1]
+                            display_text = pre + formatted_think + "🎯 **Respuesta Final:**\n" + post
+                        else:
+                            display_text = pre + formatted_think
+                    else:
+                        display_text = output_text
+                    
+                    status = f"⏱️ **Procesando...** | 🧩 Tokens: {tokens} | 🚀 Vel: {tps:.1f} t/s | ⏳ ETA ref: ~{remaining:.1f}s\n\n---\n\n"
+                    update_display(Markdown(status + display_text), display_id=d_id)
+
+        elapsed = time.time() - start_time
+        tps = tokens / elapsed if elapsed > 0 else 0
+        
+        parts = output_text.split("<think>")
+        if len(parts) > 1:
+            pre = parts[0]
+            rest = parts[1]
+            think_parts = rest.split("</think>")
+            think_content = think_parts[0]
+            formatted_think = "\n\n🤔 **Cadena de Pensamiento (CoT):**\n```text\n" + think_content + "\n```\n\n"
+            if len(think_parts) > 1:
+                final_display_text = pre + formatted_think + "🎯 **Respuesta Final:**\n" + think_parts[1]
+            else:
+                final_display_text = pre + formatted_think
+        else:
+            final_display_text = output_text
+            
+        update_display(Markdown(f"✅ **LLM Completado en {elapsed:.1f}s** | 🧩 Total tokens: {tokens} | 🚀 Velocidad media: {tps:.1f} t/s\n\n---\n\n" + final_display_text), display_id=d_id)
         
         # Strip CoT <think> blocks if present so downstream JSON parsers don't fail
-        if output_text:
-            output_text = re.sub(r'<think>.*?</think>\s*', '', output_text, flags=re.DOTALL | re.IGNORECASE)
+        clean_output = output_text
+        if clean_output:
+            clean_output = re.sub(r'<think>.*?</think>\s*', '', clean_output, flags=re.DOTALL | re.IGNORECASE)
             
-        return LLMCallResult(called=True, output_text=output_text, message="LLM call completed.")
+        return LLMCallResult(called=True, output_text=clean_output, message="LLM call completed successfully.")
     except Exception as e:
         return LLMCallResult(called=True, output_text=None, message=f"LLM call failed: {str(e)}")
