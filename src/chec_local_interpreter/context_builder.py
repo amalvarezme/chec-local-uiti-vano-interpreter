@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+import numpy as np
 
 import pandas as pd
 
@@ -75,6 +76,7 @@ def build_context_package(
     selected_circuitos: list[str],
     start_date: str | None,
     end_date: str | None,
+    raw_df: pd.DataFrame | None = None,
 ) -> dict[str, Any]:
     resolution = resolve_columns(events_df) if not events_df.empty else None
     unavailable = resolution.unavailable_optional if resolution is not None else []
@@ -87,8 +89,8 @@ def build_context_package(
             "row_count": int(len(events_df)),
             "daily_row_count": int(len(daily_df)),
             "selected_circuitos": selected_circuitos,
-            "start_date": start_date,
-            "end_date": end_date,
+            "start_date": _date_text(start_date) if start_date else None,
+            "end_date": _date_text(end_date) if end_date else None,
             "unavailable_optional_columns": unavailable,
         },
         "flow_scope": {
@@ -105,9 +107,10 @@ def build_context_package(
         },
         "selected_context": {
             "circuitos": selected_circuitos,
-            "start_date": start_date,
-            "end_date": end_date,
+            "start_date": _date_text(start_date) if start_date else None,
+            "end_date": _date_text(end_date) if end_date else None,
             "indicator": "UITI_VANO",
+            "circuit_characterization": _compute_circuit_characterization(raw_df if raw_df is not None else events_df, selected_circuitos),
         },
         "window_summary": window_summary(events_df, daily_df),
         "daily_series": daily_series_records(daily_df),
@@ -129,6 +132,71 @@ def save_json_artifact(payload: dict[str, Any], path: str | Path) -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return target
+
+
+def _compute_circuit_characterization(df: pd.DataFrame, selected_circuitos: list[str]) -> list[dict[str, Any]]:
+    if df.empty or not selected_circuitos:
+        return []
+        
+    df_copy = df.copy()
+    if 'UITI_VANO' not in df_copy.columns or 'CIRCUITO' not in df_copy.columns:
+        return []
+        
+    df_copy['UITI_VANO'] = pd.to_numeric(df_copy['UITI_VANO'], errors='coerce').fillna(0.0)
+    
+    counts = df_copy['CIRCUITO'].value_counts()
+    sums = df_copy.groupby('CIRCUITO')['UITI_VANO'].sum()
+    
+    df_coords = pd.DataFrame({
+        'event_count': counts,
+        'uiti_vano_sum': sums
+    }).dropna()
+    
+    if df_coords.empty:
+        return []
+        
+    X = df_coords[['event_count', 'uiti_vano_sum']].astype(float).values
+    X_mean = X.mean(axis=0)
+    X_std = np.where(X.std(axis=0) == 0, 1e-9, X.std(axis=0)) 
+    X_scaled = (X - X_mean) / X_std
+
+    try:
+        from chec_local_interpreter.plotting import run_kmeans
+        n_clusters = min(4, len(df_coords))
+        df_coords['cluster'] = run_kmeans(X_scaled, n_clusters=n_clusters, random_state=42)
+        
+        cluster_scores = {}
+        for cluster_id in range(n_clusters):
+            cluster_mask = df_coords['cluster'] == cluster_id
+            cluster_scores[cluster_id] = X_scaled[cluster_mask].mean()
+            
+        sorted_clusters = sorted(cluster_scores.keys(), key=lambda c: cluster_scores[c], reverse=True)
+        group_labels = ["Muy Alta", "Alta", "Media", "Baja"]
+    except ImportError:
+        df_coords['cluster'] = 0
+        sorted_clusters = [0]
+        group_labels = ["Desconocido"]
+        
+    global_avg_events = counts.mean()
+    global_avg_uiti = sums.mean()
+    
+    results = []
+    for circuito in selected_circuitos:
+        if circuito in df_coords.index:
+            row = df_coords.loc[circuito]
+            cluster_id = row['cluster']
+            rank = sorted_clusters.index(cluster_id) if cluster_id in sorted_clusters else 0
+            label = group_labels[rank] if rank < len(group_labels) else "Desconocida"
+            results.append({
+                "circuito": circuito,
+                "criticidad_global_kmeans": label,
+                "eventos_historicos": int(row['event_count']),
+                "uiti_vano_historico": round(float(row['uiti_vano_sum']), 2),
+                "promedio_global_eventos_red": round(float(global_avg_events), 2),
+                "promedio_global_uiti_red": round(float(global_avg_uiti), 2)
+            })
+            
+    return results
 
 
 def critical_points_frame(critical_points: list[dict[str, Any]]) -> pd.DataFrame:

@@ -42,7 +42,15 @@ class ValidationResult:
 
 
 def parse_llm_json(response_text: str) -> dict[str, Any]:
-    return json.loads(response_text)
+    text = response_text.strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+    return json.loads(text)
 
 
 def _flatten_strings(value: Any) -> list[str]:

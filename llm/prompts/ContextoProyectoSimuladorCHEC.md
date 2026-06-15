@@ -132,3 +132,18 @@ El agente debe aplicar estas reglas de causalidad y propagación al razonar sobr
 | **Eventos** (`DURACION`, `TOT_USUS`) | **Impacto** (`UITI`) | Cálculo del Impacto (1.00) | UiTi relaciona la duración del evento con el total de usuarios afectados. |
 | **Impacto y Topología** (`UITI`, `PORC_APORTE_VANO`) | **Objetivo por vano** (`UITI_VANO`) | Ponderación por Vano (1.00) | UiTi se distribuye según el aporte relativo del vano para obtener el objetivo de análisis. |
 | **Atributos Espaciales** (`X1`, `Y1`, `X2`, `Y2`) | **Topología** (`FID_VANO`) | Geometría de Red (1.00) | *Sistemas de Información Geográfica (SIG):* Las coordenadas definen la existencia física, trazado y longitud del tramo. |
+
+---
+
+## 4. Agrupación y Criticidad Estructural de Circuitos (Clustering)
+
+Para proporcionar contexto macro sobre el comportamiento histórico de la red, los circuitos se agrupan matemáticamente mediante un modelo de clustering bidimensional (K-Means) que balancea dos factores:
+- **Frecuencia de Eventos:** Cantidad bruta de fallas registradas en el circuito.
+- **Impacto Total (`UITI_VANO`):** Sumatoria del indicador normativo en el periodo.
+
+Las coordenadas estandarizadas se agrupan en 4 perfiles estructurales, lo que ayuda a contextualizar cualquier análisis local:
+
+1. **Muy Alta:** Circuitos atípicos que presentan anomalías severas, combinando una frecuencia inusualmente alta de fallas con un impacto operativo crítico. Son la prioridad de mitigación.
+2. **Alta:** Circuitos con riesgo elevado consistente. Si bien no son casos atípicos extremos, se ubican significativamente por encima del promedio global de la red.
+3. **Media:** Representa el comportamiento estándar o típico de la red. La frecuencia de eventos y el impacto están balanceados o dentro de los márgenes tolerables.
+4. **Baja:** Circuitos con excelente desempeño, mínima frecuencia de eventos y bajo o nulo impacto operativo (UITI_VANO).

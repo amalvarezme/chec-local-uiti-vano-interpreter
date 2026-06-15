@@ -10,3 +10,10 @@ data/*
 
 outputs/*
 !outputs/.gitkeep
+
+notebooks/outputs/*
+!notebooks/outputs/.gitkeep
+
+.vscode/
+.DS_Store
+**/.DS_Store

@@ -10,7 +10,7 @@ El proceso integra datos estructurados (tabulares) y no estructurados (texto de 
 
 1. **Selección del circuito o vano de interés:** El usuario selecciona el activo que desea analizar.
 2. **Identificación de puntos de interés:** El sistema consulta la base tabular para recuperar los eventos asociados al mismo **vano** o circuito durante los 12 meses anteriores.
-3. **Traducción semántica y diagnóstico retrospectivo:** El sistema describe cada punto de interés usando el diccionario de variables, sus modos y relaciones definidos en `ContextoProyectoSimuladorCHEC.md`, y analiza la evolución de `UITI` y `UITI_VANO` a lo largo del tiempo.
+3. **Traducción semántica y diagnóstico retrospectivo:** El sistema describe cada punto de interés usando el diccionario de variables, sus modos y relaciones definidos en `ContextoProyectoSimuladorCHEC.md`, y analiza la evolución de `UITI` y `UITI_VANO` a lo largo del tiempo. Además, considera la relación entre días criticos del circuito, y los cambios en cantidad de eventos y UITI y UITI_VANO.
 4. **Análisis Documental y Normativo (RAG):** En paralelo al paso 3, el sistema consulta un repositorio de documentos (PDFs, textos, docs). Revisa:
    - **Bitácoras de Intervenciones:** Extrae el registro de mantenimientos programados (ej. podas, reposiciones) e intervenciones de mitigación asociadas a la zona en el último año.
    - **Normativa de Sistemas de Potencia:** Extrae los lineamientos técnicos aplicables a la infraestructura afectada.

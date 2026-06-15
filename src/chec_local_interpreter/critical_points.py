@@ -66,8 +66,13 @@ def build_daily_series(events_df: pd.DataFrame) -> pd.DataFrame:
     uiti_column = resolve_column(work, "UITI")
     work["_UITI"] = pd.to_numeric(work[uiti_column], errors="coerce").fillna(0.0) if uiti_column else 0.0
 
+    fid_column = resolve_column(work, "FID_VANO")
+    fecha_col = resolve_column(work, "FECHA")
+    
+    work_agg = work.copy()
+
     daily = (
-        work.groupby("fecha_dia", as_index=False)
+        work_agg.groupby("fecha_dia", as_index=False)
         .agg(
             UITI_VANO=("_UITI_VANO", "sum"),
             event_count=("_UITI_VANO", "size"),
