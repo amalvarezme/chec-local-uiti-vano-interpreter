@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 
 
@@ -21,7 +22,7 @@ def call_llm(
     if not call_enabled:
         return LLMCallResult(called=False, message="CALL_LLM=false; prompt saved without calling the model.")
     
-    if provider.lower() not in ["google", "openai"]:
+    if provider.lower() not in ["google", "openai", "ollama"]:
         return LLMCallResult(called=False, message=f"Unsupported LLM provider for local v1: {provider}")
         
     if provider.lower() == "google":
@@ -29,6 +30,9 @@ def call_llm(
         base_url = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/")
         if not api_key:
             return LLMCallResult(called=False, message="GOOGLE_API_KEY is not configured; prompt saved for manual use.")
+    elif provider.lower() == "ollama":
+        api_key = "ollama"  # Dummy key required by OpenAI client
+        base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
     else:
         api_key = os.getenv("OPENAI_API_KEY")
         base_url = os.getenv("OPENAI_BASE_URL")
@@ -49,6 +53,11 @@ def call_llm(
             temperature=0,
         )
         output_text = response.choices[0].message.content
+        
+        # Strip CoT <think> blocks if present so downstream JSON parsers don't fail
+        if output_text:
+            output_text = re.sub(r'<think>.*?</think>\s*', '', output_text, flags=re.DOTALL | re.IGNORECASE)
+            
         return LLMCallResult(called=True, output_text=output_text, message="LLM call completed.")
     except Exception as e:
         return LLMCallResult(called=True, output_text=None, message=f"LLM call failed: {str(e)}")

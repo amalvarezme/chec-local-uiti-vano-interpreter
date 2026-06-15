@@ -253,32 +253,26 @@ def rank_critical_points(
             {
                 "critical_point_id": f"cp-{date_key}",
                 "fecha_dia": date_key,
-                "criticality_score": round(score, 4),
-                "criticality_types": sorted({str(item["reason_type"]) for item in reason_items}),
+                "score": round(score, 2),
+                "types": sorted({str(item["reason_type"]) for item in reason_items}),
                 "selection_reason": _selection_reason_text(reason_items),
-                "reasons": sorted(reason_items, key=lambda item: item["score"], reverse=True),
                 "metrics": {
-                    "UITI_VANO": _round_float(row.get(metric)),
-                    "robust_z": _round_float(row.get(f"{metric}_robust_z")),
-                    "delta_1d": _round_float(row.get(f"{metric}_delta_1d")),
-                    "delta_pct": None
-                    if pd.isna(row.get(f"{metric}_delta_pct"))
-                    else _round_float(row.get(f"{metric}_delta_pct")),
-                    "contribution_pct": _round_float(row.get(f"{metric}_contribution_pct")),
-                    "rolling_7d_sum": _round_float(row.get(f"{metric}_rolling_7d_sum")),
+                    "UITI_VANO": _round_float(row.get(metric), 1),
+                    "z": _round_float(row.get(f"{metric}_robust_z"), 2),
+                    "delta": _round_float(row.get(f"{metric}_delta_1d"), 1),
+                    "contrib": _round_float(row.get(f"{metric}_contribution_pct"), 4),
                 },
                 "daily_aggregates": {
-                    "event_count": int(row.get("event_count") or 0),
-                    "DURACION_total": _round_float(row.get("DURACION_total"), 2),
-                    "users_total": _round_float(row.get("users_total"), 2),
-                    "UITI": _round_float(row.get("UITI"), 2),
+                    "events": int(row.get("event_count") or 0),
+                    "dur": _round_float(row.get("DURACION_total"), 1),
+                    "users": _round_float(row.get("users_total"), 0),
                 },
             }
         )
 
     points = sorted(
         points,
-        key=lambda item: (item["criticality_score"], item["metrics"]["UITI_VANO"], item["fecha_dia"]),
+        key=lambda item: (item["score"], item["metrics"]["UITI_VANO"], item["fecha_dia"]),
         reverse=True,
     )[:max_points]
     for rank, point in enumerate(points, start=1):

@@ -52,6 +52,13 @@ def _valid_output() -> dict:
                 "confidence": "media",
             }
         ],
+        "circuit_characterization": {
+            "text": "Characterization text.",
+            "p97_vanos_uiti_vano": ["V1"],
+            "p97_vanos_eventos": ["V2"],
+            "top_3_modes_related": ["Mode1"],
+            "probable_justifications_rules": ["Rule1"]
+        },
         "period_synthesis": "El comportamiento del periodo se concentra en el punto critico entregado.",
         "data_gaps": [],
         "limitations": ["Solo se usa la informacion estructurada disponible."],

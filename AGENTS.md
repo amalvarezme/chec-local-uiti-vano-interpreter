@@ -33,7 +33,7 @@ feature importance masks, what-if simulation, or final evidence report generatio
 - The LLM only interprets the structured context package.
 - The LLM must return JSON matching the project schema.
 - The LLM must cite dates, `critical_point_id`, variables, and summaries present in context.
-- Do not expose or request chain-of-thought; ask for concise rationale, evidence, and assumptions.
+- The LLM is encouraged to use Chain-of-Thought (CoT) reasoning (via `<think>` blocks) to deeply debate graph information, variable definitions, time series of critical points, and root causes before emitting final JSON.
 - Save the exact prompt and structured context for every run.
 - Do not log secrets or raw credentials.
 - Avoid dumping the full raw dataset in logs.

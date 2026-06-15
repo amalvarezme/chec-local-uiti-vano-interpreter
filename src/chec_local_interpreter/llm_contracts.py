@@ -45,6 +45,7 @@ def render_prompt(
     return f"{system.strip()}\n\n---\n\n{user.strip()}\n"
 
 
+
 def save_prompt_artifact(prompt: str, path: str | Path) -> Path:
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)

@@ -35,7 +35,7 @@ def top_labels_for_day(
     date: str,
     column: str,
     weight_column: str = "UITI_VANO",
-    limit: int = 5,
+    limit: int = 3,
 ) -> list[dict[str, Any]]:
     day = _date_filter(events_df, date)
     resolved = resolve_column(day, column)
@@ -53,15 +53,13 @@ def top_labels_for_day(
     )
     return [
         {
-            "label": str(row["label"]),
-            "event_count": int(row["event_count"]),
-            "total_uiti_vano": round(float(row["total_weight"]), 4),
+            str(row["label"])[:30]: int(row["event_count"])
         }
         for _, row in grouped.iterrows()
     ]
 
 
-def top_events_for_day(events_df: pd.DataFrame, date: str, limit: int = 10) -> list[dict[str, Any]]:
+def top_events_for_day(events_df: pd.DataFrame, date: str, limit: int = 2) -> list[dict[str, Any]]:
     day = _date_filter(events_df, date)
     if day.empty:
         return []
@@ -71,17 +69,8 @@ def top_events_for_day(events_df: pd.DataFrame, date: str, limit: int = 10) -> l
     work["_USERS"] = numeric_series(work, ["TOT_USUS", "CNT_USUS"])
     work = work.sort_values(["_UITI_VANO", "_DURACION", "_USERS"], ascending=[False, False, False]).head(limit)
     fields = [
-        "CIRCUITO",
         "FID_VANO",
         "DESC_CAUSA",
-        "COD_CAUSA",
-        "FID_SW",
-        "COD_EQ_PROTEGE",
-        "TIPO",
-        "DURACION",
-        "TOT_USUS",
-        "CNT_USUS",
-        "UITI",
         "UITI_VANO",
     ]
     rows: list[dict[str, Any]] = []
@@ -90,19 +79,20 @@ def top_events_for_day(events_df: pd.DataFrame, date: str, limit: int = 10) -> l
         for field in fields:
             column = resolve_column(work, field)
             if column is not None:
-                item[field] = _json_value(row.get(column))
+                val = _json_value(row.get(column))
+                if isinstance(val, float):
+                    val = round(val, 1)
+                item[field] = val
         rows.append(item)
     return rows
 
 
 def _weather_columns(events_df: pd.DataFrame) -> dict[str, list[str]]:
     families = {
-        "precipitation": ("PREP",),
-        "clouds": ("CLOUDS",),
-        "visibility": ("VIS",),
-        "wind_speed": ("WIND_SPD",),
-        "wind_gust_speed": ("WIND_GUST_SPD",),
-        "temperature": ("TEMP",),
+        "precip": ("PREP",),
+        "wind": ("WIND_SPD",),
+        "gust": ("WIND_GUST_SPD",),
+        "temp": ("TEMP",),
     }
     columns_by_upper = {str(column).upper(): str(column) for column in events_df.columns}
     detected: dict[str, list[str]] = {}
@@ -117,33 +107,18 @@ def _weather_columns(events_df: pd.DataFrame) -> dict[str, list[str]]:
 
 def _family_stats(frame: pd.DataFrame, columns: list[str], family: str) -> dict[str, Any]:
     if not columns:
-        return {"available": False}
+        return {}
     values = frame[columns].apply(pd.to_numeric, errors="coerce")
     flat = values.stack().dropna()
     if flat.empty:
-        return {"available": True, "columns": columns, "non_null_values": 0}
-    stats: dict[str, Any] = {
-        "available": True,
-        "columns": columns,
-        "non_null_values": int(flat.shape[0]),
-    }
-    if family == "precipitation":
-        stats.update({"sum": round(float(flat.sum()), 4), "max": round(float(flat.max()), 4)})
-    elif family in {"wind_speed", "wind_gust_speed"}:
-        stats.update({"max": round(float(flat.max()), 4), "mean": round(float(flat.mean()), 4)})
-    elif family == "temperature":
-        stats.update(
-            {
-                "min": round(float(flat.min()), 4),
-                "max": round(float(flat.max()), 4),
-                "mean": round(float(flat.mean()), 4),
-            }
-        )
-    elif family == "visibility":
-        stats.update({"mean": round(float(flat.mean()), 4), "min": round(float(flat.min()), 4)})
-    else:
-        stats.update({"mean": round(float(flat.mean()), 4), "max": round(float(flat.max()), 4)})
-    return stats
+        return {}
+    if family == "precip":
+        return {"sum": round(float(flat.sum()), 1), "max": round(float(flat.max()), 1)}
+    elif family in {"wind", "gust"}:
+        return {"max": round(float(flat.max()), 1), "mean": round(float(flat.mean()), 1)}
+    elif family == "temp":
+        return {"min": round(float(flat.min()), 1), "max": round(float(flat.max()), 1)}
+    return {"mean": round(float(flat.mean()), 1)}
 
 
 def summarize_weather_for_day(events_df: pd.DataFrame, date: str) -> dict[str, Any]:
@@ -151,10 +126,16 @@ def summarize_weather_for_day(events_df: pd.DataFrame, date: str) -> dict[str, A
     if day.empty:
         return {}
     detected = _weather_columns(day)
-    return {family: _family_stats(day, columns, family) for family, columns in detected.items() if columns}
+    result = {}
+    for family, columns in detected.items():
+        if columns:
+            stats = _family_stats(day, columns, family)
+            if stats:
+                result[family] = stats
+    return result
 
 
-def summarize_variable_modes_for_day(events_df: pd.DataFrame, date: str, limit: int = 8) -> dict[str, Any]:
+def summarize_variable_modes_for_day(events_df: pd.DataFrame, date: str, limit: int = 2) -> dict[str, Any]:
     day = _date_filter(events_df, date)
     if day.empty:
         return {}
@@ -167,16 +148,16 @@ def summarize_variable_modes_for_day(events_df: pd.DataFrame, date: str, limit: 
         ]
         columns = [column for column in columns if column is not None]
         if not columns:
-            summary[group_name] = {"available": False, "columns": []}
             continue
         mode_values: dict[str, Any] = {}
         for column in columns[:limit]:
             series = day[column].dropna().astype(str)
             if series.empty:
                 continue
-            counts = Counter(series.tolist()).most_common(3)
-            mode_values[column] = [{"value": value, "count": int(count)} for value, count in counts]
-        summary[group_name] = {"available": True, "columns": columns, "modes": mode_values}
+            counts = Counter(series.tolist()).most_common(1)
+            mode_values[column] = counts[0][0] if counts else None
+        if mode_values:
+            summary[group_name] = mode_values
     return summary
 
 
@@ -185,17 +166,12 @@ def enrich_critical_points(events_df: pd.DataFrame, critical_points: list[dict[s
     for point in critical_points:
         date = str(point["fecha_dia"])
         copy = dict(point)
-        copy["attribution"] = {
-            "top_causes": top_labels_for_day(events_df, date, "DESC_CAUSA")
+        copy["attr"] = {
+            "causes": top_labels_for_day(events_df, date, "DESC_CAUSA")
             or top_labels_for_day(events_df, date, "COD_CAUSA"),
-            "top_vanos": top_labels_for_day(events_df, date, "FID_VANO"),
-            "top_protection_equipment": top_labels_for_day(events_df, date, "FID_SW")
-            or top_labels_for_day(events_df, date, "COD_EQ_PROTEGE")
-            or top_labels_for_day(events_df, date, "TIPO"),
-            "top_circuits": top_labels_for_day(events_df, date, "CIRCUITO"),
-            "top_event_rows": top_events_for_day(events_df, date),
-            "variable_mode_summary": summarize_variable_modes_for_day(events_df, date),
-            "weather_summary": summarize_weather_for_day(events_df, date),
+            "vanos": top_labels_for_day(events_df, date, "FID_VANO"),
+            "top_rows": top_events_for_day(events_df, date),
+            "weather": summarize_weather_for_day(events_df, date),
         }
         enriched.append(copy)
     return enriched

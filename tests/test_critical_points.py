@@ -30,7 +30,7 @@ def test_high_spike_day_is_detected():
     reasons = detect_point_reasons(features)
     points = rank_critical_points(features, reasons, max_points=12)
     assert points[0]["fecha_dia"] == "2026-01-04"
-    assert "local_peak" in points[0]["criticality_types"]
+    assert "local_peak" in points[0]["types"]
 
 
 def test_sharp_increase_day_is_detected():
@@ -45,7 +45,7 @@ def test_sharp_increase_day_is_detected():
     reasons = detect_point_reasons(features)
     points = rank_critical_points(features, reasons, max_points=12)
     assert points[0]["fecha_dia"] == "2026-02-04"
-    assert "sharp_positive_change" in points[0]["criticality_types"]
+    assert "sharp_positive_change" in points[0]["types"]
 
 
 def test_detect_critical_periods_with_custom_min_days():

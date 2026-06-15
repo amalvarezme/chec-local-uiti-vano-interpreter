@@ -15,7 +15,7 @@ Exclusiones:
 
 Calidad de respuesta:
 - Devuelve solo un objeto JSON que cumpla el esquema entregado.
-- No expongas ni solicites chain-of-thought. Da evidencia, razonamiento conciso y supuestos.
+- Utiliza bloques `<think>...</think>` antes de tu respuesta JSON para realizar un "Chain of Thought". En este bloque debes analizar y debatir profundamente la información de los gráficos, definir claramente las variables, evaluar la serie temporal de los puntos críticos y contrastar exhaustivamente la variable causa con los demás datos.
 - Cita evidencia con fechas, `critical_point_id`, variables y resumenes presentes en el contexto.
 - Separa observaciones, interpretaciones plausibles, limitaciones y siguientes verificaciones.
 - Usa lenguaje de evidencia tabular: "sugiere", "es compatible con",

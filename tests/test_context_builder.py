@@ -31,9 +31,8 @@ def test_context_package_includes_core_sections_and_missing_optional_columns():
     assert context["selected_context"]["circuitos"] == ["C1"]
     assert context["selected_context"]["indicator"] == "UITI_VANO"
     assert context["critical_points"]
-    assert context["domain_context"]["variable_groups"]
-    assert "NR_T" in context["metadata"]["unavailable_optional_columns"]
-    assert context["guardrails"]["do_not_detect_new_points"] is True
+    assert context["domain"]["variable_groups"]
+    assert "NR_T" in context["metadata"]["unavailable_cols"]
 
 
 def test_missing_optional_columns_do_not_crash_context_generation():
@@ -48,4 +47,4 @@ def test_missing_optional_columns_do_not_crash_context_generation():
         start_date="2026-01-01",
         end_date="2026-01-01",
     )
-    assert context["window_summary"]["total_uiti_vano"] == 1.0
+    assert context["summary"]["total_uv"] == 1.0

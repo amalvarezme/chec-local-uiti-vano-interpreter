@@ -644,9 +644,12 @@ def plot_circuit_map_plotly(df, circuito_name, date_range=None, color_target='nu
     if color_target == 'number_of_events':
         vano_metrics = df_unique_events.groupby('FID_VANO').size().to_dict()
         cbar_title = 'Número de Eventos'
-    elif color_target == 'UITI_VANO_sum':
+    elif color_target == 'sum_uiti_vano' or color_target == 'UITI_VANO_sum':
         vano_metrics = df_unique_events.groupby('FID_VANO')['UITI_VANO'].sum().to_dict()
         cbar_title = 'Suma de UITI_VANO'
+    else:
+        vano_metrics = df_unique_events.groupby('FID_VANO').size().to_dict()
+        cbar_title = 'Métrica Desconocida (Por Defecto: Eventos)'
         
     df_filtered['metric_value'] = df_filtered['FID_VANO'].map(vano_metrics)
     df_lines = df_filtered.drop_duplicates(subset=['FID_VANO']).copy()
@@ -814,50 +817,175 @@ def plot_interactive_critical_points(daily_df, critical_points, selected_circuit
     return fig
 
 
-def render_llm_analysis(validation_data: dict):
+def render_llm_analysis(
+    validation_data: dict,
+    raw_df: pd.DataFrame,
+    daily_df: pd.DataFrame,
+    critical_points: list[dict],
+    selected_circuitos: list[str],
+    start_date: str = None,
+    end_date: str = None,
+    output_dir: str | Path = "notebooks/outputs"
+):
     """
     Renders the structured JSON output from the LLM into a beautiful HTML format
-    suitable for Jupyter Notebooks.
-    
-    Args:
-        validation_data (dict): The parsed and validated JSON output from the LLM.
+    suitable for Jupyter Notebooks, incorporating interactive Plotly charts.
     """
     from IPython.display import display, Markdown, HTML
+    from datetime import datetime
+    import os
     
     if not validation_data:
         display(Markdown("> **No hay un diagnóstico válido disponible para renderizar.**"))
         return
         
+    # Generate Plotly figures
+    fig_events = plot_interactive_circuit_events(raw_df, start_date, end_date)
+    fig_sums = plot_interactive_uiti_vano_sums(raw_df, start_date, end_date)
+    fig_clusters = plot_interactive_circuit_clustering(raw_df, start_date, end_date, highlighted_circuits=selected_circuitos)
+    fig_critical = plot_interactive_critical_points(daily_df, critical_points, selected_circuitos, start_date, end_date)
+    
+    primary_circuit = selected_circuitos[0] if selected_circuitos else "TODOS"
+    
+    fig_map_events = None
+    fig_map_uiti = None
+    if primary_circuit != "TODOS":
+        fig_map_events = plot_circuit_map_plotly(raw_df, primary_circuit, date_range=(start_date, end_date) if start_date and end_date else None, color_target='number_of_events')
+        fig_map_uiti = plot_circuit_map_plotly(raw_df, primary_circuit, date_range=(start_date, end_date) if start_date and end_date else None, color_target='sum_uiti_vano')
+
+    # Convert figures to HTML snippets
+    html_events = fig_events.to_html(full_html=False, include_plotlyjs='cdn') if fig_events else ""
+    html_sums = fig_sums.to_html(full_html=False, include_plotlyjs='cdn') if fig_sums else ""
+    html_clusters = fig_clusters.to_html(full_html=False, include_plotlyjs='cdn') if fig_clusters else ""
+    html_critical = fig_critical.to_html(full_html=False, include_plotlyjs='cdn') if fig_critical else ""
+    html_map_events = fig_map_events.to_html(full_html=False, include_plotlyjs='cdn') if fig_map_events else ""
+    html_map_uiti = fig_map_uiti.to_html(full_html=False, include_plotlyjs='cdn') if fig_map_uiti else ""
+
+    # Parse key findings
+    kf_html = ""
+    for kf in validation_data.get('key_findings', []):
+        if isinstance(kf, dict):
+            title = kf.get('title', 'Hallazgo')
+            text = kf.get('text', '')
+            kf_html += f'<li style="margin-bottom: 10px;"><strong>{title}:</strong> {text}</li>'
+        else:
+            kf_html += f'<li style="margin-bottom: 10px;">{kf}</li>'
+
+    period_str = f"{start_date or 'Inicio'} a {end_date or 'Fin'}"
+    title_str = f"Análisis de Criticidad: {primary_circuit} ({period_str})"
+
+    exec_summary = validation_data.get('executive_summary', [])
+    if isinstance(exec_summary, list):
+        exec_summary = " ".join(exec_summary)
+
+    # Parse circuit characterization
+    char_data = validation_data.get('circuit_characterization', {})
+    if isinstance(char_data, dict):
+        char_text = char_data.get('text', '')
+        
+        char_html = f"<p>{char_text}</p>"
+        
+        p97_uiti = char_data.get('p97_vanos_uiti_vano', [])
+        if p97_uiti:
+            char_html += "<h4>🔴 Top 97% Vanos (Mayor Gravedad UITI_VANO)</h4><ul>"
+            for v in p97_uiti: char_html += f"<li>{v}</li>"
+            char_html += "</ul>"
+            
+        p97_events = char_data.get('p97_vanos_eventos', [])
+        if p97_events:
+            char_html += "<h4>🟠 Top 97% Vanos (Mayor Frecuencia de Eventos)</h4><ul>"
+            for v in p97_events: char_html += f"<li>{v}</li>"
+            char_html += "</ul>"
+            
+        top_modes = char_data.get('top_3_modes_related', [])
+        if top_modes:
+            char_html += "<h4>⚙️ Top 3 Modos Relacionados</h4><ul>"
+            for m in top_modes: char_html += f"<li>{m}</li>"
+            char_html += "</ul>"
+            
+        justifications = char_data.get('probable_justifications_rules', [])
+        if justifications:
+            char_html += "<h4>🔗 Justificaciones (Reglas Físico-Lógicas)</h4><ul>"
+            for j in justifications: char_html += f"<li>{j}</li>"
+            char_html += "</ul>"
+    else:
+        char_html = str(char_data)
+
     html_content = f"""
-    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 900px; margin: auto; padding: 25px; border: 1px solid #e2e8f0; border-radius: 12px; background: #f8fafc; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
-        <h2 style="color: #0f172a; border-bottom: 3px solid #2563eb; padding-bottom: 10px; margin-top: 0;">
-            📊 {validation_data.get('section_title', 'Diagnóstico de Criticidad')}
-        </h2>
-        
-        <div style="background: #eff6ff; padding: 15px; border-left: 5px solid #3b82f6; border-radius: 6px; margin-bottom: 20px;">
-            <h4 style="margin-top: 0; color: #1e3a8a; font-size: 1.1em;">Resumen Ejecutivo</h4>
-            <p style="margin-bottom: 0; font-size: 1.05em; line-height: 1.5;">{validation_data.get('executive_summary', '')}</p>
-        </div>
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+        <meta charset="UTF-8">
+        <title>{title_str}</title>
+        <style>
+            body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f8fafc; color: #334155; margin: 0; padding: 20px; }}
+            .container {{ max-width: 1200px; margin: auto; padding: 25px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }}
+            h1 {{ color: #0f172a; border-bottom: 3px solid #2563eb; padding-bottom: 10px; }}
+            h2 {{ color: #1e3a8a; margin-top: 30px; }}
+            h4 {{ color: #334155; margin-bottom: 5px; margin-top: 15px; }}
+            .summary-box {{ background: #eff6ff; padding: 15px; border-left: 5px solid #3b82f6; border-radius: 6px; margin-bottom: 20px; }}
+            .content-box {{ background: #ffffff; padding: 15px; border: 1px solid #cbd5e1; border-radius: 6px; line-height: 1.6; margin-bottom: 20px; }}
+            .chart-container {{ margin-bottom: 40px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>📊 {title_str}</h1>
+            
+            <div class="summary-box">
+                <h2 style="margin-top: 0;">Resumen Ejecutivo</h2>
+                <p>{exec_summary}</p>
+            </div>
 
-        <h3 style="color: #334155; margin-bottom: 8px;">📌 Caracterización Estructural del Circuito</h3>
-        <p style="background: #ffffff; padding: 15px; border: 1px solid #cbd5e1; border-radius: 6px; line-height: 1.6;">
-            {validation_data.get('circuit_characterization', 'No disponible')}
-        </p>
+            <h2>📌 Caracterización del Circuito</h2>
+            <div class="content-box">
+                {char_html}
+            </div>
 
-        <h3 style="color: #334155; margin-bottom: 8px;">⏱️ Síntesis del Periodo</h3>
-        <p style="background: #ffffff; padding: 15px; border: 1px solid #cbd5e1; border-radius: 6px; line-height: 1.6;">
-            {validation_data.get('period_synthesis', '')}
-        </p>
-        
-        <h3 style="color: #334155; margin-bottom: 8px;">🔍 Hallazgos Clave (Vanos y Días Críticos)</h3>
-        <ul style="background: #ffffff; padding: 15px 15px 15px 35px; border: 1px solid #cbd5e1; border-radius: 6px; line-height: 1.6;">
-            {''.join([f'<li style="margin-bottom: 10px;">{kf}</li>' for kf in validation_data.get('key_findings', [])])}
-        </ul>
-        
-        <div style="margin-top: 25px; padding: 20px; background: #f1f5f9; border-radius: 6px; font-size: 0.95em; color: #475569;">
-            <p style="margin-top: 0;"><strong>💡 Acciones Recomendadas:</strong><br> {', '.join(validation_data.get('recommended_actions', []))}</p>
-            <p style="margin-bottom: 0;"><strong>⚠️ Limitaciones del Diagnóstico:</strong><br> {', '.join(validation_data.get('limitations', []))}</p>
+            <h2>⏱️ Síntesis del Periodo</h2>
+            <div class="content-box">
+                {validation_data.get('period_synthesis', '')}
+            </div>
+            
+            <h2>🔍 Hallazgos Clave</h2>
+            <ul class="content-box" style="padding-left: 35px;">
+                {kf_html}
+            </ul>
+
+            <h2>📈 Visualizaciones Dinámicas</h2>
+            
+            <div class="chart-container">{html_critical}</div>
+            <div class="chart-container">{html_clusters}</div>
+            <div class="chart-container">{html_sums}</div>
+            <div class="chart-container">{html_events}</div>
+            """
+            
+    if fig_map_events:
+        html_content += f"<h2>🗺️ Mapa Espacial: Número de Eventos</h2><div class='chart-container'>{html_map_events}</div>"
+    if fig_map_uiti:
+        html_content += f"<h2>🗺️ Mapa Espacial: Gravedad (UITI_VANO)</h2><div class='chart-container'>{html_map_uiti}</div>"
+
+    html_content += f"""
+            <div style="margin-top: 25px; padding: 20px; background: #f1f5f9; border-radius: 6px; font-size: 0.95em; color: #475569;">
+                <p><strong>💡 Acciones Recomendadas:</strong><br> {', '.join(validation_data.get('recommended_actions', []))}</p>
+                <p><strong>⚠️ Limitaciones del Diagnóstico:</strong><br> {', '.join(validation_data.get('limitations', []))}</p>
+                <p><strong>🚧 Huecos de Datos:</strong><br> {', '.join(validation_data.get('data_gaps', []))}</p>
+            </div>
         </div>
-    </div>
+    </body>
+    </html>
     """
-    display(HTML(html_content))
+
+    # Save to disk
+    os.makedirs(output_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+    start_str = start_date.replace('-', '') if start_date else "inicio"
+    end_str = end_date.replace('-', '') if end_date else "fin"
+    filename = f"{primary_circuit}_{start_str}_{end_str}_{timestamp}.html"
+    filepath = Path(output_dir) / filename
+    
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write(html_content)
+        
+    display(Markdown(f"✅ **Reporte generado y guardado exitosamente:** [{filepath.absolute()}]({filepath.absolute()})"))
+    display(HTML(f'<a href="{filepath.absolute()}" target="_blank" style="display: inline-block; padding: 10px 20px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">Abrir Reporte en Nueva Pestaña</a>'))

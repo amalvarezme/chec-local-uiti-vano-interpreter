@@ -24,46 +24,50 @@ def _safe_float(value: Any) -> float:
     numeric = pd.to_numeric(value, errors="coerce")
     if pd.isna(numeric):
         return 0.0
-    return round(float(numeric), 4)
+    return round(float(numeric), 2)
 
 
-def daily_series_records(daily_df: pd.DataFrame, limit: int = 500) -> list[dict[str, Any]]:
+def daily_series_records(daily_df: pd.DataFrame, limit: int = 60) -> list[dict[str, Any]]:
+    """Return compact daily records for the LLM context.
+    
+    Only includes days with non-zero UITI_VANO to save tokens.
+    Caps at `limit` records (sorted by UITI_VANO descending so the
+    most important days are always included).
+    """
     if daily_df.empty:
         return []
+    work = daily_df.copy()
+    work["_uv"] = pd.to_numeric(work.get("UITI_VANO", 0), errors="coerce").fillna(0)
+    # Keep only non-zero days
+    work = work[work["_uv"] > 0].sort_values("_uv", ascending=False).head(limit)
+    # Re-sort by date for chronological context
+    work = work.sort_values("fecha_dia")
     records: list[dict[str, Any]] = []
-    for _, row in daily_df.head(limit).iterrows():
-        records.append(
-            {
-                "fecha_dia": _date_text(row.get("fecha_dia")),
-                "UITI_VANO": _safe_float(row.get("UITI_VANO")),
-                "event_count": int(row.get("event_count") or 0),
-                "DURACION_total": _safe_float(row.get("DURACION_total")),
-                "users_total": _safe_float(row.get("users_total")),
-                "UITI": _safe_float(row.get("UITI")),
-            }
-        )
+    for _, row in work.iterrows():
+        records.append({
+            "d": _date_text(row.get("fecha_dia")),
+            "uv": _safe_float(row.get("UITI_VANO")),
+            "n": int(row.get("event_count") or 0),
+            "dur": _safe_float(row.get("DURACION_total")),
+        })
     return records
 
 
 def window_summary(events_df: pd.DataFrame, daily_df: pd.DataFrame) -> dict[str, Any]:
     if daily_df.empty:
         return {
-            "row_count": int(len(events_df)),
-            "event_count": int(len(events_df)),
+            "events": int(len(events_df)),
             "nonzero_days": 0,
-            "total_uiti_vano": 0.0,
-            "max_uiti_vano_date": None,
-            "max_uiti_vano_value": 0.0,
+            "total_uv": 0.0,
         }
     values = pd.to_numeric(daily_df.get("UITI_VANO", 0.0), errors="coerce").fillna(0.0)
     max_index = values.idxmax() if not values.empty else None
     return {
-        "row_count": int(len(events_df)),
-        "event_count": int(len(events_df)),
+        "events": int(len(events_df)),
         "nonzero_days": int((values > 0).sum()),
-        "total_uiti_vano": _safe_float(values.sum()),
-        "max_uiti_vano_date": None if max_index is None else _date_text(daily_df.loc[max_index, "fecha_dia"]),
-        "max_uiti_vano_value": 0.0 if max_index is None else _safe_float(values.loc[max_index]),
+        "total_uv": _safe_float(values.sum()),
+        "max_date": None if max_index is None else _date_text(daily_df.loc[max_index, "fecha_dia"]),
+        "max_uv": 0.0 if max_index is None else _safe_float(values.loc[max_index]),
     }
 
 
@@ -83,46 +87,26 @@ def build_context_package(
     context = {
         "analysis_name": "local_uiti_vano_interpretability",
         "metadata": {
-            "prompt_version": PROMPT_VERSION,
-            "schema_version": SCHEMA_VERSION,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "row_count": int(len(events_df)),
-            "daily_row_count": int(len(daily_df)),
-            "selected_circuitos": selected_circuitos,
-            "start_date": _date_text(start_date) if start_date else None,
-            "end_date": _date_text(end_date) if end_date else None,
-            "unavailable_optional_columns": unavailable,
-        },
-        "flow_scope": {
-            "included_steps": [1, 2, 3],
-            "excluded_steps": [
-                "RAG",
-                "bitacoras",
-                "normativa",
-                "modelo_predictivo",
-                "mascaras_relevancia",
-                "what_if",
-                "reporte_final",
-            ],
+            "v": PROMPT_VERSION,
+            "schema": SCHEMA_VERSION,
+            "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M"),
+            "circuitos": selected_circuitos,
+            "start": _date_text(start_date) if start_date else None,
+            "end": _date_text(end_date) if end_date else None,
+            "unavailable_cols": unavailable,
         },
         "selected_context": {
             "circuitos": selected_circuitos,
-            "start_date": _date_text(start_date) if start_date else None,
-            "end_date": _date_text(end_date) if end_date else None,
             "indicator": "UITI_VANO",
-            "circuit_characterization": _compute_circuit_characterization(raw_df if raw_df is not None else events_df, selected_circuitos),
+            "characterization": _compute_circuit_characterization(
+                raw_df if raw_df is not None else events_df, selected_circuitos
+            ),
         },
-        "window_summary": window_summary(events_df, daily_df),
-        "daily_series": daily_series_records(daily_df),
+        "summary": window_summary(events_df, daily_df),
+        "daily": daily_series_records(daily_df),
         "critical_points": critical_points,
         "critical_periods": critical_periods,
-        "domain_context": domain_context_payload(),
-        "guardrails": {
-            "do_not_detect_new_points": True,
-            "do_not_claim_definitive_causality": True,
-            "do_not_use_rag_or_normative_evidence": True,
-            "use_only_structured_data_and_domain_context": True,
-        },
+        "domain": domain_context_payload(),
     }
     return context
 
@@ -180,23 +164,53 @@ def _compute_circuit_characterization(df: pd.DataFrame, selected_circuitos: list
     global_avg_events = counts.mean()
     global_avg_uiti = sums.mean()
     
+    df_coords_sorted = df_coords.sort_values(by='uiti_vano_sum', ascending=False)
+    circuits_to_process = [c for c in df_coords_sorted.index if c in selected_circuitos][:5]
+    
     results = []
-    for circuito in selected_circuitos:
+    for circuito in circuits_to_process:
         if circuito in df_coords.index:
             row = df_coords.loc[circuito]
             cluster_id = row['cluster']
             rank = sorted_clusters.index(cluster_id) if cluster_id in sorted_clusters else 0
             label = group_labels[rank] if rank < len(group_labels) else "Desconocida"
+            
+            # Compute P97 vanos (top 3% most critical)
+            df_circuito = df_copy[df_copy['CIRCUITO'] == circuito]
+            p97_uiti_list = []
+            p97_events_list = []
+            if not df_circuito.empty and 'FID_VANO' in df_circuito.columns:
+                vano_stats = df_circuito.groupby('FID_VANO').agg(
+                    events=('FID_VANO', 'count'),
+                    uiti_sum=('UITI_VANO', 'sum')
+                )
+                if not vano_stats.empty:
+                    try:
+                        p97_uiti = vano_stats['uiti_sum'].quantile(0.97)
+                        p97_events = vano_stats['events'].quantile(0.97)
+                        
+                        top_uiti_vanos = vano_stats[vano_stats['uiti_sum'] >= p97_uiti].sort_values('uiti_sum', ascending=False)
+                        top_events_vanos = vano_stats[vano_stats['events'] >= p97_events].sort_values('events', ascending=False)
+                        
+                        p97_uiti_list = [f"{fid}(U:{r['uiti_sum']:.0f})" for fid, r in top_uiti_vanos.iterrows()][:5]
+                        p97_events_list = [f"{fid}(E:{r['events']})" for fid, r in top_events_vanos.iterrows()][:5]
+                    except Exception:
+                        p97_uiti_list = []
+                        p97_events_list = []
+
             results.append({
                 "circuito": circuito,
-                "criticidad_global_kmeans": label,
-                "eventos_historicos": int(row['event_count']),
-                "uiti_vano_historico": round(float(row['uiti_vano_sum']), 2),
-                "promedio_global_eventos_red": round(float(global_avg_events), 2),
-                "promedio_global_uiti_red": round(float(global_avg_uiti), 2)
+                "criticidad": label,
+                "eventos": int(row['event_count']),
+                "uiti_vano_total": round(float(row['uiti_vano_sum']), 0),
+                "avg_eventos_red": round(float(global_avg_events), 0),
+                "avg_uiti_red": round(float(global_avg_uiti), 0),
+                "p97_uiti": p97_uiti_list,
+                "p97_eventos": p97_events_list,
             })
             
     return results
+
 
 
 def critical_points_frame(critical_points: list[dict[str, Any]]) -> pd.DataFrame:
@@ -207,11 +221,12 @@ def critical_points_frame(critical_points: list[dict[str, Any]]) -> pd.DataFrame
                 "critical_point_id": point.get("critical_point_id"),
                 "fecha_dia": point.get("fecha_dia"),
                 "rank": point.get("rank"),
-                "criticality_score": point.get("criticality_score"),
-                "criticality_types": ";".join(point.get("criticality_types") or []),
+                "score": point.get("score"),
+                "types": ";".join(point.get("types") or []),
                 "selection_reason": point.get("selection_reason"),
                 "UITI_VANO": (point.get("metrics") or {}).get("UITI_VANO"),
-                "event_count": (point.get("daily_aggregates") or {}).get("event_count"),
+                "events": (point.get("daily_aggregates") or {}).get("events"),
             }
         )
     return pd.DataFrame(rows)
+

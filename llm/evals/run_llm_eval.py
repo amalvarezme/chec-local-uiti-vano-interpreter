@@ -49,6 +49,13 @@ def _valid_output(context: dict) -> dict:
                 "confidence": "media",
             }
         ],
+        "circuit_characterization": {
+            "text": "Characterization text.",
+            "p97_vanos_uiti_vano": ["V1"],
+            "p97_vanos_eventos": ["V2"],
+            "top_3_modes_related": ["Mode1"],
+            "probable_justifications_rules": ["Rule1"]
+        },
         "period_synthesis": "El periodo se explica principalmente por la concentracion de UITI_VANO en los puntos ya detectados por el codigo.",
         "data_gaps": ["No todas las variables opcionales estan disponibles en esta version local."]
         if context["metadata"].get("unavailable_optional_columns")
