@@ -99,18 +99,25 @@ def _unavailable_columns(context: dict[str, Any]) -> set[str]:
 
 def _guardrail_errors(data: dict[str, Any], context: dict[str, Any]) -> list[str]:
     errors: list[str] = []
-    text_blob = "\n".join(_flatten_strings(data)).lower()
+    
+    # Exclude 'limitations' and 'data_gaps' from the forbidden term check.
+    # The LLM often correctly denies capabilities (e.g. "no simulation is done") here.
+    filtered_data = {k: v for k, v in data.items() if k not in ("limitations", "data_gaps")}
+    text_blob = "\n".join(_flatten_strings(filtered_data)).lower()
+    
     for term in FORBIDDEN_TERMS:
         if term.lower() in text_blob:
             errors.append(f"Forbidden term or claim found: {term}")
 
+    # For the rest of the checks (dates, IDs, etc.), use the full text
+    full_text_blob = "\n".join(_flatten_strings(data)).lower()
     allowed_dates = _context_dates(context)
-    for date in re.findall(r"\b20\d{2}-\d{2}-\d{2}\b", text_blob):
+    for date in re.findall(r"\b20\d{2}-\d{2}-\d{2}\b", full_text_blob):
         if date not in allowed_dates:
             errors.append(f"Referenced date outside context: {date}")
 
     allowed_ids = _critical_point_ids(context)
-    for referenced in re.findall(r"\bcp-\d{4}-\d{2}-\d{2}\b", text_blob):
+    for referenced in re.findall(r"\bcp-\d{4}-\d{2}-\d{2}\b", full_text_blob):
         if referenced not in allowed_ids:
             errors.append(f"Referenced critical_point_id outside context: {referenced}")
     for finding in data.get("key_findings", []):
@@ -130,7 +137,7 @@ def _guardrail_errors(data: dict[str, Any], context: dict[str, Any]) -> list[str
     unavailable = _unavailable_columns(context)
     for column in unavailable:
         pattern = rf"\b{re.escape(column.lower())}\b"
-        if re.search(pattern, text_blob):
+        if re.search(pattern, full_text_blob):
             errors.append(f"Unavailable column referenced as present: {column}")
 
     if not data.get("limitations"):
