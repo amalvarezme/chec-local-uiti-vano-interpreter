@@ -872,7 +872,8 @@ def render_llm_analysis(
             kf_html += f'<li style="margin-bottom: 10px;">{kf}</li>'
 
     period_str = f"{start_date or 'Inicio'} a {end_date or 'Fin'}"
-    title_str = f"Análisis de Criticidad: {primary_circuit} ({period_str})"
+    title_str = f"Reporte Criticidad {primary_circuit}"
+    title_html = f"Reporte Criticidad {primary_circuit}<br><span style='font-size: 0.6em; color: #64748b;'>Período de análisis: {period_str}</span>"
 
     exec_summary = validation_data.get('executive_summary', [])
     if isinstance(exec_summary, list):
@@ -930,7 +931,9 @@ def render_llm_analysis(
     </head>
     <body>
         <div class="container">
-            <h1>📊 {title_str}</h1>
+            <h1>📊 {title_html}</h1>
+            
+            <div class="chart-container">{html_clusters}</div>
             
             <div class="summary-box">
                 <h2 style="margin-top: 0;">Resumen Ejecutivo</h2>
@@ -947,17 +950,13 @@ def render_llm_analysis(
                 {validation_data.get('period_synthesis', '')}
             </div>
             
-            <h2>🔍 Hallazgos Clave</h2>
+            <h2>🔍 Hallazgos Clave Descriptivos</h2>
             <ul class="content-box" style="padding-left: 35px;">
                 {kf_html}
             </ul>
 
-            <h2>📈 Visualizaciones Dinámicas</h2>
-            
+            <h2>📈 Gráfica de Evaluación Diaria</h2>
             <div class="chart-container">{html_critical}</div>
-            <div class="chart-container">{html_clusters}</div>
-            <div class="chart-container">{html_sums}</div>
-            <div class="chart-container">{html_events}</div>
             """
             
     if fig_map_events:
@@ -966,11 +965,6 @@ def render_llm_analysis(
         html_content += f"<h2>🗺️ Mapa Espacial: Gravedad (UITI_VANO)</h2><div class='chart-container'>{html_map_uiti}</div>"
 
     html_content += f"""
-            <div style="margin-top: 25px; padding: 20px; background: #f1f5f9; border-radius: 6px; font-size: 0.95em; color: #475569;">
-                <p><strong>💡 Acciones Recomendadas:</strong><br> {', '.join(validation_data.get('recommended_actions', []))}</p>
-                <p><strong>⚠️ Limitaciones del Diagnóstico:</strong><br> {', '.join(validation_data.get('limitations', []))}</p>
-                <p><strong>🚧 Huecos de Datos:</strong><br> {', '.join(validation_data.get('data_gaps', []))}</p>
-            </div>
         </div>
     </body>
     </html>
