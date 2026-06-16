@@ -979,8 +979,8 @@ def render_llm_analysis(
     # Save to disk
     os.makedirs(output_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
-    start_str = start_date.replace('-', '') if start_date else "inicio"
-    end_str = end_date.replace('-', '') if end_date else "fin"
+    start_str = start_date.strftime("%Y%m%d") if hasattr(start_date, 'strftime') else str(start_date).replace('-', '') if start_date else "inicio"
+    end_str = end_date.strftime("%Y%m%d") if hasattr(end_date, 'strftime') else str(end_date).replace('-', '') if end_date else "fin"
     filename = f"{primary_circuit}_{start_str}_{end_str}_{timestamp}.html"
     filepath = Path(output_dir) / filename
     
