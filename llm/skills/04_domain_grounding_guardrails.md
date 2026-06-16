@@ -22,6 +22,10 @@ structured dataset. Treat it as interpretive guidance, not proof.
 - "la bitacora evidencia"
 - "el modelo predice"
 
+## Prohibited Associations
+
+- **CRÍTICO**: Evita relacionar operaciones manuales (manual operations) con causas, caracterizaciones o justificaciones de fallo. Las operaciones manuales son intervenciones controladas por el personal de la empresa y no afectan el funcionamiento principal del circuito.
+
 ## Preferred Language
 
 - "sugiere"

@@ -742,7 +742,7 @@ def plot_circuit_map_plotly(df, circuito_name, date_range=None, color_target='nu
         legend=dict(title="Equipos (TIPO)", yanchor="top", y=0.99, xanchor="right", x=0.01, bgcolor="rgba(255, 255, 255, 0.8)")
     )
     
-    fig.show()
+    return fig
 
 from plotly.subplots import make_subplots
 
@@ -825,7 +825,9 @@ def render_llm_analysis(
     selected_circuitos: list[str],
     start_date: str = None,
     end_date: str = None,
-    output_dir: str | Path = "notebooks/outputs"
+    output_dir: str | Path = "notebooks/outputs",
+    llm_model: str = "Desconocido",
+    llm_provider: str = "Desconocido"
 ):
     """
     Renders the structured JSON output from the LLM into a beautiful HTML format
@@ -872,8 +874,8 @@ def render_llm_analysis(
             kf_html += f'<li style="margin-bottom: 10px;">{kf}</li>'
 
     period_str = f"{start_date or 'Inicio'} a {end_date or 'Fin'}"
-    title_str = f"Reporte Criticidad {primary_circuit}"
-    title_html = f"Reporte Criticidad {primary_circuit}<br><span style='font-size: 0.6em; color: #64748b;'>Período de análisis: {period_str}</span>"
+    title_str = f"Reporte Criticidad - Circuito: {primary_circuit}"
+    title_html = f"Reporte Criticidad - Circuito: {primary_circuit}<br><span style='font-size: 0.6em; color: #64748b;'>Período de análisis: {period_str} | Modelo LLM: {llm_model}</span>"
 
     exec_summary = validation_data.get('executive_summary', [])
     if isinstance(exec_summary, list):
@@ -912,6 +914,12 @@ def render_llm_analysis(
     else:
         char_html = str(char_data)
 
+    html_maps_section = ""
+    if fig_map_events:
+        html_maps_section += f"<h2>🗺️ Mapa Espacial: Número de Eventos</h2><div class='chart-container'>{html_map_events}</div>"
+    if fig_map_uiti:
+        html_maps_section += f"<h2>🗺️ Mapa Espacial: Gravedad (UITI_VANO)</h2><div class='chart-container'>{html_map_uiti}</div>"
+
     html_content = f"""
     <!DOCTYPE html>
     <html lang="es">
@@ -939,32 +947,25 @@ def render_llm_analysis(
                 <h2 style="margin-top: 0;">Resumen Ejecutivo</h2>
                 <p>{exec_summary}</p>
             </div>
+            
+            <div class="summary-box" style="background: #fffbeb; border-left: 5px solid #fbbf24;">
+                <h2 style="margin-top: 0; color: #b45309;">Posible Causa Raíz (Hipótesis)</h2>
+                <p>{validation_data.get('cause_hypothesis_note', 'No se generó hipótesis de causa en este reporte.')}</p>
+            </div>
 
             <h2>📌 Caracterización del Circuito</h2>
             <div class="content-box">
                 {char_html}
             </div>
+            {html_maps_section}
 
             <h2>⏱️ Síntesis del Periodo</h2>
             <div class="content-box">
                 {validation_data.get('period_synthesis', '')}
             </div>
-            
-            <h2>🔍 Hallazgos Clave Descriptivos</h2>
-            <ul class="content-box" style="padding-left: 35px;">
-                {kf_html}
-            </ul>
 
             <h2>📈 Gráfica de Evaluación Diaria</h2>
             <div class="chart-container">{html_critical}</div>
-            """
-            
-    if fig_map_events:
-        html_content += f"<h2>🗺️ Mapa Espacial: Número de Eventos</h2><div class='chart-container'>{html_map_events}</div>"
-    if fig_map_uiti:
-        html_content += f"<h2>🗺️ Mapa Espacial: Gravedad (UITI_VANO)</h2><div class='chart-container'>{html_map_uiti}</div>"
-
-    html_content += f"""
         </div>
     </body>
     </html>
@@ -983,3 +984,5 @@ def render_llm_analysis(
         
     display(Markdown(f"✅ **Reporte generado y guardado exitosamente:** [{filepath.absolute()}]({filepath.absolute()})"))
     display(HTML(f'<a href="{filepath.absolute()}" target="_blank" style="display: inline-block; padding: 10px 20px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">Abrir Reporte en Nueva Pestaña</a>'))
+    
+    return filepath

@@ -6,7 +6,7 @@
   "required": [
     "source", "prompt_version", "headline", "section_title",
     "executive_summary", "key_findings", "circuit_characterization",
-    "period_synthesis", "data_gaps", "limitations", "recommended_actions"
+    "period_synthesis", "cause_hypothesis_note", "data_gaps", "limitations", "recommended_actions"
   ],
   "properties": {
     "source": {"const": "llm"},
@@ -86,6 +86,7 @@
       }
     },
     "period_synthesis": {"type": "string", "minLength": 1},
+    "cause_hypothesis_note": {"type": "string", "minLength": 1},
     "data_gaps": {"type": "array", "items": {"type": "string"}},
     "limitations": {"type": "array", "minItems": 1, "items": {"type": "string"}},
     "recommended_actions": {"type": "array", "items": {"type": "string"}}
