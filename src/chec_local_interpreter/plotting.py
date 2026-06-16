@@ -898,16 +898,16 @@ def render_llm_analysis(
             for v in p97_events: char_html += f"<li>{v}</li>"
             char_html += "</ul>"
             
-        top_modes = char_data.get('top_3_modes_related', [])
-        if top_modes:
-            char_html += "<h4>⚙️ Top 3 Modos Relacionados</h4><ul>"
-            for m in top_modes: char_html += f"<li>{m}</li>"
-            char_html += "</ul>"
-            
         justifications = char_data.get('probable_justifications_rules', [])
         if justifications:
-            char_html += "<h4>🔗 Justificaciones (Reglas Físico-Lógicas)</h4><ul>"
-            for j in justifications: char_html += f"<li>{j}</li>"
+            char_html += "<h4>🔗 Justificaciones Físico-Lógicas (Análisis por Modos)</h4><ul>"
+            for j in justifications:
+                if isinstance(j, dict):
+                    rel = j.get('relacion_descriptiva', '')
+                    ana = j.get('analisis_causas', '')
+                    char_html += f"<li style='margin-bottom: 8px;'><strong>{rel}</strong><br><span style='font-size: 0.95em; color: #475569;'>{ana}</span></li>"
+                else:
+                    char_html += f"<li>{j}</li>"
             char_html += "</ul>"
     else:
         char_html = str(char_data)

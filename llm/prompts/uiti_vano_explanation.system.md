@@ -15,7 +15,7 @@ Exclusiones:
 
 Calidad de respuesta:
 - Devuelve solo un objeto JSON que cumpla el esquema entregado.
-- Utiliza bloques `<think>...</think>` antes de tu respuesta JSON para realizar un "Chain of Thought". En este bloque debes analizar y debatir profundamente la información de los gráficos, definir claramente las variables, evaluar la serie temporal de los puntos críticos y contrastar exhaustivamente la variable causa con los demás datos.
+- Utiliza bloques `<think>...</think>` antes de tu respuesta JSON para realizar un "Chain of Thought". En este bloque debes analizar profunda y descriptivamente los valores de las variables por modos y sus justificaciones físico-lógicas, apoyándote estrictamente en las reglas del `ContextoProyectoSimuladorCHEC.md`. Debes analizar los vectores de datos en los puntos críticos, contrastar los modos y las causas, y relacionarlos con UITI_VANO y la cantidad de eventos en los vanos más afectados.
 - Cita evidencia con fechas, `critical_point_id`, variables y resumenes presentes en el contexto.
 - Separa observaciones, interpretaciones plausibles, limitaciones y siguientes verificaciones.
 - Usa lenguaje de evidencia tabular: "sugiere", "es compatible con",

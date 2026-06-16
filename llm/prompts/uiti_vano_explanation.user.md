@@ -8,10 +8,11 @@ Conecta la caracterización del circuito con la evolución temporal de `events` 
 El campo `circuit_characterization` es un objeto. DEBES:
 1. `text`: Síntesis de la criticidad del circuito.
 2. `p97_vanos_uiti_vano` y `p97_vanos_eventos`: Copiar los vanos top P97 del contexto.
-3. `top_3_modes_related`: 3 modos más relacionados con los targets.
-4. `probable_justifications_rules`: Causas probables según reglas físico-lógicas.
+3. `probable_justifications_rules`: Presentar al menos 3 ítems con las principales relaciones descriptivas analizadas de las variables que pueden estar aportando más a los puntos críticos y los vanos más afectados. Cada ítem debe tener:
+   - `relacion_descriptiva`: Relación de las variables y su impacto (basado en el análisis por Modos de `ContextoProyectoSimuladorCHEC.md`).
+   - `analisis_causas`: Pequeña descripción o análisis de las posibles causas de estos comportamientos basándose en los valores del vector de datos.
 
-Usa los valores de `top_rows` en los días críticos, correlacionando clima e infraestructura. Reporta `FID_VANO`.
+Usa los valores de `top_rows` en los días críticos, correlacionando modos de clima, infraestructura, y físicas/eléctricas. Reporta `FID_VANO`.
 
 Contexto:
 ```json
