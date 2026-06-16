@@ -81,6 +81,14 @@ def _context_dates(context: dict[str, Any]) -> set[str]:
         for item in context.get("critical_points", [])
         if isinstance(item, dict) and item.get("fecha_dia")
     )
+    # Also allow the overall analysis window start and end dates
+    window = context.get("window_summary")
+    if isinstance(window, dict):
+        if window.get("start_date"):
+            dates.add(str(window.get("start_date")))
+        if window.get("end_date"):
+            dates.add(str(window.get("end_date")))
+            
     return dates
 
 
