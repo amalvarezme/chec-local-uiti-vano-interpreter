@@ -48,7 +48,8 @@ def call_llm(
     
     try:
         import time
-        from IPython.display import display, Markdown, clear_output, HTML
+        import html
+        from IPython.display import display, HTML, clear_output
 
         response = client.chat.completions.create(
             model=selected_model,
@@ -63,7 +64,38 @@ def call_llm(
         
         # Display handle for dynamic updates
         clear_output(wait=True)
-        display(Markdown("⏳ **Iniciando conexión con LLM...**"))
+        display(HTML("<div>⏳ <b>Iniciando conexión con LLM...</b></div>"))
+        
+        def render_ui(tokens, tps, remaining, out_text, elapsed=None):
+            if elapsed is None:
+                status = f"<div style='margin-bottom: 10px; font-family: sans-serif;'>⏱️ <b>Procesando...</b> | 🧩 Tokens: {tokens} | 🚀 Vel: {tps:.1f} t/s | ⏳ ETA ref: ~{remaining:.1f}s</div><hr>"
+            else:
+                status = f"<div style='margin-bottom: 10px; font-family: sans-serif;'>✅ <b>LLM Completado en {elapsed:.1f}s</b> | 🧩 Total tokens: {tokens} | 🚀 Velocidad media: {tps:.1f} t/s</div><hr>"
+            
+            parts = out_text.split("<think>")
+            if len(parts) > 1:
+                pre = html.escape(parts[0])
+                rest = parts[1]
+                think_parts = rest.split("</think>")
+                think_content = html.escape(think_parts[0])
+                
+                details_html = f'''
+<details style="border: 1px solid #cbd5e1; border-radius: 6px; margin-bottom: 15px; padding: 5px; background-color: #f8fafc; font-family: sans-serif;">
+<summary style="cursor: pointer; font-weight: bold; padding: 5px; color: #334155;">🤔 Cadena de Pensamiento (CoT)</summary>
+<div style="padding: 10px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 4px; font-family: monospace; font-size: 0.85em; white-space: pre-wrap; max-height: 400px; overflow-y: auto; color: #475569;">
+{think_content}
+</div>
+</details>
+'''
+                if len(think_parts) > 1:
+                    post = html.escape(think_parts[1])
+                    content_html = f"<div style='white-space: pre-wrap; font-family: monospace;'>{pre}</div>{details_html}<div style='font-family: sans-serif; margin-bottom: 5px;'>🎯 <b>Respuesta Final:</b></div><div style='white-space: pre-wrap; font-family: monospace;'>{post}</div>"
+                else:
+                    content_html = f"<div style='white-space: pre-wrap; font-family: monospace;'>{pre}</div>{details_html}"
+            else:
+                content_html = f"<div style='white-space: pre-wrap; font-family: monospace;'>{html.escape(out_text)}</div>"
+                
+            return status + content_html
         
         for chunk in response:
             if not chunk.choices:
@@ -79,74 +111,22 @@ def call_llm(
                     elapsed = time.time() - start_time
                     tps = tokens / elapsed if elapsed > 0 else 0
                     
-                    # Assume an average response size of 3000 tokens for ETA
                     assumed_total = 3000
                     if tokens > assumed_total:
                         assumed_total = tokens + 1000
                         
                     remaining = (assumed_total - tokens) / tps if tps > 0 else 0
                     
-                    status_md = f"⏱️ **Procesando...** | 🧩 Tokens: {tokens} | 🚀 Vel: {tps:.1f} t/s | ⏳ ETA ref: ~{remaining:.1f}s\n\n---\n\n"
-                    
+                    ui_html = render_ui(tokens, tps, remaining, output_text)
                     clear_output(wait=True)
-                    display(Markdown(status_md))
-                    
-                    # Format <think> blocks using HTML to avoid Markdown sanitizer stripping details tag
-                    parts = output_text.split("<think>")
-                    if len(parts) > 1:
-                        pre = parts[0]
-                        if pre.strip():
-                            display(Markdown(pre))
-                            
-                        rest = parts[1]
-                        think_parts = rest.split("</think>")
-                        think_content = think_parts[0]
-                        
-                        formatted_think = f'''
-<details style="border: 1px solid #cbd5e1; border-radius: 6px; margin-bottom: 15px; padding: 5px; background-color: #f8fafc;">
-<summary style="cursor: pointer; font-weight: bold; padding: 5px; color: #334155; list-style-type: '\\25BC  ';">🤔 Cadena de Pensamiento (CoT)</summary>
-<div style="padding: 10px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 4px; font-family: monospace; font-size: 0.85em; white-space: pre-wrap; max-height: 400px; overflow-y: auto; color: #475569;">
-{think_content}
-</div>
-</details>
-'''
-                        display(HTML(formatted_think))
-                        
-                        if len(think_parts) > 1:
-                            post = think_parts[1]
-                            display(Markdown("🎯 **Respuesta Final:**\n\n" + post))
-                    else:
-                        display(Markdown(output_text))
+                    display(HTML(ui_html))
 
         elapsed = time.time() - start_time
         tps = tokens / elapsed if elapsed > 0 else 0
         
-        status_md = f"✅ **LLM Completado en {elapsed:.1f}s** | 🧩 Total tokens: {tokens} | 🚀 Velocidad media: {tps:.1f} t/s\n\n---\n\n"
+        final_ui = render_ui(tokens, tps, 0, output_text, elapsed=elapsed)
         clear_output(wait=True)
-        display(Markdown(status_md))
-        
-        parts = output_text.split("<think>")
-        if len(parts) > 1:
-            pre = parts[0]
-            if pre.strip():
-                display(Markdown(pre))
-                
-            rest = parts[1]
-            think_parts = rest.split("</think>")
-            think_content = think_parts[0]
-            formatted_think = f'''
-<details style="border: 1px solid #cbd5e1; border-radius: 6px; margin-bottom: 15px; padding: 5px; background-color: #f8fafc;">
-<summary style="cursor: pointer; font-weight: bold; padding: 5px; color: #334155; list-style-type: '\\25BC  ';">🤔 Cadena de Pensamiento (CoT)</summary>
-<div style="padding: 10px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 4px; font-family: monospace; font-size: 0.85em; white-space: pre-wrap; max-height: 400px; overflow-y: auto; color: #475569;">
-{think_content}
-</div>
-</details>
-'''
-            display(HTML(formatted_think))
-            if len(think_parts) > 1:
-                display(Markdown("🎯 **Respuesta Final:**\n\n" + think_parts[1]))
-        else:
-            display(Markdown(output_text))
+        display(HTML(final_ui))
         
         # Strip CoT <think> blocks if present so downstream JSON parsers don't fail
         clean_output = output_text
