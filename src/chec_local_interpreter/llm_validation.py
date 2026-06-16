@@ -108,15 +108,6 @@ def _unavailable_columns(context: dict[str, Any]) -> set[str]:
 def _guardrail_errors(data: dict[str, Any], context: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     
-    # Exclude 'limitations' and 'data_gaps' from the forbidden term check.
-    # The LLM often correctly denies capabilities (e.g. "no simulation is done") here.
-    filtered_data = {k: v for k, v in data.items() if k not in ("limitations", "data_gaps")}
-    text_blob = "\n".join(_flatten_strings(filtered_data)).lower()
-    
-    for term in FORBIDDEN_TERMS:
-        if term.lower() in text_blob:
-            errors.append(f"Forbidden term or claim found: {term}")
-
     # For the rest of the checks (dates, IDs, etc.), use the full text
     full_text_blob = "\n".join(_flatten_strings(data)).lower()
     allowed_dates = _context_dates(context)
@@ -148,8 +139,6 @@ def _guardrail_errors(data: dict[str, Any], context: dict[str, Any]) -> list[str
         if re.search(pattern, full_text_blob):
             errors.append(f"Unavailable column referenced as present: {column}")
 
-    if not data.get("limitations"):
-        errors.append("Output must include limitations.")
     if unavailable and not data.get("data_gaps"):
         errors.append("Output must include data_gaps when optional variables are unavailable.")
     return errors

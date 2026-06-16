@@ -691,13 +691,16 @@ def plot_circuit_map_plotly(df, circuito_name, date_range=None, color_target='nu
         color_rgba = mapper.to_rgba(val, bytes=True)
         hex_color = f'#{color_rgba[0]:02x}{color_rgba[1]:02x}{color_rgba[2]:02x}'
         
+        # Make sure we don't throw an error if TIPO is missing somehow
+        tipo_val = row['TIPO'] if 'TIPO' in row else 'N/A'
+        
         fig.add_trace(go.Scatter(
             x=[row['X1'], row['X2']],
             y=[row['Y1'], row['Y2']],
             mode='lines',
             line=dict(color=hex_color, width=4.5), # Línea más gruesa (4.5)
             hoverinfo='text',
-            text=f"FID_VANO: {row['FID_VANO']}<br>{cbar_title}: {val:.2f}",
+            text=f"FID_VANO: {row['FID_VANO']}<br>TIPO: {tipo_val}<br>{cbar_title}: {val:.2f}",
             showlegend=False,
             opacity=0.9
         ))
@@ -727,7 +730,7 @@ def plot_circuit_map_plotly(df, circuito_name, date_range=None, color_target='nu
             ), 
             name=f"TIPO: {tipo}",
             hoverinfo='text',
-            text=dft.apply(lambda r: f"TIPO: {r['TIPO']}<br>{cbar_title}: {r['metric_value']:.2f}", axis=1)
+            text=dft.apply(lambda r: f"FID_VANO: {r['FID_VANO']}<br>TIPO: {r['TIPO']}<br>{cbar_title}: {r['metric_value']:.2f}", axis=1)
         ))
 
     total_metric = df_lines['metric_value'].sum()
@@ -837,9 +840,7 @@ def render_llm_analysis(
     from datetime import datetime
     import os
     
-    if not validation_data:
-        display(Markdown("> **No hay un diagnóstico válido disponible para renderizar.**"))
-        return
+    validation_data = validation_data or {}
         
     # Generate Plotly figures
     fig_events = plot_interactive_circuit_events(raw_df, start_date, end_date)
@@ -863,56 +864,85 @@ def render_llm_analysis(
     html_map_events = fig_map_events.to_html(full_html=False, include_plotlyjs='cdn') if fig_map_events else ""
     html_map_uiti = fig_map_uiti.to_html(full_html=False, include_plotlyjs='cdn') if fig_map_uiti else ""
 
-    # Parse key findings
-    kf_html = ""
-    for kf in validation_data.get('key_findings', []):
-        if isinstance(kf, dict):
-            title = kf.get('title', 'Hallazgo')
-            text = kf.get('text', '')
-            kf_html += f'<li style="margin-bottom: 10px;"><strong>{title}:</strong> {text}</li>'
-        else:
-            kf_html += f'<li style="margin-bottom: 10px;">{kf}</li>'
-
     period_str = f"{start_date or 'Inicio'} a {end_date or 'Fin'}"
     title_str = f"Reporte Criticidad - Circuito: {primary_circuit}"
-    title_html = f"Reporte Criticidad - Circuito: {primary_circuit}<br><span style='font-size: 0.6em; color: #64748b;'>Período de análisis: {period_str} | Modelo LLM: {llm_model}</span>"
-
-    exec_summary = validation_data.get('executive_summary', [])
-    if isinstance(exec_summary, list):
-        exec_summary = " ".join(exec_summary)
-
-    # Parse circuit characterization
-    char_data = validation_data.get('circuit_characterization', {})
-    if isinstance(char_data, dict):
-        char_text = char_data.get('text', '')
-        
-        char_html = f"<p>{char_text}</p>"
-        
-        p97_uiti = char_data.get('p97_vanos_uiti_vano', [])
-        if p97_uiti:
-            char_html += "<h4>🔴 Top 97% Vanos (Mayor Gravedad UITI_VANO)</h4><ul>"
-            for v in p97_uiti: char_html += f"<li>{v}</li>"
-            char_html += "</ul>"
-            
-        p97_events = char_data.get('p97_vanos_eventos', [])
-        if p97_events:
-            char_html += "<h4>🟠 Top 97% Vanos (Mayor Frecuencia de Eventos)</h4><ul>"
-            for v in p97_events: char_html += f"<li>{v}</li>"
-            char_html += "</ul>"
-            
-        justifications = char_data.get('probable_justifications_rules', [])
-        if justifications:
-            char_html += "<h4>🔗 Justificaciones Físico-Lógicas (Análisis por Modos)</h4><ul>"
-            for j in justifications:
-                if isinstance(j, dict):
-                    rel = j.get('relacion_descriptiva', '')
-                    ana = j.get('analisis_causas', '')
-                    char_html += f"<li style='margin-bottom: 8px;'><strong>{rel}</strong><br><span style='font-size: 0.95em; color: #475569;'>{ana}</span></li>"
-                else:
-                    char_html += f"<li>{j}</li>"
-            char_html += "</ul>"
+    
+    # Adjust subtitle if no LLM data is present
+    if validation_data:
+        subtitle_info = f"Período de análisis: {period_str} | Modelo LLM: {llm_model}"
     else:
-        char_html = str(char_data)
+        subtitle_info = f"Período de análisis: {period_str} | (Solo visualización, sin análisis LLM)"
+        
+    title_html = f"Reporte Criticidad - Circuito: {primary_circuit}<br><span style='font-size: 0.6em; color: #64748b;'>{subtitle_info}</span>"
+
+    llm_sections_html = ""
+    if validation_data:
+        exec_summary = validation_data.get('executive_summary', [])
+        if isinstance(exec_summary, list):
+            exec_summary = " ".join(exec_summary)
+
+        # Parse circuit characterization
+        char_data = validation_data.get('circuit_characterization', {})
+        if isinstance(char_data, dict):
+            char_text = char_data.get('text', '')
+            
+            char_html = f"<p>{char_text}</p>"
+            
+            p97_uiti = char_data.get('p97_vanos_uiti_vano', [])
+            if p97_uiti:
+                char_html += "<h4>🔴 Top 97% Vanos (Mayor Gravedad UITI_VANO)</h4><ul>"
+                for v in p97_uiti: char_html += f"<li>{v}</li>"
+                char_html += "</ul>"
+                
+            p97_events = char_data.get('p97_vanos_eventos', [])
+            if p97_events:
+                char_html += "<h4>🟠 Top 97% Vanos (Mayor Frecuencia de Eventos)</h4><ul>"
+                for v in p97_events: char_html += f"<li>{v}</li>"
+                char_html += "</ul>"
+                
+            justifications = char_data.get('probable_justifications_rules', [])
+            if justifications:
+                char_html += "<h4>🔗 Justificaciones Físico-Lógicas (Análisis por Modos)</h4><ul>"
+                for j in justifications:
+                    if isinstance(j, dict):
+                        modo = j.get('modo', '')
+                        vars_assoc = ", ".join(j.get('variables_asociadas', [])) if isinstance(j.get('variables_asociadas', []), list) else str(j.get('variables_asociadas', ''))
+                        just_fis = j.get('justificacion_fisico_logica', '')
+                        ana = j.get('analisis_causas', '')
+                        char_html += f"<li style='margin-bottom: 8px;'><strong>Modo {modo} ({vars_assoc}):</strong> {just_fis}<br><span style='font-size: 0.95em; color: #475569;'><em>Análisis:</em> {ana}</span></li>"
+                    else:
+                        char_html += f"<li>{j}</li>"
+                char_html += "</ul>"
+        else:
+            char_html = str(char_data)
+
+        hypothesis = validation_data.get('cause_hypothesis_note', 'No se generó hipótesis de causa en este reporte.')
+        
+        llm_sections_html = f"""
+            <div class="summary-box">
+                <h2 style="margin-top: 0;">Resumen Ejecutivo</h2>
+                <p>{exec_summary}</p>
+            </div>
+            
+            <div class="summary-box" style="background: #fffbeb; border-left: 5px solid #fbbf24;">
+                <h2 style="margin-top: 0; color: #b45309;">Posible Causa Raíz (Hipótesis)</h2>
+                <p>{hypothesis}</p>
+            </div>
+
+            <h2>📌 Caracterización del Circuito</h2>
+            <div class="content-box">
+                {char_html}
+            </div>
+        """
+        
+        synthesis = validation_data.get('period_synthesis', '')
+        if synthesis:
+            llm_sections_html += f"""
+            <h2>⏱️ Síntesis del Periodo</h2>
+            <div class="content-box">
+                {synthesis}
+            </div>
+            """
 
     html_maps_section = ""
     if fig_map_events:
@@ -943,26 +973,9 @@ def render_llm_analysis(
             
             <div class="chart-container">{html_clusters}</div>
             
-            <div class="summary-box">
-                <h2 style="margin-top: 0;">Resumen Ejecutivo</h2>
-                <p>{exec_summary}</p>
-            </div>
+            {llm_sections_html}
             
-            <div class="summary-box" style="background: #fffbeb; border-left: 5px solid #fbbf24;">
-                <h2 style="margin-top: 0; color: #b45309;">Posible Causa Raíz (Hipótesis)</h2>
-                <p>{validation_data.get('cause_hypothesis_note', 'No se generó hipótesis de causa en este reporte.')}</p>
-            </div>
-
-            <h2>📌 Caracterización del Circuito</h2>
-            <div class="content-box">
-                {char_html}
-            </div>
             {html_maps_section}
-
-            <h2>⏱️ Síntesis del Periodo</h2>
-            <div class="content-box">
-                {validation_data.get('period_synthesis', '')}
-            </div>
 
             <h2>📈 Gráfica de Evaluación Diaria</h2>
             <div class="chart-container">{html_critical}</div>

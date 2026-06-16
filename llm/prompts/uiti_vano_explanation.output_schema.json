@@ -6,7 +6,7 @@
   "required": [
     "source", "prompt_version", "headline", "section_title",
     "executive_summary", "key_findings", "circuit_characterization",
-    "period_synthesis", "cause_hypothesis_note", "data_gaps", "limitations", "recommended_actions"
+    "period_synthesis", "cause_hypothesis_note", "data_gaps", "recommended_actions"
   ],
   "properties": {
     "source": {"const": "llm"},
@@ -76,9 +76,11 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["relacion_descriptiva", "analisis_causas"],
+            "required": ["modo", "variables_asociadas", "justificacion_fisico_logica", "analisis_causas"],
             "properties": {
-              "relacion_descriptiva": {"type": "string", "minLength": 1},
+              "modo": {"type": "string", "minLength": 1},
+              "variables_asociadas": {"type": "array", "items": {"type": "string"}},
+              "justificacion_fisico_logica": {"type": "string", "minLength": 1},
               "analisis_causas": {"type": "string", "minLength": 1}
             }
           }
