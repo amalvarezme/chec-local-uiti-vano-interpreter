@@ -830,7 +830,9 @@ def render_llm_analysis(
     end_date: str = None,
     output_dir: str | Path = "notebooks/outputs",
     llm_model: str = "Desconocido",
-    llm_provider: str = "Desconocido"
+    llm_provider: str = "Desconocido",
+    tabnet_results: dict | None = None,
+    tabnet_analysis: dict | None = None,
 ):
     """
     Renders the structured JSON output from the LLM into a beautiful HTML format
@@ -855,6 +857,16 @@ def render_llm_analysis(
     if primary_circuit != "TODOS":
         fig_map_events = plot_circuit_map_plotly(raw_df, primary_circuit, date_range=(start_date, end_date) if start_date and end_date else None, color_target='number_of_events')
         fig_map_uiti = plot_circuit_map_plotly(raw_df, primary_circuit, date_range=(start_date, end_date) if start_date and end_date else None, color_target='sum_uiti_vano')
+        if fig_map_events:
+            fig_map_events.update_layout(
+                title=dict(text=f"Mapa de red - {primary_circuit} (Número de eventos)", font=dict(size=14)),
+                margin=dict(t=55),
+            )
+        if fig_map_uiti:
+            fig_map_uiti.update_layout(
+                title=dict(text=f"Mapa de red - {primary_circuit} (Gravedad)", font=dict(size=14)),
+                margin=dict(t=55),
+            )
 
     # Convert figures to HTML snippets
     html_events = fig_events.to_html(full_html=False, include_plotlyjs='cdn') if fig_events else ""
@@ -863,6 +875,165 @@ def render_llm_analysis(
     html_critical = fig_critical.to_html(full_html=False, include_plotlyjs='cdn') if fig_critical else ""
     html_map_events = fig_map_events.to_html(full_html=False, include_plotlyjs='cdn') if fig_map_events else ""
     html_map_uiti = fig_map_uiti.to_html(full_html=False, include_plotlyjs='cdn') if fig_map_uiti else ""
+
+    def _escape(text):
+        import html
+        return html.escape("" if text is None else str(text))
+
+    def _figure_html(fig, title=None, show_title=False):
+        if not fig:
+            return ""
+        try:
+            import plotly.graph_objects as go
+            fig_copy = go.Figure(fig)
+            if show_title and title:
+                fig_copy.update_layout(title=dict(text=title, font=dict(size=14)))
+            else:
+                fig_copy.update_layout(title=dict(text=""), margin=dict(t=20))
+            return fig_copy.to_html(full_html=False, include_plotlyjs=False)
+        except Exception:
+            return fig.to_html(full_html=False, include_plotlyjs=False)
+
+    def _chart_panel(title, html):
+        if not html:
+            return ""
+        return f"<div class='chart-panel'><h3>{_escape(title)}</h3>{html}</div>"
+
+    def _render_tabnet_layout(results, analysis):
+        if not results:
+            return "", ""
+        analysis = analysis or {}
+        analysis_by_name = {}
+        for scenario in analysis.get("escenarios", []) if isinstance(analysis, dict) else []:
+            if isinstance(scenario, dict) and scenario.get("nombre"):
+                analysis_by_name[str(scenario["nombre"])] = scenario
+
+        hallazgos = analysis.get("hallazgos", []) if isinstance(analysis, dict) else []
+
+        def _scenario_interpretation(result):
+            if not isinstance(result, dict):
+                return ""
+            contexto = result.get("contexto", {})
+            nombre = str(contexto.get("nombre") or "")
+            escenario_llm = analysis_by_name.get(nombre, {})
+            return str(escenario_llm.get("interpretacion") or result.get("interpretacion") or "").strip()
+
+        def _scenario_discussion_panel(title, result):
+            text = _scenario_interpretation(result)
+            if not text:
+                return ""
+            return f"<div class='content-box'><h3 style='margin-top:0;'>{_escape(title)}</h3><p>{_escape(text)}</p></div>"
+
+        def _result_block(key, result, heading):
+            if not isinstance(result, dict):
+                return ""
+            interpretacion = _scenario_interpretation(result)
+            html_barras = _figure_html(result.get("fig_barras"), f"Barras - {heading}")
+            html_radar = _figure_html(result.get("fig_radar"), f"Radar - {heading}")
+
+            html_parts = [f"<h3>{_escape(heading)}</h3>"]
+            if interpretacion:
+                html_parts.append(f"<div class='content-box'><p>{_escape(interpretacion)}</p></div>")
+            chart_panels = [
+                _chart_panel(f"Barras - {heading}", html_barras),
+                _chart_panel(f"Radar - {heading}", html_radar),
+            ]
+            html_parts.append(f"<div class='chart-grid two-col'>{''.join(panel for panel in chart_panels if panel)}</div>")
+            return "\n".join(html_parts)
+
+        top_uiti = results.get("top_uiti_periodo")
+        top_frecuencia = results.get("top_frecuencia_periodo")
+        puntos_criticos_uiti = results.get("top_uiti_puntos_criticos")
+        puntos_criticos_frecuencia = results.get("top_frecuencia_puntos_criticos")
+
+        barras_periodo = []
+        radares_periodo = []
+        if top_frecuencia:
+            barras_periodo.append(_chart_panel(
+                "Número de eventos",
+                _figure_html(top_frecuencia.get("fig_barras")),
+            ))
+            radares_periodo.append(_chart_panel(
+                "Radar - Número de eventos",
+                _figure_html(top_frecuencia.get("fig_radar")),
+            ))
+        if top_uiti:
+            barras_periodo.append(_chart_panel(
+                "Gravedad",
+                _figure_html(top_uiti.get("fig_barras")),
+            ))
+            radares_periodo.append(_chart_panel(
+                "Radar - Gravedad",
+                _figure_html(top_uiti.get("fig_radar")),
+            ))
+
+        characterization_parts = []
+        discussion_texts = [str(item).strip() for item in hallazgos if str(item).strip()]
+        if top_frecuencia:
+            text = _scenario_interpretation(top_frecuencia)
+            if text:
+                discussion_texts.append(text)
+        if top_uiti:
+            text = _scenario_interpretation(top_uiti)
+            if text:
+                discussion_texts.append(text)
+        if discussion_texts:
+            characterization_parts.append("<div class='summary-box'><h3 style='margin-top:0;'>Discusión general de inferencias</h3>")
+            for item in discussion_texts:
+                characterization_parts.append(f"<p>{_escape(item)}</p>")
+            characterization_parts.append("</div>")
+        if barras_periodo:
+            characterization_parts.append("<h3>Barras por escenario</h3>")
+            characterization_parts.append(f"<div class='chart-grid two-col'>{''.join(barras_periodo)}</div>")
+        if radares_periodo:
+            characterization_parts.append("<h3>Radares por escenario</h3>")
+            characterization_parts.append(f"<div class='chart-grid two-col'>{''.join(radares_periodo)}</div>")
+
+        critical_parts = []
+        critical_discussion = []
+        if puntos_criticos_frecuencia:
+            text = _scenario_interpretation(puntos_criticos_frecuencia)
+            if text:
+                critical_discussion.append(text)
+        if puntos_criticos_uiti:
+            text = _scenario_interpretation(puntos_criticos_uiti)
+            if text:
+                critical_discussion.append(text)
+        if critical_discussion:
+            critical_parts.append("<div class='summary-box'><h3 style='margin-top:0;'>Discusión de inferencias en puntos críticos</h3>")
+            for item in critical_discussion:
+                critical_parts.append(f"<p>{_escape(item)}</p>")
+            critical_parts.append("</div>")
+
+        barras_criticos = []
+        radares_criticos = []
+        if puntos_criticos_frecuencia:
+            barras_criticos.append(_chart_panel(
+                "Número de eventos",
+                _figure_html(puntos_criticos_frecuencia.get("fig_barras")),
+            ))
+            radares_criticos.append(_chart_panel(
+                "Radar - Número de eventos",
+                _figure_html(puntos_criticos_frecuencia.get("fig_radar")),
+            ))
+        if puntos_criticos_uiti:
+            barras_criticos.append(_chart_panel(
+                "Gravedad",
+                _figure_html(puntos_criticos_uiti.get("fig_barras")),
+            ))
+            radares_criticos.append(_chart_panel(
+                "Radar - Gravedad",
+                _figure_html(puntos_criticos_uiti.get("fig_radar")),
+            ))
+        if barras_criticos or radares_criticos:
+            critical_parts.insert(0, "<h2>Análisis de inferencias en puntos críticos</h2>")
+        if barras_criticos:
+            critical_parts.append("<h3>Barras por escenario</h3>")
+            critical_parts.append(f"<div class='chart-grid two-col'>{''.join(barras_criticos)}</div>")
+        if radares_criticos:
+            critical_parts.append("<h3>Radares por escenario</h3>")
+            critical_parts.append(f"<div class='chart-grid two-col'>{''.join(radares_criticos)}</div>")
+        return "\n".join(characterization_parts), "\n".join(critical_parts)
 
     period_str = f"{start_date or 'Inicio'} a {end_date or 'Fin'}"
     title_str = f"Reporte Criticidad - Circuito: {primary_circuit}"
@@ -874,6 +1045,16 @@ def render_llm_analysis(
         subtitle_info = f"Período de análisis: {period_str} | (Solo visualización, sin análisis LLM)"
         
     title_html = f"Reporte Criticidad - Circuito: {primary_circuit}<br><span style='font-size: 0.6em; color: #64748b;'>{subtitle_info}</span>"
+
+    map_panels = []
+    if fig_map_events:
+        map_panels.append(_chart_panel("Mapa espacial - Número de eventos", html_map_events))
+    if fig_map_uiti:
+        map_panels.append(_chart_panel("Mapa espacial - Gravedad", html_map_uiti))
+    html_maps_section = f"<div class='chart-grid two-col'>{''.join(map_panels)}</div>" if map_panels else ""
+
+    html_tabnet_characterization, html_tabnet_critical = _render_tabnet_layout(tabnet_results, tabnet_analysis)
+    characterization_visuals_html = f"{html_maps_section}{html_tabnet_characterization}"
 
     llm_sections_html = ""
     if validation_data:
@@ -933,6 +1114,7 @@ def render_llm_analysis(
             <div class="content-box">
                 {char_html}
             </div>
+            {characterization_visuals_html}
         """
         
         synthesis = validation_data.get('period_synthesis', '')
@@ -943,12 +1125,11 @@ def render_llm_analysis(
                 {synthesis}
             </div>
             """
-
-    html_maps_section = ""
-    if fig_map_events:
-        html_maps_section += f"<h2>🗺️ Mapa Espacial: Número de Eventos</h2><div class='chart-container'>{html_map_events}</div>"
-    if fig_map_uiti:
-        html_maps_section += f"<h2>🗺️ Mapa Espacial: Gravedad (UITI_VANO)</h2><div class='chart-container'>{html_map_uiti}</div>"
+    elif characterization_visuals_html:
+        llm_sections_html = f"""
+            <h2>📌 Caracterización del Circuito</h2>
+            {characterization_visuals_html}
+        """
 
     html_content = f"""
     <!DOCTYPE html>
@@ -965,6 +1146,12 @@ def render_llm_analysis(
             .summary-box {{ background: #eff6ff; padding: 15px; border-left: 5px solid #3b82f6; border-radius: 6px; margin-bottom: 20px; }}
             .content-box {{ background: #ffffff; padding: 15px; border: 1px solid #cbd5e1; border-radius: 6px; line-height: 1.6; margin-bottom: 20px; }}
             .chart-container {{ margin-bottom: 40px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }}
+            .chart-grid {{ display: grid; gap: 18px; margin-bottom: 28px; }}
+            .chart-grid.two-col {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+            .chart-panel {{ border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; background: #ffffff; min-width: 0; }}
+            .chart-panel h3 {{ margin: 0; padding: 10px 14px; background: #f8fafc; color: #1e3a8a; font-size: 15px; border-bottom: 1px solid #e2e8f0; }}
+            .tabnet-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; }}
+            @media (max-width: 900px) {{ .chart-grid.two-col {{ grid-template-columns: 1fr; }} }}
         </style>
     </head>
     <body>
@@ -974,11 +1161,11 @@ def render_llm_analysis(
             <div class="chart-container">{html_clusters}</div>
             
             {llm_sections_html}
-            
-            {html_maps_section}
 
             <h2>📈 Gráfica de Evaluación Diaria</h2>
             <div class="chart-container">{html_critical}</div>
+
+            {html_tabnet_critical}
         </div>
     </body>
     </html>

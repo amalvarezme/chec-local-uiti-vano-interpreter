@@ -19,6 +19,8 @@ def call_llm(
     provider: str = "google",
     model: str | None = "gemini-2.5-flash-lite",
     call_enabled: bool = False,
+    display_progress: bool = True,
+    display_content: bool = True,
 ) -> LLMCallResult:
     if not call_enabled:
         return LLMCallResult(called=False, message="CALL_LLM=false; prompt saved without calling the model.")
@@ -50,7 +52,8 @@ def call_llm(
     try:
         import time
         import html
-        from IPython.display import display, HTML, clear_output
+        if display_progress:
+            from IPython.display import display, HTML, clear_output
 
         sys_prompt = "INSTRUCCIÓN OBLIGATORIA: Siempre debes estructurar tu cadena de pensamiento (Chain of Thought) detallada paso a paso dentro de etiquetas <think> y </think> obligatoriamente, ANTES de generar la salida final en JSON."
         full_prompt = f"{sys_prompt}\n\n{prompt}"
@@ -70,14 +73,18 @@ def call_llm(
         in_tokens_est = int(len(full_prompt) / 3.5)
         
         # Display handle for dynamic updates
-        clear_output(wait=True)
-        display(HTML("<div>⏳ <b>Iniciando conexión con LLM...</b></div>"))
+        if display_progress:
+            clear_output(wait=True)
+            display(HTML("<div>⏳ <b>Iniciando conexión con LLM...</b></div>"))
         
         def render_ui(tokens, tps, remaining, out_text, elapsed=None):
             if elapsed is None:
                 status = f"<div style='margin-bottom: 10px; font-family: sans-serif;'>⏱️ <b>Procesando...</b> | 🧩 Tokens (In: ~{in_tokens_est} | Out: {tokens}) | 🚀 Vel: {tps:.1f} t/s | ⏳ ETA ref: ~{remaining:.1f}s</div><hr>"
             else:
                 status = f"<div style='margin-bottom: 10px; font-family: sans-serif;'>✅ <b>LLM Completado en {elapsed:.1f}s</b> | 🧩 Tokens (In: ~{in_tokens_est} | Out: {tokens}) | 🚀 Velocidad media: {tps:.1f} t/s</div><hr>"
+
+            if not display_content:
+                return status + "<div style='font-family: sans-serif; color: #475569;'>Salida oculta; se validará y guardará como artefacto si cumple el contrato.</div>"
             
             parts = out_text.split("<think>")
             if len(parts) > 1:
@@ -114,7 +121,7 @@ def call_llm(
                 tokens += 1
                 
                 # Update UI periodically to avoid overwhelming the notebook frontend
-                if tokens % 8 == 0:
+                if display_progress and tokens % 8 == 0:
                     elapsed = time.time() - start_time
                     tps = tokens / elapsed if elapsed > 0 else 0
                     
@@ -131,9 +138,10 @@ def call_llm(
         elapsed = time.time() - start_time
         tps = tokens / elapsed if elapsed > 0 else 0
         
-        final_ui = render_ui(tokens, tps, 0, output_text, elapsed=elapsed)
-        clear_output(wait=True)
-        display(HTML(final_ui))
+        if display_progress:
+            final_ui = render_ui(tokens, tps, 0, output_text, elapsed=elapsed)
+            clear_output(wait=True)
+            display(HTML(final_ui))
         
         think_text = None
         if output_text:

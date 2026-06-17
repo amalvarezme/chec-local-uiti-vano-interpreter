@@ -1,12 +1,45 @@
-pandas
+# === Core data & ML ===
 numpy
+pandas
+scipy
+scikit-learn
 matplotlib
-python-dotenv
-pydantic
+seaborn
+tqdm
+joblib
+
+# === Deep learning / TabNet ===
+torch
+pytorch-tabnet
+shap
+
+# === Hyperparameter search ===
+optuna
+
+# === Visualization ===
+plotly
+
+# === Data I/O ===
 openpyxl
 pyarrow
+
+# === Weather / external API ===
+openmeteo-requests
+requests-cache
+retry-requests
+
+# === LLM / AI ===
+openai
+
+# === Validation & config ===
+python-dotenv
+pydantic
+jsonschema
+
+# === Jupyter & dev ===
+ipython
 jupyter
 ipykernel
+
+# === Testing ===
 pytest
-jsonschema
-openai

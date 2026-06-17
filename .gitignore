@@ -7,6 +7,11 @@ __pycache__/
 
 data/*
 !data/.gitkeep
+!data/Variables_seleccion.xlsx
+data/Indicadores_vano_v3.csv
+!data/models
+!data/models/**
+data/optuna/
 
 outputs/*
 !outputs/.gitkeep

@@ -12,35 +12,54 @@ REQUIRED_SKILLS = (
     "05_llm_output_validator.md",
 )
 
+TABNET_REQUIRED_SKILLS = (
+    "01_structured_context_builder.md",
+    "02_circuit_scenario_interpreter.md",
+    "03_uiti_vano_behavior_explainer.md",
+    "04_graph_connectivity_guardrails.md",
+    "05_llm_output_validator.md",
+)
 
-def skills_dir(base_dir: str | Path | None = None) -> Path:
-    return Path(base_dir) if base_dir is not None else llm_root() / "skills"
+
+def _required_skills(profile: str = "base") -> tuple[str, ...]:
+    if profile == "base":
+        return REQUIRED_SKILLS
+    if profile == "tabnet":
+        return TABNET_REQUIRED_SKILLS
+    raise ValueError("profile debe ser 'base' o 'tabnet'.")
 
 
-def list_available_skills(base_dir: str | Path | None = None) -> list[str]:
-    directory = skills_dir(base_dir)
+def skills_dir(base_dir: str | Path | None = None, *, profile: str = "base") -> Path:
+    if base_dir is not None:
+        return Path(base_dir)
+    suffix = "skills_tabnet" if profile == "tabnet" else "skills"
+    return llm_root() / suffix
+
+
+def list_available_skills(base_dir: str | Path | None = None, *, profile: str = "base") -> list[str]:
+    directory = skills_dir(base_dir, profile=profile)
     if not directory.exists():
         return []
     return sorted(path.name for path in directory.glob("*.md"))
 
 
-def verify_required_skills(base_dir: str | Path | None = None) -> list[str]:
-    directory = skills_dir(base_dir)
-    return [name for name in REQUIRED_SKILLS if not (directory / name).exists()]
+def verify_required_skills(base_dir: str | Path | None = None, *, profile: str = "base") -> list[str]:
+    directory = skills_dir(base_dir, profile=profile)
+    return [name for name in _required_skills(profile) if not (directory / name).exists()]
 
 
-def load_skill_markdown(name: str, base_dir: str | Path | None = None) -> str:
-    path = skills_dir(base_dir) / name
+def load_skill_markdown(name: str, base_dir: str | Path | None = None, *, profile: str = "base") -> str:
+    path = skills_dir(base_dir, profile=profile) / name
     if not path.exists():
         raise FileNotFoundError(f"Skill file not found: {path}")
     return path.read_text(encoding="utf-8")
 
 
-def assemble_skill_bundle(base_dir: str | Path | None = None) -> str:
-    missing = verify_required_skills(base_dir)
+def assemble_skill_bundle(base_dir: str | Path | None = None, *, profile: str = "base") -> str:
+    missing = verify_required_skills(base_dir, profile=profile)
     if missing:
         raise FileNotFoundError(f"Missing required skill files: {', '.join(missing)}")
     parts = []
-    for name in REQUIRED_SKILLS:
-        parts.append(f"# Skill: {name}\n\n{load_skill_markdown(name, base_dir).strip()}")
+    for name in _required_skills(profile):
+        parts.append(f"# Skill: {name}\n\n{load_skill_markdown(name, base_dir, profile=profile).strip()}")
     return "\n\n---\n\n".join(parts)

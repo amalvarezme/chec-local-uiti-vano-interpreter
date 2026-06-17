@@ -6,7 +6,7 @@
   "required": [
     "source", "prompt_version", "headline", "section_title",
     "executive_summary", "key_findings", "circuit_characterization",
-    "period_synthesis", "cause_hypothesis_note", "data_gaps", "recommended_actions"
+    "period_synthesis", "data_gaps", "recommended_actions"
   ],
   "properties": {
     "source": {"const": "llm"},
@@ -70,19 +70,25 @@
         "text": {"type": "string", "minLength": 1},
         "p97_vanos_uiti_vano": {"type": "array", "items": {"type": "string"}},
         "p97_vanos_eventos": {"type": "array", "items": {"type": "string"}},
+        "top_3_modes_related": {"type": "array", "items": {"type": "string"}},
         "probable_justifications_rules": {
           "type": "array", 
-          "minItems": 3,
+          "minItems": 1,
           "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["modo", "variables_asociadas", "justificacion_fisico_logica", "analisis_causas"],
-            "properties": {
-              "modo": {"type": "string", "minLength": 1},
-              "variables_asociadas": {"type": "array", "items": {"type": "string"}},
-              "justificacion_fisico_logica": {"type": "string", "minLength": 1},
-              "analisis_causas": {"type": "string", "minLength": 1}
-            }
+            "oneOf": [
+              {"type": "string", "minLength": 1},
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["modo", "variables_asociadas", "justificacion_fisico_logica", "analisis_causas"],
+                "properties": {
+                  "modo": {"type": "string", "minLength": 1},
+                  "variables_asociadas": {"type": "array", "items": {"type": "string"}},
+                  "justificacion_fisico_logica": {"type": "string", "minLength": 1},
+                  "analisis_causas": {"type": "string", "minLength": 1}
+                }
+              }
+            ]
           }
         }
       }

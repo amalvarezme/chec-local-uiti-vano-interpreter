@@ -81,6 +81,11 @@ def _context_dates(context: dict[str, Any]) -> set[str]:
         for item in context.get("critical_points", [])
         if isinstance(item, dict) and item.get("fecha_dia")
     )
+    dates.update(
+        str(item.get("d"))
+        for item in context.get("daily", [])
+        if isinstance(item, dict) and item.get("d")
+    )
     # Also allow the overall analysis window start and end dates
     window = context.get("window_summary")
     if isinstance(window, dict):
@@ -88,6 +93,12 @@ def _context_dates(context: dict[str, Any]) -> set[str]:
             dates.add(str(window.get("start_date")))
         if window.get("end_date"):
             dates.add(str(window.get("end_date")))
+    metadata = context.get("metadata")
+    if isinstance(metadata, dict):
+        if metadata.get("start"):
+            dates.add(str(metadata.get("start")))
+        if metadata.get("end"):
+            dates.add(str(metadata.get("end")))
             
     return dates
 
@@ -102,7 +113,9 @@ def _critical_point_ids(context: dict[str, Any]) -> set[str]:
 
 def _unavailable_columns(context: dict[str, Any]) -> set[str]:
     metadata = context.get("metadata") if isinstance(context.get("metadata"), dict) else {}
-    return {str(column).upper() for column in metadata.get("unavailable_optional_columns", [])}
+    columns = list(metadata.get("unavailable_optional_columns", []))
+    columns.extend(metadata.get("unavailable_cols", []))
+    return {str(column).upper() for column in columns}
 
 
 def _guardrail_errors(data: dict[str, Any], context: dict[str, Any]) -> list[str]:
@@ -110,6 +123,10 @@ def _guardrail_errors(data: dict[str, Any], context: dict[str, Any]) -> list[str
     
     # For the rest of the checks (dates, IDs, etc.), use the full text
     full_text_blob = "\n".join(_flatten_strings(data)).lower()
+    for term in FORBIDDEN_TERMS:
+        if term in full_text_blob:
+            errors.append(f"Forbidden scope term used: {term}")
+
     allowed_dates = _context_dates(context)
     for date in re.findall(r"\b20\d{2}-\d{2}-\d{2}\b", full_text_blob):
         if date not in allowed_dates:
