@@ -27,3 +27,6 @@ notebooks/notebooks/outputs/*
 # graphify knowledge graph outputs
 graphify-out/
 outputs/graphify_workspace/
+
+# Claude Code local config and memory
+.claude/
