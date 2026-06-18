@@ -16,6 +16,11 @@ El campo `circuit_characterization` es un objeto. DEBES:
 
 Usa los valores de `top_rows` en los días críticos, correlacionando modos de clima, infraestructura, y físicas/eléctricas. Reporta `FID_VANO`.
 
+**OBLIGATORIO — Vegetación y DDT:** Uno de los ítems en `probable_justifications_rules` DEBE corresponder al modo "Entorno y Riesgo" con variables `NR_T` y `DDT`. Evalúa explícitamente:
+- Si el nivel de `NR_T` en los puntos críticos sugiere que la vegetación pudo contribuir a los eventos o al deterioro de `UITI_VANO`.
+- Si los valores de `DDT` correlacionan con mayor frecuencia de eventos o con valores elevados de `UITI_VANO`.
+Ambas variables SIEMPRE están disponibles en la tabla; NUNCA afirmes que no se tienen datos de `DDT` o `NR_T`.
+
 Contexto:
 ```json
 {context_json}

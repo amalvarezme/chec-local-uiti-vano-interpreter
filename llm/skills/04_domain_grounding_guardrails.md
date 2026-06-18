@@ -6,7 +6,8 @@ structured dataset. Treat it as interpretive guidance, not proof.
 ## Compact Domain Guidance
 
 - Weather lags can indicate accumulated environmental stress.
-- `NR_T`, `DDT`, precipitation, wind, and gusts can support environmental hypotheses.
+- `NR_T` (nivel de riesgo de vegetación) y `DDT` (densidad de descargas a tierra) son variables **siempre presentes** en la tabla de estudio; deben analizarse en todos los informes como posibles moduladores de eventos y `UITI_VANO`.
+- Precipitation, wind, and gusts can support environmental hypotheses alongside `NR_T` and `DDT`.
 - Conductor, length, phases, neutral/guard wire, and taxonomy describe susceptibility.
 - `LVSW`, `CNT_VN`, `FID_VANO`, and `CIRCUITO` describe topology and propagation context.
 - Protection equipment and users protected help explain impact scope and restoration context.
@@ -21,6 +22,12 @@ structured dataset. Treat it as interpretive guidance, not proof.
 - "segun la normativa"
 - "la bitacora evidencia"
 - "el modelo predice"
+- "no se tienen datos de DDT"
+- "DDT no está disponible"
+- "no hay información de vegetación"
+- "NR_T no está disponible"
+- "no contamos con datos de DDT"
+- cualquier frase que indique ausencia de datos para `DDT` o `NR_T`
 
 ## Prohibited Associations
 
