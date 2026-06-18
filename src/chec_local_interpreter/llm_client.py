@@ -145,15 +145,30 @@ def call_llm(
         
         think_text = None
         if output_text:
-            match = re.search(r'<think>(.*?)(?:</think>|$)', output_text, flags=re.DOTALL | re.IGNORECASE)
+            # Capture the first complete <think>…</think> block for display.
+            match = re.search(r'<think>(.*?)</think>', output_text, flags=re.DOTALL | re.IGNORECASE)
             if match:
                 think_text = match.group(1).strip()
+            else:
+                # No closing tag: capture everything after <think> as the thought.
+                match_open = re.search(r'<think>(.*)', output_text, flags=re.DOTALL | re.IGNORECASE)
+                if match_open:
+                    think_text = match_open.group(1).strip()
 
-        # Strip CoT <think> blocks if present so downstream JSON parsers don't fail
+        # Strip CoT <think> blocks so downstream JSON parsers don't fail.
+        # Only strip COMPLETE blocks (with closing tag) — if </think> is absent
+        # the original text is kept intact so parse_llm_json can still find the JSON.
         clean_output = output_text
         if clean_output:
-            clean_output = re.sub(r'<think>.*?(?:</think>|$)\s*', '', clean_output, flags=re.DOTALL | re.IGNORECASE)
-            
+            clean_output = re.sub(
+                r'<think>.*?</think>\s*', '', clean_output, flags=re.DOTALL | re.IGNORECASE
+            )
+            # Guard: if stripping emptied the output but the original had content,
+            # the model opened <think> without closing it — return the raw text and
+            # let parse_llm_json locate the JSON via brace-search.
+            if not clean_output.strip() and output_text.strip():
+                clean_output = output_text
+
         return LLMCallResult(called=True, output_text=clean_output, think_content=think_text, message="LLM call completed successfully.")
     except Exception as e:
         return LLMCallResult(called=True, output_text=None, message=f"LLM call failed: {str(e)}")
