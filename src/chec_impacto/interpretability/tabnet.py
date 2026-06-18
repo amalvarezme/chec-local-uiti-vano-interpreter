@@ -625,12 +625,24 @@ TABNET_OUTPUT_SCHEMA = {
     "$id": "tabnet_shap_interpretation.output_schema.v1",
     "type": "object",
     "additionalProperties": True,
-    "required": ["contexto", "escenarios", "hallazgos", "limitaciones"],
+    "required": ["contexto", "escenarios", "hallazgos", "inferencias_predictivas", "limitaciones"],
     "properties": {
         "contexto": {"type": "object"},
         "escenarios": {"type": "array", "minItems": 1},
         "coherencia_grafo_modelo": {"type": "array"},
         "hallazgos": {"type": "array", "items": {"type": "string"}},
+        "inferencias_predictivas": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["riesgo", "justificacion_modelo", "horizonte"],
+                "properties": {
+                    "riesgo": {"type": "string"},
+                    "justificacion_modelo": {"type": "string"},
+                    "horizonte": {"type": "string"}
+                }
+            }
+        },
         "limitaciones": {"type": "array", "items": {"type": "string"}},
     },
 }
@@ -638,6 +650,8 @@ TABNET_OUTPUT_SCHEMA = {
 
 def construir_prompt_tabnet(context_package, skill_bundle, output_schema=None):
     schema = output_schema or TABNET_OUTPUT_SCHEMA
+    # Strip JSON-Schema meta-keywords so the model does not copy $schema/$id into its answer.
+    schema = {key: value for key, value in schema.items() if not str(key).startswith("$")}
     return (
         "Eres un agente de inferencias CHEC distinto del agente base de puntos criticos. "
         "Debes interpretar exclusivamente el paquete estructurado recibido y devolver JSON valido en espanol.\n\n"
@@ -656,7 +670,9 @@ def construir_prompt_tabnet(context_package, skill_bundle, output_schema=None):
         "debe ser una discusion narrativa de nivel ejecutivo y operativo, similar al agente base: "
         "un parrafo sustantivo que conecte el criterio del escenario, las barras, el radar, los "
         "vanos priorizados, el periodo, la lectura electrica y la cautela metodologica integrada "
-        "en la redaccion. No escribas listas de variables ni listas de modos dentro de "
+        "en la redaccion. A diferencia del diagnóstico base, SE TE AUTORIZA EXPLÍCITAMENTE a "
+        "incluir inferencia predictiva, pronósticos de riesgo y proyecciones futuras de falla. "
+        "No escribas listas de variables ni listas de modos dentro de "
         "`interpretacion`; usa esas senales para construir una lectura. Evita repetir limitaciones "
         "como bullets y evita titular la respuesta con el nombre de un modelo especifico. Interpreta "
         "los escenarios, sus barras de variables, sus radares por modo y la coherencia con el grafo "

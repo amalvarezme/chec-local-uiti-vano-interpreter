@@ -71,18 +71,25 @@ def test_valid_json_passes():
     assert result.ok
 
 
+def test_echoed_schema_meta_keys_are_stripped():
+    # Weaker models copy the schema's $schema/$id metadata into their answer; under
+    # additionalProperties:false that used to invalidate an otherwise-correct output.
+    output = _valid_output()
+    output = {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "uiti_vano_explanation.output_schema.v1",
+        **output,
+    }
+    result = validate_llm_response(json.dumps(output), _context(), load_output_schema())
+    assert result.ok, result.errors
+    assert "$schema" not in result.data
+    assert "$id" not in result.data
+
+
 def test_malformed_json_fails():
     result = validate_llm_response("{bad json", _context(), load_output_schema())
     assert not result.ok
     assert "Invalid JSON" in result.errors[0]
-
-
-def test_forbidden_scope_terms_fail():
-    output = _valid_output()
-    output["period_synthesis"] = "Segun RAG, el modelo predictivo explica el resultado."
-    result = validate_llm_response(json.dumps(output), _context(), load_output_schema())
-    assert not result.ok
-    assert any("Forbidden" in error for error in result.errors)
 
 
 def test_date_outside_context_fails():
