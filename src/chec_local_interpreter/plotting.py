@@ -880,6 +880,30 @@ def render_llm_analysis(
         import html
         return html.escape("" if text is None else str(text))
 
+    def _text_to_items(text: str) -> str:
+        """Split a prose paragraph into <ul><li> items of at most ~2 visual lines."""
+        import re as _re
+        raw = ("" if text is None else str(text)).strip()
+        if not raw:
+            return ""
+        # Split on sentence-terminating punctuation followed by whitespace.
+        sentences = [s.strip() for s in _re.split(r'(?<=[.!?;])\s+', raw) if s.strip()]
+        if not sentences:
+            return f"<ul class='report-list'><li>{_escape(raw)}</li></ul>"
+        MAX_CHARS = 150  # ~2 lines at 700 px container width
+        items, current, cur_len = [], [], 0
+        for s in sentences:
+            if current and cur_len + len(s) + 1 > MAX_CHARS:
+                items.append(" ".join(current))
+                current, cur_len = [s], len(s)
+            else:
+                current.append(s)
+                cur_len += len(s) + 1
+        if current:
+            items.append(" ".join(current))
+        lis = "".join(f"<li>{_escape(item)}</li>" for item in items)
+        return f"<ul class='report-list'>{lis}</ul>"
+
     def _figure_html(fig, title=None, show_title=False):
         if not fig:
             return ""
@@ -922,7 +946,7 @@ def render_llm_analysis(
             text = _scenario_interpretation(result)
             if not text:
                 return ""
-            return f"<div class='content-box'><h3 style='margin-top:0;'>{_escape(title)}</h3><p>{_escape(text)}</p></div>"
+            return f"<div class='content-box'><h3 style='margin-top:0;'>{_escape(title)}</h3>{_text_to_items(text)}</div>"
 
         def _result_block(key, result, heading):
             if not isinstance(result, dict):
@@ -933,7 +957,7 @@ def render_llm_analysis(
 
             html_parts = [f"<h3>{_escape(heading)}</h3>"]
             if interpretacion:
-                html_parts.append(f"<div class='content-box'><p>{_escape(interpretacion)}</p></div>")
+                html_parts.append(f"<div class='content-box'>{_text_to_items(interpretacion)}</div>")
             chart_panels = [
                 _chart_panel(f"Barras - {heading}", html_barras),
                 _chart_panel(f"Radar - {heading}", html_radar),
@@ -972,10 +996,11 @@ def render_llm_analysis(
         # General cross-scenario findings (shown once, before per-target discussion)
         hallazgo_texts = [str(item).strip() for item in hallazgos if str(item).strip()]
         if hallazgo_texts:
-            characterization_parts.append("<div class='summary-box'><h3 style='margin-top:0;'>Hallazgos generales del modelo predictivo</h3>")
-            for item in hallazgo_texts:
-                characterization_parts.append(f"<p>{_escape(item)}</p>")
-            characterization_parts.append("</div>")
+            characterization_parts.append(
+                "<div class='summary-box'><h3 style='margin-top:0;'>Hallazgos generales del modelo predictivo</h3>"
+                + _text_to_items(" ".join(hallazgo_texts))
+                + "</div>"
+            )
 
         # Banner 1 — Número de Eventos (target: frecuencia/recurrencia)
         if top_frecuencia:
@@ -984,8 +1009,8 @@ def render_llm_analysis(
                 characterization_parts.append(
                     "<div class='summary-box'>"
                     "<h3 style='margin-top:0;'>Discusión general de inferencias del modelo predictivo &mdash; Número de Eventos</h3>"
-                    f"<p>{_escape(text_freq)}</p>"
-                    "</div>"
+                    + _text_to_items(text_freq)
+                    + "</div>"
                 )
 
         # Banner 2 — UITI_VANO (target: severidad/impacto)
@@ -995,8 +1020,8 @@ def render_llm_analysis(
                 characterization_parts.append(
                     "<div class='summary-box'>"
                     "<h3 style='margin-top:0;'>Discusión general de inferencias del modelo predictivo &mdash; UITI_VANO</h3>"
-                    f"<p>{_escape(text_uiti)}</p>"
-                    "</div>"
+                    + _text_to_items(text_uiti)
+                    + "</div>"
                 )
         if barras_periodo:
             characterization_parts.append("<h3>Barras por escenario</h3>")
@@ -1016,10 +1041,11 @@ def render_llm_analysis(
             if text:
                 critical_discussion.append(text)
         if critical_discussion:
-            critical_parts.append("<div class='summary-box'><h3 style='margin-top:0;'>Discusión de inferencias en puntos críticos</h3>")
-            for item in critical_discussion:
-                critical_parts.append(f"<p>{_escape(item)}</p>")
-            critical_parts.append("</div>")
+            critical_parts.append(
+                "<div class='summary-box'><h3 style='margin-top:0;'>Discusión de inferencias en puntos críticos</h3>"
+                + _text_to_items(" ".join(critical_discussion))
+                + "</div>"
+            )
 
         barras_criticos = []
         radares_criticos = []
@@ -1083,7 +1109,7 @@ def render_llm_analysis(
         if isinstance(char_data, dict):
             char_text = char_data.get('text', '')
             
-            char_html = f"<p>{char_text}</p>"
+            char_html = _text_to_items(char_text)
             
             p97_uiti = char_data.get('p97_vanos_uiti_vano', [])
             if p97_uiti:
@@ -1125,36 +1151,31 @@ def render_llm_analysis(
                 
         findings_html = ""
         if findings_texts:
-            findings_html += "<div class='summary-box'><h3 style='margin-top:0;'>Hallazgos del análisis descriptivo</h3>"
-            if len(findings_texts) > 2:
-                half = (len(findings_texts) + 1) // 2
-                p1 = " ".join(findings_texts[:half])
-                p2 = " ".join(findings_texts[half:])
-                findings_html += f"<p>{_escape(p1)}</p><p>{_escape(p2)}</p>"
-            else:
-                for text in findings_texts:
-                    findings_html += f"<p>{_escape(text)}</p>"
-            findings_html += "</div>"
+            findings_html += (
+                "<div class='summary-box'><h3 style='margin-top:0;'>Hallazgos del análisis descriptivo</h3>"
+                + _text_to_items(" ".join(findings_texts))
+                + "</div>"
+            )
 
         inferencias = (tabnet_analysis or {}).get('inferencias_predictivas', [])
         if inferencias:
-            findings_html += "<div class='summary-box'><h4>Pronósticos y Riesgos Futuros</h4><ul>"
+            findings_html += "<div class='summary-box'><h4>Pronósticos y Riesgos Futuros</h4><ul class='report-list'>"
             for inf in inferencias:
                 r = inf.get('riesgo', '')
                 h = inf.get('horizonte', '')
                 j = inf.get('justificacion_modelo', '')
-                findings_html += f"<li><b>Riesgo {h}:</b> {_escape(r)}<br/><i>Justificación:</i> {_escape(j)}</li>"
+                findings_html += f"<li><b>{_escape(h)}:</b> {_escape(r)} &mdash; <i>{_escape(j)}</i></li>"
             findings_html += "</ul></div>"
 
         llm_sections_html = f"""
             <div class="summary-box">
                 <h2 style="margin-top: 0;">Resumen Ejecutivo</h2>
-                <p>{exec_summary}</p>
+                {_text_to_items(exec_summary)}
             </div>
             {findings_html}
             <div class="summary-box" style="background: #fffbeb; border-left: 5px solid #fbbf24;">
                 <h2 style="margin-top: 0; color: #b45309;">Posible Causa Raíz (Hipótesis)</h2>
-                <p>{hypothesis}</p>
+                {_text_to_items(hypothesis)}
             </div>
 
             <h2>📌 Caracterización del Circuito</h2>
@@ -1169,7 +1190,7 @@ def render_llm_analysis(
             llm_sections_html += f"""
             <h2>⏱️ Síntesis del Periodo</h2>
             <div class="content-box">
-                {synthesis}
+                {_text_to_items(synthesis)}
             </div>
             """
     elif characterization_visuals_html:
@@ -1189,9 +1210,14 @@ def render_llm_analysis(
             .container {{ max-width: 1200px; margin: auto; padding: 25px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }}
             h1 {{ color: #0f172a; border-bottom: 3px solid #2563eb; padding-bottom: 10px; }}
             h2 {{ color: #1e3a8a; margin-top: 30px; }}
+            h3 {{ color: #1e40af; margin-top: 18px; margin-bottom: 8px; font-size: 1rem; }}
             h4 {{ color: #334155; margin-bottom: 5px; margin-top: 15px; }}
-            .summary-box {{ background: #eff6ff; padding: 15px; border-left: 5px solid #3b82f6; border-radius: 6px; margin-bottom: 20px; }}
-            .content-box {{ background: #ffffff; padding: 15px; border: 1px solid #cbd5e1; border-radius: 6px; line-height: 1.6; margin-bottom: 20px; }}
+            .summary-box {{ background: #eff6ff; padding: 15px 18px; border-left: 5px solid #3b82f6; border-radius: 6px; margin-bottom: 20px; }}
+            .content-box {{ background: #ffffff; padding: 15px 18px; border: 1px solid #cbd5e1; border-radius: 6px; margin-bottom: 20px; }}
+            ul.report-list {{ margin: 6px 0 4px 0; padding-left: 20px; list-style: disc; }}
+            ul.report-list li {{ margin-bottom: 5px; line-height: 1.55; font-size: 0.95rem; }}
+            ul {{ margin: 6px 0 4px 0; padding-left: 20px; }}
+            li {{ margin-bottom: 5px; line-height: 1.55; }}
             .chart-container {{ margin-bottom: 40px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }}
             .chart-grid {{ display: grid; gap: 18px; margin-bottom: 28px; }}
             .chart-grid.two-col {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
