@@ -149,6 +149,14 @@ Evitar:
 - "El modelo probo el origen del evento."
 - "El grafo demuestra causalidad real."
 - "El vano falla por esta variable."
+- NUNCA uses términos como "causó definitivamente" o "la causa fue".
+
+## Reglas Estrictas de Generación (Obligatorio)
+
+- **Usa siempre un lenguaje de hipótesis**, nunca afirmes causalidad definitiva operativa.
+- **Fechas**: Solo utiliza fechas que estén explícitamente en el contexto entregado. No infieras, ni resumas, ni inventes fechas.
+- **data_gaps**: Si no hay datos faltantes (es decir, no hay variables en `unavailable_optional_columns`), el array `data_gaps` debe ir obligatoriamente vacío: `[]`. NUNCA inventes que falta una variable (como DDT) si no está explícitamente en la lista de no disponibles. Solo rellena el array si efectivamente se te indican variables faltantes en el contexto.
+- **Extensión de la Discusión**: El análisis genera exactamente dos banners de discusión, uno por variable objetivo: "Número de Eventos" y "UITI_VANO". Cada banner proviene del campo `interpretacion` del escenario correspondiente. Sé conciso: máximo un párrafo sustantivo por banner.
 
 ## Narrativa recomendada
 

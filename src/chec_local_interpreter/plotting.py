@@ -968,26 +968,42 @@ def render_llm_analysis(
             ))
 
         characterization_parts = []
-        discussion_texts = [str(item).strip() for item in hallazgos if str(item).strip()]
-        if top_frecuencia:
-            text = _scenario_interpretation(top_frecuencia)
-            if text:
-                discussion_texts.append(text)
-        if top_uiti:
-            text = _scenario_interpretation(top_uiti)
-            if text:
-                discussion_texts.append(text)
-        if discussion_texts:
-            characterization_parts.append("<div class='summary-box'><h3 style='margin-top:0;'>Discusión general de inferencias</h3>")
-            for item in discussion_texts:
+
+        # General cross-scenario findings (shown once, before per-target discussion)
+        hallazgo_texts = [str(item).strip() for item in hallazgos if str(item).strip()]
+        if hallazgo_texts:
+            characterization_parts.append("<div class='summary-box'><h3 style='margin-top:0;'>Hallazgos generales del modelo predictivo</h3>")
+            for item in hallazgo_texts:
                 characterization_parts.append(f"<p>{_escape(item)}</p>")
             characterization_parts.append("</div>")
+
+        # Banner 1 — Número de Eventos (target: frecuencia/recurrencia)
+        if top_frecuencia:
+            text_freq = _scenario_interpretation(top_frecuencia)
+            if text_freq:
+                characterization_parts.append(
+                    "<div class='summary-box'>"
+                    "<h3 style='margin-top:0;'>Discusión general de inferencias del modelo predictivo &mdash; Número de Eventos</h3>"
+                    f"<p>{_escape(text_freq)}</p>"
+                    "</div>"
+                )
+
+        # Banner 2 — UITI_VANO (target: severidad/impacto)
+        if top_uiti:
+            text_uiti = _scenario_interpretation(top_uiti)
+            if text_uiti:
+                characterization_parts.append(
+                    "<div class='summary-box'>"
+                    "<h3 style='margin-top:0;'>Discusión general de inferencias del modelo predictivo &mdash; UITI_VANO</h3>"
+                    f"<p>{_escape(text_uiti)}</p>"
+                    "</div>"
+                )
         if barras_periodo:
             characterization_parts.append("<h3>Barras por escenario</h3>")
             characterization_parts.append(f"<div class='chart-grid two-col'>{''.join(barras_periodo)}</div>")
         if radares_periodo:
             characterization_parts.append("<h3>Radares por escenario</h3>")
-            characterization_parts.append(f"<div class='chart-grid two-col'>{''.join(radares_periodo)}</div>")
+            characterization_parts.append(f"<div class='chart-grid'>{''.join(radares_periodo)}</div>")
 
         critical_parts = []
         critical_discussion = []
@@ -1032,7 +1048,7 @@ def render_llm_analysis(
             critical_parts.append(f"<div class='chart-grid two-col'>{''.join(barras_criticos)}</div>")
         if radares_criticos:
             critical_parts.append("<h3>Radares por escenario</h3>")
-            critical_parts.append(f"<div class='chart-grid two-col'>{''.join(radares_criticos)}</div>")
+            critical_parts.append(f"<div class='chart-grid'>{''.join(radares_criticos)}</div>")
         return "\n".join(characterization_parts), "\n".join(critical_parts)
 
     period_str = f"{start_date or 'Inicio'} a {end_date or 'Fin'}"
@@ -1051,7 +1067,7 @@ def render_llm_analysis(
         map_panels.append(_chart_panel("Mapa espacial - Número de eventos", html_map_events))
     if fig_map_uiti:
         map_panels.append(_chart_panel("Mapa espacial - Gravedad", html_map_uiti))
-    html_maps_section = f"<div class='chart-grid two-col'>{''.join(map_panels)}</div>" if map_panels else ""
+    html_maps_section = f"<div class='chart-grid'>{''.join(map_panels)}</div>" if map_panels else ""
 
     html_tabnet_characterization, html_tabnet_critical = _render_tabnet_layout(tabnet_results, tabnet_analysis)
     characterization_visuals_html = f"{html_maps_section}{html_tabnet_characterization}"
@@ -1099,12 +1115,43 @@ def render_llm_analysis(
 
         hypothesis = validation_data.get('cause_hypothesis_note', 'No se generó hipótesis de causa en este reporte.')
         
+        key_findings = validation_data.get('key_findings', [])
+        findings_texts = []
+        for f in key_findings:
+            if isinstance(f, dict) and f.get('text'):
+                findings_texts.append(f.get('text'))
+            elif isinstance(f, str):
+                findings_texts.append(f)
+                
+        findings_html = ""
+        if findings_texts:
+            findings_html += "<div class='summary-box'><h3 style='margin-top:0;'>Hallazgos del análisis descriptivo</h3>"
+            if len(findings_texts) > 2:
+                half = (len(findings_texts) + 1) // 2
+                p1 = " ".join(findings_texts[:half])
+                p2 = " ".join(findings_texts[half:])
+                findings_html += f"<p>{_escape(p1)}</p><p>{_escape(p2)}</p>"
+            else:
+                for text in findings_texts:
+                    findings_html += f"<p>{_escape(text)}</p>"
+            findings_html += "</div>"
+
+        inferencias = (tabnet_analysis or {}).get('inferencias_predictivas', [])
+        if inferencias:
+            findings_html += "<div class='summary-box'><h4>Pronósticos y Riesgos Futuros</h4><ul>"
+            for inf in inferencias:
+                r = inf.get('riesgo', '')
+                h = inf.get('horizonte', '')
+                j = inf.get('justificacion_modelo', '')
+                findings_html += f"<li><b>Riesgo {h}:</b> {_escape(r)}<br/><i>Justificación:</i> {_escape(j)}</li>"
+            findings_html += "</ul></div>"
+
         llm_sections_html = f"""
             <div class="summary-box">
                 <h2 style="margin-top: 0;">Resumen Ejecutivo</h2>
                 <p>{exec_summary}</p>
             </div>
-            
+            {findings_html}
             <div class="summary-box" style="background: #fffbeb; border-left: 5px solid #fbbf24;">
                 <h2 style="margin-top: 0; color: #b45309;">Posible Causa Raíz (Hipótesis)</h2>
                 <p>{hypothesis}</p>

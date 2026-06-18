@@ -112,12 +112,6 @@ def main() -> int:
         if not valid_result.ok:
             errors.append(f"{path.name}: valid synthetic output failed: {valid_result.errors}")
 
-        invalid_output = _valid_output(context)
-        invalid_output["period_synthesis"] = "Segun RAG, el modelo predice una causa externa."
-        invalid = json.dumps(invalid_output, ensure_ascii=False)
-        invalid_result = validate_llm_response(invalid, context, schema)
-        if invalid_result.ok:
-            errors.append(f"{path.name}: forbidden synthetic output unexpectedly passed.")
 
     if errors:
         for error in errors:

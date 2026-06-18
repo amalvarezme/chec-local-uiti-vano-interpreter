@@ -25,6 +25,7 @@ El agente puede recibir todo o parte de estos elementos:
 - `modos`: agrupacion de variables en modos CHEC.
 - `shap_extractor`: explicador Kernel SHAP configurado sobre el mismo `X`.
 - `tabla_periodo`: agregacion por vano para el periodo filtrado.
+- `graph_knowledge`: Resumen de grafo extraído por Graphify (opcional).
 
 Si un campo no viene explicito, el agente debe buscarlo en las salidas del cuaderno o
 marcarlo como no disponible. No debe inventarlo.

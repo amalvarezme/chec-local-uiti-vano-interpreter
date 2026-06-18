@@ -43,3 +43,10 @@ ipykernel
 
 # === Testing ===
 pytest
+
+# === Graph Visualization ===
+networkx
+pyvis
+
+# === Knowledge Graph Skill ===
+graphifyy
