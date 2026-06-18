@@ -84,6 +84,12 @@ def build_context_package(
 ) -> dict[str, Any]:
     resolution = resolve_columns(events_df) if not events_df.empty else None
     unavailable = resolution.unavailable_optional if resolution is not None else []
+    try:
+        from chec_local_interpreter.graph_extractor import build_graphify_context
+        graph_summary = build_graphify_context(raw_df if raw_df is not None else events_df, "_".join(selected_circuitos))
+    except Exception as e:
+        graph_summary = f"Grafo no disponible: {e}"
+
     context = {
         "analysis_name": "local_uiti_vano_interpretability",
         "metadata": {
@@ -107,6 +113,7 @@ def build_context_package(
         "critical_points": critical_points,
         "critical_periods": critical_periods,
         "domain": domain_context_payload(),
+        "graph_knowledge": graph_summary,
     }
     return context
 
