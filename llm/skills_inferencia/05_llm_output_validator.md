@@ -1,8 +1,9 @@
-# 05 - LLM Output Validator TabNet CHEC
+# 05 - LLM Output Validator CHEC
 
-Esta skill valida la salida de un agente que analiza resultados TabNet/CHEC para un
-circuito elegido por el usuario. La salida debe depender de los datos recibidos, no de
-valores quemados.
+Esta skill valida la salida de un agente que analiza resultados CHEC/MGCECDL/inferencia para
+un circuito elegido por el usuario. La salida debe depender de los datos recibidos, no de
+valores quemados. Toda explicacion debe usar el grafo de entrenamiento y las variables
+seleccionadas como marco principal.
 
 ## Formatos permitidos
 
@@ -32,8 +33,20 @@ Usar placeholders solo como nombres de campos; los valores deben venir del conte
     "n_vanos": "<valor_observado>",
     "n_features": "<valor_observado>",
     "matriz_adyacencia_shape": ["<n_features>", "<n_features>"],
-    "modelo": "<modelo_recibido>",
-    "metodo_explicacion": "Kernel SHAP + Borda ponderado"
+    "n_aristas_preservadas": "<valor_o_null>",
+      "features_usadas": ["<feature_1>", "<feature_2>"],
+      "modelo": "<modelo_recibido>",
+      "metodo_explicacion": "Kernel SHAP + Borda ponderado"
+  },
+  "entregables": {
+    "grafos_html": [
+      {
+        "escenario": "<nombre_escenario>",
+        "path": "<ruta_html_generada>",
+        "fuente": "reconstruccion_mgcecdl_rbf",
+        "pesos": "normalizados_0_1_por_maximo"
+      }
+    ]
   },
   "escenarios": [
     {
@@ -46,6 +59,9 @@ Usar placeholders solo como nombres de campos; los valores deben venir del conte
           "variable": "<variable>",
           "score_normalizado": "<0_a_1>",
           "modo": "<modo_chec_o_modo_no_identificado>",
+          "en_features": "<true_false>",
+          "ruta_grafo": "<ruta_o_null>",
+          "tipo_conexion_grafo": "<directa_preservada_sin_camino_o_desconocida>",
           "lectura": "<interpretacion_operativa>"
         }
       ],
@@ -86,12 +102,21 @@ Antes de entregar, verificar:
 - Las fechas de interes reportadas coinciden con las recibidas o se marcan como ausentes.
 - `n_features` coincide con la longitud real de `features`.
 - Si se reporta matriz de adyacencia, su forma es `(n_features, n_features)`.
+- Si se reportan aristas preservadas, se distinguen de aristas directas.
+- Si `UITI_VANO` aparece en el archivo de seleccion, confirmar que no se reporte como
+  predictor en `features`.
+- Si se reportan grafos HTML del cuaderno 05, incluir ruta, escenario y fuente
+  `reconstruccion_mgcecdl_rbf`.
 - Cada escenario incluye criterio de seleccion.
 - Cada escenario distingue Top-N configurado de Top-N efectivo si ambos existen.
 - Cada variable top tiene modo CHEC o queda marcada como `modo_no_identificado`.
+- Cada variable top indica si estuvo en `features`.
+- Cada variable top con interpretacion operativa tiene ruta de grafo o una nota clara de
+  ausencia de relacion documentada.
 - Los scores normalizados estan entre `0` y `1`.
 - Las rutas del grafo respetan direccion `source -> target`.
 - Las afirmaciones sobre SHAP dicen que explican la salida del modelo.
+- La salida no interpreta nodos originales ausentes como predictores usados.
 
 ## Validaciones de escenarios
 
@@ -120,6 +145,16 @@ Debe indicar:
 - Si las fechas se analizan juntas o por separado.
 - Si no hay eventos, no producir interpretacion inventada.
 
+### Frecuencia en fechas de interes
+
+Debe indicar:
+
+- Filtro por dias o fechas de interes recibidas.
+- Seleccion por `N_APARICIONES` descendente dentro de esas fechas.
+- Si existe desempate por `UITI_VANO_PROM`, mencionarlo.
+- Que describe recurrencia puntual en fechas criticas, no severidad general.
+- Si no hay eventos en fechas, no producir interpretacion inventada.
+
 ## Validaciones de lenguaje
 
 Reemplazar frases fuertes:
@@ -129,7 +164,8 @@ Reemplazar frases fuertes:
 | "X causo la falla" | "El modelo asigno alta relevancia a X" |
 | "X demuestra el origen del evento" | "X es coherente con una hipotesis operativa" |
 | "El grafo prueba causalidad" | "El grafo codifica una relacion experta" |
-| "TabNet uso el grafo" | "El grafo se usa para contrastar la interpretacion" |
+| "inferencia uso el grafo" | "El grafo se usa para contrastar la interpretacion" |
+| "La variable aislada explica el resultado" | "La variable se interpreta junto con su modo y ruta en el grafo" |
 | "El vano es malo" | "El vano aparece como prioritario en este escenario" |
 
 ## Validaciones numericas
@@ -140,6 +176,8 @@ Reemplazar frases fuertes:
 - No reportar porcentajes si no se calcularon explicitamente.
 - No mezclar `UITI_VANO`, `UITI_VANO_PROM`, `UITI_CIRCUITO` y frecuencia.
 - No hablar de un Top-N especifico si el Top-N efectivo fue distinto.
+- No describir la clasificacion MGCECDL como regresion o prediccion continua de
+  `UITI_VANO`.
 
 ## Validaciones de grafo
 
@@ -151,6 +189,39 @@ Para cada variable mencionada en coherencia grafo-modelo:
 - Marcar `sin_camino_experto_detectado` si no hay ruta conocida.
 - Si la ruta es preservada o virtual, decirlo explicitamente.
 - No convertir peso del grafo en probabilidad o efecto causal.
+- Si la ruta usa nodos originales no retenidos, aclarar que esos nodos contextualizan la
+  relacion pero no fueron predictores.
+- Si una variable esta ausente de `features`, no incluirla como variable explicativa del
+  modelo; solo puede aparecer como nodo intermedio o contexto original.
+- Para grafos HTML estimados por el cuaderno 05, confirmar que:
+  - Se describen como asociaciones relativas estimadas por reconstruccion MGCECDL + RBF.
+  - Los pesos se leen en escala `0-1` normalizada por el maximo del grafo.
+  - No se interpretan flechas o doble direccion, porque el entregable limpio usa aristas no
+    dirigidas.
+  - La ruta HTML se reporta como archivo guardado, no como visualizacion obligatoria en el
+    notebook.
+
+## Validaciones por modelo
+
+### MGCECDL
+
+- Puede usar el grafo durante entrenamiento mediante matriz de adyacencia, reconstruccion o
+  regularizacion asociada a variables.
+- En este proyecto raiz, MGCECDL debe tratarse como flujo de clasificacion. No validar ni
+  exigir resultados de regresion.
+- `UITI_VANO` es objetivo/clase derivada y no predictor; cualquier interpretacion que lo use
+  como feature del modelo debe rechazarse.
+- Si se reportan modalidades del modelo, distinguirlas de los seis modos interpretativos
+  CHEC. Las modalidades de entrenamiento MGCECDL pueden ser climaticos/exogenos y
+  estructurales/endogenos, mientras que los modos CHEC son una capa semantica para explicar.
+- Si se reporta atencion o soporte por modalidad, aclarar que es comportamiento del modelo,
+  no causalidad.
+
+### inferencia
+
+- No decir que inferencia uso directamente la matriz del grafo para predecir.
+- Las mascaras/atenciones o SHAP de inferencia deben contrastarse con el grafo como validacion
+  semantica externa.
 
 ## Limitaciones minimas
 
@@ -158,9 +229,14 @@ Toda salida interpretativa debe incluir limitaciones equivalentes a:
 
 - Kernel SHAP explica comportamiento del modelo, no causalidad operacional comprobada.
 - La normalizacion min-max facilita comparacion dentro de cada escenario.
-- TabNet no usa directamente la matriz de adyacencia del grafo experto.
+- inferencia no usa directamente la matriz de adyacencia del grafo experto.
+- MGCECDL puede incorporar el grafo en entrenamiento, pero sus importancias siguen siendo
+  explicaciones del modelo y requieren validacion operativa.
+- Los grafos HTML del cuaderno 05 muestran asociaciones estimadas para un escenario; no son
+  prueba causal ni sustituyen la lectura de SHAP+Borda y modos.
 - Las fechas de interes solo explican eventos presentes en el periodo filtrado.
 - Los resultados dependen del circuito, periodo, filtro y variables recibidos.
+- Las relaciones no documentadas deben marcarse como ausentes o hipoteticas.
 
 Si el contexto informa filtros especificos, incluirlos con sus valores reales. No asumirlos.
 
@@ -172,5 +248,7 @@ Antes de responder, el agente debe poder contestar "si" a:
 - Diferencie severidad, frecuencia y fechas de interes.
 - Interprete variables mediante modos CHEC.
 - Contraste con el grafo sin afirmar causalidad.
+- Conserve contexto de nodos originales sin tratarlos como predictores si no estan en
+  `features`.
 - Valide scores, nombres de variables y granularidad.
 - Evite valores quemados no presentes en el contexto.

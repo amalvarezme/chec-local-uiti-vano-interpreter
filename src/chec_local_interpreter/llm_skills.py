@@ -12,7 +12,7 @@ REQUIRED_SKILLS = (
     "05_llm_output_validator.md",
 )
 
-TABNET_REQUIRED_SKILLS = (
+INFERENCE_REQUIRED_SKILLS = (
     "01_structured_context_builder.md",
     "02_circuit_scenario_interpreter.md",
     "03_uiti_vano_behavior_explainer.md",
@@ -24,15 +24,15 @@ TABNET_REQUIRED_SKILLS = (
 def _required_skills(profile: str = "base") -> tuple[str, ...]:
     if profile == "base":
         return REQUIRED_SKILLS
-    if profile == "tabnet":
-        return TABNET_REQUIRED_SKILLS
-    raise ValueError("profile debe ser 'base' o 'tabnet'.")
+    if profile == "inferencia":
+        return INFERENCE_REQUIRED_SKILLS
+    raise ValueError("profile debe ser 'base' o 'inferencia'.")
 
 
 def skills_dir(base_dir: str | Path | None = None, *, profile: str = "base") -> Path:
     if base_dir is not None:
         return Path(base_dir)
-    suffix = "skills_tabnet" if profile == "tabnet" else "skills"
+    suffix = "skills_inferencia" if profile == "inferencia" else "skills"
     return llm_root() / suffix
 
 

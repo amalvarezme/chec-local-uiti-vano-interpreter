@@ -831,8 +831,8 @@ def render_llm_analysis(
     output_dir: str | Path = "notebooks/outputs",
     llm_model: str = "Desconocido",
     llm_provider: str = "Desconocido",
-    tabnet_results: dict | None = None,
-    tabnet_analysis: dict | None = None,
+    inference_results: dict | None = None,
+    inference_analysis: dict | None = None,
 ):
     """
     Renders the structured JSON output from the LLM into a beautiful HTML format
@@ -923,7 +923,23 @@ def render_llm_analysis(
             return ""
         return f"<div class='chart-panel'><h3>{_escape(title)}</h3>{html}</div>"
 
-    def _render_tabnet_layout(results, analysis):
+    def _graph_panel(title, graph_path):
+        if not graph_path:
+            return ""
+        path = Path(graph_path)
+        try:
+            href = path.resolve().as_uri()
+        except Exception:
+            href = str(path)
+        return (
+            f"<div class='chart-panel graph-panel'>"
+            f"<h3>{_escape(title)}</h3>"
+            f"<div class='graph-actions'><a href='{_escape(href)}' target='_blank'>Abrir grafo interactivo</a></div>"
+            f"<iframe src='{_escape(href)}' loading='lazy'></iframe>"
+            f"</div>"
+        )
+
+    def _render_inference_layout(results, analysis):
         if not results:
             return "", ""
         analysis = analysis or {}
@@ -990,6 +1006,17 @@ def render_llm_analysis(
                 "Radar - Gravedad",
                 _figure_html(top_uiti.get("fig_radar")),
             ))
+        grafos_periodo = []
+        if top_frecuencia:
+            grafos_periodo.append(_graph_panel(
+                "Grafo estimado - Número de eventos",
+                top_frecuencia.get("grafo_interactivo"),
+            ))
+        if top_uiti:
+            grafos_periodo.append(_graph_panel(
+                "Grafo estimado - Gravedad",
+                top_uiti.get("grafo_interactivo"),
+            ))
 
         characterization_parts = []
 
@@ -997,7 +1024,7 @@ def render_llm_analysis(
         hallazgo_texts = [str(item).strip() for item in hallazgos if str(item).strip()]
         if hallazgo_texts:
             characterization_parts.append(
-                "<div class='summary-box'><h3 style='margin-top:0;'>Hallazgos generales del modelo predictivo</h3>"
+                "<div class='summary-box'><h3 style='margin-top:0;'>Hallazgos generales del modelo de inferencia</h3>"
                 + _text_to_items(" ".join(hallazgo_texts))
                 + "</div>"
             )
@@ -1008,7 +1035,7 @@ def render_llm_analysis(
             if text_freq:
                 characterization_parts.append(
                     "<div class='summary-box'>"
-                    "<h3 style='margin-top:0;'>Discusión general de inferencias del modelo predictivo &mdash; Número de Eventos</h3>"
+                    "<h3 style='margin-top:0;'>Discusión general de inferencias del modelo &mdash; Número de Eventos</h3>"
                     + _text_to_items(text_freq)
                     + "</div>"
                 )
@@ -1019,7 +1046,7 @@ def render_llm_analysis(
             if text_uiti:
                 characterization_parts.append(
                     "<div class='summary-box'>"
-                    "<h3 style='margin-top:0;'>Discusión general de inferencias del modelo predictivo &mdash; UITI_VANO</h3>"
+                    "<h3 style='margin-top:0;'>Discusión general de inferencias del modelo &mdash; UITI_VANO</h3>"
                     + _text_to_items(text_uiti)
                     + "</div>"
                 )
@@ -1029,6 +1056,9 @@ def render_llm_analysis(
         if radares_periodo:
             characterization_parts.append("<h3>Radares por escenario</h3>")
             characterization_parts.append(f"<div class='chart-grid'>{''.join(radares_periodo)}</div>")
+        if grafos_periodo:
+            characterization_parts.append("<h3>Grafos interactivos por escenario</h3>")
+            characterization_parts.append(f"<div class='chart-grid'>{''.join(grafos_periodo)}</div>")
 
         critical_parts = []
         critical_discussion = []
@@ -1067,7 +1097,18 @@ def render_llm_analysis(
                 "Radar - Gravedad",
                 _figure_html(puntos_criticos_uiti.get("fig_radar")),
             ))
-        if barras_criticos or radares_criticos:
+        grafos_criticos = []
+        if puntos_criticos_frecuencia:
+            grafos_criticos.append(_graph_panel(
+                "Grafo estimado - Número de eventos",
+                puntos_criticos_frecuencia.get("grafo_interactivo"),
+            ))
+        if puntos_criticos_uiti:
+            grafos_criticos.append(_graph_panel(
+                "Grafo estimado - Gravedad",
+                puntos_criticos_uiti.get("grafo_interactivo"),
+            ))
+        if barras_criticos or radares_criticos or grafos_criticos:
             critical_parts.insert(0, "<h2>Análisis de inferencias en puntos críticos</h2>")
         if barras_criticos:
             critical_parts.append("<h3>Barras por escenario</h3>")
@@ -1075,6 +1116,9 @@ def render_llm_analysis(
         if radares_criticos:
             critical_parts.append("<h3>Radares por escenario</h3>")
             critical_parts.append(f"<div class='chart-grid'>{''.join(radares_criticos)}</div>")
+        if grafos_criticos:
+            critical_parts.append("<h3>Grafos interactivos por escenario</h3>")
+            critical_parts.append(f"<div class='chart-grid'>{''.join(grafos_criticos)}</div>")
         return "\n".join(characterization_parts), "\n".join(critical_parts)
 
     period_str = f"{start_date or 'Inicio'} a {end_date or 'Fin'}"
@@ -1095,8 +1139,8 @@ def render_llm_analysis(
         map_panels.append(_chart_panel("Mapa espacial - Gravedad", html_map_uiti))
     html_maps_section = f"<div class='chart-grid'>{''.join(map_panels)}</div>" if map_panels else ""
 
-    html_tabnet_characterization, html_tabnet_critical = _render_tabnet_layout(tabnet_results, tabnet_analysis)
-    characterization_visuals_html = f"{html_maps_section}{html_tabnet_characterization}"
+    html_inference_characterization, html_inference_critical = _render_inference_layout(inference_results, inference_analysis)
+    characterization_visuals_html = f"{html_maps_section}{html_inference_characterization}"
 
     llm_sections_html = ""
     if validation_data:
@@ -1157,9 +1201,9 @@ def render_llm_analysis(
                 + "</div>"
             )
 
-        inferencias = (tabnet_analysis or {}).get('inferencias_predictivas', [])
+        inferencias = (inference_analysis or {}).get('inferencias_predictivas', [])
         if inferencias:
-            findings_html += "<div class='summary-box'><h4>Pronósticos y Riesgos Futuros</h4><ul class='report-list'>"
+            findings_html += "<div class='summary-box'><h4>Inferencias complementarias del modelo</h4><ul class='report-list'>"
             for inf in inferencias:
                 r = inf.get('riesgo', '')
                 h = inf.get('horizonte', '')
@@ -1223,7 +1267,9 @@ def render_llm_analysis(
             .chart-grid.two-col {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
             .chart-panel {{ border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; background: #ffffff; min-width: 0; }}
             .chart-panel h3 {{ margin: 0; padding: 10px 14px; background: #f8fafc; color: #1e3a8a; font-size: 15px; border-bottom: 1px solid #e2e8f0; }}
-            .tabnet-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; }}
+            .graph-panel iframe {{ width: 100%; height: 620px; border: 0; background: #ffffff; }}
+            .graph-actions {{ padding: 10px 14px; border-bottom: 1px solid #e2e8f0; background: #ffffff; }}
+            .graph-actions a {{ color: #1d4ed8; font-weight: 600; text-decoration: none; }}
             @media (max-width: 900px) {{ .chart-grid.two-col {{ grid-template-columns: 1fr; }} }}
         </style>
     </head>
@@ -1238,7 +1284,7 @@ def render_llm_analysis(
             <h2>📈 Gráfica de Evaluación Diaria</h2>
             <div class="chart-container">{html_critical}</div>
 
-            {html_tabnet_critical}
+            {html_inference_critical}
         </div>
     </body>
     </html>

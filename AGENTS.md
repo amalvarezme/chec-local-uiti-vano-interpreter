@@ -17,7 +17,7 @@ LLM to explain the behavior in Spanish.
 
 Do not add Databricks, Dash, FastAPI, RAG, vector stores, feature importance masks,
 or what-if simulation.
-Predictive model inference and forecasting language are strictly prohibited in base explanations, EXCEPT when generating outputs validated by `validar_respuesta_tabnet`, where predictive analysis of the second LLM and final evidence report generation is fully permitted and encouraged.
+Predictive model inference and forecasting language are strictly prohibited in base explanations, EXCEPT when generating outputs validated by `validar_respuesta_inferencia`, where predictive analysis of the second LLM and final evidence report generation is fully permitted and encouraged.
 
 ## Coding Style
 

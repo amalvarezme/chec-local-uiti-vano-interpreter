@@ -29,12 +29,11 @@ def load_output_schema(base_dir: str | Path | None = None) -> dict:
 
 
 def schema_for_prompt(output_schema_json: str) -> str:
-    """Strip root JSON-Schema meta-keywords before showing the schema to the model.
+    """Strip root JSON-Schema dialect metadata before showing the schema to the model.
 
-    Embedding ``$schema``/``$id`` invites weaker models to copy them into the answer,
-    which then fails validation under ``additionalProperties: false``. They are pure
-    metadata, so dropping them from the prompt is safe and keeps the contract intact.
-    Falls back to the original string if it is not parseable JSON.
+    Embedding ``$schema`` invites weaker models to copy it into the answer, which then
+    fails validation under ``additionalProperties: false``. Keep ``$id`` visible because
+    the prompt/eval contract uses it as the output schema identifier.
     """
     try:
         schema = json.loads(output_schema_json)
@@ -42,7 +41,7 @@ def schema_for_prompt(output_schema_json: str) -> str:
         return output_schema_json
     if not isinstance(schema, dict):
         return output_schema_json
-    cleaned = {key: value for key, value in schema.items() if not str(key).startswith("$")}
+    cleaned = {key: value for key, value in schema.items() if key != "$schema"}
     return json.dumps(cleaned, ensure_ascii=False)
 
 

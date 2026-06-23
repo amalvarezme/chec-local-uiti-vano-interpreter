@@ -8,9 +8,8 @@ seaborn
 tqdm
 joblib
 
-# === Deep learning / TabNet ===
+# === Deep learning / inference ===
 torch
-pytorch-tabnet
 shap
 
 # === Hyperparameter search ===

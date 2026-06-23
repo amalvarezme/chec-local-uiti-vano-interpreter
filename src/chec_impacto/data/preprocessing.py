@@ -7,8 +7,6 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import torch
-from sklearn.metrics import r2_score
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler
 
@@ -18,35 +16,6 @@ from sklearn.preprocessing import LabelEncoder, MinMaxScaler
 # Supresión de warnings
 warnings.filterwarnings("ignore", category=FutureWarning, module="pandas")
 warnings.filterwarnings("ignore", category=FutureWarning)
-
-# ==========================================
-# 3. Funciones de Métricas y Pérdida (Loss)
-# ==========================================
-
-# Funciones exactamente iguales entre utils-v1.py y utils-v2.py
-
-def my_r2_score_fn(y_pred, y_true):
-    """Función de pérdida basada en R2 (1 - R2) para optimización."""
-    total_variance = torch.var(y_true, unbiased=False)
-    unexplained_variance = torch.mean((y_true - y_pred) ** 2)
-    r2_score_val = 1 - (unexplained_variance / total_variance)
-    return 1 - r2_score_val
-
-def regression_metrics(y_true, y_pred):
-    """Calcula MAE, RMSE y R2 en CPU (Numpy)."""
-    mae  = float(np.mean(np.abs(y_true - y_pred)))
-    rmse = float(np.sqrt(np.mean((y_true - y_pred)**2)))
-    ss_res = float(np.sum((y_true - y_pred)**2))
-    ss_tot = float(np.sum((y_true - np.mean(y_true))**2))
-    r2 = 1 - ss_res/ss_tot if ss_tot > 0 else np.nan
-    return mae, rmse, r2
-
-def eval_and_print(title, clf_model, X_test, y_test):
-    """Evalúa R² en escala original y lo imprime."""
-    y_pred = clf_model.predict(X_test)
-    r2 = r2_score(y_test, y_pred)
-    print(f"{title}: R2={r2:.4f}")
-    return r2
 
 def procesar_dataset_completo(
     path_clima='data/Indicadores_vano_v3.csv',
@@ -254,19 +223,17 @@ def procesar_dataset_completo(
 def preparar_splits_estratificados(X, y,
                                    test_size=0.20, valid_size=0.20,
                                    random_state=42,
-                                   modo='regresion'):
+                                   modo='clasificacion'):
     """
-    Prepara splits Train/Valid/Test estratificados para regresion o clasificacion.
+    Prepara splits Train/Valid/Test estratificados para clasificacion.
 
-    Usa MinMaxScaler como unica transformacion fija del objetivo.
-    En modo 'regresion', y_train/y_valid/y_test conservan el objetivo escalado.
-    En modo 'clasificacion', esos valores son clases ordinales 0, 1, 2, 3
-    generadas con percentiles 25, 50 y 75 del objetivo escalado.
+    Usa MinMaxScaler para calcular percentiles del objetivo y devuelve clases
+    ordinales 0, 1, 2, 3 generadas con percentiles 25, 50 y 75.
     """
 
     modo = modo.lower()
-    if modo not in ['regresion', 'clasificacion']:
-        raise ValueError("modo debe ser 'regresion' o 'clasificacion'.")
+    if modo != 'clasificacion':
+        raise ValueError("modo debe ser 'clasificacion'.")
 
     y = np.asarray(y)
     if y.ndim == 1:
@@ -281,10 +248,7 @@ def preparar_splits_estratificados(X, y,
         bins=percentiles
     ).astype(int)
 
-    if modo == 'clasificacion':
-        objetivo_split = y_categorized.reshape(-1, 1)
-    else:
-        objetivo_split = y_scaled
+    objetivo_split = y_categorized.reshape(-1, 1)
 
     X_temp, X_test, y_temp, y_test, ycat_temp, ycat_test = train_test_split(
         X,
@@ -295,14 +259,7 @@ def preparar_splits_estratificados(X, y,
         stratify=y_categorized
     )
 
-    if modo == 'regresion':
-        percentiles_temp = np.percentile(y_temp[:, 0], [25, 50, 75])
-        estratificacion_validacion = np.digitize(
-            y_temp[:, 0].flatten(),
-            bins=percentiles_temp
-        ).astype(int)
-    else:
-        estratificacion_validacion = ycat_temp
+    estratificacion_validacion = ycat_temp
 
     X_train, X_valid, y_train, y_valid, ycat_train, ycat_valid = train_test_split(
         X_temp,

@@ -1,4 +1,4 @@
-"""Training helpers for CHEC M-GCECDL regression and classification workflows."""
+"""Training helpers for CHEC M-GCECDL classification workflows."""
 
 from __future__ import annotations
 
@@ -6,11 +6,14 @@ import copy
 import io
 import json
 import math
+import os
+import random
 import warnings
 import zipfile
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Sequence
 
+import joblib
 import numpy as np
 import optuna
 import torch
@@ -19,31 +22,19 @@ from sklearn.metrics import (
     accuracy_score,
     balanced_accuracy_score,
     f1_score,
-    mean_absolute_error,
-    mean_squared_error,
     precision_score,
-    r2_score,
     recall_score,
     roc_auc_score,
 )
+from sklearn.preprocessing import MinMaxScaler
 from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import DataLoader, TensorDataset
 
-from chec_impacto.models.mgcecdl import MGCECDLClassifier, MGCECDLRegressor
+from chec_impacto.models.mgcecdl import MGCECDLClassifier
 
 
 _DEVICE_RESOLUTION_CACHE: dict[str, torch.device] = {}
-_REGRESSION_COMPONENT_KEYS = (
-    "total_loss",
-    "fused_loss",
-    "modality_loss",
-    "disagreement_loss",
-    "kl_loss",
-    "reconstruction_loss",
-    "mutual_information",
-    "mutual_information_loss",
-)
 _CLASSIFICATION_COMPONENT_KEYS = (
     "total_loss",
     "fused_loss",
@@ -56,10 +47,126 @@ _CLASSIFICATION_COMPONENT_KEYS = (
     "mutual_information",
     "mutual_information_loss",
 )
+MGCECDL_CLIMATE_PREFIXES = frozenset(
+    {
+        "prep",
+        "temp",
+        "wind_gust_spd",
+        "wind_spd",
+        "clouds",
+        "pres",
+        "sp",
+        "rh",
+        "solar_rad",
+    }
+)
+MGCECDL_EXOGENOUS_FEATURES = frozenset({"DDT", "NR_T"})
+MGCECDL_TWO_MODALITY_DEFAULT_NAMES = ("climaticos", "estructurales")
+
+
+def seed_mgcecdl(seed: int = 42, deterministic: bool = False) -> None:
+    """Seed Python, NumPy and Torch for MGCECDL experiments."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+    if deterministic:
+        os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+        torch.use_deterministic_algorithms(True, warn_only=True)
+        if hasattr(torch.backends, "cudnn"):
+            torch.backends.cudnn.benchmark = False
+            torch.backends.cudnn.deterministic = True
+
+
+def _feature_base_name(feature: str) -> str:
+    name = str(feature)
+    prefix, separator, suffix = name.rpartition("_")
+    if separator and suffix.isdigit() and prefix in MGCECDL_CLIMATE_PREFIXES:
+        return prefix
+    return name
+
+
+def es_variable_exogena_mgcecdl(feature: str) -> bool:
+    """Return True when a feature belongs to the exogenous/climatic MGCECDL block."""
+    base_name = _feature_base_name(feature)
+    return base_name in MGCECDL_CLIMATE_PREFIXES or base_name in MGCECDL_EXOGENOUS_FEATURES
+
+
+def construir_modalidades_mgcecdl(
+    features: Sequence[str],
+    nombres_modalidades: tuple[str, str] = MGCECDL_TWO_MODALITY_DEFAULT_NAMES,
+) -> dict[str, list[int]]:
+    """Build the two MGCECDL training modalities: climatic/exogenous and structural/endogenous."""
+    if len(nombres_modalidades) != 2:
+        raise ValueError("nombres_modalidades debe contener exactamente dos nombres.")
+
+    exogenous_name, endogenous_name = nombres_modalidades
+    if exogenous_name == endogenous_name:
+        raise ValueError("Los nombres de modalidad MGCECDL deben ser distintos.")
+
+    modality_feature_indices = {
+        exogenous_name: [],
+        endogenous_name: [],
+    }
+    for index, feature in enumerate(features):
+        if es_variable_exogena_mgcecdl(str(feature)):
+            modality_feature_indices[exogenous_name].append(index)
+        else:
+            modality_feature_indices[endogenous_name].append(index)
+
+    _validar_modalidades_entrenamiento_mgcecdl(
+        modality_feature_indices,
+        n_features=len(features),
+    )
+    return modality_feature_indices
+
+
+def _validar_modalidades_entrenamiento_mgcecdl(
+    modality_feature_indices: Mapping[str, Sequence[int]],
+    n_features: int | None = None,
+) -> None:
+    if len(modality_feature_indices) != 2:
+        raise ValueError(
+            "MGCECDL para busqueda y entrenamiento debe recibir exactamente dos modos: "
+            "climaticos/exogenos y estructurales/endogenos."
+        )
+
+    flattened_indices: list[int] = []
+    empty_modalities: list[str] = []
+    for modality_name, indices in modality_feature_indices.items():
+        indices_list = [int(index) for index in indices]
+        if not indices_list:
+            empty_modalities.append(str(modality_name))
+        flattened_indices.extend(indices_list)
+
+    if empty_modalities:
+        raise ValueError(
+            "Cada modo MGCECDL de entrenamiento debe tener al menos una variable. "
+            f"Modos vacios: {empty_modalities}"
+        )
+    if len(flattened_indices) != len(set(flattened_indices)):
+        raise ValueError("Cada feature debe pertenecer a un solo modo MGCECDL.")
+    if not flattened_indices:
+        raise ValueError("MGCECDL requiere al menos una feature para entrenar.")
+    if min(flattened_indices) < 0:
+        raise ValueError("Los indices de features MGCECDL no pueden ser negativos.")
+
+    expected_n_features = max(flattened_indices) + 1 if n_features is None else int(n_features)
+    expected_indices = set(range(expected_n_features))
+    actual_indices = set(flattened_indices)
+    if actual_indices != expected_indices:
+        missing = sorted(expected_indices - actual_indices)
+        extra = sorted(actual_indices - expected_indices)
+        raise ValueError(
+            "Los modos MGCECDL deben cubrir todas las features exactamente una vez. "
+            f"Faltantes: {missing}. Extra: {extra}."
+        )
 
 
 def guardar_modelo_mgcecdl(
-    model: MGCECDLRegressor | MGCECDLClassifier,
+    model: MGCECDLClassifier,
     output_path: str | Path,
     state_dict: Mapping[str, torch.Tensor] | None = None,
 ) -> Path:
@@ -71,10 +178,7 @@ def guardar_modelo_mgcecdl(
 
     if isinstance(model, MGCECDLClassifier):
         model_type = "classification"
-        n_classes: int | None = model.n_classes
-    elif isinstance(model, MGCECDLRegressor):
-        model_type = "regression"
-        n_classes = None
+        n_classes = model.n_classes
     else:
         raise TypeError(f"Tipo de modelo MGCECDL no soportado: {type(model).__name__}")
 
@@ -100,7 +204,7 @@ def guardar_modelo_mgcecdl(
 def cargar_modelo_mgcecdl(
     input_path: str | Path,
     device: str | torch.device = "cpu",
-) -> MGCECDLRegressor | MGCECDLClassifier:
+) -> MGCECDLClassifier:
     """Restore an M-GCECDL model from a ZIP archive created by this module."""
     input_path = Path(input_path)
     with zipfile.ZipFile(input_path, "r") as archive:
@@ -114,12 +218,12 @@ def cargar_modelo_mgcecdl(
         "dropout": float(metadata["dropout"]),
         "temperature": float(metadata["temperature"]),
     }
-    if metadata["model_type"] == "regression":
-        model: MGCECDLRegressor | MGCECDLClassifier = MGCECDLRegressor(**common_args)
-    elif metadata["model_type"] == "classification":
-        model = MGCECDLClassifier(n_classes=int(metadata["n_classes"]), **common_args)
-    else:
-        raise ValueError(f"Tipo de modelo MGCECDL desconocido: {metadata['model_type']}")
+    if metadata["model_type"] != "classification":
+        raise ValueError(
+            "Este proyecto solo soporta modelos MGCECDL de clasificacion. "
+            f"Tipo encontrado: {metadata['model_type']}"
+        )
+    model = MGCECDLClassifier(n_classes=int(metadata["n_classes"]), **common_args)
 
     resolved_device = _coerce_device(device)
     state_dict = torch.load(weights, map_location=resolved_device, weights_only=True)
@@ -229,42 +333,6 @@ def _safe_log_count(
     epsilon: float = 1e-8,
 ) -> torch.Tensor:
     return reference.new_tensor(math.log(max(int(count), 2))).clamp(min=epsilon)
-
-
-def _huber_loss_numpy(
-    residuals: np.ndarray,
-    delta: float,
-) -> np.ndarray:
-    abs_residuals = np.abs(residuals)
-    quadratic = np.minimum(abs_residuals, delta)
-    linear = abs_residuals - quadratic
-    return 0.5 * quadratic**2 + delta * linear
-
-
-def calcular_escalas_regresion_mgcecdl(
-    y_train: np.ndarray,
-    fused_delta: float = 1.0,
-    modality_delta: float = 1.0,
-    epsilon: float = 1e-8,
-) -> dict[str, float]:
-    """Calculate training-only scales for bounded M-GCECDL regression losses."""
-    targets = np.asarray(y_train, dtype=np.float32).reshape(-1)
-    if targets.size == 0:
-        raise ValueError("y_train must contain at least one target.")
-    baseline_prediction = np.full_like(targets, targets.mean(dtype=np.float64))
-    baseline_residuals = targets - baseline_prediction
-    fused_loss_scale = float(
-        np.mean(_huber_loss_numpy(baseline_residuals, float(fused_delta)))
-    )
-    modality_loss_scale = float(
-        np.mean(_huber_loss_numpy(baseline_residuals, float(modality_delta)))
-    )
-    disagreement_scale = float(np.var(targets, dtype=np.float64))
-    return {
-        "fused_loss_scale": max(fused_loss_scale, epsilon),
-        "modality_loss_scale": max(modality_loss_scale, epsilon),
-        "disagreement_scale": max(disagreement_scale, epsilon),
-    }
 
 
 def _rbf_kernel_from_variable_profiles(
@@ -430,135 +498,6 @@ def _build_mgcecdl_optimizer(
     raise ValueError(f"Optimizador MGCECDL no soportado: {optimizer_type}")
 
 
-class MGCECDLRegressionLoss(_MGCECDLGraphReconstructionLoss):
-    """Fused regression loss with independently weighted auxiliary objectives."""
-
-    def __init__(
-        self,
-        gamma_sup: float = 0.30,
-        gamma_agr: float = 0.10,
-        gamma_reg: float = 0.01,
-        fused_delta: float = 1.0,
-        modality_delta: float = 1.0,
-        weight_modality_loss_by_reliability: bool = True,
-        feature_mean: np.ndarray | torch.Tensor | None = None,
-        feature_std: np.ndarray | torch.Tensor | None = None,
-        adjacency_matrix: np.ndarray | torch.Tensor | None = None,
-        rbf_sigma: float = 1.0,
-        lambda_reconstruction: float = 0.01,
-        lambda_mutual_information: float = 0.01,
-        fused_loss_scale: float = 1.0,
-        modality_loss_scale: float | None = None,
-        disagreement_scale: float = 1.0,
-    ) -> None:
-        if feature_mean is None or feature_std is None or adjacency_matrix is None:
-            raise ValueError(
-                "feature_mean, feature_std, and adjacency_matrix are required."
-            )
-        super().__init__(
-            feature_mean=feature_mean,
-            feature_std=feature_std,
-            adjacency_matrix=adjacency_matrix,
-            rbf_sigma=rbf_sigma,
-            lambda_reconstruction=lambda_reconstruction,
-            lambda_mutual_information=lambda_mutual_information,
-        )
-        self.gamma_sup = float(gamma_sup)
-        self.gamma_agr = float(gamma_agr)
-        self.gamma_reg = float(gamma_reg)
-        self.fused_delta = fused_delta
-        self.modality_delta = modality_delta
-        self.fused_loss_scale = max(float(fused_loss_scale), 1e-8)
-        self.modality_loss_scale = max(
-            float(fused_loss_scale if modality_loss_scale is None else modality_loss_scale),
-            1e-8,
-        )
-        self.disagreement_scale = max(float(disagreement_scale), 1e-8)
-        self.weight_modality_loss_by_reliability = bool(weight_modality_loss_by_reliability)
-
-    def compute_components(
-        self,
-        model_output: Mapping[str, torch.Tensor | list[torch.Tensor] | tuple[str, ...]],
-        targets: torch.Tensor,
-        inputs: torch.Tensor,
-    ) -> dict[str, torch.Tensor]:
-        fused_prediction = model_output["fused_prediction"].squeeze(-1)
-        modality_predictions = model_output["modality_predictions"]
-        reliabilities = model_output["reliabilities"]
-        targets = targets.reshape(-1)
-
-        fused_loss_raw = F.huber_loss(
-            fused_prediction,
-            targets,
-            delta=self.fused_delta,
-            reduction="mean",
-        )
-        fused_loss = _normalize_unit_interval(fused_loss_raw, self.fused_loss_scale)
-        repeated_targets = targets.unsqueeze(1).expand_as(modality_predictions)
-        modality_loss_matrix = F.huber_loss(
-            modality_predictions,
-            repeated_targets,
-            delta=self.modality_delta,
-            reduction="none",
-        )
-        modality_loss_raw = _reduce_modality_supervision_loss(
-            modality_loss_matrix,
-            reliabilities,
-            weight_by_reliability=self.weight_modality_loss_by_reliability,
-        )
-        modality_loss = _normalize_unit_interval(
-            modality_loss_raw,
-            self.modality_loss_scale,
-        )
-
-        disagreement_raw = (
-            reliabilities * (modality_predictions - fused_prediction.unsqueeze(1)).pow(2)
-        ).sum(dim=1).mean()
-        disagreement = _normalize_unit_interval(disagreement_raw, self.disagreement_scale)
-
-        uniform_prior = torch.full_like(reliabilities, 1.0 / reliabilities.size(1))
-        kl_reg_raw = F.kl_div(
-            torch.log(reliabilities.clamp(min=1e-8)),
-            uniform_prior,
-            reduction="batchmean",
-        )
-        kl_reg = _normalize_unit_interval(
-            kl_reg_raw,
-            _safe_log_count(reliabilities.size(1), reliabilities),
-        )
-
-        graph_components = self._compute_graph_reconstruction_components(model_output, inputs)
-        total_loss = (
-            fused_loss
-            + self.gamma_sup * modality_loss
-            + self.gamma_agr * disagreement
-            + self.gamma_reg * kl_reg
-            + self.lambda_reconstruction * graph_components["reconstruction_loss"]
-            + self.lambda_mutual_information * graph_components["mutual_information_loss"]
-        )
-
-        return {
-            "total_loss": total_loss,
-            "fused_loss": fused_loss,
-            "fused_loss_raw": fused_loss_raw,
-            "modality_loss": modality_loss,
-            "modality_loss_raw": modality_loss_raw,
-            "disagreement_loss": disagreement,
-            "disagreement_loss_raw": disagreement_raw,
-            "kl_loss": kl_reg,
-            "kl_loss_raw": kl_reg_raw,
-            **graph_components,
-        }
-
-    def forward(
-        self,
-        model_output: Mapping[str, torch.Tensor | list[torch.Tensor] | tuple[str, ...]],
-        targets: torch.Tensor,
-        inputs: torch.Tensor,
-    ) -> torch.Tensor:
-        return self.compute_components(model_output, targets, inputs)["total_loss"]
-
-
 class GCELoss(nn.Module):
     """Generalized cross-entropy loss applied sample-wise to class probabilities."""
 
@@ -718,17 +657,6 @@ class MGCECDLClassificationLoss(_MGCECDLGraphReconstructionLoss):
         return self.compute_components(model_output, targets, inputs)["total_loss"]
 
 
-def compute_regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
-    """Compute MAE, RMSE, and R2 on numpy arrays."""
-    y_true = np.asarray(y_true).reshape(-1)
-    y_pred = np.asarray(y_pred).reshape(-1)
-    return {
-        "mae": float(mean_absolute_error(y_true, y_pred)),
-        "rmse": float(np.sqrt(mean_squared_error(y_true, y_pred))),
-        "r2": float(r2_score(y_true, y_pred)),
-    }
-
-
 def compute_classification_metrics(
     y_true: np.ndarray,
     y_pred: np.ndarray,
@@ -779,31 +707,12 @@ def _build_dataset(
     return TensorDataset(*tensors)
 
 
-def create_regression_dataloaders(
-    X_train: np.ndarray,
-    y_train: np.ndarray,
-    X_valid: np.ndarray,
-    y_valid: np.ndarray,
-    batch_size: int,
-    train_modality_masks: np.ndarray | None = None,
-    valid_modality_masks: np.ndarray | None = None,
-) -> tuple[DataLoader, DataLoader]:
-    """Create train and validation dataloaders for regression arrays."""
-    train_dataset = _build_dataset(
-        X_train,
-        y_train,
-        target_dtype=torch.float32,
-        modality_masks=train_modality_masks,
-    )
-    valid_dataset = _build_dataset(
-        X_valid,
-        y_valid,
-        target_dtype=torch.float32,
-        modality_masks=valid_modality_masks,
-    )
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
-    return train_loader, valid_loader
+def _build_dataloader_generator(seed: int | None) -> torch.Generator | None:
+    if seed is None:
+        return None
+    generator = torch.Generator()
+    generator.manual_seed(int(seed))
+    return generator
 
 
 def create_classification_dataloaders(
@@ -814,6 +723,7 @@ def create_classification_dataloaders(
     batch_size: int,
     train_modality_masks: np.ndarray | None = None,
     valid_modality_masks: np.ndarray | None = None,
+    shuffle_seed: int | None = None,
 ) -> tuple[DataLoader, DataLoader]:
     """Create train and validation dataloaders for classification arrays."""
     train_dataset = _build_dataset(
@@ -828,9 +738,46 @@ def create_classification_dataloaders(
         target_dtype=torch.long,
         modality_masks=valid_modality_masks,
     )
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    generator = _build_dataloader_generator(shuffle_seed)
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        generator=generator,
+    )
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
     return train_loader, valid_loader
+
+
+def escalar_features_minmax_mgcecdl(
+    splits: Mapping[str, Any],
+    feature_range: tuple[float, float] = (0.0, 1.0),
+) -> dict[str, Any]:
+    """Fit MinMax on X_train and transform MGCECDL feature splits without touching y."""
+    required_keys = {"X_train", "X_valid"}
+    missing_keys = required_keys - set(splits)
+    if missing_keys:
+        raise ValueError(
+            "Faltan splits de features para escalar MGCECDL: "
+            f"{sorted(missing_keys)}"
+        )
+
+    scaler = MinMaxScaler(feature_range=feature_range)
+    scaled_splits = dict(splits)
+    scaled_splits["X_train"] = scaler.fit_transform(
+        np.asarray(splits["X_train"], dtype=np.float32)
+    ).astype(np.float32)
+    scaled_splits["X_valid"] = scaler.transform(
+        np.asarray(splits["X_valid"], dtype=np.float32)
+    ).astype(np.float32)
+
+    if "X_test" in splits:
+        scaled_splits["X_test"] = scaler.transform(
+            np.asarray(splits["X_test"], dtype=np.float32)
+        ).astype(np.float32)
+
+    scaled_splits["feature_scaler"] = scaler
+    return scaled_splits
 
 
 def _unpack_batch(
@@ -843,38 +790,6 @@ def _unpack_batch(
         X_batch, y_batch, modality_masks = batch
         return X_batch, y_batch, modality_masks
     raise ValueError(f"Unsupported batch format with {len(batch)} tensors.")
-
-
-def train_one_epoch(
-    model: MGCECDLRegressor,
-    loader: DataLoader,
-    optimizer: torch.optim.Optimizer,
-    loss_fn: MGCECDLRegressionLoss,
-    device: str | torch.device,
-) -> dict[str, float]:
-    """Train the regression model for one epoch and report mean loss components."""
-    device = _coerce_device(device)
-    model.train()
-    loss_fn = loss_fn.to(device)
-    running = _initialize_running_metrics(_REGRESSION_COMPONENT_KEYS)
-
-    for batch in loader:
-        X_batch, y_batch, modality_masks = _unpack_batch(batch)
-        X_batch = X_batch.to(device)
-        y_batch = y_batch.to(device).reshape(-1)
-        modality_masks = None if modality_masks is None else modality_masks.to(device)
-
-        optimizer.zero_grad()
-        outputs = model(X_batch, modality_masks=modality_masks)
-        components = loss_fn.compute_components(outputs, y_batch, X_batch)
-        components["total_loss"].backward()
-        optimizer.step()
-
-        for key in running:
-            running[key] += float(components[key].detach().cpu())
-
-    batch_count = max(len(loader), 1)
-    return {key: value / batch_count for key, value in running.items()}
 
 
 def _train_classification_one_epoch(
@@ -907,72 +822,6 @@ def _train_classification_one_epoch(
 
     batch_count = max(len(loader), 1)
     return {key: value / batch_count for key, value in running.items()}
-
-
-def evaluate_model(
-    model: MGCECDLRegressor,
-    loader: DataLoader,
-    loss_fn: MGCECDLRegressionLoss,
-    device: str | torch.device,
-    inverse_transform_fn: Callable[[np.ndarray], np.ndarray] | None = None,
-) -> dict[str, Any]:
-    """Evaluate the regression model and report loss plus regression metrics."""
-    device = _coerce_device(device)
-    model.eval()
-    loss_fn = loss_fn.to(device)
-    running = _initialize_running_metrics(_REGRESSION_COMPONENT_KEYS)
-    all_predictions: list[np.ndarray] = []
-    all_targets: list[np.ndarray] = []
-    all_modality_predictions: list[np.ndarray] = []
-    all_reliabilities: list[np.ndarray] = []
-
-    with torch.no_grad():
-        for batch in loader:
-            X_batch, y_batch, modality_masks = _unpack_batch(batch)
-            X_batch = X_batch.to(device)
-            y_batch = y_batch.to(device).reshape(-1)
-            modality_masks = None if modality_masks is None else modality_masks.to(device)
-
-            outputs = model(X_batch, modality_masks=modality_masks)
-            components = loss_fn.compute_components(outputs, y_batch, X_batch)
-            for key in running:
-                running[key] += float(components[key].detach().cpu())
-
-            all_predictions.append(outputs["fused_prediction"].detach().cpu().numpy())
-            all_targets.append(y_batch.detach().cpu().numpy().reshape(-1, 1))
-            all_modality_predictions.append(outputs["modality_predictions"].detach().cpu().numpy())
-            all_reliabilities.append(outputs["reliabilities"].detach().cpu().numpy())
-
-    predictions = np.vstack(all_predictions)
-    targets = np.vstack(all_targets)
-    modality_predictions = np.vstack(all_modality_predictions)
-    reliabilities = np.vstack(all_reliabilities)
-
-    if inverse_transform_fn is not None:
-        targets_original = inverse_transform_fn(targets).reshape(-1)
-        predictions_original = inverse_transform_fn(predictions).reshape(-1)
-    else:
-        targets_original = targets.reshape(-1)
-        predictions_original = predictions.reshape(-1)
-
-    component_means = {
-        key: value / max(len(loader), 1)
-        for key, value in running.items()
-    }
-    metrics = compute_regression_metrics(targets_original, predictions_original)
-    metrics.update(
-        {
-            "loss": component_means["total_loss"],
-            **component_means,
-            "predictions": predictions,
-            "targets": targets,
-            "predictions_original": predictions_original,
-            "targets_original": targets_original,
-            "modality_predictions": modality_predictions,
-            "reliabilities": reliabilities,
-        }
-    )
-    return metrics
 
 
 def evaluate_classification_model(
@@ -1043,39 +892,6 @@ def evaluate_classification_model(
     return metrics
 
 
-def predict_regression(
-    model: MGCECDLRegressor,
-    X: np.ndarray,
-    device: str | torch.device,
-    batch_size: int = 1024,
-) -> dict[str, np.ndarray | tuple[str, ...]]:
-    """Predict fused outputs, modality predictions, and reliabilities for numpy inputs."""
-    device = resolve_training_device(device)
-    model = model.to(device)
-    dataset = TensorDataset(torch.tensor(X, dtype=torch.float32))
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
-
-    model.eval()
-    fused_predictions: list[np.ndarray] = []
-    modality_predictions: list[np.ndarray] = []
-    reliabilities: list[np.ndarray] = []
-
-    with torch.no_grad():
-        for (X_batch,) in loader:
-            X_batch = X_batch.to(device)
-            outputs = model(X_batch)
-            fused_predictions.append(outputs["fused_prediction"].detach().cpu().numpy())
-            modality_predictions.append(outputs["modality_predictions"].detach().cpu().numpy())
-            reliabilities.append(outputs["reliabilities"].detach().cpu().numpy())
-
-    return {
-        "fused_prediction": np.vstack(fused_predictions),
-        "modality_predictions": np.vstack(modality_predictions),
-        "reliabilities": np.vstack(reliabilities),
-        "modality_names": outputs["modality_names"],
-    }
-
-
 def predict_classification(
     model: MGCECDLClassifier,
     X: np.ndarray,
@@ -1118,92 +934,6 @@ def predict_classification(
     }
 
 
-def train_mgcecdl_model(
-    model: MGCECDLRegressor,
-    train_loader: DataLoader,
-    valid_loader: DataLoader,
-    optimizer: torch.optim.Optimizer,
-    loss_fn: MGCECDLRegressionLoss,
-    device: str | torch.device,
-    max_epochs: int = 100,
-    patience: int = 20,
-    checkpoint_path: str | Path | None = None,
-    inverse_transform_fn: Callable[[np.ndarray], np.ndarray] | None = None,
-    verbose: bool = False,
-) -> dict[str, Any]:
-    """Train the regression model with early stopping on validation MAE."""
-    device = resolve_training_device(device)
-    best_metric = float("inf")
-    best_epoch = -1
-    best_state: dict[str, torch.Tensor] | None = None
-    epochs_without_improvement = 0
-    history: list[dict[str, float]] = []
-
-    checkpoint_path = None if checkpoint_path is None else Path(checkpoint_path)
-    if checkpoint_path is not None:
-        checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
-
-    for epoch in range(max_epochs):
-        train_metrics = train_one_epoch(model, train_loader, optimizer, loss_fn, device)
-        valid_metrics = evaluate_model(
-            model,
-            valid_loader,
-            loss_fn,
-            device,
-            inverse_transform_fn=inverse_transform_fn,
-        )
-
-        epoch_summary = {
-            "epoch": float(epoch + 1),
-            "train_loss": train_metrics["total_loss"],
-            "valid_loss": valid_metrics["loss"],
-            "valid_mae": valid_metrics["mae"],
-            "valid_rmse": valid_metrics["rmse"],
-            "valid_r2": valid_metrics["r2"],
-        }
-        epoch_summary.update(
-            {f"train_{key}": train_metrics[key] for key in _REGRESSION_COMPONENT_KEYS}
-        )
-        epoch_summary.update(
-            {f"valid_{key}": valid_metrics[key] for key in _REGRESSION_COMPONENT_KEYS}
-        )
-        history.append(epoch_summary)
-
-        if verbose:
-            print(
-                f"Regresion | Epoch {epoch + 1:03d}/{max_epochs:03d} | "
-                f"train_loss={train_metrics['total_loss']:.6f} | "
-                f"valid_loss={valid_metrics['loss']:.6f} | "
-                f"MAE={valid_metrics['mae']:.6f} | "
-                f"RMSE={valid_metrics['rmse']:.6f} | "
-                f"R2={valid_metrics['r2']:.6f}",
-                flush=True,
-            )
-
-        if valid_metrics["mae"] < best_metric:
-            best_metric = valid_metrics["mae"]
-            best_epoch = epoch + 1
-            best_state = copy.deepcopy(model.state_dict())
-            epochs_without_improvement = 0
-            if checkpoint_path is not None:
-                guardar_modelo_mgcecdl(model, checkpoint_path, best_state)
-        else:
-            epochs_without_improvement += 1
-            if epochs_without_improvement >= patience:
-                break
-
-    if best_state is None:
-        best_state = copy.deepcopy(model.state_dict())
-    model.load_state_dict(best_state)
-
-    return {
-        "history": history,
-        "best_epoch": best_epoch,
-        "best_metric": best_metric,
-        "checkpoint_path": str(checkpoint_path) if checkpoint_path is not None else None,
-    }
-
-
 def train_mgcecdl_classifier(
     model: MGCECDLClassifier,
     train_loader: DataLoader,
@@ -1217,6 +947,7 @@ def train_mgcecdl_classifier(
     verbose: bool = False,
 ) -> dict[str, Any]:
     """Train the classification model with early stopping on validation accuracy."""
+    _validar_modalidades_entrenamiento_mgcecdl(model.modality_feature_indices)
     device = resolve_training_device(device)
     best_metric = float("-inf")
     best_epoch = -1
@@ -1256,13 +987,16 @@ def train_mgcecdl_classifier(
         history.append(epoch_summary)
 
         if verbose:
+            best_so_far = max(best_metric, valid_metrics["accuracy"])
+            best_epoch_so_far = epoch + 1 if valid_metrics["accuracy"] > best_metric else best_epoch
             print(
                 f"Clasificacion | Epoch {epoch + 1:03d}/{max_epochs:03d} | "
                 f"train_loss={train_metrics['total_loss']:.6f} | "
                 f"valid_loss={valid_metrics['loss']:.6f} | "
                 f"accuracy={valid_metrics['accuracy']:.6f} | "
                 f"balanced_accuracy={valid_metrics['balanced_accuracy']:.6f} | "
-                f"macro_f1={valid_metrics['macro_f1']:.6f}",
+                f"macro_f1={valid_metrics['macro_f1']:.6f} | "
+                f"best_accuracy={best_so_far:.6f}@{best_epoch_so_far}",
                 flush=True,
             )
 
@@ -1290,21 +1024,8 @@ def train_mgcecdl_classifier(
     }
 
 
-def _build_regression_model_from_params(
-    params: Mapping[str, float | int],
-    modality_feature_indices: Mapping[str, list[int]],
-) -> MGCECDLRegressor:
-    return MGCECDLRegressor(
-        modality_feature_indices=modality_feature_indices,
-        hidden_dim=int(params["hidden_dim"]),
-        embed_dim=int(params["embed_dim"]),
-        dropout=float(params["dropout"]),
-        temperature=float(params["temperature"]),
-    )
-
-
 def _build_classification_model_from_params(
-    params: Mapping[str, float | int],
+    params: Mapping[str, float | int | bool],
     modality_feature_indices: Mapping[str, list[int]],
     n_classes: int,
 ) -> MGCECDLClassifier:
@@ -1316,107 +1037,6 @@ def _build_classification_model_from_params(
         dropout=float(params["dropout"]),
         temperature=float(params["temperature"]),
     )
-
-
-def crear_objective_regresion_mgcecdl(
-    X_train: np.ndarray,
-    y_train: np.ndarray,
-    X_valid: np.ndarray,
-    y_valid: np.ndarray,
-    modality_feature_indices: Mapping[str, list[int]],
-    feature_mean: np.ndarray,
-    feature_std: np.ndarray,
-    adjacency_matrix: np.ndarray,
-    inverse_transform_fn: Callable[[np.ndarray], np.ndarray],
-    device: str | torch.device,
-    max_epochs: int = 60,
-    patience: int = 40,
-    seed: int = 42,
-    weight_modality_loss_by_reliability: bool = True,
-) -> Callable[[optuna.trial.Trial], float]:
-    """Create the Optuna objective for M-GCECDL regression."""
-    device = resolve_training_device(device)
-
-    def objective(trial: optuna.trial.Trial) -> float:
-        torch.manual_seed(seed)
-        np.random.seed(seed)
-
-        params = {
-            "hidden_dim": trial.suggest_categorical("hidden_dim", [64, 128, 192]),
-            "embed_dim": trial.suggest_categorical("embed_dim", [32, 64, 96]),
-            "dropout": trial.suggest_float("dropout", 0.0, 0.35),
-            "temperature": trial.suggest_float("temperature", 0.5, 2.0),
-            "learning_rate": trial.suggest_float("learning_rate", 1e-4, 1e-1, log=True),
-            "weight_decay": trial.suggest_float("weight_decay", 1e-6, 1e-4, log=True),
-            "optimizer_type": trial.suggest_categorical(
-                "optimizer_type", ["adam", "adamw", "sgd", "rmsprop"]
-            ),
-            "momentum": trial.suggest_float("momentum", 0.5, 0.95),
-            "batch_size": trial.suggest_categorical("batch_size", [256, 512, 1024]),
-            "gamma_sup": trial.suggest_float("gamma_sup", 0.05, 0.75),
-            "gamma_agr": trial.suggest_float("gamma_agr", 0.01, 0.50),
-            "gamma_reg": trial.suggest_float("gamma_reg", 1e-4, 0.10, log=True),
-            "fused_delta": trial.suggest_float("fused_delta", 0.5, 2.0),
-            "modality_delta": trial.suggest_float("modality_delta", 0.5, 2.0),
-            "rbf_sigma": trial.suggest_float("rbf_sigma", 1e-2, 10.0, log=True),
-            "lambda_reconstruction": trial.suggest_float(
-                "lambda_reconstruction", 1e-4, 0.5, log=True
-            ),
-            "lambda_mutual_information": trial.suggest_float(
-                "lambda_mutual_information", 1e-4, 0.75, log=True
-            ),
-        }
-
-        model = _build_regression_model_from_params(params, modality_feature_indices).to(device)
-        optimizer = _build_mgcecdl_optimizer(
-            model=model,
-            optimizer_type=str(params["optimizer_type"]),
-            learning_rate=float(params["learning_rate"]),
-            momentum=float(params["momentum"]),
-            weight_decay=float(params["weight_decay"]),
-        )
-        regression_loss_scales = calcular_escalas_regresion_mgcecdl(
-            y_train,
-            fused_delta=float(params["fused_delta"]),
-            modality_delta=float(params["modality_delta"]),
-        )
-        loss_fn = MGCECDLRegressionLoss(
-            gamma_sup=float(params["gamma_sup"]),
-            gamma_agr=float(params["gamma_agr"]),
-            gamma_reg=float(params["gamma_reg"]),
-            fused_delta=float(params["fused_delta"]),
-            modality_delta=float(params["modality_delta"]),
-            weight_modality_loss_by_reliability=weight_modality_loss_by_reliability,
-            feature_mean=feature_mean,
-            feature_std=feature_std,
-            adjacency_matrix=adjacency_matrix,
-            rbf_sigma=float(params["rbf_sigma"]),
-            lambda_reconstruction=float(params["lambda_reconstruction"]),
-            lambda_mutual_information=float(params["lambda_mutual_information"]),
-            **regression_loss_scales,
-        )
-        train_loader, valid_loader = create_regression_dataloaders(
-            X_train,
-            y_train,
-            X_valid,
-            y_valid,
-            batch_size=int(params["batch_size"]),
-        )
-        result = train_mgcecdl_model(
-            model=model,
-            train_loader=train_loader,
-            valid_loader=valid_loader,
-            optimizer=optimizer,
-            loss_fn=loss_fn,
-            device=device,
-            max_epochs=max_epochs,
-            patience=patience,
-            checkpoint_path=None,
-            inverse_transform_fn=inverse_transform_fn,
-        )
-        return float(result["best_metric"])
-
-    return objective
 
 
 def crear_objective_clasificacion_mgcecdl(
@@ -1436,16 +1056,19 @@ def crear_objective_clasificacion_mgcecdl(
     weight_modality_loss_by_reliability: bool = True,
 ) -> Callable[[optuna.trial.Trial], float]:
     """Create the Optuna objective for M-GCECDL classification."""
+    _validar_modalidades_entrenamiento_mgcecdl(
+        modality_feature_indices,
+        n_features=X_train.shape[1],
+    )
     device = resolve_training_device(device)
 
     def objective(trial: optuna.trial.Trial) -> float:
-        torch.manual_seed(seed)
-        np.random.seed(seed)
+        seed_mgcecdl(seed)
 
         params = {
-            "hidden_dim": trial.suggest_categorical("hidden_dim", [64, 128, 192]),
-            "embed_dim": trial.suggest_categorical("embed_dim", [32, 64, 96]),
-            "dropout": trial.suggest_float("dropout", 0.0, 0.35),
+            "hidden_dim": trial.suggest_categorical("hidden_dim", [128, 192, 256]),
+            "embed_dim": trial.suggest_categorical("embed_dim", [64, 96, 128]),
+            "dropout": trial.suggest_float("dropout", 0.0, 0.25),
             "temperature": trial.suggest_float("temperature", 0.5, 2.0),
             "learning_rate": trial.suggest_float("learning_rate", 1e-4, 1e-1, log=True),
             "weight_decay": trial.suggest_float("weight_decay", 1e-6, 1e-4, log=True),
@@ -1456,15 +1079,15 @@ def crear_objective_clasificacion_mgcecdl(
             "batch_size": trial.suggest_categorical("batch_size", [256, 512, 1024]),
             "q": trial.suggest_float("q", 0.35, 0.90),
             "q_d": trial.suggest_float("q_d", 0.35, 0.90),
-            "gamma_sup": trial.suggest_float("gamma_sup", 0.05, 0.75),
-            "gamma_agr": trial.suggest_float("gamma_agr", 0.01, 0.50),
-            "gamma_reg": trial.suggest_float("gamma_reg", 1e-4, 0.10, log=True),
+            "gamma_sup": trial.suggest_float("gamma_sup", 1e-2, 1.0, log=True),
+            "gamma_agr": trial.suggest_float("gamma_agr", 1e-2, 1.0, log=True),
+            "gamma_reg": trial.suggest_float("gamma_reg", 1e-2, 1.0, log=True),
             "rbf_sigma": trial.suggest_float("rbf_sigma", 1e-2, 10.0, log=True),
             "lambda_reconstruction": trial.suggest_float(
-                "lambda_reconstruction", 1e-4, 0.5, log=True
+                "lambda_reconstruction", 1e-2, 1.0, log=True
             ),
             "lambda_mutual_information": trial.suggest_float(
-                "lambda_mutual_information", 1e-4, 0.75, log=True
+                "lambda_mutual_information", 1e-2, 1.0, log=True
             ),
         }
 
@@ -1502,6 +1125,7 @@ def crear_objective_clasificacion_mgcecdl(
             X_valid,
             y_valid,
             batch_size=int(params["batch_size"]),
+            shuffle_seed=seed,
         )
         result = train_mgcecdl_classifier(
             model=model,
@@ -1553,17 +1177,23 @@ def cargar_estudio_optuna_mgcecdl(
     if not storage_path.exists():
         raise FileNotFoundError(f"No existe el journal Optuna MGCECDL: {storage_path}")
 
-    study_names = {
-        "clasificacion": "mgcecdl_classification_weighted_losses",
-        "regresion": "mgcecdl_regression_weighted_losses",
-    }
-    try:
-        study_name = study_names[modo_objetivo.lower()]
-    except KeyError as exc:
-        raise ValueError("modo_objetivo debe ser 'clasificacion' o 'regresion'.") from exc
+    if modo_objetivo.lower() != "clasificacion":
+        raise ValueError("modo_objetivo debe ser 'clasificacion'.")
 
     storage = JournalStorage(JournalFileStorage(str(storage_path)))
-    return optuna.load_study(study_name=study_name, storage=storage)
+    return optuna.load_study(
+        study_name="mgcecdl_classification_weighted_losses",
+        storage=storage,
+    )
+
+
+def guardar_estudio_optuna(study: optuna.Study, output_path: str | Path) -> Path:
+    """Serialize an Optuna study object for notebook workflows."""
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(study, output_path)
+    print(f"Objeto Optuna guardado en: {output_path}")
+    return output_path
 
 
 def buscar_estudio_optuna_mgcecdl(
@@ -1582,64 +1212,43 @@ def buscar_estudio_optuna_mgcecdl(
     max_epochs: int = 60,
     patience: int = 40,
     seed: int = 42,
-    inverse_transform_fn: Callable[[np.ndarray], np.ndarray] | None = None,
     n_classes: int | None = None,
     weight_modality_loss_by_reliability: bool = True,
 ) -> optuna.Study:
-    """Ejecuta la busqueda Optuna de MGCECDL para regresion o clasificacion."""
+    """Ejecuta la busqueda Optuna de MGCECDL para clasificacion."""
+    _validar_modalidades_entrenamiento_mgcecdl(
+        modality_feature_indices,
+        n_features=X_train.shape[1],
+    )
     modo_objetivo = modo_objetivo.lower()
-    if modo_objetivo == "regresion":
-        if inverse_transform_fn is None:
-            raise ValueError("inverse_transform_fn es requerido para regresion.")
-        objective = crear_objective_regresion_mgcecdl(
-            X_train=X_train,
-            y_train=y_train,
-            X_valid=X_valid,
-            y_valid=y_valid,
-            modality_feature_indices=modality_feature_indices,
-            feature_mean=feature_mean,
-            feature_std=feature_std,
-            adjacency_matrix=adjacency_matrix,
-            inverse_transform_fn=inverse_transform_fn,
-            device=device,
-            max_epochs=max_epochs,
-            patience=patience,
-            seed=seed,
-            weight_modality_loss_by_reliability=weight_modality_loss_by_reliability,
-        )
-        study_name = "mgcecdl_regression_weighted_losses"
-        direction = "minimize"
-    elif modo_objetivo == "clasificacion":
-        if n_classes is None:
-            raise ValueError("n_classes es requerido para clasificacion.")
-        objective = crear_objective_clasificacion_mgcecdl(
-            X_train=X_train,
-            y_train=y_train,
-            X_valid=X_valid,
-            y_valid=y_valid,
-            modality_feature_indices=modality_feature_indices,
-            feature_mean=feature_mean,
-            feature_std=feature_std,
-            adjacency_matrix=adjacency_matrix,
-            n_classes=n_classes,
-            device=device,
-            max_epochs=max_epochs,
-            patience=patience,
-            seed=seed,
-            weight_modality_loss_by_reliability=weight_modality_loss_by_reliability,
-        )
-        study_name = "mgcecdl_classification_weighted_losses"
-        direction = "maximize"
-    else:
-        raise ValueError("modo_objetivo debe ser 'regresion' o 'clasificacion'.")
+    if modo_objetivo != "clasificacion":
+        raise ValueError("modo_objetivo debe ser 'clasificacion'.")
+    if n_classes is None:
+        raise ValueError("n_classes es requerido para clasificacion.")
+    objective = crear_objective_clasificacion_mgcecdl(
+        X_train=X_train,
+        y_train=y_train,
+        X_valid=X_valid,
+        y_valid=y_valid,
+        modality_feature_indices=modality_feature_indices,
+        feature_mean=feature_mean,
+        feature_std=feature_std,
+        adjacency_matrix=adjacency_matrix,
+        n_classes=n_classes,
+        device=device,
+        max_epochs=max_epochs,
+        patience=patience,
+        seed=seed,
+        weight_modality_loss_by_reliability=weight_modality_loss_by_reliability,
+    )
 
     return run_optuna_study(
         objective=objective,
-        study_name=study_name,
+        study_name="mgcecdl_classification_weighted_losses",
         storage_path=storage_path,
         n_trials=n_trials,
         seed=seed,
-        direction=direction,
+        direction="maximize",
     )
 
 
