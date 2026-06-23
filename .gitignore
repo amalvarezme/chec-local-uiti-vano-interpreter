@@ -22,6 +22,7 @@ outputs/*
 notebooks/outputs/*
 !notebooks/outputs/.gitkeep
 notebooks/notebooks/outputs/*
+lib/
 
 .vscode/
 .DS_Store
