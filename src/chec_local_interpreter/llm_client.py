@@ -55,7 +55,11 @@ def call_llm(
         if display_progress:
             from IPython.display import display, HTML, clear_output
 
-        sys_prompt = "INSTRUCCIÓN OBLIGATORIA: Siempre debes estructurar tu cadena de pensamiento (Chain of Thought) detallada paso a paso dentro de etiquetas <think> y </think> obligatoriamente, ANTES de generar la salida final en JSON."
+        sys_prompt = (
+            "INSTRUCCION OBLIGATORIA: responde unicamente con la salida final solicitada. "
+            "No incluyas etiquetas <think>, razonamiento interno, markdown, explicaciones previas "
+            "ni texto posterior. Si se pide JSON, devuelve solo JSON valido."
+        )
         full_prompt = f"{sys_prompt}\n\n{prompt}"
         
         response = client.chat.completions.create(

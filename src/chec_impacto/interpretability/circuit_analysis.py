@@ -1088,7 +1088,8 @@ def construir_prompt_inferencia(context_package, skill_bundle):
     return (
         "Eres un agente de interpretacion de inferencia MGCECDL para CHEC. "
         "Usa exclusivamente el contexto estructurado, las skills y los grafos HTML "
-        "referenciados. Devuelve solo JSON valido, sin markdown.\n\n"
+        "referenciados. Devuelve solo JSON valido, sin markdown, sin etiquetas <think>, "
+        "sin razonamiento interno visible y sin texto antes o despues del JSON.\n\n"
         "## Skills de inferencia\n"
         f"{skill_bundle}\n\n"
         "## Contexto estructurado\n"
@@ -1097,7 +1098,8 @@ def construir_prompt_inferencia(context_package, skill_bundle):
         "Devuelve un objeto JSON con: contexto, entregables, escenarios, "
         "coherencia_grafo_modelo, hallazgos y limitaciones. No afirmes causalidad; "
         "describe SHAP/Borda y grafos como comportamiento del modelo y asociaciones "
-        "estimadas por reconstruccion MGCECDL + RBF."
+        "estimadas por reconstruccion MGCECDL + RBF. Incluye exactamente todos los "
+        "escenarios presentes en contexto.escenarios usando el mismo valor de nombre."
     )
 
 

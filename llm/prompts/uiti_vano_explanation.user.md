@@ -31,8 +31,7 @@ Schema de salida:
 {output_schema_json}
 ```
 
-Incluye `<think>...</think>` con razonamiento ANTES del JSON.
-Luego de `</think>`, devuelve solo JSON valido en español.
+Devuelve solo JSON valido en español. No incluyas `<think>`, markdown, comentarios, ni texto antes o despues del JSON.
 
 **PROHIBIDO:** rag, bitacora, normativa, modelo predictivo, mascara, what-if, simulacion, reporte final, causó definitivamente, demuestra que, la causa fue.
 **IDs:** Usa solo los `critical_point_id` del contexto. Si no aplica, usa `null`.
