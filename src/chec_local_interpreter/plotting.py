@@ -907,16 +907,28 @@ def render_llm_analysis(
     def _figure_html(fig, title=None, show_title=False):
         if not fig:
             return ""
+        if hasattr(fig, "to_html"):
+            try:
+                import plotly.graph_objects as go
+                fig_copy = go.Figure(fig)
+                if show_title and title:
+                    fig_copy.update_layout(title=dict(text=title, font=dict(size=14)))
+                else:
+                    fig_copy.update_layout(title=dict(text=""), margin=dict(t=20))
+                return fig_copy.to_html(full_html=False, include_plotlyjs=False)
+            except Exception:
+                return fig.to_html(full_html=False, include_plotlyjs=False)
         try:
-            import plotly.graph_objects as go
-            fig_copy = go.Figure(fig)
-            if show_title and title:
-                fig_copy.update_layout(title=dict(text=title, font=dict(size=14)))
-            else:
-                fig_copy.update_layout(title=dict(text=""), margin=dict(t=20))
-            return fig_copy.to_html(full_html=False, include_plotlyjs=False)
-        except Exception:
-            return fig.to_html(full_html=False, include_plotlyjs=False)
+            import base64
+            from io import BytesIO
+
+            buffer = BytesIO()
+            fig.savefig(buffer, format="png", bbox_inches="tight", dpi=140)
+            encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+            alt = _escape(title or "Grafica")
+            return f"<img class='embedded-figure' src='data:image/png;base64,{encoded}' alt='{alt}'>"
+        except Exception as exc:
+            return f"<p class='muted'>No se pudo renderizar la figura: {_escape(exc)}</p>"
 
     def _chart_panel(title, html):
         if not html:
@@ -1267,6 +1279,7 @@ def render_llm_analysis(
             .chart-grid.two-col {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
             .chart-panel {{ border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; background: #ffffff; min-width: 0; }}
             .chart-panel h3 {{ margin: 0; padding: 10px 14px; background: #f8fafc; color: #1e3a8a; font-size: 15px; border-bottom: 1px solid #e2e8f0; }}
+            .embedded-figure {{ display: block; width: 100%; height: auto; padding: 12px; box-sizing: border-box; }}
             .graph-panel iframe {{ width: 100%; height: 620px; border: 0; background: #ffffff; }}
             .graph-actions {{ padding: 10px 14px; border-bottom: 1px solid #e2e8f0; background: #ffffff; }}
             .graph-actions a {{ color: #1d4ed8; font-weight: 600; text-decoration: none; }}
