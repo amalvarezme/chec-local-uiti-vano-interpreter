@@ -32,7 +32,7 @@ def _required_skills(profile: str = "base") -> tuple[str, ...]:
 def skills_dir(base_dir: str | Path | None = None, *, profile: str = "base") -> Path:
     if base_dir is not None:
         return Path(base_dir)
-    suffix = "skills_inferencia" if profile == "inferencia" else "skills"
+    suffix = "skills_inference" if profile == "inferencia" else "skills"
     return llm_root() / suffix
 
 

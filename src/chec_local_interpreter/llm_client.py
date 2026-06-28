@@ -21,6 +21,7 @@ def call_llm(
     call_enabled: bool = False,
     display_progress: bool = True,
     display_content: bool = True,
+    max_output_tokens: int | None = None,
 ) -> LLMCallResult:
     if not call_enabled:
         return LLMCallResult(called=False, message="CALL_LLM=false; prompt saved without calling the model.")
@@ -48,6 +49,7 @@ def call_llm(
 
     client = OpenAI(api_key=api_key, base_url=base_url) if base_url else OpenAI(api_key=api_key)
     selected_model = model or os.getenv("LLM_MODEL", "gemini-2.5-flash-lite")
+    max_tokens = int(max_output_tokens or os.getenv("LLM_MAX_OUTPUT_TOKENS", "8192"))
     
     try:
         import time
@@ -62,18 +64,26 @@ def call_llm(
         )
         full_prompt = f"{sys_prompt}\n\n{prompt}"
         
-        response = client.chat.completions.create(
-            model=selected_model,
-            messages=[
-                {"role": "user", "content": full_prompt}
-            ],
-            temperature=0,
-            stream=True,
-        )
+        request_kwargs = {
+            "model": selected_model,
+            "messages": [{"role": "user", "content": full_prompt}],
+            "temperature": 0,
+            "stream": True,
+            "max_tokens": max_tokens,
+        }
+        if provider.lower() in {"google", "openai"}:
+            request_kwargs["response_format"] = {"type": "json_object"}
+
+        try:
+            response = client.chat.completions.create(**request_kwargs)
+        except Exception:
+            request_kwargs.pop("response_format", None)
+            response = client.chat.completions.create(**request_kwargs)
         
         start_time = time.time()
         output_text = ""
         tokens = 0
+        finish_reason = None
         in_tokens_est = int(len(full_prompt) / 3.5)
         
         # Display handle for dynamic updates
@@ -118,6 +128,8 @@ def call_llm(
         for chunk in response:
             if not chunk.choices:
                 continue
+            if getattr(chunk.choices[0], "finish_reason", None):
+                finish_reason = chunk.choices[0].finish_reason
             delta = chunk.choices[0].delta
             content = delta.content if hasattr(delta, 'content') else ""
             if content:
@@ -173,7 +185,8 @@ def call_llm(
             if not clean_output.strip() and output_text.strip():
                 clean_output = output_text
 
-        return LLMCallResult(called=True, output_text=clean_output, think_content=think_text, message="LLM call completed successfully.")
+        detail = f" finish_reason={finish_reason}" if finish_reason else ""
+        return LLMCallResult(called=True, output_text=clean_output, think_content=think_text, message=f"LLM call completed successfully.{detail}")
     except Exception as e:
         return LLMCallResult(called=True, output_text=None, message=f"LLM call failed: {str(e)}")
 

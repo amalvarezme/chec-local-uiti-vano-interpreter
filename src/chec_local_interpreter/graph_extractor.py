@@ -10,7 +10,7 @@ def build_graphify_context(df: pd.DataFrame, circuit_name: str) -> str:
     Convierte los datos del circuito a archivos markdown crudos, invoca a Graphify
     para estructurar el grafo de conocimiento, y retorna el resumen relacional.
     """
-    base_dir = Path("outputs/graphify_workspace")
+    base_dir = Path("reports/graphify")
     raw_dir = base_dir / "raw"
     out_dir = base_dir / "graphify-out"
     

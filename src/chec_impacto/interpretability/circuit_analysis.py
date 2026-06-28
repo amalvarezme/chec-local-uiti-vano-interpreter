@@ -435,26 +435,15 @@ def construir_grafo_interactivo_muestras(
         score_val = float(score_norm.loc[feature])
         raw_score = float(scores.loc[feature])
         short_mode = feature_to_mode_name.get(feature, "")
-        mode_line = (
-            f'<div style="color:#94b8d8;font-size:10.5px;margin-bottom:4px;">'
-            f'{html.escape(short_mode)}</div>'
-        ) if short_mode else ""
-        tooltip = (
-            f'<div style="font-family:\'Segoe UI\',system-ui,sans-serif;font-size:12px;'
-            f'background:#1a2e4a;color:#e8f0fe;padding:8px 12px;border-radius:6px;'
-            f'min-width:145px;line-height:1.7;">'
-            f'<div style="font-weight:600;font-size:13px;">{html.escape(feature)}</div>'
-            f'{mode_line}'
-            f'<hr style="border:none;border-top:1px solid rgba(255,255,255,0.15);margin:4px 0;">'
-            f'<div style="color:#c5daf0;">Importancia:&nbsp;{score_val:.3f}</div>'
-            f'<div style="color:#7aa8c8;font-size:10.5px;">Borda:&nbsp;{raw_score:.2f}</div>'
-            f'</div>'
-        )
+        tooltip_lines = [
+            str(feature),
+            f"Valor: {score_val:.3f}",
+        ]
         nodes.append({
             "id": feature,
             "label": feature,
             "_score": score_val,
-            "title": tooltip,
+            "title": "\n".join(tooltip_lines),
         })
 
     preserved_lookup = {}
@@ -494,13 +483,7 @@ def construir_grafo_interactivo_muestras(
     edges = []
     for weight, source, target, is_virtual in edge_candidates:
         norm_w = weight / max_raw_edge if max_raw_edge > 0 else 0.0
-        edge_tooltip = (
-            f'<div style="font-family:\'Segoe UI\',system-ui,sans-serif;font-size:11px;'
-            f'background:#1a2e4a;color:#e8f0fe;padding:6px 10px;border-radius:5px;">'
-            f'<div style="color:#94b8d8;">Afinidad: {norm_w:.3f}</div>'
-            f'<div style="color:#6a9dbf;font-size:10px;">{"Virtual" if is_virtual else "Directa"}</div>'
-            f'</div>'
-        )
+        edge_tooltip = f"Valor: {norm_w:.3f}"
         edges.append({
             "from": source,
             "to": target,
@@ -1038,6 +1021,7 @@ def construir_contexto_inferencia(
     graph_feature_order=None,
     estimated_graph_source="reconstruccion_mgcecdl_rbf",
     estimated_graph_rbf_sigma=None,
+    top_vanos_percentile=None,
 ):
     """Build the structured context consumed by the inference LLM skills."""
     features_list = [str(feature) for feature in features]
@@ -1061,6 +1045,7 @@ def construir_contexto_inferencia(
         "fecha_fin": str(fecha_fin),
         "fechas_interes": list(fechas_interes or []),
         "top_n_vanos": int(top_n_vanos),
+        "top_vanos_percentile": None if top_vanos_percentile is None else float(top_vanos_percentile),
         "top_k_vars": int(top_k_vars),
         "filtro_uiti_max": filtro_uiti_max,
         "ventana_climatica_horas": int(ventana_climatica_horas),
@@ -1083,8 +1068,34 @@ def construir_contexto_inferencia(
     }
 
 
+def _compactar_contexto_inferencia_para_prompt(context_package, *, top_variables_limit=3, modos_limit=3, tabla_limit=0):
+    """Return the same inference context with bounded lists for LLM generation."""
+    if not isinstance(context_package, dict):
+        return context_package
+
+    compact = dict(context_package)
+    compact["features"] = list(context_package.get("features", []))
+    compact["graph_feature_order"] = list(context_package.get("graph_feature_order", []))
+    escenarios_compactos = []
+    for escenario in context_package.get("escenarios", []):
+        if not isinstance(escenario, dict):
+            continue
+        escenario_out = dict(escenario)
+        escenario_out["top_variables"] = list(escenario.get("top_variables", []))[:top_variables_limit]
+        escenario_out["modos"] = list(escenario.get("modos", []))[:modos_limit]
+        escenario_out["tabla_top_vanos"] = list(escenario.get("tabla_top_vanos", []))[:tabla_limit]
+        escenario_out["tabla_top_vanos_resumen"] = (
+            f"Se entrega solo una muestra de {min(tabla_limit, len(escenario.get('tabla_top_vanos', [])))} "
+            f"registros; n_vanos_efectivo conserva el total seleccionado."
+        )
+        escenarios_compactos.append(escenario_out)
+    compact["escenarios"] = escenarios_compactos
+    return compact
+
+
 def construir_prompt_inferencia(context_package, skill_bundle):
     """Render the MGCECDL inference prompt from context plus loaded skills."""
+    prompt_context = _compactar_contexto_inferencia_para_prompt(context_package)
     return (
         "Eres un agente de interpretacion de inferencia MGCECDL para CHEC. "
         "Usa exclusivamente el contexto estructurado, las skills y los grafos HTML "
@@ -1093,13 +1104,28 @@ def construir_prompt_inferencia(context_package, skill_bundle):
         "## Skills de inferencia\n"
         f"{skill_bundle}\n\n"
         "## Contexto estructurado\n"
-        f"{json.dumps(context_package, ensure_ascii=False, indent=2)}\n\n"
+        f"{json.dumps(prompt_context, ensure_ascii=False, indent=2)}\n\n"
         "## Contrato de salida\n"
         "Devuelve un objeto JSON con: contexto, entregables, escenarios, "
         "coherencia_grafo_modelo, hallazgos y limitaciones. No afirmes causalidad; "
         "describe SHAP/Borda y grafos como comportamiento del modelo y asociaciones "
         "estimadas por reconstruccion MGCECDL + RBF. Incluye exactamente todos los "
-        "escenarios presentes en contexto.escenarios usando el mismo valor de nombre."
+        "escenarios presentes en contexto.escenarios usando el mismo valor de nombre. "
+        "Mantén la respuesta muy compacta: por cada escenario devuelve solo nombre e "
+        "interpretacion, con 2 frases como maximo. No copies features, graph_feature_order, "
+        "top_variables, modos ni tabla_top_vanos; solo sintetiza sus patrones. El JSON "
+        "completo debe ser breve para evitar truncamiento. No agregues campos no solicitados "
+        "ni repitas contenido literal de las skills.\n\n"
+        "Usa esta forma exacta y completa:\n"
+        "{\n"
+        '  "contexto": {"circuito": "...", "periodo": {"inicio": "...", "fin": "..."}, "modelo": "..."},\n'
+        '  "entregables": {"grafos_html": [{"escenario": "...", "path": "..."}]},\n'
+        '  "escenarios": [{"nombre": "...", "interpretacion": "..."}],\n'
+        '  "coherencia_grafo_modelo": ["..."],\n'
+        '  "hallazgos": ["..."],\n'
+        '  "limitaciones": ["..."],\n'
+        '  "inferencias_predictivas": [{"horizonte": "periodo analizado", "riesgo": "...", "justificacion_modelo": "..."}]\n'
+        "}"
     )
 
 

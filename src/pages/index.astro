@@ -1,0 +1,2508 @@
+---
+import logoLab from "../assets/site/logos/logo_labIA.png";
+import logoChec from "../assets/site/logos/checlogo.png";
+import logoUnal from "../assets/site/logos/logo_unal_transparente.png";
+import metodologia from "../assets/site/results/metodolgia.png";
+import dataIntelligenceEngine from "../assets/site/results/data_intelligence_engine.png";
+import databricksLogo from "../assets/site/results/databricks.png";
+import pdfData from "../assets/site/results/pdfData.jpeg";
+import georeferencia from "../assets/site/results/georeferencia.jpeg";
+import historicoOutput from "../assets/site/results/hisoticoOutput.jpeg";
+import agente from "../assets/site/results/agente.jpeg";
+import variables from "../data/variables.json";
+
+const grafoRedNivel2 = `${import.meta.env.BASE_URL}grafo_red_nivel2.html`;
+const grafoRedNivel2Seleccionadas = `${import.meta.env.BASE_URL}grafo_red_nivel2_seleccionadas.html`;
+
+const vaciosApi = [
+  ["CAPACIDAD_NOMINAL", "126.732", "76,855715 %"],
+  ["CNT_USUS", "126.732", "76,855715 %"],
+  ["CODIGO", "126.732", "76,855715 %"],
+  ["FECHA_OPERACION_TRF", "126.732", "76,855715 %"],
+  ["FID_TRAFO", "126.732", "76,855715 %"],
+  ["PROMEDIO_KWH_TRF", "126.732", "76,855715 %"],
+  ["NR_T", "92.430", "56,053513 %"],
+  ["CALIBRE_NEUTRO", "28.573", "17,327892 %"],
+  ["LONG_CRUCETA", "24.355", "14,769916 %"],
+  ["NORMA", "9.840", "5,967398 %"],
+  ["ALTURA", "5.426", "3,290559 %"],
+  ["CLASE", "5.426", "3,290559 %"],
+  ["VAL_CRIT_APOYO", "5.426", "3,290559 %"],
+  ["PROMEDIO_KWH_VANO", "5.228", "3,170483 %"]
+];
+
+const variablesSeleccionadas = [
+  ["CNT_VN", "Vanos hasta el equipo que protege", "Numérica"],
+  ["UITI_VANO", "Objetivo: UiTi ponderado por vano", "Objetivo"],
+  ["CNT_TRF", "Transformadores afectados", "Numérica"],
+  ["TIPO", "Tipo de equipo protector", "Categórica"],
+  ["LONGITUD", "Longitud del vano", "Numérica"],
+  ["CNT_FASES", "Cantidad de fases", "Numérica"],
+  ["CONDUCTOR", "Conductor de fases", "Categórica"],
+  ["CALIBRE_NEUTRO", "Calibre del neutro", "Categórica"],
+  ["NG_RED", "Presencia de guarda o neutro", "Categórica"],
+  ["FECHA_OPERACION_VANO", "Entrada en operación del vano", "Fecha"],
+  ["X2 / Y2", "Coordenadas finales del vano", "Numérica"],
+  ["ALTURA", "Altura del apoyo final", "Numérica"],
+  ["CANTIDAD_TIERRA", "Presencia de puesta a tierra", "Numérica"],
+  ["VAL_CRIT_APOYO", "Criticidad por clase de apoyo", "Numérica"],
+  ["CAPACIDAD_NOMINAL", "Capacidad del transformador", "Numérica"],
+  ["FECHA_OPERACION_TRF", "Entrada en operación del transformador", "Fecha"],
+  ["PROMEDIO_KWH_TRF", "Consumo mensual del transformador", "Numérica"],
+  ["TIPO_TAX", "Taxonomía del vano", "Categórica"],
+  ["NR_T", "Riesgo por vegetación", "Numérica"],
+  ["LONG_CRUCETA", "Longitud de cruceta", "Numérica"],
+  ["PROMEDIO_KWH_VANO", "Energía mensual del vano", "Numérica"],
+  ["DDT", "Densidad de descargas a tierra", "Numérica"],
+  ["prep / temp / wind_gust_spd / wind_spd", "Clima horario", "12 rezagos por variable"]
+];
+
+const baseModelFeatures = [
+  "CNT_VN", "CNT_TRF", "TIPO", "LONGITUD", "CNT_FASES", "CONDUCTOR",
+  "CALIBRE_NEUTRO", "NG_RED", "FECHA_OPERACION_VANO", "X2", "Y2", "ALTURA",
+  "CANTIDAD_TIERRA", "VAL_CRIT_APOYO", "CAPACIDAD_NOMINAL", "FECHA_OPERACION_TRF",
+  "PROMEDIO_KWH_TRF", "TIPO_TAX", "NR_T", "LONG_CRUCETA", "PROMEDIO_KWH_VANO", "DDT"
+];
+const climatePrefixes = ["prep", "temp", "wind_gust_spd", "wind_spd"];
+const modelFeatures = [
+  ...baseModelFeatures,
+  ...climatePrefixes.flatMap((prefix) => Array.from({ length: 12 }, (_, lag) => `${prefix}_${lag}`))
+];
+const mgcecdlModes = [
+  ["Climáticos / exógenos", "50 variables", "DDT, NR_T y las familias prep, temp, wind_gust_spd y wind_spd con rezagos 0…11."],
+  ["Estructurales / endógenos", "20 variables", "Topología, protección, geometría, activos, consumos, taxonomía y características físicas del vano."]
+];
+const mgcecdlComponents = [
+  ["Atención por variable", "Pondera variables dentro de cada modo antes de construir sus embeddings."],
+  ["Codificadores por modo", "Aprende representaciones separadas para información climática/exógena y estructural/endógena."],
+  ["Confiabilidad modal", "Estima cuánto peso aporta cada modo para la salida fusionada."],
+  ["Reconstrucción", "Regulariza las representaciones para preservar información de entrada por modalidad."],
+  ["Clasificación de criticidad", "Organiza UITI_VANO en niveles ordinales para priorización operativa."]
+];
+
+const baseColumnsExcludedFromModel = [
+  "CIRCUITO", "FID_SW", "COD_EQ_PROTEGE", "FID_VANO", "T_USUS_EQ_PROT", "LVSW",
+  "CNT_VN_SW", "FECHA", "DURACION", "UITI", "TOT_USUS", "COD_CAUSA", "DESC_CAUSA",
+  "PORC_APORTE_VANO", "X1", "Y1", "COD_APOYO_FIN", "FID_APOYO_FIN", "PROPIETARIO",
+  "CLASE", "ELEMENTO", "NORMA", "FID_TRAFO", "CODIGO", "CNT_USUS"
+];
+const climateFamiliesExcludedFromV3 = ["pres", "sp", "rh", "solar_rad", "clouds"];
+
+const etapas = [
+  ["Entradas de información", "Consolidación de fuentes técnicas, históricas y económicas para alimentar el simulador."],
+  ["Actualización Prototipo 1", "Ajuste de librerías, base de datos 2025, RAG, normativa y chatbot inteligente."],
+  ["Simulación contrafactual", "Escenarios tipo que pasa si para reposición, mantenimiento y eventos extremos."],
+  ["Evaluación económica", "Integración de costos de mantenimiento, reposición y retorno de inversión."],
+  ["Resultados del simulador", "Visualización tabular y georreferenciada de impactos esperados."],
+  ["Soporte a decisiones", "Comparación entre estado actual e intervenciones priorizadas."]
+];
+
+const cronograma = [
+  ["Ajustes módulo M-GCECDL y agentes", "Actualización de librerías, datos 2025 y flujo local", "Mes 1"],
+  ["Ajustes módulo M-GCECDL y agentes", "Actualización de contexto técnico, normativa y documentación", "Mes 1 - Mes 2"],
+  ["Simulación contrafactual", "Diseño de arquitectura del simulador", "Mes 1"],
+  ["Simulación contrafactual", "Modelado probabilístico con restricciones físicas", "Mes 2 - Mes 3"],
+  ["Simulación contrafactual", "Escenarios que pasa si, UiTi por vano y clima extremo", "Mes 2 - Mes 4"],
+  ["Evaluación económica dinámica", "Costos, retorno de inversión y ranking de intervenciones", "Mes 2 - Mes 4"],
+  ["Visualización y despliegue", "Resultados georreferenciados/tabulares e infraestructura local/nube CHEC", "Mes 1 - Mes 4"],
+  ["Validación final", "Pruebas técnicas y ajuste fino", "Mes 4"]
+];
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Resultados de avance del proyecto Simulador de criticidad CHEC - UNAL."
+    />
+    <title>Simulador Criticidad CHEC | Lab IA UNAL</title>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#inicio" aria-label="Inicio">
+        <img src={logoLab.src} alt="Logo Laboratorio IA UNAL" />
+      </a>
+      <nav aria-label="Navegación principal">
+        <a href="#acta">Acta</a>
+        <a href="#cronograma">Cronograma</a>
+        <a href="#resultados">Resultados</a>
+        <a href="#arquitectura">Arquitectura</a>
+      </nav>
+    </header>
+
+    <main id="inicio">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">CHEC + Universidad Nacional de Colombia</p>
+          <h1>Simulador de criticidad CHEC</h1>
+          <p class="lead">
+            Avance del proyecto para desarrollar módulos de inteligencia artificial informados por la física,
+            orientados al análisis de criticidad e intervenciones en redes de nivel de tensión 2.
+          </p>
+          <div class="hero-actions" aria-label="Acciones principales">
+            <a class="button primary" href="#acta">Ver secciones</a>
+            <a class="button secondary" href="#resultados">Resultados actuales</a>
+          </div>
+        </div>
+        <aside class="hero-panel" aria-label="Datos principales del proyecto">
+          <img class="panel-logo" src={logoLab.src} alt="Laboratorio IA UNAL" />
+          <dl>
+            <div>
+              <dt>Contrato</dt>
+              <dd>CRW254513 de 2024</dd>
+            </div>
+            <div>
+              <dt>Acta</dt>
+              <dd>Trabajo número 1</dd>
+            </div>
+            <div>
+              <dt>Duración</dt>
+              <dd>104 días calendario</dd>
+            </div>
+            <div>
+              <dt>Inicio mes 1</dt>
+              <dd>27 de abril de 2026</dd>
+            </div>
+          </dl>
+        </aside>
+      </section>
+
+      <section class="logo-strip" aria-label="Instituciones participantes">
+        <img src={logoChec.src} alt="Logo CHEC" />
+        <img src={logoUnal.src} alt="Logo Universidad Nacional de Colombia" />
+      </section>
+
+      <section id="acta" class="section">
+        <div class="section-heading">
+          <p class="eyebrow">Resumen del documento</p>
+          <h2>Secciones 1 a 9 del acta</h2>
+          <p>
+            Síntesis ejecutiva del alcance, metodología, resultados esperados, cronograma y entregables del
+            proyecto.
+          </p>
+        </div>
+
+        <div class="summary-grid">
+          <article>
+            <span>01</span>
+            <h3>Abreviaturas</h3>
+            <p>CHEC: Central Hidroeléctrica de Caldas S.A. E.S.P. UNAL: Universidad Nacional de Colombia sede Manizales.</p>
+          </article>
+          <article>
+            <span>02</span>
+            <h3>Objeto</h3>
+            <p>Desarrollar módulos de IA informados por la física y apoyados por agentes para estudiar criticidad y efectividad de intervenciones.</p>
+          </article>
+          <article>
+            <span>03</span>
+            <h3>Alcance</h3>
+            <p>Simulación contrafactual para reposición y mantenimiento, estimando UiTi por vano y costos con incertidumbre y sensibilidad.</p>
+          </article>
+          <article>
+            <span>04</span>
+            <h3>Objetivos</h3>
+            <p>Construir módulos de análisis con datos estructurados, modelo multimodal y reportes técnicos de evidencia.</p>
+          </article>
+          <article>
+            <span>05</span>
+            <h3>Metodología</h3>
+            <p>El trabajo avanza desde entradas de información hasta comparación de escenarios para apoyar decisiones de inversión.</p>
+          </article>
+          <article>
+            <span>06</span>
+            <h3>Plazo</h3>
+            <p>La ejecución contempla 104 días calendario, con posibilidad de ajustes por acuerdo entre las partes.</p>
+          </article>
+          <article>
+            <span>07</span>
+            <h3>Resultado esperado</h3>
+            <p>Simulador con visualización georreferenciada y tabular, más actualización de arquitectura local/nube CHEC-EPM.</p>
+          </article>
+          <article>
+            <span>08</span>
+            <h3>Cronograma</h3>
+            <p>Plan de cuatro meses que integra predicción, simulación, evaluación económica, despliegue y validación final.</p>
+          </article>
+          <article>
+            <span>09</span>
+            <h3>Entregables</h3>
+            <p>Informe técnico, repositorio GitHub documentado y pruebas piloto en cuadernos de Python.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section tinted">
+        <div class="section-heading compact">
+          <p class="eyebrow">Tabla resumida</p>
+          <h2>Participantes clave</h2>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Entidad / rol</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Gustavo Agredo Cardona</td>
+                <td>Representante legal del contratista - UNAL</td>
+              </tr>
+              <tr>
+                <td>Juan Carlos Álvarez Barreto</td>
+                <td>Profesional Subgerencia T&amp;D, gestor técnico</td>
+              </tr>
+              <tr>
+                <td>Luis Alirio Bolaños Navarrete</td>
+                <td>Profesional Subgerencia T&amp;D, gestor técnico</td>
+              </tr>
+              <tr>
+                <td>Iván Darío Cardona Jiménez</td>
+                <td>Profesional Área Gestión Operativa, gestor administrativo</td>
+              </tr>
+              <tr>
+                <td>Andrés Marino Álvarez Meza</td>
+                <td>Director del proyecto por parte de UNAL</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-heading">
+          <p class="eyebrow">Ruta metodológica</p>
+          <h2>Etapas de trabajo</h2>
+        </div>
+        <div class="timeline">
+          {etapas.map(([title, text], index) => (
+            <article>
+              <strong>{String(index + 1).padStart(2, "0")}</strong>
+              <div>
+                <h3>{title}</h3>
+                <p>{text}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section id="cronograma" class="section tinted">
+        <div class="section-heading compact">
+          <p class="eyebrow">Tabla resumida</p>
+          <h2>Cronograma de avance</h2>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Módulo / etapa</th>
+                <th>Actividad principal</th>
+                <th>Ventana</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cronograma.map(([modulo, actividad, ventana]) => (
+                <tr>
+                  <td>{modulo}</td>
+                  <td>{actividad}</td>
+                  <td><span class="pill">{ventana}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section deliverables">
+        <div class="section-heading">
+          <p class="eyebrow">Sección 9</p>
+          <h2>Entregables acordados</h2>
+        </div>
+        <div class="deliverable-grid">
+          <article>
+            <h3>Informe técnico</h3>
+            <p>Documento con la descripción de los desarrollos, resultados y decisiones técnicas.</p>
+          </article>
+          <article>
+            <h3>Repositorio GitHub</h3>
+            <p>Código desarrollado y documentado para facilitar trazabilidad y continuidad.</p>
+          </article>
+          <article>
+            <h3>Pruebas piloto</h3>
+            <p>Cuadernos de Python para validar cálculos, procedimientos y actualización de resultados.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="resultados" class="section results">
+        <div class="section-heading">
+          <p class="eyebrow">Resultados actuales</p>
+          <h2>Metodología implementada</h2>
+          <p>
+            Vista actual del flujo de trabajo del simulador de criticidad, integrando datos, agentes,
+            modelado y visualización para la toma de decisiones.
+          </p>
+        </div>
+        <figure>
+          <img src={metodologia.src} alt="Metodología actual del simulador de criticidad CHEC" />
+          <figcaption>Figura de avance: metodología del simulador de criticidad CHEC.</figcaption>
+        </figure>
+      </section>
+
+      <section id="despliegue" class="section cloud">
+        <div class="section-heading">
+          <p class="eyebrow">Despliegue en nube - CHEC</p>
+          <h2>Databricks como plataforma de analítica e IA</h2>
+          <p>
+            Databricks permite integrar datos, modelos y aplicaciones analíticas en un entorno gobernado,
+            escalable y preparado para operación empresarial.
+          </p>
+        </div>
+
+        <div class="cloud-layout">
+          <div class="cloud-copy">
+            <a class="cloud-link" href="https://www.databricks.com/" target="_blank" rel="noreferrer">
+              Ir a Databricks
+            </a>
+            <div class="cloud-items">
+              <article>
+                <h3>Plataforma lakehouse</h3>
+                <p>Unifica almacenamiento, procesamiento y analítica para trabajar con datos estructurados y no estructurados.</p>
+              </article>
+              <article>
+                <h3>IA y datos gobernados</h3>
+                <p>Facilita construir, entrenar y desplegar modelos con trazabilidad, seguridad y control de acceso.</p>
+              </article>
+              <article>
+                <h3>Escalabilidad en nube</h3>
+                <p>Permite ejecutar cargas de trabajo de datos e inteligencia artificial ajustando recursos según la demanda.</p>
+              </article>
+            </div>
+          </div>
+          <div class="cloud-visuals" aria-label="Referencias visuales de Databricks">
+            <img class="databricks-mark" src={databricksLogo.src} alt="Logo Databricks" />
+            <img
+              class="engine-figure"
+              src={dataIntelligenceEngine.src}
+              alt="Esquema Data Intelligence Engine de Databricks"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section id="prototipo-databricks" class="section prototype">
+        <div class="section-heading">
+          <p class="eyebrow">Prototipo 1 - Ajustado en Databricks</p>
+          <h2>Funcionalidades migradas y fortalecidas</h2>
+          <p>
+            Se migraron sobre Databricks las funcionalidades principales del Prototipo 1, incorporando
+            mejoras de visualización, organización de salidas y un agente para apoyar recomendaciones de
+            criticidad sobre los activos analizados.
+          </p>
+        </div>
+
+        <div class="prototype-showcase">
+          <article class="feature-shot">
+            <div>
+              <span>Visualización territorial</span>
+              <h3>Georreferenciación de activos y criticidad</h3>
+              <p>
+                Vista espacial para explorar zonas, activos y concentración de criticidad dentro del flujo
+                analítico desplegado en nube.
+              </p>
+            </div>
+            <img src={georeferencia.src} alt="Vista georreferenciada del prototipo en Databricks" />
+          </article>
+
+          <div class="prototype-gallery">
+            <article>
+              <img src={pdfData.src} alt="Extracción y consulta de datos desde documentos PDF" />
+              <div>
+                <h3>Datos desde PDF</h3>
+                <p>Consulta estructurada de información técnica para alimentar análisis y reportes.</p>
+              </div>
+            </article>
+            <article>
+              <img src={historicoOutput.src} alt="Salida histórica del prototipo ajustado" />
+              <div>
+                <h3>Salidas históricas</h3>
+                <p>Mejor lectura de resultados previos y trazabilidad de los indicadores generados.</p>
+              </div>
+            </article>
+            <article>
+              <img src={agente.src} alt="Agente de recomendaciones de criticidad" />
+              <div>
+                <h3>Agente de criticidad</h3>
+                <p>Asistente para recomendaciones orientadas a priorización y soporte operativo.</p>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="criticidad-fisica" class="section physics">
+        <div class="section-heading">
+          <p class="eyebrow">Estudio de la criticidad por redes informadas por la física</p>
+          <h2>Grafo físico, eléctrico y espacio-temporal</h2>
+          <p>
+            La red de Nivel de Tensión 2 se modela como un grafo de eventos, activos, protecciones,
+            topología, entorno y clima. Cada falla se interpreta como una interacción entre infraestructura,
+            condiciones ambientales y propagación eléctrica hacia el impacto UiTi ponderado por vano.
+          </p>
+        </div>
+
+        <div class="physics-summary">
+          {variables.resumen.map((item) => (
+            <article>
+              <h3>{item.titulo}</h3>
+              <p>{item.descripcion}</p>
+            </article>
+          ))}
+        </div>
+
+        <div class="table-wrap physics-table modes-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Modo</th>
+                <th>Nodos en el grafo</th>
+                <th>Descripción resumida</th>
+              </tr>
+            </thead>
+            <tbody>
+              {variables.modos.map((modo) => (
+                <tr>
+                  <td>{modo.nombre}</td>
+                  <td>{modo.cantidad}</td>
+                  <td>{modo.descripcion}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="connection-intro">
+          <h3>Descripción de conexiones físico/lógicas</h3>
+          <p>
+            El grafo conecta variables por reglas de causalidad técnica: acumulación climática, susceptibilidad
+            material, propagación hacia protecciones, impacto demográfico y cálculo regulatorio.
+          </p>
+        </div>
+
+        <div class="table-wrap physics-table connections-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Origen</th>
+                <th>Destino</th>
+                <th>Relación / peso</th>
+                <th>Justificación técnica</th>
+              </tr>
+            </thead>
+            <tbody>
+              {variables.conexiones.map((conexion) => (
+                <tr>
+                  <td>{conexion.origen}</td>
+                  <td>{conexion.destino}</td>
+                  <td>{conexion.relacion}</td>
+                  <td>{conexion.justificacion}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <p class="graph-note">
+          Estamos ajustando el modelo para incluir grafos, múltiples salidas de criticidad y análisis por
+          ventanas temporales de vanos para crear informes automatizados con agentes de IA de las posibles
+          causas y la historia reciente de los fallos de dicho vano. Los grafos interactivos y la trazabilidad
+          de la selección se presentan ahora en el apartado Datos estructurados del simulador.
+        </p>
+      </section>
+
+      <section id="arquitectura" class="section architecture">
+        <div class="section-heading">
+          <p class="eyebrow">Arquitectura y flujo de operación</p>
+          <h2>Simulador multimodal con agentes de IA</h2>
+          <p>
+            El flujo integra datos tabulares, documentos técnicos, bitácoras operativas y un modelo
+            M-GCECDL entrenado sobre dos modos de información para analizar vanos de interés, explicar
+            puntos críticos y generar reportes de evidencia para la toma de decisiones.
+          </p>
+        </div>
+
+        <div class="architecture-pillars">
+          <a class="pillar-card" href="#datos-estructurados" aria-label="Abrir detalle de datos estructurados">
+            <span>01</span>
+            <h3>Datos estructurados</h3>
+            <p>Selección de circuito o vano, eventos, protecciones, UiTi, UiTi ponderado y variables de activos.</p>
+            <strong>Explorar datos y grafos →</strong>
+          </a>
+          <article>
+            <span>02</span>
+            <h3>Historial y RAG</h3>
+            <p>Se integran eventos de 12 meses, bitácoras, reportes, normas y documentos técnicos.</p>
+          </article>
+          <a class="pillar-card" href="#modelo-mgcecdl" aria-label="Abrir detalle del modelo M-GCECDL">
+            <span>03</span>
+            <h3>Modelo M-GCECDL</h3>
+            <p>Clasificación de criticidad de <code>UITI_VANO</code> y relevancias por modo climático y estructural.</p>
+            <strong>Ver preparación y modos →</strong>
+          </a>
+          <article>
+            <span>04</span>
+            <h3>Reporte de evidencia</h3>
+            <p>Documento final con razonamiento causal, simulación What-If y soporte normativo-operativo.</p>
+          </article>
+        </div>
+
+        <div class="agent-grid">
+          <article>
+            <span class="agent-type low">Low / Fast</span>
+            <h3>Agente 1: Descriptor</h3>
+            <p>Describe cada punto de interés usando variables, modos, relaciones y causas del contexto del proyecto.</p>
+          </article>
+          <article>
+            <span class="agent-type high">High / Reasoning</span>
+            <h3>Agente 2: Histórico</h3>
+            <p>Recupera 12 meses de eventos del vano o circuito y analiza la evolución de UITI y UITI_VANO.</p>
+          </article>
+          <article>
+            <span class="agent-type high">High / Context</span>
+            <h3>Agente 3: RAG</h3>
+            <p>Consulta bitácoras, normas y evidencias documentales relacionadas con la falla.</p>
+          </article>
+          <article>
+            <span class="agent-type model">API / ML</span>
+            <h3>Orquestador M-GCECDL</h3>
+            <p>Ejecuta el modelo entrenado y retorna nivel de criticidad, confiabilidad modal y relevancias.</p>
+          </article>
+          <article>
+            <span class="agent-type high">High / Reasoning</span>
+            <h3>Agente 4: Causalidad</h3>
+            <p>Coteja diagnósticos agénticos, bitácoras/normas y máscaras del modelo para explicar causas.</p>
+          </article>
+          <article>
+            <span class="agent-type low">Low / Fast</span>
+            <h3>Agente 5: Simulación</h3>
+            <p>Gestiona escenarios What-If y valida si una intervención reduce el impacto proyectado en UITI_VANO.</p>
+          </article>
+          <article>
+            <span class="agent-type high">High / Generative</span>
+            <h3>Agente 6: Informes</h3>
+            <p>Compila argumentos, evidencias, citas y resultados de simulación en un reporte técnico final.</p>
+          </article>
+        </div>
+
+        <div class="flow-diagram detailed-flow" aria-label="Diagrama de bloques con conexiones del simulador">
+          <div class="flow-title">
+            <h3>Diagrama de bloques y conexiones operativas</h3>
+            <p>El flujo muestra selección del activo, puntos de interés, análisis paralelo, cotejo de diagnósticos y salida de evidencia.</p>
+          </div>
+
+          <div class="flow-lane">
+            <span class="lane-label">Entrada y contexto</span>
+            <article class="flow-node user-node">
+              <span>Usuario / Operador</span>
+              <strong>Selecciona circuito o vano</strong>
+            </article>
+            <div class="flow-connector">
+              <strong>1</strong>
+              <span>Activo de interés</span>
+            </div>
+            <article class="flow-node data-node">
+              <span>Base tabular</span>
+              <strong>Identifica puntos de interés</strong>
+            </article>
+            <div class="flow-connector">
+              <strong>2</strong>
+              <span>Vanos / circuito + 12 meses</span>
+            </div>
+            <article class="flow-node agent-low-node">
+              <span>Agente 1 Low</span>
+              <strong>Diagnóstico descriptivo por punto</strong>
+            </article>
+            <div class="flow-connector dashed">
+              <strong>KB</strong>
+              <span>Variables, modos y causas</span>
+            </div>
+            <article class="flow-node context-node">
+              <span>Contexto.md</span>
+              <strong>Reglas y modos del sistema</strong>
+            </article>
+          </div>
+
+          <div class="flow-lane">
+            <span class="lane-label">Análisis paralelo</span>
+            <article class="flow-node agent-high-node">
+              <span>Agente 2 High</span>
+              <strong>Evolución histórica de indicadores</strong>
+            </article>
+            <div class="flow-connector bidirectional">
+              <strong>3</strong>
+              <span>Eventos por vano/circuito</span>
+            </div>
+            <article class="flow-node data-node">
+              <span>Base tabular</span>
+              <strong>SAIDI, SAIFI, UiTi y eventos</strong>
+            </article>
+            <div class="flow-connector">
+              <strong>4</strong>
+              <span>RAG</span>
+            </div>
+            <article class="flow-node agent-high-node">
+              <span>Agente 3 High</span>
+              <strong>Analista documental</strong>
+            </article>
+            <div class="flow-connector bidirectional">
+              <strong>Docs</strong>
+              <span>Normas y bitácoras</span>
+            </div>
+            <article class="flow-node doc-node">
+              <span>Repositorio documental</span>
+              <strong>PDFs, reportes, normas</strong>
+            </article>
+          </div>
+
+          <div class="flow-lane">
+            <span class="lane-label">Inferencia y cotejo causal</span>
+            <article class="flow-node agent-low-node">
+              <span>Diagnóstico 3</span>
+              <strong>Descriptivo por punto de interés</strong>
+            </article>
+            <div class="flow-connector">
+              <strong>5</strong>
+              <span>Historial + RAG</span>
+            </div>
+            <article class="flow-node agent-high-node">
+              <span>Diagnóstico 5</span>
+              <strong>Mejorado con bitácoras y normativa</strong>
+            </article>
+            <div class="flow-connector">
+              <strong>6</strong>
+              <span>Variables tabulares</span>
+            </div>
+            <article class="flow-node model-node">
+              <span>Modelo M-GCECDL</span>
+              <strong>Criticidad UITI_VANO y relevancias</strong>
+            </article>
+            <div class="flow-connector merge">
+              <strong>7</strong>
+              <span>Cotejo diagnósticos 3, 5 y 6</span>
+            </div>
+            <article class="flow-node agent-high-node emphasis-node">
+              <span>Agente 4 High</span>
+              <strong>Consultor de criticidad y causalidad</strong>
+            </article>
+          </div>
+
+          <div class="flow-lane">
+            <span class="lane-label">Simulación y reporte</span>
+            <article class="flow-node agent-high-node">
+              <span>Agente 4</span>
+              <strong>Opciones de intervención</strong>
+            </article>
+            <div class="flow-connector">
+              <strong>8</strong>
+              <span>Variables candidatas</span>
+            </div>
+            <article class="flow-node agent-low-node">
+              <span>Agente 5 Low</span>
+              <strong>Simulación What-If</strong>
+            </article>
+            <div class="flow-connector cycle">
+              <strong>9-10</strong>
+              <span>Nuevo escenario ⇄ modelo</span>
+            </div>
+            <article class="flow-node agent-high-node">
+              <span>Agente 6 High</span>
+              <strong>Redactor de informes</strong>
+            </article>
+            <div class="flow-connector">
+              <strong>11</strong>
+              <span>Evidencias</span>
+            </div>
+            <article class="flow-node output-node">
+              <span>Reporte final</span>
+              <strong>Razonamientos y soporte técnico</strong>
+            </article>
+          </div>
+        </div>
+
+        <div class="value-cycle">
+          <article>
+            <strong>Comprender</strong>
+            <p>Selección de circuito o vano e identificación de puntos de interés.</p>
+          </article>
+          <article>
+            <strong>Contextualizar</strong>
+            <p>Historial numérico más evidencia documental y normativa.</p>
+          </article>
+          <article>
+            <strong>Validar</strong>
+            <p>Causas contrastadas con evidencias del modelo M-GCECDL.</p>
+          </article>
+          <article>
+            <strong>Actuar</strong>
+            <p>Simulaciones fundamentadas para priorizar intervenciones.</p>
+          </article>
+          <article>
+            <strong>Documentar</strong>
+            <p>Reporte final automatizado para soporte técnico y directivo.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="datos-estructurados" class="detail-panel" aria-labelledby="datos-title">
+        <div class="detail-shell">
+          <a class="back-link" href="#arquitectura">← Volver al simulador multimodal</a>
+          <div class="section-heading">
+            <p class="eyebrow">Componente 01</p>
+            <h2 id="datos-title">Datos estructurados</h2>
+            <p>
+              Trazabilidad desde el archivo enriquecido de 273 columnas, pasando por la versión v3 de 173
+              columnas, hasta las 71 columnas seleccionadas y los 70 predictores usados por el modelo M-GCECDL.
+            </p>
+          </div>
+
+          <div class="detail-stats">
+            <article><strong>164.896</strong><span>filas originales</span></article>
+            <article><strong>273</strong><span>columnas después del enriquecimiento climático</span></article>
+            <article><strong>173</strong><span>columnas conservadas en la versión v3</span></article>
+            <article><strong>71</strong><span>columnas seleccionadas, incluido el objetivo</span></article>
+            <article><strong>70</strong><span>predictores finales del modelo</span></article>
+          </div>
+
+          <div class="detail-block">
+            <h3>Resumen de los datos originales</h3>
+            <p>
+              Cada fila representa la relación entre una falla, el vano afectado, su equipo de protección,
+              atributos eléctricos y físicos, e información climática horaria. El archivo enriquecido contiene
+              48 columnas base y nueve familias climáticas con 25 horas cada una: <code>48 + 9 × 25 = 273</code>.
+            </p>
+            <div class="table-wrap wide-table">
+              <table>
+                <thead><tr><th>Índice</th><th>CIRCUITO</th><th>FID_SW</th><th>COD_EQ_PROTEGE</th><th>FID_VANO</th><th>T_USUS_EQ_PROT</th><th>LVSW</th><th>CNT_VN</th><th>CNT_VN_SW</th><th>FECHA</th><th>DURACION</th><th>…</th><th>clouds_15</th><th>clouds_16</th><th>clouds_17</th><th>clouds_18</th><th>clouds_19</th><th>clouds_20</th><th>clouds_21</th><th>clouds_22</th><th>clouds_23</th><th>clouds_24</th></tr></thead>
+                <tbody>
+                  <tr><td>0</td><td>AGU23L14</td><td>20142930</td><td>AGU23L14</td><td>20139439</td><td>1821</td><td>2,568</td><td>16</td><td>22</td><td>2025-11-03 23:56:04</td><td>0,008</td><td>…</td><td>100</td><td>100</td><td>100</td><td>100</td><td>100</td><td>100</td><td>100</td><td>100</td><td>100</td><td>100</td></tr>
+                  <tr><td>1</td><td>AGU23L14</td><td>20142930</td><td>AGU23L14</td><td>20139439</td><td>1821</td><td>2,568</td><td>16</td><td>22</td><td>2025-11-18 17:08:14</td><td>0,008</td><td>…</td><td>100</td><td>100</td><td>84</td><td>99</td><td>99</td><td>98</td><td>98</td><td>97</td><td>98</td><td>100</td></tr>
+                  <tr><td>2</td><td>AGU23L14</td><td>20142930</td><td>AGU23L14</td><td>20139439</td><td>1821</td><td>2,568</td><td>16</td><td>22</td><td>2025-11-19 20:25:50</td><td>0,008</td><td>…</td><td>79</td><td>99</td><td>100</td><td>100</td><td>100</td><td>97</td><td>100</td><td>100</td><td>99</td><td>98</td></tr>
+                  <tr class="ellipsis-row"><td>…</td><td colspan="21">164.886 registros intermedios</td></tr>
+                  <tr><td>164891</td><td>GTO23L13</td><td>31291927</td><td>L22261</td><td>357636441</td><td>15</td><td>1,657</td><td>17</td><td>21</td><td>2025-11-16 06:55:00</td><td>8,833</td><td>…</td><td>100</td><td>100</td><td>88</td><td>61</td><td>98</td><td>55</td><td>68</td><td>87</td><td>100</td><td>100</td></tr>
+                  <tr><td>164895</td><td>GTO23L13</td><td>31291927</td><td>L22261</td><td>357636454</td><td>15</td><td>2,142</td><td>21</td><td>21</td><td>2025-11-16 06:55:00</td><td>8,833</td><td>…</td><td>100</td><td>100</td><td>88</td><td>61</td><td>98</td><td>55</td><td>68</td><td>87</td><td>100</td><td>100</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Trazabilidad de columnas: 273 → 173 → 71 → 70</h3>
+            <div class="process-grid">
+              <article><strong>273 → 173</strong><p>Se retiran las 25 horas de <code>{climateFamiliesExcludedFromV3.slice(0, 4).join(", ")}</code>: cuatro familias completas, equivalentes a 100 columnas.</p></article>
+              <article><strong>173 → 71</strong><p>El Excel conserva 22 variables base, cuatro familias climáticas y <code>UITI_VANO</code>. Cada familia se limita a los rezagos <code>0…11</code>.</p></article>
+              <article><strong>102 descartadas</strong><p>Se excluyen 25 columnas base con <code>SELECCIÓN = 0</code>, la familia <code>clouds</code> y 52 columnas climáticas de rezagos <code>12…24</code>.</p></article>
+              <article><strong>71 → 70</strong><p><code>UITI_VANO</code> se separa como variable objetivo; las 70 columnas restantes forman la matriz del modelo.</p></article>
+            </div>
+            <p><strong>Columnas base no usadas por el modelo:</strong></p>
+            <div class="feature-list">{baseColumnsExcludedFromModel.map((column) => <code>{column}</code>)}</div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Grafo original de variables</h3>
+            <p>
+              El grafo no representa una etapa de reducción del dataset. Conserva todas las variables del catálogo:
+              48 variables base y las nueve familias climáticas, usando solo 12 horas por familia. Por eso contiene
+              <strong>156 nodos</strong>: <code>48 + 9 × 12</code>.
+            </p>
+            <iframe class="graph-frame" src={grafoRedNivel2} title="Grafo original de la red Nivel 2"></iframe>
+          </div>
+
+          <div class="detail-block">
+            <h3>Vacíos después de completar con API</h3>
+            <p>
+              El reporte se calcula antes de la limpieza final. Los mayores vacíos se concentran en datos del
+              transformador y riesgo de vegetación; esto evidencia qué atributos no retornó la fuente externa.
+            </p>
+            <div class="table-wrap compact-table">
+              <table><thead><tr><th>Columna</th><th>Vacíos API</th><th>Porcentaje</th></tr></thead><tbody>
+                {vaciosApi.map(([columna, vacios, porcentaje]) => <tr><td>{columna}</td><td>{vacios}</td><td>{porcentaje}</td></tr>)}
+              </tbody></table>
+            </div>
+          </div>
+
+          <div class="detail-block cleaning-block">
+            <h3>Tratamiento aplicado y generación de la versión v3</h3>
+            <div class="process-grid">
+              <article><strong>1. Imputación numérica</strong><p>Se reemplazan por cero los vacíos de consumos, riesgo, usuarios y capacidad nominal.</p></article>
+              <article><strong>2. Imputación textual</strong><p><code>CALIBRE_NEUTRO</code> vacío se representa con la categoría <code>"0"</code>.</p></article>
+              <article><strong>3. Consistencia temporal</strong><p><code>FECHA_OPERACION_TRF</code> toma la fecha de operación del vano cuando falta.</p></article>
+              <article><strong>4. Criterio de calidad</strong><p>Se eliminan 5.426 filas sin <code>ALTURA</code> y se vuelve a auditar el resultado.</p></article>
+            </div>
+            <p class="note-callout">La limpieza resuelve los campos operativos definidos por el flujo. Las columnas no imputadas se conservan para auditoría y se reportan nuevamente antes del entrenamiento.</p>
+          </div>
+
+          <div class="detail-block">
+            <h3>Variables seleccionadas</h3>
+            <p>
+              El archivo <code>Variables_seleccion.xlsx</code> evalúa 57 entradas y marca 27: una corresponde al
+              objetivo, 22 son predictores base y cuatro son familias climáticas que se expanden en 12 horas cada una.
+              Esto produce 71 columnas seleccionadas, incluyendo <code>UITI_VANO</code>, y 70 predictores después
+              de separar el objetivo.
+            </p>
+            <div class="table-wrap compact-table">
+              <table><thead><tr><th>Variable</th><th>Descripción</th><th>Uso</th></tr></thead><tbody>
+                {variablesSeleccionadas.map(([nombre, descripcion, uso]) => <tr><td><code>{nombre}</code></td><td>{descripcion}</td><td>{uso}</td></tr>)}
+              </tbody></table>
+            </div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Grafo con variables seleccionadas</h3>
+            <p>La segunda vista concentra el análisis en las variables que alimentan el modelo y sus relaciones técnicas.</p>
+            <iframe class="graph-frame" src={grafoRedNivel2Seleccionadas} title="Grafo de variables seleccionadas"></iframe>
+          </div>
+          <a class="back-link bottom" href="#arquitectura">← Volver al simulador multimodal</a>
+        </div>
+      </section>
+
+      <section id="modelo-mgcecdl" class="detail-panel" aria-labelledby="modelo-title">
+        <div class="detail-shell">
+          <a class="back-link" href="#arquitectura">← Volver al simulador multimodal</a>
+          <div class="section-heading">
+            <p class="eyebrow">Componente 03</p>
+            <h2 id="modelo-title">Modelo M-GCECDL</h2>
+            <p>
+              Preparación reproducible de datos para M-GCECDL, con entrada multimodal en dos modos:
+              variables climáticas/exógenas y variables estructurales/endógenas del vano.
+            </p>
+          </div>
+
+          <div class="detail-block">
+            <h3>Qué hace el preprocesamiento</h3>
+            <div class="process-grid model-process">
+              <article><strong>Carga y filtro</strong><p>Lee CSV, Excel o pickle; convierte <code>FECHA</code> y conserva registros con <code>UITI_VANO ≤ 1000</code>.</p></article>
+              <article><strong>Selección</strong><p>Lee el Excel, valida las marcas y expande cada familia climática desde el rezago 0 hasta el 11.</p></article>
+              <article><strong>Imputación</strong><p>Fechas a timestamp; numéricas vacías a <code>-10 × máximo</code>; categóricas vacías a <code>"no aplica"</code>.</p></article>
+              <article><strong>Codificación</strong><p>Aplica <code>LabelEncoder</code> a categorías y convierte la matriz final a <code>float32</code>.</p></article>
+              <article><strong>Objetivo</strong><p>Organiza <code>UITI_VANO</code> en niveles ordinales de criticidad para entrenamiento supervisado.</p></article>
+              <article><strong>Particiones</strong><p>Genera train, validación y test estratificados: 64 %, 16 % y 20 %, con semilla 42.</p></article>
+            </div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Columnas reales usadas por el modelo</h3>
+            <p><strong>{modelFeatures.length} predictores efectivos:</strong> 22 columnas base y 48 columnas climáticas horarias. <code>UITI_VANO</code> se mantiene separado como objetivo.</p>
+            <div class="feature-list">{modelFeatures.map((feature) => <code>{feature}</code>)}</div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Dos modos de entrada</h3>
+            <div class="process-grid">
+              {mgcecdlModes.map(([modo, cantidad, descripcion]) => (
+                <article>
+                  <strong>{modo}</strong>
+                  <span class="mode-count">{cantidad}</span>
+                  <p>{descripcion}</p>
+                </article>
+              ))}
+            </div>
+            <p class="note-callout">
+              La separación por modos permite contrastar la señal ambiental con la señal física y operativa del vano,
+              sin mezclar sus relaciones antes de la fusión del modelo.
+            </p>
+          </div>
+
+          <div class="detail-block">
+            <h3>Componentes M-GCECDL</h3>
+            <div class="process-grid">
+              {mgcecdlComponents.map(([componente, descripcion]) => (
+                <article><strong>{componente}</strong><p>{descripcion}</p></article>
+              ))}
+            </div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Salidas usadas por la página</h3>
+            <p>
+              La página queda preparada para publicar resúmenes agregados del modelo M-GCECDL y sus relevancias
+              por variable. La integración visual de análisis por circuito se retira de esta vista hasta definir
+              el flujo final de publicación.
+            </p>
+          </div>
+          <a class="back-link bottom" href="#arquitectura">← Volver al simulador multimodal</a>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <img src={logoLab.src} alt="Laboratorio IA UNAL" />
+      <p>Simulador de criticidad CHEC - Universidad Nacional de Colombia, sede Manizales.</p>
+    </footer>
+  </body>
+</html>
+
+<style>
+  :root {
+    --ink: #102129;
+    --muted: #5f6f77;
+    --line: #dce7e4;
+    --soft: #f3f8f6;
+    --panel: #ffffff;
+    --green: #007a53;
+    --green-dark: #005c45;
+    --blue: #0b5f8a;
+    --gold: #f4b23a;
+    --shadow: 0 18px 50px rgb(16 33 41 / 10%);
+    color: var(--ink);
+    font-family:
+      Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--soft);
+    scroll-behavior: smooth;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    background:
+      linear-gradient(180deg, rgba(243, 248, 246, 0.95), rgba(255, 255, 255, 0.98) 36rem),
+      var(--soft);
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  img {
+    max-width: 100%;
+    display: block;
+  }
+
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.8rem clamp(1rem, 4vw, 4rem);
+    background: rgba(255, 255, 255, 0.88);
+    border-bottom: 1px solid var(--line);
+    backdrop-filter: blur(14px);
+  }
+
+  .brand img {
+    width: 148px;
+    height: 46px;
+    object-fit: contain;
+  }
+
+  nav {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.8rem, 2vw, 1.6rem);
+    color: var(--muted);
+    font-size: 0.94rem;
+    font-weight: 700;
+  }
+
+  nav a:hover {
+    color: var(--green);
+  }
+
+  main {
+    overflow: hidden;
+  }
+
+  .hero,
+  .section,
+  footer {
+    width: min(1120px, calc(100% - 2rem));
+    margin-inline: auto;
+  }
+
+  .hero {
+    min-height: calc(100vh - 76px);
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(290px, 0.75fr);
+    align-items: center;
+    gap: clamp(2rem, 5vw, 4rem);
+    padding: clamp(3rem, 8vw, 6rem) 0 2.5rem;
+  }
+
+  .eyebrow {
+    margin: 0 0 0.8rem;
+    color: var(--green);
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  h1,
+  h2,
+  h3,
+  p {
+    margin-top: 0;
+  }
+
+  h1 {
+    max-width: 780px;
+    margin-bottom: 1rem;
+    color: var(--ink);
+    font-size: clamp(3rem, 8vw, 6.6rem);
+    line-height: 0.92;
+    letter-spacing: 0;
+  }
+
+  h2 {
+    margin-bottom: 0.8rem;
+    font-size: clamp(2rem, 4vw, 3.5rem);
+    line-height: 1;
+    letter-spacing: 0;
+  }
+
+  h3 {
+    margin-bottom: 0.5rem;
+    font-size: 1.05rem;
+  }
+
+  .lead,
+  .section-heading p {
+    color: var(--muted);
+    font-size: clamp(1rem, 2vw, 1.16rem);
+    line-height: 1.65;
+  }
+
+  .hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+    margin-top: 2rem;
+  }
+
+  .button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+    padding: 0.85rem 1.15rem;
+    border: 1px solid var(--green);
+    border-radius: 6px;
+    font-weight: 800;
+  }
+
+  .button.primary {
+    color: white;
+    background: var(--green);
+  }
+
+  .button.secondary {
+    color: var(--green-dark);
+    background: white;
+  }
+
+  .hero-panel {
+    padding: clamp(1.25rem, 3vw, 2rem);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+  }
+
+  .panel-logo {
+    width: min(260px, 100%);
+    margin-bottom: 1.5rem;
+  }
+
+  dl {
+    display: grid;
+    gap: 0.85rem;
+    margin: 0;
+  }
+
+  dl div {
+    padding-bottom: 0.85rem;
+    border-bottom: 1px solid var(--line);
+  }
+
+  dl div:last-child {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+
+  dt {
+    color: var(--muted);
+    font-size: 0.8rem;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  dd {
+    margin: 0.2rem 0 0;
+    font-size: 1.08rem;
+    font-weight: 800;
+  }
+
+  .logo-strip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(2rem, 8vw, 6rem);
+    width: 100%;
+    padding: 2rem 1rem;
+    background: white;
+    border-block: 1px solid var(--line);
+  }
+
+  .logo-strip img {
+    max-width: 180px;
+    max-height: 78px;
+    object-fit: contain;
+  }
+
+  .section {
+    padding: clamp(3.2rem, 8vw, 6rem) 0;
+  }
+
+  .section.tinted {
+    width: 100%;
+    padding-inline: max(1rem, calc((100% - 1120px) / 2));
+    background: #edf5f2;
+    border-block: 1px solid var(--line);
+  }
+
+  .section-heading {
+    max-width: 760px;
+    margin-bottom: 2rem;
+  }
+
+  .section-heading.compact {
+    margin-bottom: 1.2rem;
+  }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .summary-grid article,
+  .deliverable-grid article {
+    min-height: 100%;
+    padding: 1.25rem;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: 0 10px 28px rgb(16 33 41 / 6%);
+  }
+
+  .summary-grid span {
+    display: inline-flex;
+    margin-bottom: 1rem;
+    color: var(--blue);
+    font-weight: 900;
+  }
+
+  .summary-grid p,
+  .deliverable-grid p,
+  .timeline p,
+  figcaption,
+  footer p {
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 720px;
+  }
+
+  th,
+  td {
+    padding: 1rem;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--line);
+  }
+
+  th {
+    color: var(--green-dark);
+    background: #f8fbfa;
+    font-size: 0.82rem;
+    text-transform: uppercase;
+  }
+
+  tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    padding: 0.28rem 0.65rem;
+    color: #684308;
+    background: #fff3d9;
+    border: 1px solid #f7cf83;
+    border-radius: 999px;
+    font-size: 0.86rem;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  .timeline {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .timeline article {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 1rem;
+    padding: 1.15rem;
+    background: white;
+    border-left: 4px solid var(--green);
+    border-radius: 8px;
+  }
+
+  .timeline strong {
+    color: var(--gold);
+    font-size: 1.2rem;
+  }
+
+  .deliverable-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .results figure {
+    margin: 0;
+    padding: clamp(0.7rem, 2vw, 1rem);
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+  }
+
+  .results img {
+    width: 100%;
+    border-radius: 6px;
+  }
+
+  figcaption {
+    margin-top: 0.8rem;
+    font-size: 0.95rem;
+  }
+
+  .cloud {
+    padding-top: clamp(2rem, 5vw, 4rem);
+  }
+
+  .cloud-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(320px, 1.1fr);
+    gap: clamp(1.2rem, 4vw, 2.5rem);
+    align-items: start;
+  }
+
+  .cloud-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    margin-bottom: 1rem;
+    padding: 0.75rem 1rem;
+    color: white;
+    background: #ff3621;
+    border: 1px solid #cf2d1d;
+    border-radius: 6px;
+    font-weight: 800;
+  }
+
+  .cloud-items {
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  .cloud-items article {
+    padding: 1rem;
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+
+  .cloud-items p {
+    margin-bottom: 0;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  .cloud-visuals {
+    display: grid;
+    gap: 1rem;
+    padding: clamp(0.8rem, 2vw, 1rem);
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+  }
+
+  .databricks-mark {
+    width: min(180px, 100%);
+    max-height: 70px;
+    object-fit: contain;
+  }
+
+  .engine-figure {
+    width: 100%;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+  }
+
+  .prototype {
+    width: 100%;
+    padding-inline: max(1rem, calc((100% - 1120px) / 2));
+    background: linear-gradient(180deg, #f8fbfa 0%, #eef6f3 100%);
+    border-top: 1px solid var(--line);
+  }
+
+  .prototype-showcase {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .feature-shot {
+    display: grid;
+    grid-template-columns: minmax(280px, 0.45fr) minmax(0, 0.55fr);
+    gap: clamp(1rem, 3vw, 1.6rem);
+    align-items: center;
+    padding: clamp(1rem, 3vw, 1.4rem);
+    color: white;
+    background: linear-gradient(135deg, #10352e 0%, #0b5f8a 100%);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+  }
+
+  .feature-shot span {
+    display: inline-flex;
+    margin-bottom: 0.7rem;
+    color: #ffe2a6;
+    font-size: 0.78rem;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .feature-shot h3 {
+    max-width: 420px;
+    margin-bottom: 0.7rem;
+    font-size: clamp(1.5rem, 3vw, 2.35rem);
+    line-height: 1.05;
+  }
+
+  .feature-shot p {
+    margin-bottom: 0;
+    color: rgb(255 255 255 / 82%);
+    line-height: 1.6;
+  }
+
+  .feature-shot img {
+    width: 100%;
+    border: 1px solid rgb(255 255 255 / 20%);
+    border-radius: 6px;
+    box-shadow: 0 18px 44px rgb(0 0 0 / 20%);
+  }
+
+  .prototype-gallery {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .prototype-gallery article {
+    overflow: hidden;
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: 0 12px 32px rgb(16 33 41 / 8%);
+  }
+
+  .prototype-gallery img {
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    object-fit: cover;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .prototype-gallery div {
+    padding: 1rem;
+  }
+
+  .prototype-gallery p {
+    margin-bottom: 0;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  .physics {
+    width: 100%;
+    padding-inline: max(1rem, calc((100% - 1120px) / 2));
+    background: white;
+    border-top: 1px solid var(--line);
+  }
+
+  .physics-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .physics-summary article {
+    padding: 1.1rem;
+    background: #f8fbfa;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+
+  .physics-summary p {
+    margin-bottom: 0;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  .physics-table {
+    margin-bottom: 1.2rem;
+  }
+
+  .modes-table td:nth-child(2),
+  .modes-table th:nth-child(2) {
+    width: 170px;
+    text-align: center;
+  }
+
+  .connection-intro {
+    max-width: 760px;
+    margin: 2rem 0 1rem;
+  }
+
+  .connection-intro p {
+    margin-bottom: 0;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .connections-table table {
+    min-width: 980px;
+  }
+
+  .graph-banner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 1rem;
+    align-items: center;
+    margin: 1.2rem 0;
+    padding: clamp(1rem, 3vw, 1.4rem);
+    color: white;
+    background: linear-gradient(135deg, #0b5f8a 0%, #007a53 100%);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+  }
+
+  .graph-banner span {
+    display: inline-flex;
+    margin-bottom: 0.55rem;
+    color: #ffe2a6;
+    font-size: 0.78rem;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .graph-banner h3 {
+    max-width: 680px;
+    margin-bottom: 0.45rem;
+    font-size: clamp(1.4rem, 3vw, 2.1rem);
+    line-height: 1.1;
+  }
+
+  .graph-banner p {
+    margin-bottom: 0;
+    color: rgb(255 255 255 / 82%);
+    line-height: 1.55;
+  }
+
+  .graph-banner a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+    padding: 0.8rem 1rem;
+    color: var(--green-dark);
+    background: white;
+    border-radius: 6px;
+    font-weight: 900;
+    white-space: nowrap;
+  }
+
+  .graph-actions {
+    display: flex;
+    gap: 0.65rem;
+    align-items: stretch;
+  }
+
+  .graph-note {
+    max-width: 980px;
+    margin: 1rem auto 0;
+    padding: clamp(1rem, 3vw, 1.4rem);
+    color: var(--ink);
+    background: #fff7e6;
+    border: 1px solid #f3d28c;
+    border-left: 5px solid var(--gold);
+    border-radius: 8px;
+    font-size: clamp(1.05rem, 2vw, 1.28rem);
+    font-weight: 800;
+    line-height: 1.5;
+  }
+
+  .architecture {
+    width: 100%;
+    padding-inline: max(1rem, calc((100% - 1120px) / 2));
+    background: linear-gradient(180deg, #f8fbfa 0%, #ffffff 100%);
+    border-top: 1px solid var(--line);
+  }
+
+  .architecture-pillars {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .architecture-pillars article,
+  .architecture-pillars .pillar-card,
+  .agent-grid article,
+  .value-cycle article {
+    padding: 1rem;
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: 0 10px 28px rgb(16 33 41 / 6%);
+  }
+
+  .architecture-pillars span {
+    display: inline-flex;
+    margin-bottom: 0.65rem;
+    color: var(--blue);
+    font-weight: 900;
+  }
+
+  .architecture-pillars p,
+  .agent-grid p,
+  .value-cycle p {
+    margin-bottom: 0;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  .pillar-card {
+    display: block;
+    transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .pillar-card:hover,
+  .pillar-card:focus-visible {
+    transform: translateY(-3px);
+    border-color: #8bc6b3;
+    box-shadow: 0 16px 36px rgb(0 122 83 / 13%);
+    outline: none;
+  }
+
+  .pillar-card strong {
+    display: inline-flex;
+    margin-top: 0.9rem;
+    color: var(--green-dark);
+    font-size: 0.88rem;
+  }
+
+  .agent-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.2rem;
+  }
+
+  .agent-type {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    margin-bottom: 0.75rem;
+    padding: 0.25rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 900;
+  }
+
+  .agent-type.low {
+    color: #0a4c63;
+    background: #d9edf7;
+  }
+
+  .agent-type.high {
+    color: #215d2d;
+    background: #dff0d8;
+  }
+
+  .agent-type.model {
+    color: #444;
+    background: #e2e2ea;
+  }
+
+  .flow-diagram {
+    display: grid;
+    gap: 1rem;
+    margin: 1.4rem 0;
+    padding: clamp(1rem, 3vw, 1.4rem);
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    overflow-x: auto;
+  }
+
+  .flow-title {
+    max-width: 760px;
+  }
+
+  .flow-title p {
+    margin-bottom: 0;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  .flow-lane {
+    position: relative;
+    display: grid;
+    grid-template-columns:
+      minmax(120px, 0.55fr)
+      minmax(170px, 1fr)
+      minmax(90px, 0.42fr)
+      minmax(170px, 1fr)
+      minmax(90px, 0.42fr)
+      minmax(170px, 1fr)
+      minmax(90px, 0.42fr)
+      minmax(170px, 1fr);
+    gap: 0.75rem;
+    align-items: stretch;
+    min-width: 1160px;
+    padding: 0.8rem;
+    background: #f8fbfa;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+
+  .lane-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.7rem;
+    color: var(--green-dark);
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 900;
+    text-align: center;
+    text-transform: uppercase;
+  }
+
+  .flow-node {
+    min-height: 112px;
+    padding: 0.9rem;
+    border: 2px solid var(--line);
+    border-radius: 8px;
+    background: #f8fbfa;
+  }
+
+  .flow-node span {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .flow-node strong {
+    display: block;
+    line-height: 1.2;
+  }
+
+  .flow-connector {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 112px;
+    color: var(--green);
+    text-align: center;
+  }
+
+  .flow-connector::before,
+  .flow-connector::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    z-index: 0;
+    display: block;
+  }
+
+  .flow-connector::before {
+    left: 4px;
+    right: 14px;
+    height: 2px;
+    background: currentColor;
+  }
+
+  .flow-connector::after {
+    right: 4px;
+    transform: translateY(-50%);
+    width: 0;
+    height: 0;
+    border-block: 6px solid transparent;
+    border-left: 9px solid currentColor;
+    background: transparent;
+  }
+
+  .flow-connector strong {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    min-height: 32px;
+    margin: 0.35rem 0;
+    z-index: 1;
+    color: white;
+    background: var(--green);
+    border-radius: 999px;
+    font-size: 0.78rem;
+  }
+
+  .flow-connector span {
+    max-width: 120px;
+    z-index: 1;
+    padding: 0.12rem 0.28rem;
+    color: var(--muted);
+    background: #f8fbfa;
+    font-size: 0.76rem;
+    font-weight: 800;
+    line-height: 1.2;
+  }
+
+  .flow-connector.dashed::before {
+    background: repeating-linear-gradient(90deg, currentColor 0 7px, transparent 7px 12px);
+  }
+
+  .flow-connector.bidirectional::after {
+    content: "↔";
+    top: 50%;
+    right: 50%;
+    width: auto;
+    height: auto;
+    border: 0;
+    background: #f8fbfa;
+    font-size: 1.2rem;
+    font-weight: 900;
+    transform: translate(50%, -50%);
+  }
+
+  .flow-connector.merge strong {
+    background: var(--blue);
+  }
+
+  .flow-connector.cycle strong {
+    background: #7c5a0d;
+  }
+
+  .user-node {
+    background: #fff5f7;
+    border-color: #d8a7b1;
+  }
+
+  .agent-low-node {
+    background: #edf8fc;
+    border-color: #9dc7d7;
+  }
+
+  .agent-high-node {
+    background: #edf8ec;
+    border-color: #9cc99b;
+  }
+
+  .data-node,
+  .context-node {
+    background: #fff9e8;
+    border-color: #e2c878;
+  }
+
+  .doc-node {
+    background: #eef7e9;
+    border-color: #a6ce96;
+  }
+
+  .model-node {
+    background: #f1f1f6;
+    border-color: #b7b7c5;
+    border-style: dashed;
+  }
+
+  .output-node {
+    background: #fff4d6;
+    border-color: #ddb84d;
+  }
+
+  .emphasis-node {
+    border-width: 3px;
+    box-shadow: 0 14px 34px rgb(0 122 83 / 14%);
+  }
+
+  .value-cycle {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .value-cycle strong {
+    display: block;
+    margin-bottom: 0.45rem;
+    color: var(--green-dark);
+    font-size: 1.05rem;
+  }
+
+  .detail-panel {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    width: 100%;
+    overflow-y: auto;
+    padding: 1rem;
+    background: rgb(243 248 246 / 98%);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(12px);
+    transition: opacity 180ms ease, transform 180ms ease, visibility 180ms;
+  }
+
+  .detail-panel:target {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+
+  .detail-shell {
+    width: min(1180px, 100%);
+    margin: 0 auto;
+    padding: clamp(1.2rem, 4vw, 3rem);
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: 0 26px 80px rgb(16 33 41 / 18%);
+  }
+
+  .back-link {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    display: inline-flex;
+    align-items: center;
+    min-height: 42px;
+    margin-bottom: 2rem;
+    padding: 0.65rem 0.9rem;
+    color: white;
+    background: var(--green);
+    border-radius: 6px;
+    font-weight: 900;
+    box-shadow: 0 8px 24px rgb(0 92 69 / 20%);
+  }
+
+  .back-link.bottom {
+    position: static;
+    margin: 1rem 0 0;
+  }
+
+  .detail-stats,
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.8rem;
+    margin-bottom: 1.4rem;
+  }
+
+  .detail-stats article,
+  .metrics-grid article {
+    padding: 1rem;
+    background: #f8fbfa;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+
+  .detail-stats strong,
+  .metrics-grid strong {
+    display: block;
+    color: var(--green-dark);
+    font-size: clamp(1.35rem, 3vw, 2rem);
+  }
+
+  .detail-stats span,
+  .metrics-grid span {
+    color: var(--muted);
+    font-size: 0.86rem;
+    font-weight: 800;
+  }
+
+  .detail-block {
+    margin-top: 1.2rem;
+    padding: clamp(1rem, 3vw, 1.5rem);
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgb(16 33 41 / 6%);
+  }
+
+  .detail-block > h3 {
+    margin-bottom: 0.7rem;
+    font-size: clamp(1.35rem, 3vw, 2rem);
+  }
+
+  .detail-block > p,
+  .detail-block figcaption {
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .wide-table table {
+    min-width: 1800px;
+    font-size: 0.82rem;
+  }
+
+  .compact-table {
+    max-height: 520px;
+  }
+
+  .compact-table table {
+    min-width: 680px;
+  }
+
+  .ellipsis-row td {
+    color: var(--muted);
+    background: #f8fbfa;
+    text-align: center;
+    font-style: italic;
+  }
+
+  .graph-frame {
+    width: 100%;
+    min-height: 680px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #f8fbfa;
+  }
+
+  .process-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.8rem;
+  }
+
+  .process-grid article {
+    padding: 1rem;
+    background: #f8fbfa;
+    border-left: 4px solid var(--green);
+    border-radius: 6px;
+  }
+
+  .process-grid strong {
+    display: block;
+    margin-bottom: 0.45rem;
+  }
+
+  .process-grid p {
+    margin-bottom: 0;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .mode-count {
+    display: inline-flex;
+    margin-bottom: 0.55rem;
+    padding: 0.25rem 0.55rem;
+    color: var(--green-dark);
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 900;
+  }
+
+  .model-process {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  pre {
+    overflow-x: auto;
+    margin: 1rem 0;
+    padding: 1rem;
+    color: #e8fff5;
+    background: #102129;
+    border-radius: 8px;
+    font-size: 0.84rem;
+    line-height: 1.6;
+  }
+
+  code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  }
+
+  .note-callout {
+    margin: 1rem 0 0;
+    padding: 1rem;
+    color: var(--ink) !important;
+    background: #fff7e6;
+    border: 1px solid #f3d28c;
+    border-left: 5px solid var(--gold);
+    border-radius: 8px;
+  }
+
+  .feature-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .feature-list code {
+    padding: 0.42rem 0.58rem;
+    color: #0a4c63;
+    background: #edf8fc;
+    border: 1px solid #c5e2ec;
+    border-radius: 5px;
+    font-size: 0.8rem;
+  }
+
+  .result-block figure,
+  .detail-block > figure {
+    margin: 1rem 0 0;
+  }
+
+  .result-block figure img,
+  .detail-block > figure img,
+  .two-column-figures img {
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+
+  .metrics-grid {
+    margin: 1rem 0 0;
+  }
+
+  .regression-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .two-column-figures {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .two-column-figures figure {
+    margin: 0;
+  }
+
+  .spaced-figure {
+    margin-top: 1.5rem !important;
+  }
+
+  /* ── Interpretabilidad ── */
+  .interp {
+    width: 100%;
+    padding-inline: max(1rem, calc((100% - 1120px) / 2));
+    background: linear-gradient(180deg, #ffffff 0%, #f3f8f6 100%);
+    border-top: 1px solid var(--line);
+  }
+
+  .interp-pending {
+    padding: 1.5rem 1.75rem;
+    background: #fff7e6;
+    border: 1px solid #f3d28c;
+    border-left: 5px solid var(--gold);
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+  }
+
+  .interp-pending strong {
+    display: block;
+    margin-bottom: 0.4rem;
+    font-size: 1rem;
+  }
+
+  .interp-pending p {
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  .interp-content {
+    display: grid;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .interp-headline {
+    padding: clamp(1rem, 3vw, 1.5rem);
+    background: linear-gradient(135deg, #10352e 0%, #0b5f8a 100%);
+    border-radius: 8px;
+    color: white;
+  }
+
+  .interp-headline h3 {
+    margin-bottom: 0.75rem;
+    font-size: clamp(1.3rem, 3vw, 2rem);
+    line-height: 1.1;
+  }
+
+  .interp-headline p {
+    margin-bottom: 0.5rem;
+    color: rgb(255 255 255 / 85%);
+    line-height: 1.6;
+  }
+
+  .interp-block {
+    padding: clamp(1rem, 3vw, 1.5rem);
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgb(16 33 41 / 6%);
+  }
+
+  .interp-block > h3 {
+    margin-bottom: 0.7rem;
+    font-size: clamp(1.1rem, 2.5vw, 1.6rem);
+  }
+
+  .interp-block > p {
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .graph-block {
+    margin-top: 1rem;
+  }
+
+  .findings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1rem;
+    margin-top: 0.75rem;
+  }
+
+  .finding {
+    padding: 1rem;
+    background: #f8fbfa;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+
+  .finding h4 {
+    margin: 0.5rem 0 0.4rem;
+    font-size: 1rem;
+  }
+
+  .finding p {
+    margin-bottom: 0;
+    color: var(--muted);
+    line-height: 1.55;
+    font-size: 0.95rem;
+  }
+
+  .finding-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .confidence-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .confidence-badge.alta {
+    color: #215d2d;
+    background: #dff0d8;
+  }
+
+  .confidence-badge.media {
+    color: #684308;
+    background: #fff3d9;
+  }
+
+  .confidence-badge.baja {
+    color: #5c2d2d;
+    background: #f9e0e0;
+  }
+
+  .group-tag {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 0.2rem 0.5rem;
+    color: #0a4c63;
+    background: #edf8fc;
+    border: 1px solid #c5e2ec;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 800;
+  }
+
+  .evidence-list {
+    margin: 0.6rem 0 0;
+    padding-left: 1.2rem;
+    color: var(--muted);
+    font-size: 0.88rem;
+    line-height: 1.5;
+  }
+
+  .evidence-list li {
+    margin-bottom: 0.3rem;
+  }
+
+  .vanos-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    margin: 1rem 0;
+  }
+
+  .vanos-grid article {
+    padding: 1rem;
+    background: #f8fbfa;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+
+  .vanos-grid strong {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.88rem;
+    text-transform: uppercase;
+    color: var(--green-dark);
+  }
+
+  .justifications {
+    display: grid;
+    gap: 0.75rem;
+    margin-top: 1rem;
+  }
+
+  .rule-card {
+    padding: 1rem;
+    background: #f8fbfa;
+    border-left: 4px solid var(--blue);
+    border-radius: 6px;
+  }
+
+  .rule-card strong {
+    display: block;
+    margin-bottom: 0.4rem;
+    color: var(--blue);
+    font-size: 0.92rem;
+    text-transform: uppercase;
+  }
+
+  .rule-card p {
+    margin-bottom: 0.3rem;
+    color: var(--muted);
+    line-height: 1.55;
+    font-size: 0.93rem;
+  }
+
+  .rule-causes {
+    font-style: italic;
+  }
+
+  .rule-text {
+    margin: 0;
+    padding: 0.85rem 1rem;
+    background: #f8fbfa;
+    border-left: 4px solid var(--green);
+    border-radius: 6px;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  .action-list {
+    padding-left: 1.4rem;
+    color: var(--muted);
+    line-height: 1.7;
+  }
+
+  .action-list li {
+    margin-bottom: 0.4rem;
+  }
+
+  /* ── End Interpretabilidad ── */
+
+  footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 2rem 0 2.5rem;
+    border-top: 1px solid var(--line);
+  }
+
+  footer img {
+    width: 150px;
+  }
+
+  footer p {
+    margin: 0;
+    text-align: right;
+  }
+
+  @media (max-width: 860px) {
+    .site-header {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    nav {
+      width: 100%;
+      justify-content: space-between;
+    }
+
+    .hero {
+      min-height: auto;
+      grid-template-columns: 1fr;
+    }
+
+    .summary-grid,
+    .timeline,
+    .deliverable-grid,
+    .cloud-layout,
+    .feature-shot,
+    .prototype-gallery,
+    .physics-summary,
+    .graph-banner,
+    .architecture-pillars,
+    .agent-grid,
+    .value-cycle {
+      grid-template-columns: 1fr;
+    }
+
+    .graph-actions {
+      flex-direction: column;
+      width: 100%;
+    }
+
+    .detail-stats,
+    .metrics-grid,
+    .process-grid,
+    .model-process,
+    .two-column-figures {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .graph-banner a {
+      width: 100%;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .hero,
+    .section,
+    footer {
+      width: min(100% - 1rem, 1120px);
+    }
+
+    h1 {
+      font-size: clamp(2.5rem, 18vw, 4.4rem);
+    }
+
+    .brand img {
+      width: 128px;
+    }
+
+    nav {
+      gap: 0.45rem;
+      font-size: 0.82rem;
+    }
+
+    .logo-strip {
+      flex-direction: column;
+    }
+
+    .button {
+      width: 100%;
+    }
+
+    .detail-panel {
+      padding: 0;
+    }
+
+    .detail-shell {
+      border-radius: 0;
+    }
+
+    .detail-stats,
+    .metrics-grid,
+    .regression-metrics,
+    .process-grid,
+    .model-process,
+    .two-column-figures {
+      grid-template-columns: 1fr;
+    }
+
+    .graph-frame {
+      min-height: 520px;
+    }
+
+    footer {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    footer p {
+      text-align: left;
+    }
+  }
+</style>

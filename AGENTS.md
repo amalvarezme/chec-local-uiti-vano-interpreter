@@ -48,7 +48,7 @@ the resulting data gaps without claiming those variables were observed.
 ## Invalid LLM Output
 
 If LLM output does not validate, save the raw invalid output and validation errors
-under `outputs/`, print a clear notebook message, and do not present it as final analysis.
+under `reports/interpretability/artifacts/`, print a clear notebook message, and do not present it as final analysis.
 
 ## Testing Expectations
 

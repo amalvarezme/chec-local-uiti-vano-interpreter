@@ -68,6 +68,7 @@
       "required": ["text", "p97_vanos_uiti_vano", "p97_vanos_eventos", "probable_justifications_rules"],
       "properties": {
         "text": {"type": "string", "minLength": 1},
+        "top_vanos_percentile": {"type": "number"},
         "p97_vanos_uiti_vano": {"type": "array", "items": {"type": "string"}},
         "p97_vanos_eventos": {"type": "array", "items": {"type": "string"}},
         "top_3_modes_related": {"type": "array", "items": {"type": "string"}},

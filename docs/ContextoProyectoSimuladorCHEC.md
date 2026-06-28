@@ -122,7 +122,7 @@ Para conectar los 156 nodos representados en el grafo completo en un modelo cohe
 En el flujo actual existen dos usos complementarios del grafo:
 
 1. **Grafo experto de entrenamiento:** matriz alineada al orden exacto de `features`, construida desde las relaciones de dominio y usada por MGCECDL como regularización/reconstrucción. Si una variable del grafo completo no está en `features`, conserva valor semántico, pero no fue predictor del modelo.
-2. **Grafo estimado por muestra o escenario:** entregable interpretativo generado en `notebooks/05_Analisis_Circuito_MGCECDL.ipynb`. Se estima a partir de la capa de reconstrucción del modelo MGCECDL y una similitud RBF entre perfiles reconstruidos de variables. Se exporta como HTML interactivo en `data/results_mgcecdl/grafos_interactivos/`.
+2. **Grafo estimado por muestra o escenario:** entregable interpretativo generado en `notebooks/inference/05_mgcecdl_circuit_analysis.ipynb`. Se estima a partir de la capa de reconstrucción del modelo MGCECDL y una similitud RBF entre perfiles reconstruidos de variables. Se exporta como HTML interactivo en `reports/mgcecdl-results/interactive_graphs/`.
 
 El grafo estimado del cuaderno 05 se debe leer como mapa de asociación aprendido/inducido por el modelo para las muestras del escenario, no como prueba causal ni como reemplazo del grafo experto. Sus aristas se muestran sin doble dirección, sin flechas, con pesos normalizados por la conexión máxima del grafo (`0-1`) y reportados en notación científica.
 

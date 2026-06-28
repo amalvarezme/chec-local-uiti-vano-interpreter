@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 DEFAULT_DATA_PATH = "../data/Indicadores_vano_v3.csv"
-DEFAULT_OUTPUT_DIR = "outputs"
+DEFAULT_OUTPUT_DIR = "reports/interpretability/artifacts"
 
 PROMPT_VERSION = "uiti-vano-explanation-v1"
 SCHEMA_VERSION = "uiti-vano-output-schema-v1"

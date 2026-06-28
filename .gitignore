@@ -16,12 +16,14 @@ data/*
 !data/optuna/
 !data/optuna/**
 
-outputs/*
-!outputs/.gitkeep
-
-notebooks/outputs/*
-!notebooks/outputs/.gitkeep
-notebooks/notebooks/outputs/*
+reports/interpretability/artifacts/*
+!reports/interpretability/artifacts/.gitkeep
+reports/graphify/*
+!reports/graphify/.gitkeep
+reports/mgcecdl-results/*
+!reports/mgcecdl-results/.gitkeep
+reports/legacy-model-assets/*
+!reports/legacy-model-assets/.gitkeep
 lib/
 
 .vscode/
@@ -34,3 +36,9 @@ outputs/graphify_workspace/
 
 # Claude Code local config and memory
 .claude/
+
+# Web (Astro) — root project
+node_modules/
+dist/
+.astro/
+.npm-cache/

@@ -15,14 +15,14 @@ El proceso integra datos estructurados (tabulares) y no estructurados (texto de 
    - **Bitácoras de Intervenciones:** Extrae el registro de mantenimientos programados (ej. podas, reposiciones) e intervenciones de mitigación asociadas a la zona en el último año.
    - **Normativa de Sistemas de Potencia:** Extrae los lineamientos técnicos aplicables a la infraestructura afectada.
 5. **Diagnóstico Preliminar agéntico descriptivo mejorado (bítacoras, historial y normativa):** Se consolida el evento actual con el historial tabular y el registro documental para plantear hipótesis de fallos tempranas.
-6. **Inferencia del Modelo Predictivo:** Un modelo de IA predictiva procesa las variables tabulares del evento actual y entrega:
+6. **Inferencia del Modelo M-GCECDL:** Un modelo de IA predictiva procesa las variables tabulares del evento actual y entrega:
    - La clase o nivel de impacto asociado a `UITI_VANO`, junto con probabilidades del clasificador.
    - **Relevancia de variables:** Kernel SHAP + Borda ponderado, radares por modo y soportes del modelo cuando estén disponibles.
-   - **Grafos HTML por escenario:** mapas interactivos generados en `notebooks/05_Analisis_Circuito_MGCECDL.ipynb` y guardados en `data/results_mgcecdl/grafos_interactivos/`.
+   - **Grafos HTML por escenario:** mapas interactivos generados en `notebooks/inference/05_mgcecdl_circuit_analysis.ipynb` y guardados en `reports/mgcecdl-results/interactive_graphs/`.
 7. **Cotejo Analítico a Tres Vías (Razonamiento Cruzado):** El sistema realiza un cruce crítico y justifica las causas combinando los patrones históricos, las justificaciones de bitácoras/normas y las máscaras del modelo ML. Coteja diagnósticos en puntos 3, 5 y 6.
 8. **Identificación de Escenarios Guiados:** Basado en el cotejo, se presenta una lista filtrada de variables candidatas a intervenir, estrictamente guiadas y validadas por los hallazgos en las bitácoras y la norma.
 9. **Simulación "*What-If*":** El usuario modifica los valores de las variables sugeridas en la interfaz.
-10. **Reevaluación Predictiva:** El modelo predictivo procesa el nuevo escenario y proyecta la nueva clase o probabilidad de impacto.
+10. **Reevaluación Predictiva:** El modelo M-GCECDL procesa el nuevo escenario y proyecta la nueva clase o probabilidad de impacto.
 11. **Generación de Reporte de Evidencias:** El sistema compila y redacta automáticamente un informe técnico formal. Este documento expone el razonamiento cruzado, las pruebas estadísticas, los grafos HTML de asociación por escenario y las evidencias documentales (citas de bitácoras y normativas) que justifican tanto las hipótesis sobre el fallo como la viabilidad del escenario de intervención propuesto.
 
 ---
@@ -43,7 +43,7 @@ La arquitectura multimodelo utiliza agentes especializados con cargas cognitivas
 - **Rol:** Especialista en Normativa y Operaciones.
 - **Función:** Lee bitácoras, reportes de poda e incidencias desde una base de datos vectorial (Vector Store). Coteja si el mantenimiento operativo en terreno se ejecutó según la normativa vigente.
 
-### Orquestador del Modelo Predictivo (API / No LLM)
+### Orquestador del Modelo M-GCECDL (API / No LLM)
 - **Rol:** Puente de Inferencia ML.
 - **Función:** Ejecuta el clasificador MGCECDL pre-entrenado, retorna probabilidades/clases de impacto, prepara insumos de interpretabilidad y conserva la alineación exacta entre `X`, `features`, grafo experto y salidas del modelo. `UITI_VANO` es objetivo/clase derivada y no debe enviarse como predictor.
 
@@ -53,7 +53,7 @@ La arquitectura multimodelo utiliza agentes especializados con cargas cognitivas
 
 ### Agente 5: Simulador y Evaluador de Escenarios (Modelo *Low/Fast*)
 - **Rol:** Asistente Interactiva "What-If".
-- **Función:** Gestiona la simulación iterativa con el usuario y ejecuta la reevaluación con el modelo predictivo, validando matemáticamente si la intervención mejora la red.
+- **Función:** Gestiona la simulación iterativa con el usuario y ejecuta la reevaluación con el modelo M-GCECDL, validando matemáticamente si la intervención mejora la red.
 
 ### Agente 6: Redactor de Informes Técnicos (Modelo *High/Generative*)
 - **Rol:** Generador de Reportes de Evidencia.
@@ -90,7 +90,7 @@ graph TD
     A6[Agente 6: Redactor Informes\nModelo High]:::agentHigh
     
     MP{{MGCECDL Clasificacion\nPre-entrenado}}:::model
-    Graphs[(HTML Grafos estimados\nnotebooks/05_Analisis_Circuito_MGCECDL)]:::db
+    Graphs[(HTML Grafos estimados\nnotebooks/inference/05_mgcecdl_circuit_analysis)]:::db
     Reporte[[Reporte de Evidencias\ny Razonamientos]]:::outputDoc
 
     %% Flujo Inicial
@@ -137,6 +137,6 @@ graph TD
 ## Resumen del Ciclo de Valor Ampliado
 1. **Comprender:** Desde la taxonomía numérica de fallas (`Agente 1`).
 2. **Contextualizar Multimodalmente:** Cruzando el historial numérico de degradación (`Agente 2`) con la "historia operativa" registrada en bitácoras y regulada en normas (`Agente 3`).
-3. **Validar Causas:** Contrastando el raciocinio humano/LLM cualitativo con inferencias matemáticas estrictas (`Agente 4` + `Modelo Predictivo`).
+3. **Validar Causas:** Contrastando el raciocinio humano/LLM cualitativo con inferencias matemáticas estrictas (`Agente 4` + `Modelo M-GCECDL`).
 4. **Actuar Inteligentemente:** Diseñando simulaciones fundamentadas operativa y normativamente (`Agente 5`).
 5. **Documentar y Soportar:** Generando de forma automática un reporte técnico exhaustivo que cristaliza las evidencias encontradas y los razonamientos inferidos (`Agente 6`), cerrando la brecha entre el análisis de IA y la toma de decisiones empresariales.

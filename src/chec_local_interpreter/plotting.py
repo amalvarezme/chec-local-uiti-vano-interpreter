@@ -828,7 +828,7 @@ def render_llm_analysis(
     selected_circuitos: list[str],
     start_date: str = None,
     end_date: str = None,
-    output_dir: str | Path = "notebooks/outputs",
+    output_dir: str | Path = "reports/interpretability/html",
     llm_model: str = "Desconocido",
     llm_provider: str = "Desconocido",
     inference_results: dict | None = None,
@@ -1166,16 +1166,21 @@ def render_llm_analysis(
             char_text = char_data.get('text', '')
             
             char_html = _text_to_items(char_text)
+            top_percentile = char_data.get("top_vanos_percentile", 97)
+            try:
+                top_percentile_label = f"P{float(top_percentile):g}"
+            except (TypeError, ValueError):
+                top_percentile_label = "percentil configurado"
             
             p97_uiti = char_data.get('p97_vanos_uiti_vano', [])
             if p97_uiti:
-                char_html += "<h4>🔴 Top 97% Vanos (Mayor Gravedad UITI_VANO)</h4><ul>"
+                char_html += f"<h4>🔴 Top {top_percentile_label} Vanos (Mayor Gravedad UITI_VANO)</h4><ul>"
                 for v in p97_uiti: char_html += f"<li>{v}</li>"
                 char_html += "</ul>"
                 
             p97_events = char_data.get('p97_vanos_eventos', [])
             if p97_events:
-                char_html += "<h4>🟠 Top 97% Vanos (Mayor Frecuencia de Eventos)</h4><ul>"
+                char_html += f"<h4>🟠 Top {top_percentile_label} Vanos (Mayor Frecuencia de Eventos)</h4><ul>"
                 for v in p97_events: char_html += f"<li>{v}</li>"
                 char_html += "</ul>"
                 
