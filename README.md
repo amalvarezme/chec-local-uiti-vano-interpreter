@@ -6,7 +6,10 @@ Small local repo for notebook-first analysis of `UITI_VANO` in the CHEC wide dat
 
 La página pública del proyecto se puede abrir desde GitHub Pages:
 
-https://amalvarezme.github.io/CHECUNAL_2026/
+https://jclugor.github.io/chec-local-uiti-vano-interpreter/
+
+La versión publicada corresponde a la rama:
+`feat/graphify-context-integration`
 
 The workflow covers only steps 1 to 3: select circuits/date window, detect critical
 points from structured data, and build a semantic preliminary diagnosis context. It
