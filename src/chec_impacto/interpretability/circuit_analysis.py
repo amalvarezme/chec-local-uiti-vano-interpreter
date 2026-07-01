@@ -1031,6 +1031,13 @@ def validar_respuesta_inferencia(response_text, context_package):
         if isinstance(item, dict) and item.get("path")
     ]
     graph_discussions = data.get("discusion_grafos", [])
+    if isinstance(graph_discussions, dict):
+        graph_discussions = [
+            {"seccion": key, "lectura": value}
+            for key, value in graph_discussions.items()
+            if str(value or "").strip()
+        ]
+        data["discusion_grafos"] = graph_discussions
 
     def _graph_section(value):
         text = str(value or "").strip().lower()

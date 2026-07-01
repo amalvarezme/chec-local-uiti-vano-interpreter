@@ -33,3 +33,4 @@ def test_inference_prompt_uses_skill_contract():
     assert "Inference Output Contract" in prompt
     assert '"Escenario A"' in prompt
     assert "## Contrato de salida" not in prompt
+    assert "discusion_grafos` debe ser siempre un arreglo/lista de objetos" in prompt

@@ -23,6 +23,9 @@ Tu tarea es producir un diagnostico descriptivo del circuito y periodo seleccion
   del JSON.
 - El objeto debe cumplir el schema entregado en el prompt.
 - Usa solo los `critical_point_id` presentes en el contexto. Si no aplica, usa `null`.
+- Antes de responder, verificar que todos los campos requeridos por el schema existan con la
+  forma exacta solicitada. No reemplaces listas de objetos por diccionarios ni diccionarios
+  por listas aunque el contenido parezca equivalente.
 
 ## Diagnostico requerido
 

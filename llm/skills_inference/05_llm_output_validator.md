@@ -148,6 +148,10 @@ Antes de entregar, verificar:
 - Si se reportan grafos HTML del cuaderno 05, incluir en `discusion_grafos` una lectura para
   `periodo_completo` y otra para `puntos_criticos` cuando existan grafos en ambas secciones,
   con asociaciones relativas y modos, sin repetir una discusión por escenario.
+- `discusion_grafos` debe ser lista de objetos con claves `seccion` y `lectura`; no debe ser
+  un diccionario con claves `periodo_completo` y `puntos_criticos`.
+- No entregar el JSON final si `entregables.grafos_html` incluye grafos de periodo completo y
+  puntos criticos pero `discusion_grafos` no tiene ambas secciones como objetos de lista.
 - `hipotesis_modelo_predictivo.periodo_completo` integra hallazgos, escenarios del periodo
   completo y grafos de periodo completo.
 - `hipotesis_modelo_predictivo.puntos_criticos` integra escenarios y grafos de puntos

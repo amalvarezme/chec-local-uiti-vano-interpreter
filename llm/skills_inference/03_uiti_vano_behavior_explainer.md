@@ -139,6 +139,18 @@ conectar variables o modos relevantes con asociaciones relativas del grafo estim
 afirmar causalidad, sin repetir solo rutas de archivo y sin duplicar discusion por
 escenario.
 
+La forma JSON obligatoria de esas lecturas es una lista de objetos:
+
+```json
+[
+  {"seccion": "periodo_completo", "lectura": "..."},
+  {"seccion": "puntos_criticos", "lectura": "..."}
+]
+```
+
+No devolver `discusion_grafos` como diccionario. Si existen grafos de ambas secciones, ambas
+entradas son obligatorias.
+
 ## Lectura por modos CHEC
 
 ### Evento, impacto e indicadores

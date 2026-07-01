@@ -83,6 +83,10 @@ El objeto JSON debe incluir estas claves:
 - `variables_a_priorizar`
 - `sintesis_final`
 
+Antes de responder, verificar que cada clave requerida exista con la forma esperada. No
+reemplaces arreglos de objetos por diccionarios resumidos aunque el contenido parezca
+equivalente.
+
 En `coincidencias` y `diferencias`, devuelve hallazgos ejecutivos con:
 
 - `tema`

@@ -67,6 +67,8 @@ Devuelve un objeto JSON con estas claves:
 
 Agregar en `discusion_grafos`:
 
+- `discusion_grafos` debe ser siempre un arreglo/lista de objetos. No usar un objeto tipo
+  `{"periodo_completo": "...", "puntos_criticos": "..."}`.
 - Una lectura con `seccion="periodo_completo"` cuando existan grafos HTML de periodo
   completo.
 - Una lectura con `seccion="puntos_criticos"` cuando existan grafos HTML de fechas o puntos
@@ -78,6 +80,9 @@ Cada lectura debe:
 - Conectar variables o modos relevantes con asociaciones del grafo.
 - Evitar causalidad.
 - Evitar repetir solo rutas de archivo.
+- Antes de responder, verificar que si `entregables.grafos_html` contiene rutas de periodo
+  completo y puntos criticos, entonces existen exactamente entradas equivalentes en
+  `discusion_grafos` para ambas secciones.
 
 ## Presentacion esperada en el reporte
 
