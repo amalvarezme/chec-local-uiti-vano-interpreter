@@ -14,7 +14,6 @@ import shap
 import torch
 import warnings
 
-
 def construir_modos_interpretabilidad(features=None, ventana_climatica_horas=12):
     clima_horas = range(ventana_climatica_horas)
 
@@ -422,27 +421,35 @@ def construir_grafo_interactivo_muestras(
     selected_set = set(selected_features)
     score_norm = normalizar_minmax(scores.reindex(selected_features, fill_value=0.0))
 
-    # feature → mode_name (for tooltip only; color is always value-based)
-    feature_to_mode_name = {}
+    mode_styles = {}
+    for idx, mode_name in enumerate(modos or {}):
+        mode_id = chr(ord("A") + idx)
+        mode_styles[mode_name] = {"id": mode_id}
+
+    feature_to_mode = {}
     if modos:
         for mode_name, mode_feats in modos.items():
             for feat in mode_feats:
-                if feat not in feature_to_mode_name:
-                    feature_to_mode_name[feat] = mode_name.replace("\n", " ")
+                if feat not in feature_to_mode:
+                    feature_to_mode[feat] = {
+                        "name": mode_name.replace("\n", " "),
+                        **mode_styles.get(mode_name, {"id": "", "color": "#7f8c8d"}),
+                    }
 
     nodes = []
     for feature in selected_features:
         score_val = float(score_norm.loc[feature])
-        raw_score = float(scores.loc[feature])
-        short_mode = feature_to_mode_name.get(feature, "")
+        mode_info = feature_to_mode.get(feature, {"id": "", "name": "Sin modo asignado"})
         tooltip_lines = [
             str(feature),
-            f"Valor: {score_val:.3f}",
+            f"Relevancia: {score_val:.3e}",
         ]
         nodes.append({
             "id": feature,
             "label": feature,
             "_score": score_val,
+            "mode_id": mode_info["id"],
+            "mode_name": mode_info["name"],
             "title": "\n".join(tooltip_lines),
         })
 
@@ -483,14 +490,14 @@ def construir_grafo_interactivo_muestras(
     edges = []
     for weight, source, target, is_virtual in edge_candidates:
         norm_w = weight / max_raw_edge if max_raw_edge > 0 else 0.0
-        edge_tooltip = f"Valor: {norm_w:.3f}"
+        edge_tooltip = f"Valor: {weight:.3e}"
         edges.append({
             "from": source,
             "to": target,
             "_norm_w": norm_w,
             "width": round(0.5 + 8.5 * norm_w, 2),
             "title": edge_tooltip,
-            "color": {"color": "#c97b22" if is_virtual else "#27ae60", "opacity": round(0.38 + 0.62 * norm_w, 3)},
+            "color": {"color": "#555555", "opacity": round(0.34 + 0.58 * norm_w, 3)},
             "dashes": is_virtual,
             "arrows": {"to": {"enabled": True, "scaleFactor": 0.48}},
         })
@@ -499,24 +506,6 @@ def construir_grafo_interactivo_muestras(
     output_path = Path(output_path or "grafo_interactivo_mgcecdl.html")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     graph_id = f"net_{_normalizar_nombre_archivo(output_path.stem)}"
-
-    # --- Sidebar: importancia del nodo (siempre barra de color) ---
-    sidebar_top = (
-        f'<div><div class="sidebar-section-label">Importancia del nodo</div>'
-        f'<div class="colorbar-row">'
-        f'<canvas id="cb_{graph_id}" class="colorbar-canvas" width="18" height="150"></canvas>'
-        f'<div class="colorbar-ticks">'
-        f'<span>Alta</span><span style="color:#a0b4c8;">Media</span><span>Baja</span>'
-        f'</div></div></div>'
-    )
-    colorbar_js = f"""    const cb = document.getElementById('cb_{graph_id}');
-    if (cb) {{
-      const ctx = cb.getContext('2d');
-      for (let y = 0; y < cb.height; y++) {{
-        ctx.fillStyle = scoreToCSS(1 - y / cb.height);
-        ctx.fillRect(0, y, cb.width, 1);
-      }}
-    }}"""
 
     payload_json = json.dumps(
         {"nodes": nodes, "edges": edges},
@@ -543,137 +532,41 @@ def construir_grafo_interactivo_muestras(
     *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
     body {{
       font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-      background: #eef2f7;
-      color: #1a2332;
-    }}
-    .page-header {{
-      background: linear-gradient(135deg, #1a2e4a 0%, #243b55 100%);
-      color: #e8f0fe;
-      padding: 13px 20px 11px;
-      display: flex;
-      align-items: flex-start;
-      gap: 14px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.22);
-    }}
-    .page-title {{
-      font-size: 14px; font-weight: 600; letter-spacing: 0.01em;
-      margin-bottom: 4px;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }}
-    .page-meta {{ font-size: 11.5px; color: #90afd0; }}
-    .badge {{
-      display: inline-block; background: rgba(255,255,255,0.13);
-      border-radius: 10px; padding: 1px 8px; margin-left: 5px;
-      font-size: 10.5px; color: #b8d0ec;
-    }}
-    .layout {{ display: flex; height: {height_esc}; }}
-    .graph-wrap {{
-      flex: 1; position: relative;
       background: #ffffff;
-      border-right: 1px solid #cddbe8;
+      color: #1a2332;
+      overflow: hidden;
+    }}
+    .layout {{ position: relative; height: {height_esc}; }}
+    .graph-wrap {{
+      position: absolute; inset: 0;
+      background: #ffffff;
     }}
     #{graph_id} {{ width: 100%; height: 100%; }}
-    .sidebar {{
-      width: 200px; background: #ffffff;
-      padding: 16px 14px;
-      display: flex; flex-direction: column; gap: 18px;
-      overflow-y: auto;
-    }}
-    .sidebar-section-label {{
-      font-size: 10px; font-weight: 700; text-transform: uppercase;
-      letter-spacing: 0.07em; color: #6b83a0; margin-bottom: 9px;
-    }}
-    .legend-item {{
-      display: flex; align-items: center; gap: 8px; margin-bottom: 7px;
-    }}
-    .legend-dot {{
-      width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0;
-      box-shadow: 0 0 0 1.5px rgba(0,0,0,0.12);
-    }}
-    .legend-label {{
-      font-size: 11px; color: #3a4e62; flex: 1;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }}
-    .legend-count {{ font-size: 10px; color: #8fa8be; white-space: nowrap; }}
-    .colorbar-row {{ display: flex; align-items: stretch; gap: 10px; height: 150px; }}
-    .colorbar-canvas {{ width: 18px; border-radius: 4px; border: 1px solid #c8d6e4; }}
-    .colorbar-ticks {{
-      display: flex; flex-direction: column; justify-content: space-between;
-      font-size: 10px; color: #7a92aa;
-    }}
-    .edge-item {{
-      display: flex; align-items: center; gap: 9px;
-      font-size: 11px; color: #3d5166; margin-bottom: 8px;
-    }}
-    .edge-line {{ width: 26px; height: 0; flex-shrink: 0; }}
-    .edge-solid {{ border-top: 2.5px solid #27ae60; }}
-    .edge-dashed {{ border-top: 2.5px dashed #c97b22; }}
-    .hint-block {{
-      margin-top: auto;
-      background: #f4f7fb; border: 1px solid #d8e4f0;
-      border-radius: 6px; padding: 9px 11px;
-      font-size: 10px; color: #6b83a0; line-height: 1.8;
-    }}
-    .hint-block b {{ color: #3d5166; font-weight: 600; }}
   </style>
 </head>
 <body>
-  <div class="page-header">
-    <div style="flex:1;min-width:0;">
-      <div class="page-title">{title_esc}</div>
-      <div class="page-meta">
-        <span class="badge">{len(nodes)} nodos</span>
-        <span class="badge">{len(edges)} aristas</span>
-        <span style="margin-left:8px;">SHAP+Borda &middot; umbral &ge; {min_edge_weight:.0e}</span>
-      </div>
-    </div>
-  </div>
-
   <div class="layout">
     <div class="graph-wrap">
       <div id="{graph_id}"></div>
     </div>
-    <aside class="sidebar">
-      {sidebar_top}
-      <div>
-        <div class="sidebar-section-label">Tipo de arista</div>
-        <div class="edge-item">
-          <div class="edge-line edge-solid"></div><span>Directa</span>
-        </div>
-        <div class="edge-item">
-          <div class="edge-line edge-dashed"></div><span>Virtual</span>
-        </div>
-      </div>
-      <div class="hint-block">
-        <b>Navegaci&oacute;n</b><br>
-        Scroll &rarr; zoom<br>
-        Arrastre &rarr; mover<br>
-        Clic nodo &rarr; resaltar<br>
-        Clic fondo &rarr; limpiar
-      </div>
-    </aside>
   </div>
 
   <script>
   (() => {{
-    // --- Colorscale azul → amarillo → rojo ---
     function lerpRGB(a, b, t) {{
       return [
-        Math.round(a[0]+t*(b[0]-a[0])),
-        Math.round(a[1]+t*(b[1]-a[1])),
-        Math.round(a[2]+t*(b[2]-a[2])),
+        Math.round(a[0] + t * (b[0] - a[0])),
+        Math.round(a[1] + t * (b[1] - a[1])),
+        Math.round(a[2] + t * (b[2] - a[2])),
       ];
     }}
     const CS = [[69,117,180],[255,255,191],[215,48,39]];
-    function scoreToRGB(t) {{
-      t = Math.max(0, Math.min(1, t));
-      return t<=0.5 ? lerpRGB(CS[0],CS[1],t*2) : lerpRGB(CS[1],CS[2],(t-0.5)*2);
-    }}
     function scoreToCSS(t) {{
-      const [r,g,b] = scoreToRGB(t);
-      return `rgb(${{r}},${{g}},${{b}})`;
+      t = Math.max(0, Math.min(1, t));
+      const rgb = t <= 0.5 ? lerpRGB(CS[0], CS[1], t * 2) : lerpRGB(CS[1], CS[2], (t - 0.5) * 2);
+      return `rgb(${{rgb[0]}},${{rgb[1]}},${{rgb[2]}})`;
     }}
-{colorbar_js}
+
     const payload = {payload_json};
     const container = document.getElementById('{graph_id}');
 
@@ -692,27 +585,22 @@ def construir_grafo_interactivo_muestras(
     var nodes = new vis.DataSet(
       payload.nodes.map(n => {{
         const bg = scoreToCSS(n._score);
-        const [r,g,b] = scoreToRGB(n._score);
-        const lum = 0.299*r + 0.587*g + 0.114*b;
-        const fontColor = lum > 150 ? '#1a2332' : '#ffffff';
-        const dk = c => Math.round(c*0.58);
         return {{
           id: n.id, label: n.label, title: n.title,
-          size: 22, shape: 'dot',
+          size: 16 + 8 * Math.max(0, Math.min(1, n._score)), shape: 'dot',
           color: {{
             background: bg,
-            border: `rgb(${{dk(r)}},${{dk(g)}},${{dk(b)}})`,
-            highlight: {{ background: bg, border: '#ff6d3a' }},
-            hover:     {{ background: bg, border: '#ff6d3a' }},
+            border: bg,
+            highlight: {{ background: bg, border: '#2c3e50' }},
+            hover:     {{ background: bg, border: '#2c3e50' }},
           }},
           font: {{
-            size: 12, color: fontColor,
+            size: 14, color: '#000000',
             face: "'Segoe UI', system-ui, sans-serif",
-            strokeWidth: lum > 150 ? 0 : 2,
-            strokeColor: 'rgba(0,0,0,0.28)',
+            strokeWidth: 0,
           }},
-          borderWidth: 1.5, borderWidthSelected: 3,
-          shadow: {{ enabled: true, color: 'rgba(0,0,0,0.11)', size: 7, x: 2, y: 2 }},
+          borderWidth: 1,
+          borderWidthSelected: 3,
         }};
       }})
     );
@@ -761,22 +649,22 @@ def construir_grafo_interactivo_muestras(
         enabled: true,
         solver: 'barnesHut',
         barnesHut: {{
-          gravitationalConstant: -2800,
+          gravitationalConstant: -2000,
           centralGravity: 0.1,
-          springLength: 175,
-          springConstant: 0.04,
-          damping: 0.09,
+          springLength: 150,
+          springConstant: 0.05,
+          damping: 0.9,
           avoidOverlap: 0.12,
         }},
         stabilization: {{ enabled: true, fit: true, iterations: 550, updateInterval: 30 }},
       }},
       interaction: {{
         hover: true, tooltipDelay: 60,
-        navigationButtons: true,
-        keyboard: {{ enabled: true, bindToWindow: false }},
+        navigationButtons: false,
+        keyboard: {{ enabled: false, bindToWindow: false }},
         zoomView: true, dragNodes: true,
       }},
-      nodes: {{ shape: 'dot', size: 22 }},
+      nodes: {{ shape: 'dot' }},
       edges: {{
         smooth: {{ type: 'dynamic' }},
         hoverWidth: w => w + 1,
@@ -800,9 +688,9 @@ def construir_grafo_interactivo_muestras(
       network.setOptions({{
         physics: {{
           barnesHut: {{
-            gravitationalConstant: -550,
-            springConstant: 0.012,
-            damping: 0.22,
+            gravitationalConstant: -2000,
+            springConstant: 0.05,
+            damping: 0.9,
           }}
         }}
       }});
@@ -1098,34 +986,12 @@ def construir_prompt_inferencia(context_package, skill_bundle):
     prompt_context = _compactar_contexto_inferencia_para_prompt(context_package)
     return (
         "Eres un agente de interpretacion de inferencia MGCECDL para CHEC. "
-        "Usa exclusivamente el contexto estructurado, las skills y los grafos HTML "
-        "referenciados. Devuelve solo JSON valido, sin markdown, sin etiquetas <think>, "
-        "sin razonamiento interno visible y sin texto antes o despues del JSON.\n\n"
+        "Todas las instrucciones tecnicas y de salida estan en las skills cargadas. "
+        "Devuelve solo JSON valido y usa exclusivamente el contexto entregado.\n\n"
         "## Skills de inferencia\n"
         f"{skill_bundle}\n\n"
         "## Contexto estructurado\n"
-        f"{json.dumps(prompt_context, ensure_ascii=False, indent=2)}\n\n"
-        "## Contrato de salida\n"
-        "Devuelve un objeto JSON con: contexto, entregables, escenarios, "
-        "coherencia_grafo_modelo, hallazgos y limitaciones. No afirmes causalidad; "
-        "describe SHAP/Borda y grafos como comportamiento del modelo y asociaciones "
-        "estimadas por reconstruccion MGCECDL + RBF. Incluye exactamente todos los "
-        "escenarios presentes en contexto.escenarios usando el mismo valor de nombre. "
-        "Mantén la respuesta muy compacta: por cada escenario devuelve solo nombre e "
-        "interpretacion, con 2 frases como maximo. No copies features, graph_feature_order, "
-        "top_variables, modos ni tabla_top_vanos; solo sintetiza sus patrones. El JSON "
-        "completo debe ser breve para evitar truncamiento. No agregues campos no solicitados "
-        "ni repitas contenido literal de las skills.\n\n"
-        "Usa esta forma exacta y completa:\n"
-        "{\n"
-        '  "contexto": {"circuito": "...", "periodo": {"inicio": "...", "fin": "..."}, "modelo": "..."},\n'
-        '  "entregables": {"grafos_html": [{"escenario": "...", "path": "..."}]},\n'
-        '  "escenarios": [{"nombre": "...", "interpretacion": "..."}],\n'
-        '  "coherencia_grafo_modelo": ["..."],\n'
-        '  "hallazgos": ["..."],\n'
-        '  "limitaciones": ["..."],\n'
-        '  "inferencias_predictivas": [{"horizonte": "periodo analizado", "riesgo": "...", "justificacion_modelo": "..."}]\n'
-        "}"
+        f"{json.dumps(prompt_context, ensure_ascii=False, indent=2)}"
     )
 
 
@@ -1158,6 +1024,37 @@ def validar_respuesta_inferencia(response_text, context_package):
     missing = sorted(expected_names - received_names)
     if missing:
         errors.append(f"Faltan escenarios en la respuesta: {missing}")
+
+    expected_graphs = [
+        item
+        for item in context_package.get("graph_html_paths", [])
+        if isinstance(item, dict) and item.get("path")
+    ]
+    graph_discussions = data.get("discusion_grafos", [])
+
+    def _graph_section(value):
+        text = str(value or "").strip().lower()
+        if any(token in text for token in ["critico", "crítico", "punto", "fecha"]):
+            return "puntos_criticos"
+        if any(token in text for token in ["periodo", "período", "completo", "general"]):
+            return "periodo_completo"
+        return ""
+
+    expected_graph_sections = {
+        _graph_section(item.get("escenario") or item.get("nombre") or item.get("path"))
+        for item in expected_graphs
+    }
+    expected_graph_sections.discard("")
+    received_graph_sections = {
+        _graph_section(item.get("seccion") or item.get("section") or item.get("apartado") or item.get("escenario") or item.get("nombre"))
+        for item in graph_discussions
+        if isinstance(item, dict)
+        and str(item.get("lectura") or item.get("interpretacion") or item.get("discusion") or item.get("texto") or "").strip()
+    } if isinstance(graph_discussions, list) else set()
+    received_graph_sections.discard("")
+    missing_graph_sections = sorted(expected_graph_sections - received_graph_sections)
+    if missing_graph_sections:
+        errors.append(f"Faltan discusiones de grafos por seccion: {missing_graph_sections}")
 
     text_blob = json.dumps(data, ensure_ascii=False).lower()
     forbidden = ["causó", "causo", "demuestra causalidad", "prueba causal"]

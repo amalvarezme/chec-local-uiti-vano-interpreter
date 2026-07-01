@@ -18,6 +18,14 @@ def _context(unavailable: list[str] | None = None) -> dict:
                 "selection_reason": "Punto critico entregado por codigo.",
             }
         ],
+        "critical_periods": [
+            {
+                "critical_period_id": "period-2026-01-01-2026-01-02",
+                "start_date": "2026-01-01",
+                "end_date": "2026-01-02",
+                "summary": "Periodo critico entregado por codigo.",
+            }
+        ],
     }
 
 
@@ -98,6 +106,24 @@ def test_date_outside_context_fails():
     result = validate_llm_response(json.dumps(output), _context(), load_output_schema())
     assert not result.ok
     assert any("Referenced date outside context" in error for error in result.errors)
+
+
+def test_critical_period_id_from_context_passes():
+    output = _valid_output()
+    output["key_findings"][0]["evidence"][0]["date"] = "2026-01-01"
+    output["key_findings"][0]["evidence"][0]["critical_point_id"] = "period-2026-01-01-2026-01-02"
+    output["key_findings"][0]["referenced_events"][0]["date"] = "2026-01-02"
+    output["key_findings"][0]["referenced_events"][0]["critical_point_id"] = "period-2026-01-01-2026-01-02"
+    result = validate_llm_response(json.dumps(output), _context(), load_output_schema())
+    assert result.ok, result.errors
+
+
+def test_unknown_critical_period_id_fails():
+    output = _valid_output()
+    output["key_findings"][0]["evidence"][0]["critical_point_id"] = "period-2026-02-01-2026-02-02"
+    result = validate_llm_response(json.dumps(output), _context(), load_output_schema())
+    assert not result.ok
+    assert any("Referenced critical_point_id outside context" in error for error in result.errors)
 
 
 def test_unavailable_column_referenced_as_present_fails():

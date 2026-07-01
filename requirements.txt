@@ -22,6 +22,10 @@ plotly
 openpyxl
 pyarrow
 
+# === PDF extraction ===
+PyMuPDF
+pdfplumber
+
 # === Weather / external API ===
 openmeteo-requests
 requests-cache
@@ -46,6 +50,14 @@ pytest
 # === Graph Visualization ===
 networkx
 pyvis
+
+# === Geospatial analysis ===
+geopandas
+pyogrio
+shapely
+pyproj
+folium
+mapclassify
 
 # === Knowledge Graph Skill ===
 graphifyy

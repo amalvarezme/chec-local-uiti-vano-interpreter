@@ -3,8 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-DEFAULT_DATA_PATH = "../data/Indicadores_vano_v3.csv"
-DEFAULT_OUTPUT_DIR = "reports/interpretability/artifacts"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_DATA_PATH = PROJECT_ROOT / "data" / "Indicadores_vano_v3.csv"
+DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "reports" / "interpretability" / "artifacts"
 
 PROMPT_VERSION = "uiti-vano-explanation-v1"
 SCHEMA_VERSION = "uiti-vano-output-schema-v1"

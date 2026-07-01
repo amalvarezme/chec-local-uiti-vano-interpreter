@@ -131,6 +131,14 @@ El cuaderno 05 puede generar grafos interactivos HTML por escenario en
 Al narrarlos, usar frases como "el grafo estimado muestra asociacion relativa entre..." y
 evitar "el grafo demuestra que...".
 
+En salidas JSON del cuaderno `02_local_uiti_vano_interpretability_v3.ipynb`, los grafos
+HTML recibidos deben sintetizarse en dos entradas generales de `discusion_grafos` cuando
+apliquen: `seccion="periodo_completo"` para los grafos del periodo completo y
+`seccion="puntos_criticos"` para los grafos de fechas o puntos criticos. Cada lectura debe
+conectar variables o modos relevantes con asociaciones relativas del grafo estimado, sin
+afirmar causalidad, sin repetir solo rutas de archivo y sin duplicar discusion por
+escenario.
+
 ## Lectura por modos CHEC
 
 ### Evento, impacto e indicadores

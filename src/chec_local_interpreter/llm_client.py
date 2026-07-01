@@ -49,7 +49,7 @@ def call_llm(
 
     client = OpenAI(api_key=api_key, base_url=base_url) if base_url else OpenAI(api_key=api_key)
     selected_model = model or os.getenv("LLM_MODEL", "gemini-2.5-flash-lite")
-    max_tokens = int(max_output_tokens or os.getenv("LLM_MAX_OUTPUT_TOKENS", "8192"))
+    max_tokens = int(max_output_tokens or os.getenv("LLM_MAX_OUTPUT_TOKENS", "32768"))
     
     try:
         import time
@@ -71,8 +71,9 @@ def call_llm(
             "stream": True,
             "max_tokens": max_tokens,
         }
-        if provider.lower() in {"google", "openai"}:
-            request_kwargs["response_format"] = {"type": "json_object"}
+        if provider.lower() == "ollama":
+            request_kwargs["extra_body"] = {"options": {"num_predict": max_tokens}}
+        request_kwargs["response_format"] = {"type": "json_object"}
 
         try:
             response = client.chat.completions.create(**request_kwargs)

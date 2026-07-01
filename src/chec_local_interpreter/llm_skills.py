@@ -10,6 +10,8 @@ REQUIRED_SKILLS = (
     "03_uiti_vano_behavior_explainer.md",
     "04_domain_grounding_guardrails.md",
     "05_llm_output_validator.md",
+    "06_base_repair.md",
+    "07_base_output_contract.md",
 )
 
 INFERENCE_REQUIRED_SKILLS = (
@@ -18,6 +20,13 @@ INFERENCE_REQUIRED_SKILLS = (
     "03_uiti_vano_behavior_explainer.md",
     "04_graph_connectivity_guardrails.md",
     "05_llm_output_validator.md",
+    "06_inference_output_contract.md",
+)
+
+EXPERT_ALIGNMENT_REQUIRED_SKILLS = (
+    "01_pdf_report_comparison.md",
+    "02_predictive_variable_prioritization.md",
+    "03_graph_context_for_alignment.md",
 )
 
 
@@ -26,13 +35,20 @@ def _required_skills(profile: str = "base") -> tuple[str, ...]:
         return REQUIRED_SKILLS
     if profile == "inferencia":
         return INFERENCE_REQUIRED_SKILLS
-    raise ValueError("profile debe ser 'base' o 'inferencia'.")
+    if profile in {"expert_alignment", "pdf_report_comparison"}:
+        return EXPERT_ALIGNMENT_REQUIRED_SKILLS
+    raise ValueError("profile debe ser 'base', 'inferencia' o 'expert_alignment'.")
 
 
 def skills_dir(base_dir: str | Path | None = None, *, profile: str = "base") -> Path:
     if base_dir is not None:
         return Path(base_dir)
-    suffix = "skills_inference" if profile == "inferencia" else "skills"
+    if profile == "inferencia":
+        suffix = "skills_inference"
+    elif profile in {"expert_alignment", "pdf_report_comparison"}:
+        suffix = "skills_expert_alignment"
+    else:
+        suffix = "skills"
     return llm_root() / suffix
 
 

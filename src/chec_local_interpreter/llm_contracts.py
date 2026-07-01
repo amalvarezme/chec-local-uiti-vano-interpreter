@@ -51,13 +51,19 @@ def render_prompt(
     output_schema_json: str,
     prompt_version: str = PROMPT_VERSION,
     base_dir: str | Path | None = None,
+    skill_bundle: str | None = None,
 ) -> str:
+    if skill_bundle is None:
+        from chec_local_interpreter.llm_skills import assemble_skill_bundle
+
+        skill_bundle = assemble_skill_bundle(profile="base")
     system = load_prompt_template(SYSTEM_PROMPT_FILE, base_dir)
     user_template = load_prompt_template(USER_PROMPT_FILE, base_dir)
     user = user_template.format(
         context_json=context_json,
         output_schema_json=schema_for_prompt(output_schema_json),
         prompt_version=prompt_version,
+        skill_bundle=skill_bundle,
     )
     return f"{system.strip()}\n\n---\n\n{user.strip()}\n"
 

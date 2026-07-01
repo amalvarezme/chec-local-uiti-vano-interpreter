@@ -74,6 +74,13 @@ def _context_dates(context: dict[str, Any]) -> set[str]:
         for item in context.get("critical_points", [])
         if isinstance(item, dict) and item.get("fecha_dia")
     )
+    for item in context.get("critical_periods", []):
+        if not isinstance(item, dict):
+            continue
+        if item.get("start_date"):
+            dates.add(str(item.get("start_date")))
+        if item.get("end_date"):
+            dates.add(str(item.get("end_date")))
     dates.update(
         str(item.get("d"))
         for item in context.get("daily", [])
@@ -97,11 +104,17 @@ def _context_dates(context: dict[str, Any]) -> set[str]:
 
 
 def _critical_point_ids(context: dict[str, Any]) -> set[str]:
-    return {
+    ids = {
         str(item.get("critical_point_id"))
         for item in context.get("critical_points", [])
         if isinstance(item, dict) and item.get("critical_point_id")
     }
+    ids.update(
+        str(item.get("critical_period_id"))
+        for item in context.get("critical_periods", [])
+        if isinstance(item, dict) and item.get("critical_period_id")
+    )
+    return ids
 
 
 def _unavailable_columns(context: dict[str, Any]) -> set[str]:

@@ -11,17 +11,30 @@ Cuando la salida sea consumida por `notebooks/core/02_local_uiti_vano_interpreta
 el agente debe producir **solo un objeto JSON valido**. No usar markdown, tablas markdown,
 bloques de codigo, texto antes del JSON, texto despues del JSON ni etiquetas `<think>`.
 
-La respuesta debe ser compacta para evitar truncamiento del proveedor LLM:
+La respuesta debe preservar el analisis y mantener una estructura apta para el reporte HTML:
 
 - Incluir todos los escenarios recibidos en `contexto.escenarios`, usando exactamente el
   mismo valor de `nombre`.
-- Por escenario, devolver maximo 5 `top_variables`.
-- Por escenario, devolver maximo 5 `modos`.
-- No copiar `tabla_top_vanos` completa. Si se necesita mencionarla, resumirla en una frase.
-- `coherencia_grafo_modelo` debe tener maximo 8 entradas.
-- `hallazgos` debe tener entre 2 y 5 frases cortas.
-- `limitaciones` debe tener entre 2 y 5 frases cortas.
-- Cada `interpretacion` debe tener 2 a 4 frases.
+- Incluir las `top_variables` necesarias para explicar el escenario sin inventar variables.
+- Incluir los `modos` necesarios para explicar el escenario sin inventar modos.
+- No copiar `tabla_top_vanos` completa; sintetizar los patrones relevantes.
+- `discusion_grafos` debe incluir hasta dos lecturas generales: una para
+  `seccion="periodo_completo"` y otra para `seccion="puntos_criticos"` cuando existan
+  grafos HTML en ambas secciones.
+- Cada lectura de `discusion_grafos` debe ser apta para renderizarse como viñeta del
+  apartado correspondiente del reporte, sin afirmar causalidad.
+- `coherencia_grafo_modelo` debe incluir las entradas necesarias para explicar la relacion
+  entre modelo y grafo.
+- `hallazgos`, `limitaciones` e `interpretacion` deben contener el detalle necesario para
+  no comprometer el analisis.
+- Cada conclusion o bloque presentado como items debe tener maximo 5 items; si hay mas
+  informacion, priorizar la mas relevante para el reporte.
+- La presentacion final debe consolidar la discusion general en una sola conclusion con dos
+  aspectos: `Número de Eventos` y `UITI_VANO`. La seccion de puntos criticos debe seguir el
+  mismo patron cuando existan ambos escenarios.
+- Incluir `hipotesis_modelo_predictivo` con dos listas de items:
+  `periodo_completo` y `puntos_criticos`. Cada lista debe tener maximo 5 items y debe
+  sintetizar la discusion general junto con la discusion de grafos correspondiente.
 
 ## Esquema JSON recomendado
 
@@ -78,8 +91,18 @@ Usar placeholders solo como nombres de campos; los valores deben venir del conte
           "score_normalizado": "<0_a_1>"
         }
       ],
-      "interpretacion": "<lectura_del_escenario_en_2_a_4_frases>",
+      "interpretacion": "<lectura_del_escenario>",
       "cautelas": ["<limitacion_aplicable>"]
+    }
+  ],
+  "discusion_grafos": [
+    {
+      "seccion": "periodo_completo",
+      "lectura": "<lectura_general_de_los_grafos_estimados_del_periodo_completo>"
+    },
+    {
+      "seccion": "puntos_criticos",
+      "lectura": "<lectura_general_de_los_grafos_estimados_de_puntos_criticos>"
     }
   ],
   "coherencia_grafo_modelo": [
@@ -93,7 +116,15 @@ Usar placeholders solo como nombres de campos; los valores deben venir del conte
     }
   ],
   "hallazgos": ["<hallazgos_principales>"],
-  "limitaciones": ["<limitaciones>"]
+  "limitaciones": ["<limitaciones>"],
+  "hipotesis_modelo_predictivo": {
+    "periodo_completo": [
+      "<hipotesis_del_modelo_para_periodo_completo_basada_en_escenarios_y_grafos>"
+    ],
+    "puntos_criticos": [
+      "<hipotesis_del_modelo_para_puntos_criticos_basada_en_escenarios_y_grafos>"
+    ]
+  }
 }
 ```
 
@@ -114,6 +145,13 @@ Antes de entregar, verificar:
   predictor en `features`.
 - Si se reportan grafos HTML del cuaderno 05, incluir ruta, escenario y fuente
   `reconstruccion_mgcecdl_rbf`.
+- Si se reportan grafos HTML del cuaderno 05, incluir en `discusion_grafos` una lectura para
+  `periodo_completo` y otra para `puntos_criticos` cuando existan grafos en ambas secciones,
+  con asociaciones relativas y modos, sin repetir una discusión por escenario.
+- `hipotesis_modelo_predictivo.periodo_completo` integra hallazgos, escenarios del periodo
+  completo y grafos de periodo completo.
+- `hipotesis_modelo_predictivo.puntos_criticos` integra escenarios y grafos de puntos
+  criticos.
 - Cada escenario incluye criterio de seleccion.
 - Cada escenario distingue Top-N configurado de Top-N efectivo si ambos existen.
 - Cada variable top tiene modo CHEC o queda marcada como `modo_no_identificado`.

@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from chec_local_interpreter.config import PROJECT_ROOT
+
 
 def save_uiti_vano_plot(
     daily_df: pd.DataFrame,
@@ -63,24 +65,24 @@ import plotly.graph_objects as go
 def plot_interactive_circuit_events(raw_df, start_date=None, end_date=None):
     """
     Plots an interactive bar chart of events per circuit with quartile backgrounds.
-    
+
     Parameters:
     - raw_df (pd.DataFrame): The main dataset containing 'CIRCUITO' and optionally 'FECHA' columns.
     - start_date (str, optional): The start date to filter the data (e.g., '2023-01-01').
     - end_date (str, optional): The end date to filter the data.
-    
+
     Returns:
     - fig: A plotly Figure object.
     """
     df = raw_df.copy()
-    
+
     # Check if we need to filter by date and ensure FECHA is parsed safely
     if start_date is not None or end_date is not None:
         if 'FECHA' in df.columns:
             # Parse FECHA as per project rules
             if not pd.api.types.is_datetime64_any_dtype(df['FECHA']):
                 df['FECHA'] = pd.to_datetime(df['FECHA'], errors='coerce')
-                
+
             if start_date is not None:
                 df = df[df['FECHA'] >= pd.to_datetime(start_date)]
             if end_date is not None:
@@ -96,7 +98,7 @@ def plot_interactive_circuit_events(raw_df, start_date=None, end_date=None):
 
     # 1. Calculate the number of events per circuit and sort descending
     circuit_counts = df['CIRCUITO'].value_counts().sort_values(ascending=False)
-    
+
     # Handle empty dataframe edge case (e.g. if dates are too narrow)
     if circuit_counts.empty:
         print("No data available for the given date range.")
@@ -147,11 +149,11 @@ def plot_interactive_circuit_events(raw_df, start_date=None, end_date=None):
         ))
 
     # 5. Draw dashed boundary lines for quartile cuts
-    fig.add_hline(y=q1, line_dash="dash", line_color="#2563eb", line_width=1.5, 
+    fig.add_hline(y=q1, line_dash="dash", line_color="#2563eb", line_width=1.5,
                   annotation_text=f'<b>Q1 ({q1:.1f})</b>', annotation_position="top left", annotation_font_color="#1d4ed8")
-    fig.add_hline(y=q2, line_dash="dash", line_color="#059669", line_width=1.5, 
+    fig.add_hline(y=q2, line_dash="dash", line_color="#059669", line_width=1.5,
                   annotation_text=f'<b>Q2/Med ({q2:.1f})</b>', annotation_position="top left", annotation_font_color="#047857")
-    fig.add_hline(y=q3, line_dash="dash", line_color="#e11d48", line_width=1.5, 
+    fig.add_hline(y=q3, line_dash="dash", line_color="#e11d48", line_width=1.5,
                   annotation_text=f'<b>Q3 ({q3:.1f})</b>', annotation_position="top left", annotation_font_color="#be123c")
 
     # Dynamic Title indicating date range
@@ -171,7 +173,7 @@ def plot_interactive_circuit_events(raw_df, start_date=None, end_date=None):
 
     fig.update_layout(
         title=dict(
-            text=title_text, 
+            text=title_text,
             font=dict(size=18, family="Arial, sans-serif")
         ),
         xaxis_title='Circuitos (Ordenados por frecuencia)',
@@ -179,21 +181,21 @@ def plot_interactive_circuit_events(raw_df, start_date=None, end_date=None):
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='#ffffff',
         xaxis=dict(
-            tickangle=-90, 
+            tickangle=-90,
             range=xaxis_range,
             showgrid=False
         ),
         yaxis=dict(
-            range=[0, max_val * 1.05], 
-            showgrid=True, 
-            gridcolor='#e2e8f0', 
-            gridwidth=1, 
+            range=[0, max_val * 1.05],
+            showgrid=True,
+            gridcolor='#e2e8f0',
+            gridwidth=1,
             griddash='dot'
         ),
         legend=dict(
-            title='Rango de Cuartiles (Fondo)', 
-            bgcolor='rgba(255, 255, 255, 0.8)', 
-            bordercolor='#e2e8f0', 
+            title='Rango de Cuartiles (Fondo)',
+            bgcolor='rgba(255, 255, 255, 0.8)',
+            bordercolor='#e2e8f0',
             borderwidth=1,
             yanchor="top",
             y=0.99,
@@ -215,17 +217,17 @@ import plotly.graph_objects as go
 def plot_interactive_uiti_vano_sums(raw_df, start_date=None, end_date=None):
     """
     Plots an interactive bar chart of the sum of UITI_VANO per circuit with quartile backgrounds.
-    
+
     Parameters:
     - raw_df (pd.DataFrame): The main dataset containing 'CIRCUITO', 'UITI_VANO', and optionally 'FECHA'.
     - start_date (str, optional): The start date to filter the data (e.g., '2023-01-01').
     - end_date (str, optional): The end date to filter the data.
-    
+
     Returns:
     - fig: A plotly Figure object.
     """
     df = raw_df.copy()
-    
+
     # 1. Ensure UITI_VANO is numeric and handle missing values
     df['UITI_VANO'] = pd.to_numeric(df['UITI_VANO'], errors='coerce').fillna(0.0)
 
@@ -235,7 +237,7 @@ def plot_interactive_uiti_vano_sums(raw_df, start_date=None, end_date=None):
             # Parse FECHA as per project rules
             if not pd.api.types.is_datetime64_any_dtype(df['FECHA']):
                 df['FECHA'] = pd.to_datetime(df['FECHA'], errors='coerce')
-                
+
             if start_date is not None:
                 df = df[df['FECHA'] >= pd.to_datetime(start_date)]
             if end_date is not None:
@@ -251,7 +253,7 @@ def plot_interactive_uiti_vano_sums(raw_df, start_date=None, end_date=None):
 
     # 3. Group by circuit and calculate total UITI_VANO (sorted descending)
     circuit_sums = df.groupby('CIRCUITO')['UITI_VANO'].sum().sort_values(ascending=False)
-    
+
     # Handle empty dataframe edge case
     if circuit_sums.empty:
         print("No data available for the given date range.")
@@ -303,11 +305,11 @@ def plot_interactive_uiti_vano_sums(raw_df, start_date=None, end_date=None):
         ))
 
     # 7. Draw dashed boundary lines for quartile cuts
-    fig.add_hline(y=q1, line_dash="dash", line_color="#2563eb", line_width=1.5, 
+    fig.add_hline(y=q1, line_dash="dash", line_color="#2563eb", line_width=1.5,
                   annotation_text=f'<b>Q1 ({q1:,.0f})</b>', annotation_position="top left", annotation_font_color="#1d4ed8")
-    fig.add_hline(y=q2, line_dash="dash", line_color="#059669", line_width=1.5, 
+    fig.add_hline(y=q2, line_dash="dash", line_color="#059669", line_width=1.5,
                   annotation_text=f'<b>Q2/Med ({q2:,.0f})</b>', annotation_position="top left", annotation_font_color="#047857")
-    fig.add_hline(y=q3, line_dash="dash", line_color="#e11d48", line_width=1.5, 
+    fig.add_hline(y=q3, line_dash="dash", line_color="#e11d48", line_width=1.5,
                   annotation_text=f'<b>Q3 ({q3:,.0f})</b>', annotation_position="top left", annotation_font_color="#be123c")
 
     # Dynamic Title indicating date range
@@ -327,7 +329,7 @@ def plot_interactive_uiti_vano_sums(raw_df, start_date=None, end_date=None):
 
     fig.update_layout(
         title=dict(
-            text=title_text, 
+            text=title_text,
             font=dict(size=18, family="Arial, sans-serif")
         ),
         xaxis_title='Circuitos (Ordenados por suma de UITI_VANO)',
@@ -335,22 +337,22 @@ def plot_interactive_uiti_vano_sums(raw_df, start_date=None, end_date=None):
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='#ffffff',
         xaxis=dict(
-            tickangle=-90, 
+            tickangle=-90,
             range=xaxis_range,
             showgrid=False
         ),
         yaxis=dict(
-            range=[0, max_val * 1.05], 
-            showgrid=True, 
-            gridcolor='#e2e8f0', 
-            gridwidth=1, 
+            range=[0, max_val * 1.05],
+            showgrid=True,
+            gridcolor='#e2e8f0',
+            gridwidth=1,
             griddash='dot',
             tickformat=",.0f"  # Format Y-axis values with commas as thousand separators
         ),
         legend=dict(
-            title='Rango de Cuartiles (Fondo)', 
-            bgcolor='rgba(255, 255, 255, 0.8)', 
-            bordercolor='#e2e8f0', 
+            title='Rango de Cuartiles (Fondo)',
+            bgcolor='rgba(255, 255, 255, 0.8)',
+            bordercolor='#e2e8f0',
             borderwidth=1,
             yanchor="top",
             y=0.99,
@@ -373,9 +375,9 @@ def run_kmeans(data, n_clusters=5, max_iters=100, random_state=42):
     np.random.seed(random_state)
     # Ensure we don't ask for more clusters than available data points
     n_clusters = min(n_clusters, data.shape[0])
-    
+
     centroids = data[np.random.choice(data.shape[0], n_clusters, replace=False)]
-    
+
     for _ in range(max_iters):
         distances = np.linalg.norm(data[:, np.newaxis] - centroids, axis=2)
         labels = np.argmin(distances, axis=1)
@@ -386,14 +388,14 @@ def run_kmeans(data, n_clusters=5, max_iters=100, random_state=42):
         if np.allclose(centroids, new_centroids):
             break
         centroids = new_centroids
-        
+
     return labels
 
 def plot_interactive_circuit_clustering(raw_df, start_date=None, end_date=None, highlighted_circuits=None):
     """
     Plots an interactive log-log scatter map of events frequency vs UITI_VANO sums
     clustered via K-Means.
-    
+
     Parameters:
     - raw_df (pd.DataFrame): The main dataset containing 'CIRCUITO', 'UITI_VANO', and 'FECHA'.
     - start_date (str, optional): Start date string (e.g. '2023-01-01').
@@ -402,15 +404,15 @@ def plot_interactive_circuit_clustering(raw_df, start_date=None, end_date=None, 
     """
     if highlighted_circuits is None:
         highlighted_circuits = []
-        
+
     df = raw_df.copy()
-    
+
     # 1. Check if we need to filter by date and ensure FECHA is parsed safely
     if start_date is not None or end_date is not None:
         if 'FECHA' in df.columns:
             if not pd.api.types.is_datetime64_any_dtype(df['FECHA']):
                 df['FECHA'] = pd.to_datetime(df['FECHA'], errors='coerce')
-                
+
             if start_date is not None:
                 df = df[df['FECHA'] >= pd.to_datetime(start_date)]
             if end_date is not None:
@@ -420,23 +422,23 @@ def plot_interactive_circuit_clustering(raw_df, start_date=None, end_date=None, 
 
     # 2. Data Preparation
     df['UITI_VANO'] = pd.to_numeric(df['UITI_VANO'], errors='coerce').fillna(0.0)
-    
+
     # Deduplicar por FECHA y FID_VANO si existen para evitar sobreconteo
     # if 'FECHA' in df.columns and 'FID_VANO' in df.columns:
     #     if not pd.api.types.is_datetime64_any_dtype(df['FECHA']):
     #         df['FECHA'] = pd.to_datetime(df['FECHA'], errors='coerce')
     #     df = df.drop_duplicates(subset=['FECHA', 'FID_VANO'])
-    
+
     # Calculate metrics per circuit
     counts = df['CIRCUITO'].value_counts()
     sums = df.groupby('CIRCUITO')['UITI_VANO'].sum()
-    
+
     # Merge into a coordinate dataframe
     df_coords = pd.DataFrame({
         'event_count': counts,
         'uiti_vano_sum': sums
     }).dropna()
-    
+
     # Handle empty dataframe edge case
     if df_coords.empty:
         print("No data available for the given date range.")
@@ -444,47 +446,47 @@ def plot_interactive_circuit_clustering(raw_df, start_date=None, end_date=None, 
 
     # Explicitly cast to float before converting to NumPy values
     X = df_coords[['event_count', 'uiti_vano_sum']].astype(float).values
-    
+
     # 3. Scaling (Z-score normalization)
     X_mean = X.mean(axis=0)
     # Add a small epsilon to standard deviation to avoid division by zero
-    X_std = np.where(X.std(axis=0) == 0, 1e-9, X.std(axis=0)) 
+    X_std = np.where(X.std(axis=0) == 0, 1e-9, X.std(axis=0))
     X_scaled = (X - X_mean) / X_std
 
     # Execute clustering
     n_clusters = min(4, len(df_coords))
     df_coords['cluster'] = run_kmeans(X_scaled, n_clusters=n_clusters, random_state=42)
-    
+
     # Rank clusters based on the mean of their scaled coordinates (higher means more critical)
     cluster_scores = {}
     for cluster_id in range(n_clusters):
         cluster_mask = df_coords['cluster'] == cluster_id
         cluster_scores[cluster_id] = X_scaled[cluster_mask].mean()
-        
+
     sorted_clusters = sorted(cluster_scores.keys(), key=lambda c: cluster_scores[c], reverse=True)
     group_labels = ["Muy Alta", "Alta", "Media", "Baja"]
     group_colors = ["#ef4444", "#f97316", "#eab308", "#22c55e"] # Red, Orange, Yellow, Green
-    
+
     # 4. Plotting Setup
     fig = go.Figure()
-    
+
     # Plot clusters (Combining both normal and highlighted logic inside the same loop)
     for rank, cluster_id in enumerate(sorted_clusters):
         cluster_data = df_coords[df_coords['cluster'] == cluster_id]
         if cluster_data.empty:
             continue
-            
+
         label = group_labels[rank]
         color = group_colors[rank]
-            
+
         # Split into normal vs highlighted for this specific cluster
         normal_data = cluster_data[~cluster_data.index.isin(highlighted_circuits)]
         highlighted_data = cluster_data[cluster_data.index.isin(highlighted_circuits)]
-        
+
         # We assign them to the same legendgroup so they toggle together
         legend_group_name = f'group_{rank}'
         legend_name = f'{label} (n={len(cluster_data)})'
-        
+
         # 4a. Plot normal points (Circles)
         if not normal_data.empty:
             fig.add_trace(go.Scatter(
@@ -566,7 +568,7 @@ def plot_interactive_circuit_clustering(raw_df, start_date=None, end_date=None, 
     # Formatting axes
     fig.update_layout(
         title=dict(
-            text=title_text, 
+            text=title_text,
             font=dict(size=16, family="Arial, sans-serif")
         ),
         xaxis_title='Número de Eventos por Circuito',
@@ -588,9 +590,9 @@ def plot_interactive_circuit_clustering(raw_df, start_date=None, end_date=None, 
             griddash='dot'
         ),
         legend=dict(
-            title='Grupos Criticidad', 
-            bgcolor='rgba(255, 255, 255, 0.95)', 
-            bordercolor='#e2e8f0', 
+            title='Grupos Criticidad',
+            bgcolor='rgba(255, 255, 255, 0.95)',
+            bordercolor='#e2e8f0',
             borderwidth=1,
             x=0.75, # Bottom Right roughly
             y=0.02
@@ -599,7 +601,7 @@ def plot_interactive_circuit_clustering(raw_df, start_date=None, end_date=None, 
         margin=dict(l=60, r=50, t=90, b=80),
         hovermode="closest"
     )
-    
+
     return fig
 
 import pandas as pd
@@ -609,26 +611,179 @@ import plotly.express as px
 import matplotlib.colors as mcolors
 import matplotlib.cm as cm
 
+def _norm_map_id(series: pd.Series) -> pd.Series:
+    return (
+        series.astype("string")
+        .str.strip()
+        .str.replace(r"\.0$", "", regex=True)
+        .replace({"": pd.NA, "<NA>": pd.NA, "nan": pd.NA, "None": pd.NA})
+    )
+
+
+def _load_geo_vanos_for_circuit(circuito_name: str):
+    geo_path = PROJECT_ROOT / "data" / "GEO" / "MVLINSEC.shp"
+    if not geo_path.exists():
+        return None
+
+    try:
+        import geopandas as gpd
+    except ImportError:
+        return None
+
+    lineas = gpd.read_file(geo_path)
+    required_cols = {"CIRCUITO", "G3E_FID", "geometry"}
+    if not required_cols.issubset(lineas.columns):
+        return None
+
+    geo = lineas[lineas["CIRCUITO"].astype(str).eq(str(circuito_name))].copy()
+    if geo.empty:
+        return None
+
+    geo["FID_VANO_GEO"] = _norm_map_id(geo["G3E_FID"])
+    return geo
+
+
+def _iter_line_xy(geometry):
+    if geometry is None or geometry.is_empty:
+        return
+    geom_type = geometry.geom_type
+    if geom_type == "LineString":
+        xs, ys = geometry.xy
+        yield list(xs), list(ys)
+    elif geom_type == "MultiLineString":
+        for part in geometry.geoms:
+            xs, ys = part.xy
+            yield list(xs), list(ys)
+
+
 def plot_circuit_map_plotly(df, circuito_name, date_range=None, color_target='number_of_events'):
     # 1. Filtrar por circuito
     df_filtered = df[df['CIRCUITO'] == circuito_name].copy()
-    
+
     # 2. Filtrar por fechas
     if date_range is not None:
         df_filtered['FECHA_parsed'] = pd.to_datetime(df_filtered['FECHA'], errors='coerce')
-        start_date, end_date = pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1])
-        df_filtered = df_filtered[(df_filtered['FECHA_parsed'] >= start_date) & 
+        start_date = pd.to_datetime(date_range[0]) if date_range[0] else df_filtered['FECHA_parsed'].min()
+        end_date = pd.to_datetime(date_range[1]) if date_range[1] else df_filtered['FECHA_parsed'].max()
+        df_filtered = df_filtered[(df_filtered['FECHA_parsed'] >= start_date) &
                                   (df_filtered['FECHA_parsed'] <= end_date)]
     else:
-        start_date, end_date = pd.to_datetime(df_filtered['FECHA']).min(), pd.to_datetime(df_filtered['FECHA']).max()                             
-    
-        
+        start_date, end_date = pd.to_datetime(df_filtered['FECHA']).min(), pd.to_datetime(df_filtered['FECHA']).max()
+
+    geo_vanos = _load_geo_vanos_for_circuit(circuito_name)
+    if geo_vanos is not None and 'FID_VANO' in df_filtered.columns:
+        df_filtered['FID_VANO_NORM'] = _norm_map_id(df_filtered['FID_VANO'])
+        df_filtered['UITI_VANO'] = pd.to_numeric(df_filtered['UITI_VANO'], errors='coerce').fillna(0)
+
+        df_unique_events = df_filtered.copy()
+        if color_target == 'number_of_events':
+            vano_metrics = df_unique_events.groupby('FID_VANO_NORM').size().rename('metric_value')
+            cbar_title = 'Número de Eventos'
+        elif color_target == 'sum_uiti_vano' or color_target == 'UITI_VANO_sum':
+            vano_metrics = df_unique_events.groupby('FID_VANO_NORM')['UITI_VANO'].sum().rename('metric_value')
+            cbar_title = 'Suma de UITI_VANO'
+        else:
+            vano_metrics = df_unique_events.groupby('FID_VANO_NORM').size().rename('metric_value')
+            cbar_title = 'Métrica Desconocida (Por Defecto: Eventos)'
+
+        geo_plot = geo_vanos.merge(vano_metrics, left_on='FID_VANO_GEO', right_index=True, how='left')
+        geo_plot['has_v3_event'] = geo_plot['metric_value'].notna()
+        geo_plot['metric_value_color'] = geo_plot['metric_value'].fillna(0.0)
+
+        colored_values = geo_plot.loc[geo_plot['has_v3_event'], 'metric_value_color']
+        if colored_values.empty:
+            print(f"No hay vanos de {circuito_name} con aparición en el archivo V3 para el periodo seleccionado.")
+            vmin, vmax_robust = 0, 1
+        else:
+            vmin = colored_values.min()
+            vmax_robust = np.percentile(colored_values, 95)
+            if vmax_robust <= vmin:
+                vmax_robust = colored_values.max()
+                if vmax_robust == vmin:
+                    vmax_robust = vmin + 1
+
+        norm = mcolors.Normalize(vmin=vmin, vmax=vmax_robust)
+        mapper = cm.ScalarMappable(norm=norm, cmap=cm.turbo)
+
+        bounds = geo_plot.total_bounds
+        center = {"lon": (bounds[0] + bounds[2]) / 2, "lat": (bounds[1] + bounds[3]) / 2}
+
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=[center["lon"]], y=[center["lat"]], mode='markers',
+            marker=dict(
+                size=1,
+                opacity=0,
+                colorscale='Turbo', cmin=vmin, cmax=vmax_robust,
+                colorbar=dict(title=dict(text=f"{cbar_title}<br>(Corte al p95)", font=dict(weight='bold')), thickness=15, len=0.8),
+                color=[vmin],
+                showscale=True
+            ),
+            showlegend=False, hoverinfo='none'
+        ))
+
+        for _, row in geo_plot.sort_values('has_v3_event').iterrows():
+            val = row['metric_value_color']
+            if row['has_v3_event']:
+                color_rgba = mapper.to_rgba(val, bytes=True)
+                line_color = f'#{color_rgba[0]:02x}{color_rgba[1]:02x}{color_rgba[2]:02x}'
+                width = 4.5
+                opacity = 0.9
+                value_text = f"{val:.2f}"
+            else:
+                line_color = '#9ca3af'
+                width = 2.0
+                opacity = 0.45
+                value_text = 'sin aparición en V3'
+
+            hover_text = (
+                f"FID VANO: {row['FID_VANO_GEO']}<br>"
+                f"{cbar_title}: {value_text}"
+            )
+            for xs, ys in _iter_line_xy(row.geometry):
+                fig.add_trace(go.Scatter(
+                    x=xs,
+                    y=ys,
+                    mode='lines',
+                    line=dict(color=line_color, width=width),
+                    hoverinfo='text',
+                    text=hover_text,
+                    showlegend=False,
+                    opacity=opacity
+                ))
+
+        fig.add_trace(go.Scatter(
+            x=[None],
+            y=[None],
+            mode='lines',
+            line=dict(color='#9ca3af', width=2),
+            name='Sin aparición en V3',
+            hoverinfo='none'
+        ))
+
+        total_metric = colored_values.sum() if not colored_values.empty else 0
+
+        fig.update_layout(
+            title=dict(text=f"Mapa de Red - Circuito: {circuito_name} (Total {cbar_title}: {total_metric:.2f})<br><sup>Periodo: {start_date} a {end_date} | Geometría: MVLINSEC</sup>", font=dict(size=18)),
+            xaxis_title="Longitud",
+            yaxis_title="Latitud",
+            yaxis=dict(scaleanchor="x", scaleratio=1),
+            plot_bgcolor='#f8fafc',
+            paper_bgcolor='#ffffff',
+            width=1000,
+            height=800,
+            margin=dict(l=60, r=50, t=90, b=80),
+            legend=dict(title="Vanos", yanchor="top", y=0.99, xanchor="left", x=0.01, bgcolor="rgba(255, 255, 255, 0.8)")
+        )
+        return fig
+
+
     coords_cols = ['X1', 'Y1', 'X2', 'Y2']
     df_filtered = df_filtered.dropna(subset=coords_cols)
     if df_filtered.empty:
         print(f"No hay coordenadas válidas para {circuito_name}.")
-        return 
-        
+        return
+
     for col in coords_cols:
         df_filtered[col] = pd.to_numeric(df_filtered[col], errors='coerce')
     df_filtered = df_filtered.dropna(subset=coords_cols)
@@ -650,17 +805,17 @@ def plot_circuit_map_plotly(df, circuito_name, date_range=None, color_target='nu
     else:
         vano_metrics = df_unique_events.groupby('FID_VANO').size().to_dict()
         cbar_title = 'Métrica Desconocida (Por Defecto: Eventos)'
-        
+
     df_filtered['metric_value'] = df_filtered['FID_VANO'].map(vano_metrics)
     df_lines = df_filtered.drop_duplicates(subset=['FID_VANO']).copy()
-    
+
     # ==========================================
     # MEJORA DE VISIBILIDAD: Escala Robusta
     # ==========================================
     vmin = df_lines['metric_value'].min()
     # Usar el percentil 95 o 98 evita que 1 vano atípico arruine todo el contraste de colores
     vmax_robust = np.percentile(df_lines['metric_value'], 95)
-    
+
     # Si todos los valores son iguales, ajustamos
     if vmax_robust <= vmin:
         vmax_robust = df_lines['metric_value'].max()
@@ -669,9 +824,9 @@ def plot_circuit_map_plotly(df, circuito_name, date_range=None, color_target='nu
 
     norm = mcolors.Normalize(vmin=vmin, vmax=vmax_robust)
     mapper = cm.ScalarMappable(norm=norm, cmap=cm.turbo) # 'turbo' tiene el mejor contraste
-    
+
     fig = go.Figure()
-    
+
     # Colorbar
     fig.add_trace(go.Scatter(
         x=[None], y=[None], mode='markers',
@@ -690,10 +845,10 @@ def plot_circuit_map_plotly(df, circuito_name, date_range=None, color_target='nu
         val = row['metric_value']
         color_rgba = mapper.to_rgba(val, bytes=True)
         hex_color = f'#{color_rgba[0]:02x}{color_rgba[1]:02x}{color_rgba[2]:02x}'
-        
+
         # Make sure we don't throw an error if TIPO is missing somehow
         tipo_val = row['TIPO'] if 'TIPO' in row else 'N/A'
-        
+
         fig.add_trace(go.Scatter(
             x=[row['X1'], row['X2']],
             y=[row['Y1'], row['Y2']],
@@ -704,22 +859,22 @@ def plot_circuit_map_plotly(df, circuito_name, date_range=None, color_target='nu
             showlegend=False,
             opacity=0.9
         ))
-        
+
     # ==========================================
     # MEJORA DE VISIBILIDAD: Puntos más discretos
     # ==========================================
     df_points = df_filtered.drop_duplicates(subset=['X1', 'Y1', 'TIPO']).copy()
     tipos = df_points['TIPO'].unique()
     symbols_px = ['circle', 'square', 'diamond', 'cross', 'x', 'triangle-up', 'triangle-down', 'pentagon', 'hexagon', 'star']
-    
+
     for i, tipo in enumerate(tipos):
         dft = df_points[df_points['TIPO'] == tipo]
         fig.add_trace(go.Scatter(
             x=dft['X1'], y=dft['Y1'],
             mode='markers',
             marker=dict(
-                size=8, 
-                opacity=0.9, 
+                size=8,
+                opacity=0.9,
                 symbol=symbols_px[i % len(symbols_px)],
                 color=dft['metric_value'],
                 colorscale='Turbo',
@@ -727,14 +882,14 @@ def plot_circuit_map_plotly(df, circuito_name, date_range=None, color_target='nu
                 cmax=vmax_robust,
                 showscale=False,
                 line=dict(width=0.5, color='white')
-            ), 
+            ),
             name=f"TIPO: {tipo}",
             hoverinfo='text',
             text=dft.apply(lambda r: f"FID_VANO: {r['FID_VANO']}<br>TIPO: {r['TIPO']}<br>{cbar_title}: {r['metric_value']:.2f}", axis=1)
         ))
 
     total_metric = df_lines['metric_value'].sum()
-    
+
     fig.update_layout(
         title=dict(text=f"Mapa de Red - Circuito: {circuito_name} (Total {cbar_title}: {total_metric:.2f})<br><sup> Periodo: {start_date} a {end_date} </sup>", font=dict(size=18)),
         xaxis_title="Coordenada X (Este)",
@@ -744,7 +899,7 @@ def plot_circuit_map_plotly(df, circuito_name, date_range=None, color_target='nu
         width=1000, height=800,
         legend=dict(title="Equipos (TIPO)", yanchor="top", y=0.99, xanchor="right", x=0.01, bgcolor="rgba(255, 255, 255, 0.8)")
     )
-    
+
     return fig
 
 from plotly.subplots import make_subplots
@@ -754,11 +909,11 @@ def plot_interactive_critical_points(daily_df, critical_points, selected_circuit
     Plots an interactive timeline of UITI_VANO and event counts, overlaid with critical points.
     """
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-    
+
     if not daily_df.empty:
         work = daily_df.copy()
         work["fecha_dia"] = pd.to_datetime(work["fecha_dia"], errors="coerce")
-        
+
         # Plot event_count (Bar)
         if "event_count" in work.columns:
             fig.add_trace(go.Bar(
@@ -778,7 +933,7 @@ def plot_interactive_critical_points(daily_df, critical_points, selected_circuit
             line=dict(color="#19535F", width=2.5),
             hovertemplate="Fecha: %{x|%Y-%m-%d}<br>UITI_VANO: %{y:.2f}<extra></extra>"
         ), secondary_y=False)
-        
+
         # Plot critical points
         point_dates = [pd.to_datetime(point["fecha_dia"]) for point in critical_points]
         if point_dates:
@@ -791,14 +946,14 @@ def plot_interactive_critical_points(daily_df, critical_points, selected_circuit
                 marker=dict(color="#D1495B", size=12, symbol='star', line=dict(color='white', width=1)),
                 hovertemplate="<b>Punto Crítico</b><br>Fecha: %{x|%Y-%m-%d}<br>UITI_VANO: %{y:.2f}<extra></extra>"
             ), secondary_y=False)
-            
+
     circuit_text = ", ".join(selected_circuitos[:4]) if selected_circuitos else "todos los circuitos"
     if selected_circuitos and len(selected_circuitos) > 4:
         circuit_text += f" +{len(selected_circuitos) - 4}"
-        
+
     total_events = work["event_count"].sum() if "event_count" in work.columns else 0
     total_uiti = work["UITI_VANO"].sum()
-        
+
     title_text = f"Evolución Diaria (Eventos Totales: {total_events:,.0f} | UITI_VANO Total: {total_uiti:,.2f})<br><sup>Circuito(s): {circuit_text} | {start_date or 'inicio'} a {end_date or 'fin'}</sup>"
 
     fig.update_layout(
@@ -812,12 +967,190 @@ def plot_interactive_critical_points(daily_df, critical_points, selected_circuit
         height=550,
         margin=dict(l=60, r=60, t=110, b=80),
     )
-    
+
     # rangemode='tozero' evita que los ejes Y se dibujen por debajo de cero
     fig.update_yaxes(title_text="UITI_VANO", secondary_y=False, showgrid=True, gridcolor='#e2e8f0', griddash='dot', rangemode='tozero')
     fig.update_yaxes(title_text="Número de Eventos", secondary_y=True, showgrid=False, rangemode='tozero')
-    
+
     return fig
+
+
+def render_expert_alignment_tab(expert_alignment_validation_data):
+    """
+    Renderiza la segunda pestaña del reporte HTML con la comparación
+    entre el agente de análisis histórico, el agente del modelo predictivo y reportes expertos.
+    No devuelve JSON crudo; solo HTML escapado con las clases visuales del reporte.
+    """
+    import html
+
+    analysis = expert_alignment_validation_data if isinstance(expert_alignment_validation_data, dict) else None
+
+    def _escape(text):
+        return html.escape("" if text is None else str(text))
+
+    def _value(value):
+        source_labels = {
+            "LLM1": "Agente base",
+            "LLM2": "Agente predictivo",
+            "LLM de datos históricos": "Agente base",
+            "LLM del modelo predictivo": "Agente predictivo",
+            "agente de análisis histórico": "Agente base",
+            "agente del modelo predictivo": "Agente predictivo",
+            "PDF_EXPERTO": "reportes expertos",
+        }
+        if isinstance(value, list):
+            return ", ".join(_escape(source_labels.get(str(item), str(item))) for item in value if str(item).strip())
+        return _escape(source_labels.get(str(value), value))
+
+    def _empty_message():
+        return "<p class='muted'>No hay elementos reportados para esta sección.</p>"
+
+    def _section_items(key, title, fields):
+        items = analysis.get(key, []) if analysis else []
+        body = []
+        if isinstance(items, list):
+            for item in items:
+                if not isinstance(item, dict):
+                    if str(item).strip():
+                        body.append(f"<li>{_escape(item)}</li>")
+                    continue
+                lead = item.get("tema") or item.get("variable") or item.get("fuente") or "Hallazgo"
+                details = []
+                for field, label in fields:
+                    value = item.get(field)
+                    if value in (None, "", []):
+                        continue
+                    details.append(f"<span><strong>{_escape(label)}:</strong> {_value(value)}</span>")
+                body.append(
+                    "<li>"
+                    f"<strong>{_escape(lead)}</strong>"
+                    f"<div class='item-details'>{''.join(details)}</div>"
+                    "</li>"
+                )
+        content = f"<ul class='report-list'>{''.join(body)}</ul>" if body else _empty_message()
+        return (
+            "<div class='content-box'>"
+            f"<h3 style='margin-top:0;'>{_escape(title)}</h3>"
+            f"{content}"
+            "</div>"
+        )
+
+    def _finding_items(key, title):
+        items = analysis.get(key, []) if analysis else []
+        body = []
+        if isinstance(items, list):
+            for item in items:
+                details = ""
+                if isinstance(item, dict):
+                    text = item.get("tema") or item.get("explicacion") or item.get("impacto_interpretativo") or ""
+                    extra = item.get("explicacion") if item.get("tema") else ""
+                    if text and extra and extra != text:
+                        text = f"{text}: {extra}"
+                    sources = item.get("fuentes")
+                    if sources not in (None, "", []):
+                        details = (
+                            "<div class='item-details'>"
+                            f"<span><strong>Fuentes:</strong> {_value(sources)}</span>"
+                            "</div>"
+                        )
+                else:
+                    text = str(item)
+                if str(text).strip():
+                    body.append(f"<li>{_escape(text)}{details}</li>")
+        content = f"<ul class='report-list'>{''.join(body)}</ul>" if body else _empty_message()
+        return (
+            "<div class='content-box'>"
+            f"<h3 style='margin-top:0;'>{_escape(title)}</h3>"
+            f"{content}"
+            "</div>"
+        )
+
+    def _variables_table():
+        rows = []
+        items = analysis.get("variables_a_priorizar", []) if analysis else []
+        if isinstance(items, list):
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                rows.append(
+                    "<tr>"
+                    f"<td>{_escape(item.get('variable'))}</td>"
+                    f"<td>{_escape(item.get('prioridad'))}</td>"
+                    f"<td>{_value(item.get('fuentes_que_la_respaldan'))}</td>"
+                    f"<td>{_escape(item.get('justificacion'))}</td>"
+                    f"<td>{_escape(item.get('tipo_de_validacion_sugerida'))}</td>"
+                    "</tr>"
+                )
+        if not rows:
+            return (
+                "<div class='content-box'>"
+                "<h3 style='margin-top:0;'>Variables a priorizar</h3>"
+                f"{_empty_message()}"
+                "</div>"
+            )
+        return (
+            "<div class='content-box'>"
+            "<h3 style='margin-top:0;'>Variables a priorizar</h3>"
+            "<div class='table-scroll'><table class='compact-table'>"
+            "<thead><tr><th>Variable</th><th>Prioridad</th><th>Fuentes</th>"
+            "<th>Justificación</th><th>Validación sugerida</th></tr></thead>"
+            f"<tbody>{''.join(rows)}</tbody></table></div>"
+            "</div>"
+        )
+
+    if not analysis:
+        return (
+            "<div class='summary-box'>"
+            "<h2 style='margin-top:0;'>Comparación con reportes expertos</h2>"
+            "<p>La comparación con reportes expertos no está disponible para esta ejecución.</p>"
+            "</div>"
+        )
+
+    contexto = analysis.get("contexto", {}) if isinstance(analysis.get("contexto"), dict) else {}
+    periodo = contexto.get("periodo", {}) if isinstance(contexto.get("periodo"), dict) else {}
+    summary_bits = []
+    if contexto.get("circuito"):
+        summary_bits.append(f"<li><strong>Circuito:</strong> {_escape(contexto.get('circuito'))}</li>")
+    if periodo.get("inicio") or periodo.get("fin"):
+        summary_bits.append(
+            f"<li><strong>Periodo:</strong> {_escape(periodo.get('inicio'))} a {_escape(periodo.get('fin'))}</li>"
+        )
+    if "n_filas_expertas_comparadas" in contexto:
+        summary_bits.append(
+            f"<li><strong>Filas expertas comparadas:</strong> {_escape(contexto.get('n_filas_expertas_comparadas'))}</li>"
+        )
+    resumen = (
+        "<ul class='report-list'>" + "".join(summary_bits) + "</ul>"
+        if summary_bits else "<p class='muted'>No hay resumen contextual disponible.</p>"
+    )
+
+    synthesis = str(analysis.get("sintesis_final") or "").strip()
+    synthesis_html = (
+        "<div class='summary-box'>"
+        "<h3 style='margin-top:0;'>Síntesis final</h3>"
+        f"<ul class='report-list'><li>{_escape(synthesis)}</li></ul>"
+        "</div>"
+        if synthesis else
+        "<div class='summary-box'><h3 style='margin-top:0;'>Síntesis final</h3><p class='muted'>No se entregó síntesis final.</p></div>"
+    )
+
+    return (
+        "<h2>Comparación con reportes expertos</h2>"
+        "<div class='summary-box'>"
+        "<h3 style='margin-top:0;'>Resumen de la comparación</h3>"
+        f"{resumen}"
+        "</div>"
+        + _finding_items(
+            "coincidencias",
+            "Coincidencias entre análisis histórico, modelo predictivo y reportes expertos",
+        )
+        + _finding_items(
+            "diferencias",
+            "Diferencias entre análisis histórico, modelo predictivo y reportes expertos",
+        )
+        + _variables_table()
+        + synthesis_html
+    )
 
 
 def render_llm_analysis(
@@ -828,11 +1161,13 @@ def render_llm_analysis(
     selected_circuitos: list[str],
     start_date: str = None,
     end_date: str = None,
-    output_dir: str | Path = "reports/interpretability/html",
+    output_dir: str | Path = PROJECT_ROOT / "reports" / "interpretability" / "html",
     llm_model: str = "Desconocido",
     llm_provider: str = "Desconocido",
     inference_results: dict | None = None,
     inference_analysis: dict | None = None,
+    expert_alignment_analysis: dict | None = None,
+    expert_alignment_matches: list[dict] | None = None,
 ):
     """
     Renders the structured JSON output from the LLM into a beautiful HTML format
@@ -841,17 +1176,17 @@ def render_llm_analysis(
     from IPython.display import display, Markdown, HTML
     from datetime import datetime
     import os
-    
+
     validation_data = validation_data or {}
-        
+
     # Generate Plotly figures
     fig_events = plot_interactive_circuit_events(raw_df, start_date, end_date)
     fig_sums = plot_interactive_uiti_vano_sums(raw_df, start_date, end_date)
     fig_clusters = plot_interactive_circuit_clustering(raw_df, start_date, end_date, highlighted_circuits=selected_circuitos)
     fig_critical = plot_interactive_critical_points(daily_df, critical_points, selected_circuitos, start_date, end_date)
-    
+
     primary_circuit = selected_circuitos[0] if selected_circuitos else "TODOS"
-    
+
     fig_map_events = None
     fig_map_uiti = None
     if primary_circuit != "TODOS":
@@ -880,7 +1215,7 @@ def render_llm_analysis(
         import html
         return html.escape("" if text is None else str(text))
 
-    def _text_to_items(text: str) -> str:
+    def _text_to_items(text: str, *, max_items: int | None = None) -> str:
         """Split a prose paragraph into <ul><li> items of at most ~2 visual lines."""
         import re as _re
         raw = ("" if text is None else str(text)).strip()
@@ -901,7 +1236,18 @@ def render_llm_analysis(
                 cur_len += len(s) + 1
         if current:
             items.append(" ".join(current))
+        if max_items is not None:
+            items = items[:max_items]
         lis = "".join(f"<li>{_escape(item)}</li>" for item in items)
+        return f"<ul class='report-list'>{lis}</ul>"
+
+    def _list_to_items(items, *, max_items: int | None = None) -> str:
+        clean_items = [str(item).strip() for item in (items or []) if str(item).strip()]
+        if max_items is not None:
+            clean_items = clean_items[:max_items]
+        if not clean_items:
+            return ""
+        lis = "".join(f"<li>{_escape(item)}</li>" for item in clean_items)
         return f"<ul class='report-list'>{lis}</ul>"
 
     def _figure_html(fig, title=None, show_title=False):
@@ -961,6 +1307,95 @@ def render_llm_analysis(
                 analysis_by_name[str(scenario["nombre"])] = scenario
 
         hallazgos = analysis.get("hallazgos", []) if isinstance(analysis, dict) else []
+        graph_discussions = analysis.get("discusion_grafos", []) if isinstance(analysis, dict) else []
+        graph_discussions_by_section = {"periodo_completo": [], "puntos_criticos": []}
+        graph_discussions_general = []
+
+        def _normalizar_seccion_grafo(value):
+            text = str(value or "").strip().lower()
+            if any(token in text for token in ["critico", "crítico", "punto", "fecha"]):
+                return "puntos_criticos"
+            if any(token in text for token in ["periodo", "período", "completo", "general"]):
+                return "periodo_completo"
+            return ""
+
+        for item in graph_discussions if isinstance(graph_discussions, list) else []:
+            if isinstance(item, dict):
+                section = _normalizar_seccion_grafo(
+                    item.get("seccion") or item.get("section") or item.get("apartado") or item.get("escenario") or item.get("nombre")
+                )
+                text = str(
+                    item.get("lectura")
+                    or item.get("interpretacion")
+                    or item.get("discusion")
+                    or item.get("texto")
+                    or ""
+                ).strip()
+                if section and text:
+                    graph_discussions_by_section.setdefault(section, []).append(text)
+                elif text:
+                    graph_discussions_general.append(text)
+            elif str(item).strip():
+                graph_discussions_general.append(str(item).strip())
+        if not graph_discussions_general and not any(graph_discussions_by_section.values()):
+            coherencia_items = analysis.get("coherencia_grafo_modelo", []) if isinstance(analysis, dict) else []
+            for item in coherencia_items if isinstance(coherencia_items, list) else []:
+                if isinstance(item, dict):
+                    text = str(item.get("lectura") or item.get("ruta_resumida") or item).strip()
+                else:
+                    text = str(item).strip()
+                if text:
+                    graph_discussions_general.append(text)
+
+        def _graph_discussion_items(section):
+            items = list(graph_discussions_by_section.get(section, []))
+            if not items:
+                items = list(graph_discussions_general)
+            return items
+
+        def _as_items(value):
+            if isinstance(value, list):
+                return [str(item).strip() for item in value if str(item).strip()]
+            if isinstance(value, dict):
+                return [
+                    str(item).strip()
+                    for item in value.values()
+                    if str(item).strip()
+                ]
+            text = str(value or "").strip()
+            return [text] if text else []
+
+        def _hypothesis_items(section, scenario_texts, graph_items):
+            hypotheses = analysis.get("hipotesis_modelo_predictivo", {}) if isinstance(analysis, dict) else {}
+            explicit = []
+            if isinstance(hypotheses, dict):
+                candidates = [hypotheses.get(section), hypotheses.get(section.replace("_", " "))]
+                if section == "periodo_completo":
+                    candidates.extend([hypotheses.get("periodo"), hypotheses.get("general")])
+                elif section == "puntos_criticos":
+                    candidates.extend([hypotheses.get("puntos críticos"), hypotheses.get("puntos criticos")])
+                for candidate in candidates:
+                    explicit = _as_items(candidate)
+                    if explicit:
+                        break
+            elif isinstance(hypotheses, list):
+                for item in hypotheses:
+                    if not isinstance(item, dict):
+                        continue
+                    item_section = _normalizar_seccion_grafo(item.get("seccion") or item.get("section") or item.get("apartado"))
+                    if item_section == section:
+                        explicit.extend(_as_items(item.get("items") or item.get("hipotesis") or item.get("texto")))
+            if explicit:
+                return explicit
+            sources = [text for text in scenario_texts if str(text).strip()]
+            sources.extend(str(item).strip() for item in graph_items if str(item).strip())
+            if not sources:
+                return []
+            if section == "periodo_completo":
+                lead = "La hipótesis del modelo predictivo para el período completo integra las señales de recurrencia, severidad y grafos estimados."
+            else:
+                lead = "La hipótesis del modelo predictivo para los puntos críticos integra las señales focalizadas por fecha y los grafos estimados."
+            return [lead, *sources[:4]]
 
         def _scenario_interpretation(result):
             if not isinstance(result, dict):
@@ -1031,37 +1466,47 @@ def render_llm_analysis(
             ))
 
         characterization_parts = []
-
-        # General cross-scenario findings (shown once, before per-target discussion)
+        max_conclusion_items = 5
         hallazgo_texts = [str(item).strip() for item in hallazgos if str(item).strip()]
+        general_sections = []
+        period_scenario_texts = []
         if hallazgo_texts:
-            characterization_parts.append(
-                "<div class='summary-box'><h3 style='margin-top:0;'>Hallazgos generales del modelo de inferencia</h3>"
-                + _text_to_items(" ".join(hallazgo_texts))
-                + "</div>"
+            general_sections.append(
+                "<h4>Síntesis general</h4>"
+                + _list_to_items(hallazgo_texts, max_items=max_conclusion_items)
             )
-
-        # Banner 1 — Número de Eventos (target: frecuencia/recurrencia)
+            period_scenario_texts.extend(hallazgo_texts)
         if top_frecuencia:
             text_freq = _scenario_interpretation(top_frecuencia)
             if text_freq:
-                characterization_parts.append(
-                    "<div class='summary-box'>"
-                    "<h3 style='margin-top:0;'>Discusión general de inferencias del modelo &mdash; Número de Eventos</h3>"
-                    + _text_to_items(text_freq)
-                    + "</div>"
+                period_scenario_texts.append(text_freq)
+                general_sections.append(
+                    "<h4>Número de Eventos</h4>"
+                    + _text_to_items(text_freq, max_items=max_conclusion_items)
                 )
-
-        # Banner 2 — UITI_VANO (target: severidad/impacto)
         if top_uiti:
             text_uiti = _scenario_interpretation(top_uiti)
             if text_uiti:
-                characterization_parts.append(
-                    "<div class='summary-box'>"
-                    "<h3 style='margin-top:0;'>Discusión general de inferencias del modelo &mdash; UITI_VANO</h3>"
-                    + _text_to_items(text_uiti)
-                    + "</div>"
+                period_scenario_texts.append(text_uiti)
+                general_sections.append(
+                    "<h4>UITI_VANO</h4>"
+                    + _text_to_items(text_uiti, max_items=max_conclusion_items)
                 )
+        graph_discussion_periodo = _graph_discussion_items("periodo_completo")
+        hypothesis_periodo = _hypothesis_items("periodo_completo", period_scenario_texts, graph_discussion_periodo)
+        if general_sections:
+            characterization_parts.append(
+                "<div class='summary-box'><h3 style='margin-top:0;'>Discusión general de inferencias del modelo</h3>"
+                + "".join(general_sections)
+                + "</div>"
+            )
+        if hypothesis_periodo:
+            characterization_parts.append(
+                "<div class='summary-box' style='background: #fffbeb; border-left: 5px solid #fbbf24;'>"
+                "<h3 style='margin-top:0; color:#b45309;'>Hipótesis del modelo predictivo — período completo</h3>"
+                + _list_to_items(hypothesis_periodo, max_items=max_conclusion_items)
+                + "</div>"
+            )
         if barras_periodo:
             characterization_parts.append("<h3>Barras por escenario</h3>")
             characterization_parts.append(f"<div class='chart-grid two-col'>{''.join(barras_periodo)}</div>")
@@ -1069,23 +1514,49 @@ def render_llm_analysis(
             characterization_parts.append("<h3>Radares por escenario</h3>")
             characterization_parts.append(f"<div class='chart-grid'>{''.join(radares_periodo)}</div>")
         if grafos_periodo:
+            if graph_discussion_periodo:
+                characterization_parts.append(
+                    "<h3>Discusión de grafos estimados</h3>"
+                    "<div class='content-box'>"
+                    "<h3 style='margin-top:0;'>Discusión de grafos estimados &mdash; período completo</h3>"
+                    f"{_list_to_items(graph_discussion_periodo, max_items=max_conclusion_items)}"
+                    "</div>"
+                )
             characterization_parts.append("<h3>Grafos interactivos por escenario</h3>")
             characterization_parts.append(f"<div class='chart-grid'>{''.join(grafos_periodo)}</div>")
 
         critical_parts = []
-        critical_discussion = []
+        critical_sections = []
+        critical_scenario_texts = []
         if puntos_criticos_frecuencia:
             text = _scenario_interpretation(puntos_criticos_frecuencia)
             if text:
-                critical_discussion.append(text)
+                critical_scenario_texts.append(text)
+                critical_sections.append(
+                    "<h4>Número de Eventos</h4>"
+                    + _text_to_items(text, max_items=max_conclusion_items)
+                )
         if puntos_criticos_uiti:
             text = _scenario_interpretation(puntos_criticos_uiti)
             if text:
-                critical_discussion.append(text)
-        if critical_discussion:
+                critical_scenario_texts.append(text)
+                critical_sections.append(
+                    "<h4>UITI_VANO</h4>"
+                    + _text_to_items(text, max_items=max_conclusion_items)
+                )
+        graph_discussion_criticos = _graph_discussion_items("puntos_criticos")
+        hypothesis_criticos = _hypothesis_items("puntos_criticos", critical_scenario_texts, graph_discussion_criticos)
+        if critical_sections:
             critical_parts.append(
                 "<div class='summary-box'><h3 style='margin-top:0;'>Discusión de inferencias en puntos críticos</h3>"
-                + _text_to_items(" ".join(critical_discussion))
+                + "".join(critical_sections)
+                + "</div>"
+            )
+        if hypothesis_criticos:
+            critical_parts.append(
+                "<div class='summary-box' style='background: #fffbeb; border-left: 5px solid #fbbf24;'>"
+                "<h3 style='margin-top:0; color:#b45309;'>Hipótesis del modelo predictivo — puntos críticos</h3>"
+                + _list_to_items(hypothesis_criticos, max_items=max_conclusion_items)
                 + "</div>"
             )
 
@@ -1129,19 +1600,27 @@ def render_llm_analysis(
             critical_parts.append("<h3>Radares por escenario</h3>")
             critical_parts.append(f"<div class='chart-grid'>{''.join(radares_criticos)}</div>")
         if grafos_criticos:
+            if graph_discussion_criticos:
+                critical_parts.append(
+                    "<h3>Discusión de grafos estimados</h3>"
+                    "<div class='content-box'>"
+                    "<h3 style='margin-top:0;'>Discusión de grafos estimados &mdash; puntos críticos</h3>"
+                    f"{_list_to_items(graph_discussion_criticos, max_items=max_conclusion_items)}"
+                    "</div>"
+                )
             critical_parts.append("<h3>Grafos interactivos por escenario</h3>")
             critical_parts.append(f"<div class='chart-grid'>{''.join(grafos_criticos)}</div>")
         return "\n".join(characterization_parts), "\n".join(critical_parts)
 
     period_str = f"{start_date or 'Inicio'} a {end_date or 'Fin'}"
     title_str = f"Reporte Criticidad - Circuito: {primary_circuit}"
-    
+
     # Adjust subtitle if no LLM data is present
     if validation_data:
         subtitle_info = f"Período de análisis: {period_str} | Modelo LLM: {llm_model}"
     else:
         subtitle_info = f"Período de análisis: {period_str} | (Solo visualización, sin análisis LLM)"
-        
+
     title_html = f"Reporte Criticidad - Circuito: {primary_circuit}<br><span style='font-size: 0.6em; color: #64748b;'>{subtitle_info}</span>"
 
     map_panels = []
@@ -1153,6 +1632,7 @@ def render_llm_analysis(
 
     html_inference_characterization, html_inference_critical = _render_inference_layout(inference_results, inference_analysis)
     characterization_visuals_html = f"{html_maps_section}{html_inference_characterization}"
+    html_expert_alignment = render_expert_alignment_tab(expert_alignment_analysis)
 
     llm_sections_html = ""
     if validation_data:
@@ -1164,26 +1644,26 @@ def render_llm_analysis(
         char_data = validation_data.get('circuit_characterization', {})
         if isinstance(char_data, dict):
             char_text = char_data.get('text', '')
-            
+
             char_html = _text_to_items(char_text)
             top_percentile = char_data.get("top_vanos_percentile", 97)
             try:
                 top_percentile_label = f"P{float(top_percentile):g}"
             except (TypeError, ValueError):
                 top_percentile_label = "percentil configurado"
-            
+
             p97_uiti = char_data.get('p97_vanos_uiti_vano', [])
             if p97_uiti:
                 char_html += f"<h4>🔴 Top {top_percentile_label} Vanos (Mayor Gravedad UITI_VANO)</h4><ul>"
                 for v in p97_uiti: char_html += f"<li>{v}</li>"
                 char_html += "</ul>"
-                
+
             p97_events = char_data.get('p97_vanos_eventos', [])
             if p97_events:
                 char_html += f"<h4>🟠 Top {top_percentile_label} Vanos (Mayor Frecuencia de Eventos)</h4><ul>"
                 for v in p97_events: char_html += f"<li>{v}</li>"
                 char_html += "</ul>"
-                
+
             justifications = char_data.get('probable_justifications_rules', [])
             if justifications:
                 char_html += "<h4>🔗 Justificaciones Físico-Lógicas (Análisis por Modos)</h4><ul>"
@@ -1201,7 +1681,7 @@ def render_llm_analysis(
             char_html = str(char_data)
 
         hypothesis = validation_data.get('cause_hypothesis_note', 'No se generó hipótesis de causa en este reporte.')
-        
+
         key_findings = validation_data.get('key_findings', [])
         findings_texts = []
         for f in key_findings:
@@ -1209,7 +1689,7 @@ def render_llm_analysis(
                 findings_texts.append(f.get('text'))
             elif isinstance(f, str):
                 findings_texts.append(f)
-                
+
         findings_html = ""
         if findings_texts:
             findings_html += (
@@ -1245,7 +1725,7 @@ def render_llm_analysis(
             </div>
             {characterization_visuals_html}
         """
-        
+
         synthesis = validation_data.get('period_synthesis', '')
         if synthesis:
             llm_sections_html += f"""
@@ -1259,6 +1739,17 @@ def render_llm_analysis(
             <h2>📌 Caracterización del Circuito</h2>
             {characterization_visuals_html}
         """
+
+    report_tab_html = f"""
+            <div class="chart-container">{html_clusters}</div>
+
+            {llm_sections_html}
+
+            <h2>📈 Gráfica de Evaluación Diaria</h2>
+            <div class="chart-container">{html_critical}</div>
+
+            {html_inference_critical}
+    """
 
     html_content = f"""
     <!DOCTYPE html>
@@ -1288,22 +1779,51 @@ def render_llm_analysis(
             .graph-panel iframe {{ width: 100%; height: 620px; border: 0; background: #ffffff; }}
             .graph-actions {{ padding: 10px 14px; border-bottom: 1px solid #e2e8f0; background: #ffffff; }}
             .graph-actions a {{ color: #1d4ed8; font-weight: 600; text-decoration: none; }}
+            .table-scroll {{ overflow-x: auto; }}
+            .compact-table {{ width: 100%; border-collapse: collapse; font-size: 0.9rem; }}
+            .compact-table th, .compact-table td {{ border: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; vertical-align: top; }}
+            .compact-table th {{ background: #f8fafc; color: #1e3a8a; }}
+            .item-details span {{ display: block; margin-top: 4px; }}
+            .muted {{ color: #64748b; margin: 6px 0 4px 0; }}
+            .tabs {{ margin-top: 18px; }}
+            .tab-nav {{ display: flex; gap: 8px; border-bottom: 1px solid #cbd5e1; margin-bottom: 20px; flex-wrap: wrap; }}
+            .tab-button {{ appearance: none; border: 1px solid #cbd5e1; border-bottom: 0; background: #f8fafc; color: #1e3a8a; padding: 10px 14px; border-radius: 6px 6px 0 0; font-weight: 700; cursor: pointer; }}
+            .tab-button.active {{ background: #ffffff; color: #0f172a; box-shadow: inset 0 3px 0 #2563eb; }}
+            .tab-panel {{ display: none; }}
+            .tab-panel.active {{ display: block; }}
             @media (max-width: 900px) {{ .chart-grid.two-col {{ grid-template-columns: 1fr; }} }}
         </style>
     </head>
     <body>
         <div class="container">
             <h1>📊 {title_html}</h1>
-            
-            <div class="chart-container">{html_clusters}</div>
-            
-            {llm_sections_html}
-
-            <h2>📈 Gráfica de Evaluación Diaria</h2>
-            <div class="chart-container">{html_critical}</div>
-
-            {html_inference_critical}
+            <div class="tabs">
+                <div class="tab-nav" role="tablist" aria-label="Secciones del reporte">
+                    <button class="tab-button active" type="button" role="tab" aria-selected="true" aria-controls="tab-informe" id="tab-button-informe" data-tab-target="tab-informe">Informe</button>
+                    <button class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="tab-expertos" id="tab-button-expertos" data-tab-target="tab-expertos">Comparación con reportes expertos</button>
+                </div>
+                <section class="tab-panel active" role="tabpanel" id="tab-informe" aria-labelledby="tab-button-informe">
+                    {report_tab_html}
+                </section>
+                <section class="tab-panel" role="tabpanel" id="tab-expertos" aria-labelledby="tab-button-expertos">
+                    {html_expert_alignment}
+                </section>
+            </div>
         </div>
+        <script>
+            document.querySelectorAll('.tab-button').forEach(function(button) {{
+                button.addEventListener('click', function() {{
+                    var targetId = button.getAttribute('data-tab-target');
+                    document.querySelectorAll('.tab-button').forEach(function(item) {{
+                        item.classList.toggle('active', item === button);
+                        item.setAttribute('aria-selected', item === button ? 'true' : 'false');
+                    }});
+                    document.querySelectorAll('.tab-panel').forEach(function(panel) {{
+                        panel.classList.toggle('active', panel.id === targetId);
+                    }});
+                }});
+            }});
+        </script>
     </body>
     </html>
     """
@@ -1315,11 +1835,11 @@ def render_llm_analysis(
     end_str = end_date.strftime("%Y%m%d") if hasattr(end_date, 'strftime') else str(end_date).replace('-', '') if end_date else "fin"
     filename = f"{primary_circuit}_{start_str}_{end_str}_{timestamp}.html"
     filepath = Path(output_dir) / filename
-    
+
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(html_content)
-        
+
     display(Markdown(f"✅ **Reporte generado y guardado exitosamente:** [{filepath.absolute()}]({filepath.absolute()})"))
     display(HTML(f'<a href="{filepath.absolute()}" target="_blank" style="display: inline-block; padding: 10px 20px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">Abrir Reporte en Nueva Pestaña</a>'))
-    
+
     return filepath

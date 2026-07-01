@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Grafo interactivo MGCECDL (matriz estimada por reconstruccion) — DON23L13 | Top P97 por UITI_VANO — período completo</title>
+  <link rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/dist/vis-network.min.css"
+    integrity="sha512-WgxfT5LWjfszlPHXRmBWHkV2eceiWTOBvrKCNbdgDYTHrT2AeLCGbF4sZlZw3UMN3WtL0tGUoIAKsu8mllg/XA=="
+    crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <script
+    src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/vis-network.min.js"
+    integrity="sha512-LnvoEWDFrqGHlHmDD2101OrLcbsfkrzoSpvtSQtxK3RMnRV0eOkhhBN2dXHKRrUU8p2DGRTk35n4O8nWSVe1mQ=="
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #ffffff;
+      color: #1a2332;
+      overflow: hidden;
+    }
+    .layout { position: relative; height: 680px; }
+    .graph-wrap {
+      position: absolute; inset: 0;
+      background: #ffffff;
+    }
+    #net_top_uiti_periodo { width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <div class="graph-wrap">
+      <div id="net_top_uiti_periodo"></div>
+    </div>
+  </div>
+
+  <script>
+  (() => {
+    function lerpRGB(a, b, t) {
+      return [
+        Math.round(a[0] + t * (b[0] - a[0])),
+        Math.round(a[1] + t * (b[1] - a[1])),
+        Math.round(a[2] + t * (b[2] - a[2])),
+      ];
+    }
+    const CS = [[69,117,180],[255,255,191],[215,48,39]];
+    function scoreToCSS(t) {
+      t = Math.max(0, Math.min(1, t));
+      const rgb = t <= 0.5 ? lerpRGB(CS[0], CS[1], t * 2) : lerpRGB(CS[1], CS[2], (t - 0.5) * 2);
+      return `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+    }
+
+    const payload = {"nodes": [{"id": "TIPO", "label": "TIPO", "_score": 1.0, "mode_id": "B", "mode_name": "Infraestructura de protección y maniobra", "title": "TIPO\nRelevancia: 1.000e+00"}, {"id": "CNT_TRF", "label": "CNT_TRF", "_score": 0.5860997618622242, "mode_id": "A", "mode_name": "Evento, impacto e indicadores", "title": "CNT_TRF\nRelevancia: 5.861e-01"}, {"id": "CNT_VN", "label": "CNT_VN", "_score": 0.05591835882743473, "mode_id": "B", "mode_name": "Infraestructura de protección y maniobra", "title": "CNT_VN\nRelevancia: 5.592e-02"}, {"id": "wind_spd_11", "label": "wind_spd_11", "_score": 0.05379931186802782, "mode_id": "F", "mode_name": "Entorno, riesgo y clima", "title": "wind_spd_11\nRelevancia: 5.380e-02"}, {"id": "CANTIDAD_TIERRA", "label": "CANTIDAD_TIERRA", "_score": 0.025146865825679182, "mode_id": "E", "mode_name": "Activos: apoyo final y transformador", "title": "CANTIDAD_TIERRA\nRelevancia: 2.515e-02"}, {"id": "temp_4", "label": "temp_4", "_score": 0.018794074839934772, "mode_id": "F", "mode_name": "Entorno, riesgo y clima", "title": "temp_4\nRelevancia: 1.879e-02"}, {"id": "wind_spd_0", "label": "wind_spd_0", "_score": 0.014915949184541538, "mode_id": "F", "mode_name": "Entorno, riesgo y clima", "title": "wind_spd_0\nRelevancia: 1.492e-02"}, {"id": "prep_10", "label": "prep_10", "_score": 0.01390283808289213, "mode_id": "F", "mode_name": "Entorno, riesgo y clima", "title": "prep_10\nRelevancia: 1.390e-02"}, {"id": "temp_11", "label": "temp_11", "_score": 0.012173002877720085, "mode_id": "F", "mode_name": "Entorno, riesgo y clima", "title": "temp_11\nRelevancia: 1.217e-02"}, {"id": "wind_spd_3", "label": "wind_spd_3", "_score": 0.009625168249701818, "mode_id": "F", "mode_name": "Entorno, riesgo y clima", "title": "wind_spd_3\nRelevancia: 9.625e-03"}, {"id": "temp_2", "label": "temp_2", "_score": 0.008615732714533527, "mode_id": "F", "mode_name": "Entorno, riesgo y clima", "title": "temp_2\nRelevancia: 8.616e-03"}, {"id": "FECHA_OPERACION_VANO", "label": "FECHA_OPERACION_VANO", "_score": 0.007549266417679859, "mode_id": "D", "mode_name": "Características físicas y eléctricas del vano", "title": "FECHA_OPERACION_VANO\nRelevancia: 7.549e-03"}, {"id": "TIPO_TAX", "label": "TIPO_TAX", "_score": 0.007305396857898632, "mode_id": "D", "mode_name": "Características físicas y eléctricas del vano", "title": "TIPO_TAX\nRelevancia: 7.305e-03"}, {"id": "prep_3", "label": "prep_3", "_score": 0.007006956009149032, "mode_id": "F", "mode_name": "Entorno, riesgo y clima", "title": "prep_3\nRelevancia: 7.007e-03"}, {"id": "VAL_CRIT_APOYO", "label": "VAL_CRIT_APOYO", "_score": 0.005479220031680522, "mode_id": "E", "mode_name": "Activos: apoyo final y transformador", "title": "VAL_CRIT_APOYO\nRelevancia: 5.479e-03"}, {"id": "wind_spd_7", "label": "wind_spd_7", "_score": 0.004765095708603366, "mode_id": "F", "mode_name": "Entorno, riesgo y clima", "title": "wind_spd_7\nRelevancia: 4.765e-03"}, {"id": "PROMEDIO_KWH_VANO", "label": "PROMEDIO_KWH_VANO", "_score": 0.003972043380578187, "mode_id": "D", "mode_name": "Características físicas y eléctricas del vano", "title": "PROMEDIO_KWH_VANO\nRelevancia: 3.972e-03"}, {"id": "wind_spd_5", "label": "wind_spd_5", "_score": 0.00029468981928568454, "mode_id": "F", "mode_name": "Entorno, riesgo y clima", "title": "wind_spd_5\nRelevancia: 2.947e-04"}, {"id": "prep_7", "label": "prep_7", "_score": 0.00023160962256463816, "mode_id": "F", "mode_name": "Entorno, riesgo y clima", "title": "prep_7\nRelevancia: 2.316e-04"}, {"id": "prep_8", "label": "prep_8", "_score": 0.0, "mode_id": "F", "mode_name": "Entorno, riesgo y clima", "title": "prep_8\nRelevancia: 0.000e+00"}], "edges": [{"from": "CNT_VN", "to": "TIPO_TAX", "_norm_w": 1.0, "width": 9.0, "title": "Valor: 4.706e-03", "color": {"color": "#555555", "opacity": 0.92}, "dashes": false, "arrows": {"to": {"enabled": true, "scaleFactor": 0.48}}}, {"from": "wind_spd_11", "to": "wind_spd_0", "_norm_w": 0.24670136712455823, "width": 2.6, "title": "Valor: 1.161e-03", "color": {"color": "#555555", "opacity": 0.483}, "dashes": false, "arrows": {"to": {"enabled": true, "scaleFactor": 0.48}}}, {"from": "temp_4", "to": "prep_3", "_norm_w": 0.19030318738474833, "width": 2.12, "title": "Valor: 8.956e-04", "color": {"color": "#555555", "opacity": 0.45}, "dashes": false, "arrows": {"to": {"enabled": true, "scaleFactor": 0.48}}}, {"from": "CNT_TRF", "to": "VAL_CRIT_APOYO", "_norm_w": 0.1901183345244589, "width": 2.12, "title": "Valor: 8.948e-04", "color": {"color": "#555555", "opacity": 0.45}, "dashes": false, "arrows": {"to": {"enabled": true, "scaleFactor": 0.48}}}, {"from": "CNT_TRF", "to": "FECHA_OPERACION_VANO", "_norm_w": 0.18839656605572133, "width": 2.1, "title": "Valor: 8.866e-04", "color": {"color": "#555555", "opacity": 0.449}, "dashes": false, "arrows": {"to": {"enabled": true, "scaleFactor": 0.48}}}, {"from": "prep_3", "to": "prep_7", "_norm_w": 0.18280163173154565, "width": 2.05, "title": "Valor: 8.603e-04", "color": {"color": "#555555", "opacity": 0.446}, "dashes": false, "arrows": {"to": {"enabled": true, "scaleFactor": 0.48}}}]};
+    const container = document.getElementById('net_top_uiti_periodo');
+
+    if (typeof vis === 'undefined') {
+      container.innerHTML = `
+        <div style="margin:24px;padding:20px;border:1px solid #d1dce8;border-radius:8px;
+                    background:#f8fafc;color:#3d5166;font-family:system-ui,sans-serif;">
+          <b style="font-size:14px;">vis-network no disponible</b>
+          <p style="margin-top:8px;font-size:12px;line-height:1.6;">
+            Abre este archivo en un navegador con acceso a internet.
+          </p>
+        </div>`;
+      return;
+    }
+
+    var nodes = new vis.DataSet(
+      payload.nodes.map(n => {
+        const bg = scoreToCSS(n._score);
+        return {
+          id: n.id, label: n.label, title: n.title,
+          size: 16 + 8 * Math.max(0, Math.min(1, n._score)), shape: 'dot',
+          color: {
+            background: bg,
+            border: bg,
+            highlight: { background: bg, border: '#2c3e50' },
+            hover:     { background: bg, border: '#2c3e50' },
+          },
+          font: {
+            size: 14, color: '#000000',
+            face: "'Segoe UI', system-ui, sans-serif",
+            strokeWidth: 0,
+          },
+          borderWidth: 1,
+          borderWidthSelected: 3,
+        };
+      })
+    );
+
+    var edges = new vis.DataSet(
+      payload.edges.map(e => ({
+        from: e.from, to: e.to,
+        width: e.width, title: e.title,
+        color: e.color, dashes: e.dashes,
+        arrows: e.arrows,
+        smooth: { type: 'dynamic' },
+      }))
+    );
+
+    // --- Resaltado de vecindad (click) ---
+    const origColors = {};
+    const origLabels = {};
+    nodes.get().forEach(n => { origColors[n.id] = n.color; origLabels[n.id] = n.label; });
+    let highlightActive = false;
+
+    function resetHighlight() {
+      nodes.update(nodes.get().map(n => ({
+        id: n.id, color: origColors[n.id], label: origLabels[n.id],
+      })));
+      highlightActive = false;
+    }
+
+    function applyHighlight(selId) {
+      const conn = new Set(network.getConnectedNodes(selId));
+      nodes.update(nodes.get().map(n => {
+        const fade = n.id !== selId && !conn.has(n.id);
+        return {
+          id: n.id,
+          color: fade
+            ? { background:'rgba(210,222,234,0.38)', border:'rgba(180,200,220,0.42)' }
+            : origColors[n.id],
+          label: fade ? undefined : origLabels[n.id],
+        };
+      }));
+      highlightActive = true;
+    }
+
+    // --- F&iacute;sica con inercia (barnesHut, amortiguaci&oacute;n baja) ---
+    const options = {
+      physics: {
+        enabled: true,
+        solver: 'barnesHut',
+        barnesHut: {
+          gravitationalConstant: -2000,
+          centralGravity: 0.1,
+          springLength: 150,
+          springConstant: 0.05,
+          damping: 0.9,
+          avoidOverlap: 0.12,
+        },
+        stabilization: { enabled: true, fit: true, iterations: 550, updateInterval: 30 },
+      },
+      interaction: {
+        hover: true, tooltipDelay: 60,
+        navigationButtons: false,
+        keyboard: { enabled: false, bindToWindow: false },
+        zoomView: true, dragNodes: true,
+      },
+      nodes: { shape: 'dot' },
+      edges: {
+        smooth: { type: 'dynamic' },
+        hoverWidth: w => w + 1,
+        selectionWidth: w => w + 2,
+      },
+    };
+
+    const network = new vis.Network(container, { nodes, edges }, options);
+
+    network.on('click', params => {
+      if (params.nodes.length > 0) {
+        applyHighlight(params.nodes[0]);
+      } else if (highlightActive) {
+        resetHighlight();
+      }
+    });
+
+    network.once('stabilizationIterationsDone', () => {
+      network.fit({ animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+      // Reducir fuerzas pero mantener f&iacute;sica activa → inercia al arrastrar
+      network.setOptions({
+        physics: {
+          barnesHut: {
+            gravitationalConstant: -2000,
+            springConstant: 0.05,
+            damping: 0.9,
+          }
+        }
+      });
+    });
+  })();
+  </script>
+</body>
+</html>
