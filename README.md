@@ -2,6 +2,12 @@
 
 Small local repo for notebook-first analysis of `UITI_VANO` in the CHEC wide dataset.
 
+## Página del proyecto
+
+La página pública del proyecto se puede abrir desde GitHub Pages:
+
+https://amalvarezme.github.io/CHECUNAL_2026/
+
 The workflow covers only steps 1 to 3: select circuits/date window, detect critical
 points from structured data, and build a semantic preliminary diagnosis context. It
 does not use Databricks, Dash, FastAPI, RAG, vector stores, predictive models, masks,
