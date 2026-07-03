@@ -81,9 +81,16 @@ def build_context_package(
     start_date: str | None,
     end_date: str | None,
     raw_df: pd.DataFrame | None = None,
+    top_vanos_percentile: float = 97,
 ) -> dict[str, Any]:
     resolution = resolve_columns(events_df) if not events_df.empty else None
     unavailable = resolution.unavailable_optional if resolution is not None else []
+    try:
+        from chec_local_interpreter.graph_extractor import build_graphify_context
+        graph_summary = build_graphify_context(raw_df if raw_df is not None else events_df, "_".join(selected_circuitos))
+    except Exception as e:
+        graph_summary = f"Grafo no disponible: {e}"
+
     context = {
         "analysis_name": "local_uiti_vano_interpretability",
         "metadata": {
@@ -99,7 +106,9 @@ def build_context_package(
             "circuitos": selected_circuitos,
             "indicator": "UITI_VANO",
             "characterization": _compute_circuit_characterization(
-                raw_df if raw_df is not None else events_df, selected_circuitos
+                raw_df if raw_df is not None else events_df,
+                selected_circuitos,
+                top_vanos_percentile=top_vanos_percentile,
             ),
         },
         "summary": window_summary(events_df, daily_df),
@@ -107,6 +116,7 @@ def build_context_package(
         "critical_points": critical_points,
         "critical_periods": critical_periods,
         "domain": domain_context_payload(),
+        "graph_knowledge": graph_summary,
     }
     return context
 
@@ -118,7 +128,12 @@ def save_json_artifact(payload: dict[str, Any], path: str | Path) -> Path:
     return target
 
 
-def _compute_circuit_characterization(df: pd.DataFrame, selected_circuitos: list[str]) -> list[dict[str, Any]]:
+def _compute_circuit_characterization(
+    df: pd.DataFrame,
+    selected_circuitos: list[str],
+    *,
+    top_vanos_percentile: float = 97,
+) -> list[dict[str, Any]]:
     if df.empty or not selected_circuitos:
         return []
         
@@ -175,7 +190,11 @@ def _compute_circuit_characterization(df: pd.DataFrame, selected_circuitos: list
             rank = sorted_clusters.index(cluster_id) if cluster_id in sorted_clusters else 0
             label = group_labels[rank] if rank < len(group_labels) else "Desconocida"
             
-            # Compute P97 vanos (top 3% most critical)
+            percentile = min(max(float(top_vanos_percentile), 0.0), 100.0)
+            quantile_value = percentile / 100.0
+
+            # Compute top-percentile vanos using the same threshold rule used by
+            # the inference scenarios: metric >= percentile(metric).
             df_circuito = df_copy[df_copy['CIRCUITO'] == circuito]
             p97_uiti_list = []
             p97_events_list = []
@@ -186,8 +205,8 @@ def _compute_circuit_characterization(df: pd.DataFrame, selected_circuitos: list
                 )
                 if not vano_stats.empty:
                     try:
-                        p97_uiti = vano_stats['uiti_sum'].quantile(0.97)
-                        p97_events = vano_stats['events'].quantile(0.97)
+                        p97_uiti = vano_stats['uiti_sum'].quantile(quantile_value)
+                        p97_events = vano_stats['events'].quantile(quantile_value)
                         
                         top_uiti_vanos = vano_stats[vano_stats['uiti_sum'] >= p97_uiti].sort_values('uiti_sum', ascending=False)
                         top_events_vanos = vano_stats[vano_stats['events'] >= p97_events].sort_values('events', ascending=False)
@@ -205,6 +224,7 @@ def _compute_circuit_characterization(df: pd.DataFrame, selected_circuitos: list
                 "uiti_vano_total": round(float(row['uiti_vano_sum']), 0),
                 "avg_eventos_red": round(float(global_avg_events), 0),
                 "avg_uiti_red": round(float(global_avg_uiti), 0),
+                "top_vanos_percentile": percentile,
                 "p97_uiti": p97_uiti_list,
                 "p97_eventos": p97_events_list,
             })
@@ -229,4 +249,3 @@ def critical_points_frame(critical_points: list[dict[str, Any]]) -> pd.DataFrame
             }
         )
     return pd.DataFrame(rows)
-

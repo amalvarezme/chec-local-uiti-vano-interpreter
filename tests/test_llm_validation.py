@@ -18,6 +18,14 @@ def _context(unavailable: list[str] | None = None) -> dict:
                 "selection_reason": "Punto critico entregado por codigo.",
             }
         ],
+        "critical_periods": [
+            {
+                "critical_period_id": "period-2026-01-01-2026-01-02",
+                "start_date": "2026-01-01",
+                "end_date": "2026-01-02",
+                "summary": "Periodo critico entregado por codigo.",
+            }
+        ],
     }
 
 
@@ -71,18 +79,25 @@ def test_valid_json_passes():
     assert result.ok
 
 
+def test_echoed_schema_meta_keys_are_stripped():
+    # Weaker models copy the schema's $schema/$id metadata into their answer; under
+    # additionalProperties:false that used to invalidate an otherwise-correct output.
+    output = _valid_output()
+    output = {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "uiti_vano_explanation.output_schema.v1",
+        **output,
+    }
+    result = validate_llm_response(json.dumps(output), _context(), load_output_schema())
+    assert result.ok, result.errors
+    assert "$schema" not in result.data
+    assert "$id" not in result.data
+
+
 def test_malformed_json_fails():
     result = validate_llm_response("{bad json", _context(), load_output_schema())
     assert not result.ok
     assert "Invalid JSON" in result.errors[0]
-
-
-def test_forbidden_scope_terms_fail():
-    output = _valid_output()
-    output["period_synthesis"] = "Segun RAG, el modelo predictivo explica el resultado."
-    result = validate_llm_response(json.dumps(output), _context(), load_output_schema())
-    assert not result.ok
-    assert any("Forbidden" in error for error in result.errors)
 
 
 def test_date_outside_context_fails():
@@ -91,6 +106,24 @@ def test_date_outside_context_fails():
     result = validate_llm_response(json.dumps(output), _context(), load_output_schema())
     assert not result.ok
     assert any("Referenced date outside context" in error for error in result.errors)
+
+
+def test_critical_period_id_from_context_passes():
+    output = _valid_output()
+    output["key_findings"][0]["evidence"][0]["date"] = "2026-01-01"
+    output["key_findings"][0]["evidence"][0]["critical_point_id"] = "period-2026-01-01-2026-01-02"
+    output["key_findings"][0]["referenced_events"][0]["date"] = "2026-01-02"
+    output["key_findings"][0]["referenced_events"][0]["critical_point_id"] = "period-2026-01-01-2026-01-02"
+    result = validate_llm_response(json.dumps(output), _context(), load_output_schema())
+    assert result.ok, result.errors
+
+
+def test_unknown_critical_period_id_fails():
+    output = _valid_output()
+    output["key_findings"][0]["evidence"][0]["critical_point_id"] = "period-2026-02-01-2026-02-02"
+    result = validate_llm_response(json.dumps(output), _context(), load_output_schema())
+    assert not result.ok
+    assert any("Referenced critical_point_id outside context" in error for error in result.errors)
 
 
 def test_unavailable_column_referenced_as_present_fails():

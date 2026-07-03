@@ -1,0 +1,3822 @@
+---
+import logoLab from "../assets/site/logos/logo_labIA.png";
+import logoChec from "../assets/site/logos/checlogo.png";
+import logoUnal from "../assets/site/logos/logo_unal_transparente.png";
+import metodologia from "../assets/site/results/metodolgia.png";
+import dataIntelligenceEngine from "../assets/site/results/data_intelligence_engine.png";
+import databricksLogo from "../assets/site/results/databricks.png";
+import pdfData from "../assets/site/results/pdfData.jpeg";
+import georeferencia from "../assets/site/results/georeferencia.jpeg";
+import historicoOutput from "../assets/site/results/hisoticoOutput.jpeg";
+import agente from "../assets/site/results/agente.jpeg";
+import mgcecdlConfusionMatrix from "../assets/site/results/mgcecdl_confusion_matrix.png";
+import mgcecdlRocCurve from "../assets/site/results/mgcecdl_roc_curve.png";
+import mgcecdlModeImportance from "../assets/site/results/mgcecdl_mode_importance.png";
+import mgcecdlTopUitiPeriodoBarras from "../assets/site/results/mgcecdl_top_uiti_periodo_barras.png";
+import mgcecdlTopUitiPeriodoRadar from "../assets/site/results/mgcecdl_top_uiti_periodo_radar.png";
+import variables from "../data/variables.json";
+
+const grafoRedNivel2 = `${import.meta.env.BASE_URL}grafo_red_nivel2.html`;
+const grafoRedNivel2Seleccionadas = `${import.meta.env.BASE_URL}grafo_red_nivel2_seleccionadas.html`;
+const grafoTopUitiPeriodoMgcecdl = `${import.meta.env.BASE_URL}mgcecdl_top_uiti_periodo_grafo.html`;
+const latestInterpretabilityReport = `${import.meta.env.BASE_URL}latest_interpretability_report.html`;
+const baseCircuitMap = `${import.meta.env.BASE_URL}base_circuit_map.html`;
+const baseCriticalPoints = `${import.meta.env.BASE_URL}base_critical_points.html`;
+
+const vaciosApi = [
+  ["CAPACIDAD_NOMINAL", "126.732", "76,855715 %"],
+  ["CNT_USUS", "126.732", "76,855715 %"],
+  ["CODIGO", "126.732", "76,855715 %"],
+  ["FECHA_OPERACION_TRF", "126.732", "76,855715 %"],
+  ["FID_TRAFO", "126.732", "76,855715 %"],
+  ["PROMEDIO_KWH_TRF", "126.732", "76,855715 %"],
+  ["NR_T", "92.430", "56,053513 %"],
+  ["CALIBRE_NEUTRO", "28.573", "17,327892 %"],
+  ["LONG_CRUCETA", "24.355", "14,769916 %"],
+  ["NORMA", "9.840", "5,967398 %"],
+  ["ALTURA", "5.426", "3,290559 %"],
+  ["CLASE", "5.426", "3,290559 %"],
+  ["VAL_CRIT_APOYO", "5.426", "3,290559 %"],
+  ["PROMEDIO_KWH_VANO", "5.228", "3,170483 %"]
+];
+
+const variablesSeleccionadas = [
+  ["CNT_VN", "Vanos hasta el equipo que protege", "Numérica"],
+  ["UITI_VANO", "Objetivo: UiTi ponderado por vano", "Objetivo"],
+  ["CNT_TRF", "Transformadores afectados", "Numérica"],
+  ["TIPO", "Tipo de equipo protector", "Categórica"],
+  ["LONGITUD", "Longitud del vano", "Numérica"],
+  ["CNT_FASES", "Cantidad de fases", "Numérica"],
+  ["CONDUCTOR", "Conductor de fases", "Categórica"],
+  ["CALIBRE_NEUTRO", "Calibre del neutro", "Categórica"],
+  ["NG_RED", "Presencia de guarda o neutro", "Categórica"],
+  ["FECHA_OPERACION_VANO", "Entrada en operación del vano", "Fecha"],
+  ["X2 / Y2", "Coordenadas finales del vano", "Numérica"],
+  ["ALTURA", "Altura del apoyo final", "Numérica"],
+  ["CANTIDAD_TIERRA", "Presencia de puesta a tierra", "Numérica"],
+  ["VAL_CRIT_APOYO", "Criticidad por clase de apoyo", "Numérica"],
+  ["CAPACIDAD_NOMINAL", "Capacidad del transformador", "Numérica"],
+  ["FECHA_OPERACION_TRF", "Entrada en operación del transformador", "Fecha"],
+  ["PROMEDIO_KWH_TRF", "Consumo mensual del transformador", "Numérica"],
+  ["TIPO_TAX", "Taxonomía del vano", "Categórica"],
+  ["NR_T", "Riesgo por vegetación", "Numérica"],
+  ["LONG_CRUCETA", "Longitud de cruceta", "Numérica"],
+  ["PROMEDIO_KWH_VANO", "Energía mensual del vano", "Numérica"],
+  ["DDT", "Densidad de descargas a tierra", "Numérica"],
+  ["prep / temp / wind_gust_spd / wind_spd", "Clima horario", "12 rezagos por variable"]
+];
+
+const baseModelFeatures = [
+  "CNT_VN", "CNT_TRF", "TIPO", "LONGITUD", "CNT_FASES", "CONDUCTOR",
+  "CALIBRE_NEUTRO", "NG_RED", "FECHA_OPERACION_VANO", "X2", "Y2", "ALTURA",
+  "CANTIDAD_TIERRA", "VAL_CRIT_APOYO", "CAPACIDAD_NOMINAL", "FECHA_OPERACION_TRF",
+  "PROMEDIO_KWH_TRF", "TIPO_TAX", "NR_T", "LONG_CRUCETA", "PROMEDIO_KWH_VANO", "DDT"
+];
+const climatePrefixes = ["prep", "temp", "wind_gust_spd", "wind_spd"];
+const modelFeatures = [
+  ...baseModelFeatures,
+  ...climatePrefixes.flatMap((prefix) => Array.from({ length: 12 }, (_, lag) => `${prefix}_${lag}`))
+];
+const mgcecdlModes = [
+  ["Climáticos / exógenos", "50 variables", "DDT, NR_T y las familias prep, temp, wind_gust_spd y wind_spd con rezagos 0…11."],
+  ["Estructurales / endógenos", "20 variables", "Topología, protección, geometría, activos, consumos, taxonomía y características físicas del vano."]
+];
+const mgcecdlComponents = [
+  ["Atención por variable", "Pondera variables dentro de cada modo antes de construir sus embeddings."],
+  ["Codificadores por modo", "Aprende representaciones separadas para información climática/exógena y estructural/endógena."],
+  ["Confiabilidad modal", "Estima cuánto peso aporta cada modo para la salida fusionada."],
+  ["Reconstrucción", "Regulariza las representaciones para preservar información de entrada por modalidad."],
+  ["Clasificación de criticidad", "Organiza UITI_VANO en niveles ordinales para priorización operativa."]
+];
+const pdfDiscussionRows = [
+  ["AGU23L15", "2016-01-01", "2025-12-21", "Degradación positiva de la red, ciclicidad asociada a pluviosidad y señales de reincidencia operativa."],
+  ["AGU23L15", "2025-09-23", "2025-12-18", "Análisis de señales del interruptor de cabecera; función 51N frecuente y mayor exposición en fase A."],
+  ["DON23L13", "2021-01-01", "2026-03-19", "Eventos SCADA combinan arranques de protección, recierres, enclavamientos y telemetría del IED."],
+  ["DON23L13", "2025-01-06", "2026-04-30", "Mejora de severidad posterior a intervención de junio de 2025, compatible con reducción de tiempos de restablecimiento."],
+  ["DON23L13", "2025-12-11", "2026-10-02", "Ventanas móviles de 90 días para contrastar causas ambientales con intervenciones programadas."]
+];
+const pdfDiscussionColumns = ["Circuito", "Fecha inicio", "Fecha fin", "Análisis técnico"];
+const llmNotebookFlow = [
+  ["Agente base descriptor-histórico", "Interpreta el contexto estructurado del circuito: selección, serie diaria, puntos críticos, variables disponibles, causas observadas, metadatos faltantes y grafos de relación técnica."],
+  ["RAG del modelo predictivo", "Interpreta las inferencias M-GCECDL: relevancias por escenario, modos climático/estructural, variables de entrada del modelo y conexiones del grafo para priorizar variables explicativas."],
+  ["RAG de contraste experto", "Contrasta el modelo de datos históricos y el modelo predictivo con la tabla de discusiones técnicas extraída de PDFs; reporta coincidencias, diferencias y variables priorizadas sin usar la variable objetivo como predictor."]
+];
+const pdfExtractionSteps = [
+  ["1. Lectura documental", "Carga PDFs técnicos desde el repositorio documental y extrae texto por página con PyMuPDF o pdfplumber."],
+  ["2. Segmentación", "Agrupa páginas en fragmentos comparables, conserva el circuito inferido desde el nombre del PDF y propaga intervalos configurados cuando aplica."],
+  ["3. Extracción con skill", "La skill de extracción de discusiones PDF decide si el fragmento contiene una discusión técnica verificable."],
+  ["4. Validación", "Solo acepta filas con circuito, fecha o intervalo válido, análisis técnico breve y evidencia textual verificable."],
+  ["5. Tabla base", "Guarda el Excel tabla_pdfs_intervalo_2025-11-01_2026-04-30.xlsx como insumo documental para el contraste experto en la generación de reportes."]
+];
+
+const databricksNotebookRows = [
+  ["CPU", "Carga tabular, limpieza, selección de circuito, agregación diaria, detección de puntos críticos, extracción PDF y validaciones JSON.", "Bajo", "Puede ejecutarse en notebooks CPU o jobs pequeños si el volumen se mantiene cercano al actual."],
+  ["T4", "Entrenamiento M-GCECDL, evaluación, ROC, matriz de confusión, SHAP por lotes y generación de visuales.", "Medio", "T4 sirve como referencia para entrenamiento pequeño, pruebas y ejecución batch controlada."],
+  ["GPU mayor", "LLM local 32B tipo DeepSeek-R1-Distill-Qwen-32B, deepseek-r1:32b, QwQ-32B o similar.", "Alto / crítico", "No debe asumirse T4 como suficiente salvo evidencia de cuantización agresiva, contexto bajo, baja concurrencia y rendimiento aceptable."],
+  ["API externa", "Agentes LLM de extracción documental, análisis histórico, interpretación predictiva y cotejo experto cuando usan Google u OpenAI.", "Bajo / medio", "Conviene para reportes bajo demanda; el costo depende de tokens, reintentos y número de circuitos procesados."],
+  ["Serving", "Endpoints persistentes para M-GCECDL o para un LLM local disponible como servicio.", "Alto / crítico", "No está implementado en el repositorio; si se activa 24/7, el costo cambia de batch a alojamiento continuo."]
+];
+
+const azureFlowTimingRows = [
+  ["01_climate.ipynb", "36.5 min", "CPU Job"],
+  ["01_pdf_discussion_table_from_pdfs.ipynb", "2 min", "CPU Job"],
+  ["02_local_uiti_vano_interpretability_v3.ipynb", "5 min", "GPU T4 Job"],
+  ["02_mgcecdl_optuna_classification_search.ipynb", "2 h para 20 trials", "GPU T4 Job"],
+  ["03_mgcecdl_training.ipynb", "10 min para 100 épocas", "GPU T4 Job"],
+  ["04_mgcecdl_performance.ipynb", "1 min", "GPU T4 o CPU"],
+  ["05_mgcecdl_circuit_analysis.ipynb", "5 min", "GPU T4 Job"],
+  ["06_mgcecdl_document_replication.ipynb", "2 h 30 min", "GPU T4 Job"],
+  ["Total aproximado", "5.49 h", "Flujo completo"]
+];
+
+const azureInteractiveRows = [
+  ["Sin idle", "5.49 h", "USD 5.11-7.41"],
+  ["Idle +15 min", "5.74 h", "USD 5.34-7.75"],
+  ["Idle +30 min", "5.99 h", "USD 5.57-8.09"],
+  ["Idle +1 h", "6.49 h", "USD 6.04-8.76"]
+];
+
+const azureLlmRows = [
+  ["Gemini 2.5 Flash-Lite API", "~168k input / ~6.2k output", "USD 0.019 por ciclo"],
+  ["Gemini 2.5 Flash API", "~168k input / ~6.2k output", "USD 0.066 por ciclo"],
+  ["Gemini 2.5 Pro API", "contexto <= 200k tokens", "USD 0.272 por ciclo"],
+  ["GPT-5.4 nano API", "~168k input / ~6.2k output", "USD 0.041 por ciclo"],
+  ["GPT-5.4 mini API", "~168k input / ~6.2k output", "USD 0.154 por ciclo"],
+  ["FMS abierto económico", "GPT OSS 20B vía Databricks", "USD 0.014 por ciclo"],
+  ["FMS Llama 3.3 70B", "pay-per-token vía Databricks", "USD 0.093 por ciclo"]
+];
+
+const azureProductionRows = [
+  ["Jobs Compute + Gemini API", "CPU Jobs + GPU T4 Jobs", "USD 3.48-5.07"],
+  ["Jobs Compute + GPT-5.4 mini API", "CPU Jobs + GPU T4 Jobs", "USD 3.61-5.20"],
+  ["Jobs Compute + FMS abierto económico", "CPU Jobs + GPU T4 Jobs", "USD 3.47-5.07"],
+  ["Jobs Compute + FMS Llama 3.3 70B", "CPU Jobs + GPU T4 Jobs", "USD 3.55-5.14"],
+  ["Margen operativo recomendado", "Producción completa estabilizada", "USD 4-6 por ejecución"],
+  ["All-Purpose mal apagado", "idle o clúster interactivo encendido", "USD 8-15+ por ejecución"]
+];
+
+const azureLocalLlmRows = [
+  ["32B 4-bit", "A100 80 GB o equivalente con margen", "T4 no recomendada"],
+  ["32B batch", "A100 80 GB durante 5 h", "USD 22-40 adicionales"],
+  ["32B 24/7", "A100 80 GB activo todo el mes", "USD 3.300-5.800+/mes"],
+  ["70B local", "A100 80 GB o multi-GPU", "USD 5-15+/h"],
+  ["120B local", "multi-GPU", "USD 15-40+/h"],
+  ["FMS disponible", "Llama 70B, Qwen 80B/122B, GPT OSS 120B", "Probar pay-per-token antes de local"]
+];
+
+const databricksCostRows = [
+  ["All-Purpose T4 interactivo", "Fase de ajuste usando Azure NC4as_T4_v3 y DBU All-Purpose para todo el flujo.", "Medio", "USD 5-8 por ejecución completa; USD 6-9 con idle moderado.", "Útil para migración y depuración inicial; no es la arquitectura productiva recomendada."],
+  ["Jobs Compute productivo", "Separación CPU Jobs para clima/PDF y GPU T4 Jobs para M-GCECDL, Optuna, SHAP y reportes.", "Bajo / medio", "USD 4-6 por ejecución completa estabilizada.", "Jobs Compute apaga recursos al terminar; reduce idle frente a All-Purpose."],
+  ["Optuna", "Búsqueda de 20 trials estimada en 2 h sobre T4.", "Medio", "USD 1.85-2.70 por búsqueda; USD 0.09-0.14 por trial.", "No incluye repeticiones por afinamiento adicional."],
+  ["Entrenamiento M-GCECDL", "100 épocas con T4.", "Bajo", "USD 0.15-0.23 por ejecución de entrenamiento.", "El costo aislado es bajo frente a Optuna y al notebook 06."],
+  ["Replicación documental M-GCECDL", "06_mgcecdl_document_replication.ipynb agrega 2.5 h de T4.", "Medio", "USD 2.33-3.38 por ejecución.", "Pasa a ser uno de los principales componentes de costo computacional."],
+  ["GPU mayor para LLM local 32B+", "Soporte futuro Ollama/deepseek-r1:32b; no activo actualmente.", "Alto / crítico", "A100 80 GB: USD 4.5-8/h; 5 h: USD 22-40; 24/7: USD 3.300-5.800+/mes.", "T4 de 16 GB no debe tratarse como suficiente para 32B salvo evidencia fuerte de cuantización, contexto bajo y rendimiento aceptable."],
+  ["APIs externas", "Flujo completo estimado: ~168k tokens input y ~6.2k output.", "Bajo", "Gemini Flash-Lite ~USD 0.019; GPT-5.4 mini ~USD 0.154 por ciclo.", "El costo LLM por API es menor que GPU/DBU; la decisión pesa más por gobierno, privacidad y calidad."],
+  ["Foundation Model Serving", "FMS abierto o propietario desde Databricks pay-per-token.", "Bajo / medio", "FMS económico ~USD 0.014; Llama 3.3 70B ~USD 0.093 por ciclo.", "Si se llama desde notebooks Databricks, sumar compute del job más costo FMS."],
+  ["Almacenamiento de datos", "Peso local observado: data cerca de 695 MB; reports cerca de 70 MB. En Azure pueden existir Delta, DBFS, Unity Catalog Volumes, ADLS, originales, procesados, temporales y versiones históricas.", "Bajo hoy; medio si crece la retención", "Menos de USD 5-50/mes si permanece bajo 100 GB; no estimable para producción sin retención y volumen real.", "No asumir almacenamiento gratis: faltan tamaño final, particiones, historial Delta, temporales, backups y política de borrado."],
+  ["Modelos y artefactos", "Checkpoints, modelo entrenado, Optuna, métricas, HTML, prompts, salidas crudas y errores.", "Bajo / medio", "USD 5-100/mes si los artefactos siguen livianos.", "Incluye MLflow, logs, resultados intermedios, imágenes, HTML y experiment tracking."],
+  ["Alojamiento de modelos", "No hay endpoints persistentes implementados para M-GCECDL ni LLM.", "Despreciable hoy; alto si se activa", "Actual: USD 0 persistente; endpoint GPU 24/7 puede pasar a miles USD/mes.", "Batch apaga recursos; serving mantiene capacidad caliente o reservada."],
+  ["Transferencia de datos y red", "No hay transferencia entre regiones ni egress productivo declarado; sí habría lecturas/escrituras contra storage cloud y descargas de modelos si se migra.", "Bajo / desconocido", "No estimable con la información actual.", "Considerar lectura/escritura Databricks-storage, egress a internet, APIs externas, descarga Hugging Face/Ollama y tráfico de endpoints."],
+  ["Logs, monitoreo y auditoría", "El proyecto guarda prompts, contextos, errores, artefactos HTML, métricas de modelo y salidas inválidas.", "Bajo / medio", "USD 5-100+/mes según retención, volumen de logs y monitoreo de endpoints.", "Faltan retención, cantidad de usuarios, linaje, auditoría, alertas, MLflow tracking y volumen histórico."],
+  ["Jobs recurrentes y orquestación", "No hay workflows programados en el repositorio; la ejecución actual es manual por notebook.", "Despreciable hoy; medio si se programa", "Mensual = costo por ejecución x frecuencia + reintentos/fallos.", "Incluir reintentos automáticos, tareas fallidas y ventanas idle entre tareas."],
+  ["Costos por clúster idle", "All-Purpose puede quedar encendido después de terminar el trabajo.", "Medio / alto", "+15 min: USD 5.34-7.75; +1 h: USD 6.04-8.76 por ejecución interactiva.", "En producción conviene Jobs Compute y auto-termination estricta."],
+  ["Embeddings e índices vectoriales", "El flujo documental implementado no usa FAISS, Chroma ni vector store; la tabla PDF se construye con fragmentos trazables y validación.", "Despreciable hoy; medio si se agregan", "Actual: USD 0 evidenciado. Futuro: no estimable sin tamaño de corpus, embeddings e índice.", "Si se agrega RAG vectorial real, incluir embeddings guardados, índices, refrescos y consultas."],
+  ["Resumen ejecutivo de rubros", "Cómputo, DBU, GPU, almacenamiento, alojamiento, APIs, transferencia, logs, jobs, endpoints e idle aparecen separados.", "Bajo / medio para batch; crítico para LLM local 32B+ 24/7", "Ajuste interactivo: USD 5-8. Producción Jobs: USD 4-6 por ejecución.", "El costo mensual requiere frecuencia de ejecuciones, usuarios, retención, endpoints activos y política de apagado."]
+];
+
+const baseColumnsExcludedFromModel = [
+  "CIRCUITO", "FID_SW", "COD_EQ_PROTEGE", "FID_VANO", "T_USUS_EQ_PROT", "LVSW",
+  "CNT_VN_SW", "FECHA", "DURACION", "UITI", "TOT_USUS", "COD_CAUSA", "DESC_CAUSA",
+  "PORC_APORTE_VANO", "X1", "Y1", "COD_APOYO_FIN", "FID_APOYO_FIN", "PROPIETARIO",
+  "CLASE", "ELEMENTO", "NORMA", "FID_TRAFO", "CODIGO", "CNT_USUS"
+];
+const climateFamiliesExcludedFromV3 = ["pres", "sp", "rh", "solar_rad", "clouds"];
+
+const etapas = [
+  ["Entradas de información", "Consolidación de fuentes técnicas, históricas y económicas para alimentar el simulador."],
+  ["Actualización Prototipo 1", "Ajuste de librerías, base de datos 2025, RAG, normativa y chatbot inteligente."],
+  ["Simulación contrafactual", "Escenarios tipo que pasa si para reposición, mantenimiento y eventos extremos."],
+  ["Evaluación económica", "Integración de costos de mantenimiento, reposición y retorno de inversión."],
+  ["Resultados del simulador", "Visualización tabular y georreferenciada de impactos esperados."],
+  ["Soporte a decisiones", "Comparación entre estado actual e intervenciones priorizadas."]
+];
+
+const cronograma = [
+  ["Ajustes módulo M-GCECDL y agentes", "Actualización de librerías, datos 2025 y flujo local", "Mes 1"],
+  ["Ajustes módulo M-GCECDL y agentes", "Actualización de contexto técnico, normativa y documentación", "Mes 1 - Mes 2"],
+  ["Simulación contrafactual", "Diseño de arquitectura del simulador", "Mes 1"],
+  ["Simulación contrafactual", "Modelado probabilístico con restricciones físicas", "Mes 2 - Mes 3"],
+  ["Simulación contrafactual", "Escenarios que pasa si, UiTi por vano y clima extremo", "Mes 2 - Mes 4"],
+  ["Evaluación económica dinámica", "Costos, retorno de inversión y ranking de intervenciones", "Mes 2 - Mes 4"],
+  ["Visualización y despliegue", "Resultados georreferenciados/tabulares e infraestructura local/nube CHEC", "Mes 1 - Mes 4"],
+  ["Validación final", "Pruebas técnicas y ajuste fino", "Mes 4"]
+];
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Resultados de avance del proyecto Simulador de criticidad CHEC - UNAL."
+    />
+    <title>Simulador Criticidad CHEC | Lab IA UNAL</title>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#inicio" aria-label="Inicio">
+        <img src={logoLab.src} alt="Logo Laboratorio IA UNAL" />
+      </a>
+      <nav aria-label="Navegación principal">
+        <a href="#acta">Acta</a>
+        <a href="#cronograma">Cronograma</a>
+        <a href="#resultados">Resultados</a>
+        <a href="#arquitectura">Arquitectura</a>
+        <a href="#costos-databricks">Costos</a>
+      </nav>
+    </header>
+
+    <main id="inicio">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">CHEC + Universidad Nacional de Colombia</p>
+          <h1>Simulador de criticidad CHEC</h1>
+          <p class="lead">
+            Avance del proyecto para desarrollar módulos de inteligencia artificial informados por la física,
+            orientados al análisis de criticidad e intervenciones en redes de nivel de tensión 2.
+          </p>
+          <div class="hero-actions" aria-label="Acciones principales">
+            <a class="button primary" href="#acta">Ver secciones</a>
+            <a class="button secondary" href="#resultados">Resultados actuales</a>
+          </div>
+        </div>
+        <aside class="hero-panel" aria-label="Datos principales del proyecto">
+          <img class="panel-logo" src={logoLab.src} alt="Laboratorio IA UNAL" />
+          <dl>
+            <div>
+              <dt>Contrato</dt>
+              <dd>CRW254513 de 2024</dd>
+            </div>
+            <div>
+              <dt>Acta</dt>
+              <dd>Trabajo número 1</dd>
+            </div>
+            <div>
+              <dt>Duración</dt>
+              <dd>104 días calendario</dd>
+            </div>
+            <div>
+              <dt>Inicio mes 1</dt>
+              <dd>27 de abril de 2026</dd>
+            </div>
+          </dl>
+        </aside>
+      </section>
+
+      <section class="logo-strip" aria-label="Instituciones participantes">
+        <img src={logoChec.src} alt="Logo CHEC" />
+        <img src={logoUnal.src} alt="Logo Universidad Nacional de Colombia" />
+      </section>
+
+      <section id="acta" class="section">
+        <div class="section-heading">
+          <p class="eyebrow">Resumen del documento</p>
+          <h2>Secciones 1 a 9 del acta</h2>
+          <p>
+            Síntesis ejecutiva del alcance, metodología, resultados esperados, cronograma y entregables del
+            proyecto.
+          </p>
+        </div>
+
+        <div class="summary-grid">
+          <article>
+            <span>01</span>
+            <h3>Abreviaturas</h3>
+            <p>CHEC: Central Hidroeléctrica de Caldas S.A. E.S.P. UNAL: Universidad Nacional de Colombia sede Manizales.</p>
+          </article>
+          <article>
+            <span>02</span>
+            <h3>Objeto</h3>
+            <p>Desarrollar módulos de IA informados por la física y apoyados por agentes para estudiar criticidad y efectividad de intervenciones.</p>
+          </article>
+          <article>
+            <span>03</span>
+            <h3>Alcance</h3>
+            <p>Simulación contrafactual para reposición y mantenimiento, estimando UiTi por vano y costos con incertidumbre y sensibilidad.</p>
+          </article>
+          <article>
+            <span>04</span>
+            <h3>Objetivos</h3>
+            <p>Construir módulos de análisis con datos estructurados, modelo multimodal y reportes técnicos de evidencia.</p>
+          </article>
+          <article>
+            <span>05</span>
+            <h3>Metodología</h3>
+            <p>El trabajo avanza desde entradas de información hasta comparación de escenarios para apoyar decisiones de inversión.</p>
+          </article>
+          <article>
+            <span>06</span>
+            <h3>Plazo</h3>
+            <p>La ejecución contempla 104 días calendario, con posibilidad de ajustes por acuerdo entre las partes.</p>
+          </article>
+          <article>
+            <span>07</span>
+            <h3>Resultado esperado</h3>
+            <p>Simulador con visualización georreferenciada y tabular, más actualización de arquitectura local/nube CHEC-EPM.</p>
+          </article>
+          <article>
+            <span>08</span>
+            <h3>Cronograma</h3>
+            <p>Plan de cuatro meses que integra predicción, simulación, evaluación económica, despliegue y validación final.</p>
+          </article>
+          <article>
+            <span>09</span>
+            <h3>Entregables</h3>
+            <p>Informe técnico, repositorio GitHub documentado y pruebas piloto del flujo de análisis.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section tinted">
+        <div class="section-heading compact">
+          <p class="eyebrow">Tabla resumida</p>
+          <h2>Participantes clave</h2>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Entidad / rol</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Gustavo Agredo Cardona</td>
+                <td>Representante legal del contratista - UNAL</td>
+              </tr>
+              <tr>
+                <td>Juan Carlos Álvarez Barreto</td>
+                <td>Profesional Subgerencia T&amp;D, gestor técnico</td>
+              </tr>
+              <tr>
+                <td>Luis Alirio Bolaños Navarrete</td>
+                <td>Profesional Subgerencia T&amp;D, gestor técnico</td>
+              </tr>
+              <tr>
+                <td>Iván Darío Cardona Jiménez</td>
+                <td>Profesional Área Gestión Operativa, gestor administrativo</td>
+              </tr>
+              <tr>
+                <td>Andrés Marino Álvarez Meza</td>
+                <td>Director del proyecto por parte de UNAL</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-heading">
+          <p class="eyebrow">Ruta metodológica</p>
+          <h2>Etapas de trabajo</h2>
+        </div>
+        <div class="timeline">
+          {etapas.map(([title, text], index) => (
+            <article>
+              <strong>{String(index + 1).padStart(2, "0")}</strong>
+              <div>
+                <h3>{title}</h3>
+                <p>{text}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section id="cronograma" class="section tinted">
+        <div class="section-heading compact">
+          <p class="eyebrow">Tabla resumida</p>
+          <h2>Cronograma de avance</h2>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Módulo / etapa</th>
+                <th>Actividad principal</th>
+                <th>Ventana</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cronograma.map(([modulo, actividad, ventana]) => (
+                <tr>
+                  <td>{modulo}</td>
+                  <td>{actividad}</td>
+                  <td><span class="pill">{ventana}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section deliverables">
+        <div class="section-heading">
+          <p class="eyebrow">Sección 9</p>
+          <h2>Entregables acordados</h2>
+        </div>
+        <div class="deliverable-grid">
+          <article>
+            <h3>Informe técnico</h3>
+            <p>Documento con la descripción de los desarrollos, resultados y decisiones técnicas.</p>
+          </article>
+          <article>
+            <h3>Repositorio GitHub</h3>
+            <p>Código desarrollado y documentado para facilitar trazabilidad y continuidad.</p>
+          </article>
+          <article>
+            <h3>Pruebas piloto</h3>
+            <p>Flujos reproducibles para validar cálculos, procedimientos y actualización de resultados.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="resultados" class="section results">
+        <div class="section-heading">
+          <p class="eyebrow">Resultados actuales</p>
+          <h2>Metodología implementada</h2>
+          <p>
+            Vista actual del flujo de trabajo del simulador de criticidad, integrando datos, agentes,
+            modelado y visualización para la toma de decisiones.
+          </p>
+        </div>
+        <figure>
+          <img src={metodologia.src} alt="Metodología actual del simulador de criticidad CHEC" />
+          <figcaption>Figura de avance: metodología del simulador de criticidad CHEC.</figcaption>
+        </figure>
+      </section>
+
+      <section id="despliegue" class="section cloud">
+        <div class="section-heading">
+          <p class="eyebrow">Despliegue en nube - CHEC</p>
+          <h2>Databricks como plataforma de analítica e IA</h2>
+          <p>
+            Databricks permite integrar datos, modelos y aplicaciones analíticas en un entorno gobernado,
+            escalable y preparado para operación empresarial.
+          </p>
+        </div>
+
+        <div class="cloud-layout">
+          <div class="cloud-copy">
+            <a class="cloud-link" href="https://www.databricks.com/" target="_blank" rel="noreferrer">
+              Ir a Databricks
+            </a>
+            <a class="cloud-link secondary-cloud-link" href="#costos-databricks">
+              Ver estimación de costos
+            </a>
+            <div class="cloud-items">
+              <article>
+                <h3>Plataforma lakehouse</h3>
+                <p>Unifica almacenamiento, procesamiento y analítica para trabajar con datos estructurados y no estructurados.</p>
+              </article>
+              <article>
+                <h3>IA y datos gobernados</h3>
+                <p>Facilita construir, entrenar y desplegar modelos con trazabilidad, seguridad y control de acceso.</p>
+              </article>
+              <article>
+                <h3>Escalabilidad en nube</h3>
+                <p>Permite ejecutar cargas de trabajo de datos e inteligencia artificial ajustando recursos según la demanda.</p>
+              </article>
+            </div>
+          </div>
+          <div class="cloud-visuals" aria-label="Referencias visuales de Databricks">
+            <img class="databricks-mark" src={databricksLogo.src} alt="Logo Databricks" />
+            <img
+              class="engine-figure"
+              src={dataIntelligenceEngine.src}
+              alt="Esquema Data Intelligence Engine de Databricks"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section id="prototipo-databricks" class="section prototype">
+        <div class="section-heading">
+          <p class="eyebrow">Prototipo 1 - Ajustado en Databricks</p>
+          <h2>Funcionalidades migradas y fortalecidas</h2>
+          <p>
+            Se migraron sobre Databricks las funcionalidades principales del Prototipo 1, incorporando
+            mejoras de visualización, organización de salidas y un agente para apoyar recomendaciones de
+            criticidad sobre los activos analizados.
+          </p>
+        </div>
+
+        <div class="prototype-showcase">
+          <article class="feature-shot">
+            <div>
+              <span>Visualización territorial</span>
+              <h3>Georreferenciación de activos y criticidad</h3>
+              <p>
+                Vista espacial para explorar zonas, activos y concentración de criticidad dentro del flujo
+                analítico desplegado en nube.
+              </p>
+            </div>
+            <img src={georeferencia.src} alt="Vista georreferenciada del prototipo en Databricks" />
+          </article>
+
+          <div class="prototype-gallery">
+            <article>
+              <img src={pdfData.src} alt="Extracción y consulta de datos desde documentos PDF" />
+              <div>
+                <h3>Datos desde PDF</h3>
+                <p>Consulta estructurada de información técnica para alimentar análisis y reportes.</p>
+              </div>
+            </article>
+            <article>
+              <img src={historicoOutput.src} alt="Salida histórica del prototipo ajustado" />
+              <div>
+                <h3>Salidas históricas</h3>
+                <p>Mejor lectura de resultados previos y trazabilidad de los indicadores generados.</p>
+              </div>
+            </article>
+            <article>
+              <img src={agente.src} alt="Agente de recomendaciones de criticidad" />
+              <div>
+                <h3>Agente de criticidad</h3>
+                <p>Asistente para recomendaciones orientadas a priorización y soporte operativo.</p>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="criticidad-fisica" class="section physics">
+        <div class="section-heading">
+          <p class="eyebrow">Estudio de la criticidad por redes informadas por la física</p>
+          <h2>Grafo físico, eléctrico y espacio-temporal</h2>
+          <p>
+            La red de Nivel de Tensión 2 se modela como un grafo de eventos, activos, protecciones,
+            topología, entorno y clima. Cada falla se interpreta como una interacción entre infraestructura,
+            condiciones ambientales y propagación eléctrica hacia el impacto UiTi ponderado por vano.
+          </p>
+        </div>
+
+        <div class="physics-summary">
+          {variables.resumen.map((item) => (
+            <article>
+              <h3>{item.titulo}</h3>
+              <p>{item.descripcion}</p>
+            </article>
+          ))}
+        </div>
+
+        <div class="table-wrap physics-table modes-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Modo</th>
+                <th>Nodos en el grafo</th>
+                <th>Descripción resumida</th>
+              </tr>
+            </thead>
+            <tbody>
+              {variables.modos.map((modo) => (
+                <tr>
+                  <td>{modo.nombre}</td>
+                  <td>{modo.cantidad}</td>
+                  <td>{modo.descripcion}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="connection-intro">
+          <h3>Descripción de conexiones físico/lógicas</h3>
+          <p>
+            El grafo conecta variables por reglas de causalidad técnica: acumulación climática, susceptibilidad
+            material, propagación hacia protecciones, impacto demográfico y cálculo regulatorio.
+          </p>
+        </div>
+
+        <div class="table-wrap physics-table connections-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Origen</th>
+                <th>Destino</th>
+                <th>Relación / peso</th>
+                <th>Justificación técnica</th>
+              </tr>
+            </thead>
+            <tbody>
+              {variables.conexiones.map((conexion) => (
+                <tr>
+                  <td>{conexion.origen}</td>
+                  <td>{conexion.destino}</td>
+                  <td>{conexion.relacion}</td>
+                  <td>{conexion.justificacion}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+      </section>
+
+      <section id="arquitectura" class="section architecture">
+        <div class="section-heading">
+          <p class="eyebrow">Arquitectura y flujo de operación</p>
+          <h2>Simulador multimodal con agentes de IA</h2>
+          <p>
+            El flujo integra datos tabulares, documentos técnicos, bitácoras operativas y un modelo
+            M-GCECDL entrenado sobre dos modos de información para analizar vanos de interés, explicar
+            puntos críticos y generar reportes de evidencia para la toma de decisiones.
+          </p>
+        </div>
+
+        <div class="architecture-pillars">
+          <a class="pillar-card" href="#datos-estructurados" aria-label="Abrir detalle de datos estructurados">
+            <span>01</span>
+            <h3>Datos estructurados</h3>
+            <p>Selección de circuito o vano, eventos, protecciones, UiTi, UiTi ponderado y variables de activos.</p>
+            <strong>Explorar datos y grafos →</strong>
+          </a>
+          <a class="pillar-card" href="#historial-rag" aria-label="Abrir detalle de historial y RAG">
+            <span>02</span>
+            <h3>Historial y RAG</h3>
+            <p>Extracción de discusiones expertas desde PDFs y contraste con los agentes de generación de reportes.</p>
+            <strong>Ver tabla y flujo LLM →</strong>
+          </a>
+          <a class="pillar-card" href="#modelo-mgcecdl" aria-label="Abrir detalle del modelo M-GCECDL">
+            <span>03</span>
+            <h3>Modelo M-GCECDL</h3>
+            <p>Clasificación de criticidad de <code>UITI_VANO</code> y relevancias por modo climático y estructural.</p>
+            <strong>Ver preparación y modos →</strong>
+          </a>
+          <article>
+            <span>04</span>
+            <h3>Reporte de evidencia</h3>
+            <p>Documento final con razonamiento causal, simulación What-If y soporte normativo-operativo.</p>
+          </article>
+        </div>
+
+        <div class="agent-grid">
+          <a class="agent-card" href="#agente-base" aria-label="Abrir detalle del agente base descriptor e histórico">
+            <span class="agent-type high">High / Context</span>
+            <h3>Agente base: descriptor e histórico</h3>
+            <p>Construye el contexto histórico del circuito, detecta puntos críticos y genera el análisis base validado.</p>
+          </a>
+          <a class="agent-card" href="#agente-rag" aria-label="Abrir detalle del agente extractor documental">
+            <span class="agent-type high">High / Context</span>
+            <h3>Agente extractor documental</h3>
+            <p>Transforma PDFs expertos en una tabla validada de discusiones técnicas trazables.</p>
+          </a>
+          <a class="agent-card" href="#orquestador-mgcecdl" aria-label="Abrir detalle del agente predictivo M-GCECDL">
+            <span class="agent-type model">API / ML</span>
+            <h3>Agente predictivo M-GCECDL</h3>
+            <p>Ejecuta el modelo predictivo, estima criticidad y prepara explicaciones con SHAP, Borda, radar y grafos.</p>
+          </a>
+          <a class="agent-card" href="#agente-causalidad" aria-label="Abrir detalle del agente de alineación experta">
+            <span class="agent-type high">High / Reasoning</span>
+            <h3>Agente de alineación experta</h3>
+            <p>Contrasta análisis histórico, modelo predictivo y reportes expertos para priorizar variables revisables.</p>
+          </a>
+          <a class="agent-card" href="#agente-simulacion" aria-label="Abrir detalle conceptual del agente de simulación">
+            <span class="agent-type low">Low / Fast</span>
+            <h3>Agente 5: Simulación</h3>
+            <p>Gestiona escenarios What-If y valida si una intervención reduce el impacto proyectado en UITI_VANO.</p>
+          </a>
+          <a class="agent-card" href="#agente-informes" aria-label="Abrir detalle del agente de informes">
+            <span class="agent-type high">High / Generative</span>
+            <h3>Agente 6: Informes</h3>
+            <p>Compila argumentos, evidencias, citas y resultados de simulación en un reporte técnico final.</p>
+          </a>
+        </div>
+
+        <div class="flow-diagram detailed-flow" aria-label="Diagrama de bloques con conexiones del simulador">
+          <div class="flow-title">
+            <h3>Diagrama de bloques y conexiones operativas</h3>
+            <p>El flujo muestra selección del activo, puntos de interés, análisis paralelo, cotejo de diagnósticos y salida de evidencia.</p>
+          </div>
+
+          <div class="flow-lane">
+            <span class="lane-label">Entrada y contexto</span>
+            <article class="flow-node user-node">
+              <span>Usuario / Operador</span>
+              <strong>Selecciona circuito o vano</strong>
+            </article>
+            <div class="flow-connector">
+              <strong>1</strong>
+              <span>Activo de interés</span>
+            </div>
+            <article class="flow-node data-node">
+              <span>Base tabular</span>
+              <strong>Identifica puntos de interés</strong>
+            </article>
+            <div class="flow-connector">
+              <strong>2</strong>
+              <span>Circuito + fechas + eventos</span>
+            </div>
+            <article class="flow-node agent-low-node">
+              <span>Agente base</span>
+              <strong>Selección, puntos críticos y diagnóstico base</strong>
+            </article>
+            <div class="flow-connector dashed">
+              <strong>KB</strong>
+              <span>Variables, modos y causas</span>
+            </div>
+            <article class="flow-node context-node">
+              <span>Contexto.md</span>
+              <strong>Reglas y modos del sistema</strong>
+            </article>
+          </div>
+
+          <div class="flow-lane">
+            <span class="lane-label">Análisis paralelo</span>
+            <article class="flow-node data-node">
+              <span>Serie diaria</span>
+              <strong>Evolución histórica de indicadores</strong>
+            </article>
+            <div class="flow-connector bidirectional">
+              <strong>3</strong>
+              <span>Eventos por vano/circuito</span>
+            </div>
+            <article class="flow-node data-node">
+              <span>Base tabular</span>
+              <strong>SAIDI, SAIFI, UiTi y eventos</strong>
+            </article>
+            <div class="flow-connector">
+              <strong>4</strong>
+              <span>RAG</span>
+            </div>
+            <article class="flow-node agent-high-node">
+              <span>Agente 3 High</span>
+              <strong>Analista documental</strong>
+            </article>
+            <div class="flow-connector bidirectional">
+              <strong>Docs</strong>
+              <span>Normas y bitácoras</span>
+            </div>
+            <article class="flow-node doc-node">
+              <span>Repositorio documental</span>
+              <strong>PDFs, reportes, normas</strong>
+            </article>
+          </div>
+
+          <div class="flow-lane">
+            <span class="lane-label">Inferencia y cotejo causal</span>
+            <article class="flow-node agent-low-node">
+              <span>Diagnóstico 3</span>
+              <strong>Descriptivo por punto de interés</strong>
+            </article>
+            <div class="flow-connector">
+              <strong>5</strong>
+              <span>Historial + RAG</span>
+            </div>
+            <article class="flow-node agent-high-node">
+              <span>Diagnóstico 5</span>
+              <strong>Mejorado con bitácoras y normativa</strong>
+            </article>
+            <div class="flow-connector">
+              <strong>6</strong>
+              <span>Variables tabulares</span>
+            </div>
+            <article class="flow-node model-node">
+              <span>Modelo M-GCECDL</span>
+              <strong>Criticidad UITI_VANO y relevancias</strong>
+            </article>
+            <div class="flow-connector merge">
+              <strong>7</strong>
+              <span>Cotejo diagnósticos 3, 5 y 6</span>
+            </div>
+            <article class="flow-node agent-high-node emphasis-node">
+              <span>Agente 4 High</span>
+              <strong>Alineación experta y priorización</strong>
+            </article>
+          </div>
+
+          <div class="flow-lane">
+            <span class="lane-label">Simulación y reporte</span>
+            <article class="flow-node agent-high-node">
+              <span>Agente 4</span>
+              <strong>Opciones de intervención</strong>
+            </article>
+            <div class="flow-connector">
+              <strong>8</strong>
+              <span>Variables candidatas</span>
+            </div>
+            <article class="flow-node agent-low-node">
+              <span>Agente 5 Low</span>
+              <strong>Simulación What-If</strong>
+            </article>
+            <div class="flow-connector cycle">
+              <strong>9-10</strong>
+              <span>Nuevo escenario ⇄ modelo</span>
+            </div>
+            <article class="flow-node agent-high-node">
+              <span>Agente 6 High</span>
+              <strong>Redactor de informes</strong>
+            </article>
+            <div class="flow-connector">
+              <strong>11</strong>
+              <span>Evidencias</span>
+            </div>
+            <article class="flow-node output-node">
+              <span>Reporte final</span>
+              <strong>Razonamientos y soporte técnico</strong>
+            </article>
+          </div>
+        </div>
+
+        <div class="value-cycle">
+          <article>
+            <strong>Comprender</strong>
+            <p>Selección de circuito o vano e identificación de puntos de interés.</p>
+          </article>
+          <article>
+            <strong>Contextualizar</strong>
+            <p>Historial numérico más evidencia documental y normativa.</p>
+          </article>
+          <article>
+            <strong>Validar</strong>
+            <p>Causas contrastadas con evidencias del modelo M-GCECDL.</p>
+          </article>
+          <article>
+            <strong>Actuar</strong>
+            <p>Simulaciones fundamentadas para priorizar intervenciones.</p>
+          </article>
+          <article>
+            <strong>Documentar</strong>
+            <p>Reporte final automatizado para soporte técnico y directivo.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="datos-estructurados" class="detail-panel" aria-labelledby="datos-title">
+        <div class="detail-shell">
+          <a class="back-link" href="#arquitectura">← Volver al simulador multimodal</a>
+          <div class="section-heading">
+            <p class="eyebrow">Componente 01</p>
+            <h2 id="datos-title">Datos estructurados</h2>
+            <p>
+              Trazabilidad desde el archivo enriquecido de 273 columnas, pasando por la versión v3 de 173
+              columnas, hasta las 71 columnas seleccionadas y los 70 predictores usados por el modelo M-GCECDL.
+            </p>
+          </div>
+
+          <div class="detail-stats">
+            <article><strong>164.896</strong><span>filas originales</span></article>
+            <article><strong>273</strong><span>columnas después del enriquecimiento climático</span></article>
+            <article><strong>173</strong><span>columnas conservadas en la versión v3</span></article>
+            <article><strong>71</strong><span>columnas seleccionadas, incluido el objetivo</span></article>
+            <article><strong>70</strong><span>predictores finales del modelo</span></article>
+          </div>
+
+          <div class="detail-block">
+            <h3>Resumen de los datos originales</h3>
+            <p>
+              Cada fila representa la relación entre una falla, el vano afectado, su equipo de protección,
+              atributos eléctricos y físicos, e información climática horaria. El archivo enriquecido contiene
+              48 columnas base y nueve familias climáticas con 25 horas cada una: <code>48 + 9 × 25 = 273</code>.
+            </p>
+            <div class="table-wrap wide-table">
+              <table>
+                <thead><tr><th>Índice</th><th>CIRCUITO</th><th>FID_SW</th><th>COD_EQ_PROTEGE</th><th>FID_VANO</th><th>T_USUS_EQ_PROT</th><th>LVSW</th><th>CNT_VN</th><th>CNT_VN_SW</th><th>FECHA</th><th>DURACION</th><th>…</th><th>clouds_15</th><th>clouds_16</th><th>clouds_17</th><th>clouds_18</th><th>clouds_19</th><th>clouds_20</th><th>clouds_21</th><th>clouds_22</th><th>clouds_23</th><th>clouds_24</th></tr></thead>
+                <tbody>
+                  <tr><td>0</td><td>AGU23L14</td><td>20142930</td><td>AGU23L14</td><td>20139439</td><td>1821</td><td>2,568</td><td>16</td><td>22</td><td>2025-11-03 23:56:04</td><td>0,008</td><td>…</td><td>100</td><td>100</td><td>100</td><td>100</td><td>100</td><td>100</td><td>100</td><td>100</td><td>100</td><td>100</td></tr>
+                  <tr><td>1</td><td>AGU23L14</td><td>20142930</td><td>AGU23L14</td><td>20139439</td><td>1821</td><td>2,568</td><td>16</td><td>22</td><td>2025-11-18 17:08:14</td><td>0,008</td><td>…</td><td>100</td><td>100</td><td>84</td><td>99</td><td>99</td><td>98</td><td>98</td><td>97</td><td>98</td><td>100</td></tr>
+                  <tr><td>2</td><td>AGU23L14</td><td>20142930</td><td>AGU23L14</td><td>20139439</td><td>1821</td><td>2,568</td><td>16</td><td>22</td><td>2025-11-19 20:25:50</td><td>0,008</td><td>…</td><td>79</td><td>99</td><td>100</td><td>100</td><td>100</td><td>97</td><td>100</td><td>100</td><td>99</td><td>98</td></tr>
+                  <tr class="ellipsis-row"><td>…</td><td colspan="21">164.886 registros intermedios</td></tr>
+                  <tr><td>164891</td><td>GTO23L13</td><td>31291927</td><td>L22261</td><td>357636441</td><td>15</td><td>1,657</td><td>17</td><td>21</td><td>2025-11-16 06:55:00</td><td>8,833</td><td>…</td><td>100</td><td>100</td><td>88</td><td>61</td><td>98</td><td>55</td><td>68</td><td>87</td><td>100</td><td>100</td></tr>
+                  <tr><td>164895</td><td>GTO23L13</td><td>31291927</td><td>L22261</td><td>357636454</td><td>15</td><td>2,142</td><td>21</td><td>21</td><td>2025-11-16 06:55:00</td><td>8,833</td><td>…</td><td>100</td><td>100</td><td>88</td><td>61</td><td>98</td><td>55</td><td>68</td><td>87</td><td>100</td><td>100</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Trazabilidad de columnas: 273 → 173 → 71 → 70</h3>
+            <div class="process-grid">
+              <article><strong>273 → 173</strong><p>Se retiran las 25 horas de <code>{climateFamiliesExcludedFromV3.slice(0, 4).join(", ")}</code>: cuatro familias completas, equivalentes a 100 columnas.</p></article>
+              <article><strong>173 → 71</strong><p>El Excel conserva 22 variables base, cuatro familias climáticas y <code>UITI_VANO</code>. Cada familia se limita a los rezagos <code>0…11</code>.</p></article>
+              <article><strong>102 descartadas</strong><p>Se excluyen 25 columnas base con <code>SELECCIÓN = 0</code>, la familia <code>clouds</code> y 52 columnas climáticas de rezagos <code>12…24</code>.</p></article>
+              <article><strong>71 → 70</strong><p><code>UITI_VANO</code> se separa como variable objetivo; las 70 columnas restantes forman la matriz del modelo.</p></article>
+            </div>
+            <p><strong>Columnas base no usadas por el modelo:</strong></p>
+            <div class="feature-list">{baseColumnsExcludedFromModel.map((column) => <code>{column}</code>)}</div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Grafo original de variables</h3>
+            <p>
+              El grafo no representa una etapa de reducción del dataset. Conserva todas las variables del catálogo:
+              48 variables base y las nueve familias climáticas, usando solo 12 horas por familia. Por eso contiene
+              <strong>156 nodos</strong>: <code>48 + 9 × 12</code>.
+            </p>
+            <iframe class="graph-frame" src={grafoRedNivel2} title="Grafo original de la red Nivel 2"></iframe>
+          </div>
+
+          <div class="detail-block">
+            <h3>Vacíos después de completar con API</h3>
+            <p>
+              El reporte se calcula antes de la limpieza final. Los mayores vacíos se concentran en datos del
+              transformador y riesgo de vegetación; esto evidencia qué atributos no retornó la fuente externa.
+            </p>
+            <div class="table-wrap compact-table">
+              <table><thead><tr><th>Columna</th><th>Vacíos API</th><th>Porcentaje</th></tr></thead><tbody>
+                {vaciosApi.map(([columna, vacios, porcentaje]) => <tr><td>{columna}</td><td>{vacios}</td><td>{porcentaje}</td></tr>)}
+              </tbody></table>
+            </div>
+          </div>
+
+          <div class="detail-block cleaning-block">
+            <h3>Tratamiento aplicado y generación de la versión v3</h3>
+            <div class="process-grid">
+              <article><strong>1. Imputación numérica</strong><p>Se reemplazan por cero los vacíos de consumos, riesgo, usuarios y capacidad nominal.</p></article>
+              <article><strong>2. Imputación textual</strong><p><code>CALIBRE_NEUTRO</code> vacío se representa con la categoría <code>"0"</code>.</p></article>
+              <article><strong>3. Consistencia temporal</strong><p><code>FECHA_OPERACION_TRF</code> toma la fecha de operación del vano cuando falta.</p></article>
+              <article><strong>4. Criterio de calidad</strong><p>Se eliminan 5.426 filas sin <code>ALTURA</code> y se vuelve a auditar el resultado.</p></article>
+            </div>
+            <p class="note-callout">La limpieza resuelve los campos operativos definidos por el flujo. Las columnas no imputadas se conservan para auditoría y se reportan nuevamente antes del entrenamiento.</p>
+          </div>
+
+          <div class="detail-block">
+            <h3>Variables seleccionadas</h3>
+            <p>
+              El archivo <code>Variables_seleccion.xlsx</code> evalúa 57 entradas y marca 27: una corresponde al
+              objetivo, 22 son predictores base y cuatro son familias climáticas que se expanden en 12 horas cada una.
+              Esto produce 71 columnas seleccionadas, incluyendo <code>UITI_VANO</code>, y 70 predictores después
+              de separar el objetivo.
+            </p>
+            <div class="table-wrap compact-table">
+              <table><thead><tr><th>Variable</th><th>Descripción</th><th>Uso</th></tr></thead><tbody>
+                {variablesSeleccionadas.map(([nombre, descripcion, uso]) => <tr><td><code>{nombre}</code></td><td>{descripcion}</td><td>{uso}</td></tr>)}
+              </tbody></table>
+            </div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Grafo con variables seleccionadas</h3>
+            <p>La segunda vista concentra el análisis en las variables que alimentan el modelo y sus relaciones técnicas.</p>
+            <iframe class="graph-frame" src={grafoRedNivel2Seleccionadas} title="Grafo de variables seleccionadas"></iframe>
+          </div>
+          <a class="back-link bottom" href="#arquitectura">← Volver al simulador multimodal</a>
+        </div>
+      </section>
+
+      <section id="historial-rag" class="detail-panel" aria-labelledby="historial-title">
+        <div class="detail-shell">
+          <a class="back-link" href="#arquitectura">← Volver al simulador multimodal</a>
+          <div class="section-heading">
+            <p class="eyebrow">Componente 02</p>
+            <h2 id="historial-title">Historial y RAG</h2>
+            <p>
+              Construcción de una memoria técnica verificable a partir de reportes expertos en PDF y su uso
+              posterior como contexto documental para comparar el análisis histórico, el modelo predictivo y
+              la evidencia operacional disponible.
+            </p>
+          </div>
+
+          <div class="detail-stats">
+            <article><strong>8</strong><span>PDFs técnicos de entrada</span></article>
+            <article><strong>14</strong><span>discusiones expertas validadas</span></article>
+            <article><strong>5</strong><span>columnas del Excel base</span></article>
+            <article><strong>3</strong><span>agentes LLM en el flujo v3</span></article>
+          </div>
+
+          <div class="detail-block">
+            <h3>Proceso de extracción PDF</h3>
+            <p>
+              El proceso transforma documentos técnicos en una tabla auditable. No usa embeddings, FAISS,
+              Chroma ni una base vectorial: el control se hace mediante fragmentos trazables, una skill de
+              extracción y validación de campos.
+            </p>
+            <div class="process-grid">
+              {pdfExtractionSteps.map(([paso, descripcion]) => (
+                <article><strong>{paso}</strong><p>{descripcion}</p></article>
+              ))}
+            </div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Tabla base de discusiones técnicas</h3>
+            <p>
+              El resultado queda en <code>tabla_pdfs_intervalo_2025-11-01_2026-04-30.xlsx</code>.
+              Esta tabla es la entrada documental que luego permite buscar coincidencias temporales y técnicas
+              con el circuito analizado.
+            </p>
+            <div class="table-wrap compact-table">
+              <table>
+                <thead>
+                  <tr>{pdfDiscussionColumns.map((column) => <th>{column}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {pdfDiscussionRows.map((row) => (
+                    <tr>{row.map((value) => <td>{value}</td>)}</tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Flujo de generación de reportes</h3>
+            <p>
+              La generación del reporte coordina tres salidas complementarias: primero explica los datos
+              históricos, luego interpreta la inferencia del modelo M-GCECDL y finalmente compara ambos
+              resultados contra la memoria experta de los PDFs.
+            </p>
+            <div class="process-grid model-process">
+              {llmNotebookFlow.map(([agente, descripcion]) => (
+                <article><strong>{agente}</strong><p>{descripcion}</p></article>
+              ))}
+            </div>
+            <p class="note-callout">
+              Los dos primeros RAG producen diagnósticos independientes. El RAG de contraste experto no reemplaza
+              esos análisis: los compara con las discusiones expertas para marcar coincidencias, diferencias y
+              variables a priorizar.
+            </p>
+          </div>
+          <a class="back-link bottom" href="#arquitectura">← Volver al simulador multimodal</a>
+        </div>
+      </section>
+
+      <section id="agente-base" class="detail-panel" aria-labelledby="agente-base-title">
+        <div class="detail-shell">
+          <a class="back-link" href="#arquitectura">← Volver al simulador multimodal</a>
+          <div class="section-heading">
+            <p class="eyebrow">Agente base</p>
+            <h2 id="agente-base-title">Descriptor histórico del circuito</h2>
+            <p>
+              Construye el paquete histórico que interpreta el primer LLM del reporte. El flujo selecciona
+              circuito y ventana, agrupa eventos por día, detecta puntos críticos y prepara un contexto
+              estructurado con métricas, causas observadas, variables disponibles, faltantes y relaciones del
+              grafo. El LLM no decide esos cálculos: los recibe ya determinados por Python.
+            </p>
+          </div>
+          <div class="detail-block">
+            <h3>Selección de circuito y ventana</h3>
+            <p>
+              Esta etapa define el alcance del análisis antes de cualquier llamada al LLM. La selección controla
+              qué registros entran a la serie diaria, qué mapa se exporta como apoyo visual y qué fechas pueden
+              aparecer después en el JSON validado.
+            </p>
+            <div class="process-grid">
+              <article><strong>Circuito</strong><p>Si existe una selección explícita, se toma el primer circuito seleccionado. Si no existe, se usa el primer circuito disponible en la base.</p></article>
+              <article><strong>Fechas</strong><p>La ventana usa fecha inicial y final cuando están definidas; si no, trabaja con el período disponible para el circuito.</p></article>
+              <article><strong>Agrupación</strong><p>Los eventos filtrados se agrupan por día para construir la serie diaria de UITI_VANO y número de eventos.</p></article>
+              <article><strong>Mapa</strong><p>El mapa colorea vanos por número de eventos para mostrar la distribución espacial de la recurrencia.</p></article>
+            </div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Mapa base del circuito</h3>
+            <p>
+              El mapa se exporta como referencia para el usuario y para la trazabilidad del reporte. No es la
+              fuente primaria del razonamiento del LLM: la fuente primaria es el contexto estructurado con
+              circuito, vanos, conteos, fechas y resumen de eventos. El mapa permite verificar visualmente que
+              el análisis corresponde al circuito y ventana seleccionados.
+            </p>
+            <iframe class="graph-frame compact-frame" src={baseCircuitMap} title="Mapa base del circuito seleccionado"></iframe>
+          </div>
+
+          <div class="detail-block">
+            <h3>Estimación de puntos críticos</h3>
+            <div class="process-grid">
+              <article><strong>Serie diaria</strong><p>Se construye una tabla diaria desde los eventos filtrados del circuito y la ventana seleccionada.</p></article>
+              <article><strong>Features diarias</strong><p>Se calculan variables derivadas sobre UITI_VANO para comparar magnitud, comportamiento local y recurrencia.</p></article>
+              <article><strong>Razones</strong><p>El detector asigna motivos técnicos a cada día candidato usando umbrales de criticidad configurados.</p></article>
+              <article><strong>Ranking</strong><p>Los candidatos se ordenan y se conservan hasta el máximo de puntos críticos definido para el análisis.</p></article>
+            </div>
+            <div class="formula-box">
+              <p><strong>Base diaria:</strong> primero se resume la información por día, acumulando el impacto UITI_VANO de los eventos y contando cuántos registros ocurrieron en esa fecha.</p>
+              <p><strong>Comportamiento esperado:</strong> cada día se compara contra la línea base de la ventana usando una medida robusta, menos sensible a valores extremos que un promedio simple.</p>
+              <p><strong>Cambios bruscos:</strong> el flujo revisa si el impacto de un día sube de forma marcada frente al día anterior, porque un salto repentino puede señalar una condición operativa relevante.</p>
+              <p><strong>Peso dentro del período:</strong> también se mide cuánto aporta cada día al impacto total de la ventana; así se identifican fechas que concentran una parte importante del problema.</p>
+              <p><strong>Candidatos:</strong> un día se considera crítico si combina señales como valor alto, salto positivo, aporte relevante al total o pico local frente a los días vecinos.</p>
+              <p><strong>Selección final:</strong> cada candidato recibe un puntaje técnico, se ordena por criticidad e impacto, y se conservan los puntos definidos para alimentar el análisis del agente base.</p>
+            </div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Visual de puntos críticos</h3>
+            <p>
+              La visualización muestra la misma selección que entra al contexto del agente base: serie diaria,
+              número de eventos y fechas críticas detectadas por reglas determinísticas. Su función es auditar
+              qué días fueron entregados al LLM como puntos de discusión; el agente solo puede referirse a esas
+              fechas si existen en el contexto.
+            </p>
+            <iframe class="graph-frame compact-frame" src={baseCriticalPoints} title="Puntos críticos del circuito seleccionado"></iframe>
+          </div>
+
+          <div class="detail-block">
+            <h3>Skills y contrato del agente base</h3>
+            <p>
+              Con el circuito, la ventana, la serie diaria y los puntos críticos ya calculados, el LLM recibe
+              un paquete de contexto estructurado. Ese paquete incluye resumen temporal, métricas agregadas,
+              identificadores de puntos críticos, causas registradas en los datos, variables disponibles,
+              columnas opcionales faltantes y relaciones del grafo. Las skills indican cómo convertir ese
+              contexto en explicación sin inventar fechas, causas, variables ni relaciones.
+            </p>
+            <div class="process-grid">
+              <article><strong>Structured context builder</strong><p>Construye el paquete que el LLM recibe: selección, métricas diarias, puntos críticos, variables disponibles y faltantes.</p></article>
+              <article><strong>Behavior explainer</strong><p>Convierte serie, causas observadas y puntos críticos en hipótesis históricas verificables.</p></article>
+              <article><strong>Graph guardrails</strong><p>Permite usar relaciones del grafo como apoyo de contexto, sin afirmar causalidad fuera de lo entregado.</p></article>
+              <article><strong>Base output contract</strong><p>Define las secciones y referencias obligatorias del JSON para integrarlo al reporte HTML.</p></article>
+            </div>
+            <p class="note-callout">
+              La salida esperada no es texto libre: es un JSON de análisis con secciones, referencias a fechas
+              y puntos críticos existentes, hipótesis y limitaciones. La validación comprueba ese JSON antes de
+              convertirlo en contenido del reporte.
+            </p>
+          </div>
+
+          <div class="detail-block">
+            <h3>Validación y reparación del JSON</h3>
+            <p>
+              Esta etapa protege el flujo. Antes de mostrar resultados, el sistema revisa que la respuesta del
+              LLM cumpla el contrato, use identificadores reales del contexto y no introduzca referencias que no
+              fueron calculadas por el cuaderno.
+            </p>
+            <div class="process-grid">
+              <article><strong>Intento base</strong><p>El prompt inicial se envía al LLM con el paquete de contexto y el contrato de salida.</p></article>
+              <article><strong>Validación</strong><p>La respuesta se valida contra el esquema y contra identificadores presentes en el contexto.</p></article>
+              <article><strong>Artefactos inválidos</strong><p>Si la salida no valida, se guarda el texto crudo y los errores para auditoría.</p></article>
+              <article><strong>Reparación</strong><p>El prompt de reparación pide corregir solo el JSON final. Si vuelve a fallar, se reintenta con mayor presupuesto de salida.</p></article>
+            </div>
+            <p class="note-callout">
+              Si después de los reintentos no existe un JSON válido, el flujo detiene la generación del HTML.
+              Así la página y el reporte no presentan análisis que no cumpla el contrato.
+            </p>
+          </div>
+          <a class="back-link bottom" href="#arquitectura">← Volver al simulador multimodal</a>
+        </div>
+      </section>
+
+      <section id="agente-rag" class="detail-panel" aria-labelledby="rag-title">
+        <div class="detail-shell">
+          <a class="back-link" href="#arquitectura">← Volver al simulador multimodal</a>
+          <div class="section-heading">
+            <p class="eyebrow">Agente extractor</p>
+            <h2 id="rag-title">Extractor documental de discusiones técnicas</h2>
+            <p>
+              Construye la memoria documental que luego usan los agentes de reporte. El flujo toma reportes
+              expertos en PDF, los divide en fragmentos trazables y pide al LLM que genere una fila estructurada
+              únicamente cuando el fragmento contiene una discusión técnica con evidencia y fecha comparable.
+            </p>
+          </div>
+
+          <div class="detail-block">
+            <h3>Selección de documentos y ventana</h3>
+            <p>
+              El flujo parte de los reportes técnicos disponibles y de una ventana de fechas definida por el
+              usuario. Cada PDF se asocia a un circuito desde el nombre del archivo; si el nombre no permite
+              identificar el circuito, ese documento no se usa para generar filas de la tabla.
+            </p>
+            <div class="process-grid">
+              <article><strong>PDFs de entrada</strong><p>Se recorren los reportes expertos almacenados para el análisis documental.</p></article>
+              <article><strong>Circuito del PDF</strong><p>El circuito se toma del nombre del archivo y se conserva como identificador obligatorio de la fila.</p></article>
+              <article><strong>Ventana solicitada</strong><p>La discusión solo se acepta si su fecha o intervalo se traslapa con el rango definido para la tabla.</p></article>
+              <article><strong>Período del informe</strong><p>Cuando el documento declara un período general, este puede usarse solo si la discusión no trae una fecha más específica.</p></article>
+            </div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Extracción y segmentación del texto</h3>
+            <p>
+              Antes de llamar al LLM, el cuaderno hace una limpieza determinística: extrae el texto página por
+              página, agrupa páginas en fragmentos manejables y filtra candidatos con señales mínimas de utilidad
+              técnica. Así el agente no interpreta documentos completos sin control; interpreta unidades
+              pequeñas con página de origen, circuito, período y ventana de comparación.
+            </p>
+            <div class="process-grid">
+              <article><strong>Texto por página</strong><p>Se usa extracción directa del PDF y se advierte cuando una página no tiene texto recuperable.</p></article>
+              <article><strong>Fragmentos</strong><p>Las páginas se agrupan por tamaño de texto, conservando el rango de páginas de origen.</p></article>
+              <article><strong>Filtro inicial</strong><p>Un fragmento entra como candidato si contiene términos técnicos y alguna señal de fecha, circuito o período asociado.</p></article>
+              <article><strong>Trazabilidad</strong><p>Cada fragmento conserva nombre del PDF, páginas, circuito detectado y período general disponible.</p></article>
+            </div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Skill y contrato del extractor</h3>
+            <p>
+              El LLM recibe un fragmento candidato con sus metadatos: ventana solicitada, nombre del PDF,
+              circuito heredado del archivo, páginas de origen, período general del informe y texto del
+              fragmento. La skill funciona como filtro experto: decide si hay discusión técnica suficiente,
+              asigna fechas con una jerarquía definida y produce una fila solo si puede sostenerla con evidencia
+              textual del propio fragmento.
+            </p>
+            <div class="process-grid">
+              <article><strong>PDF discussion extractor</strong><p>Convierte fragmentos útiles en filas documentales; si no hay evidencia suficiente, debe descartar.</p></article>
+              <article><strong>Reglas de fecha</strong><p>Ordenan la decisión temporal: fecha explícita, fecha de tabla/evento, mantenimiento asociado o período general del informe.</p></article>
+              <article><strong>Reglas de circuito</strong><p>Evitan mezclar activos: el circuito sale del nombre del PDF y no de menciones internas inconsistentes.</p></article>
+              <article><strong>Contrato de salida</strong><p>Exige JSON con decisión de incluir o descartar, fechas normalizadas, análisis breve y evidencia textual.</p></article>
+            </div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Validación y generación de la tabla</h3>
+            <p>
+              Cada salida del LLM se parsea como JSON y se valida antes de entrar al Excel. Si no se puede
+              parsear, si falta una columna, si la fecha es inválida o si la discusión no se traslapa con la
+              ventana solicitada, la salida se guarda como inválida y no alimenta la tabla final.
+            </p>
+            <div class="process-grid">
+              <article><strong>Parseo JSON</strong><p>Se extrae el objeto JSON de la respuesta y se descarta cualquier salida que no pueda leerse de forma estructurada.</p></article>
+              <article><strong>Campos obligatorios</strong><p>La fila solo pasa si contiene circuito, fechas, análisis y evidencia.</p></article>
+              <article><strong>Control temporal</strong><p>Las fechas se normalizan y se revisa que estén dentro o se crucen con el rango solicitado.</p></article>
+              <article><strong>Artefactos</strong><p>Se guardan prompts, contextos, salidas crudas y errores para auditar cómo se construyó la tabla.</p></article>
+            </div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Tabla documental generada</h3>
+            <p>
+              El resultado no es un resumen completo de los PDFs. Es una tabla de memoria técnica: conserva
+              solo discusiones validadas, con fecha y evidencia, para que más adelante el flujo pueda comparar
+              análisis histórico, modelo predictivo y evidencia documental sin volver a leer documentos crudos.
+            </p>
+            <div class="table-wrap compact-table">
+              <table>
+                <thead>
+                  <tr>{pdfDiscussionColumns.map((column) => <th>{column}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {pdfDiscussionRows.map((row) => (
+                    <tr>{row.map((value) => <td>{value}</td>)}</tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <a class="back-link bottom" href="#arquitectura">← Volver al simulador multimodal</a>
+        </div>
+      </section>
+
+      <section id="orquestador-mgcecdl" class="detail-panel" aria-labelledby="orquestador-title">
+        <div class="detail-shell">
+          <a class="back-link" href="#arquitectura">← Volver al simulador multimodal</a>
+          <div class="section-heading">
+            <p class="eyebrow">Agente predictivo</p>
+            <h2 id="orquestador-title">Modelo predictivo M-GCECDL</h2>
+            <p>
+              Ejecuta el clasificador M-GCECDL sobre las variables del vano y organiza sus salidas para el
+              reporte: nivel de criticidad, probabilidades, confiabilidad modal, variables relevantes y grafos
+              de apoyo. En esta etapa la variable objetivo UITI_VANO no se usa como predictor.
+            </p>
+          </div>
+
+          <div class="detail-block">
+            <h3>Características del modelo</h3>
+            <div class="process-grid">
+              <article><strong>Dos modos</strong><p>Entrena entradas climáticas/exógenas y estructurales/endógenas por separado antes de fusionarlas.</p></article>
+              <article><strong>70 predictores</strong><p>Usa 50 variables climáticas y 20 variables estructurales; UITI_VANO queda separado como objetivo.</p></article>
+              <article><strong>Clasificación ordinal</strong><p>Convierte UITI_VANO en niveles de criticidad para priorizar el riesgo operativo del vano.</p></article>
+              <article><strong>Salida multimodal</strong><p>Entrega predicción fusionada, salidas por modo y confiabilidad relativa de cada modo.</p></article>
+            </div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Entrenamiento, costo y Optuna</h3>
+            <p>
+              El entrenamiento combina la pérdida de clasificación fusionada con pérdidas auxiliares por modo,
+              acuerdo entre modos, regularización de confiabilidad y componentes de reconstrucción del grafo.
+              Optuna busca una configuración estable en vez de fijar manualmente todos los pesos del modelo.
+            </p>
+            <div class="process-grid">
+              <article><strong>Función de costo</strong><p>Usa Generalized Cross Entropy para la salida fusionada y para las salidas por modo, más penalizaciones de acuerdo, regularización, reconstrucción e información mutua.</p></article>
+              <article><strong>Arquitectura</strong><p>Optuna explora <code>hidden_dim</code> 128/192/256, <code>embed_dim</code> 64/96/128, dropout 0-0,25 y temperatura 0,5-2,0.</p></article>
+              <article><strong>Optimización</strong><p>Explora learning rate 1e-4 a 1e-1, weight decay 1e-6 a 1e-4, batch 256/512/1024 y optimizador Adam, AdamW, SGD o RMSprop.</p></article>
+              <article><strong>Pesos de pérdida</strong><p>Ajusta <code>q</code>, <code>q_d</code>, pesos de supervisión, acuerdo, regularización, reconstrucción e información mutua.</p></article>
+            </div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Rendimiento del modelo</h3>
+            <p>
+              Antes de usar el modelo en reportes, el flujo de rendimiento carga el mejor clasificador,
+              evalúa la clasificación y guarda visuales generales. La matriz de confusión muestra errores por
+              clase; la curva ROC revisa separación entre niveles de criticidad.
+            </p>
+            <div class="visual-grid">
+              <figure>
+                <img src={mgcecdlConfusionMatrix.src} alt="Matriz de confusión del modelo M-GCECDL" />
+                <figcaption>Control de clasificación por nivel de criticidad.</figcaption>
+              </figure>
+              <figure>
+                <img src={mgcecdlRocCurve.src} alt="Curvas ROC multiclase del modelo M-GCECDL" />
+                <figcaption>Validación de separación entre clases.</figcaption>
+              </figure>
+            </div>
+          </div>
+
+          <div class="detail-block">
+            <h3>SHAP, Borda y variables relevantes</h3>
+            <p>
+              En la generación de reportes, el modelo predictivo no entrega una sola explicación global. El
+              flujo arma escenarios para el período completo y para las fechas críticas elegidas por el agente
+              base; en cada ventana compara vanos priorizados por severidad UITI_VANO y por frecuencia de
+              eventos. Para cada escenario calcula Kernel SHAP por evento, conserva el Top-20 de variables y
+              agrega esas posiciones con Borda ponderado por la magnitud SHAP.
+            </p>
+            <div class="formula-box">
+              <p><strong>Función de Borda:</strong> convierte el ranking Top-20 de cada evento en un puntaje acumulable. La posición 1 recibe 20 puntos base, la posición 2 recibe 19 y así hasta la posición 20, que recibe 1.</p>
+              <p><strong>Ejemplo coherente con el flujo:</strong> una variable en puesto 1 con SHAP 0,20 suma 20 × 0,20 = 4,00. Otra en puesto 3 con SHAP 0,12 suma 18 × 0,12 = 2,16.</p>
+              <p>Al sumar muchos eventos, Borda cuantifica persistencia en el ranking y SHAP cuantifica intensidad de atribución. Luego el resultado se normaliza para ordenar variables comparables dentro del escenario.</p>
+              <p>Esta lectura alimenta las skills como priorización predictiva: ayuda a decir qué variables revisó el modelo y con qué recurrencia relativa, pero no convierte SHAP ni Borda en causalidad física.</p>
+            </div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Ejemplo visual del escenario predictivo</h3>
+            <p>
+              El LLM recibe, para cada escenario, un paquete estructurado con tres salidas principales:
+              variables Top-20 agregadas por SHAP+Borda, puntajes agregados por modo y ruta del grafo estimado.
+              Ese paquete se genera tanto para el período completo como para las fechas críticas seleccionadas
+              por el agente base. Aquí se muestra un ejemplo del escenario <strong>Top P97 por UITI_VANO —
+              período completo</strong>; los demás escenarios siguen la misma lógica.
+            </p>
+            <div class="visual-grid predictive-visual-grid">
+              <figure>
+                <img src={mgcecdlTopUitiPeriodoBarras.src} alt="Barras SHAP y Borda del escenario Top P97 por UITI_VANO" />
+                <figcaption><strong>Barras SHAP+Borda.</strong> Le entregan a la skill de comportamiento predictivo qué variables de entrada debe discutir primero y cuáles quedan como señales secundarias.</figcaption>
+              </figure>
+              <figure>
+                <img src={mgcecdlTopUitiPeriodoRadar.src} alt="Radar de modos del escenario Top P97 por UITI_VANO" />
+                <figcaption><strong>Radar de modos.</strong> Le indica al agente si la explicación debe centrarse en el modo climático/exógeno, el estructural/endógeno o en una combinación de ambos.</figcaption>
+              </figure>
+              <figure>
+                <iframe class="graph-frame compact-frame" src={grafoTopUitiPeriodoMgcecdl} title="Grafo estimado MGCECDL del escenario Top P97 por UITI_VANO"></iframe>
+                <figcaption><strong>Grafo estimado.</strong> Alimenta la skill de conectividad: permite revisar relaciones relativas entre variables priorizadas sin afirmar causalidad directa.</figcaption>
+              </figure>
+            </div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Skills del agente predictivo</h3>
+            <p>
+              El LLM no recibe solo imágenes. Recibe un contexto estructurado con escenarios, criterios de
+              selección, top variables SHAP+Borda, puntajes por modo, rutas de grafos y metadatos del modelo.
+              Las skills convierten ese paquete en discusión técnica: primero identifican el escenario, luego
+              leen variables priorizadas, después interpretan el balance modal y finalmente usan el grafo como
+              apoyo de conectividad.
+            </p>
+            <div class="process-grid">
+              <article><strong>Circuit scenario interpreter</strong><p>Toma cada escenario del cuaderno y ordena la lectura por período completo, frecuencia, UITI_VANO o puntos críticos.</p></article>
+              <article><strong>UITI_VANO behavior explainer</strong><p>Usa las barras SHAP+Borda y el radar para redactar hipótesis predictivas sobre variables y modos dominantes.</p></article>
+              <article><strong>Graph connectivity guardrails</strong><p>Usa el grafo estimado como soporte de conectividad y evita presentar esas conexiones como causalidad física comprobada.</p></article>
+              <article><strong>Inference output contract</strong><p>Define el JSON que debe producir el agente para que el reporte pueda integrar escenarios, hallazgos, grafos y limitaciones.</p></article>
+            </div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Validaciones de salida</h3>
+            <p>
+              La respuesta del agente predictivo se valida antes de mostrarse: debe respetar el esquema,
+              referenciar escenarios existentes, no incluir UITI_VANO como variable predictora priorizada y
+              separar claramente predicción, importancia de variables y lectura operativa.
+            </p>
+            <div class="process-grid">
+              <article><strong>Contrato estructurado</strong><p>La salida debe ser JSON válido con secciones esperadas para el reporte.</p></article>
+              <article><strong>Variables permitidas</strong><p>La priorización se limita a variables que realmente recibe el modelo.</p></article>
+              <article><strong>Escenarios válidos</strong><p>Solo puede hablar de escenarios SHAP, barras, radar y grafos generados por el flujo.</p></article>
+              <article><strong>Control conceptual</strong><p>Debe declarar que SHAP, Borda y grafos explican asociaciones del modelo, no causalidad definitiva.</p></article>
+            </div>
+          </div>
+          <a class="back-link bottom" href="#arquitectura">← Volver al simulador multimodal</a>
+        </div>
+      </section>
+
+      <section id="agente-causalidad" class="detail-panel" aria-labelledby="causalidad-title">
+        <div class="detail-shell">
+          <a class="back-link" href="#arquitectura">← Volver al simulador multimodal</a>
+          <div class="section-heading">
+            <p class="eyebrow">Agente de alineación experta</p>
+            <h2 id="causalidad-title">Contraste experto y priorización operativa</h2>
+            <p>
+              Compara tres fuentes ya estructuradas: el análisis histórico del agente base, la interpretación
+              del modelo predictivo y las filas expertas extraídas desde PDFs. Su objetivo no es demostrar
+              causalidad, sino separar coincidencias, diferencias y variables del modelo que merecen revisión
+              operativa.
+            </p>
+          </div>
+
+          <div class="detail-block">
+            <h3>Entradas que recibe el agente</h3>
+            <p>
+              El agente no lee PDFs ni ejecuta búsquedas externas. Recibe una tabla de coincidencias documentales
+              ya filtrada por cercanía temporal, el JSON validado del análisis histórico, el JSON validado del
+              modelo predictivo, las fechas del informe y la lista exacta de variables que el modelo recibe como
+              entrada.
+            </p>
+            <div class="process-grid">
+              <article><strong>Análisis histórico</strong><p>Aporta comportamiento diario, puntos críticos, causas observadas, limitaciones y lectura de datos históricos.</p></article>
+              <article><strong>Modelo predictivo</strong><p>Aporta escenarios, Top-20 SHAP+Borda, modos, grafos estimados y variables relevantes del M-GCECDL.</p></article>
+              <article><strong>Reportes expertos</strong><p>Aportan filas documentales ya extraídas y seleccionadas desde la tabla de discusiones técnicas.</p></article>
+              <article><strong>Variables permitidas</strong><p>Limita la priorización a variables reales del modelo predictivo; UITI_VANO queda como objetivo, no predictor.</p></article>
+            </div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Método de contraste</h3>
+            <p>
+              La comparación distingue soporte temporal, soporte temático y soporte predictivo. Una coincidencia
+              puede surgir porque el histórico, el modelo y los reportes expertos apuntan al mismo fenómeno; una
+              diferencia aparece cuando una fuente explica algo que las otras no respaldan o cuando el modelo
+              prioriza variables que no están documentadas por los reportes expertos.
+            </p>
+            <div class="process-grid">
+              <article><strong>Coincidencias</strong><p>Resume acuerdos ejecutivos entre análisis histórico, modelo predictivo y reportes expertos.</p></article>
+              <article><strong>Diferencias</strong><p>Separa tensiones: señales del modelo sin respaldo documental, o hallazgos expertos no cubiertos por variables del modelo.</p></article>
+              <article><strong>Variables a priorizar</strong><p>Propone hasta cinco variables de entrada del modelo para revisión operacional, con prioridad y validación sugerida.</p></article>
+              <article><strong>Lenguaje cauteloso</strong><p>Usa asociación, consistencia o posible explicación; no convierte coincidencias temporales en causalidad.</p></article>
+            </div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Uso de grafos para priorizar</h3>
+            <p>
+              El agente usa dos niveles de grafo. El grafo general ayuda a entender rutas técnicas entre
+              protección, topología, activos, entorno y clima. El grafo de variables seleccionadas es el que
+              más pesa para priorizar, porque está alineado con las variables que el modelo predictivo recibe.
+              Si un reporte experto habla de vegetación, protección o descargas, el grafo ayuda a traducir ese
+              hallazgo hacia variables priorizables como <code>NR_T</code>, <code>TIPO</code>, <code>DDT</code>
+              o variables climáticas, siempre que existan en el conjunto del modelo.
+            </p>
+            <iframe class="graph-frame compact-frame" src={grafoRedNivel2Seleccionadas} title="Grafo de variables seleccionadas para alineación experta"></iframe>
+          </div>
+
+          <div class="detail-block">
+            <h3>Skills y contrato de salida</h3>
+            <p>
+              Las skills obligan al agente a usar nombres comprensibles para usuarios expertos en redes:
+              agente de análisis histórico, agente del modelo predictivo y reportes expertos. También controlan
+              que coincidencias y diferencias sean hallazgos ejecutivos, y que las variables priorizadas sean
+              identificadores técnicos reales del modelo.
+            </p>
+            <div class="process-grid">
+              <article><strong>PDF report comparison</strong><p>Compara solo las filas expertas entregadas; no lee PDFs ni usa búsqueda semántica.</p></article>
+              <article><strong>Predictive variable prioritization</strong><p>Convierte coincidencias y diferencias en variables revisables del modelo predictivo.</p></article>
+              <article><strong>Graph context for alignment</strong><p>Usa conexiones del grafo para traducir hallazgos técnicos en variables accionables.</p></article>
+              <article><strong>Contrato JSON</strong><p>Exige contexto, coincidencias, diferencias, brechas, variables a priorizar y síntesis final.</p></article>
+            </div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Validaciones</h3>
+            <p>
+              Antes de mostrarse en el reporte, la salida se valida contra el contexto. El sistema rechaza JSON
+              con texto adicional, fechas fuera del informe, evidencias que no provienen de las filas comparadas,
+              variables inexistentes en el modelo o lenguaje que afirme causalidad directa.
+            </p>
+            <div class="process-grid">
+              <article><strong>JSON estricto</strong><p>La respuesta debe ser un único objeto JSON con las claves esperadas.</p></article>
+              <article><strong>Evidencia permitida</strong><p>Solo puede citar o usar evidencia presente en las filas expertas comparadas.</p></article>
+              <article><strong>Variables válidas</strong><p>Descarta variables no presentes en el modelo predictivo y excluye UITI_VANO como predictor.</p></article>
+              <article><strong>No causalidad</strong><p>Bloquea frases como “demuestra causalidad” o afirmaciones causales no soportadas.</p></article>
+            </div>
+          </div>
+          <a class="back-link bottom" href="#arquitectura">← Volver al simulador multimodal</a>
+        </div>
+      </section>
+
+      <section id="agente-simulacion" class="detail-panel" aria-labelledby="simulacion-title">
+        <div class="detail-shell">
+          <a class="back-link" href="#arquitectura">← Volver al simulador multimodal</a>
+          <div class="section-heading">
+            <p class="eyebrow">Agente 5</p>
+            <h2 id="simulacion-title">Simulación What-If</h2>
+            <p>
+              Estamos trabajando en este módulo. La simulación What-If queda documentada como parte de la
+              arquitectura, pero todavía no se publican resultados ni escenarios simulados en la página.
+            </p>
+          </div>
+          <a class="back-link bottom" href="#arquitectura">← Volver al simulador multimodal</a>
+        </div>
+      </section>
+
+      <section id="agente-informes" class="detail-panel" aria-labelledby="informes-title">
+        <div class="detail-shell">
+          <a class="back-link" href="#arquitectura">← Volver al simulador multimodal</a>
+          <div class="section-heading">
+            <p class="eyebrow">Agente 6</p>
+            <h2 id="informes-title">Generación de informes</h2>
+            <p>
+              Integra los apartados anteriores en un HTML técnico: contexto histórico, puntos críticos,
+              inferencia del modelo predictivo, variables priorizadas, grafos, contraste experto y validaciones
+              de salida. El informe final es el artefacto donde el flujo completo queda reunido para revisión.
+            </p>
+          </div>
+          <div class="detail-block">
+            <h3>Cómo integra el flujo</h3>
+            <div class="process-grid">
+              <article><strong>Histórico</strong><p>Incluye la selección del circuito, serie diaria, puntos críticos y explicación del comportamiento observado.</p></article>
+              <article><strong>Predictivo</strong><p>Agrega escenarios M-GCECDL, variables SHAP+Borda, modos, radar y grafos estimados.</p></article>
+              <article><strong>Experto</strong><p>Contrasta análisis histórico y predictivo con la memoria documental extraída de reportes técnicos.</p></article>
+              <article><strong>Validación</strong><p>Solo presenta salidas que cumplen los contratos JSON y las reglas de referencia del contexto.</p></article>
+            </div>
+          </div>
+          <div class="detail-block">
+            <h3>Último reporte generado</h3>
+            <p>
+              Abre el último reporte HTML disponible generado por el flujo. Se muestra en una pestaña nueva
+              para conservar completa su navegación, tablas, grafos y secciones técnicas.
+            </p>
+            <a class="button primary" href={latestInterpretabilityReport} target="_blank" rel="noreferrer">
+              Abrir último reporte
+            </a>
+          </div>
+          <a class="back-link bottom" href="#arquitectura">← Volver al simulador multimodal</a>
+        </div>
+      </section>
+
+      <section id="modelo-mgcecdl" class="detail-panel" aria-labelledby="modelo-title">
+        <div class="detail-shell">
+          <a class="back-link" href="#arquitectura">← Volver al simulador multimodal</a>
+          <div class="section-heading">
+            <p class="eyebrow">Componente 03</p>
+            <h2 id="modelo-title">Modelo M-GCECDL</h2>
+            <p>
+              Modelo multimodal para clasificar criticidad de UITI_VANO usando dos grupos de entrada:
+              variables climáticas/exógenas y variables estructurales/endógenas del vano. Sus salidas
+              alimentan al agente predictivo M-GCECDL y a los agentes que redactan diagnósticos e informes.
+            </p>
+          </div>
+
+          <div class="detail-block">
+            <h3>Qué hace el preprocesamiento</h3>
+            <div class="process-grid model-process">
+              <article><strong>Carga y filtro</strong><p>Lee CSV, Excel o pickle; convierte <code>FECHA</code> y conserva registros con <code>UITI_VANO ≤ 1000</code>.</p></article>
+              <article><strong>Selección</strong><p>Lee el Excel, valida las marcas y expande cada familia climática desde el rezago 0 hasta el 11.</p></article>
+              <article><strong>Imputación</strong><p>Fechas a timestamp; numéricas vacías a <code>-10 × máximo</code>; categóricas vacías a <code>"no aplica"</code>.</p></article>
+              <article><strong>Codificación</strong><p>Aplica <code>LabelEncoder</code> a categorías y convierte la matriz final a <code>float32</code>.</p></article>
+              <article><strong>Objetivo</strong><p>Organiza <code>UITI_VANO</code> en niveles ordinales de criticidad para entrenamiento supervisado.</p></article>
+              <article><strong>Particiones</strong><p>Genera train, validación y test estratificados: 64 %, 16 % y 20 %, con semilla 42.</p></article>
+            </div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Columnas reales usadas por el modelo</h3>
+            <p><strong>{modelFeatures.length} predictores efectivos:</strong> 22 columnas base y 48 columnas climáticas horarias. <code>UITI_VANO</code> se mantiene separado como objetivo.</p>
+            <div class="feature-list">{modelFeatures.map((feature) => <code>{feature}</code>)}</div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Dos modos de entrada</h3>
+            <div class="process-grid">
+              {mgcecdlModes.map(([modo, cantidad, descripcion]) => (
+                <article>
+                  <strong>{modo}</strong>
+                  <span class="mode-count">{cantidad}</span>
+                  <p>{descripcion}</p>
+                </article>
+              ))}
+            </div>
+            <p class="note-callout">
+              La separación por modos permite contrastar la señal ambiental con la señal física y operativa del vano,
+              sin mezclar sus relaciones antes de la fusión del modelo.
+            </p>
+          </div>
+
+          <div class="detail-block">
+            <h3>Componentes M-GCECDL</h3>
+            <div class="process-grid">
+              {mgcecdlComponents.map(([componente, descripcion]) => (
+                <article><strong>{componente}</strong><p>{descripcion}</p></article>
+              ))}
+            </div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Evaluación del rendimiento</h3>
+            <p>
+              El flujo de rendimiento actualiza imágenes generales para la página: matriz de confusión,
+              curvas ROC e importancia por modos. Estas piezas explican cómo se verifica el modelo antes
+              de usarlo como soporte para reportes.
+            </p>
+            <div class="visual-grid">
+              <figure>
+                <img src={mgcecdlConfusionMatrix.src} alt="Matriz de confusión del modelo M-GCECDL" />
+                <figcaption>Control de clasificación por nivel de criticidad.</figcaption>
+              </figure>
+              <figure>
+                <img src={mgcecdlRocCurve.src} alt="Curvas ROC multiclase del modelo M-GCECDL" />
+                <figcaption>Validación de separación entre clases.</figcaption>
+              </figure>
+              <figure>
+                <img src={mgcecdlModeImportance.src} alt="Importancia por modos del modelo M-GCECDL" />
+                <figcaption>Lectura de importancia agregada por modos de entrada.</figcaption>
+              </figure>
+            </div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Salidas usadas por la página</h3>
+            <p>
+              El modelo produce nivel de criticidad, confiabilidad modal y relevancias por variable o modo.
+              El agente predictivo convierte esas señales en insumos para el análisis del modelo, el cotejo
+              causal y la generación del informe técnico.
+            </p>
+          </div>
+
+          <div class="detail-block">
+            <h3>Modelo M-GCECDL para el Agente 6: Informes</h3>
+            <p>
+              El Agente 6 recibe el contexto histórico, las señales del modelo, las comparaciones expertas
+              y las visualizaciones ya validadas. Con esos insumos compone el último reporte técnico HTML.
+              El reporte más reciente se abre como documento independiente para conservar su navegación completa.
+            </p>
+            <a class="button primary" href={latestInterpretabilityReport} target="_blank" rel="noreferrer">
+              Abrir último reporte
+            </a>
+          </div>
+          <a class="back-link bottom" href="#arquitectura">← Volver al simulador multimodal</a>
+        </div>
+      </section>
+
+      <section id="costos-databricks" class="detail-panel" aria-labelledby="costos-title">
+        <div class="detail-shell">
+          <a class="back-link" href="#arquitectura">← Volver al simulador multimodal</a>
+          <div class="section-heading">
+            <p class="eyebrow">Estimación operativa</p>
+            <h2 id="costos-title">Complemento de estimación de costos en Azure Databricks</h2>
+          </div>
+
+          <div class="detail-block">
+            <h3>Alcance actualizado</h3>
+            <p>
+              Esta estimación asume <strong>una ejecución completa del flujo ya estabilizado</strong>.
+              No incluye iteraciones adicionales para afinar la migración, depurar errores, ajustar rutas,
+              instalar dependencias, repetir notebooks, validar credenciales ni probar diferentes
+              configuraciones de clúster.
+            </p>
+            <p>
+              El inventario técnico indica que el proyecto actual usa PyTorch, Optuna, SHAP y agentes LLM
+              por API externa, principalmente Google Gemini. También existe soporte futuro para Ollama /
+              <code>deepseek-r1:32b</code>, pero no está activo actualmente.
+            </p>
+          </div>
+
+          <div class="detail-block">
+            <h3>Tiempos actualizados del flujo</h3>
+            <div class="table-wrap compact-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Notebook / flujo</th>
+                    <th>Tiempo usado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td><code>01_climate.ipynb</code></td><td>36.5 min</td></tr>
+                  <tr><td><code>01_pdf_discussion_table_from_pdfs.ipynb</code></td><td>2 min</td></tr>
+                  <tr><td><code>02_local_uiti_vano_interpretability_v3.ipynb</code></td><td>5 min</td></tr>
+                  <tr><td><code>02_mgcecdl_optuna_classification_search.ipynb</code></td><td>2 h para 20 trials</td></tr>
+                  <tr><td><code>03_mgcecdl_training.ipynb</code></td><td>10 min para 100 épocas</td></tr>
+                  <tr><td><code>04_mgcecdl_performance.ipynb</code></td><td>1 min</td></tr>
+                  <tr><td><code>05_mgcecdl_circuit_analysis.ipynb</code></td><td>5 min</td></tr>
+                  <tr><td><code>06_mgcecdl_document_replication.ipynb</code></td><td>2 h 30 min</td></tr>
+                  <tr><td><strong>Total aproximado</strong></td><td><strong>5.49 h</strong></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="note-callout">
+              El cambio fuerte está en <code>06_mgcecdl_document_replication.ipynb</code>, porque agrega
+              <strong>2.5 h de T4</strong> al flujo completo.
+            </p>
+          </div>
+
+          <div class="detail-block">
+            <h3>1. Escenario de ajuste interactivo: All-Purpose T4 para todo</h3>
+            <p>
+              Este escenario representa la fase inicial de migración y ajuste dentro de Azure Databricks.
+              Se usa un clúster interactivo All-Purpose con GPU T4 para correr todo el flujo, incluso
+              notebooks que realmente podrían correr en CPU.
+            </p>
+            <p>
+              La familia Azure <code>NCasT4_v3</code> usa NVIDIA Tesla T4 con 16 GB de memoria por GPU.
+              Microsoft documenta que esta familia puede tener hasta 4 T4, cada una con 16 GB de memoria.
+              Como referencia, <code>NC4as_T4_v3</code> aparece alrededor de <strong>USD 0.526/h</strong>
+              on-demand.
+            </p>
+
+            <h4>Supuesto de costo por hora</h4>
+            <div class="table-wrap compact-table">
+              <table>
+                <thead><tr><th>Componente</th><th>Supuesto</th></tr></thead>
+                <tbody>
+                  <tr><td>VM Azure T4 <code>NC4as_T4_v3</code></td><td>~USD 0.526/h</td></tr>
+                  <tr><td>DBU All-Purpose</td><td>USD 0.40–0.55/DBU</td></tr>
+                  <tr><td>Reserva aproximada DBU</td><td>1.0–1.5 DBU/h</td></tr>
+                  <tr><td><strong>Costo total All-Purpose T4 estimado</strong></td><td><strong>USD 0.93–1.35/h</strong></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>
+              Azure Databricks cobra por las VMs provisionadas y por DBU; el consumo de DBU depende del
+              tipo y tamaño del compute.
+            </p>
+
+            <h4>Costo por ejecución completa</h4>
+            <div class="table-wrap compact-table">
+              <table>
+                <thead><tr><th>Caso</th><th>Horas cobradas</th><th>Costo aprox.</th></tr></thead>
+                <tbody>
+                  <tr><td>Sin idle</td><td>5.49 h</td><td><strong>USD 5.11–7.41</strong></td></tr>
+                  <tr><td>Idle +15 min</td><td>5.74 h</td><td><strong>USD 5.34–7.75</strong></td></tr>
+                  <tr><td>Idle +30 min</td><td>5.99 h</td><td><strong>USD 5.57–8.09</strong></td></tr>
+                  <tr><td>Idle +1 h</td><td>6.49 h</td><td><strong>USD 6.04–8.76</strong></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>
+              <strong>Idle</strong> significa que el clúster queda prendido sin ejecutar trabajo útil.
+              Por ejemplo, <code>idle +15 min</code> significa que el flujo terminó, pero el clúster
+              siguió encendido 15 minutos adicionales. Esto importa sobre todo en All-Purpose, porque
+              no se apaga automáticamente al terminar un notebook; depende de auto-termination por
+              inactividad. Databricks documenta que Jobs Compute termina al finalizar la ejecución,
+              mientras que All-Purpose depende del comportamiento del clúster interactivo.
+            </p>
+            <p class="note-callout">
+              <strong>Estimación ejecutiva:</strong> Una ejecución completa en modo interactivo con T4
+              para todo costaría aproximadamente <strong>USD 5–8</strong> si se apaga rápido, y
+              <strong>USD 6–9</strong> si queda algo de idle.
+            </p>
+
+            <h4>Costo de Optuna por trial</h4>
+            <p>La búsqueda actual de Optuna está estimada en <strong>20 trials</strong> y tarda aproximadamente <strong>2 h</strong>.</p>
+            <div class="table-wrap compact-table">
+              <table>
+                <thead><tr><th>Concepto</th><th>Valor</th></tr></thead>
+                <tbody>
+                  <tr><td>Tiempo total Optuna</td><td>2 h</td></tr>
+                  <tr><td>Trials</td><td>20</td></tr>
+                  <tr><td>Costo All-Purpose T4 para 2 h</td><td>USD 1.85–2.70</td></tr>
+                  <tr><td><strong>Costo aproximado por trial</strong></td><td><strong>USD 0.09–0.14/trial</strong></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <blockquote>
+              La búsqueda actual no es una búsqueda masiva; son 20 trials. En All-Purpose T4, esa búsqueda
+              costaría aproximadamente USD 1.85–2.70, equivalente a USD 0.09–0.14 por trial. No incluye
+              repeticiones adicionales de Optuna durante afinamiento.
+            </blockquote>
+
+            <h4>Costo de entrenamiento</h4>
+            <div class="table-wrap compact-table">
+              <table>
+                <thead><tr><th>Entrenamiento</th><th>Tiempo</th><th>Costo aprox.</th></tr></thead>
+                <tbody>
+                  <tr><td>100 épocas con T4</td><td>10 min</td><td><strong>USD 0.15–0.23</strong></td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h4>Costo de <code>06_mgcecdl_document_replication.ipynb</code></h4>
+            <div class="table-wrap compact-table">
+              <table>
+                <thead><tr><th>Notebook</th><th>Tiempo</th><th>Costo aprox.</th></tr></thead>
+                <tbody>
+                  <tr><td><code>06_mgcecdl_document_replication.ipynb</code></td><td>2.5 h</td><td><strong>USD 2.33–3.38</strong></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>Este notebook pasa a ser, junto con Optuna, uno de los principales componentes de costo.</p>
+          </div>
+
+          <div class="detail-block">
+            <h3>2. Costo de LLMs usando API externa</h3>
+            <p>El ciclo completo estimado usa aproximadamente:</p>
+            <div class="table-wrap compact-table">
+              <table>
+                <thead><tr><th>Flujo</th><th>Tokens entrada</th><th>Tokens salida</th></tr></thead>
+                <tbody>
+                  <tr><td>Reporte interpretabilidad + extracción PDF</td><td>~168.000</td><td>~6.200</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>En este volumen, los LLMs por API siguen siendo baratos frente al costo de GPU/DBU.</p>
+
+            <h4>2.1 Google Gemini API</h4>
+            <p>
+              Google publica precios por millón de tokens. Para Gemini 2.5 Flash-Lite, el costo estándar
+              es <strong>USD 0.10/M input</strong> y <strong>USD 0.40/M output</strong>; para Gemini 2.5
+              Flash es <strong>USD 0.30/M input</strong> y <strong>USD 2.50/M output</strong>; para Gemini
+              2.5 Pro, en contexto menor o igual a 200k tokens, es <strong>USD 1.25/M input</strong> y
+              <strong>USD 10/M output</strong>.
+            </p>
+            <div class="table-wrap compact-table">
+              <table>
+                <thead><tr><th>Modelo Google</th><th>Modo</th><th>Input USD/M</th><th>Output USD/M</th><th>Costo aprox. por ciclo</th></tr></thead>
+                <tbody>
+                  <tr><td>Gemini 2.5 Flash-Lite</td><td>Standard</td><td>0.10</td><td>0.40</td><td><strong>USD 0.019</strong></td></tr>
+                  <tr><td>Gemini 2.5 Flash-Lite</td><td>Batch / Flex</td><td>0.05</td><td>0.20</td><td><strong>USD 0.010</strong></td></tr>
+                  <tr><td>Gemini 2.5 Flash</td><td>Standard</td><td>0.30</td><td>2.50</td><td><strong>USD 0.066</strong></td></tr>
+                  <tr><td>Gemini 2.5 Flash</td><td>Batch / Flex</td><td>0.15</td><td>1.25</td><td><strong>USD 0.033</strong></td></tr>
+                  <tr><td>Gemini 2.5 Pro</td><td>Standard, ≤200k tokens</td><td>1.25</td><td>10.00</td><td><strong>USD 0.272</strong></td></tr>
+                  <tr><td>Gemini 2.5 Pro</td><td>Batch / Flex, ≤200k tokens</td><td>0.625</td><td>5.00</td><td><strong>USD 0.136</strong></td></tr>
+                  <tr><td>Gemini 3.1 Flash-Lite</td><td>Standard</td><td>0.25</td><td>1.50</td><td><strong>USD 0.051</strong></td></tr>
+                  <tr><td>Gemini 3.1 Flash-Lite</td><td>Batch / Flex</td><td>0.125</td><td>0.75</td><td><strong>USD 0.026</strong></td></tr>
+                  <tr><td>Gemini 3.1 Flash</td><td>Standard</td><td>0.50</td><td>3.00</td><td><strong>USD 0.103</strong></td></tr>
+                  <tr><td>Gemini 3.1 Flash</td><td>Batch / Flex</td><td>0.25</td><td>1.50</td><td><strong>USD 0.051</strong></td></tr>
+                  <tr><td>Gemini 3.1 Pro Preview</td><td>Standard</td><td>0.90</td><td>5.40</td><td><strong>USD 0.185</strong></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>
+              Gemini 3.1 Flash-Lite está descrito como un modelo costo-eficiente para tareas agentic,
+              traducción y procesamiento simple; Google lista sus precios estándar y batch/flex.
+            </p>
+            <p class="note-callout">
+              <strong>Lectura:</strong> Para este proyecto, Gemini 2.5 Flash-Lite o Gemini 3.1 Flash-Lite
+              son suficientes como opción económica. Gemini Pro solo tendría sentido si los agentes empiezan
+              a fallar por calidad, razonamiento o cumplimiento del formato JSON.
+            </p>
+
+            <h4>2.2 OpenAI / GPT API</h4>
+            <p>
+              OpenAI publica precios por millón de tokens. En pricing estándar, <code>gpt-5.4-nano</code>
+              aparece en <strong>USD 0.20/M input</strong> y <strong>USD 1.25/M output</strong>;
+              <code>gpt-5.4-mini</code> en <strong>USD 0.75/M input</strong> y
+              <strong>USD 4.50/M output</strong>; <code>gpt-5.4</code> en
+              <strong>USD 2.50/M input</strong> y <strong>USD 15/M output</strong>; y
+              <code>gpt-5.5</code> en <strong>USD 5/M input</strong> y <strong>USD 30/M output</strong>.
+            </p>
+            <div class="table-wrap compact-table">
+              <table>
+                <thead><tr><th>Modelo GPT</th><th>Modo</th><th>Input USD/M</th><th>Output USD/M</th><th>Costo aprox. por ciclo</th></tr></thead>
+                <tbody>
+                  <tr><td>GPT-5.4 nano</td><td>Standard</td><td>0.20</td><td>1.25</td><td><strong>USD 0.041</strong></td></tr>
+                  <tr><td>GPT-5.4 mini</td><td>Standard</td><td>0.75</td><td>4.50</td><td><strong>USD 0.154</strong></td></tr>
+                  <tr><td>GPT-5.4</td><td>Standard</td><td>2.50</td><td>15.00</td><td><strong>USD 0.513</strong></td></tr>
+                  <tr><td>GPT-5.5</td><td>Standard</td><td>5.00</td><td>30.00</td><td><strong>USD 1.026</strong></td></tr>
+                  <tr><td>GPT-5.4 Pro</td><td>Standard</td><td>30.00</td><td>180.00</td><td><strong>USD 6.156</strong></td></tr>
+                  <tr><td>GPT-5.5 Pro</td><td>Standard</td><td>30.00</td><td>180.00</td><td><strong>USD 6.156</strong></td></tr>
+                  <tr><td>GPT-5.4 nano</td><td>Flex</td><td>0.10</td><td>0.625</td><td><strong>USD 0.021</strong></td></tr>
+                  <tr><td>GPT-5.4 mini</td><td>Flex</td><td>0.375</td><td>2.25</td><td><strong>USD 0.077</strong></td></tr>
+                  <tr><td>GPT-5.4</td><td>Flex</td><td>1.25</td><td>7.50</td><td><strong>USD 0.257</strong></td></tr>
+                  <tr><td>GPT-5.5</td><td>Flex</td><td>2.50</td><td>15.00</td><td><strong>USD 0.513</strong></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>
+              OpenAI también indica que los endpoints con procesamiento regional pueden tener un recargo de
+              10% para modelos elegibles publicados después de marzo de 2026.
+            </p>
+            <p class="note-callout">
+              <strong>Lectura:</strong> Para este proyecto, si se usa OpenAI, el punto de entrada razonable
+              sería GPT-5.4 nano o GPT-5.4 mini. GPT-5.4/5.5 completo o Pro no parecen necesarios para el
+              flujo base, salvo que se quiera máxima calidad en razonamiento o robustez de salida.
+            </p>
+          </div>
+
+          <div class="detail-block">
+            <h3>3. Foundation Model Serving en Databricks</h3>
+            <p>
+              Databricks Foundation Model APIs permite consultar modelos fundacionales desde endpoints
+              administrados, sin mantener un despliegue propio del modelo. Azure Databricks documenta modos
+              pay-per-token y provisioned throughput; pay-per-token se recomienda para empezar, mientras que
+              provisioned throughput se recomienda cuando se necesitan garantías de rendimiento.
+            </p>
+            <p>La conversión usada aquí es:</p>
+            <pre class="cost-formula"><code>USD aproximado = DBU × USD 0.07</code></pre>
+            <p>Ese USD/DBU es solo una conversión de planeación. La empresa debe reemplazarlo por su tarifa real.</p>
+
+            <h4>3.1 Foundation Model Serving abierto / Databricks-hosted</h4>
+            <p>
+              La tabla pública de Databricks FMS incluye estas opciones pay-per-token: Llama 4 Maverick,
+              Llama 3.3 70B, Qwen 3 Next 80B, Qwen 3.5 122B, GPT OSS 120B, Gemma 3 12B, Llama 3.1 8B
+              y GPT OSS 20B.
+            </p>
+            <div class="table-wrap compact-table">
+              <table>
+                <thead><tr><th>Modelo FMS</th><th>DBU/M input</th><th>DBU/M output</th><th>DBU por ciclo</th><th>USD aprox. por ciclo</th></tr></thead>
+                <tbody>
+                  <tr><td>GPT OSS 20B</td><td>1.000</td><td>4.286</td><td>0.195</td><td><strong>USD 0.014</strong></td></tr>
+                  <tr><td>Llama 3.1 8B</td><td>2.143</td><td>6.429</td><td>0.400</td><td><strong>USD 0.028</strong></td></tr>
+                  <tr><td>Gemma 3 12B</td><td>2.143</td><td>7.143</td><td>0.404</td><td><strong>USD 0.028</strong></td></tr>
+                  <tr><td>GPT OSS 120B</td><td>2.143</td><td>8.571</td><td>0.413</td><td><strong>USD 0.029</strong></td></tr>
+                  <tr><td>Qwen 3 Next 80B</td><td>2.143</td><td>17.143</td><td>0.466</td><td><strong>USD 0.033</strong></td></tr>
+                  <tr><td>Qwen 3.5 122B</td><td>3.143</td><td>31.429</td><td>0.723</td><td><strong>USD 0.051</strong></td></tr>
+                  <tr><td>Llama 4 Maverick</td><td>7.143</td><td>21.429</td><td>1.333</td><td><strong>USD 0.093</strong></td></tr>
+                  <tr><td>Llama 3.3 70B</td><td>7.143</td><td>21.429</td><td>1.333</td><td><strong>USD 0.093</strong></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="note-callout">
+              <strong>Lectura:</strong> En este volumen de tokens, FMS abierto es barato por ciclo. La
+              decisión no es de costo puro, sino de gobierno, trazabilidad y facilidad de centralizar el
+              consumo dentro de Databricks.
+            </p>
+
+            <h4>3.2 Proprietary Foundation Model Serving: Google / OpenAI dentro de Databricks</h4>
+            <p>
+              Databricks también publica una tabla de Proprietary Foundation Model Serving para proveedores
+              como OpenAI, Anthropic y Google. Para Google, por ejemplo, lista Gemini 3.5 Flash, Gemini 3.1
+              Flash-Lite, Gemini 3.0/3.1 Pro, Gemini 3.0 Flash, Gemini 2.5 Pro, Gemini 2.5 Flash y Gemini
+              2.5 Flash-Lite en DBU por millón de tokens.
+            </p>
+            <div class="table-wrap compact-table">
+              <table>
+                <thead><tr><th>Modelo propietario vía Databricks</th><th>DBU/M input</th><th>DBU/M output</th><th>DBU por ciclo</th><th>USD aprox. por ciclo</th></tr></thead>
+                <tbody>
+                  <tr><td>Gemini 2.5 Flash-Lite</td><td>1.786</td><td>7.143</td><td>0.344</td><td><strong>USD 0.024</strong></td></tr>
+                  <tr><td>Gemini 2.5 Flash</td><td>5.357</td><td>44.643</td><td>1.177</td><td><strong>USD 0.082</strong></td></tr>
+                  <tr><td>Gemini 3.1 Flash-Lite</td><td>4.464</td><td>26.786</td><td>0.916</td><td><strong>USD 0.064</strong></td></tr>
+                  <tr><td>Gemini 3.0 Flash</td><td>8.929</td><td>53.571</td><td>1.832</td><td><strong>USD 0.128</strong></td></tr>
+                  <tr><td>Gemini 2.5 Pro, short context</td><td>22.321</td><td>178.571</td><td>4.857</td><td><strong>USD 0.340</strong></td></tr>
+                  <tr><td>Gemini 3.0/3.1 Pro, short context</td><td>35.714</td><td>214.286</td><td>7.329</td><td><strong>USD 0.513</strong></td></tr>
+                  <tr><td>OpenAI GPT-5.4 nano</td><td>2.857</td><td>17.857</td><td>0.591</td><td><strong>USD 0.041</strong></td></tr>
+                  <tr><td>OpenAI GPT-5.4 mini</td><td>10.714</td><td>64.286</td><td>2.199</td><td><strong>USD 0.154</strong></td></tr>
+                  <tr><td>OpenAI GPT-5.4</td><td>35.714</td><td>214.286</td><td>7.329</td><td><strong>USD 0.513</strong></td></tr>
+                  <tr><td>OpenAI GPT-5.5</td><td>71.429</td><td>428.571</td><td>14.657</td><td><strong>USD 1.026</strong></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>
+              Esta tabla es útil porque permite comparar casi directamente con API externa: para varios
+              modelos, el costo aproximado convertido desde DBU queda parecido al costo API directo, pero
+              dentro del perímetro Databricks.
+            </p>
+            <p class="note-callout">
+              <strong>Importante:</strong> si el notebook que llama FMS también corre en Databricks, el costo
+              total es:
+            </p>
+            <pre class="cost-formula"><code>Costo total = costo compute del notebook/job + costo FMS por tokens</code></pre>
+          </div>
+
+          <div class="detail-block">
+            <h3>4. Escenario productivo actualizado: Jobs Compute</h3>
+            <p>
+              Después de la fase interactiva, el flujo debería ir a Jobs Compute. Con los nuevos tiempos,
+              ya no se puede mantener la estimación anterior de USD 2–4 si se incluye <code>06</code>
+              completo; ahora el costo productivo sube.
+            </p>
+
+            <h4>Arquitectura recomendada</h4>
+            <div class="table-wrap compact-table">
+              <table>
+                <thead><tr><th>Parte del flujo</th><th>Compute recomendado</th></tr></thead>
+                <tbody>
+                  <tr><td><code>01_climate.ipynb</code></td><td>Jobs CPU</td></tr>
+                  <tr><td><code>01_pdf_discussion_table_from_pdfs.ipynb</code></td><td>Jobs CPU</td></tr>
+                  <tr><td><code>02_local_uiti_vano_interpretability_v3.ipynb</code></td><td>Jobs GPU T4</td></tr>
+                  <tr><td><code>02_mgcecdl_optuna_classification_search.ipynb</code></td><td>Jobs GPU T4</td></tr>
+                  <tr><td><code>03_mgcecdl_training.ipynb</code></td><td>Jobs GPU T4</td></tr>
+                  <tr><td><code>04_mgcecdl_performance.ipynb</code></td><td>Jobs GPU T4 o CPU</td></tr>
+                  <tr><td><code>05_mgcecdl_circuit_analysis.ipynb</code></td><td>Jobs GPU T4</td></tr>
+                  <tr><td><code>06_mgcecdl_document_replication.ipynb</code></td><td>Jobs GPU T4</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h4>Supuestos Jobs Compute</h4>
+            <div class="table-wrap compact-table">
+              <table>
+                <thead><tr><th>Recurso</th><th>Costo/h estimado</th></tr></thead>
+                <tbody>
+                  <tr><td>CPU Job</td><td>USD 0.25–0.47/h</td></tr>
+                  <tr><td>GPU T4 Job</td><td>USD 0.68–0.98/h</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h4>Costo productivo actualizado</h4>
+            <div class="table-wrap compact-table">
+              <table>
+                <thead><tr><th>Parte</th><th>Tiempo</th><th>Recurso</th><th>Costo aprox.</th></tr></thead>
+                <tbody>
+                  <tr><td>CPU notebooks: clima + PDF</td><td>~0.64 h</td><td>Jobs CPU</td><td>USD 0.16–0.30</td></tr>
+                  <tr><td>GPU notebooks: interpretabilidad + Optuna + training + performance + 05 + 06</td><td>~4.85 h</td><td>Jobs GPU T4</td><td>USD 3.30–4.75</td></tr>
+                  <tr><td>LLM Gemini 2.5 Flash-Lite API</td><td>—</td><td>tokens</td><td>USD 0.019</td></tr>
+                  <tr><td>LLM FMS GPT OSS 20B</td><td>—</td><td>tokens/DBU</td><td>USD 0.014</td></tr>
+                  <tr><td>LLM FMS Llama 3.3 70B</td><td>—</td><td>tokens/DBU</td><td>USD 0.093</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="table-wrap compact-table">
+              <table>
+                <thead><tr><th>Escenario productivo</th><th>Total aproximado</th></tr></thead>
+                <tbody>
+                  <tr><td>Jobs Compute + Gemini API</td><td><strong>USD 3.48–5.07</strong></td></tr>
+                  <tr><td>Jobs Compute + GPT-5.4 mini API</td><td><strong>USD 3.61–5.20</strong></td></tr>
+                  <tr><td>Jobs Compute + FMS abierto económico</td><td><strong>USD 3.47–5.07</strong></td></tr>
+                  <tr><td>Jobs Compute + FMS Llama 3.3 70B</td><td><strong>USD 3.55–5.14</strong></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <blockquote><strong>Jobs Compute para flujo completo actualizado: USD 4–6 por ejecución completa.</strong></blockquote>
+          </div>
+
+          <div class="detail-block">
+            <h3>5. Modelos locales tipo DeepSeek 32B o superiores</h3>
+            <p>
+              Este escenario debe mantenerse separado del flujo base. No usa API externa, pero exige GPU
+              grande, DBU, almacenamiento del modelo y control del tiempo activo.
+            </p>
+            <p>
+              Azure Databricks soporta compute acelerado con GPU. Para modelos locales 32B o superiores,
+              una T4 de 16 GB no debe tratarse como suficiente.
+            </p>
+
+            <h4>Ejemplos de modelos 32B o superiores</h4>
+            <div class="table-wrap compact-table">
+              <table>
+                <thead><tr><th>Familia</th><th>Modelo ejemplo</th><th>Tamaño</th><th>Comentario</th></tr></thead>
+                <tbody>
+                  <tr><td>DeepSeek</td><td>DeepSeek-R1-Distill-Qwen-32B</td><td>32B</td><td>Modelo razonador destilado; existe en Hugging Face.</td></tr>
+                  <tr><td>Qwen</td><td>QwQ-32B</td><td>32B</td><td>Modelo de razonamiento de Qwen; Qwen lo presenta para matemáticas, coding y resolución de problemas.</td></tr>
+                  <tr><td>Qwen</td><td>Qwen3-32B</td><td>32B</td><td>Modelo Qwen3 dense de 32B.</td></tr>
+                  <tr><td>Meta</td><td>Llama 3.3 70B Instruct</td><td>70B</td><td>Modelo 70B text-in/text-out; disponible también vía Ollama/OpenRouter.</td></tr>
+                  <tr><td>DeepSeek</td><td>DeepSeek-R1-Distill-Llama-70B</td><td>70B</td><td>Alternativa razonadora superior a 32B; requiere más memoria.</td></tr>
+                  <tr><td>Qwen</td><td>Qwen 3 Next 80B</td><td>80B</td><td>Disponible en FMS abierto de Databricks.</td></tr>
+                  <tr><td>Qwen</td><td>Qwen 3.5 122B</td><td>122B</td><td>Disponible en FMS abierto de Databricks.</td></tr>
+                  <tr><td>Open weights</td><td>GPT OSS 120B</td><td>120B</td><td>Disponible en FMS abierto de Databricks.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h4>Requerimiento de GPU aproximado</h4>
+            <div class="table-wrap compact-table">
+              <table>
+                <thead><tr><th>Tamaño de modelo</th><th>GPU mínima práctica</th><th>Recomendación</th></tr></thead>
+                <tbody>
+                  <tr><td>32B 4-bit</td><td>A100 80 GB o GPU equivalente con margen</td><td>T4 no recomendada</td></tr>
+                  <tr><td>32B con contexto largo</td><td>A100 80 GB</td><td>Mejor margen para KV cache</td></tr>
+                  <tr><td>70B 4-bit</td><td>A100 80 GB mínimo razonable</td><td>Puede requerir optimización fuerte</td></tr>
+                  <tr><td>70B+ con serving</td><td>varias GPU o Model Serving</td><td>no incluir en MVP</td></tr>
+                  <tr><td>120B+</td><td>FMS o múltiples GPU</td><td>no correr local salvo necesidad fuerte</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>
+              Azure tiene la serie NC A100 v4 con GPUs NVIDIA A100 de 80 GB; Microsoft documenta que estas
+              VMs tienen hasta 4 A100 PCIe de 80 GB. Como referencia, <code>NC24ads_A100_v4</code> aparece
+              alrededor de <strong>USD 3.673/h</strong> on-demand antes de sumar DBU.
+            </p>
+
+            <h4>Costo estimado para LLM local 32B+</h4>
+            <div class="table-wrap compact-table">
+              <table>
+                <thead><tr><th>Caso</th><th>Recurso</th><th>Tiempo</th><th>Costo adicional aproximado</th></tr></thead>
+                <tbody>
+                  <tr><td>Prueba corta 32B</td><td>A100 80 GB en Azure Databricks</td><td>1 h</td><td><strong>USD 4.5–8/h</strong></td></tr>
+                  <tr><td>Batch 32B</td><td>A100 80 GB</td><td>5 h</td><td><strong>USD 22–40</strong></td></tr>
+                  <tr><td>32B 24/7</td><td>A100 80 GB activo todo el mes</td><td>730 h</td><td><strong>USD 3.300–5.800+/mes</strong></td></tr>
+                  <tr><td>70B local</td><td>A100 80 GB o multi-GPU</td><td>1 h</td><td><strong>USD 5–15+/h</strong></td></tr>
+                  <tr><td>120B local</td><td>multi-GPU</td><td>1 h</td><td><strong>USD 15–40+/h</strong></td></tr>
+                  <tr><td>T4 para 32B</td><td>T4 16 GB</td><td>—</td><td><strong>No recomendado</strong></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="note-callout">
+              <strong>Lectura:</strong> Si el modelo abierto ya está disponible en FMS, como Llama 3.3 70B,
+              Qwen 3 Next 80B, Qwen 3.5 122B o GPT OSS 120B, conviene primero probar FMS pay-per-token.
+              Correrlo local solo tiene sentido por privacidad, control total del modelo, restricciones de
+              datos o costos a gran escala.
+            </p>
+          </div>
+
+          <div class="detail-block">
+            <h3>6. Comparación resumida actualizada</h3>
+            <p>
+              Estos valores asumen <strong>una ejecución completa del flujo una sola vez</strong>, con
+              <code>05</code> y <code>06</code> incluidos. No incluyen iteraciones necesarias para afinar,
+              depurar, repetir notebooks, ajustar dependencias o validar la migración.
+            </p>
+            <div class="table-wrap compact-table">
+              <table>
+                <thead><tr><th>Escenario</th><th>Tipo</th><th>LLM</th><th>Costo aprox. por ejecución</th></tr></thead>
+                <tbody>
+                  <tr><td>Ajuste interactivo</td><td>All-Purpose T4 para todo</td><td>Gemini API</td><td><strong>USD 5–8</strong></td></tr>
+                  <tr><td>Ajuste interactivo</td><td>All-Purpose T4 para todo</td><td>GPT-5.4 nano / mini API</td><td><strong>USD 5.1–8.2</strong></td></tr>
+                  <tr><td>Ajuste interactivo</td><td>All-Purpose T4 para todo</td><td>FMS Databricks</td><td><strong>USD 5.1–8.2</strong></td></tr>
+                  <tr><td>Ajuste interactivo con idle</td><td>All-Purpose T4 para todo + idle 30–60 min</td><td>cualquiera</td><td><strong>USD 6–9</strong></td></tr>
+                  <tr><td>Producción</td><td>Jobs CPU + Jobs T4</td><td>Gemini API</td><td><strong>USD 4–6</strong></td></tr>
+                  <tr><td>Producción</td><td>Jobs CPU + Jobs T4</td><td>GPT-5.4 nano / mini API</td><td><strong>USD 4–6</strong></td></tr>
+                  <tr><td>Producción</td><td>Jobs CPU + Jobs T4</td><td>FMS Databricks</td><td><strong>USD 4–6</strong></td></tr>
+                  <tr><td>Producción con idle</td><td>All-Purpose mal apagado</td><td>cualquiera</td><td><strong>USD 8–15+</strong></td></tr>
+                  <tr><td>LLM local 32B+ batch</td><td>A100 80 GB en Azure Databricks</td><td>sin API externa</td><td><strong>USD 4.5–8/h adicional</strong></td></tr>
+                  <tr><td>LLM local 32B+ 5 h</td><td>A100 80 GB en Azure Databricks</td><td>sin API externa</td><td><strong>USD 22–40 adicionales</strong></td></tr>
+                  <tr><td>LLM local 70B+</td><td>A100 80 GB o multi-GPU</td><td>sin API externa</td><td><strong>USD 5–15+/h adicional</strong></td></tr>
+                  <tr><td>LLM local 120B+</td><td>multi-GPU</td><td>sin API externa</td><td><strong>USD 15–40+/h adicional</strong></td></tr>
+                  <tr><td>LLM local 32B+ 24/7</td><td>A100 80 GB siempre activo</td><td>sin API externa</td><td><strong>USD 3.300–5.800+/mes</strong></td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h4>Lectura final</h4>
+            <p>
+              Con los nuevos tiempos, la ejecución completa del flujo en Azure Databricks sube porque
+              <code>06_mgcecdl_document_replication.ipynb</code> agrega 2.5 horas de T4. Para ajuste inicial,
+              el escenario All-Purpose T4 para todo queda alrededor de <strong>USD 5–8 por ejecución completa</strong>,
+              o <strong>USD 6–9</strong> si hay idle moderado. Para producción, separando CPU y GPU mediante
+              Jobs Compute, el flujo completo queda alrededor de <strong>USD 4–6 por ejecución</strong>.
+            </p>
+            <p>
+              El costo de LLM por API o FMS sigue siendo bajo frente al costo GPU/DBU. La decisión entre
+              Gemini API, GPT API y Databricks FMS debe tomarse más por gobierno, trazabilidad, privacidad y
+              política empresarial que por costo puro.
+            </p>
+            <p>
+              Los modelos locales tipo <code>deepseek-r1:32b</code>, QwQ-32B, Qwen3-32B o superiores deben
+              tratarse como escenario separado: requieren A100 80 GB o multi-GPU, y agregan aproximadamente
+              <strong>USD 4.5–8 por hora</strong> como mínimo razonable dentro de Azure Databricks.
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <img src={logoLab.src} alt="Laboratorio IA UNAL" />
+      <p>Simulador de criticidad CHEC - Universidad Nacional de Colombia, sede Manizales.</p>
+    </footer>
+  </body>
+</html>
+
+<style>
+  :root {
+    --ink: #102129;
+    --muted: #5f6f77;
+    --line: #dce7e4;
+    --soft: #f3f8f6;
+    --panel: #ffffff;
+    --green: #007a53;
+    --green-dark: #005c45;
+    --blue: #0b5f8a;
+    --gold: #f4b23a;
+    --shadow: 0 18px 50px rgb(16 33 41 / 10%);
+    color: var(--ink);
+    font-family:
+      Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--soft);
+    scroll-behavior: smooth;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    background:
+      linear-gradient(180deg, rgba(243, 248, 246, 0.95), rgba(255, 255, 255, 0.98) 36rem),
+      var(--soft);
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  img {
+    max-width: 100%;
+    display: block;
+  }
+
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.8rem clamp(1rem, 4vw, 4rem);
+    background: rgba(255, 255, 255, 0.88);
+    border-bottom: 1px solid var(--line);
+    backdrop-filter: blur(14px);
+  }
+
+  .brand img {
+    width: 148px;
+    height: 46px;
+    object-fit: contain;
+  }
+
+  nav {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.8rem, 2vw, 1.6rem);
+    color: var(--muted);
+    font-size: 0.94rem;
+    font-weight: 700;
+  }
+
+  nav a:hover {
+    color: var(--green);
+  }
+
+  main {
+    overflow: hidden;
+  }
+
+  .hero,
+  .section,
+  footer {
+    width: min(1120px, calc(100% - 2rem));
+    margin-inline: auto;
+  }
+
+  .hero {
+    min-height: calc(100vh - 76px);
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(290px, 0.75fr);
+    align-items: center;
+    gap: clamp(2rem, 5vw, 4rem);
+    padding: clamp(3rem, 8vw, 6rem) 0 2.5rem;
+  }
+
+  .eyebrow {
+    margin: 0 0 0.8rem;
+    color: var(--green);
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  h1,
+  h2,
+  h3,
+  p {
+    margin-top: 0;
+  }
+
+  h1 {
+    max-width: 780px;
+    margin-bottom: 1rem;
+    color: var(--ink);
+    font-size: clamp(3rem, 8vw, 6.6rem);
+    line-height: 0.92;
+    letter-spacing: 0;
+  }
+
+  h2 {
+    margin-bottom: 0.8rem;
+    font-size: clamp(2rem, 4vw, 3.5rem);
+    line-height: 1;
+    letter-spacing: 0;
+  }
+
+  h3 {
+    margin-bottom: 0.5rem;
+    font-size: 1.05rem;
+  }
+
+  .lead,
+  .section-heading p {
+    color: var(--muted);
+    font-size: clamp(1rem, 2vw, 1.16rem);
+    line-height: 1.65;
+  }
+
+  .hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+    margin-top: 2rem;
+  }
+
+  .button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+    padding: 0.85rem 1.15rem;
+    border: 1px solid var(--green);
+    border-radius: 6px;
+    font-weight: 800;
+  }
+
+  .button.primary {
+    color: white;
+    background: var(--green);
+  }
+
+  .button.secondary {
+    color: var(--green-dark);
+    background: white;
+  }
+
+  .hero-panel {
+    padding: clamp(1.25rem, 3vw, 2rem);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+  }
+
+  .panel-logo {
+    width: min(260px, 100%);
+    margin-bottom: 1.5rem;
+  }
+
+  dl {
+    display: grid;
+    gap: 0.85rem;
+    margin: 0;
+  }
+
+  dl div {
+    padding-bottom: 0.85rem;
+    border-bottom: 1px solid var(--line);
+  }
+
+  dl div:last-child {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+
+  dt {
+    color: var(--muted);
+    font-size: 0.8rem;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  dd {
+    margin: 0.2rem 0 0;
+    font-size: 1.08rem;
+    font-weight: 800;
+  }
+
+  .logo-strip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(2rem, 8vw, 6rem);
+    width: 100%;
+    padding: 2rem 1rem;
+    background: white;
+    border-block: 1px solid var(--line);
+  }
+
+  .logo-strip img {
+    max-width: 180px;
+    max-height: 78px;
+    object-fit: contain;
+  }
+
+  .section {
+    padding: clamp(3.2rem, 8vw, 6rem) 0;
+  }
+
+  .section.tinted {
+    width: 100%;
+    padding-inline: max(1rem, calc((100% - 1120px) / 2));
+    background: #edf5f2;
+    border-block: 1px solid var(--line);
+  }
+
+  .section-heading {
+    max-width: 760px;
+    margin-bottom: 2rem;
+  }
+
+  .section-heading.compact {
+    margin-bottom: 1.2rem;
+  }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .summary-grid article,
+  .deliverable-grid article {
+    min-height: 100%;
+    padding: 1.25rem;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: 0 10px 28px rgb(16 33 41 / 6%);
+  }
+
+  .summary-grid span {
+    display: inline-flex;
+    margin-bottom: 1rem;
+    color: var(--blue);
+    font-weight: 900;
+  }
+
+  .summary-grid p,
+  .deliverable-grid p,
+  .timeline p,
+  figcaption,
+  footer p {
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 720px;
+  }
+
+  th,
+  td {
+    padding: 1rem;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--line);
+  }
+
+  th {
+    color: var(--green-dark);
+    background: #f8fbfa;
+    font-size: 0.82rem;
+    text-transform: uppercase;
+  }
+
+  tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    padding: 0.28rem 0.65rem;
+    color: #684308;
+    background: #fff3d9;
+    border: 1px solid #f7cf83;
+    border-radius: 999px;
+    font-size: 0.86rem;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  .timeline {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .timeline article {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 1rem;
+    padding: 1.15rem;
+    background: white;
+    border-left: 4px solid var(--green);
+    border-radius: 8px;
+  }
+
+  .timeline strong {
+    color: var(--gold);
+    font-size: 1.2rem;
+  }
+
+  .deliverable-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .results figure {
+    margin: 0;
+    padding: clamp(0.7rem, 2vw, 1rem);
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+  }
+
+  .results img {
+    width: 100%;
+    border-radius: 6px;
+  }
+
+  figcaption {
+    margin-top: 0.8rem;
+    font-size: 0.95rem;
+  }
+
+  .cloud {
+    padding-top: clamp(2rem, 5vw, 4rem);
+  }
+
+  .cloud-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(320px, 1.1fr);
+    gap: clamp(1.2rem, 4vw, 2.5rem);
+    align-items: start;
+  }
+
+  .cloud-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    margin-bottom: 1rem;
+    padding: 0.75rem 1rem;
+    color: white;
+    background: #ff3621;
+    border: 1px solid #cf2d1d;
+    border-radius: 6px;
+    font-weight: 800;
+  }
+
+  .secondary-cloud-link {
+    margin-left: 0.6rem;
+    color: white;
+    background: #ff3621;
+    border-color: #cf2d1d;
+  }
+
+  .cloud-items {
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  .cloud-items article {
+    padding: 1rem;
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+
+  .cloud-items p {
+    margin-bottom: 0;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  .cloud-visuals {
+    display: grid;
+    gap: 1rem;
+    padding: clamp(0.8rem, 2vw, 1rem);
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+  }
+
+  .databricks-mark {
+    width: min(180px, 100%);
+    max-height: 70px;
+    object-fit: contain;
+  }
+
+  .engine-figure {
+    width: 100%;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+  }
+
+  .prototype {
+    width: 100%;
+    padding-inline: max(1rem, calc((100% - 1120px) / 2));
+    background: linear-gradient(180deg, #f8fbfa 0%, #eef6f3 100%);
+    border-top: 1px solid var(--line);
+  }
+
+  .prototype-showcase {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .feature-shot {
+    display: grid;
+    grid-template-columns: minmax(280px, 0.45fr) minmax(0, 0.55fr);
+    gap: clamp(1rem, 3vw, 1.6rem);
+    align-items: center;
+    padding: clamp(1rem, 3vw, 1.4rem);
+    color: white;
+    background: linear-gradient(135deg, #10352e 0%, #0b5f8a 100%);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+  }
+
+  .feature-shot span {
+    display: inline-flex;
+    margin-bottom: 0.7rem;
+    color: #ffe2a6;
+    font-size: 0.78rem;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .feature-shot h3 {
+    max-width: 420px;
+    margin-bottom: 0.7rem;
+    font-size: clamp(1.5rem, 3vw, 2.35rem);
+    line-height: 1.05;
+  }
+
+  .feature-shot p {
+    margin-bottom: 0;
+    color: rgb(255 255 255 / 82%);
+    line-height: 1.6;
+  }
+
+  .feature-shot img {
+    width: 100%;
+    border: 1px solid rgb(255 255 255 / 20%);
+    border-radius: 6px;
+    box-shadow: 0 18px 44px rgb(0 0 0 / 20%);
+  }
+
+  .prototype-gallery {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .prototype-gallery article {
+    overflow: hidden;
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: 0 12px 32px rgb(16 33 41 / 8%);
+  }
+
+  .prototype-gallery img {
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    object-fit: cover;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .prototype-gallery div {
+    padding: 1rem;
+  }
+
+  .prototype-gallery p {
+    margin-bottom: 0;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  .physics {
+    width: 100%;
+    padding-inline: max(1rem, calc((100% - 1120px) / 2));
+    background: white;
+    border-top: 1px solid var(--line);
+  }
+
+  .physics-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .physics-summary article {
+    padding: 1.1rem;
+    background: #f8fbfa;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+
+  .physics-summary p {
+    margin-bottom: 0;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  .physics-table {
+    margin-bottom: 1.2rem;
+  }
+
+  .modes-table td:nth-child(2),
+  .modes-table th:nth-child(2) {
+    width: 170px;
+    text-align: center;
+  }
+
+  .connection-intro {
+    max-width: 760px;
+    margin: 2rem 0 1rem;
+  }
+
+  .connection-intro p {
+    margin-bottom: 0;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .connections-table table {
+    min-width: 980px;
+  }
+
+  .graph-banner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 1rem;
+    align-items: center;
+    margin: 1.2rem 0;
+    padding: clamp(1rem, 3vw, 1.4rem);
+    color: white;
+    background: linear-gradient(135deg, #0b5f8a 0%, #007a53 100%);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+  }
+
+  .graph-banner span {
+    display: inline-flex;
+    margin-bottom: 0.55rem;
+    color: #ffe2a6;
+    font-size: 0.78rem;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .graph-banner h3 {
+    max-width: 680px;
+    margin-bottom: 0.45rem;
+    font-size: clamp(1.4rem, 3vw, 2.1rem);
+    line-height: 1.1;
+  }
+
+  .graph-banner p {
+    margin-bottom: 0;
+    color: rgb(255 255 255 / 82%);
+    line-height: 1.55;
+  }
+
+  .graph-banner a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+    padding: 0.8rem 1rem;
+    color: var(--green-dark);
+    background: white;
+    border-radius: 6px;
+    font-weight: 900;
+    white-space: nowrap;
+  }
+
+  .graph-actions {
+    display: flex;
+    gap: 0.65rem;
+    align-items: stretch;
+  }
+
+  .graph-note {
+    max-width: 980px;
+    margin: 1rem auto 0;
+    padding: clamp(1rem, 3vw, 1.4rem);
+    color: var(--ink);
+    background: #fff7e6;
+    border: 1px solid #f3d28c;
+    border-left: 5px solid var(--gold);
+    border-radius: 8px;
+    font-size: clamp(1.05rem, 2vw, 1.28rem);
+    font-weight: 800;
+    line-height: 1.5;
+  }
+
+  .architecture {
+    width: 100%;
+    padding-inline: max(1rem, calc((100% - 1120px) / 2));
+    background: linear-gradient(180deg, #f8fbfa 0%, #ffffff 100%);
+    border-top: 1px solid var(--line);
+  }
+
+  .architecture-pillars {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .architecture-pillars article,
+  .architecture-pillars .pillar-card,
+  .agent-grid article,
+  .agent-grid .agent-card,
+  .value-cycle article {
+    padding: 1rem;
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: 0 10px 28px rgb(16 33 41 / 6%);
+  }
+
+  .architecture-pillars span {
+    display: inline-flex;
+    margin-bottom: 0.65rem;
+    color: var(--blue);
+    font-weight: 900;
+  }
+
+  .architecture-pillars p,
+  .agent-grid p,
+  .value-cycle p {
+    margin-bottom: 0;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  .pillar-card {
+    display: block;
+    transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .pillar-card:hover,
+  .pillar-card:focus-visible,
+  .agent-card:hover,
+  .agent-card:focus-visible {
+    transform: translateY(-3px);
+    border-color: #8bc6b3;
+    box-shadow: 0 16px 36px rgb(0 122 83 / 13%);
+    outline: none;
+  }
+
+  .pillar-card strong {
+    display: inline-flex;
+    margin-top: 0.9rem;
+    color: var(--green-dark);
+    font-size: 0.88rem;
+  }
+
+  .agent-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.2rem;
+  }
+
+  .agent-card {
+    display: block;
+    transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .agent-type {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    margin-bottom: 0.75rem;
+    padding: 0.25rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 900;
+  }
+
+  .agent-type.low {
+    color: #0a4c63;
+    background: #d9edf7;
+  }
+
+  .agent-type.high {
+    color: #215d2d;
+    background: #dff0d8;
+  }
+
+  .agent-type.model {
+    color: #444;
+    background: #e2e2ea;
+  }
+
+  .flow-diagram {
+    display: grid;
+    gap: 1rem;
+    margin: 1.4rem 0;
+    padding: clamp(1rem, 3vw, 1.4rem);
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    overflow-x: auto;
+  }
+
+  .flow-title {
+    max-width: 760px;
+  }
+
+  .flow-title p {
+    margin-bottom: 0;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  .flow-lane {
+    position: relative;
+    display: grid;
+    grid-template-columns:
+      minmax(120px, 0.55fr)
+      minmax(170px, 1fr)
+      minmax(90px, 0.42fr)
+      minmax(170px, 1fr)
+      minmax(90px, 0.42fr)
+      minmax(170px, 1fr)
+      minmax(90px, 0.42fr)
+      minmax(170px, 1fr);
+    gap: 0.75rem;
+    align-items: stretch;
+    min-width: 1160px;
+    padding: 0.8rem;
+    background: #f8fbfa;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+
+  .lane-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.7rem;
+    color: var(--green-dark);
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 900;
+    text-align: center;
+    text-transform: uppercase;
+  }
+
+  .flow-node {
+    min-height: 112px;
+    padding: 0.9rem;
+    border: 2px solid var(--line);
+    border-radius: 8px;
+    background: #f8fbfa;
+  }
+
+  .flow-node span {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .flow-node strong {
+    display: block;
+    line-height: 1.2;
+  }
+
+  .flow-connector {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 112px;
+    color: var(--green);
+    text-align: center;
+  }
+
+  .flow-connector::before,
+  .flow-connector::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    z-index: 0;
+    display: block;
+  }
+
+  .flow-connector::before {
+    left: 4px;
+    right: 14px;
+    height: 2px;
+    background: currentColor;
+  }
+
+  .flow-connector::after {
+    right: 4px;
+    transform: translateY(-50%);
+    width: 0;
+    height: 0;
+    border-block: 6px solid transparent;
+    border-left: 9px solid currentColor;
+    background: transparent;
+  }
+
+  .flow-connector strong {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    min-height: 32px;
+    margin: 0.35rem 0;
+    z-index: 1;
+    color: white;
+    background: var(--green);
+    border-radius: 999px;
+    font-size: 0.78rem;
+  }
+
+  .flow-connector span {
+    max-width: 120px;
+    z-index: 1;
+    padding: 0.12rem 0.28rem;
+    color: var(--muted);
+    background: #f8fbfa;
+    font-size: 0.76rem;
+    font-weight: 800;
+    line-height: 1.2;
+  }
+
+  .flow-connector.dashed::before {
+    background: repeating-linear-gradient(90deg, currentColor 0 7px, transparent 7px 12px);
+  }
+
+  .flow-connector.bidirectional::after {
+    content: "↔";
+    top: 50%;
+    right: 50%;
+    width: auto;
+    height: auto;
+    border: 0;
+    background: #f8fbfa;
+    font-size: 1.2rem;
+    font-weight: 900;
+    transform: translate(50%, -50%);
+  }
+
+  .flow-connector.merge strong {
+    background: var(--blue);
+  }
+
+  .flow-connector.cycle strong {
+    background: #7c5a0d;
+  }
+
+  .user-node {
+    background: #fff5f7;
+    border-color: #d8a7b1;
+  }
+
+  .agent-low-node {
+    background: #edf8fc;
+    border-color: #9dc7d7;
+  }
+
+  .agent-high-node {
+    background: #edf8ec;
+    border-color: #9cc99b;
+  }
+
+  .data-node,
+  .context-node {
+    background: #fff9e8;
+    border-color: #e2c878;
+  }
+
+  .doc-node {
+    background: #eef7e9;
+    border-color: #a6ce96;
+  }
+
+  .model-node {
+    background: #f1f1f6;
+    border-color: #b7b7c5;
+    border-style: dashed;
+  }
+
+  .output-node {
+    background: #fff4d6;
+    border-color: #ddb84d;
+  }
+
+  .emphasis-node {
+    border-width: 3px;
+    box-shadow: 0 14px 34px rgb(0 122 83 / 14%);
+  }
+
+  .value-cycle {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .value-cycle strong {
+    display: block;
+    margin-bottom: 0.45rem;
+    color: var(--green-dark);
+    font-size: 1.05rem;
+  }
+
+  .detail-panel {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    width: 100%;
+    overflow-y: auto;
+    padding: 1rem;
+    background: rgb(243 248 246 / 98%);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(12px);
+    transition: opacity 180ms ease, transform 180ms ease, visibility 180ms;
+  }
+
+  .detail-panel:target {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+
+  .detail-shell {
+    width: min(1180px, 100%);
+    margin: 0 auto;
+    padding: clamp(1.2rem, 4vw, 3rem);
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: 0 26px 80px rgb(16 33 41 / 18%);
+  }
+
+  .back-link {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    display: inline-flex;
+    align-items: center;
+    min-height: 42px;
+    margin-bottom: 2rem;
+    padding: 0.65rem 0.9rem;
+    color: white;
+    background: var(--green);
+    border-radius: 6px;
+    font-weight: 900;
+    box-shadow: 0 8px 24px rgb(0 92 69 / 20%);
+  }
+
+  .back-link.bottom {
+    position: static;
+    margin: 1rem 0 0;
+  }
+
+  .detail-stats,
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.8rem;
+    margin-bottom: 1.4rem;
+  }
+
+  .detail-stats article,
+  .metrics-grid article {
+    padding: 1rem;
+    background: #f8fbfa;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+
+  .detail-stats strong,
+  .metrics-grid strong {
+    display: block;
+    color: var(--green-dark);
+    font-size: clamp(1.35rem, 3vw, 2rem);
+  }
+
+  .detail-stats span,
+  .metrics-grid span {
+    color: var(--muted);
+    font-size: 0.86rem;
+    font-weight: 800;
+  }
+
+  .detail-block {
+    margin-top: 1.2rem;
+    padding: clamp(1rem, 3vw, 1.5rem);
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgb(16 33 41 / 6%);
+  }
+
+  .detail-block > h3 {
+    margin-bottom: 0.7rem;
+    font-size: clamp(1.35rem, 3vw, 2rem);
+  }
+
+  .detail-block h4 {
+    margin: 1.35rem 0 0.65rem;
+    color: var(--ink);
+    font-size: 1rem;
+  }
+
+  .detail-block > p,
+  .detail-block figcaption {
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .detail-block blockquote {
+    margin: 1rem 0;
+    padding: 1rem;
+    color: var(--ink);
+    background: #f8fbfa;
+    border-left: 5px solid #ff3621;
+    border-radius: 8px;
+  }
+
+  .cost-formula {
+    overflow-x: auto;
+    margin: 0.8rem 0 1rem;
+    padding: 0.9rem 1rem;
+    color: white;
+    background: #102129;
+    border-radius: 8px;
+  }
+
+  .wide-table table {
+    min-width: 1800px;
+    font-size: 0.82rem;
+  }
+
+  .compact-table {
+    max-height: 520px;
+  }
+
+  .compact-table table {
+    min-width: 680px;
+  }
+
+  .dual-table-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .ellipsis-row td {
+    color: var(--muted);
+    background: #f8fbfa;
+    text-align: center;
+    font-style: italic;
+  }
+
+  .graph-frame {
+    width: 100%;
+    min-height: 680px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #f8fbfa;
+  }
+
+  .compact-frame {
+    min-height: 520px;
+  }
+
+  .report-frame {
+    min-height: 760px;
+  }
+
+  .media-block {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(280px, 1.1fr);
+    gap: clamp(1rem, 3vw, 1.5rem);
+    align-items: center;
+  }
+
+  .media-block img {
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+
+  .visual-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .visual-grid figure {
+    margin: 0;
+  }
+
+  .visual-grid img {
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+
+  .predictive-visual-grid {
+    align-items: stretch;
+  }
+
+  .predictive-visual-grid figure {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+
+  .predictive-visual-grid .graph-frame {
+    flex: 1;
+    min-height: 300px;
+  }
+
+  .process-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.8rem;
+  }
+
+  .process-grid article {
+    padding: 1rem;
+    background: #f8fbfa;
+    border-left: 4px solid var(--green);
+    border-radius: 6px;
+  }
+
+  .process-grid strong {
+    display: block;
+    margin-bottom: 0.45rem;
+  }
+
+  .process-grid p {
+    margin-bottom: 0;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .mode-count {
+    display: inline-flex;
+    margin-bottom: 0.55rem;
+    padding: 0.25rem 0.55rem;
+    color: var(--green-dark);
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 900;
+  }
+
+  .model-process {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  pre {
+    overflow-x: auto;
+    margin: 1rem 0;
+    padding: 1rem;
+    color: #e8fff5;
+    background: #102129;
+    border-radius: 8px;
+    font-size: 0.84rem;
+    line-height: 1.6;
+  }
+
+  code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  }
+
+  .note-callout {
+    margin: 1rem 0 0;
+    padding: 1rem;
+    color: var(--ink) !important;
+    background: #fff7e6;
+    border: 1px solid #f3d28c;
+    border-left: 5px solid var(--gold);
+    border-radius: 8px;
+  }
+
+  .formula-box {
+    margin: 1rem 0 0;
+    padding: 1rem;
+    background: #f7fbfa;
+    border: 1px solid #cfe4df;
+    border-left: 5px solid var(--green);
+    border-radius: 8px;
+  }
+
+  .formula-box p {
+    margin: 0 0 0.65rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .formula-box p:last-child {
+    margin-bottom: 0;
+  }
+
+  .feature-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .feature-list code {
+    padding: 0.42rem 0.58rem;
+    color: #0a4c63;
+    background: #edf8fc;
+    border: 1px solid #c5e2ec;
+    border-radius: 5px;
+    font-size: 0.8rem;
+  }
+
+  .result-block figure,
+  .detail-block > figure {
+    margin: 1rem 0 0;
+  }
+
+  .result-block figure img,
+  .detail-block > figure img,
+  .two-column-figures img {
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+
+  .metrics-grid {
+    margin: 1rem 0 0;
+  }
+
+  .regression-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .two-column-figures {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .two-column-figures figure {
+    margin: 0;
+  }
+
+  .spaced-figure {
+    margin-top: 1.5rem !important;
+  }
+
+  /* ── Interpretabilidad ── */
+  .interp {
+    width: 100%;
+    padding-inline: max(1rem, calc((100% - 1120px) / 2));
+    background: linear-gradient(180deg, #ffffff 0%, #f3f8f6 100%);
+    border-top: 1px solid var(--line);
+  }
+
+  .interp-pending {
+    padding: 1.5rem 1.75rem;
+    background: #fff7e6;
+    border: 1px solid #f3d28c;
+    border-left: 5px solid var(--gold);
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+  }
+
+  .interp-pending strong {
+    display: block;
+    margin-bottom: 0.4rem;
+    font-size: 1rem;
+  }
+
+  .interp-pending p {
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  .interp-content {
+    display: grid;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .interp-headline {
+    padding: clamp(1rem, 3vw, 1.5rem);
+    background: linear-gradient(135deg, #10352e 0%, #0b5f8a 100%);
+    border-radius: 8px;
+    color: white;
+  }
+
+  .interp-headline h3 {
+    margin-bottom: 0.75rem;
+    font-size: clamp(1.3rem, 3vw, 2rem);
+    line-height: 1.1;
+  }
+
+  .interp-headline p {
+    margin-bottom: 0.5rem;
+    color: rgb(255 255 255 / 85%);
+    line-height: 1.6;
+  }
+
+  .interp-block {
+    padding: clamp(1rem, 3vw, 1.5rem);
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgb(16 33 41 / 6%);
+  }
+
+  .interp-block > h3 {
+    margin-bottom: 0.7rem;
+    font-size: clamp(1.1rem, 2.5vw, 1.6rem);
+  }
+
+  .interp-block > p {
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .graph-block {
+    margin-top: 1rem;
+  }
+
+  .findings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1rem;
+    margin-top: 0.75rem;
+  }
+
+  .finding {
+    padding: 1rem;
+    background: #f8fbfa;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+
+  .finding h4 {
+    margin: 0.5rem 0 0.4rem;
+    font-size: 1rem;
+  }
+
+  .finding p {
+    margin-bottom: 0;
+    color: var(--muted);
+    line-height: 1.55;
+    font-size: 0.95rem;
+  }
+
+  .finding-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .confidence-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .confidence-badge.alta {
+    color: #215d2d;
+    background: #dff0d8;
+  }
+
+  .confidence-badge.media {
+    color: #684308;
+    background: #fff3d9;
+  }
+
+  .confidence-badge.baja {
+    color: #5c2d2d;
+    background: #f9e0e0;
+  }
+
+  .group-tag {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 0.2rem 0.5rem;
+    color: #0a4c63;
+    background: #edf8fc;
+    border: 1px solid #c5e2ec;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 800;
+  }
+
+  .evidence-list {
+    margin: 0.6rem 0 0;
+    padding-left: 1.2rem;
+    color: var(--muted);
+    font-size: 0.88rem;
+    line-height: 1.5;
+  }
+
+  .evidence-list li {
+    margin-bottom: 0.3rem;
+  }
+
+  .vanos-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    margin: 1rem 0;
+  }
+
+  .vanos-grid article {
+    padding: 1rem;
+    background: #f8fbfa;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+
+  .vanos-grid strong {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.88rem;
+    text-transform: uppercase;
+    color: var(--green-dark);
+  }
+
+  .justifications {
+    display: grid;
+    gap: 0.75rem;
+    margin-top: 1rem;
+  }
+
+  .rule-card {
+    padding: 1rem;
+    background: #f8fbfa;
+    border-left: 4px solid var(--blue);
+    border-radius: 6px;
+  }
+
+  .rule-card strong {
+    display: block;
+    margin-bottom: 0.4rem;
+    color: var(--blue);
+    font-size: 0.92rem;
+    text-transform: uppercase;
+  }
+
+  .rule-card p {
+    margin-bottom: 0.3rem;
+    color: var(--muted);
+    line-height: 1.55;
+    font-size: 0.93rem;
+  }
+
+  .rule-causes {
+    font-style: italic;
+  }
+
+  .rule-text {
+    margin: 0;
+    padding: 0.85rem 1rem;
+    background: #f8fbfa;
+    border-left: 4px solid var(--green);
+    border-radius: 6px;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  .action-list {
+    padding-left: 1.4rem;
+    color: var(--muted);
+    line-height: 1.7;
+  }
+
+  .action-list li {
+    margin-bottom: 0.4rem;
+  }
+
+  /* ── End Interpretabilidad ── */
+
+  footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 2rem 0 2.5rem;
+    border-top: 1px solid var(--line);
+  }
+
+  footer img {
+    width: 150px;
+  }
+
+  footer p {
+    margin: 0;
+    text-align: right;
+  }
+
+  @media (max-width: 860px) {
+    .site-header {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    nav {
+      width: 100%;
+      justify-content: space-between;
+    }
+
+    .hero {
+      min-height: auto;
+      grid-template-columns: 1fr;
+    }
+
+    .summary-grid,
+    .timeline,
+    .deliverable-grid,
+    .cloud-layout,
+    .feature-shot,
+    .prototype-gallery,
+    .physics-summary,
+    .graph-banner,
+    .architecture-pillars,
+    .agent-grid,
+    .media-block,
+    .dual-table-grid,
+    .value-cycle {
+      grid-template-columns: 1fr;
+    }
+
+    .graph-actions {
+      flex-direction: column;
+      width: 100%;
+    }
+
+    .detail-stats,
+    .metrics-grid,
+    .process-grid,
+    .model-process,
+    .visual-grid,
+    .two-column-figures {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .graph-banner a {
+      width: 100%;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .hero,
+    .section,
+    footer {
+      width: min(100% - 1rem, 1120px);
+    }
+
+    h1 {
+      font-size: clamp(2.5rem, 18vw, 4.4rem);
+    }
+
+    .brand img {
+      width: 128px;
+    }
+
+    nav {
+      gap: 0.45rem;
+      font-size: 0.82rem;
+    }
+
+    .logo-strip {
+      flex-direction: column;
+    }
+
+    .button {
+      width: 100%;
+    }
+
+    .detail-panel {
+      padding: 0;
+    }
+
+    .detail-shell {
+      border-radius: 0;
+    }
+
+    .detail-stats,
+    .metrics-grid,
+    .regression-metrics,
+    .process-grid,
+    .model-process,
+    .visual-grid,
+    .two-column-figures {
+      grid-template-columns: 1fr;
+    }
+
+    .graph-frame {
+      min-height: 520px;
+    }
+
+    footer {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    footer p {
+      text-align: left;
+    }
+  }
+</style>

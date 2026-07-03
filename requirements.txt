@@ -8,9 +8,8 @@ seaborn
 tqdm
 joblib
 
-# === Deep learning / TabNet ===
+# === Deep learning / inference ===
 torch
-pytorch-tabnet
 shap
 
 # === Hyperparameter search ===
@@ -22,6 +21,10 @@ plotly
 # === Data I/O ===
 openpyxl
 pyarrow
+
+# === PDF extraction ===
+PyMuPDF
+pdfplumber
 
 # === Weather / external API ===
 openmeteo-requests
@@ -43,3 +46,18 @@ ipykernel
 
 # === Testing ===
 pytest
+
+# === Graph Visualization ===
+networkx
+pyvis
+
+# === Geospatial analysis ===
+geopandas
+pyogrio
+shapely
+pyproj
+folium
+mapclassify
+
+# === Knowledge Graph Skill ===
+graphifyy

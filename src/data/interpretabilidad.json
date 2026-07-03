@@ -1,0 +1,20 @@
+{
+  "disponible": false,
+  "analisis": {
+    "source": "llm",
+    "prompt_version": "",
+    "headline": "",
+    "section_title": "",
+    "executive_summary": [],
+    "key_findings": [],
+    "circuit_characterization": {
+      "text": "",
+      "p97_vanos_uiti_vano": [],
+      "p97_vanos_eventos": [],
+      "probable_justifications_rules": []
+    },
+    "period_synthesis": "",
+    "data_gaps": [],
+    "recommended_actions": []
+  }
+}

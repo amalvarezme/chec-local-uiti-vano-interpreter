@@ -1,0 +1,24 @@
+{
+  "name": "chec-local-uiti-vano-interpreter",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jclugor/chec-local-uiti-vano-interpreter.git"
+  },
+  "homepage": "https://jclugor.github.io/chec-local-uiti-vano-interpreter/",
+  "bugs": {
+    "url": "https://github.com/jclugor/chec-local-uiti-vano-interpreter/issues"
+  },
+  "scripts": {
+    "dev": "BASE_PATH=/ ASTRO_TELEMETRY_DISABLED=1 astro dev --host 0.0.0.0",
+    "dev:pages": "BASE_PATH=/chec-local-uiti-vano-interpreter/ ASTRO_TELEMETRY_DISABLED=1 astro dev --host 0.0.0.0",
+    "build": "ASTRO_TELEMETRY_DISABLED=1 astro build",
+    "preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "astro": "^5.0.0"
+  },
+  "devDependencies": {}
+}

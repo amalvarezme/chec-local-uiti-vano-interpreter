@@ -21,6 +21,7 @@ def call_llm(
     call_enabled: bool = False,
     display_progress: bool = True,
     display_content: bool = True,
+    max_output_tokens: int | None = None,
 ) -> LLMCallResult:
     if not call_enabled:
         return LLMCallResult(called=False, message="CALL_LLM=false; prompt saved without calling the model.")
@@ -48,6 +49,7 @@ def call_llm(
 
     client = OpenAI(api_key=api_key, base_url=base_url) if base_url else OpenAI(api_key=api_key)
     selected_model = model or os.getenv("LLM_MODEL", "gemini-2.5-flash-lite")
+    max_tokens = int(max_output_tokens or os.getenv("LLM_MAX_OUTPUT_TOKENS", "32768"))
     
     try:
         import time
@@ -55,21 +57,34 @@ def call_llm(
         if display_progress:
             from IPython.display import display, HTML, clear_output
 
-        sys_prompt = "INSTRUCCIÓN OBLIGATORIA: Siempre debes estructurar tu cadena de pensamiento (Chain of Thought) detallada paso a paso dentro de etiquetas <think> y </think> obligatoriamente, ANTES de generar la salida final en JSON."
+        sys_prompt = (
+            "INSTRUCCION OBLIGATORIA: responde unicamente con la salida final solicitada. "
+            "No incluyas etiquetas <think>, razonamiento interno, markdown, explicaciones previas "
+            "ni texto posterior. Si se pide JSON, devuelve solo JSON valido."
+        )
         full_prompt = f"{sys_prompt}\n\n{prompt}"
         
-        response = client.chat.completions.create(
-            model=selected_model,
-            messages=[
-                {"role": "user", "content": full_prompt}
-            ],
-            temperature=0,
-            stream=True,
-        )
+        request_kwargs = {
+            "model": selected_model,
+            "messages": [{"role": "user", "content": full_prompt}],
+            "temperature": 0,
+            "stream": True,
+            "max_tokens": max_tokens,
+        }
+        if provider.lower() == "ollama":
+            request_kwargs["extra_body"] = {"options": {"num_predict": max_tokens}}
+        request_kwargs["response_format"] = {"type": "json_object"}
+
+        try:
+            response = client.chat.completions.create(**request_kwargs)
+        except Exception:
+            request_kwargs.pop("response_format", None)
+            response = client.chat.completions.create(**request_kwargs)
         
         start_time = time.time()
         output_text = ""
         tokens = 0
+        finish_reason = None
         in_tokens_est = int(len(full_prompt) / 3.5)
         
         # Display handle for dynamic updates
@@ -114,6 +129,8 @@ def call_llm(
         for chunk in response:
             if not chunk.choices:
                 continue
+            if getattr(chunk.choices[0], "finish_reason", None):
+                finish_reason = chunk.choices[0].finish_reason
             delta = chunk.choices[0].delta
             content = delta.content if hasattr(delta, 'content') else ""
             if content:
@@ -145,16 +162,32 @@ def call_llm(
         
         think_text = None
         if output_text:
-            match = re.search(r'<think>(.*?)(?:</think>|$)', output_text, flags=re.DOTALL | re.IGNORECASE)
+            # Capture the first complete <think>…</think> block for display.
+            match = re.search(r'<think>(.*?)</think>', output_text, flags=re.DOTALL | re.IGNORECASE)
             if match:
                 think_text = match.group(1).strip()
+            else:
+                # No closing tag: capture everything after <think> as the thought.
+                match_open = re.search(r'<think>(.*)', output_text, flags=re.DOTALL | re.IGNORECASE)
+                if match_open:
+                    think_text = match_open.group(1).strip()
 
-        # Strip CoT <think> blocks if present so downstream JSON parsers don't fail
+        # Strip CoT <think> blocks so downstream JSON parsers don't fail.
+        # Only strip COMPLETE blocks (with closing tag) — if </think> is absent
+        # the original text is kept intact so parse_llm_json can still find the JSON.
         clean_output = output_text
         if clean_output:
-            clean_output = re.sub(r'<think>.*?(?:</think>|$)\s*', '', clean_output, flags=re.DOTALL | re.IGNORECASE)
-            
-        return LLMCallResult(called=True, output_text=clean_output, think_content=think_text, message="LLM call completed successfully.")
+            clean_output = re.sub(
+                r'<think>.*?</think>\s*', '', clean_output, flags=re.DOTALL | re.IGNORECASE
+            )
+            # Guard: if stripping emptied the output but the original had content,
+            # the model opened <think> without closing it — return the raw text and
+            # let parse_llm_json locate the JSON via brace-search.
+            if not clean_output.strip() and output_text.strip():
+                clean_output = output_text
+
+        detail = f" finish_reason={finish_reason}" if finish_reason else ""
+        return LLMCallResult(called=True, output_text=clean_output, think_content=think_text, message=f"LLM call completed successfully.{detail}")
     except Exception as e:
         return LLMCallResult(called=True, output_text=None, message=f"LLM call failed: {str(e)}")
 

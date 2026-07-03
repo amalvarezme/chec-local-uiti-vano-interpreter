@@ -15,8 +15,9 @@ LLM to explain the behavior in Spanish.
 
 ## Prohibited Additions
 
-Do not add Databricks, Dash, FastAPI, RAG, vector stores, predictive model inference,
-feature importance masks, what-if simulation, or final evidence report generation.
+Do not add Databricks, Dash, FastAPI, RAG, vector stores, feature importance masks,
+or what-if simulation.
+Predictive model inference and forecasting language are strictly prohibited in base explanations, EXCEPT when generating outputs validated by `validar_respuesta_inferencia`, where predictive analysis of the second LLM and final evidence report generation is fully permitted and encouraged.
 
 ## Coding Style
 
@@ -47,7 +48,7 @@ the resulting data gaps without claiming those variables were observed.
 ## Invalid LLM Output
 
 If LLM output does not validate, save the raw invalid output and validation errors
-under `outputs/`, print a clear notebook message, and do not present it as final analysis.
+under `reports/interpretability/artifacts/`, print a clear notebook message, and do not present it as final analysis.
 
 ## Testing Expectations
 

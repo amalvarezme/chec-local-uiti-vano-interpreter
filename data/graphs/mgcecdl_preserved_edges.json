@@ -1,0 +1,576 @@
+[
+  {
+    "source": "CNT_VN",
+    "target": "TIPO",
+    "weight": 0.85,
+    "path": [
+      "CNT_VN",
+      "COD_EQ_PROTEGE",
+      "FID_SW",
+      "TIPO"
+    ],
+    "is_virtual": true
+  },
+  {
+    "source": "CALIBRE_NEUTRO",
+    "target": "CONDUCTOR",
+    "weight": 0.8,
+    "path": [
+      "CALIBRE_NEUTRO",
+      "CONDUCTOR"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "NG_RED",
+    "target": "DDT",
+    "weight": 0.75,
+    "path": [
+      "NG_RED",
+      "DDT"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "FECHA_OPERACION_VANO",
+    "target": "CONDUCTOR",
+    "weight": 0.6,
+    "path": [
+      "FECHA_OPERACION_VANO",
+      "CONDUCTOR"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "X2",
+    "target": "TIPO",
+    "weight": 0.85,
+    "path": [
+      "X2",
+      "FID_VANO",
+      "LVSW",
+      "COD_EQ_PROTEGE",
+      "FID_SW",
+      "TIPO"
+    ],
+    "is_virtual": true
+  },
+  {
+    "source": "Y2",
+    "target": "TIPO",
+    "weight": 0.85,
+    "path": [
+      "Y2",
+      "FID_VANO",
+      "LVSW",
+      "COD_EQ_PROTEGE",
+      "FID_SW",
+      "TIPO"
+    ],
+    "is_virtual": true
+  },
+  {
+    "source": "ALTURA",
+    "target": "NR_T",
+    "weight": 0.75,
+    "path": [
+      "ALTURA",
+      "NR_T"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "CANTIDAD_TIERRA",
+    "target": "DDT",
+    "weight": 0.85,
+    "path": [
+      "CANTIDAD_TIERRA",
+      "DDT"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "VAL_CRIT_APOYO",
+    "target": "NR_T",
+    "weight": 0.6,
+    "path": [
+      "VAL_CRIT_APOYO",
+      "NR_T"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "TIPO_TAX",
+    "target": "TIPO",
+    "weight": 0.7,
+    "path": [
+      "TIPO_TAX",
+      "FID_VANO",
+      "LVSW",
+      "COD_EQ_PROTEGE",
+      "FID_SW",
+      "TIPO"
+    ],
+    "is_virtual": true
+  },
+  {
+    "source": "PROMEDIO_KWH_VANO",
+    "target": "CNT_FASES",
+    "weight": 0.7,
+    "path": [
+      "PROMEDIO_KWH_VANO",
+      "CNT_FASES"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "prep_1",
+    "target": "prep_0",
+    "weight": 0.9,
+    "path": [
+      "prep_1",
+      "prep_0"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "prep_2",
+    "target": "prep_1",
+    "weight": 0.9,
+    "path": [
+      "prep_2",
+      "prep_1"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "prep_3",
+    "target": "prep_2",
+    "weight": 0.9,
+    "path": [
+      "prep_3",
+      "prep_2"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "prep_4",
+    "target": "prep_3",
+    "weight": 0.9,
+    "path": [
+      "prep_4",
+      "prep_3"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "prep_5",
+    "target": "prep_4",
+    "weight": 0.9,
+    "path": [
+      "prep_5",
+      "prep_4"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "prep_6",
+    "target": "prep_5",
+    "weight": 0.9,
+    "path": [
+      "prep_6",
+      "prep_5"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "prep_7",
+    "target": "prep_6",
+    "weight": 0.9,
+    "path": [
+      "prep_7",
+      "prep_6"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "prep_8",
+    "target": "prep_7",
+    "weight": 0.9,
+    "path": [
+      "prep_8",
+      "prep_7"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "prep_9",
+    "target": "prep_8",
+    "weight": 0.9,
+    "path": [
+      "prep_9",
+      "prep_8"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "prep_10",
+    "target": "prep_9",
+    "weight": 0.9,
+    "path": [
+      "prep_10",
+      "prep_9"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "prep_11",
+    "target": "prep_10",
+    "weight": 0.9,
+    "path": [
+      "prep_11",
+      "prep_10"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "temp_1",
+    "target": "temp_0",
+    "weight": 0.9,
+    "path": [
+      "temp_1",
+      "temp_0"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "temp_2",
+    "target": "temp_1",
+    "weight": 0.9,
+    "path": [
+      "temp_2",
+      "temp_1"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "temp_3",
+    "target": "temp_2",
+    "weight": 0.9,
+    "path": [
+      "temp_3",
+      "temp_2"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "temp_4",
+    "target": "temp_3",
+    "weight": 0.9,
+    "path": [
+      "temp_4",
+      "temp_3"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "temp_5",
+    "target": "temp_4",
+    "weight": 0.9,
+    "path": [
+      "temp_5",
+      "temp_4"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "temp_6",
+    "target": "temp_5",
+    "weight": 0.9,
+    "path": [
+      "temp_6",
+      "temp_5"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "temp_7",
+    "target": "temp_6",
+    "weight": 0.9,
+    "path": [
+      "temp_7",
+      "temp_6"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "temp_8",
+    "target": "temp_7",
+    "weight": 0.9,
+    "path": [
+      "temp_8",
+      "temp_7"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "temp_9",
+    "target": "temp_8",
+    "weight": 0.9,
+    "path": [
+      "temp_9",
+      "temp_8"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "temp_10",
+    "target": "temp_9",
+    "weight": 0.9,
+    "path": [
+      "temp_10",
+      "temp_9"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "temp_11",
+    "target": "temp_10",
+    "weight": 0.9,
+    "path": [
+      "temp_11",
+      "temp_10"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "wind_gust_spd_0",
+    "target": "NR_T",
+    "weight": 0.8,
+    "path": [
+      "wind_gust_spd_0",
+      "NR_T"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "wind_gust_spd_1",
+    "target": "wind_gust_spd_0",
+    "weight": 0.9,
+    "path": [
+      "wind_gust_spd_1",
+      "wind_gust_spd_0"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "wind_gust_spd_2",
+    "target": "wind_gust_spd_1",
+    "weight": 0.9,
+    "path": [
+      "wind_gust_spd_2",
+      "wind_gust_spd_1"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "wind_gust_spd_3",
+    "target": "wind_gust_spd_2",
+    "weight": 0.9,
+    "path": [
+      "wind_gust_spd_3",
+      "wind_gust_spd_2"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "wind_gust_spd_4",
+    "target": "wind_gust_spd_3",
+    "weight": 0.9,
+    "path": [
+      "wind_gust_spd_4",
+      "wind_gust_spd_3"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "wind_gust_spd_5",
+    "target": "wind_gust_spd_4",
+    "weight": 0.9,
+    "path": [
+      "wind_gust_spd_5",
+      "wind_gust_spd_4"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "wind_gust_spd_6",
+    "target": "wind_gust_spd_5",
+    "weight": 0.9,
+    "path": [
+      "wind_gust_spd_6",
+      "wind_gust_spd_5"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "wind_gust_spd_7",
+    "target": "wind_gust_spd_6",
+    "weight": 0.9,
+    "path": [
+      "wind_gust_spd_7",
+      "wind_gust_spd_6"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "wind_gust_spd_8",
+    "target": "wind_gust_spd_7",
+    "weight": 0.9,
+    "path": [
+      "wind_gust_spd_8",
+      "wind_gust_spd_7"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "wind_gust_spd_9",
+    "target": "wind_gust_spd_8",
+    "weight": 0.9,
+    "path": [
+      "wind_gust_spd_9",
+      "wind_gust_spd_8"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "wind_gust_spd_10",
+    "target": "wind_gust_spd_9",
+    "weight": 0.9,
+    "path": [
+      "wind_gust_spd_10",
+      "wind_gust_spd_9"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "wind_gust_spd_11",
+    "target": "wind_gust_spd_10",
+    "weight": 0.9,
+    "path": [
+      "wind_gust_spd_11",
+      "wind_gust_spd_10"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "wind_spd_1",
+    "target": "wind_spd_0",
+    "weight": 0.9,
+    "path": [
+      "wind_spd_1",
+      "wind_spd_0"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "wind_spd_2",
+    "target": "wind_spd_1",
+    "weight": 0.9,
+    "path": [
+      "wind_spd_2",
+      "wind_spd_1"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "wind_spd_3",
+    "target": "wind_spd_2",
+    "weight": 0.9,
+    "path": [
+      "wind_spd_3",
+      "wind_spd_2"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "wind_spd_4",
+    "target": "wind_spd_3",
+    "weight": 0.9,
+    "path": [
+      "wind_spd_4",
+      "wind_spd_3"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "wind_spd_5",
+    "target": "wind_spd_4",
+    "weight": 0.9,
+    "path": [
+      "wind_spd_5",
+      "wind_spd_4"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "wind_spd_6",
+    "target": "wind_spd_5",
+    "weight": 0.9,
+    "path": [
+      "wind_spd_6",
+      "wind_spd_5"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "wind_spd_7",
+    "target": "wind_spd_6",
+    "weight": 0.9,
+    "path": [
+      "wind_spd_7",
+      "wind_spd_6"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "wind_spd_8",
+    "target": "wind_spd_7",
+    "weight": 0.9,
+    "path": [
+      "wind_spd_8",
+      "wind_spd_7"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "wind_spd_9",
+    "target": "wind_spd_8",
+    "weight": 0.9,
+    "path": [
+      "wind_spd_9",
+      "wind_spd_8"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "wind_spd_10",
+    "target": "wind_spd_9",
+    "weight": 0.9,
+    "path": [
+      "wind_spd_10",
+      "wind_spd_9"
+    ],
+    "is_virtual": false
+  },
+  {
+    "source": "wind_spd_11",
+    "target": "wind_spd_10",
+    "weight": 0.9,
+    "path": [
+      "wind_spd_11",
+      "wind_spd_10"
+    ],
+    "is_virtual": false
+  }
+]

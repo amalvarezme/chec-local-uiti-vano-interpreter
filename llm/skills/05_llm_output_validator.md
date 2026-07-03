@@ -14,7 +14,7 @@ Validate every LLM response before presenting it as analysis.
 
 ## If Validation Fails
 
-- Save invalid raw output to `outputs/invalid_llm_output_<timestamp>.txt`.
-- Save validation errors to `outputs/llm_validation_errors_<timestamp>.json`.
+- Save invalid raw output to `reports/interpretability/artifacts/invalid_llm_output_<timestamp>.txt`.
+- Save validation errors to `reports/interpretability/artifacts/llm_validation_errors_<timestamp>.json`.
 - Do not present the invalid output as final analysis.
 - Print a clear notebook message explaining that the prompt and context were saved for manual review.

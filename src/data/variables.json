@@ -1,0 +1,125 @@
+{
+  "totalVariables": 156,
+  "ventanaClimaticaHoras": 12,
+  "resumen": [
+    {
+      "titulo": "Base de eventos",
+      "descripcion": "Cada fila representa una falla y cada columna describe el evento, el vano, los activos, el entorno o el impacto."
+    },
+    {
+      "titulo": "156 nodos en el grafo completo",
+      "descripcion": "El grafo conserva las 48 variables base y representa las nueve familias climáticas en 12 horas cada una."
+    },
+    {
+      "titulo": "12 ventanas temporales",
+      "descripcion": "Nueve familias climáticas capturan la acumulación de estrés ambiental en las 12 horas previas a la falla."
+    }
+  ],
+  "modos": [
+    {
+      "id": "A",
+      "nombre": "Evento, impacto e indicadores",
+      "cantidad": 8,
+      "descripcion": "Fecha, duración, usuarios, transformadores, causas, UiTi y UiTi ponderado por vano.",
+      "variables": ["FECHA", "DURACION", "UITI", "UITI_VANO", "TOT_USUS", "CNT_TRF", "COD_CAUSA", "DESC_CAUSA"]
+    },
+    {
+      "id": "B",
+      "nombre": "Infraestructura de protección y maniobra",
+      "cantidad": 5,
+      "descripcion": "Equipo que opera, tipo de protección, vanos protegidos y usuarios potencialmente expuestos.",
+      "variables": ["FID_SW", "COD_EQ_PROTEGE", "TIPO", "CNT_VN_SW", "T_USUS_EQ_PROT"]
+    },
+    {
+      "id": "C",
+      "nombre": "Topología y configuración espacial",
+      "cantidad": 9,
+      "descripcion": "Circuito, vano, coordenadas, distancia al equipo y aporte ponderado del vano.",
+      "variables": ["CIRCUITO", "FID_VANO", "X1", "Y1", "X2", "Y2", "LVSW", "CNT_VN", "PORC_APORTE_VANO"]
+    },
+    {
+      "id": "D",
+      "nombre": "Características físicas y eléctricas del vano",
+      "cantidad": 8,
+      "descripcion": "Operación, longitud, fases, conductor, neutro, guarda, energía promedio y taxonomía.",
+      "variables": ["FECHA_OPERACION_VANO", "LONGITUD", "CNT_FASES", "CONDUCTOR", "CALIBRE_NEUTRO", "NG_RED", "PROMEDIO_KWH_VANO", "TIPO_TAX"]
+    },
+    {
+      "id": "E",
+      "nombre": "Activos: apoyo final y transformador",
+      "cantidad": 16,
+      "descripcion": "Apoyo, estructura, cruceta, puesta a tierra, criticidad, transformador, capacidad y usuarios.",
+      "variables": ["COD_APOYO_FIN", "FID_APOYO_FIN", "ALTURA", "CANTIDAD_TIERRA", "PROPIETARIO", "CLASE", "ELEMENTO", "NORMA", "VAL_CRIT_APOYO", "FID_TRAFO", "CODIGO", "CAPACIDAD_NOMINAL", "CNT_USUS", "FECHA_OPERACION_TRF", "PROMEDIO_KWH_TRF", "LONG_CRUCETA"]
+    },
+    {
+      "id": "F",
+      "nombre": "Entorno, riesgo y clima",
+      "cantidad": 110,
+      "descripcion": "Vegetación, rayos y nueve familias meteorológicas representadas en 12 horas para el grafo.",
+      "variablesEstaticas": ["NR_T", "DDT"],
+      "familiasClimaticas": ["prep", "temp", "wind_gust_spd", "wind_spd", "clouds", "pres", "sp", "rh", "solar_rad"]
+    }
+  ],
+  "conexiones": [
+    {
+      "origen": "Series climáticas",
+      "destino": "Nodos de riesgo",
+      "relacion": "Acumulación ambiental (0.85)",
+      "justificacion": "Lluvia, nubosidad, viento y temperatura acumulan estrés sobre aisladores, conductores y entorno."
+    },
+    {
+      "origen": "Entorno y riesgo",
+      "destino": "Eventos / causa",
+      "relacion": "Causa directa (0.90)",
+      "justificacion": "Vegetación, descargas y ráfagas pueden romper aislamiento dieléctrico o mecánico."
+    },
+    {
+      "origen": "Físicas y eléctricas",
+      "destino": "Eventos / causa",
+      "relacion": "Susceptibilidad material (0.80)",
+      "justificacion": "Conductor, guarda, material y longitud modulan exposición y resistencia ante fallas."
+    },
+    {
+      "origen": "Topología",
+      "destino": "Protección",
+      "relacion": "Propagación de falla (0.95)",
+      "justificacion": "Distancia y cantidad de vanos determinan el equipo que debe operar para aislar el daño."
+    },
+    {
+      "origen": "Activos finales",
+      "destino": "Entorno y riesgo",
+      "relacion": "Vulnerabilidad estructural (0.75)",
+      "justificacion": "Altura, norma y clase del apoyo condicionan respuesta ante árboles, viento y tensión mecánica."
+    },
+    {
+      "origen": "Carga y consumo",
+      "destino": "Impacto",
+      "relacion": "Impacto demográfico (0.85)",
+      "justificacion": "Usuarios y demanda del transformador explican la magnitud del corte y su impacto aguas abajo."
+    },
+    {
+      "origen": "Protección",
+      "destino": "Impacto",
+      "relacion": "Aislamiento y tiempos (0.80)",
+      "justificacion": "Fusibles y reconectadores producen tiempos de reposición e impactos operativos distintos."
+    },
+    {
+      "origen": "Eventos",
+      "destino": "UITI",
+      "relacion": "Cálculo del impacto (1.00)",
+      "justificacion": "UITI relaciona la duración del evento con el total de usuarios afectados."
+    },
+    {
+      "origen": "UITI y aporte del vano",
+      "destino": "UITI_VANO",
+      "relacion": "Ponderación por vano (1.00)",
+      "justificacion": "UITI_VANO distribuye el impacto del evento según el aporte relativo del vano."
+    },
+    {
+      "origen": "Atributos espaciales",
+      "destino": "Topología",
+      "relacion": "Geometría de red (1.00)",
+      "justificacion": "Coordenadas del vano definen trazado físico, longitud y relación con el circuito."
+    }
+  ]
+}

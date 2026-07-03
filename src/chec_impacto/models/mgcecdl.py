@@ -10,6 +10,19 @@ from torch import nn
 from torch.nn import functional as F
 
 
+class _FeatureAttentionGate(nn.Module):
+    def __init__(self, input_dim: int) -> None:
+        super().__init__()
+        self.normalization = nn.LayerNorm(input_dim)
+        self.scorer = nn.Linear(input_dim, input_dim)
+        self.scale = float(input_dim)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        scores = self.scorer(self.normalization(x))
+        weights = F.softmax(scores, dim=1)
+        return x * weights * self.scale
+
+
 class _ModalityEncoder(nn.Module):
     def __init__(
         self,
@@ -19,6 +32,7 @@ class _ModalityEncoder(nn.Module):
         dropout: float,
     ) -> None:
         super().__init__()
+        self.feature_attention = _FeatureAttentionGate(input_dim)
         self.network = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),
@@ -33,6 +47,7 @@ class _ModalityEncoder(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.feature_attention(x)
         return self.network(x)
 
 
@@ -87,7 +102,12 @@ class _BaseMGCECDL(nn.Module):
         self.temperature = float(temperature)
 
         self.modality_encoders = nn.ModuleList(
-            _ModalityEncoder(len(indices), hidden_dim, embed_dim, dropout)
+            _ModalityEncoder(
+                len(indices),
+                hidden_dim,
+                embed_dim,
+                dropout,
+            )
             for indices in self.modality_feature_indices.values()
         )
         self.modality_reliability_heads = nn.ModuleList(
@@ -155,62 +175,6 @@ class _BaseMGCECDL(nn.Module):
                 modality_masks <= 0, -1e9
             )
         return F.softmax(stacked_reliability_scores / self.temperature, dim=1)
-
-
-class MGCECDLRegressor(_BaseMGCECDL):
-    """Regression adaptation of M-GCECDL using modality-specific encoders and reliability weights."""
-
-    def __init__(
-        self,
-        modality_feature_indices: Mapping[str, Sequence[int]],
-        hidden_dim: int = 128,
-        embed_dim: int = 64,
-        dropout: float = 0.10,
-        temperature: float = 1.0,
-    ) -> None:
-        super().__init__(
-            modality_feature_indices=modality_feature_indices,
-            hidden_dim=hidden_dim,
-            embed_dim=embed_dim,
-            dropout=dropout,
-            temperature=temperature,
-        )
-        self.modality_regressors = nn.ModuleList(
-            nn.Linear(embed_dim, 1) for _ in self.modality_feature_indices
-        )
-
-    def forward(
-        self,
-        x: torch.Tensor,
-        modality_masks: torch.Tensor | None = None,
-    ) -> dict[str, Any]:
-        modality_embeddings, reliability_scores = self._encode_modalities(x)
-        modality_reconstructions, reconstructed_features = self._decode_modalities(
-            modality_embeddings
-        )
-        modality_predictions: list[torch.Tensor] = []
-
-        for embeddings, regressor in zip(
-            modality_embeddings,
-            self.modality_regressors,
-        ):
-            modality_predictions.append(regressor(embeddings).squeeze(-1))
-
-        stacked_predictions = torch.stack(modality_predictions, dim=1)
-        reliabilities = self._compute_reliabilities(reliability_scores, modality_masks)
-        fused_prediction = torch.sum(reliabilities * stacked_predictions, dim=1, keepdim=True)
-        modality_contributions = reliabilities * stacked_predictions
-
-        return {
-            "fused_prediction": fused_prediction,
-            "modality_predictions": stacked_predictions,
-            "reliabilities": reliabilities,
-            "modality_contributions": modality_contributions,
-            "embeddings": modality_embeddings,
-            "modality_reconstructions": modality_reconstructions,
-            "reconstructed_features": reconstructed_features,
-            "modality_names": self.modality_names,
-        }
 
 
 class MGCECDLClassifier(_BaseMGCECDL):

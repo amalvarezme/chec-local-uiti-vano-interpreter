@@ -1,6 +1,6 @@
 # Arquitectura y Flujo de Operación: Simulador de Criticidad CHEC
 
-Este documento describe la arquitectura multi-agente y el flujo de información del Simulador de Criticidad, basado en los conceptos del contexto del proyecto (`ContextoProyectoSimuladorCHEC.md`). El sistema emplea agentes de IA de diferentes capacidades (Low/High), técnicas de Recuperación de Información (RAG) para análisis documental, y un modelo predictivo pre-entrenado para analizar causas de fallas, simular escenarios de mejora en redes de distribución eléctrica de Nivel de Tensión 2, y generar reportes de evidencias.
+Este documento describe la arquitectura multi-agente y el flujo de información del Simulador de Criticidad, basado en los conceptos del contexto del proyecto (`ContextoProyectoSimuladorCHEC.md`). El sistema emplea agentes de IA de diferentes capacidades (Low/High), técnicas de Recuperación de Información (RAG) para análisis documental, y un modelo M-GCECDL pre-entrenado para analizar causas de fallas, simular escenarios de mejora en redes de distribución eléctrica de Nivel de Tensión 2, y generar reportes de evidencias.
 
 ---
 
@@ -15,13 +15,13 @@ El proceso integra datos estructurados (tabulares) y no estructurados (texto de 
    - **Bitácoras de Intervenciones:** Extrae el registro de mantenimientos programados (ej. podas, reposiciones) e intervenciones de mitigación asociadas a la zona en el último año.
    - **Normativa de Sistemas de Potencia:** Extrae los lineamientos técnicos aplicables a la infraestructura afectada.
 5. **Diagnóstico Preliminar agéntico descriptivo mejorado (bítacoras, historial y normativa):** Se consolida el evento actual con el historial tabular y el registro documental para plantear hipótesis de fallos tempranas.
-6. **Inferencia del Modelo Predictivo:** Un modelo de IA predictiva procesa las variables tabulares del evento actual y entrega:
+6. **Inferencia del Modelo M-GCECDL:** Un modelo de IA predictiva procesa las variables tabulares del evento actual y entrega:
    - La predicción matemática de `UITI_VANO`.
    - **Máscaras de relevancia (Feature Importance):** Valores de 0 a 1 indicando qué características tienen mayor peso estadístico.
 7. **Cotejo Analítico a Tres Vías (Razonamiento Cruzado):** El sistema realiza un cruce crítico y justifica las causas combinando los patrones históricos, las justificaciones de bitácoras/normas y las máscaras del modelo ML. Coteja diagnósticos en puntos 3, 5 y 6.
 8. **Identificación de Escenarios Guiados:** Basado en el cotejo, se presenta una lista filtrada de variables candidatas a intervenir, estrictamente guiadas y validadas por los hallazgos en las bitácoras y la norma.
 9. **Simulación "*What-If*":** El usuario modifica los valores de las variables sugeridas en la interfaz.
-10. **Reevaluación Predictiva:** El modelo predictivo procesa el nuevo escenario y proyecta el nuevo valor de `UITI_VANO`.
+10. **Reevaluación Predictiva:** El modelo M-GCECDL procesa el nuevo escenario y proyecta el nuevo valor de `UITI_VANO`.
 11. **Generación de Reporte de Evidencias:** El sistema compila y redacta automáticamente un informe técnico formal. Este documento expone el razonamiento cruzado, las pruebas estadísticas (máscaras y proyecciones) y las evidencias documentales (citas de bitácoras y normativas) que justifican tanto las causas del fallo como la viabilidad del escenario de intervención propuesto.
 
 ---
@@ -42,7 +42,7 @@ La arquitectura multimodelo utiliza agentes especializados con cargas cognitivas
 - **Rol:** Especialista en Normativa y Operaciones.
 - **Función:** Lee bitácoras, reportes de poda e incidencias desde una base de datos vectorial (Vector Store). Coteja si el mantenimiento operativo en terreno se ejecutó según la normativa vigente.
 
-### Orquestador del Modelo Predictivo (API / No LLM)
+### Orquestador del Modelo M-GCECDL (API / No LLM)
 - **Rol:** Puente de Inferencia ML.
 - **Función:** Ejecuta el modelo pre-entrenado y retorna las predicciones numéricas y el tensor de máscaras de relevancia.
 
@@ -52,7 +52,7 @@ La arquitectura multimodelo utiliza agentes especializados con cargas cognitivas
 
 ### Agente 5: Simulador y Evaluador de Escenarios (Modelo *Low/Fast*)
 - **Rol:** Asistente Interactiva "What-If".
-- **Función:** Gestiona la simulación iterativa con el usuario y ejecuta la reevaluación con el modelo predictivo, validando matemáticamente si la intervención mejora la red.
+- **Función:** Gestiona la simulación iterativa con el usuario y ejecuta la reevaluación con el modelo M-GCECDL, validando matemáticamente si la intervención mejora la red.
 
 ### Agente 6: Redactor de Informes Técnicos (Modelo *High/Generative*)
 - **Rol:** Generador de Reportes de Evidencia.
@@ -88,7 +88,7 @@ graph TD
     A5[Agente 5: Simulador Escenarios\nModelo Low]:::agentLow
     A6[Agente 6: Redactor Informes\nModelo High]:::agentHigh
     
-    MP{{Modelo Predictivo\nPre-entrenado}}:::model
+    MP{{Modelo M-GCECDL\nPre-entrenado}}:::model
     Reporte[[Reporte de Evidencias\ny Razonamientos]]:::outputDoc
 
     %% Flujo Inicial
@@ -133,6 +133,6 @@ graph TD
 ## Resumen del Ciclo de Valor Ampliado
 1. **Comprender:** Desde la taxonomía numérica de fallas (`Agente 1`).
 2. **Contextualizar Multimodalmente:** Cruzando el historial numérico de degradación (`Agente 2`) con la "historia operativa" registrada en bitácoras y regulada en normas (`Agente 3`).
-3. **Validar Causas:** Contrastando el raciocinio humano/LLM cualitativo con inferencias matemáticas estrictas (`Agente 4` + `Modelo Predictivo`).
+3. **Validar Causas:** Contrastando el raciocinio humano/LLM cualitativo con inferencias matemáticas estrictas (`Agente 4` + `Modelo M-GCECDL`).
 4. **Actuar Inteligentemente:** Diseñando simulaciones fundamentadas operativa y normativamente (`Agente 5`).
 5. **Documentar y Soportar:** Generando de forma automática un reporte técnico exhaustivo que cristaliza las evidencias encontradas y los razonamientos inferidos (`Agente 6`), cerrando la brecha entre el análisis de IA y la toma de decisiones empresariales.

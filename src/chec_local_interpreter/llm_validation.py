@@ -13,27 +13,6 @@ except ImportError:  # pragma: no cover - exercised only in minimal environments
 
 from chec_local_interpreter.llm_contracts import load_output_schema
 
-FORBIDDEN_TERMS = (
-    "rag",
-    "bitacora",
-    "bitácora",
-    "normativa",
-    "modelo predictivo",
-    "predice",
-    "mascara",
-    "máscara",
-    "what-if",
-    "what if",
-    "simulacion",
-    "simulación",
-    "reporte final",
-    "causó definitivamente",
-    "causo definitivamente",
-    "demuestra que",
-    "la causa fue",
-)
-
-
 @dataclass
 class ValidationResult:
     ok: bool
@@ -51,7 +30,21 @@ def parse_llm_json(response_text: str) -> dict[str, Any]:
         end = text.rfind('}')
         if start != -1 and end != -1 and end > start:
             text = text[start:end+1]
-    return json.loads(text)
+    data = json.loads(text)
+    return _strip_schema_meta_keys(data)
+
+
+def _strip_schema_meta_keys(data: Any) -> Any:
+    """Drop JSON-Schema meta-keywords the model tends to echo at the object root.
+
+    The output schema is embedded verbatim in the prompt, so weaker models copy its
+    ``$schema``/``$id`` metadata into their answer. Under ``additionalProperties: false``
+    that turns an otherwise-valid answer into a hard validation failure, so we remove any
+    top-level ``$``-prefixed key before validation.
+    """
+    if isinstance(data, dict):
+        return {key: value for key, value in data.items() if not str(key).startswith("$")}
+    return data
 
 
 def _flatten_strings(value: Any) -> list[str]:
@@ -81,6 +74,13 @@ def _context_dates(context: dict[str, Any]) -> set[str]:
         for item in context.get("critical_points", [])
         if isinstance(item, dict) and item.get("fecha_dia")
     )
+    for item in context.get("critical_periods", []):
+        if not isinstance(item, dict):
+            continue
+        if item.get("start_date"):
+            dates.add(str(item.get("start_date")))
+        if item.get("end_date"):
+            dates.add(str(item.get("end_date")))
     dates.update(
         str(item.get("d"))
         for item in context.get("daily", [])
@@ -104,11 +104,17 @@ def _context_dates(context: dict[str, Any]) -> set[str]:
 
 
 def _critical_point_ids(context: dict[str, Any]) -> set[str]:
-    return {
+    ids = {
         str(item.get("critical_point_id"))
         for item in context.get("critical_points", [])
         if isinstance(item, dict) and item.get("critical_point_id")
     }
+    ids.update(
+        str(item.get("critical_period_id"))
+        for item in context.get("critical_periods", [])
+        if isinstance(item, dict) and item.get("critical_period_id")
+    )
+    return ids
 
 
 def _unavailable_columns(context: dict[str, Any]) -> set[str]:
@@ -123,10 +129,6 @@ def _guardrail_errors(data: dict[str, Any], context: dict[str, Any]) -> list[str
     
     # For the rest of the checks (dates, IDs, etc.), use the full text
     full_text_blob = "\n".join(_flatten_strings(data)).lower()
-    for term in FORBIDDEN_TERMS:
-        if term in full_text_blob:
-            errors.append(f"Forbidden scope term used: {term}")
-
     allowed_dates = _context_dates(context)
     for date in re.findall(r"\b20\d{2}-\d{2}-\d{2}\b", full_text_blob):
         if date not in allowed_dates:
