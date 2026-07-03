@@ -3,7 +3,7 @@ name: Deploy site to GitHub Pages
 on:
   push:
     branches:
-      - feat/graphify-context-integration
+      - main
   workflow_dispatch:
 
 permissions:

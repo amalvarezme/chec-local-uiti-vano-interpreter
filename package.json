@@ -5,11 +5,11 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jclugor/chec-local-uiti-vano-interpreter.git"
+    "url": "https://github.com/amalvarezme/chec-local-uiti-vano-interpreter.git"
   },
-  "homepage": "https://jclugor.github.io/chec-local-uiti-vano-interpreter/",
+  "homepage": "https://amalvarezme.github.io/chec-local-uiti-vano-interpreter/",
   "bugs": {
-    "url": "https://github.com/jclugor/chec-local-uiti-vano-interpreter/issues"
+    "url": "https://github.com/amalvarezme/chec-local-uiti-vano-interpreter/issues"
   },
   "scripts": {
     "dev": "BASE_PATH=/ ASTRO_TELEMETRY_DISABLED=1 astro dev --host 0.0.0.0",
