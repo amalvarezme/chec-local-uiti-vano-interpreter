@@ -1,20 +1,20 @@
-# Domain Grounding Guardrails
+# Reglas de Anclaje de Dominio
 
-Use domain context from `ContextoProyectoSimuladorCHEC.md` only as grounding for the
-structured dataset. Treat it as interpretive guidance, not proof.
+Usa el contexto de dominio de `ContextoProyectoSimuladorCHEC.md` únicamente como anclaje
+para el dataset estructurado. Trátalo como guía interpretativa, no como prueba.
 
-## Compact Domain Guidance
+## Guía Compacta de Dominio
 
-- Weather lags can indicate accumulated environmental stress.
+- Los rezagos climáticos pueden indicar estrés ambiental acumulado.
 - `NR_T` (nivel de riesgo de vegetación) y `DDT` (densidad de descargas a tierra) son variables **siempre presentes** en la tabla de estudio; deben analizarse en todos los informes como posibles moduladores de eventos y `UITI_VANO`.
-- Precipitation, wind, and gusts can support environmental hypotheses alongside `NR_T` and `DDT`.
-- Conductor, length, phases, neutral/guard wire, and taxonomy describe susceptibility.
-- `LVSW`, `CNT_VN`, `FID_VANO`, and `CIRCUITO` describe topology and propagation context.
-- Protection equipment and users protected help explain impact scope and restoration context.
-- Asset variables help describe vulnerability and exposure.
-- Duration and affected users help explain event-level interruption impact.
+- La precipitación, el viento y las ráfagas pueden respaldar hipótesis ambientales junto con `NR_T` y `DDT`.
+- El conductor, la longitud, las fases, el neutro/cable de guarda y la taxonomía describen susceptibilidad.
+- `LVSW`, `CNT_VN`, `FID_VANO` y `CIRCUITO` describen la topología y el contexto de propagación.
+- Los equipos de protección y los usuarios protegidos ayudan a explicar el alcance del impacto y el contexto de restablecimiento.
+- Las variables de activos ayudan a describir vulnerabilidad y exposición.
+- La duración y los usuarios afectados ayudan a explicar el impacto de la interrupción a nivel de evento.
 
-## Prohibited Language
+## Lenguaje Prohibido
 
 - "causo definitivamente"
 - "demuestra que"
@@ -29,15 +29,15 @@ structured dataset. Treat it as interpretive guidance, not proof.
 - "no contamos con datos de DDT"
 - cualquier frase que indique ausencia de datos para `DDT` o `NR_T`
 
-## Prohibited Associations
+## Asociaciones Prohibidas
 
-- **CRÍTICO**: Evita relacionar operaciones manuales (manual operations) con causas, caracterizaciones o justificaciones de fallo. Las operaciones manuales son intervenciones controladas por el personal de la empresa y no afectan el funcionamiento principal del circuito.
+- **CRÍTICO**: Evita relacionar operaciones manuales con causas, caracterizaciones o justificaciones de fallo. Las operaciones manuales son intervenciones controladas por el personal de la empresa y no afectan el funcionamiento principal del circuito.
 
-## Preferred Language
+## Lenguaje Preferido
 
 - "sugiere"
 - "es compatible con"
-- "podria estar asociado con"
+- "podría estar asociado con"
 - "la evidencia tabular muestra"
 - "dentro de las variables disponibles"
-- "no se puede confirmar con esta version local"
+- "no se puede confirmar con esta versión local"

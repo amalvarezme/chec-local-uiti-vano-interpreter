@@ -28,6 +28,11 @@ EXPERT_ALIGNMENT_REQUIRED_KEYS = (
 TARGET_VARIABLES = {"UITI_VANO"}
 
 
+def normalizar_circuito(value: Any) -> str:
+    """Normalize circuit ids for strict, case-insensitive equality checks."""
+    return re.sub(r"[^A-Z0-9]", "", str(value or "").upper())
+
+
 def _date_text(value: Any) -> str | None:
     parsed = pd.to_datetime(value, errors="coerce")
     if pd.isna(parsed):
@@ -190,6 +195,17 @@ def _interval_overlap_and_distance(a_start, a_end, b_start, b_end) -> tuple[int,
     return 0, (a_start - b_end).days
 
 
+def filtrar_discussiones_por_circuito(pdf_df: pd.DataFrame, circuito_interes: str | None) -> pd.DataFrame:
+    """Return only rows explicitly associated with the evaluated circuit."""
+    if pdf_df.empty:
+        return pdf_df.copy()
+    circuito_norm = normalizar_circuito(circuito_interes)
+    if not circuito_norm or "Circuito" not in pdf_df.columns:
+        return pdf_df.iloc[0:0].copy()
+    mask = pdf_df["Circuito"].map(normalizar_circuito).eq(circuito_norm)
+    return pdf_df.loc[mask].copy()
+
+
 def seleccionar_top_coincidencias_temporales(
     *,
     fechas_informe: list[dict[str, Any]],
@@ -200,9 +216,12 @@ def seleccionar_top_coincidencias_temporales(
     if pdf_df.empty or not fechas_informe or top_k <= 0:
         return []
 
+    circuit_pdf_df = filtrar_discussiones_por_circuito(pdf_df, circuito_interes)
+    if circuit_pdf_df.empty:
+        return []
+
     candidates: list[dict[str, Any]] = []
-    circuito_norm = str(circuito_interes or "").strip().upper()
-    for idx, row in pdf_df.iterrows():
+    for idx, row in circuit_pdf_df.iterrows():
         pdf_start = _date_value(row.get("Fecha inicio"))
         pdf_end = _date_value(row.get("Fecha fin"))
         if not pdf_start or not pdf_end:
@@ -226,8 +245,6 @@ def seleccionar_top_coincidencias_temporales(
             else:
                 temporal_score = 1.0 / (1.0 + distance_days)
             temporal_score *= float(fecha.get("peso") or 1.0)
-            if circuito_norm and str(row.get("Circuito") or "").strip().upper() == circuito_norm:
-                temporal_score += 0.5
             if str(row.get("Evidencia") or "").strip():
                 temporal_score += 0.1
 
@@ -492,6 +509,10 @@ def compactar_contexto_expert_alignment_para_prompt(context: dict[str, Any]) -> 
     return {
         "circuito": context.get("circuito"),
         "periodo_informe": context.get("periodo_informe"),
+        "fuentes_disponibles": context.get("fuentes_disponibles", []),
+        "fuentes_usadas": context.get("fuentes_usadas", []),
+        "modelo_experto_disponible": context.get("modelo_experto_disponible", False),
+        "modelo_experto_razon": context.get("modelo_experto_razon"),
         "fechas_informe": [
             item for item in context.get("fechas_informe", [])
             if isinstance(item, dict) and item.get("source") != "context"
@@ -506,23 +527,40 @@ def compactar_contexto_expert_alignment_para_prompt(context: dict[str, Any]) -> 
 
 def construir_prompt_expert_alignment(context: dict[str, Any], skill_bundle: str) -> str:
     compact = compactar_contexto_expert_alignment_para_prompt(context)
+    has_pdf_matches = bool(compact.get("pdf_expert_matches"))
+    available_sources = ["Agente Descriptor", "Agente predictivo"]
+    if has_pdf_matches:
+        available_sources.append("Modelo Experto")
+    source_instruction = (
+        "Hay filas expertas disponibles en pdf_expert_matches; puedes compararlas contra "
+        "Agente Descriptor y Agente predictivo, citando solo los archivos PDF presentes."
+        if has_pdf_matches
+        else
+        "No hay filas expertas disponibles en pdf_expert_matches. Genera la comparación "
+        "solo entre Agente Descriptor y Agente predictivo; no menciones Modelo Experto ni reportes expertos como "
+        "fuente observada, no inventes evidencia PDF y deja vacíos los arreglos que dependan "
+        "exclusivamente de hallazgos expertos."
+    )
     return (
-        "Eres un agente de comparación técnica entre tres fuentes: "
-        "agente de análisis histórico, agente del modelo predictivo y reportes expertos extraídos previamente a Excel. "
+        "Eres un agente de comparación técnica entre las fuentes disponibles del flujo CHEC. "
         "Devuelve únicamente JSON válido, "
         "sin markdown, sin etiquetas <think> y sin texto adicional.\n\n"
+        "## Fuentes disponibles\n"
+        f"{json.dumps(available_sources, ensure_ascii=False, indent=2)}\n\n"
+        "## Regla para esta ejecución\n"
+        f"{source_instruction}\n\n"
         "## Skill expert_alignment\n"
         f"{skill_bundle}\n\n"
         "## Contexto estructurado\n"
         f"{json.dumps(compact, ensure_ascii=False, indent=2)}\n\n"
         "## Formato exacto de salida\n"
         "{\n"
-        '  "contexto": {"circuito": "...", "periodo": {"inicio": "YYYY-MM-DD", "fin": "YYYY-MM-DD"}, "n_filas_expertas_comparadas": 0},\n'
-        '  "coincidencias": [{"tema": "hallazgo", "fuentes": ["Agente base", "Agente predictivo", "DON23L13.pdf"], "explicacion": "..."}],\n'
-        '  "diferencias": [{"tema": "hallazgo", "fuentes": ["Agente base", "Agente predictivo", "DON23L13.pdf"], "explicacion": "..."}],\n'
+        '  "contexto": {"circuito": "...", "periodo": {"inicio": "YYYY-MM-DD", "fin": "YYYY-MM-DD"}, "n_filas_expertas_comparadas": 0, "fuentes_usadas": ["Agente Descriptor", "Agente predictivo"], "modelo_experto_disponible": false, "modelo_experto_razon": "..."},\n'
+        '  "coincidencias": [{"tema": "hallazgo", "fuentes": ["Agente Descriptor", "Agente predictivo", "DON23L13.pdf"], "explicacion": "..."}],\n'
+        '  "diferencias": [{"tema": "hallazgo", "fuentes": ["Agente Descriptor", "Agente predictivo", "DON23L13.pdf"], "explicacion": "..."}],\n'
         '  "hallazgos_expertos_no_cubiertos": [],\n'
         '  "hallazgos_modelo_no_respaldados_por_pdf": [],\n'
-        '  "variables_a_priorizar": [{"variable": "...", "prioridad": "alta", "fuentes_que_la_respaldan": ["Agente base", "Agente predictivo", "DON23L13.pdf"], "justificacion": "...", "tipo_de_validacion_sugerida": "..."}],\n'
+        '  "variables_a_priorizar": [{"variable": "...", "prioridad": "alta", "fuentes_que_la_respaldan": ["Agente Descriptor", "Agente predictivo", "DON23L13.pdf"], "justificacion": "...", "tipo_de_validacion_sugerida": "..."}],\n'
         '  "sintesis_final": "..."\n'
         "}\n\n"
         "Aplica estrictamente las skills cargadas para decidir contenido, nombres de fuentes, "
@@ -546,12 +584,30 @@ def construir_contexto_expert_alignment(
     predictive_variables = _normalize_variable_list(variables_modelo_predictivo)
     if not predictive_variables:
         predictive_variables = _predictive_model_variables(inference_context_package)
+    circuito_norm = normalizar_circuito(circuito)
+    pdf_expert_matches = [
+        item for item in (pdf_expert_matches or [])
+        if isinstance(item, dict) and normalizar_circuito(item.get("Circuito")) == circuito_norm
+    ]
+    available_sources = ["Agente Descriptor", "Agente predictivo"]
+    expert_available = bool(pdf_expert_matches)
+    if pdf_expert_matches:
+        available_sources.append("Modelo Experto")
+    expert_reason = (
+        "Se encontraron discusiones explícitamente asociadas al circuito evaluado."
+        if expert_available
+        else "No hay discusión experta disponible para el circuito evaluado; la tabla de discusiones se omite."
+    )
     return {
         "circuito": str(circuito),
         "periodo_informe": {
             "inicio": _date_text(periodo_inicio),
             "fin": _date_text(periodo_fin),
         },
+        "fuentes_disponibles": available_sources,
+        "fuentes_usadas": available_sources,
+        "modelo_experto_disponible": expert_available,
+        "modelo_experto_razon": expert_reason,
         "fechas_informe": fechas_informe,
         "llm1_analysis": validation_data,
         "llm2_inference_analysis": inference_validation_data,
@@ -750,24 +806,27 @@ def _pdf_source_names(context: dict[str, Any]) -> list[str]:
 
 def _normalize_visible_sources(value: Any, context: dict[str, Any]) -> list[str]:
     pdf_names = _pdf_source_names(context)
-    fallback_pdf = pdf_names or ["reportes expertos"]
+    fallback_pdf = pdf_names
     if value in (None, "", []):
         return []
     raw_items = value if isinstance(value, list) else [value]
     normalized: list[str] = []
     source_map = {
-        "llm1": ["Agente base"],
-        "llm 1": ["Agente base"],
-        "agente base": ["Agente base"],
-        "agente de análisis histórico": ["Agente base"],
-        "agente de analisis historico": ["Agente base"],
-        "llm de datos históricos": ["Agente base"],
-        "llm de datos historicos": ["Agente base"],
+        "llm1": ["Agente Descriptor"],
+        "llm 1": ["Agente Descriptor"],
+        "agente base": ["Agente Descriptor"],
+        "agente descriptor": ["Agente Descriptor"],
+        "agente de análisis histórico": ["Agente Descriptor"],
+        "agente de analisis historico": ["Agente Descriptor"],
+        "llm de datos históricos": ["Agente Descriptor"],
+        "llm de datos historicos": ["Agente Descriptor"],
         "llm2": ["Agente predictivo"],
         "llm 2": ["Agente predictivo"],
         "agente predictivo": ["Agente predictivo"],
         "agente del modelo predictivo": ["Agente predictivo"],
         "llm del modelo predictivo": ["Agente predictivo"],
+        "modelo experto": fallback_pdf,
+        "agente del modelo experto": fallback_pdf,
         "pdf_experto": fallback_pdf,
         "reportes expertos": fallback_pdf,
         "reporte experto": fallback_pdf,
@@ -793,7 +852,7 @@ def _normalize_comparison_sources(data: dict[str, Any], context: dict[str, Any])
             if not isinstance(item, dict):
                 continue
             sources = _normalize_visible_sources(item.get("fuentes"), context)
-            if sources:
+            if item.get("fuentes") not in (None, "", []):
                 item["fuentes"] = sources
     variables = data.get("variables_a_priorizar", [])
     if isinstance(variables, list):
@@ -801,8 +860,73 @@ def _normalize_comparison_sources(data: dict[str, Any], context: dict[str, Any])
             if not isinstance(item, dict):
                 continue
             sources = _normalize_visible_sources(item.get("fuentes_que_la_respaldan"), context)
-            if sources:
+            if item.get("fuentes_que_la_respaldan") not in (None, "", []):
                 item["fuentes_que_la_respaldan"] = sources
+
+
+def _normalize_output_context_metadata(data: dict[str, Any], context: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    output_context = data.get("contexto")
+    if not isinstance(output_context, dict):
+        errors.append("contexto debe ser un objeto.")
+        return errors
+
+    expected_expert_available = bool(context.get("modelo_experto_disponible") or context.get("pdf_expert_matches"))
+    expected_sources = list(context.get("fuentes_usadas") or ["Agente Descriptor", "Agente predictivo"])
+    if expected_expert_available and "Modelo Experto" not in expected_sources:
+        expected_sources.append("Modelo Experto")
+    expected_expert_reason = str(context.get("modelo_experto_razon") or "").strip()
+    if not expected_expert_reason:
+        expected_expert_reason = (
+            "Se encontraron discusiones explícitamente asociadas al circuito evaluado."
+            if expected_expert_available
+            else "No hay discusión experta disponible para el circuito evaluado; la tabla de discusiones se omite."
+        )
+
+    if not output_context.get("fuentes_usadas"):
+        output_context["fuentes_usadas"] = expected_sources
+    else:
+        raw_sources = output_context.get("fuentes_usadas")
+        raw_sources = raw_sources if isinstance(raw_sources, list) else [raw_sources]
+        normalized_sources: list[str] = []
+        pdf_names = set(_pdf_source_names(context))
+        for source in raw_sources:
+            text = str(source or "").strip()
+            lower = text.lower()
+            if lower in {
+                "llm1",
+                "llm 1",
+                "agente base",
+                "agente descriptor",
+                "agente de análisis histórico",
+                "agente de analisis historico",
+                "llm de datos históricos",
+                "llm de datos historicos",
+            }:
+                mapped = "Agente Descriptor"
+            elif lower in {"llm2", "llm 2", "agente predictivo", "agente del modelo predictivo", "llm del modelo predictivo"}:
+                mapped = "Agente predictivo"
+            elif lower in {"modelo experto", "agente del modelo experto", "pdf_experto", "reportes expertos", "reporte experto"} or text in pdf_names:
+                mapped = "Modelo Experto"
+            else:
+                mapped = text
+            if mapped and mapped not in normalized_sources:
+                normalized_sources.append(mapped)
+        output_context["fuentes_usadas"] = normalized_sources
+        if normalized_sources != expected_sources:
+            errors.append(
+                "fuentes_usadas no coincide con las fuentes disponibles para el circuito evaluado: "
+                + ", ".join(normalized_sources)
+            )
+
+    if "modelo_experto_disponible" not in output_context:
+        output_context["modelo_experto_disponible"] = expected_expert_available
+    elif bool(output_context.get("modelo_experto_disponible")) != expected_expert_available:
+        errors.append("modelo_experto_disponible no coincide con la evidencia experta disponible para el circuito.")
+
+    if not output_context.get("modelo_experto_razon"):
+        output_context["modelo_experto_razon"] = expected_expert_reason
+    return errors
 
 
 def validar_respuesta_expert_alignment(response_text: str, context: dict[str, Any]) -> dict[str, Any]:
@@ -816,6 +940,7 @@ def validar_respuesta_expert_alignment(response_text: str, context: dict[str, An
         return {"ok": False, "data": None, "errors": ["La respuesta debe ser un objeto JSON."]}
 
     _normalize_comparison_sources(data, context)
+    errors.extend(_normalize_output_context_metadata(data, context))
 
     for key in EXPERT_ALIGNMENT_REQUIRED_KEYS:
         if key not in data:
@@ -846,6 +971,14 @@ def validar_respuesta_expert_alignment(response_text: str, context: dict[str, An
         evidence = str(item.get("evidencia_pdf") or "").strip()
         if evidence and not _evidence_is_supported(evidence, evidences, allowed_indexes):
             errors.append(f"Evidencia PDF no proviene de filas comparadas: {evidence[:120]}")
+    if not context.get("pdf_expert_matches"):
+        expert_only_sections = (
+            "hallazgos_expertos_no_cubiertos",
+        )
+        for section_name in expert_only_sections:
+            section = data.get(section_name, [])
+            if isinstance(section, list) and section:
+                errors.append(f"{section_name} debe estar vacío cuando no hay reportes expertos comparables.")
 
     allowed_variables = _allowed_variables(context)
     variables_section = data.get("variables_a_priorizar", [])

@@ -1,10 +1,10 @@
-# PDF Discussion Extraction
+# Extracción de Discusiones PDF
 
-Skills para generar la tabla base de discusiones tecnicas verificables desde reportes expertos en PDF.
+Habilidades para generar la tabla base de discusiones técnicas verificables desde reportes expertos en PDF.
 
 Esta carpeta separa el contrato del agente extractor del cuaderno que lo ejecuta. El cuaderno `notebooks/core/03_pdf_discussion_table_from_pdfs.ipynb` carga `01_pdf_discussion_extractor.md`, rellena los metadatos del fragmento y valida la salida antes de agregar filas al Excel final.
 
-Restricciones de esta funcion:
+Restricciones de esta función:
 
 - No usa embeddings.
 - No usa FAISS.

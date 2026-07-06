@@ -16,7 +16,7 @@ def test_prompt_rendering_includes_context_schema_and_version():
     assert '"C1"' in prompt
     assert "uiti_vano_explanation.output_schema.v1" in prompt
     assert PROMPT_VERSION in prompt
-    assert "Base Output Contract" in prompt
+    assert "Contrato de Salida Base" in prompt
 
 
 def test_compact_base_repair_prompt_uses_skill_and_minimal_context():
@@ -41,11 +41,11 @@ def test_compact_base_repair_prompt_uses_skill_and_minimal_context():
         top_vanos_percentile=97,
         max_critical_points=1,
     )
-    assert "Base Repair" in prompt
+    assert "Reparación Base" in prompt
     assert PROMPT_VERSION in prompt
     assert '"C1"' in prompt
     assert '"FID_VANO": "D"' not in prompt
-    assert "máximo 5 items" in prompt
+    assert "máximo 5 ítems" in prompt
     assert "{{CONTEXT_JSON}}" not in prompt
 
     prompt_alias = render_compact_base_repair_prompt(

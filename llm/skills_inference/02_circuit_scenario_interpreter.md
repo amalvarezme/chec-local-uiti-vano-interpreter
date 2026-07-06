@@ -1,22 +1,22 @@
-# 02 - Circuit Scenario Interpreter
+# 02 - Intérprete de Escenarios de Circuito
 
-Esta skill explica que recibe el agente en cada escenario del analisis por circuito y como
+Esta habilidad explica qué recibe el agente en cada escenario del análisis por circuito y cómo
 debe interpretarlo. El circuito, fechas, Top-N y cantidad de variables no son fijos:
-dependen de la seleccion del usuario y de los resultados del cuaderno.
+dependen de la selección del usuario y de los resultados del cuaderno.
 
-La interpretacion debe usar el grafo de entrenamiento como marco principal. Las variables
+La interpretación debe usar el grafo de entrenamiento como marco principal. Las variables
 top no son etiquetas aisladas: cada una debe relacionarse, cuando sea posible, con su modo
-CHEC, su posicion en el grafo, sus conexiones directas o preservadas y su camino conceptual
+CHEC, su posición en el grafo, sus conexiones directas o preservadas y su camino conceptual
 hacia `UITI_VANO`.
 
 En el flujo MGCECDL actual, el cuaderno
 `notebooks/inference/05_mgcecdl_circuit_analysis.ipynb` agrega un entregable adicional por
 escenario: un HTML de grafo estimado. Ese grafo no es la matriz experta original; se deriva
-de la capa de reconstruccion del modelo para las muestras del escenario y de una similitud
+de la capa de reconstrucción del modelo para las muestras del escenario y de una similitud
 RBF entre variables. Se usa para explorar asociaciones inducidas por el modelo, no para
 afirmar causalidad.
 
-## Unidad de analisis
+## Unidad de Análisis
 
 La unidad operativa es el `FID_VANO` dentro del circuito seleccionado. El agente recibe
 eventos filtrados para ese circuito-periodo y, a partir de ellos, tablas o resultados
@@ -69,7 +69,7 @@ Como leer cada campo:
   depender de verlo inline; basta con que el HTML quede en
   `reports/mgcecdl-results/interactive_graphs/`.
 
-## Metodologia comun
+## Metodología Común
 
 Cada escenario sigue esta logica:
 
@@ -86,7 +86,7 @@ Cada escenario sigue esta logica:
 10. Si existe, registrar el HTML del grafo estimado del escenario como entregable
     interpretativo complementario.
 
-## Relacion obligatoria con el grafo
+## Relación Obligatoria con el Grafo
 
 Para cada escenario, el agente debe revisar:
 
@@ -105,8 +105,8 @@ Para cada escenario, el agente debe revisar:
 Si no hay ruta documentada, usar una frase explicita:
 
 ```text
-No se encontro una relacion documentada entre <variable> y UITI_VANO dentro del grafo
-disponible. Su relevancia debe leerse como comportamiento del modelo, no como explicacion
+No se encontró una relación documentada entre <variable> y UITI_VANO dentro del grafo
+disponible. Su relevancia debe leerse como comportamiento del modelo, no como explicación
 experta validada.
 ```
 
@@ -152,7 +152,7 @@ Como interpretarlo:
 - Variables dominantes en este escenario pueden describir repeticion del patron, no
   necesariamente magnitud del dano.
 
-## Escenario de fechas de interes
+## Escenario de Fechas de Interés
 
 Criterio esperado:
 
@@ -172,7 +172,7 @@ Como interpretarlo:
 - Si el escenario concatena varias fechas, la interpretacion corresponde al conjunto de
   fechas, no necesariamente a cada dia por separado.
 
-## Escenario de frecuencia en fechas de interes
+## Escenario de Frecuencia en Fechas de Interés
 
 Criterio esperado:
 

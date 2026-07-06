@@ -1,20 +1,20 @@
-# LLM Output Validator
+# Validador de Salida del LLM
 
-Validate every LLM response before presenting it as analysis.
+Valida cada respuesta del LLM antes de presentarla como análisis.
 
-## The Response Must
+## La Respuesta Debe
 
-- Be valid JSON.
-- Match `uiti_vano_explanation.output_schema.json`.
-- Include only dates present in `critical_points` or `daily_series`.
-- Not reference unavailable columns as if they were present.
-- Not claim use of RAG, operational logs, standards review, predictive models, masks, simulations, or final report generation.
-- Include limitations.
-- Include data gaps when optional variables are missing.
+- Ser JSON válido.
+- Cumplir con `uiti_vano_explanation.output_schema.json`.
+- Incluir solo fechas presentes en `critical_points` o `daily_series`.
+- No referenciar columnas no disponibles como si estuvieran presentes.
+- No afirmar el uso de RAG, bitácoras operativas, revisión normativa, modelos predictivos, máscaras, simulaciones ni generación de reportes finales.
+- Incluir limitaciones.
+- Incluir brechas de datos cuando falten variables opcionales.
 
-## If Validation Fails
+## Si la Validación Falla
 
-- Save invalid raw output to `reports/interpretability/artifacts/invalid_llm_output_<timestamp>.txt`.
-- Save validation errors to `reports/interpretability/artifacts/llm_validation_errors_<timestamp>.json`.
-- Do not present the invalid output as final analysis.
-- Print a clear notebook message explaining that the prompt and context were saved for manual review.
+- Guarda la salida cruda inválida en `reports/interpretability/artifacts/invalid_llm_output_<timestamp>.txt`.
+- Guarda los errores de validación en `reports/interpretability/artifacts/llm_validation_errors_<timestamp>.json`.
+- No presentes la salida inválida como análisis final.
+- Imprime un mensaje claro en el notebook explicando que el prompt y el contexto fueron guardados para revisión manual.

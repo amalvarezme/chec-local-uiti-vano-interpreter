@@ -1,4 +1,4 @@
-# Base Repair
+# Reparación Base
 
 ## Rol
 
@@ -16,10 +16,12 @@ Este modo se usa solo cuando una respuesta anterior no validó.
 - Si hay columnas opcionales no disponibles en `metadata`, inclúyelas en `data_gaps`.
 - Uno de esos ítems debe tratar `NR_T` y `DDT` si aparecen en el contexto.
 - Desarrolla el análisis necesario para corregir la respuesta sin sacrificar hallazgos.
-- Cada bloque presentado como lista debe tener máximo 5 items.
+- Cada bloque presentado como lista debe tener máximo 5 ítems.
 - Cada texto debe ser un párrafo cerrado y completo. No prolongues un campo narrativo con
   detalles que puedan ir en `key_findings` o `probable_justifications_rules`.
 - Prioriza cerrar correctamente el objeto JSON completo.
+- Si el intento anterior falló por sintaxis JSON, regenera desde cero el objeto completo;
+  no continúes ni parches un fragmento truncado.
 
 ## Contexto de reparación
 
@@ -35,7 +37,7 @@ Este modo se usa solo cuando una respuesta anterior no validó.
   "prompt_version": "{{PROMPT_VERSION}}",
   "headline": "...",
   "section_title": "...",
-  "executive_summary": ["maximo 5 items"],
+  "executive_summary": ["máximo 5 ítems"],
   "key_findings": [
     {
       "title": "...",
@@ -87,8 +89,8 @@ Este modo se usa solo cuando una respuesta anterior no validó.
       }
     ]
   },
-  "period_synthesis": "parrafo cerrado",
-  "cause_hypothesis_note": "parrafo cerrado",
+  "period_synthesis": "párrafo cerrado",
+  "cause_hypothesis_note": "párrafo cerrado",
   "data_gaps": [],
   "limitations": ["..."],
   "recommended_actions": ["..."]

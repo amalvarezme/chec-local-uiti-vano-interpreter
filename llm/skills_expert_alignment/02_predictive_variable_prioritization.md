@@ -1,11 +1,11 @@
-# Priorizacion de Variables del Modelo Predictivo
+# Priorización de Variables del Modelo Predictivo
 
-## Proposito
+## Propósito
 
-Esta skill define como el agente de comparacion experta debe convertir coincidencias y
-diferencias en variables a priorizar para revision operacional.
+Esta habilidad define cómo el agente de comparación experta debe convertir coincidencias y
+diferencias en variables a priorizar para revisión operacional.
 
-El publico esperado son expertos en redes electricas. La salida debe ser clara sin exigir
+El público esperado son expertos en redes eléctricas. La salida debe ser clara sin exigir
 conocimiento de agentes, LLMs o nombres internos como LLM1/LLM2.
 
 ## Nombres de fuentes
@@ -58,7 +58,7 @@ ese identificador exista en `variables_modelo_predictivo`:
 
 Si el identificador tecnico no existe en `variables_modelo_predictivo`, no priorizarlo.
 
-## Como decidir prioridad
+## Cómo Decidir Prioridad
 
 Prioriza una variable cuando haya consistencia entre al menos dos de estas senales:
 

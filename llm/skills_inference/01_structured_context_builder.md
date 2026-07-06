@@ -1,12 +1,12 @@
-# 01 - Structured Context Builder CHEC
+# 01 - Constructor de Contexto Estructurado CHEC
 
-Esta skill indica como leer el paquete de contexto que recibe un agente para analizar un
+Esta habilidad indica cómo leer el paquete de contexto que recibe un agente para analizar un
 circuito elegido por el usuario en los flujos CHEC/MGCECDL/inferencia. No debe asumir
-circuito, fechas, Top-N, numero de features ni rutas fijas: esos valores vienen del
-cuaderno, del usuario o del `context_package` generado antes de la interpretacion.
+circuito, fechas, Top-N, número de features ni rutas fijas: esos valores vienen del
+cuaderno, del usuario o del `context_package` generado antes de la interpretación.
 
-El eje de interpretacion es el grafo usado para entrenar o contrastar el modelo. Ese grafo
-no es un grafo generico fijo: se reconstruye o carga alineado al vector `features` de la
+El eje de interpretación es el grafo usado para entrenar o contrastar el modelo. Ese grafo
+no es un grafo genérico fijo: se reconstruye o carga alineado al vector `features` de la
 corrida. Por eso, todo resultado de interpretabilidad debe leerse junto con:
 
 - Las variables seleccionadas que llegaron a `X`.
@@ -14,33 +14,33 @@ corrida. Por eso, todo resultado de interpretabilidad debe leerse junto con:
 - La matriz de adyacencia alineada a ese orden, si esta disponible.
 - Las aristas preservadas que conectan variables retenidas pasando por nodos originales no
   retenidos.
-- El contexto semantico original de los modos CHEC, aunque el modelo haya usado solo un
+- El contexto semántico original de los modos CHEC, aunque el modelo haya usado solo un
   subconjunto de nodos o variables.
 
-En el flujo MGCECDL actual solo se documenta la rama de clasificacion. `UITI_VANO` puede
-estar marcado en el Excel de seleccion, pero el preprocesamiento lo excluye de `features`
+En el flujo MGCECDL actual solo se documenta la rama de clasificación. `UITI_VANO` puede
+estar marcado en el Excel de selección, pero el preprocesamiento lo excluye de `features`
 porque es el objetivo o la base para generar clases de impacto. El agente debe tratarlo
-como objetivo, criterio de priorizacion o columna de reporte, nunca como predictor usado
+como objetivo, criterio de priorización o columna de reporte, nunca como predictor usado
 por el clasificador.
 
-## Que va a recibir el agente
+## Qué va a recibir el agente
 
 El agente puede recibir todo o parte de estos elementos:
 
 - `circuito_interes`: circuito seleccionado por el usuario.
-- `fecha_inicio` y `fecha_fin`: ventana temporal de analisis.
-- `fechas_interes`: fechas puntuales o dias criticos que se quieren contrastar.
-- `top_n_vanos`: cantidad maxima de vanos a priorizar por escenario.
+- `fecha_inicio` y `fecha_fin`: ventana temporal de análisis.
+- `fechas_interes`: fechas puntuales o días críticos que se quieren contrastar.
+- `top_n_vanos`: cantidad máxima de vanos a priorizar por escenario.
 - `top_k_vars`: cantidad de variables explicativas retenidas por evento o escenario.
 - `filtro_uiti_max`: umbral usado para excluir valores extremos antes de entrenar o analizar.
-- `ventana_climatica_horas`: cantidad de lags climaticos incluidos.
+- `ventana_climatica_horas`: cantidad de lags climáticos incluidos.
 - `dataset_path`: fuente de eventos/indicadores.
 - `variables_seleccion_path`: fuente de variables seleccionadas.
 - `model_path`: modelo de clasificacion ya entrenado.
 - `X`: matriz numerica filtrada para el circuito-periodo.
 - `features`: nombres de columnas de `X`, en el mismo orden.
 - `base`: dataframe original filtrado, alineado posicionalmente con `X`.
-- `modos`: agrupacion de variables en modos CHEC.
+- `modos`: agrupación de variables en modos CHEC.
 - `shap_extractor`: explicador Kernel SHAP configurado sobre el mismo `X`.
 - `tabla_periodo`: agregacion por vano para el periodo filtrado.
 - `graph_adjacency_matrix`: matriz dirigida de relaciones entre variables retenidas.
@@ -53,24 +53,24 @@ El agente puede recibir todo o parte de estos elementos:
   `top_uiti_periodo.html`, `top_frecuencia_periodo.html`, `top_uiti_fechas.html` y
   `top_frecuencia_fechas.html`.
 - `estimated_graph_source`: fuente del grafo estimado; para MGCECDL debe describirse como
-  reconstruccion del modelo + similitud RBF entre perfiles de variables.
+  reconstrucción del modelo + similitud RBF entre perfiles de variables.
 - `estimated_graph_rbf_sigma`: sigma RBF tomado del mejor estudio Optuna cuando este
   disponible.
 - `modelo_tipo`: `clasificacion`, `mgcecdl` o `inferencia`, si el contexto lo
   informa.
 
-Si un campo no viene explicito, el agente debe buscarlo en las salidas del cuaderno o
+Si un campo no viene explícito, el agente debe buscarlo en las salidas del cuaderno o
 marcarlo como no disponible. No debe inventarlo.
 
-## Como interpretar el contexto
+## Cómo interpretar el contexto
 
-La estructura minima que hace valido el analisis es:
+La estructura mínima que hace válido el análisis es:
 
 1. Un circuito seleccionado.
 2. Una ventana temporal.
 3. Eventos filtrados de ese circuito y ventana.
-4. `X` y `base` con el mismo numero de filas.
-5. `features` con el mismo numero de columnas que `X`.
+4. `X` y `base` con el mismo número de filas.
+5. `features` con el mismo número de columnas que `X`.
 6. Un modelo compatible con esas features.
 7. Un explicador SHAP inicializado sobre ese mismo subconjunto.
 8. Modos CHEC construidos a partir de las variables disponibles.

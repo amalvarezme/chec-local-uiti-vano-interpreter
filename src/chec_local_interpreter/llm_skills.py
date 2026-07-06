@@ -29,6 +29,11 @@ EXPERT_ALIGNMENT_REQUIRED_SKILLS = (
     "03_graph_context_for_alignment.md",
 )
 
+AUTO_SIMULATOR_REQUIRED_SKILLS = (
+    "01_auto_minmax_sensitivity_context.md",
+    "02_auto_minmax_sensitivity_output_contract.md",
+)
+
 
 def _required_skills(profile: str = "base") -> tuple[str, ...]:
     if profile == "base":
@@ -37,7 +42,9 @@ def _required_skills(profile: str = "base") -> tuple[str, ...]:
         return INFERENCE_REQUIRED_SKILLS
     if profile in {"expert_alignment", "pdf_report_comparison"}:
         return EXPERT_ALIGNMENT_REQUIRED_SKILLS
-    raise ValueError("profile debe ser 'base', 'inferencia' o 'expert_alignment'.")
+    if profile in {"auto_simulator", "simulador_automatico"}:
+        return AUTO_SIMULATOR_REQUIRED_SKILLS
+    raise ValueError("profile debe ser 'base', 'inferencia', 'expert_alignment' o 'auto_simulator'.")
 
 
 def skills_dir(base_dir: str | Path | None = None, *, profile: str = "base") -> Path:
@@ -47,6 +54,8 @@ def skills_dir(base_dir: str | Path | None = None, *, profile: str = "base") -> 
         suffix = "skills_inference"
     elif profile in {"expert_alignment", "pdf_report_comparison"}:
         suffix = "skills_expert_alignment"
+    elif profile in {"auto_simulator", "simulador_automatico"}:
+        suffix = "skills_auto_simulator"
     else:
         suffix = "skills"
     return llm_root() / suffix

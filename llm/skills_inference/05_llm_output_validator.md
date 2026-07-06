@@ -1,8 +1,8 @@
-# 05 - LLM Output Validator CHEC
+# 05 - Validador de Salida del LLM CHEC
 
-Esta skill valida la salida de un agente que analiza resultados CHEC/MGCECDL/inferencia para
+Esta habilidad valida la salida de un agente que analiza resultados CHEC/MGCECDL/inferencia para
 un circuito elegido por el usuario. La salida debe depender de los datos recibidos, no de
-valores quemados. Toda explicacion debe usar el grafo de entrenamiento y las variables
+valores quemados. Toda explicación debe usar el grafo de entrenamiento y las variables
 seleccionadas como marco principal.
 
 ## Formato obligatorio en este notebook
@@ -217,7 +217,7 @@ Reemplazar frases fuertes:
 | "La variable aislada explica el resultado" | "La variable se interpreta junto con su modo y ruta en el grafo" |
 | "El vano es malo" | "El vano aparece como prioritario en este escenario" |
 
-## Validaciones numericas
+## Validaciones Numéricas
 
 - No reportar valores fijos si no vienen del contexto.
 - No comparar puntajes Borda crudos entre escenarios con distinto numero de eventos.

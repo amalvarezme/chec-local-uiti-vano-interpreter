@@ -1,10 +1,10 @@
-# 04 - Graph Connectivity Guardrails
+# 04 - Reglas de Conectividad de Grafos
 
-Esta skill contiene el marco experto de grafo y conectividad que el agente debe usar para
+Esta habilidad contiene el marco experto de grafo y conectividad que el agente debe usar para
 interpretar resultados CHEC/MGCECDL/inferencia. Es autocontenida: el agente no debe depender
-de una fuente externa para conocer las relaciones de negocio descritas aqui.
+de una fuente externa para conocer las relaciones de negocio descritas aquí.
 
-## Que va a recibir el agente
+## Qué va a recibir el agente
 
 El agente puede recibir:
 
@@ -107,7 +107,7 @@ Reglas:
 - Si el usuario cambia variables seleccionadas, filtro o ventana climatica, el grafo de
   entrenamiento debe considerarse distinto hasta validar el nuevo orden de `features`.
 
-## Direccion y pesos
+## Dirección y Pesos
 
 Cada relacion es dirigida:
 
@@ -368,7 +368,7 @@ Una variable top debe explicarse idealmente con:
 4. Si la ruta es fuerte, moderada o debil.
 5. Como encaja con el escenario analizado.
 
-## Guardrails
+## Reglas de Protección
 
 El agente no debe:
 
@@ -401,12 +401,12 @@ retenidos como predictores. No debe interpretarse como conexion fisica directa n
 coeficiente aprendido por el modelo.
 ```
 
-## Cuando falta informacion
+## Cuando Falta Información
 
 Usar estas formulas:
 
-- "No se encontro una definicion explicita para esta variable."
-- "La relacion entre estos elementos no esta documentada en el grafo disponible."
-- "La variable esta en `features`, pero no se encontro camino documentado hacia
+- "No se encontró una definición explícita para esta variable."
+- "La relación entre estos elementos no está documentada en el grafo disponible."
+- "La variable está en `features`, pero no se encontró camino documentado hacia
   `UITI_VANO`."
-- "La interpretacion debe tratarse como hipotesis hasta validacion operativa."
+- "La interpretación debe tratarse como hipótesis hasta validación operativa."

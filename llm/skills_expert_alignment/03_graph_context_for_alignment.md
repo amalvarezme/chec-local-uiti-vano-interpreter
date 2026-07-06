@@ -1,9 +1,9 @@
-# Contexto de Grafos para Comparacion Experta
+# Contexto de Grafos para Comparación Experta
 
-## Proposito
+## Propósito
 
-Esta skill da al agente de comparacion experta el contexto minimo de grafos que necesita
-para decidir variables a priorizar. Debe complementar la comparacion entre:
+Esta habilidad da al agente de comparación experta el contexto mínimo de grafos que necesita
+para decidir variables a priorizar. Debe complementar la comparación entre:
 
 - agente de analisis historico,
 - agente del modelo predictivo,

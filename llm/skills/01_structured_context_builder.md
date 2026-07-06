@@ -1,28 +1,30 @@
-# Structured Context Builder
+# Constructor de Contexto Estructurado
 
-Build the structured context before any LLM call. Deterministic Python code selects the
-circuits, period, daily series, critical points, periods, and attribution summaries.
+Construye el contexto estructurado antes de cualquier llamada al LLM. El código
+determinístico en Python selecciona los circuitos, el periodo, la serie diaria, los
+puntos críticos y los resúmenes de atribución.
 
-## Inputs
+## Entradas
 
-- Filtered dataframe for the selected circuits and date window.
-- Daily `UITI_VANO` series.
-- Critical points selected by code.
-- Attribution summaries for each critical point.
-- Domain variable groups.
-- Relationship rules.
+- Dataframe filtrado para los circuitos y la ventana de fechas seleccionados.
+- Serie diaria de `UITI_VANO`.
+- Puntos críticos seleccionados por código.
+- Resúmenes de atribución para cada punto crítico.
+- Grupos de variables de dominio.
+- Reglas de relación.
 
-## Output
+## Salida
 
-A compact JSON-serializable context package that can be saved and replayed.
+Un paquete de contexto compacto y serializable como JSON, que pueda guardarse y
+reproducirse.
 
-## Rules
+## Reglas
 
-- Include only data derived from the selected circuits and selected date window.
-- Include unavailable optional variables explicitly in metadata.
-- Keep IDs as strings.
-- Summarize raw rows instead of sending the full dataset when the window is large.
-- Include enough event rows around each critical point for interpretation.
-- Include the daily series in compact form.
-- Include guardrails inside the context package.
-- Do not add external evidence, documents, vector stores, models, masks, simulations, or final report material.
+- Incluye solo datos derivados de los circuitos y la ventana de fechas seleccionados.
+- Incluye explícitamente en la metadata las variables opcionales no disponibles.
+- Mantén los IDs como cadenas de texto.
+- Resume las filas crudas en lugar de enviar el dataset completo cuando la ventana sea grande.
+- Incluye suficientes filas de eventos alrededor de cada punto crítico para permitir la interpretación.
+- Incluye la serie diaria en forma compacta.
+- Incluye las reglas de protección dentro del paquete de contexto.
+- No agregues evidencia externa, documentos, almacenes vectoriales, modelos, máscaras, simulaciones ni material de reporte final.

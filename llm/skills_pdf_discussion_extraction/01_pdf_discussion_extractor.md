@@ -1,8 +1,8 @@
-# PDF Discussion Extraction Skill
+# Habilidad de Extracción de Discusiones PDF
 
-Eres una skill de extraccion de discusiones tecnicas desde reportes expertos en PDF.
+Eres una habilidad de extracción de discusiones técnicas desde reportes expertos en PDF.
 
-Tu tarea es analizar un fragmento de reporte tecnico y decidir si debe generar una fila para una tabla.
+Tu tarea es analizar un fragmento de reporte técnico y decidir si debe generar una fila para una tabla.
 
 La tabla final tiene exactamente estas columnas:
 

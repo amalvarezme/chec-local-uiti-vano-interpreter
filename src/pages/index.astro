@@ -99,7 +99,8 @@ const pdfDiscussionColumns = ["Circuito", "Fecha inicio", "Fecha fin", "Análisi
 const llmNotebookFlow = [
   ["Agente base descriptor-histórico", "Interpreta el contexto estructurado del circuito: selección, serie diaria, puntos críticos, variables disponibles, causas observadas, metadatos faltantes y grafos de relación técnica."],
   ["RAG del modelo predictivo", "Interpreta las inferencias M-GCECDL: relevancias por escenario, modos climático/estructural, variables de entrada del modelo y conexiones del grafo para priorizar variables explicativas."],
-  ["RAG de contraste experto", "Contrasta el modelo de datos históricos y el modelo predictivo con la tabla de discusiones técnicas extraída de PDFs; reporta coincidencias, diferencias y variables priorizadas sin usar la variable objetivo como predictor."]
+  ["RAG de contraste experto", "Contrasta el modelo de datos históricos y el modelo predictivo con la tabla de discusiones técnicas extraída de PDFs; reporta coincidencias, diferencias y variables priorizadas sin usar la variable objetivo como predictor."],
+  ["Agente automático de sensibilidad y costos", "Lee la tabla mínimo/máximo del simulador, detecta cambios de categoría de riesgo y complementa la discusión con ítems cercanos de COSTOS ITEMS CONTRATOS.xlsx."]
 ];
 const pdfExtractionSteps = [
   ["1. Lectura documental", "Carga PDFs técnicos desde el repositorio documental y extrae texto por página con PyMuPDF o pdfplumber."],
@@ -184,6 +185,15 @@ const databricksCostRows = [
   ["Resumen ejecutivo de rubros", "Cómputo, DBU, GPU, almacenamiento, alojamiento, APIs, transferencia, logs, jobs, endpoints e idle aparecen separados.", "Bajo / medio para batch; crítico para LLM local 32B+ 24/7", "Ajuste interactivo: USD 5-8. Producción Jobs: USD 4-6 por ejecución.", "El costo mensual requiere frecuencia de ejecuciones, usuarios, retención, endpoints activos y política de apagado."]
 ];
 
+const contractCostRows = [
+  ["Transformadores", "CNT_TRF, CAPACIDAD_NOMINAL, PROMEDIO_KWH_TRF", "Instalación, reemplazo, bajantes y transporte manual de transformador.", "$109.345 - $696.655 aprox."],
+  ["Apoyos y postes", "ALTURA, VAL_CRIT_APOYO, COD_APOYO_FIN", "Marcación, retiro de apoyo de concreto y adecuación de vestida de poste.", "$24.960 - $202.370 aprox."],
+  ["Puesta a tierra", "CANTIDAD_TIERRA, DDT", "Instalación o reparación de puesta a tierra primaria, secundaria o con contrapesos.", "$118.348 - $333.116 aprox."],
+  ["Vegetación", "NR_T", "Poda en redes rurales o urbanas, con lectura de complejidad operativa.", "$166.112 - $5.131.579 aprox."],
+  ["Crucetas y red primaria", "LONG_CRUCETA, LONGITUD, CONDUCTOR, CNT_FASES", "Adecuación de crucetas, instalación por hilo y trabajos asociados a red primaria.", "$3.565 - $465.230 aprox."],
+  ["Inspección y mantenimiento", "TIPO, TIPO_TAX, CNT_VN", "Inspección, mantenimiento de redes y apoyo logístico de materiales o vehículo.", "$35.563 - $50.804 aprox."]
+];
+
 const baseColumnsExcludedFromModel = [
   "CIRCUITO", "FID_SW", "COD_EQ_PROTEGE", "FID_VANO", "T_USUS_EQ_PROT", "LVSW",
   "CNT_VN_SW", "FECHA", "DURACION", "UITI", "TOT_USUS", "COD_CAUSA", "DESC_CAUSA",
@@ -234,6 +244,7 @@ const cronograma = [
         <a href="#cronograma">Cronograma</a>
         <a href="#resultados">Resultados</a>
         <a href="#arquitectura">Arquitectura</a>
+        <a href="#costos-items-contratos">Costos ítems</a>
         <a href="#costos-databricks">Costos</a>
       </nav>
     </header>
@@ -657,11 +668,12 @@ const cronograma = [
             <p>Clasificación de criticidad de <code>UITI_VANO</code> y relevancias por modo climático y estructural.</p>
             <strong>Ver preparación y modos →</strong>
           </a>
-          <article>
+          <a class="pillar-card" href="#costos-items-contratos" aria-label="Abrir detalle de costos por ítems de contrato">
             <span>04</span>
-            <h3>Reporte de evidencia</h3>
-            <p>Documento final con razonamiento causal, simulación What-If y soporte normativo-operativo.</p>
-          </article>
+            <h3>Costos por ítems</h3>
+            <p>El agente de sensibilidad cruza variables críticas con COSTOS ITEMS CONTRATOS.xlsx para discusión económica.</p>
+            <strong>Ver costos del agente →</strong>
+          </a>
         </div>
 
         <div class="agent-grid">
@@ -687,8 +699,8 @@ const cronograma = [
           </a>
           <a class="agent-card" href="#agente-simulacion" aria-label="Abrir detalle conceptual del agente de simulación">
             <span class="agent-type low">Low / Fast</span>
-            <h3>Agente 5: Simulación</h3>
-            <p>Gestiona escenarios What-If y valida si una intervención reduce el impacto proyectado en UITI_VANO.</p>
+            <h3>Agente automático: sensibilidad</h3>
+            <p>Interpreta escenarios mínimo/máximo, cambios de categoría de riesgo, gráfica de impacto y costos cercanos.</p>
           </a>
           <a class="agent-card" href="#agente-informes" aria-label="Abrir detalle del agente de informes">
             <span class="agent-type high">High / Generative</span>
@@ -810,12 +822,12 @@ const cronograma = [
               <span>Variables candidatas</span>
             </div>
             <article class="flow-node agent-low-node">
-              <span>Agente 5 Low</span>
-              <strong>Simulación What-If</strong>
+              <span>Agente automático</span>
+              <strong>Sensibilidad mínimo/máximo y costos</strong>
             </article>
             <div class="flow-connector cycle">
               <strong>9-10</strong>
-              <span>Nuevo escenario ⇄ modelo</span>
+              <span>Tabla + gráfica + ítems cercanos</span>
             </div>
             <article class="flow-node agent-high-node">
               <span>Agente 6 High</span>
@@ -1489,11 +1501,102 @@ const cronograma = [
         <div class="detail-shell">
           <a class="back-link" href="#arquitectura">← Volver al simulador multimodal</a>
           <div class="section-heading">
-            <p class="eyebrow">Agente 5</p>
-            <h2 id="simulacion-title">Simulación What-If</h2>
+            <p class="eyebrow">Agente automático</p>
+            <h2 id="simulacion-title">Sensibilidad mínimo/máximo y costos</h2>
             <p>
-              Estamos trabajando en este módulo. La simulación What-If queda documentada como parte de la
-              arquitectura, pero todavía no se publican resultados ni escenarios simulados en la página.
+              El agente automático conserva la lógica del simulador: toma variables priorizadas por los
+              agentes anteriores, evalúa su valor mínimo y máximo observado, compara el riesgo contra el
+              escenario base y redacta una discusión compacta enfocada en cambios de categoría de riesgo.
+            </p>
+          </div>
+
+          <div class="detail-block">
+            <h3>Entradas que recibe</h3>
+            <div class="process-grid">
+              <article><strong>Variables priorizadas</strong><p>Provienen del agente de alineación experta o, si no están disponibles, de las variables principales del agente predictivo M-GCECDL.</p></article>
+              <article><strong>Tabla mínimo/máximo</strong><p>Incluye riesgo base, riesgo con mínimo, riesgo con máximo, cambios absolutos y etiquetas de riesgo por variable.</p></article>
+              <article><strong>Costos de contrato</strong><p>Lee <code>data/COSTOS ITEMS CONTRATOS.xlsx</code> y busca apartados cercanos por texto para complementar la discusión económica.</p></article>
+              <article><strong>Contexto previo</strong><p>Reutiliza circuito, periodo, modos, grafos, inferencia y comparación experta sin inventar resultados nuevos.</p></article>
+            </div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Cómo aparece en el reporte HTML</h3>
+            <p>
+              La segunda pestaña del reporte conserva la tabla del simulador automático y añade una gráfica
+              de cambio absoluto de riesgo. Si alguna variable cambia de categoría, el reporte lo resalta
+              antes de la discusión del agente. Debajo se muestra el apartado de costos con los ítems de
+              contrato más cercanos y sus costos promedio.
+            </p>
+            <a class="button primary" href={latestInterpretabilityReport} target="_blank" rel="noreferrer">
+              Abrir último reporte
+            </a>
+          </div>
+          <a class="back-link bottom" href="#arquitectura">← Volver al simulador multimodal</a>
+        </div>
+      </section>
+
+      <section id="costos-items-contratos" class="detail-panel" aria-labelledby="costos-items-title">
+        <div class="detail-shell">
+          <a class="back-link" href="#arquitectura">← Volver al simulador multimodal</a>
+          <div class="section-heading">
+            <p class="eyebrow">Evaluación económica del agente</p>
+            <h2 id="costos-items-title">Costos por ítems de contrato</h2>
+            <p>
+              Esta sección documenta cómo el agente automático complementa la sensibilidad de riesgo con
+              costos de referencia. El archivo <code>data/COSTOS ITEMS CONTRATOS.xlsx</code> se normaliza,
+              se compara contra variables sensibles y se entrega al agente como contexto económico trazable.
+            </p>
+          </div>
+
+          <div class="detail-block">
+            <h3>Cómo funciona</h3>
+            <div class="process-grid">
+              <article><strong>1. Lectura</strong><p>Carga la descripción del ítem y el promedio de <code>UNITCOST</code> desde la hoja de costos.</p></article>
+              <article><strong>2. Normalización</strong><p>Limpia acentos, mayúsculas, separadores y términos comunes para comparar texto técnico.</p></article>
+              <article><strong>3. Cercanía</strong><p>Relaciona variables como <code>CNT_TRF</code>, <code>NR_T</code> o <code>CANTIDAD_TIERRA</code> con palabras de dominio como transformador, poda o puesta a tierra.</p></article>
+              <article><strong>4. Discusión</strong><p>El agente usa los costos solo como referencia; no los convierte en presupuesto ni recomienda intervención automática.</p></article>
+            </div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Apartados económicos conectados</h3>
+            <div class="table-wrap compact-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Apartado</th>
+                    <th>Variables cercanas</th>
+                    <th>Ítems usados como referencia</th>
+                    <th>Orden de costo promedio</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {contractCostRows.map(([apartado, variables, items, costo]) => (
+                    <tr>
+                      <td>{apartado}</td>
+                      <td>{variables}</td>
+                      <td>{items}</td>
+                      <td>{costo}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p class="note-callout">
+              Los valores son referencias observadas en el archivo de costos. La cuantificación final depende
+              de cantidades, alcance de obra, zona, disponibilidad operativa y validación contractual de CHEC.
+            </p>
+          </div>
+
+          <div class="detail-block">
+            <h3>Interacción con los agentes existentes</h3>
+            <p>
+              El agente base identifica puntos críticos, el agente predictivo prioriza variables, el agente de
+              alineación experta selecciona variables revisables y el agente automático prueba escenarios
+              mínimo/máximo. El componente de costos entra al final: toma esas variables sensibles y busca
+              apartados económicos cercanos para que la discusión del reporte no sea solo técnica, sino también
+              orientada a orden de magnitud económico.
             </p>
           </div>
           <a class="back-link bottom" href="#arquitectura">← Volver al simulador multimodal</a>

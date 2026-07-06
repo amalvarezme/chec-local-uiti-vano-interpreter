@@ -9,6 +9,9 @@ data/*
 !data/.gitkeep
 !data/Variables_seleccion.xlsx
 !data/Indicadores_vano_v3.csv
+!data/COSTOS ITEMS CONTRATOS.xlsx
+!data/GEO/
+!data/GEO/**
 !data/models
 !data/models/**
 !data/graphs/

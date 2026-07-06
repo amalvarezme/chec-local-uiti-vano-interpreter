@@ -975,7 +975,13 @@ def plot_interactive_critical_points(daily_df, critical_points, selected_circuit
     return fig
 
 
-def render_expert_alignment_tab(expert_alignment_validation_data):
+def render_expert_alignment_tab(
+    expert_alignment_validation_data,
+    *,
+    automatic_simulation_table=None,
+    automatic_simulation_analysis=None,
+    automatic_simulation_cost_context=None,
+):
     """
     Renderiza la segunda pestaña del reporte HTML con la comparación
     entre el agente de análisis histórico, el agente del modelo predictivo y reportes expertos.
@@ -990,11 +996,12 @@ def render_expert_alignment_tab(expert_alignment_validation_data):
 
     def _value(value):
         source_labels = {
-            "LLM1": "Agente base",
+            "LLM1": "Agente Descriptor",
             "LLM2": "Agente predictivo",
-            "LLM de datos históricos": "Agente base",
+            "LLM de datos históricos": "Agente Descriptor",
             "LLM del modelo predictivo": "Agente predictivo",
-            "agente de análisis histórico": "Agente base",
+            "agente de análisis histórico": "Agente Descriptor",
+            "Agente base": "Agente Descriptor",
             "agente del modelo predictivo": "Agente predictivo",
             "PDF_EXPERTO": "reportes expertos",
         }
@@ -1004,6 +1011,264 @@ def render_expert_alignment_tab(expert_alignment_validation_data):
 
     def _empty_message():
         return "<p class='muted'>No hay elementos reportados para esta sección.</p>"
+
+    def _list_to_items(items, *, max_items: int | None = None) -> str:
+        if isinstance(items, dict):
+            raw_items = list(items.values())
+        elif isinstance(items, list):
+            raw_items = items
+        else:
+            raw_items = [items]
+        clean_items = [str(item).strip() for item in raw_items if str(item).strip()]
+        if max_items is not None:
+            clean_items = clean_items[:max_items]
+        if not clean_items:
+            return _empty_message()
+        lis = "".join(f"<li>{_escape(item)}</li>" for item in clean_items)
+        return f"<ul class='report-list'>{lis}</ul>"
+
+    def _risk_category_rank(label) -> int:
+        normalized = str(label or "").strip().lower()
+        if "alto" in normalized and "medio" not in normalized:
+            return 3
+        if "medio-alto" in normalized or ("medio" in normalized and "alto" in normalized):
+            return 2
+        if "medio-bajo" in normalized or ("medio" in normalized and "bajo" in normalized):
+            return 1
+        if "medio" in normalized:
+            return 1
+        if "bajo" in normalized:
+            return 0
+        return -1
+
+    def _risk_transition_text(base_label, scenario_label) -> str:
+        base = str(base_label or "").strip()
+        scenario = str(scenario_label or "").strip()
+        if not base or not scenario:
+            return "categoría no disponible"
+        if base == scenario:
+            return "sin cambio de categoría"
+        return f"{base} -> {scenario}"
+
+    def _auto_simulation_chart_html(table) -> str:
+        required = {
+            "variable",
+            "riesgo_base",
+            "riesgo_valor_minimo",
+            "riesgo_valor_maximo",
+            "cambio_absoluto_minimo",
+            "cambio_absoluto_maximo",
+        }
+        if table is None or not hasattr(table, "columns") or not required.issubset(set(table.columns)):
+            return (
+                "<p class='muted'>No hay columnas suficientes para graficar los cambios de riesgo "
+                "del simulador automático.</p>"
+            )
+
+        work = table.copy()
+        for col in [
+            "riesgo_base",
+            "riesgo_valor_minimo",
+            "riesgo_valor_maximo",
+            "cambio_absoluto_minimo",
+            "cambio_absoluto_maximo",
+        ]:
+            work[col] = pd.to_numeric(work[col], errors="coerce")
+        work["variable"] = work["variable"].fillna("").astype(str).str.strip()
+        work = work[work["variable"] != ""].copy()
+        if work.empty:
+            return "<p class='muted'>No hay variables válidas para graficar el simulador automático.</p>"
+
+        if "riesgo_base_etiqueta" not in work.columns:
+            work["riesgo_base_etiqueta"] = ""
+        if "riesgo_valor_minimo_etiqueta" not in work.columns:
+            work["riesgo_valor_minimo_etiqueta"] = ""
+        if "riesgo_valor_maximo_etiqueta" not in work.columns:
+            work["riesgo_valor_maximo_etiqueta"] = ""
+
+        work["transicion_minimo"] = work.apply(
+            lambda row: _risk_transition_text(row.get("riesgo_base_etiqueta"), row.get("riesgo_valor_minimo_etiqueta")),
+            axis=1,
+        )
+        work["transicion_maximo"] = work.apply(
+            lambda row: _risk_transition_text(row.get("riesgo_base_etiqueta"), row.get("riesgo_valor_maximo_etiqueta")),
+            axis=1,
+        )
+        work["cambia_categoria_minimo"] = work["transicion_minimo"] != "sin cambio de categoría"
+        work["cambia_categoria_maximo"] = work["transicion_maximo"] != "sin cambio de categoría"
+        work["cambia_categoria"] = work["cambia_categoria_minimo"] | work["cambia_categoria_maximo"]
+        work["salto_categoria_minimo"] = (
+            work["riesgo_valor_minimo_etiqueta"].map(_risk_category_rank)
+            - work["riesgo_base_etiqueta"].map(_risk_category_rank)
+        ).abs()
+        work["salto_categoria_maximo"] = (
+            work["riesgo_valor_maximo_etiqueta"].map(_risk_category_rank)
+            - work["riesgo_base_etiqueta"].map(_risk_category_rank)
+        ).abs()
+        work["max_salto_categoria"] = work[["salto_categoria_minimo", "salto_categoria_maximo"]].max(axis=1)
+        work["max_cambio_abs"] = work[["cambio_absoluto_minimo", "cambio_absoluto_maximo"]].abs().max(axis=1)
+        work = (
+            work.sort_values(["max_salto_categoria", "max_cambio_abs"], ascending=[False, False], kind="stable")
+            .head(15)
+            .iloc[::-1]
+            .copy()
+        )
+        transition_rows = work[work["cambia_categoria"]].iloc[::-1].head(5)
+        if transition_rows.empty:
+            transition_summary = (
+                "<p class='muted'>No se observan cambios de categoría de riesgo en las variables graficadas; "
+                "la gráfica resalta cambios numéricos frente al escenario base.</p>"
+            )
+        else:
+            transition_items = []
+            for row in transition_rows.itertuples(index=False):
+                changes = []
+                if row.cambia_categoria_minimo:
+                    changes.append(f"mínimo: {row.transicion_minimo}")
+                if row.cambia_categoria_maximo:
+                    changes.append(f"máximo: {row.transicion_maximo}")
+                transition_items.append(f"<li><strong>{_escape(row.variable)}</strong>: {_escape('; '.join(changes))}</li>")
+            transition_summary = (
+                "<div class='insight-card'>"
+                "<strong>Transiciones de categoría detectadas</strong>"
+                f"<ul class='report-list'>{''.join(transition_items)}</ul>"
+                "</div>"
+            )
+
+        min_colors = ["#b91c1c" if flag else "#94a3b8" for flag in work["cambia_categoria_minimo"]]
+        max_colors = ["#7f1d1d" if flag else "#2563eb" for flag in work["cambia_categoria_maximo"]]
+        min_hover = [
+            (
+                f"Variable: {row.variable}<br>Escenario: mínimo"
+                f"<br>Riesgo base: {row.riesgo_base:.4f}"
+                f"<br>Riesgo mínimo: {row.riesgo_valor_minimo:.4f}"
+                f"<br>Cambio abs.: {row.cambio_absoluto_minimo:.4f}"
+                f"<br>Categoría: {row.transicion_minimo}"
+            )
+            for row in work.itertuples(index=False)
+        ]
+        max_hover = [
+            (
+                f"Variable: {row.variable}<br>Escenario: máximo"
+                f"<br>Riesgo base: {row.riesgo_base:.4f}"
+                f"<br>Riesgo máximo: {row.riesgo_valor_maximo:.4f}"
+                f"<br>Cambio abs.: {row.cambio_absoluto_maximo:.4f}"
+                f"<br>Categoría: {row.transicion_maximo}"
+            )
+            for row in work.itertuples(index=False)
+        ]
+
+        try:
+            fig = go.Figure()
+            fig.add_trace(
+                go.Bar(
+                    y=work["variable"],
+                    x=work["cambio_absoluto_minimo"],
+                    name="Valor mínimo",
+                    orientation="h",
+                    marker=dict(color=min_colors),
+                    customdata=min_hover,
+                    hovertemplate="%{customdata}<extra></extra>",
+                )
+            )
+            fig.add_trace(
+                go.Bar(
+                    y=work["variable"],
+                    x=work["cambio_absoluto_maximo"],
+                    name="Valor máximo",
+                    orientation="h",
+                    marker=dict(color=max_colors),
+                    customdata=max_hover,
+                    hovertemplate="%{customdata}<extra></extra>",
+                )
+            )
+            fig.add_vline(x=0, line_color="#334155", line_width=1)
+            fig.update_layout(
+                title=dict(
+                    text="Cambio absoluto del riesgo por variable y transición de categoría",
+                    font=dict(size=15),
+                ),
+                xaxis_title="Cambio del riesgo frente al escenario base",
+                yaxis_title="Variable",
+                barmode="group",
+                height=max(420, 42 * len(work) + 160),
+                margin=dict(l=120, r=40, t=70, b=70),
+                plot_bgcolor="#f8fafc",
+                paper_bgcolor="#ffffff",
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            )
+            chart = fig.to_html(full_html=False, include_plotlyjs=False)
+            legend = (
+                "<p class='muted'>Las barras rojas indican escenarios donde la etiqueta de riesgo cambia "
+                "frente al riesgo base; las barras azules/grises indican cambios numéricos sin transición "
+                "de categoría reportada.</p>"
+            )
+            return f"<div class='chart-panel'>{transition_summary}{chart}{legend}</div>"
+        except Exception as exc:
+            return f"<p class='muted'>No se pudo generar la gráfica del simulador automático: {_escape(exc)}</p>"
+
+    def _auto_simulation_cost_section() -> str:
+        context = automatic_simulation_cost_context if isinstance(automatic_simulation_cost_context, dict) else {}
+        if not context:
+            return (
+                "<h4>Costos aproximados por ítems de contrato</h4>"
+                "<p class='muted'>No se entregó contexto de costos para esta ejecución.</p>"
+            )
+        warnings = context.get("advertencias") if isinstance(context.get("advertencias"), list) else []
+        matches = context.get("coincidencias") if isinstance(context.get("coincidencias"), list) else []
+        parts = [
+            "<h4>Costos aproximados por ítems de contrato</h4>",
+            "<p class='muted'>Los costos se estiman por cercanía textual entre variables sensibles del simulador "
+            "y apartados del archivo COSTOS ITEMS CONTRATOS.xlsx. Son referencias para discusión económica, "
+            "no presupuestos cerrados ni causalidad de intervención.</p>",
+        ]
+        if warnings:
+            parts.append(_list_to_items(warnings, max_items=5))
+        if not matches:
+            parts.append("<p class='muted'>No hay coincidencias de costos disponibles para mostrar.</p>")
+            return "".join(parts)
+
+        rows = []
+        for item in matches[:8]:
+            if not isinstance(item, dict):
+                continue
+            variable = item.get("variable", "")
+            risk_labels = [
+                item.get("riesgo_base_etiqueta", ""),
+                item.get("riesgo_valor_minimo_etiqueta", ""),
+                item.get("riesgo_valor_maximo_etiqueta", ""),
+            ]
+            risk_text = " / ".join(str(label).strip() for label in risk_labels if str(label).strip())
+            for cost_item in (item.get("items_costo_cercanos") or [])[:3]:
+                if not isinstance(cost_item, dict):
+                    continue
+                cost = cost_item.get("costo_promedio")
+                if cost in (None, ""):
+                    cost_text = "No disponible"
+                else:
+                    try:
+                        cost_text = f"${float(cost):,.0f}"
+                    except (TypeError, ValueError):
+                        cost_text = _escape(cost)
+                rows.append(
+                    "<tr>"
+                    f"<td>{_escape(variable)}</td>"
+                    f"<td>{_escape(cost_item.get('item_costo', ''))}</td>"
+                    f"<td>{_escape(cost_text)}</td>"
+                    f"<td>{_escape(cost_item.get('puntaje_cercania', ''))}</td>"
+                    f"<td>{_escape(risk_text)}</td>"
+                    "</tr>"
+                )
+        if not rows:
+            parts.append("<p class='muted'>No hay ítems de costo cercanos para las variables simuladas.</p>")
+            return "".join(parts)
+        parts.append(
+            "<div class='table-scroll'><table class='compact-table'>"
+            "<thead><tr><th>Variable</th><th>Ítem cercano</th><th>Costo promedio</th>"
+            "<th>Cercanía</th><th>Etiquetas de riesgo</th></tr></thead>"
+            f"<tbody>{''.join(rows)}</tbody></table></div>"
+        )
+        return "".join(parts)
 
     def _section_items(key, title, fields):
         items = analysis.get(key, []) if analysis else []
@@ -1098,16 +1363,124 @@ def render_expert_alignment_tab(expert_alignment_validation_data):
             "</div>"
         )
 
+    def _auto_simulation_section():
+        table = automatic_simulation_table
+        analysis_data = automatic_simulation_analysis or {}
+        has_table = table is not None and hasattr(table, "empty") and not table.empty
+        has_analysis = isinstance(analysis_data, dict) and bool(analysis_data)
+        if not has_table and not has_analysis:
+            return ""
+
+        parts = [
+            "<div class='content-box'>",
+            "<h3 style='margin-top:0;'>Análisis automático de sensibilidad por escenarios mínimo/máximo</h3>",
+        ]
+        if has_table:
+            display_columns = [
+                ("variable", "Variable"),
+                ("valor_original_base", "Valor base"),
+                ("valor_minimo_usado", "Mínimo usado"),
+                ("valor_maximo_usado", "Máximo usado"),
+                ("riesgo_base", "Riesgo base"),
+                ("riesgo_valor_minimo", "Riesgo mínimo"),
+                ("riesgo_valor_maximo", "Riesgo máximo"),
+                ("cambio_absoluto_minimo", "Cambio mín."),
+                ("cambio_absoluto_maximo", "Cambio máx."),
+                ("direccion_cambio_minimo", "Dirección mín."),
+                ("direccion_cambio_maximo", "Dirección máx."),
+                ("observacion", "Observación"),
+            ]
+            available_columns = [(col, label) for col, label in display_columns if col in table.columns]
+
+            def _format_cell(value):
+                try:
+                    if pd.isna(value):
+                        return ""
+                except Exception:
+                    pass
+                if isinstance(value, float):
+                    return f"{value:.4f}"
+                return _escape(value)
+
+            rows = []
+            for _, row in table.head(20).iterrows():
+                rows.append(
+                    "<tr>"
+                    + "".join(f"<td>{_format_cell(row.get(col))}</td>" for col, _ in available_columns)
+                    + "</tr>"
+                )
+            head = "".join(f"<th>{_escape(label)}</th>" for _, label in available_columns)
+            parts.append(
+                "<div class='table-scroll'><table class='compact-table'>"
+                f"<thead><tr>{head}</tr></thead>"
+                f"<tbody>{''.join(rows)}</tbody></table></div>"
+            )
+            if len(table) > 20:
+                parts.append(f"<p class='muted'>Se muestran 20 de {len(table)} variables simuladas.</p>")
+            parts.append(_auto_simulation_chart_html(table))
+            parts.append(_auto_simulation_cost_section())
+        else:
+            parts.append("<p class='muted'>La tabla del simulador automático no está disponible para esta ejecución.</p>")
+            parts.append(_auto_simulation_cost_section())
+
+        if has_analysis:
+            for key, title in [
+                ("resumen", "Resumen del agente"),
+                ("variables_mas_sensibles", "Variables más sensibles"),
+                ("patrones_minimo_maximo", "Patrones mínimo/máximo"),
+                ("hallazgos_para_criticidad", "Hallazgos útiles para criticidad"),
+                ("limitaciones", "Limitaciones"),
+                ("contexto_reutilizado", "Contexto reutilizado"),
+            ]:
+                items = analysis_data.get(key)
+                if not items:
+                    continue
+                if key == "variables_mas_sensibles" and isinstance(items, list):
+                    rendered = []
+                    for item in items[:5]:
+                        if isinstance(item, dict):
+                            variable = item.get("variable", "")
+                            lectura = item.get("lectura", "")
+                            cambio = item.get("mayor_cambio_abs", "")
+                            rendered.append(
+                                f"{_escape(variable)}: {_escape(lectura)}"
+                                + (f" (mayor cambio abs.: {_escape(cambio)})" if cambio not in (None, "") else "")
+                            )
+                        elif str(item).strip():
+                            rendered.append(str(item).strip())
+                    parts.append(f"<h4>{_escape(title)}</h4>{_list_to_items(rendered, max_items=5)}")
+                else:
+                    parts.append(f"<h4>{_escape(title)}</h4>{_list_to_items(items, max_items=5)}")
+        parts.append("</div>")
+        return "".join(parts)
+
     if not analysis:
         return (
             "<div class='summary-box'>"
             "<h2 style='margin-top:0;'>Comparación con reportes expertos</h2>"
             "<p>La comparación con reportes expertos no está disponible para esta ejecución.</p>"
             "</div>"
+            + _auto_simulation_section()
         )
 
     contexto = analysis.get("contexto", {}) if isinstance(analysis.get("contexto"), dict) else {}
     periodo = contexto.get("periodo", {}) if isinstance(contexto.get("periodo"), dict) else {}
+    expert_rows = contexto.get("n_filas_expertas_comparadas")
+    has_expert_rows = False
+    try:
+        has_expert_rows = int(expert_rows or 0) > 0
+    except (TypeError, ValueError):
+        has_expert_rows = bool(expert_rows)
+    comparison_title = (
+        "Comparación con reportes expertos"
+        if has_expert_rows
+        else "Comparación entre agentes disponibles"
+    )
+    comparison_scope = (
+        "análisis histórico, modelo predictivo y reportes expertos"
+        if has_expert_rows
+        else "análisis histórico y modelo predictivo"
+    )
     summary_bits = []
     if contexto.get("circuito"):
         summary_bits.append(f"<li><strong>Circuito:</strong> {_escape(contexto.get('circuito'))}</li>")
@@ -1118,6 +1491,17 @@ def render_expert_alignment_tab(expert_alignment_validation_data):
     if "n_filas_expertas_comparadas" in contexto:
         summary_bits.append(
             f"<li><strong>Filas expertas comparadas:</strong> {_escape(contexto.get('n_filas_expertas_comparadas'))}</li>"
+        )
+    if contexto.get("fuentes_usadas"):
+        summary_bits.append(
+            f"<li><strong>Fuentes usadas:</strong> {_value(contexto.get('fuentes_usadas'))}</li>"
+        )
+    if "modelo_experto_disponible" in contexto:
+        disponibilidad = "Sí" if contexto.get("modelo_experto_disponible") else "No"
+        summary_bits.append(f"<li><strong>Modelo Experto disponible:</strong> {_escape(disponibilidad)}</li>")
+    if contexto.get("modelo_experto_razon"):
+        summary_bits.append(
+            f"<li><strong>Razón Modelo Experto:</strong> {_escape(contexto.get('modelo_experto_razon'))}</li>"
         )
     resumen = (
         "<ul class='report-list'>" + "".join(summary_bits) + "</ul>"
@@ -1135,20 +1519,21 @@ def render_expert_alignment_tab(expert_alignment_validation_data):
     )
 
     return (
-        "<h2>Comparación con reportes expertos</h2>"
+        f"<h2>{_escape(comparison_title)}</h2>"
         "<div class='summary-box'>"
         "<h3 style='margin-top:0;'>Resumen de la comparación</h3>"
         f"{resumen}"
         "</div>"
         + _finding_items(
             "coincidencias",
-            "Coincidencias entre análisis histórico, modelo predictivo y reportes expertos",
+            f"Coincidencias entre {comparison_scope}",
         )
         + _finding_items(
             "diferencias",
-            "Diferencias entre análisis histórico, modelo predictivo y reportes expertos",
+            f"Diferencias entre {comparison_scope}",
         )
         + _variables_table()
+        + _auto_simulation_section()
         + synthesis_html
     )
 
@@ -1168,6 +1553,9 @@ def render_llm_analysis(
     inference_analysis: dict | None = None,
     expert_alignment_analysis: dict | None = None,
     expert_alignment_matches: list[dict] | None = None,
+    automatic_simulation_table=None,
+    automatic_simulation_analysis: dict | None = None,
+    automatic_simulation_cost_context: dict | None = None,
 ):
     """
     Renders the structured JSON output from the LLM into a beautiful HTML format
@@ -1632,7 +2020,12 @@ def render_llm_analysis(
 
     html_inference_characterization, html_inference_critical = _render_inference_layout(inference_results, inference_analysis)
     characterization_visuals_html = f"{html_maps_section}{html_inference_characterization}"
-    html_expert_alignment = render_expert_alignment_tab(expert_alignment_analysis)
+    html_expert_alignment = render_expert_alignment_tab(
+        expert_alignment_analysis,
+        automatic_simulation_table=automatic_simulation_table,
+        automatic_simulation_analysis=automatic_simulation_analysis,
+        automatic_simulation_cost_context=automatic_simulation_cost_context,
+    )
 
     llm_sections_html = ""
     if validation_data:

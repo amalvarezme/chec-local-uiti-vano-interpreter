@@ -6,7 +6,9 @@ import pandas as pd
 
 from chec_local_interpreter.expert_alignment import (
     construir_contexto_expert_alignment,
+    construir_prompt_expert_alignment,
     extraer_fechas_informe,
+    filtrar_discussiones_por_circuito,
     seleccionar_top_coincidencias_temporales,
     validar_respuesta_expert_alignment,
 )
@@ -22,8 +24,8 @@ def test_expert_alignment_skill_profile_loads():
         "03_graph_context_for_alignment.md",
     ]
     skill_bundle = assemble_skill_bundle(profile="expert_alignment")
-    assert "PDF Report Comparison" in skill_bundle
-    assert "Priorizacion de Variables" in skill_bundle
+    assert "Comparación de Reportes PDF" in skill_bundle
+    assert "Priorización de Variables" in skill_bundle
     assert "Contexto de Grafos" in skill_bundle
 
 
@@ -60,6 +62,59 @@ def test_seleccionar_top_coincidencias_temporales_prefers_overlap_and_circuit():
     assert matches[0]["Circuito"] == "DON23L13"
     assert matches[0]["overlap_days"] == 1
     assert matches[0]["matched_source"] == "critical_point"
+    assert all(match["Circuito"] == "DON23L13" for match in matches)
+
+
+def test_pdf_discussions_are_ignored_when_circuit_is_absent():
+    fechas = [
+        {"source": "critical_point", "fecha_inicio": "2026-01-10", "fecha_fin": "2026-01-10", "descripcion": "cp", "peso": 3.0},
+    ]
+    pdf_df = pd.DataFrame(
+        [
+            {"Circuito": "OTRO", "Fecha inicio": "2026-01-09", "Fecha fin": "2026-01-11", "Análisis": "UITI_VANO alto", "Evidencia": "Evidencia A"},
+            {"Circuito": "DON23L14", "Fecha inicio": "2026-01-10", "Fecha fin": "2026-01-10", "Análisis": "Cercano pero otro circuito", "Evidencia": "Evidencia B"},
+        ]
+    )
+    assert filtrar_discussiones_por_circuito(pdf_df, "DON23L13").empty
+    matches = seleccionar_top_coincidencias_temporales(
+        fechas_informe=fechas,
+        pdf_df=pdf_df,
+        circuito_interes="DON23L13",
+        top_k=2,
+    )
+    assert matches == []
+
+
+def test_pdf_discussion_filter_accepts_normalized_exact_circuit():
+    pdf_df = pd.DataFrame(
+        [
+            {"Circuito": " don-23l13 ", "Fecha inicio": "2026-01-09", "Fecha fin": "2026-01-11", "Análisis": "A", "Evidencia": "B"},
+            {"Circuito": "DON23L14", "Fecha inicio": "2026-01-09", "Fecha fin": "2026-01-11", "Análisis": "C", "Evidencia": "D"},
+        ]
+    )
+    filtered = filtrar_discussiones_por_circuito(pdf_df, "DON23L13")
+    assert len(filtered) == 1
+    assert filtered.iloc[0]["Circuito"] == " don-23l13 "
+
+
+def test_context_builder_drops_pdf_matches_from_other_circuits():
+    context = construir_contexto_expert_alignment(
+        circuito="DON23L13",
+        periodo_inicio="2026-01-01",
+        periodo_fin="2026-01-31",
+        fechas_informe=[],
+        validation_data={},
+        inference_validation_data={},
+        pdf_expert_matches=[
+            {"Circuito": "OTRO", "Fecha inicio": "2026-01-01", "Fecha fin": "2026-01-02", "Análisis": "No usar", "Evidencia": "No usar"},
+            {"Circuito": " don-23l13 ", "Fecha inicio": "2026-01-03", "Fecha fin": "2026-01-04", "Análisis": "Usar", "Evidencia": "Usar"},
+        ],
+        variables_modelo_predictivo=["CNT_TRF"],
+    )
+    assert len(context["pdf_expert_matches"]) == 1
+    assert context["pdf_expert_matches"][0]["Análisis"] == "Usar"
+    assert context["modelo_experto_disponible"] is True
+    assert context["fuentes_usadas"] == ["Agente Descriptor", "Agente predictivo", "Modelo Experto"]
 
 
 def test_validar_respuesta_expert_alignment_checks_evidence_dates_and_variables():
@@ -106,8 +161,10 @@ def test_validar_respuesta_expert_alignment_checks_evidence_dates_and_variables(
     }
     result = validar_respuesta_expert_alignment(json.dumps(output, ensure_ascii=False), context)
     assert result["ok"], result["errors"]
-    assert result["data"]["coincidencias"][0]["fuentes"] == ["Agente base", "DON23L13.pdf"]
-    assert result["data"]["variables_a_priorizar"][0]["fuentes_que_la_respaldan"] == ["Agente base", "DON23L13.pdf"]
+    assert result["data"]["coincidencias"][0]["fuentes"] == ["Agente Descriptor", "DON23L13.pdf"]
+    assert result["data"]["variables_a_priorizar"][0]["fuentes_que_la_respaldan"] == ["Agente Descriptor", "DON23L13.pdf"]
+    assert result["data"]["contexto"]["fuentes_usadas"] == ["Agente Descriptor", "Agente predictivo", "Modelo Experto"]
+    assert result["data"]["contexto"]["modelo_experto_disponible"] is True
 
     output["variables_a_priorizar"][0]["variable"] = "UITI_VANO"
     result = validar_respuesta_expert_alignment(json.dumps(output, ensure_ascii=False), context)
@@ -164,7 +221,7 @@ def test_render_expert_alignment_tab_uses_html_not_raw_json():
     assert "Comparación con reportes expertos" in html
     assert "UITI_VANO alto" in html
     assert "Fuentes:" in html
-    assert "Agente base" in html
+    assert "Agente Descriptor" in html
     assert "reportes expertos" in html
     assert '"coincidencias"' not in html
     assert "<table" in html
@@ -203,3 +260,68 @@ def test_context_includes_predictive_model_signals_for_priorities():
     assert result["ok"], result["errors"]
     variables = {item["variable"] for item in result["data"]["variables_a_priorizar"]}
     assert {"CNT_TRF", "CNT_VN"}.issubset(variables)
+
+
+def test_expert_alignment_runs_with_available_agents_when_no_pdf_matches():
+    context = construir_contexto_expert_alignment(
+        circuito="DON23L13",
+        periodo_inicio="2026-01-01",
+        periodo_fin="2026-01-31",
+        fechas_informe=[{"source": "critical_point", "fecha_inicio": "2026-01-10", "fecha_fin": "2026-01-10"}],
+        validation_data={"period_synthesis": "UITI_VANO sube en el punto crítico."},
+        inference_validation_data={"hallazgos": ["El modelo resalta CNT_TRF."]},
+        pdf_expert_matches=[],
+        variables_modelo_predictivo=["CNT_TRF", "CNT_VN"],
+        inference_context_package={
+            "escenarios": [
+                {
+                    "nombre": "Top por UITI_VANO",
+                    "top_variables": [{"variable": "CNT_TRF", "score": 0.9}],
+                    "modos": [],
+                }
+            ]
+        },
+    )
+    prompt = construir_prompt_expert_alignment(context, "Skill bundle")
+    assert context["fuentes_disponibles"] == ["Agente Descriptor", "Agente predictivo"]
+    assert context["modelo_experto_disponible"] is False
+    assert context["modelo_experto_razon"]
+    assert "solo entre Agente Descriptor y Agente predictivo" in prompt
+
+    output = {
+        "contexto": {"circuito": "DON23L13", "periodo": {"inicio": "2026-01-01", "fin": "2026-01-31"}, "n_filas_expertas_comparadas": 0},
+        "coincidencias": [{"tema": "UITI_VANO y CNT_TRF", "fuentes": ["Agente Descriptor", "Agente predictivo"], "explicacion": "Ambos agentes apuntan al mismo periodo crítico."}],
+        "diferencias": [],
+        "hallazgos_expertos_no_cubiertos": [],
+        "hallazgos_modelo_no_respaldados_por_pdf": [],
+        "variables_a_priorizar": [{"variable": "CNT_TRF", "prioridad": "media", "fuentes_que_la_respaldan": ["Agente predictivo"], "justificacion": "Es señal del modelo.", "tipo_de_validacion_sugerida": "Revisar conexión en grafos."}],
+        "sintesis_final": "La comparación queda limitada a las dos fuentes disponibles.",
+    }
+    result = validar_respuesta_expert_alignment(json.dumps(output, ensure_ascii=False), context)
+    assert result["ok"], result["errors"]
+
+
+def test_expert_alignment_rejects_expert_findings_without_pdf_matches():
+    context = construir_contexto_expert_alignment(
+        circuito="DON23L13",
+        periodo_inicio="2026-01-01",
+        periodo_fin="2026-01-31",
+        fechas_informe=[],
+        validation_data={},
+        inference_validation_data={},
+        pdf_expert_matches=[],
+        variables_modelo_predictivo=["CNT_TRF"],
+    )
+    output = {
+        "contexto": {"circuito": "DON23L13", "periodo": {"inicio": "2026-01-01", "fin": "2026-01-31"}, "n_filas_expertas_comparadas": 0},
+        "coincidencias": [{"tema": "Supuesto PDF", "fuentes": ["PDF_EXPERTO"], "explicacion": "Un reporte lo respalda."}],
+        "diferencias": [],
+        "hallazgos_expertos_no_cubiertos": [{"tema": "Hallazgo experto inexistente"}],
+        "hallazgos_modelo_no_respaldados_por_pdf": [],
+        "variables_a_priorizar": [],
+        "sintesis_final": "Síntesis.",
+    }
+    result = validar_respuesta_expert_alignment(json.dumps(output, ensure_ascii=False), context)
+    assert not result["ok"]
+    assert any("fuentes visibles" in error for error in result["errors"])
+    assert any("hallazgos_expertos_no_cubiertos" in error for error in result["errors"])

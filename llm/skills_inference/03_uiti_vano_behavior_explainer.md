@@ -1,24 +1,24 @@
-# 03 - UITI_VANO Behavior Explainer
+# 03 - Explicador del Comportamiento de `UITI_VANO`
 
-Esta skill explica como traducir `UITI_VANO`, resultados MGCECDL/inferencia y atribuciones a
-lenguaje de negocio electrico. El agente debe adaptar la explicacion al circuito, periodo y
+Esta habilidad explica cómo traducir `UITI_VANO`, resultados MGCECDL/inferencia y atribuciones a
+lenguaje de negocio eléctrico. El agente debe adaptar la explicación al circuito, periodo y
 eventos que reciba, sin asumir valores fijos.
 
-La interpretacion debe apoyarse en el grafo de entrenamiento. Una variable relevante para
+La interpretación debe apoyarse en el grafo de entrenamiento. Una variable relevante para
 el modelo se explica mejor cuando se conectan cuatro piezas: importancia del modelo,
-modo CHEC, relacion en el grafo y significado operativo.
+modo CHEC, relación en el grafo y significado operativo.
 
-En la salida JSON del notebook principal, esta explicacion debe ser sintetica. No escribir
-una explicacion larga por cada variable. Priorizar las 3 a 5 variables principales de cada
+En la salida JSON del notebook principal, esta explicación debe ser sintética. No escribir
+una explicación larga por cada variable. Priorizar las 3 a 5 variables principales de cada
 escenario, agrupar lecturas por modo cuando sea posible y dejar el detalle visual a las
 barras, radares y grafos HTML.
 
-En MGCECDL, el flujo vigente es de clasificacion. `UITI_VANO` se usa como objetivo,
+En MGCECDL, el flujo vigente es de clasificación. `UITI_VANO` se usa como objetivo,
 criterio de severidad o base para clases ordinales de impacto; aunque aparezca en el Excel
-de seleccion de variables, debe excluirse de `features` y no debe narrarse como predictor
+de selección de variables, debe excluirse de `features` y no debe narrarse como predictor
 del modelo.
 
-## Que va a recibir el agente
+## Qué va a recibir el agente
 
 El agente puede recibir:
 
@@ -26,8 +26,8 @@ El agente puede recibir:
 - `UITI_VANO_PROM` agregado por vano.
 - Rankings de vanos por severidad o recurrencia.
 - Variables Top-K explicadas por SHAP/inferencia.
-- Variables Top-K explicadas por SHAP, atencion, soporte modal o importancia por
-  permutacion.
+- Variables Top-K explicadas por SHAP, atención, soporte modal o importancia por
+  permutación.
 - Modos CHEC con scores normalizados.
 - Fechas de interes o subconjuntos de eventos.
 - Matriz de adyacencia y aristas preservadas del grafo usado por la corrida.
@@ -41,10 +41,10 @@ El agente debe distinguir siempre la granularidad:
 - Circuito: agregacion o filtro superior.
 - Escenario: subconjunto analitico definido por severidad, frecuencia o fechas.
 
-## Que representa UITI_VANO
+## Qué Representa `UITI_VANO`
 
-`UITI_VANO` es una medida de impacto de interrupcion a nivel de vano. Operativamente
-relaciona usuarios afectados, tiempo de interrupcion y aporte del vano dentro del evento o
+`UITI_VANO` es una medida de impacto de interrupción a nivel de vano. Operativamente
+relaciona usuarios afectados, tiempo de interrupción y aporte del vano dentro del evento o
 del circuito analizado.
 
 En la logica experta del proyecto, el impacto se entiende mediante rutas como:
@@ -99,7 +99,7 @@ Lecturas tipicas:
 - Baja severidad y alta frecuencia: comportamiento repetitivo con impacto contenido.
 - Alto impacto en fechas de interes: contribucion relevante a dias criticos seleccionados.
 
-## Clasificacion
+## Clasificación
 
 El flujo de clasificacion discretiza `UITI_VANO` en clases ordinales de impacto. El numero
 exacto de clases, umbrales o percentiles debe leerse del contexto del modelo o del cuaderno
@@ -218,7 +218,7 @@ Interpretacion:
 - Lags cercanos al evento apuntan a condiciones contemporaneas.
 - Lags previos pueden sugerir persistencia, acumulacion o contexto meteorologico anterior.
 
-## Como conectar variable, grafo e impacto
+## Cómo Conectar Variable, Grafo e Impacto
 
 Para explicar una variable top:
 
@@ -243,12 +243,12 @@ Ejemplos de lectura soportada por el grafo:
 Si una variable no tiene ruta documentada:
 
 ```text
-No se encontro una ruta documentada entre <variable> y UITI_VANO. La relevancia se reporta
-como comportamiento del modelo y requiere validacion experta antes de usarla como hipotesis
+No se encontró una ruta documentada entre <variable> y UITI_VANO. La relevancia se reporta
+como comportamiento del modelo y requiere validación experta antes de usarla como hipótesis
 operativa.
 ```
 
-## Como hablar de impacto
+## Cómo Hablar de Impacto
 
 Usar:
 
