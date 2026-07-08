@@ -8,6 +8,10 @@ por variable: valor mínimo observado y valor máximo observado, siempre en esca
 
 - Tabla `simulador_automatico_minmax`, generada por código determinístico.
 - Metadata del simulador: circuito, periodo, número de filas base, advertencias y modelo.
+- Contexto opcional `curvas_softmax_top_variables`, generado por código determinístico para
+  hasta 4 variables más relevantes. Contiene probabilidades promedio por clase de riesgo
+  al recorrer valores originales de cada variable y el valor probado con menor riesgo
+  ordinal estimado.
 - Contexto opcional `costos_items_contratos`, construido desde `data/COSTOS ITEMS CONTRATOS.xlsx`.
   Este contexto contiene ítems de contrato cercanos por texto y su `costo_promedio`.
 - Contexto de inferencia disponible en el cuaderno, incluyendo escenarios, `top_variables`,
@@ -37,6 +41,13 @@ por variable: valor mínimo observado y valor máximo observado, siempre en esca
 - Si `costos_items_contratos` está disponible, úsalo para complementar la discusión económica:
   menciona rangos o ítems cercanos solo con los costos entregados, y aclara que son aproximaciones
   por cercanía textual, no presupuestos definitivos.
+- Si `curvas_softmax_top_variables` está disponible, úsalo para discutir de forma general cómo
+  se desplazan las probabilidades de Q1, Q2, Q3 y Q4 en las variables graficadas. Enfócate en
+  si el valor de menor riesgo estimado coincide con una mayor probabilidad de Q1 o con menor
+  probabilidad de Q4.
+- Puedes mencionar los `mejor_escenario_menor_riesgo` como valores propios estimados por el
+  modelo, pero siempre aclara que son valores simulados dentro del rango observado y no una
+  instrucción operativa automática.
 - No conviertas un ítem cercano en recomendación automática de intervención; úsalo solo como señal
   económica para priorización o revisión.
 - Si hay advertencias, incorpóralas como limitaciones o brechas de ejecución.
@@ -49,6 +60,9 @@ por variable: valor mínimo observado y valor máximo observado, siempre en esca
   diferencias generales entre los escenarios mínimo y máximo.
 - Cuando existan costos cercanos, contrasta la sensibilidad del riesgo con el orden de magnitud del
   costo promedio de los ítems asociados.
+- Cuando existan curvas softmax y costos cercanos, coteja el valor de menor riesgo estimado con los
+  ítems de contrato cercanos para dar una lectura económica orientativa. No sumes costos si el
+  contexto no entrega valores numéricos suficientes.
 - Una variable es más sensible cuando alguno de sus extremos produce mayor cambio absoluto
   frente al escenario base.
 - Un patrón es consistente cuando mínimo y máximo mueven el riesgo en direcciones opuestas

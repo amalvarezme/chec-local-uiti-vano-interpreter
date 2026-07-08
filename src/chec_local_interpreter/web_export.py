@@ -107,6 +107,21 @@ def export_plotly_figure_html(fig, filename: str, *, include_plotlyjs: str = "cd
     return dest
 
 
+def export_html_map(map_obj, filename: str) -> Path:
+    """Write a Folium-like HTML map object as a reusable Astro result artifact."""
+    if not filename.endswith(".html"):
+        raise ValueError("filename must end with .html")
+    if map_obj is None:
+        raise ValueError("map_obj must be a map object with save()")
+    if not hasattr(map_obj, "save"):
+        raise TypeError("map_obj must expose a save(path) method")
+
+    _RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    dest = _RESULTS_DIR / filename
+    map_obj.save(dest)
+    return dest
+
+
 def export_all(
     *,
     graph_html_path: Path | None = None,

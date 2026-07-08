@@ -27,6 +27,12 @@ insertarse en el reporte HTML.
   bajo -> medio, medio -> alto, alto -> medio y medio -> bajo.
 - Si recibes `costos_items_contratos`, complementa la discusión con los ítems de contrato más
   cercanos y sus costos promedio. No inventes costos ni extrapoles cantidades.
+- Si recibes `curvas_softmax_top_variables`, usa esas curvas para discutir el desplazamiento general
+  de probabilidades entre Q1, Q2, Q3 y Q4 en las variables más relevantes. No describas una por una
+  si no es necesario.
+- Si el contexto trae `mejor_escenario_menor_riesgo`, puedes reportar esos valores como estimaciones
+  propias del modelo para menor riesgo dentro de los valores probados, sin convertirlos en órdenes
+  operativas.
 - Trata los costos como aproximaciones de referencia por cercanía textual; no son presupuesto,
   cotización ni recomendación obligatoria de intervención.
 - Si no hay cambios de categoría, dilo explícitamente en `resumen` o
@@ -75,6 +81,7 @@ Devuelve un objeto JSON con estas claves:
   disminuyen o mantienen el riesgo, destacando transiciones de categoría cuando existan.
 - `hallazgos_para_criticidad` debe enfocarse en la relevancia de las transiciones de categoría
   o, si no existen, en estabilidad y sensibilidad numérica sin afirmar causalidad. Cuando haya
+  curvas softmax, debe incorporar la lectura general de probabilidades por clase. Cuando haya
   costos cercanos, debe incorporar la lectura económica general sin hacer una lista larga por
   variable.
 - `limitaciones` debe incluir advertencias del simulador y límites metodológicos.

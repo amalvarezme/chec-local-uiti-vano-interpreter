@@ -47,7 +47,11 @@ def call_llm(
     except ImportError:
         return LLMCallResult(called=False, message="openai package is not installed; prompt saved for manual use.")
 
-    client = OpenAI(api_key=api_key, base_url=base_url) if base_url else OpenAI(api_key=api_key)
+    timeout_seconds = float(os.getenv("LLM_TIMEOUT_SECONDS", "180"))
+    client_kwargs = {"api_key": api_key, "timeout": timeout_seconds}
+    if base_url:
+        client_kwargs["base_url"] = base_url
+    client = OpenAI(**client_kwargs)
     selected_model = model or os.getenv("LLM_MODEL", "gemini-2.5-flash-lite")
     max_tokens = int(max_output_tokens or os.getenv("LLM_MAX_OUTPUT_TOKENS", "32768"))
     

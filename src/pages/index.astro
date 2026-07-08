@@ -21,6 +21,7 @@ const grafoRedNivel2Seleccionadas = `${import.meta.env.BASE_URL}grafo_red_nivel2
 const grafoTopUitiPeriodoMgcecdl = `${import.meta.env.BASE_URL}mgcecdl_top_uiti_periodo_grafo.html`;
 const latestInterpretabilityReport = `${import.meta.env.BASE_URL}latest_interpretability_report.html`;
 const baseCircuitMap = `${import.meta.env.BASE_URL}base_circuit_map.html`;
+const baseCircuitMapUiti = `${import.meta.env.BASE_URL}base_circuit_map_uiti.html`;
 const baseCriticalPoints = `${import.meta.env.BASE_URL}base_critical_points.html`;
 
 const vaciosApi = [
@@ -100,7 +101,7 @@ const llmNotebookFlow = [
   ["Agente base descriptor-histórico", "Interpreta el contexto estructurado del circuito: selección, serie diaria, puntos críticos, variables disponibles, causas observadas, metadatos faltantes y grafos de relación técnica."],
   ["RAG del modelo predictivo", "Interpreta las inferencias M-GCECDL: relevancias por escenario, modos climático/estructural, variables de entrada del modelo y conexiones del grafo para priorizar variables explicativas."],
   ["RAG de contraste experto", "Contrasta el modelo de datos históricos y el modelo predictivo con la tabla de discusiones técnicas extraída de PDFs; reporta coincidencias, diferencias y variables priorizadas sin usar la variable objetivo como predictor."],
-  ["Agente automático de sensibilidad y costos", "Lee la tabla mínimo/máximo del simulador, detecta cambios de categoría de riesgo y complementa la discusión con ítems cercanos de COSTOS ITEMS CONTRATOS.xlsx."]
+  ["Agente automático de sensibilidad y costos", "Lee la tabla mínimo/máximo del simulador, genera curvas softmax para las 4 variables más relevantes y complementa la discusión con ítems cercanos de COSTOS ITEMS CONTRATOS.xlsx."]
 ];
 const pdfExtractionSteps = [
   ["1. Lectura documental", "Carga PDFs técnicos desde el repositorio documental y extrae texto por página con PyMuPDF o pdfplumber."],
@@ -700,7 +701,7 @@ const cronograma = [
           <a class="agent-card" href="#agente-simulacion" aria-label="Abrir detalle conceptual del agente de simulación">
             <span class="agent-type low">Low / Fast</span>
             <h3>Agente automático: sensibilidad</h3>
-            <p>Interpreta escenarios mínimo/máximo, cambios de categoría de riesgo, gráfica de impacto y costos cercanos.</p>
+            <p>Interpreta escenarios mínimo/máximo, cambios de categoría, curvas softmax top 4 y costos cercanos.</p>
           </a>
           <a class="agent-card" href="#agente-informes" aria-label="Abrir detalle del agente de informes">
             <span class="agent-type high">High / Generative</span>
@@ -1081,19 +1082,21 @@ const cronograma = [
               <article><strong>Circuito</strong><p>Si existe una selección explícita, se toma el primer circuito seleccionado. Si no existe, se usa el primer circuito disponible en la base.</p></article>
               <article><strong>Fechas</strong><p>La ventana usa fecha inicial y final cuando están definidas; si no, trabaja con el período disponible para el circuito.</p></article>
               <article><strong>Agrupación</strong><p>Los eventos filtrados se agrupan por día para construir la serie diaria de UITI_VANO y número de eventos.</p></article>
-              <article><strong>Mapa</strong><p>El mapa colorea vanos por número de eventos para mostrar la distribución espacial de la recurrencia.</p></article>
+              <article><strong>Mapa</strong><p>El mapa usa GEO para dibujar vanos, transformadores e interruptores; colorea los vanos por eventos o UITI_VANO.</p></article>
             </div>
           </div>
 
           <div class="detail-block">
-            <h3>Mapa base del circuito</h3>
+            <h3>Mapas base del circuito</h3>
             <p>
               El mapa se exporta como referencia para el usuario y para la trazabilidad del reporte. No es la
               fuente primaria del razonamiento del LLM: la fuente primaria es el contexto estructurado con
-              circuito, vanos, conteos, fechas y resumen de eventos. El mapa permite verificar visualmente que
-              el análisis corresponde al circuito y ventana seleccionados.
+              circuito, vanos, conteos, fechas y resumen de eventos. Los mapas permiten verificar visualmente
+              que el análisis corresponde al circuito y ventana seleccionados, incluyendo transformadores e
+              interruptores cargados desde la carpeta GEO.
             </p>
-            <iframe class="graph-frame compact-frame" src={baseCircuitMap} title="Mapa base del circuito seleccionado"></iframe>
+            <iframe class="graph-frame compact-frame" src={baseCircuitMap} title="Mapa base por número de eventos"></iframe>
+            <iframe class="graph-frame compact-frame" src={baseCircuitMapUiti} title="Mapa base por UITI_VANO"></iframe>
           </div>
 
           <div class="detail-block">
@@ -1506,7 +1509,8 @@ const cronograma = [
             <p>
               El agente automático conserva la lógica del simulador: toma variables priorizadas por los
               agentes anteriores, evalúa su valor mínimo y máximo observado, compara el riesgo contra el
-              escenario base y redacta una discusión compacta enfocada en cambios de categoría de riesgo.
+              escenario base, calcula curvas softmax para las variables más sensibles y redacta una discusión
+              compacta enfocada en cambios de categoría de riesgo.
             </p>
           </div>
 
@@ -1515,6 +1519,7 @@ const cronograma = [
             <div class="process-grid">
               <article><strong>Variables priorizadas</strong><p>Provienen del agente de alineación experta o, si no están disponibles, de las variables principales del agente predictivo M-GCECDL.</p></article>
               <article><strong>Tabla mínimo/máximo</strong><p>Incluye riesgo base, riesgo con mínimo, riesgo con máximo, cambios absolutos y etiquetas de riesgo por variable.</p></article>
+              <article><strong>Curvas softmax top 4</strong><p>Recorren valores originales de las variables más relevantes para visualizar probabilidades promedio de Q1, Q2, Q3 y Q4.</p></article>
               <article><strong>Costos de contrato</strong><p>Lee <code>data/COSTOS ITEMS CONTRATOS.xlsx</code> y busca apartados cercanos por texto para complementar la discusión económica.</p></article>
               <article><strong>Contexto previo</strong><p>Reutiliza circuito, periodo, modos, grafos, inferencia y comparación experta sin inventar resultados nuevos.</p></article>
             </div>
@@ -1524,9 +1529,10 @@ const cronograma = [
             <h3>Cómo aparece en el reporte HTML</h3>
             <p>
               La segunda pestaña del reporte conserva la tabla del simulador automático y añade una gráfica
-              de cambio absoluto de riesgo. Si alguna variable cambia de categoría, el reporte lo resalta
-              antes de la discusión del agente. Debajo se muestra el apartado de costos con los ítems de
-              contrato más cercanos y sus costos promedio.
+              ordinal para base, mínimo y máximo, más una rejilla 2x2 de curvas softmax para hasta 4 variables
+              relevantes. Si alguna variable cambia de categoría, el reporte lo resalta antes de la discusión
+              del agente. Debajo se muestra el apartado de costos y una estimación orientativa de menor riesgo
+              cotejada con los ítems de contrato cercanos.
             </p>
             <a class="button primary" href={latestInterpretabilityReport} target="_blank" rel="noreferrer">
               Abrir último reporte
@@ -1555,7 +1561,8 @@ const cronograma = [
               <article><strong>1. Lectura</strong><p>Carga la descripción del ítem y el promedio de <code>UNITCOST</code> desde la hoja de costos.</p></article>
               <article><strong>2. Normalización</strong><p>Limpia acentos, mayúsculas, separadores y términos comunes para comparar texto técnico.</p></article>
               <article><strong>3. Cercanía</strong><p>Relaciona variables como <code>CNT_TRF</code>, <code>NR_T</code> o <code>CANTIDAD_TIERRA</code> con palabras de dominio como transformador, poda o puesta a tierra.</p></article>
-              <article><strong>4. Discusión</strong><p>El agente usa los costos solo como referencia; no los convierte en presupuesto ni recomienda intervención automática.</p></article>
+              <article><strong>4. Estimación</strong><p>Contrasta el valor de menor riesgo estimado en las curvas softmax con el ítem cercano de menor costo promedio disponible.</p></article>
+              <article><strong>5. Discusión</strong><p>El agente usa los costos solo como referencia; no los convierte en presupuesto ni recomienda intervención automática.</p></article>
             </div>
           </div>
 
@@ -1594,9 +1601,10 @@ const cronograma = [
             <p>
               El agente base identifica puntos críticos, el agente predictivo prioriza variables, el agente de
               alineación experta selecciona variables revisables y el agente automático prueba escenarios
-              mínimo/máximo. El componente de costos entra al final: toma esas variables sensibles y busca
-              apartados económicos cercanos para que la discusión del reporte no sea solo técnica, sino también
-              orientada a orden de magnitud económico.
+              mínimo/máximo y curvas softmax. El componente de costos entra al final: toma esas variables
+              sensibles, coteja los valores de menor riesgo estimado y busca apartados económicos cercanos
+              para que la discusión del reporte no sea solo técnica, sino también orientada a orden de
+              magnitud económico.
             </p>
           </div>
           <a class="back-link bottom" href="#arquitectura">← Volver al simulador multimodal</a>
