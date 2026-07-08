@@ -19,10 +19,11 @@ import variables from "../data/variables.json";
 const grafoRedNivel2 = `${import.meta.env.BASE_URL}grafo_red_nivel2.html`;
 const grafoRedNivel2Seleccionadas = `${import.meta.env.BASE_URL}grafo_red_nivel2_seleccionadas.html`;
 const grafoTopUitiPeriodoMgcecdl = `${import.meta.env.BASE_URL}mgcecdl_top_uiti_periodo_grafo.html`;
-const latestInterpretabilityReport = `${import.meta.env.BASE_URL}latest_interpretability_report.html?v=20260708-softmax-maps`;
-const baseCircuitMap = `${import.meta.env.BASE_URL}base_circuit_map.html`;
-const baseCircuitMapUiti = `${import.meta.env.BASE_URL}base_circuit_map_uiti.html`;
-const baseCriticalPoints = `${import.meta.env.BASE_URL}base_critical_points.html`;
+const reportVersion = "20260708-map-legend-frequency";
+const latestInterpretabilityReport = `${import.meta.env.BASE_URL}latest_interpretability_report.html?v=${reportVersion}`;
+const baseCircuitMap = `${import.meta.env.BASE_URL}base_circuit_map.html?v=${reportVersion}`;
+const baseCircuitMapUiti = `${import.meta.env.BASE_URL}base_circuit_map_uiti.html?v=${reportVersion}`;
+const baseCriticalPoints = `${import.meta.env.BASE_URL}base_critical_points.html?v=${reportVersion}`;
 
 const vaciosApi = [
   ["CAPACIDAD_NOMINAL", "126.732", "76,855715 %"],
