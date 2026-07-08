@@ -7,6 +7,7 @@ import pandas as pd
 
 from chec_local_interpreter.config import CriticalityThresholds
 from chec_local_interpreter.data_loader import numeric_series, resolve_column
+from chec_local_interpreter.event_counts import event_date_key
 
 
 def _date_text(value: Any) -> str:
@@ -70,12 +71,13 @@ def build_daily_series(events_df: pd.DataFrame) -> pd.DataFrame:
     fecha_col = resolve_column(work, "FECHA")
     
     work_agg = work.copy()
+    work_agg["_EVENT_DATE_KEY"] = event_date_key(work_agg, date_col=fecha_col or "FECHA")
 
     daily = (
         work_agg.groupby("fecha_dia", as_index=False)
         .agg(
             UITI_VANO=("_UITI_VANO", "sum"),
-            event_count=("_UITI_VANO", "size"),
+            event_count=("_EVENT_DATE_KEY", "nunique"),
             DURACION_total=("_DURACION", "sum"),
             users_total=("_USERS", "sum"),
             UITI=("_UITI", "sum"),

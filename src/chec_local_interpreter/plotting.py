@@ -7,6 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from chec_local_interpreter.config import PROJECT_ROOT
+from chec_local_interpreter.event_counts import count_unique_event_dates
 
 
 def save_uiti_vano_plot(
@@ -90,14 +91,8 @@ def plot_interactive_circuit_events(raw_df, start_date=None, end_date=None):
         else:
             print("Warning: 'FECHA' column not found in dataframe. Showing all data without date filtering.")
 
-    # Deduplicar por FECHA y FID_VANO si existen para evitar sobreconteo por múltiples equipos
-    # if 'FECHA' in df.columns and 'FID_VANO' in df.columns:
-    #     if not pd.api.types.is_datetime64_any_dtype(df['FECHA']):
-    #         df['FECHA'] = pd.to_datetime(df['FECHA'], errors='coerce')
-    #     df = df.drop_duplicates(subset=['FECHA', 'FID_VANO'])
-
-    # 1. Calculate the number of events per circuit and sort descending
-    circuit_counts = df['CIRCUITO'].value_counts().sort_values(ascending=False)
+    # 1. Calculate events per circuit as distinct FECHA values, not raw rows.
+    circuit_counts = count_unique_event_dates(df, "CIRCUITO").sort_values(ascending=False)
 
     # Handle empty dataframe edge case (e.g. if dates are too narrow)
     if circuit_counts.empty:
@@ -423,14 +418,8 @@ def plot_interactive_circuit_clustering(raw_df, start_date=None, end_date=None, 
     # 2. Data Preparation
     df['UITI_VANO'] = pd.to_numeric(df['UITI_VANO'], errors='coerce').fillna(0.0)
 
-    # Deduplicar por FECHA y FID_VANO si existen para evitar sobreconteo
-    # if 'FECHA' in df.columns and 'FID_VANO' in df.columns:
-    #     if not pd.api.types.is_datetime64_any_dtype(df['FECHA']):
-    #         df['FECHA'] = pd.to_datetime(df['FECHA'], errors='coerce')
-    #     df = df.drop_duplicates(subset=['FECHA', 'FID_VANO'])
-
-    # Calculate metrics per circuit
-    counts = df['CIRCUITO'].value_counts()
+    # Calculate metrics per circuit. Frequency counts distinct FECHA values.
+    counts = count_unique_event_dates(df, "CIRCUITO")
     sums = df.groupby('CIRCUITO')['UITI_VANO'].sum()
 
     # Merge into a coordinate dataframe
@@ -581,13 +570,19 @@ def plot_interactive_circuit_clustering(raw_df, start_date=None, end_date=None, 
             showgrid=True,
             gridcolor='#e2e8f0',
             gridwidth=1,
-            griddash='dot'
+            griddash='dot',
+            dtick=1,
+            exponentformat='power',
+            showexponent='all',
         ),
         yaxis=dict(
             showgrid=True,
             gridcolor='#e2e8f0',
             gridwidth=1,
-            griddash='dot'
+            griddash='dot',
+            dtick=1,
+            exponentformat='power',
+            showexponent='all',
         ),
         legend=dict(
             title='Grupos Criticidad',
@@ -763,6 +758,23 @@ def _add_folium_point_layer(fmap, geo_points, *, name: str, color: str, radius: 
         ).add_to(group)
     group.add_to(fmap)
     return len(geo_points)
+
+
+def _add_folium_equipment_legend(fmap) -> None:
+    import folium
+
+    legend_html = f"""
+    <div style='position: fixed; bottom: 22px; right: 22px; z-index: 9999;
+        background: rgba(255,255,255,.94); padding: 9px 11px; border: 1px solid #cbd5e1;
+        border-radius: 6px; font: 12px Arial, sans-serif; line-height: 1.35; min-width: 190px;'>
+      <strong>Equipos y capas</strong>
+      <div><span style='display:inline-block;width:22px;height:0;border-top:4px solid #0ea5e9;margin-right:6px;vertical-align:middle;'></span>Vano / tramo MV</div>
+      <div><span style='display:inline-block;width:22px;height:0;border-top:3px solid #9ca3af;margin-right:6px;vertical-align:middle;opacity:.75;'></span>Vano/tramo MV sin evento</div>
+      <div><span style='display:inline-block;width:10px;height:10px;background:#f59e0b;border:1px solid #ffffff;border-radius:50%;margin-right:9px;'></span>Transformador</div>
+      <div><span style='display:inline-block;width:10px;height:10px;background:#7c3aed;border:1px solid #ffffff;border-radius:50%;margin-right:9px;'></span>Interruptor / switch</div>
+    </div>
+    """
+    fmap.get_root().html.add_child(folium.Element(legend_html))
 
 
 def plot_circuit_map_folium(
@@ -956,20 +968,7 @@ def plot_circuit_map_folium(
             ("EST_OPERAT", "Estado operativo"),
         ],
     )
-
-    total_metric = float(colored_values.sum()) if not colored_values.empty else 0.0
-    title_html = (
-        f"<div style='position: fixed; top: 10px; left: 50px; z-index: 9999; "
-        f"background: rgba(255,255,255,.92); padding: 8px 12px; border: 1px solid #cbd5e1; "
-        f"border-radius: 6px; font: 13px Arial, sans-serif;'>"
-        f"<strong>Mapa de Red - Circuito: {circuito_name}</strong><br>"
-        f"Total {metric_label}: {total_metric:.2f}<br>"
-        f"Periodo: {start_date} a {end_date}<br>"
-        f"Geometría: MVLINSEC + TRANSFORMADORES + SWITCHES"
-        f"</div>"
-    )
-    fmap.get_root().html.add_child(folium.Element(title_html))
-    folium.LayerControl(collapsed=False).add_to(fmap)
+    _add_folium_equipment_legend(fmap)
     fmap.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
     map_name = fmap.get_name()
     render_fix = f"""
@@ -1144,10 +1143,7 @@ def plot_circuit_map_plotly(df, circuito_name, date_range=None, color_target='nu
             ],
         )
 
-        total_metric = colored_values.sum() if not colored_values.empty else 0
-
         fig.update_layout(
-            title=dict(text=f"Mapa de Red - Circuito: {circuito_name} (Total {cbar_title}: {total_metric:.2f})<br><sup>Periodo: {start_date} a {end_date} | Geometría: MVLINSEC + TRANSFORMADORES + SWITCHES</sup>", font=dict(size=18)),
             xaxis_title="Longitud",
             yaxis_title="Latitud",
             yaxis=dict(scaleanchor="x", scaleratio=1),
@@ -1155,8 +1151,8 @@ def plot_circuit_map_plotly(df, circuito_name, date_range=None, color_target='nu
             paper_bgcolor='#ffffff',
             width=1000,
             height=800,
-            margin=dict(l=60, r=50, t=90, b=80),
-            legend=dict(title="Capas", yanchor="top", y=0.99, xanchor="left", x=0.01, bgcolor="rgba(255, 255, 255, 0.8)")
+            margin=dict(l=60, r=50, t=30, b=80),
+            showlegend=False,
         )
         return fig
 
@@ -1271,16 +1267,14 @@ def plot_circuit_map_plotly(df, circuito_name, date_range=None, color_target='nu
             text=dft.apply(lambda r: f"FID_VANO: {r['FID_VANO']}<br>TIPO: {r['TIPO']}<br>{cbar_title}: {r['metric_value']:.2f}", axis=1)
         ))
 
-    total_metric = df_lines['metric_value'].sum()
-
     fig.update_layout(
-        title=dict(text=f"Mapa de Red - Circuito: {circuito_name} (Total {cbar_title}: {total_metric:.2f})<br><sup> Periodo: {start_date} a {end_date} </sup>", font=dict(size=18)),
         xaxis_title="Coordenada X (Este)",
         yaxis_title="Coordenada Y (Norte)",
         #plot_bgcolor='#2b3035', # Fondo oscuro opcional para que los colores brillen más (ajusta si prefieres claro)
         yaxis=dict(scaleanchor="x", scaleratio=1),
         width=1000, height=800,
-        legend=dict(title="Equipos (TIPO)", yanchor="top", y=0.99, xanchor="right", x=0.01, bgcolor="rgba(255, 255, 255, 0.8)")
+        margin=dict(l=60, r=50, t=30, b=80),
+        showlegend=False,
     )
 
     return fig

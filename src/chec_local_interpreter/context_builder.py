@@ -11,6 +11,7 @@ import pandas as pd
 from chec_local_interpreter.config import PROMPT_VERSION, SCHEMA_VERSION
 from chec_local_interpreter.data_loader import resolve_columns
 from chec_local_interpreter.domain_context import domain_context_payload
+from chec_local_interpreter.event_counts import count_unique_event_dates
 
 
 def _date_text(value: Any) -> str | None:
@@ -56,14 +57,14 @@ def daily_series_records(daily_df: pd.DataFrame, limit: int = 60) -> list[dict[s
 def window_summary(events_df: pd.DataFrame, daily_df: pd.DataFrame) -> dict[str, Any]:
     if daily_df.empty:
         return {
-            "events": int(len(events_df)),
+            "events": int(count_unique_event_dates(events_df, []).sum()) if not events_df.empty else 0,
             "nonzero_days": 0,
             "total_uv": 0.0,
         }
     values = pd.to_numeric(daily_df.get("UITI_VANO", 0.0), errors="coerce").fillna(0.0)
     max_index = values.idxmax() if not values.empty else None
     return {
-        "events": int(len(events_df)),
+        "events": int(count_unique_event_dates(events_df, []).sum()) if not events_df.empty else 0,
         "nonzero_days": int((values > 0).sum()),
         "total_uv": _safe_float(values.sum()),
         "max_date": None if max_index is None else _date_text(daily_df.loc[max_index, "fecha_dia"]),
@@ -143,7 +144,7 @@ def _compute_circuit_characterization(
         
     df_copy['UITI_VANO'] = pd.to_numeric(df_copy['UITI_VANO'], errors='coerce').fillna(0.0)
     
-    counts = df_copy['CIRCUITO'].value_counts()
+    counts = count_unique_event_dates(df_copy, 'CIRCUITO')
     sums = df_copy.groupby('CIRCUITO')['UITI_VANO'].sum()
     
     df_coords = pd.DataFrame({

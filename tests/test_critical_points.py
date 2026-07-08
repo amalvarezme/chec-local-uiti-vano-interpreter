@@ -72,3 +72,15 @@ def test_build_daily_series_fills_missing_dates_without_quality_error():
     daily = build_daily_series(events)
     assert daily.shape[0] == 3
     assert daily.loc[1, "UITI_VANO"] == 0
+
+
+def test_build_daily_series_counts_unique_fecha_values_as_events():
+    events = pd.DataFrame(
+        {
+            "CIRCUITO": ["C1", "C1", "C1"],
+            "FECHA": ["2026-01-01 08:00", "2026-01-01 08:00", "2026-01-01 09:00"],
+            "UITI_VANO": [2, 3, 4],
+        }
+    )
+    daily = build_daily_series(events)
+    assert daily.loc[0, "event_count"] == 2
