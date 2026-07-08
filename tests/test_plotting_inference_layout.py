@@ -92,6 +92,23 @@ def test_expert_alignment_tab_renders_auto_simulation_analysis():
                 "direccion_cambio_minimo": "disminuye riesgo",
                 "direccion_cambio_maximo": "aumenta riesgo",
                 "observacion": "CNT_TRF cambia el riesgo.",
+            },
+            {
+                "variable": "LONGITUD",
+                "valor_original_base": 10.0,
+                "valor_minimo_usado": 5.0,
+                "valor_maximo_usado": 20.0,
+                "riesgo_base": 2.1,
+                "riesgo_base_etiqueta": "Riesgo medio-alto (Q3)",
+                "riesgo_valor_minimo": 2.0,
+                "riesgo_valor_minimo_etiqueta": "Riesgo medio-alto (Q3)",
+                "riesgo_valor_maximo": 2.2,
+                "riesgo_valor_maximo_etiqueta": "Riesgo medio-alto (Q3)",
+                "cambio_absoluto_minimo": -0.1,
+                "cambio_absoluto_maximo": 0.1,
+                "direccion_cambio_minimo": "sin cambio relevante",
+                "direccion_cambio_maximo": "sin cambio relevante",
+                "observacion": "LONGITUD mantiene la clase.",
             }
         ]
     )
@@ -103,7 +120,7 @@ def test_expert_alignment_tab_renders_auto_simulation_analysis():
         "sintesis_final": "Síntesis.",
     }
     auto_analysis = {
-        "resumen": ["Resumen del simulador."],
+        "resumen": ["Resumen del simulador con &#x27;Riesgo bajo (Q1)&#x27; legible."],
         "variables_mas_sensibles": [
             {"variable": "CNT_TRF", "lectura": "Mayor sensibilidad.", "mayor_cambio_abs": 0.3}
         ],
@@ -132,18 +149,113 @@ def test_expert_alignment_tab_renders_auto_simulation_analysis():
             }
         ],
     }
+    softmax_curves = {
+        "variables": [
+            {
+                "variable": "CNT_TRF",
+                "etiquetas_clase": [
+                    "Riesgo bajo (Q1)",
+                    "Riesgo medio-bajo (Q2)",
+                    "Riesgo medio-alto (Q3)",
+                    "Riesgo alto (Q4)",
+                ],
+                "filas": [
+                    {
+                        "valor_original": 0.0,
+                        "riesgo_ordinal_estimado": 0.2,
+                        "clase_estimacion": "Riesgo bajo (Q1)",
+                        "probabilidades": {
+                            "Riesgo bajo (Q1)": 0.9,
+                            "Riesgo medio-bajo (Q2)": 0.1,
+                            "Riesgo medio-alto (Q3)": 0.0,
+                            "Riesgo alto (Q4)": 0.0,
+                        },
+                    },
+                    {
+                        "valor_original": 3.0,
+                        "riesgo_ordinal_estimado": 2.6,
+                        "clase_estimacion": "Riesgo alto (Q4)",
+                        "probabilidades": {
+                            "Riesgo bajo (Q1)": 0.05,
+                            "Riesgo medio-bajo (Q2)": 0.05,
+                            "Riesgo medio-alto (Q3)": 0.2,
+                            "Riesgo alto (Q4)": 0.7,
+                        },
+                    },
+                ],
+                "mejor_escenario_menor_riesgo": {
+                    "valor_original": 0.0,
+                    "riesgo_ordinal_estimado": 0.2,
+                    "clase_estimacion": "Riesgo bajo (Q1)",
+                    "probabilidades": {
+                        "Riesgo bajo (Q1)": 0.9,
+                        "Riesgo medio-bajo (Q2)": 0.1,
+                        "Riesgo medio-alto (Q3)": 0.0,
+                        "Riesgo alto (Q4)": 0.0,
+                    },
+                },
+            },
+            {
+                "variable": "LONGITUD",
+                "etiquetas_clase": [
+                    "Riesgo bajo (Q1)",
+                    "Riesgo medio-bajo (Q2)",
+                    "Riesgo medio-alto (Q3)",
+                    "Riesgo alto (Q4)",
+                ],
+                "filas": [
+                    {
+                        "valor_original": 5.0,
+                        "riesgo_ordinal_estimado": 2.0,
+                        "clase_estimacion": "Riesgo medio-alto (Q3)",
+                        "probabilidades": {
+                            "Riesgo bajo (Q1)": 0.0,
+                            "Riesgo medio-bajo (Q2)": 0.2,
+                            "Riesgo medio-alto (Q3)": 0.7,
+                            "Riesgo alto (Q4)": 0.1,
+                        },
+                    }
+                ],
+                "mejor_escenario_menor_riesgo": {
+                    "valor_original": 5.0,
+                    "riesgo_ordinal_estimado": 2.0,
+                    "clase_estimacion": "Riesgo medio-alto (Q3)",
+                    "probabilidades": {
+                        "Riesgo bajo (Q1)": 0.0,
+                        "Riesgo medio-bajo (Q2)": 0.2,
+                        "Riesgo medio-alto (Q3)": 0.7,
+                        "Riesgo alto (Q4)": 0.1,
+                    },
+                },
+            },
+        ],
+        "metadata": {"variables_graficadas": ["CNT_TRF", "LONGITUD"], "warnings": []},
+    }
 
     html = render_expert_alignment_tab(
         analysis,
         automatic_simulation_table=table,
         automatic_simulation_analysis=auto_analysis,
         automatic_simulation_cost_context=cost_context,
+        automatic_simulation_softmax_curves=softmax_curves,
     )
 
-    assert "Análisis automático de sensibilidad" in html
+    assert "Análisis automático de sensibilidad" not in html
     assert "CNT_TRF" in html
-    assert "Cambio absoluto del riesgo por variable" in html
-    assert "Riesgo bajo -&gt; Riesgo alto" in html
-    assert "Costos aproximados por ítems de contrato" in html
-    assert "SERVICIO DE INSTALACION DE TRANSFORMADOR TRIFASICO" in html
-    assert "Mayor sensibilidad" in html
+    assert "LONGITUD" in html
+    assert html.index("Variables a priorizar") < html.index("Gráficas del simulador automático")
+    assert "Comparación breve del simulador" in html
+    assert "Clase de riesgo por variable priorizada" not in html
+    assert "Transiciones de categoría detectadas" not in html
+    assert "Escala ordinal usada en la gráfica" not in html
+    assert "Riesgo bajo -&gt; Riesgo alto" not in html
+    assert "Costos aproximados por ítems de contrato" not in html
+    assert "Curvas softmax por clase" in html
+    assert "Probabilidad softmax promedio" in html
+    assert "Valores sugeridos por menor clase dominante" in html
+    assert "Estimación económica orientativa para menor riesgo" not in html
+    assert "Estimación determinística de referencia" not in html
+    assert "SERVICIO DE INSTALACION DE TRANSFORMADOR TRIFASICO" not in html
+    assert "&#x27;" not in html
+    assert "&amp;#x27;" not in html
+    assert "Mayor sensibilidad" not in html

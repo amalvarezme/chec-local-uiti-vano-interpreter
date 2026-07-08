@@ -608,6 +608,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
+os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "chec_local_matplotlib"))
 import matplotlib.colors as mcolors
 import matplotlib.cm as cm
 
@@ -643,6 +644,31 @@ def _load_geo_vanos_for_circuit(circuito_name: str):
     return geo
 
 
+def _load_geo_points_for_circuit(circuito_name: str, filename: str, fid_column: str):
+    geo_path = PROJECT_ROOT / "data" / "GEO" / filename
+    if not geo_path.exists():
+        return None
+
+    try:
+        import geopandas as gpd
+    except ImportError:
+        return None
+
+    points = gpd.read_file(geo_path)
+    required_cols = {"CIRCUITO", "G3E_FID", "geometry"}
+    if not required_cols.issubset(points.columns):
+        return None
+
+    geo = points[points["CIRCUITO"].astype(str).eq(str(circuito_name))].copy()
+    if geo.empty:
+        return None
+    if str(geo.crs) != "EPSG:4326":
+        geo = geo.to_crs("EPSG:4326")
+    geo[fid_column] = _norm_map_id(geo["G3E_FID"])
+    geo = geo[geo.geometry.notna() & ~geo.geometry.is_empty].copy()
+    return geo if not geo.empty else None
+
+
 def _iter_line_xy(geometry):
     if geometry is None or geometry.is_empty:
         return
@@ -654,6 +680,320 @@ def _iter_line_xy(geometry):
         for part in geometry.geoms:
             xs, ys = part.xy
             yield list(xs), list(ys)
+
+
+def _format_geo_value(value) -> str:
+    try:
+        if pd.isna(value):
+            return ""
+    except Exception:
+        pass
+    return str(value)
+
+
+def _point_hover_text(row, fields: list[tuple[str, str]], title: str) -> str:
+    parts = [f"<b>{title}</b>"]
+    for column, label in fields:
+        text = _format_geo_value(row.get(column, ""))
+        if text:
+            parts.append(f"{label}: {text}")
+    return "<br>".join(parts)
+
+
+def _add_geo_point_trace(fig, geo_points, *, name: str, color: str, symbol: str, size: int, fields: list[tuple[str, str]]):
+    if geo_points is None or geo_points.empty:
+        return
+    hover_text = [_point_hover_text(row, fields, name) for _, row in geo_points.iterrows()]
+    fig.add_trace(
+        go.Scatter(
+            x=geo_points.geometry.x,
+            y=geo_points.geometry.y,
+            mode="markers",
+            marker=dict(
+                size=size,
+                color=color,
+                symbol=symbol,
+                opacity=0.9,
+                line=dict(width=1.2, color="white"),
+            ),
+            name=f"{name} ({len(geo_points)})",
+            hoverinfo="text",
+            text=hover_text,
+        )
+    )
+
+
+def _geo_points_for_folium(geo_points):
+    if geo_points is None or geo_points.empty:
+        return geo_points
+    if str(geo_points.crs) != "EPSG:4326":
+        geo_points = geo_points.to_crs("EPSG:4326")
+    return geo_points[geo_points.geometry.notna() & ~geo_points.geometry.is_empty].copy()
+
+
+def _folium_popup_html(row, fields: list[tuple[str, str]], title: str) -> str:
+    items = []
+    for column, label in fields:
+        text = _format_geo_value(row.get(column, ""))
+        if text:
+            items.append(f"<tr><th style='text-align:left;padding-right:8px'>{label}</th><td>{text}</td></tr>")
+    return f"<strong>{title}</strong><table>{''.join(items)}</table>"
+
+
+def _add_folium_point_layer(fmap, geo_points, *, name: str, color: str, radius: int, fields: list[tuple[str, str]]) -> int:
+    geo_points = _geo_points_for_folium(geo_points)
+    if geo_points is None or geo_points.empty:
+        return 0
+
+    import folium
+
+    group = folium.FeatureGroup(name=f"{name} ({len(geo_points)})", show=True)
+    for _, row in geo_points.iterrows():
+        geom = row.geometry
+        folium.CircleMarker(
+            location=[geom.y, geom.x],
+            radius=radius,
+            color=color,
+            fill=True,
+            fill_color=color,
+            fill_opacity=0.85,
+            weight=1,
+            tooltip=f"{name}: {_format_geo_value(row.get('CODIGO', row.get('G3E_FID', '')))}",
+            popup=folium.Popup(_folium_popup_html(row, fields, name), max_width=420),
+        ).add_to(group)
+    group.add_to(fmap)
+    return len(geo_points)
+
+
+def plot_circuit_map_folium(
+    df,
+    circuito_name,
+    date_range=None,
+    color_target="number_of_events",
+    metric_by_vano=None,
+    metric_label: str | None = None,
+    metric_column: str | None = None,
+    metric_class_by_vano=None,
+    metric_class_column: str | None = None,
+):
+    """Build the same layered GEO HTML map used in notebook 03, enriched with V3 metrics."""
+    os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "chec_local_matplotlib"))
+    import folium
+    import geopandas as gpd
+    import matplotlib.colors as mcolors
+    import matplotlib.cm as cm
+
+    df_filtered = df[df["CIRCUITO"].astype(str).eq(str(circuito_name))].copy()
+    if date_range is not None:
+        df_filtered["FECHA_parsed"] = pd.to_datetime(df_filtered["FECHA"], errors="coerce")
+        start_date = pd.to_datetime(date_range[0]) if date_range[0] else df_filtered["FECHA_parsed"].min()
+        end_date = pd.to_datetime(date_range[1]) if date_range[1] else df_filtered["FECHA_parsed"].max()
+        df_filtered = df_filtered[
+            (df_filtered["FECHA_parsed"] >= start_date)
+            & (df_filtered["FECHA_parsed"] <= end_date)
+        ]
+    else:
+        start_date = pd.to_datetime(df_filtered["FECHA"], errors="coerce").min()
+        end_date = pd.to_datetime(df_filtered["FECHA"], errors="coerce").max()
+
+    geo_vanos = _load_geo_vanos_for_circuit(circuito_name)
+    geo_trafos = _load_geo_points_for_circuit(circuito_name, "GDBCHEC_TRANSFOR.shp", "FID_TRAFO_GEO")
+    geo_switches = _load_geo_points_for_circuit(circuito_name, "SWITCHES.shp", "FID_SWITCH_GEO")
+    if geo_vanos is None and geo_trafos is None and geo_switches is None:
+        raise ValueError(f"No hay geometria GEO para circuito {circuito_name}")
+
+    if geo_vanos is not None and str(geo_vanos.crs) != "EPSG:4326":
+        geo_vanos = geo_vanos.to_crs("EPSG:4326")
+
+    if "FID_VANO" in df_filtered.columns:
+        df_filtered["FID_VANO_NORM"] = _norm_map_id(df_filtered["FID_VANO"])
+    else:
+        df_filtered["FID_VANO_NORM"] = pd.NA
+    if "UITI_VANO" in df_filtered.columns:
+        df_filtered["UITI_VANO"] = pd.to_numeric(df_filtered["UITI_VANO"], errors="coerce").fillna(0)
+    else:
+        df_filtered["UITI_VANO"] = 0
+
+    if metric_by_vano is not None:
+        metric = pd.Series(metric_by_vano, dtype="float64").rename("metric_value")
+        metric.index = _norm_map_id(pd.Series(metric.index, dtype="object"))
+        metric_label = metric_label or "Métrica por vano"
+        metric_column = metric_column or "metric_value"
+    elif color_target == "number_of_events":
+        metric = df_filtered.groupby("FID_VANO_NORM").size().rename("metric_value")
+        metric_label = "Número de eventos"
+        metric_column = "n_eventos"
+    elif color_target in {"sum_uiti_vano", "UITI_VANO_sum"}:
+        metric = df_filtered.groupby("FID_VANO_NORM")["UITI_VANO"].sum().rename("metric_value")
+        metric_label = "Suma de UITI_VANO"
+        metric_column = "uiti_vano_total"
+    else:
+        metric = df_filtered.groupby("FID_VANO_NORM").size().rename("metric_value")
+        metric_label = "Número de eventos"
+        metric_column = "n_eventos"
+
+    if geo_vanos is not None:
+        geo_plot = geo_vanos.merge(metric, left_on="FID_VANO_GEO", right_index=True, how="left")
+        geo_plot["metric_value"] = pd.to_numeric(geo_plot["metric_value"], errors="coerce")
+        geo_plot["has_v3_event"] = geo_plot["metric_value"].notna()
+        geo_plot[metric_column] = geo_plot["metric_value"].fillna(0)
+        if metric_class_by_vano is not None:
+            class_metric = pd.Series(metric_class_by_vano, dtype="object").rename("metric_class")
+            class_metric.index = _norm_map_id(pd.Series(class_metric.index, dtype="object"))
+            metric_class_column = metric_class_column or "clase_riesgo"
+            geo_plot = geo_plot.merge(class_metric, left_on="FID_VANO_GEO", right_index=True, how="left")
+            geo_plot[metric_class_column] = geo_plot["metric_class"].fillna("Sin clase")
+    else:
+        geo_plot = gpd.GeoDataFrame(geometry=[], crs="EPSG:4326")
+
+    bounds_frames = []
+    for gdf in [geo_plot, _geo_points_for_folium(geo_trafos), _geo_points_for_folium(geo_switches)]:
+        if gdf is not None and not gdf.empty:
+            bounds_frames.append(gdf[["geometry"]])
+    if not bounds_frames:
+        raise ValueError(f"No hay geometria utilizable para circuito {circuito_name}")
+    bounds_source = pd.concat(bounds_frames, ignore_index=True)
+    bounds = gpd.GeoDataFrame(bounds_source, geometry="geometry", crs="EPSG:4326").total_bounds
+    center = [(bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2]
+
+    fmap = folium.Map(location=center, zoom_start=12, tiles="CartoDB positron", width="100%", height="100%")
+
+    colored_values = (
+        geo_plot.loc[geo_plot["has_v3_event"], metric_column]
+        if not geo_plot.empty and "has_v3_event" in geo_plot.columns
+        else pd.Series(dtype=float)
+    )
+    if colored_values.empty:
+        vmin, vmax_robust = 0, 1
+    else:
+        vmin = float(colored_values.min())
+        vmax_robust = float(np.percentile(colored_values, 95))
+        if vmax_robust <= vmin:
+            vmax_robust = float(colored_values.max())
+            if vmax_robust == vmin:
+                vmax_robust = vmin + 1
+    norm = mcolors.Normalize(vmin=vmin, vmax=vmax_robust)
+    mapper = cm.ScalarMappable(norm=norm, cmap=cm.turbo)
+    class_colors = {
+        "Bajo": "#2dd4bf",
+        "Medio": "#facc15",
+        "Alto": "#fb923c",
+        "Muy alto": "#dc2626",
+    }
+
+    def style_line(feature):
+        value = feature["properties"].get(metric_column)
+        has_value = bool(feature["properties"].get("has_v3_event"))
+        if has_value:
+            class_value = feature["properties"].get(metric_class_column) if metric_class_column else None
+            if class_value in class_colors:
+                return {"color": class_colors[class_value], "weight": 4, "opacity": 0.88}
+            rgba = mapper.to_rgba(min(float(value or 0), vmax_robust), bytes=True)
+            return {"color": f"#{rgba[0]:02x}{rgba[1]:02x}{rgba[2]:02x}", "weight": 4, "opacity": 0.85}
+        return {"color": "#9ca3af", "weight": 2, "opacity": 0.45}
+
+    if not geo_plot.empty:
+        tooltip_fields = [col for col in ["FID_VANO_GEO", "CODIGO", "CIRCUITO", metric_column] if col in geo_plot.columns]
+        if metric_class_column and metric_class_column in geo_plot.columns:
+            tooltip_fields.append(metric_class_column)
+        folium.GeoJson(
+            geo_plot[[*tooltip_fields, "has_v3_event", "geometry"]],
+            name=f"Vanos / tramos MV - {metric_label}",
+            style_function=style_line,
+            tooltip=folium.GeoJsonTooltip(fields=tooltip_fields),
+        ).add_to(fmap)
+        if metric_class_column:
+            legend_items = "".join(
+                f"<div><span style='display:inline-block;width:11px;height:11px;background:{color};"
+                f"margin-right:6px;border-radius:2px;'></span>{label}</div>"
+                for label, color in class_colors.items()
+            )
+            legend_html = (
+                "<div style='position: fixed; bottom: 22px; left: 50px; z-index: 9999; "
+                "background: rgba(255,255,255,.94); padding: 8px 10px; border: 1px solid #cbd5e1; "
+                "border-radius: 6px; font: 12px Arial, sans-serif;'>"
+                "<strong>Clase</strong>"
+                f"{legend_items}"
+                "</div>"
+            )
+            fmap.get_root().html.add_child(folium.Element(legend_html))
+
+    _add_folium_point_layer(
+        fmap,
+        geo_trafos,
+        name="Transformadores",
+        color="#f59e0b",
+        radius=5,
+        fields=[
+            ("FID_TRAFO_GEO", "FID trafo"),
+            ("CODIGO", "Código"),
+            ("CIRCUITO", "Circuito"),
+            ("CAPACIDAD_", "Capacidad"),
+            ("FASES", "Fases"),
+            ("MUNICIPIO", "Municipio"),
+            ("DIRECCION", "Dirección"),
+            ("ENERGIZADO", "Energizado"),
+            ("EST_OPERAT", "Estado operativo"),
+        ],
+    )
+    _add_folium_point_layer(
+        fmap,
+        geo_switches,
+        name="Interruptores / switches",
+        color="#7c3aed",
+        radius=4,
+        fields=[
+            ("FID_SWITCH_GEO", "FID switch"),
+            ("CODIGO", "Código"),
+            ("TIPO", "Tipo"),
+            ("ELEMENTO", "Elemento"),
+            ("CIRCUITO", "Circuito"),
+            ("CAPACIDAD_", "Capacidad"),
+            ("FASES", "Fases"),
+            ("MUNICIPIO", "Municipio"),
+            ("DIRECCION", "Dirección"),
+            ("ENERGIZADO", "Energizado"),
+            ("EST_OPERAT", "Estado operativo"),
+        ],
+    )
+
+    total_metric = float(colored_values.sum()) if not colored_values.empty else 0.0
+    title_html = (
+        f"<div style='position: fixed; top: 10px; left: 50px; z-index: 9999; "
+        f"background: rgba(255,255,255,.92); padding: 8px 12px; border: 1px solid #cbd5e1; "
+        f"border-radius: 6px; font: 13px Arial, sans-serif;'>"
+        f"<strong>Mapa de Red - Circuito: {circuito_name}</strong><br>"
+        f"Total {metric_label}: {total_metric:.2f}<br>"
+        f"Periodo: {start_date} a {end_date}<br>"
+        f"Geometría: MVLINSEC + TRANSFORMADORES + SWITCHES"
+        f"</div>"
+    )
+    fmap.get_root().html.add_child(folium.Element(title_html))
+    folium.LayerControl(collapsed=False).add_to(fmap)
+    fmap.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
+    map_name = fmap.get_name()
+    render_fix = f"""
+    <style>
+      html, body, .folium-map {{
+        width: 100% !important;
+        height: 100vh !important;
+        min-height: 520px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }}
+    </style>
+    <script>
+      window.addEventListener("load", function () {{
+        setTimeout(function () {{
+          if (window.{map_name}) {{
+            window.{map_name}.invalidateSize(true);
+          }}
+        }}, 150);
+      }});
+    </script>
+    """
+    fmap.get_root().html.add_child(folium.Element(render_fix))
+    return fmap
 
 
 def plot_circuit_map_plotly(df, circuito_name, date_range=None, color_target='number_of_events'):
@@ -672,6 +1012,8 @@ def plot_circuit_map_plotly(df, circuito_name, date_range=None, color_target='nu
 
     geo_vanos = _load_geo_vanos_for_circuit(circuito_name)
     if geo_vanos is not None and 'FID_VANO' in df_filtered.columns:
+        geo_trafos = _load_geo_points_for_circuit(circuito_name, "GDBCHEC_TRANSFOR.shp", "FID_TRAFO_GEO")
+        geo_switches = _load_geo_points_for_circuit(circuito_name, "SWITCHES.shp", "FID_SWITCH_GEO")
         df_filtered['FID_VANO_NORM'] = _norm_map_id(df_filtered['FID_VANO'])
         df_filtered['UITI_VANO'] = pd.to_numeric(df_filtered['UITI_VANO'], errors='coerce').fillna(0)
 
@@ -761,10 +1103,51 @@ def plot_circuit_map_plotly(df, circuito_name, date_range=None, color_target='nu
             hoverinfo='none'
         ))
 
+        _add_geo_point_trace(
+            fig,
+            geo_trafos,
+            name="Transformadores",
+            color="#f59e0b",
+            symbol="diamond",
+            size=9,
+            fields=[
+                ("FID_TRAFO_GEO", "FID trafo"),
+                ("CODIGO", "Código"),
+                ("CIRCUITO", "Circuito"),
+                ("CAPACIDAD_", "Capacidad"),
+                ("FASES", "Fases"),
+                ("MUNICIPIO", "Municipio"),
+                ("DIRECCION", "Dirección"),
+                ("ENERGIZADO", "Energizado"),
+                ("EST_OPERAT", "Estado operativo"),
+            ],
+        )
+        _add_geo_point_trace(
+            fig,
+            geo_switches,
+            name="Interruptores / switches",
+            color="#7c3aed",
+            symbol="triangle-up",
+            size=8,
+            fields=[
+                ("FID_SWITCH_GEO", "FID switch"),
+                ("CODIGO", "Código"),
+                ("TIPO", "Tipo"),
+                ("ELEMENTO", "Elemento"),
+                ("CIRCUITO", "Circuito"),
+                ("CAPACIDAD_", "Capacidad"),
+                ("FASES", "Fases"),
+                ("MUNICIPIO", "Municipio"),
+                ("DIRECCION", "Dirección"),
+                ("ENERGIZADO", "Energizado"),
+                ("EST_OPERAT", "Estado operativo"),
+            ],
+        )
+
         total_metric = colored_values.sum() if not colored_values.empty else 0
 
         fig.update_layout(
-            title=dict(text=f"Mapa de Red - Circuito: {circuito_name} (Total {cbar_title}: {total_metric:.2f})<br><sup>Periodo: {start_date} a {end_date} | Geometría: MVLINSEC</sup>", font=dict(size=18)),
+            title=dict(text=f"Mapa de Red - Circuito: {circuito_name} (Total {cbar_title}: {total_metric:.2f})<br><sup>Periodo: {start_date} a {end_date} | Geometría: MVLINSEC + TRANSFORMADORES + SWITCHES</sup>", font=dict(size=18)),
             xaxis_title="Longitud",
             yaxis_title="Latitud",
             yaxis=dict(scaleanchor="x", scaleratio=1),
@@ -773,7 +1156,7 @@ def plot_circuit_map_plotly(df, circuito_name, date_range=None, color_target='nu
             width=1000,
             height=800,
             margin=dict(l=60, r=50, t=90, b=80),
-            legend=dict(title="Vanos", yanchor="top", y=0.99, xanchor="left", x=0.01, bgcolor="rgba(255, 255, 255, 0.8)")
+            legend=dict(title="Capas", yanchor="top", y=0.99, xanchor="left", x=0.01, bgcolor="rgba(255, 255, 255, 0.8)")
         )
         return fig
 
@@ -981,6 +1364,8 @@ def render_expert_alignment_tab(
     automatic_simulation_table=None,
     automatic_simulation_analysis=None,
     automatic_simulation_cost_context=None,
+    automatic_simulation_softmax_curves=None,
+    automatic_simulation_risk_maps_html="",
 ):
     """
     Renderiza la segunda pestaña del reporte HTML con la comparación
@@ -991,8 +1376,15 @@ def render_expert_alignment_tab(
 
     analysis = expert_alignment_validation_data if isinstance(expert_alignment_validation_data, dict) else None
 
+    def _clean_text(text) -> str:
+        value = html.unescape("" if text is None else str(text))
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1].strip()
+        return value
+
     def _escape(text):
-        return html.escape("" if text is None else str(text))
+        return html.escape(_clean_text(text), quote=False)
 
     def _value(value):
         source_labels = {
@@ -1028,7 +1420,7 @@ def render_expert_alignment_tab(
         return f"<ul class='report-list'>{lis}</ul>"
 
     def _risk_category_rank(label) -> int:
-        normalized = str(label or "").strip().lower()
+        normalized = _clean_text(label).lower()
         if "alto" in normalized and "medio" not in normalized:
             return 3
         if "medio-alto" in normalized or ("medio" in normalized and "alto" in normalized):
@@ -1041,9 +1433,33 @@ def render_expert_alignment_tab(
             return 0
         return -1
 
+    def _risk_class_level(label, score=None) -> int | None:
+        rank = _risk_category_rank(label)
+        if rank >= 0:
+            return rank + 1
+        parsed = pd.to_numeric(pd.Series([score]), errors="coerce").iloc[0]
+        try:
+            if pd.isna(parsed):
+                return None
+        except Exception:
+            return None
+        return int(max(1, min(4, round(float(parsed)) + 1)))
+
+    def _risk_class_label(level: int | None, label=None) -> str:
+        text = _clean_text(label)
+        if text:
+            return text
+        labels = {
+            1: "Q1 - Riesgo bajo",
+            2: "Q2 - Riesgo medio-bajo",
+            3: "Q3 - Riesgo medio-alto",
+            4: "Q4 - Riesgo alto",
+        }
+        return labels.get(level or 0, "Riesgo no disponible")
+
     def _risk_transition_text(base_label, scenario_label) -> str:
-        base = str(base_label or "").strip()
-        scenario = str(scenario_label or "").strip()
+        base = _clean_text(base_label)
+        scenario = _clean_text(scenario_label)
         if not base or not scenario:
             return "categoría no disponible"
         if base == scenario:
@@ -1051,28 +1467,15 @@ def render_expert_alignment_tab(
         return f"{base} -> {scenario}"
 
     def _auto_simulation_chart_html(table) -> str:
-        required = {
-            "variable",
-            "riesgo_base",
-            "riesgo_valor_minimo",
-            "riesgo_valor_maximo",
-            "cambio_absoluto_minimo",
-            "cambio_absoluto_maximo",
-        }
+        required = {"variable", "riesgo_base", "riesgo_valor_minimo", "riesgo_valor_maximo"}
         if table is None or not hasattr(table, "columns") or not required.issubset(set(table.columns)):
             return (
-                "<p class='muted'>No hay columnas suficientes para graficar los cambios de riesgo "
+                "<p class='muted'>No hay columnas suficientes para graficar las clases de riesgo "
                 "del simulador automático.</p>"
             )
 
         work = table.copy()
-        for col in [
-            "riesgo_base",
-            "riesgo_valor_minimo",
-            "riesgo_valor_maximo",
-            "cambio_absoluto_minimo",
-            "cambio_absoluto_maximo",
-        ]:
+        for col in ["riesgo_base", "riesgo_valor_minimo", "riesgo_valor_maximo"]:
             work[col] = pd.to_numeric(work[col], errors="coerce")
         work["variable"] = work["variable"].fillna("").astype(str).str.strip()
         work = work[work["variable"] != ""].copy()
@@ -1086,38 +1489,65 @@ def render_expert_alignment_tab(
         if "riesgo_valor_maximo_etiqueta" not in work.columns:
             work["riesgo_valor_maximo_etiqueta"] = ""
 
+        work["nivel_base"] = work.apply(
+            lambda row: _risk_class_level(row.get("riesgo_base_etiqueta"), row.get("riesgo_base")),
+            axis=1,
+        )
+        work["nivel_minimo"] = work.apply(
+            lambda row: _risk_class_level(row.get("riesgo_valor_minimo_etiqueta"), row.get("riesgo_valor_minimo")),
+            axis=1,
+        )
+        work["nivel_maximo"] = work.apply(
+            lambda row: _risk_class_level(row.get("riesgo_valor_maximo_etiqueta"), row.get("riesgo_valor_maximo")),
+            axis=1,
+        )
+        work = work.dropna(subset=["nivel_base", "nivel_minimo", "nivel_maximo"]).copy()
+        if work.empty:
+            return "<p class='muted'>No hay clases de riesgo válidas para graficar el simulador automático.</p>"
+        for col in ["nivel_base", "nivel_minimo", "nivel_maximo"]:
+            work[col] = work[col].astype(int).clip(1, 4)
+        work["clase_base"] = work.apply(
+            lambda row: _risk_class_label(row.get("nivel_base"), row.get("riesgo_base_etiqueta")),
+            axis=1,
+        )
+        work["clase_minimo"] = work.apply(
+            lambda row: _risk_class_label(row.get("nivel_minimo"), row.get("riesgo_valor_minimo_etiqueta")),
+            axis=1,
+        )
+        work["clase_maximo"] = work.apply(
+            lambda row: _risk_class_label(row.get("nivel_maximo"), row.get("riesgo_valor_maximo_etiqueta")),
+            axis=1,
+        )
+        work["cambia_categoria_minimo"] = work["nivel_minimo"] != work["nivel_base"]
+        work["cambia_categoria_maximo"] = work["nivel_maximo"] != work["nivel_base"]
         work["transicion_minimo"] = work.apply(
-            lambda row: _risk_transition_text(row.get("riesgo_base_etiqueta"), row.get("riesgo_valor_minimo_etiqueta")),
+            lambda row: _risk_transition_text(row.get("clase_base"), row.get("clase_minimo"))
+            if row.get("cambia_categoria_minimo")
+            else "sin cambio de categoría",
             axis=1,
         )
         work["transicion_maximo"] = work.apply(
-            lambda row: _risk_transition_text(row.get("riesgo_base_etiqueta"), row.get("riesgo_valor_maximo_etiqueta")),
+            lambda row: _risk_transition_text(row.get("clase_base"), row.get("clase_maximo"))
+            if row.get("cambia_categoria_maximo")
+            else "sin cambio de categoría",
             axis=1,
         )
-        work["cambia_categoria_minimo"] = work["transicion_minimo"] != "sin cambio de categoría"
-        work["cambia_categoria_maximo"] = work["transicion_maximo"] != "sin cambio de categoría"
         work["cambia_categoria"] = work["cambia_categoria_minimo"] | work["cambia_categoria_maximo"]
-        work["salto_categoria_minimo"] = (
-            work["riesgo_valor_minimo_etiqueta"].map(_risk_category_rank)
-            - work["riesgo_base_etiqueta"].map(_risk_category_rank)
-        ).abs()
-        work["salto_categoria_maximo"] = (
-            work["riesgo_valor_maximo_etiqueta"].map(_risk_category_rank)
-            - work["riesgo_base_etiqueta"].map(_risk_category_rank)
-        ).abs()
+        work["salto_categoria_minimo"] = (work["nivel_minimo"] - work["nivel_base"]).abs()
+        work["salto_categoria_maximo"] = (work["nivel_maximo"] - work["nivel_base"]).abs()
         work["max_salto_categoria"] = work[["salto_categoria_minimo", "salto_categoria_maximo"]].max(axis=1)
-        work["max_cambio_abs"] = work[["cambio_absoluto_minimo", "cambio_absoluto_maximo"]].abs().max(axis=1)
-        work = (
-            work.sort_values(["max_salto_categoria", "max_cambio_abs"], ascending=[False, False], kind="stable")
-            .head(15)
-            .iloc[::-1]
-            .copy()
-        )
+        for col in ["cambio_absoluto_minimo", "cambio_absoluto_maximo", "magnitud_max_cambio_abs"]:
+            if col not in work.columns:
+                work[col] = 0.0
+            work[col] = pd.to_numeric(work[col], errors="coerce").fillna(0.0)
+        work["max_cambio_abs"] = work[["cambio_absoluto_minimo", "cambio_absoluto_maximo", "magnitud_max_cambio_abs"]].abs().max(axis=1)
+        work = work.sort_values(["max_salto_categoria", "max_cambio_abs"], ascending=[False, False], kind="stable").copy()
+        chart_work = work.iloc[::-1].copy()
         transition_rows = work[work["cambia_categoria"]].iloc[::-1].head(5)
         if transition_rows.empty:
             transition_summary = (
                 "<p class='muted'>No se observan cambios de categoría de riesgo en las variables graficadas; "
-                "la gráfica resalta cambios numéricos frente al escenario base.</p>"
+                "la gráfica confirma la estabilidad de clase en los escenarios base, mínimo y máximo.</p>"
             )
         else:
             transition_items = []
@@ -1134,36 +1564,72 @@ def render_expert_alignment_tab(
                 f"<ul class='report-list'>{''.join(transition_items)}</ul>"
                 "</div>"
             )
+        class_legend = (
+            "<div class='insight-card'>"
+            "<strong>Escala ordinal usada en la gráfica</strong>"
+            "<ul class='report-list'>"
+            "<li>Q1 - Riesgo bajo</li>"
+            "<li>Q2 - Riesgo medio-bajo</li>"
+            "<li>Q3 - Riesgo medio-alto</li>"
+            "<li>Q4 - Riesgo alto</li>"
+            "</ul>"
+            "</div>"
+        )
+        scenario_legend = (
+            "<p class='muted'><strong>Escenarios graficados:</strong> Base, valor mínimo y valor máximo "
+            "de cada variable priorizada.</p>"
+        )
 
-        min_colors = ["#b91c1c" if flag else "#94a3b8" for flag in work["cambia_categoria_minimo"]]
-        max_colors = ["#7f1d1d" if flag else "#2563eb" for flag in work["cambia_categoria_maximo"]]
-        min_hover = [
-            (
-                f"Variable: {row.variable}<br>Escenario: mínimo"
-                f"<br>Riesgo base: {row.riesgo_base:.4f}"
-                f"<br>Riesgo mínimo: {row.riesgo_valor_minimo:.4f}"
-                f"<br>Cambio abs.: {row.cambio_absoluto_minimo:.4f}"
-                f"<br>Categoría: {row.transicion_minimo}"
+        def _scenario_hover(row, *, scenario: str, risk_value: str, class_value: str, transition: str = "") -> str:
+            text = (
+                f"Variable: {_clean_text(row.variable)}<br>"
+                f"Escenario: {scenario}<br>"
+                f"Clase de riesgo: {_clean_text(getattr(row, class_value))}<br>"
+                f"Nivel ordinal: {getattr(row, risk_value)} de 4"
             )
-            for row in work.itertuples(index=False)
+            score_col = {
+                "Base": "riesgo_base",
+                "Mínimo": "riesgo_valor_minimo",
+                "Máximo": "riesgo_valor_maximo",
+            }.get(scenario)
+            if score_col:
+                text += f"<br>Score continuo del modelo: {float(getattr(row, score_col)):.4f}"
+            if transition:
+                text += f"<br>Transición: {_clean_text(getattr(row, transition))}"
+            return text
+
+        base_hover = [
+            _scenario_hover(row, scenario="Base", risk_value="nivel_base", class_value="clase_base")
+            for row in chart_work.itertuples(index=False)
+        ]
+        min_hover = [
+            _scenario_hover(row, scenario="Mínimo", risk_value="nivel_minimo", class_value="clase_minimo", transition="transicion_minimo")
+            for row in chart_work.itertuples(index=False)
         ]
         max_hover = [
-            (
-                f"Variable: {row.variable}<br>Escenario: máximo"
-                f"<br>Riesgo base: {row.riesgo_base:.4f}"
-                f"<br>Riesgo máximo: {row.riesgo_valor_maximo:.4f}"
-                f"<br>Cambio abs.: {row.cambio_absoluto_maximo:.4f}"
-                f"<br>Categoría: {row.transicion_maximo}"
-            )
-            for row in work.itertuples(index=False)
+            _scenario_hover(row, scenario="Máximo", risk_value="nivel_maximo", class_value="clase_maximo", transition="transicion_maximo")
+            for row in chart_work.itertuples(index=False)
         ]
+        min_colors = ["#d97706" if flag else "#60a5fa" for flag in chart_work["cambia_categoria_minimo"]]
+        max_colors = ["#b91c1c" if flag else "#2563eb" for flag in chart_work["cambia_categoria_maximo"]]
 
         try:
             fig = go.Figure()
             fig.add_trace(
                 go.Bar(
-                    y=work["variable"],
-                    x=work["cambio_absoluto_minimo"],
+                    y=chart_work["variable"],
+                    x=chart_work["nivel_base"],
+                    name="Base",
+                    orientation="h",
+                    marker=dict(color="#64748b"),
+                    customdata=base_hover,
+                    hovertemplate="%{customdata}<extra></extra>",
+                )
+            )
+            fig.add_trace(
+                go.Bar(
+                    y=chart_work["variable"],
+                    x=chart_work["nivel_minimo"],
                     name="Valor mínimo",
                     orientation="h",
                     marker=dict(color=min_colors),
@@ -1173,8 +1639,8 @@ def render_expert_alignment_tab(
             )
             fig.add_trace(
                 go.Bar(
-                    y=work["variable"],
-                    x=work["cambio_absoluto_maximo"],
+                    y=chart_work["variable"],
+                    x=chart_work["nivel_maximo"],
                     name="Valor máximo",
                     orientation="h",
                     marker=dict(color=max_colors),
@@ -1182,28 +1648,40 @@ def render_expert_alignment_tab(
                     hovertemplate="%{customdata}<extra></extra>",
                 )
             )
-            fig.add_vline(x=0, line_color="#334155", line_width=1)
             fig.update_layout(
                 title=dict(
-                    text="Cambio absoluto del riesgo por variable y transición de categoría",
+                    text="Clase de riesgo por variable priorizada: base, mínimo y máximo",
                     font=dict(size=15),
                 ),
-                xaxis_title="Cambio del riesgo frente al escenario base",
+                xaxis_title="Clase de riesgo",
                 yaxis_title="Variable",
                 barmode="group",
-                height=max(420, 42 * len(work) + 160),
+                height=max(460, 54 * len(chart_work) + 170),
                 margin=dict(l=120, r=40, t=70, b=70),
                 plot_bgcolor="#f8fafc",
                 paper_bgcolor="#ffffff",
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                xaxis=dict(
+                    range=[0.5, 4.5],
+                    tickmode="array",
+                    tickvals=[1, 2, 3, 4],
+                    ticktext=[
+                        "Q1<br>Riesgo bajo",
+                        "Q2<br>Riesgo medio-bajo",
+                        "Q3<br>Riesgo medio-alto",
+                        "Q4<br>Riesgo alto",
+                    ],
+                    gridcolor="#e2e8f0",
+                    dtick=1,
+                ),
             )
             chart = fig.to_html(full_html=False, include_plotlyjs=False)
             legend = (
-                "<p class='muted'>Las barras rojas indican escenarios donde la etiqueta de riesgo cambia "
-                "frente al riesgo base; las barras azules/grises indican cambios numéricos sin transición "
-                "de categoría reportada.</p>"
+                "<p class='muted'>Cada barra representa la clase ordinal de riesgo del escenario: "
+                "Q1 bajo, Q2 medio-bajo, Q3 medio-alto y Q4 alto. Los colores naranja/rojo resaltan "
+                "escenarios mínimo o máximo donde la variable cambia de clase frente al riesgo base.</p>"
             )
-            return f"<div class='chart-panel'>{transition_summary}{chart}{legend}</div>"
+            return f"<div class='chart-panel'>{transition_summary}{class_legend}{scenario_legend}{chart}{legend}</div>"
         except Exception as exc:
             return f"<p class='muted'>No se pudo generar la gráfica del simulador automático: {_escape(exc)}</p>"
 
@@ -1268,6 +1746,334 @@ def render_expert_alignment_tab(
             "<th>Cercanía</th><th>Etiquetas de riesgo</th></tr></thead>"
             f"<tbody>{''.join(rows)}</tbody></table></div>"
         )
+        return "".join(parts)
+
+    def _auto_simulation_softmax_grid_html() -> str:
+        context = automatic_simulation_softmax_curves if isinstance(automatic_simulation_softmax_curves, dict) else {}
+        variables = context.get("variables") if isinstance(context.get("variables"), list) else []
+        variables = [item for item in variables[:4] if isinstance(item, dict) and item.get("filas")]
+        if not variables:
+            return (
+                "<h4>Curvas softmax por clase</h4>"
+                "<p class='muted'>No hay datos suficientes para construir la rejilla 2x2 de curvas softmax.</p>"
+            )
+
+        class_colors = {
+            "Riesgo bajo (Q1)": "#1f77b4",
+            "Riesgo medio-bajo (Q2)": "#ff7f0e",
+            "Riesgo medio-alto (Q3)": "#2ca02c",
+            "Riesgo alto (Q4)": "#d62728",
+        }
+
+        def _label_rank(label) -> int:
+            text = str(label or "").lower()
+            if "q1" in text or ("bajo" in text and "medio" not in text):
+                return 0
+            if "q2" in text or "medio-bajo" in text or ("medio" in text and "alto" not in text):
+                return 1
+            if "q3" in text or "medio-alto" in text:
+                return 2
+            if "q4" in text or "alto" in text:
+                return 3
+            return 4
+
+        def _dominant_label(row) -> str:
+            probs = row.get("probabilidades") if isinstance(row.get("probabilidades"), dict) else {}
+            if not probs:
+                return ""
+            return str(max(probs, key=lambda label: float(probs.get(label, 0.0) or 0.0)))
+
+        def _selected_softmax_row(item) -> tuple[dict, str, float, bool]:
+            filas = [row for row in item.get("filas", []) if isinstance(row, dict)]
+            candidates = []
+            for row in filas:
+                dominant = _dominant_label(row)
+                rank = _label_rank(dominant)
+                probs = row.get("probabilidades") if isinstance(row.get("probabilidades"), dict) else {}
+                probability = float(probs.get(dominant, 0.0) or 0.0)
+                candidates.append((rank, -probability, float(row.get("riesgo_ordinal_estimado", 99.0) or 99.0), row, dominant, probability))
+            valid = [candidate for candidate in candidates if candidate[0] < 3]
+            if not valid:
+                return {}, "", 0.0, True
+            rank, _, _, row, dominant, probability = sorted(valid, key=lambda candidate: candidate[:3])[0]
+            return row, dominant, probability, False
+
+        try:
+            titles = [_clean_text(item.get("variable")) for item in variables] + [""] * (4 - len(variables))
+            fig = make_subplots(rows=2, cols=2, subplot_titles=titles[:4])
+            for idx, item in enumerate(variables):
+                subplot_row = (idx // 2) + 1
+                subplot_col = (idx % 2) + 1
+                variable = _clean_text(item.get("variable"))
+                filas = [fila for fila in item.get("filas", []) if isinstance(fila, dict)]
+                etiquetas = item.get("etiquetas_clase") or []
+                for label in etiquetas:
+                    clean_label = _clean_text(label)
+                    x_values = [fila.get("valor_original") for fila in filas]
+                    y_values = [
+                        float((fila.get("probabilidades") or {}).get(label, 0.0) or 0.0)
+                        for fila in filas
+                    ]
+                    fig.add_trace(
+                        go.Scatter(
+                            x=x_values,
+                            y=y_values,
+                            mode="lines+markers",
+                            name=clean_label,
+                            legendgroup=clean_label,
+                            showlegend=idx == 0,
+                            marker=dict(size=6),
+                            line=dict(color=class_colors.get(clean_label), width=2),
+                            hovertemplate=(
+                                f"Variable: {variable}<br>Valor original: %{{x}}<br>"
+                                f"Clase: {clean_label}<br>Probabilidad promedio: %{{y:.3f}}<extra></extra>"
+                            ),
+                        ),
+                        row=subplot_row,
+                        col=subplot_col,
+                    )
+                best, best_label, best_probability, kept_quiet = _selected_softmax_row(item)
+                if best:
+                    fig.add_trace(
+                        go.Scatter(
+                            x=[best.get("valor_original")],
+                            y=[best_probability],
+                            mode="markers",
+                            name="Valor sugerido",
+                            legendgroup="Valor sugerido",
+                            showlegend=idx == 0,
+                            marker=dict(symbol="star", size=12, color="#111827", line=dict(width=1, color="#ffffff")),
+                            hovertemplate=(
+                                f"Valor sugerido<br>Clase dominante: {_clean_text(best_label)}<br>"
+                                "Valor original: %{x}<br>Probabilidad dominante: %{y:.3f}<extra></extra>"
+                            ),
+                        ),
+                        row=subplot_row,
+                        col=subplot_col,
+                    )
+                fig.update_xaxes(title_text=variable, row=subplot_row, col=subplot_col)
+                fig.update_yaxes(title_text="Probabilidad softmax promedio", range=[0, 1], row=subplot_row, col=subplot_col)
+            fig.update_layout(
+                title=dict(text="Softmax por clase en las 4 variables más relevantes", font=dict(size=15)),
+                height=760,
+                margin=dict(l=70, r=35, t=95, b=65),
+                plot_bgcolor="#f8fafc",
+                paper_bgcolor="#ffffff",
+                legend=dict(orientation="h", yanchor="bottom", y=1.04, xanchor="right", x=1),
+            )
+            chart = fig.to_html(full_html=False, include_plotlyjs=False)
+        except Exception as exc:
+            return f"<p class='muted'>No se pudo generar la rejilla de curvas softmax: {_escape(exc)}</p>"
+
+        best_items = []
+        quiet_items = []
+        for item in variables:
+            best, best_label, best_probability, kept_quiet = _selected_softmax_row(item)
+            if kept_quiet:
+                quiet_items.append(f"<li><strong>{_escape(item.get('variable'))}</strong>: queda quieta porque domina la clase de mayor riesgo.</li>")
+                continue
+            if not best:
+                continue
+            risk_value = round(float(best.get("riesgo_ordinal_estimado", 0.0) or 0.0), 3)
+            best_items.append(
+                "<li>"
+                f"<strong>{_escape(item.get('variable'))}</strong>: valor {_escape(best.get('valor_original'))}, "
+                f"clase dominante {_escape(best_label)} "
+                f"(P={best_probability:.3f}; riesgo ordinal {_escape(risk_value)})"
+                "</li>"
+            )
+        best_summary = (
+            "<div class='insight-card'><strong>Valores sugeridos por menor clase dominante</strong>"
+            f"<ul class='report-list'>{''.join(best_items)}{''.join(quiet_items)}</ul></div>"
+            if best_items or quiet_items
+            else ""
+        )
+        metadata = context.get("metadata") if isinstance(context.get("metadata"), dict) else {}
+        warnings = [
+            str(warning).strip()
+            for warning in metadata.get("warnings", [])
+            if str(warning).strip()
+        ] if isinstance(metadata.get("warnings"), list) else []
+        warning_html = _list_to_items(warnings, max_items=5) if warnings else ""
+        return (
+            "<h4>Curvas softmax por clase</h4>"
+            "<p class='muted'>La rejilla muestra, para hasta 4 variables ordenadas por impacto del simulador, "
+            "cómo cambia la probabilidad promedio de cada clase de riesgo al recorrer valores originales de la variable. "
+            "La estrella marca el primer valor útil donde domina Bajo; si no existe, Medio; luego Alto. "
+            "Si solo domina Muy alto, la variable queda quieta.</p>"
+            f"{chart}{best_summary}{warning_html}"
+        )
+
+    def _auto_simulation_low_risk_cost_estimate() -> str:
+        curves = automatic_simulation_softmax_curves if isinstance(automatic_simulation_softmax_curves, dict) else {}
+        variables = curves.get("variables") if isinstance(curves.get("variables"), list) else []
+        cost_context = automatic_simulation_cost_context if isinstance(automatic_simulation_cost_context, dict) else {}
+        matches = cost_context.get("coincidencias") if isinstance(cost_context.get("coincidencias"), list) else []
+        match_by_variable = {
+            str(item.get("variable", "")).strip(): item
+            for item in matches
+            if isinstance(item, dict) and str(item.get("variable", "")).strip()
+        }
+        rows = []
+        total_min = 0.0
+        total_max = 0.0
+        used_costs = 0
+        for item in variables[:4]:
+            if not isinstance(item, dict):
+                continue
+            variable = str(item.get("variable", "")).strip()
+            best = item.get("mejor_escenario_menor_riesgo") if isinstance(item.get("mejor_escenario_menor_riesgo"), dict) else {}
+            match = match_by_variable.get(variable, {})
+            cost_items = match.get("items_costo_cercanos") if isinstance(match, dict) and isinstance(match.get("items_costo_cercanos"), list) else []
+            numeric_items = []
+            for cost_item in cost_items:
+                if not isinstance(cost_item, dict):
+                    continue
+                try:
+                    cost = float(cost_item.get("costo_promedio"))
+                except (TypeError, ValueError):
+                    continue
+                numeric_items.append((cost, cost_item))
+            if numeric_items:
+                numeric_items.sort(key=lambda pair: pair[0])
+                chosen_cost, chosen_item = numeric_items[0]
+                total_min += chosen_cost
+                total_max += max(pair[0] for pair in numeric_items)
+                used_costs += 1
+                cost_text = f"${chosen_cost:,.0f}"
+                item_text = chosen_item.get("item_costo", "")
+            else:
+                cost_text = "Sin costo cercano"
+                item_text = "Sin coincidencia utilizable"
+            rows.append(
+                "<tr>"
+                f"<td>{_escape(variable)}</td>"
+                f"<td>{_escape(best.get('valor_original', ''))}</td>"
+                f"<td>{_escape(best.get('clase_estimacion', ''))}</td>"
+                f"<td>{_escape(item_text)}</td>"
+                f"<td>{_escape(cost_text)}</td>"
+                "</tr>"
+            )
+        if not rows:
+            return (
+                "<h4>Estimación económica orientativa para menor riesgo</h4>"
+                "<p class='muted'>No hay curvas softmax suficientes para estimar costos de menor riesgo.</p>"
+            )
+        if used_costs:
+            total_text = f"${total_min:,.0f}"
+            if total_max > total_min:
+                total_text += f" a ${total_max:,.0f}"
+            total_html = (
+                "<p class='muted'><strong>Estimación determinística de referencia:</strong> "
+                f"{_escape(total_text)} al sumar un ítem cercano por variable con costo disponible. "
+                "Esta suma no es un presupuesto: solo coteja el menor riesgo estimado por el modelo con los "
+                "apartados de contrato más cercanos encontrados en el Excel.</p>"
+            )
+        else:
+            total_html = "<p class='muted'>No hay costos numéricos cercanos suficientes para calcular una suma orientativa.</p>"
+        return (
+            "<h4>Estimación económica orientativa para menor riesgo</h4>"
+            "<p class='muted'>Para cada variable de la rejilla se toma el valor probado con menor riesgo ordinal "
+            "estimado y se coteja con el ítem de contrato cercano de menor costo promedio disponible.</p>"
+            "<div class='table-scroll'><table class='compact-table'>"
+            "<thead><tr><th>Variable</th><th>Valor de menor riesgo</th><th>Clase estimada</th>"
+            "<th>Ítem de costo usado</th><th>Costo de referencia</th></tr></thead>"
+            f"<tbody>{''.join(rows)}</tbody></table></div>"
+            f"{total_html}"
+        )
+
+    def _auto_simulation_brief_comparison() -> str:
+        curves = automatic_simulation_softmax_curves if isinstance(automatic_simulation_softmax_curves, dict) else {}
+        variables = [item for item in (curves.get("variables") or [])[:4] if isinstance(item, dict) and item.get("filas")]
+        if not variables:
+            return (
+                "<div class='summary-box'>"
+                "<h3 style='margin-top:0;'>Comparación breve del simulador</h3>"
+                "<p class='muted'>No hay curvas softmax suficientes para comparar los valores sugeridos.</p>"
+                "</div>"
+            )
+        def _label_rank(label) -> int:
+            text = str(label or "").lower()
+            if "bajo" in text and "medio" not in text:
+                return 0
+            if "medio-bajo" in text or ("medio" in text and "alto" not in text):
+                return 1
+            if "medio-alto" in text:
+                return 2
+            if "alto" in text:
+                return 3
+            return 4
+
+        def _dominant_label(row) -> str:
+            probs = row.get("probabilidades") if isinstance(row.get("probabilidades"), dict) else {}
+            if not probs:
+                return ""
+            return str(max(probs, key=lambda label: float(probs.get(label, 0.0) or 0.0)))
+
+        selected = []
+        kept = []
+        for item in variables:
+            filas = [row for row in item.get("filas", []) if isinstance(row, dict)]
+            if not filas:
+                continue
+            candidates = []
+            for row in filas:
+                dominant = _dominant_label(row)
+                rank = _label_rank(dominant)
+                candidates.append((rank, row, dominant))
+            valid_candidates = [item for item in candidates if item[0] < 3]
+            if not valid_candidates:
+                kept.append(str(item.get("variable", "")).strip())
+                continue
+            best_rank, best_row, dominant = sorted(
+                valid_candidates,
+                key=lambda item: (
+                    item[0],
+                    float(best_row_probs.get(item[2], 0.0) if (best_row_probs := (item[1].get("probabilidades") or {})) else 0.0) * -1,
+                    float(item[1].get("riesgo_ordinal_estimado", 99.0) or 99.0),
+                ),
+            )[0]
+            selected.append(
+                f"{_clean_text(item.get('variable'))}: valor {_clean_text(best_row.get('valor_original'))} "
+                f"con clase dominante {_clean_text(dominant)}"
+            )
+        if not selected:
+            return ""
+        kept_html = (
+            f"<li>Sin configuración de reducción útil: {_escape(', '.join(kept))}. "
+            "Esas columnas se dejan quietas porque la clase de mayor probabilidad sigue siendo la de mayor riesgo.</li>"
+            if kept
+            else ""
+        )
+        return (
+            "<div class='summary-box'>"
+            "<h3 style='margin-top:0;'>Comparación breve del simulador</h3>"
+            "<ul class='report-list'>"
+            "<li>Para cada variable se busca primero una configuración donde domine riesgo bajo; si no existe, riesgo medio; si tampoco existe, riesgo alto.</li>"
+            f"<li>{_escape('; '.join(selected))}</li>"
+            f"{kept_html}"
+            "</ul>"
+            "</div>"
+        )
+
+    def _post_prioritization_simulator_visuals() -> str:
+        table = automatic_simulation_table
+        has_table = table is not None and hasattr(table, "empty") and not table.empty
+        has_curves = isinstance(automatic_simulation_softmax_curves, dict) and bool(
+            automatic_simulation_softmax_curves.get("variables")
+        )
+        if not has_table and not has_curves and not automatic_simulation_risk_maps_html:
+            return ""
+        parts = [
+            "<div class='content-box'>",
+            "<h3 style='margin-top:0;'>Gráficas del simulador automático</h3>",
+        ]
+        if has_curves:
+            parts.append(_auto_simulation_softmax_grid_html())
+        parts.append(_auto_simulation_brief_comparison())
+        if automatic_simulation_risk_maps_html:
+            parts.append(automatic_simulation_risk_maps_html)
+        parts.append("</div>")
         return "".join(parts)
 
     def _section_items(key, title, fields):
@@ -1417,11 +2223,12 @@ def render_expert_alignment_tab(
             )
             if len(table) > 20:
                 parts.append(f"<p class='muted'>Se muestran 20 de {len(table)} variables simuladas.</p>")
-            parts.append(_auto_simulation_chart_html(table))
             parts.append(_auto_simulation_cost_section())
+            parts.append(_auto_simulation_low_risk_cost_estimate())
         else:
             parts.append("<p class='muted'>La tabla del simulador automático no está disponible para esta ejecución.</p>")
             parts.append(_auto_simulation_cost_section())
+            parts.append(_auto_simulation_low_risk_cost_estimate())
 
         if has_analysis:
             for key, title in [
@@ -1460,7 +2267,6 @@ def render_expert_alignment_tab(
             "<h2 style='margin-top:0;'>Comparación con reportes expertos</h2>"
             "<p>La comparación con reportes expertos no está disponible para esta ejecución.</p>"
             "</div>"
-            + _auto_simulation_section()
         )
 
     contexto = analysis.get("contexto", {}) if isinstance(analysis.get("contexto"), dict) else {}
@@ -1533,7 +2339,7 @@ def render_expert_alignment_tab(
             f"Diferencias entre {comparison_scope}",
         )
         + _variables_table()
-        + _auto_simulation_section()
+        + _post_prioritization_simulator_visuals()
         + synthesis_html
     )
 
@@ -1556,6 +2362,8 @@ def render_llm_analysis(
     automatic_simulation_table=None,
     automatic_simulation_analysis: dict | None = None,
     automatic_simulation_cost_context: dict | None = None,
+    automatic_simulation_softmax_curves: dict | None = None,
+    automatic_simulation_vano_risk_df=None,
 ):
     """
     Renders the structured JSON output from the LLM into a beautiful HTML format
@@ -1575,33 +2383,47 @@ def render_llm_analysis(
 
     primary_circuit = selected_circuitos[0] if selected_circuitos else "TODOS"
 
-    fig_map_events = None
-    fig_map_uiti = None
+    html_map_events = ""
+    html_map_uiti = ""
     if primary_circuit != "TODOS":
-        fig_map_events = plot_circuit_map_plotly(raw_df, primary_circuit, date_range=(start_date, end_date) if start_date and end_date else None, color_target='number_of_events')
-        fig_map_uiti = plot_circuit_map_plotly(raw_df, primary_circuit, date_range=(start_date, end_date) if start_date and end_date else None, color_target='sum_uiti_vano')
-        if fig_map_events:
-            fig_map_events.update_layout(
-                title=dict(text=f"Mapa de red - {primary_circuit} (Número de eventos)", font=dict(size=14)),
-                margin=dict(t=55),
+        try:
+            map_events = plot_circuit_map_folium(
+                raw_df,
+                primary_circuit,
+                date_range=(start_date, end_date) if start_date or end_date else None,
+                color_target="number_of_events",
             )
-        if fig_map_uiti:
-            fig_map_uiti.update_layout(
-                title=dict(text=f"Mapa de red - {primary_circuit} (Gravedad)", font=dict(size=14)),
-                margin=dict(t=55),
+            html_map_events = map_events.get_root().render()
+        except Exception as exc:
+            html_map_events = f"<p class='muted'>No se pudo renderizar el mapa GEO por eventos: {exc}</p>"
+        try:
+            map_uiti = plot_circuit_map_folium(
+                raw_df,
+                primary_circuit,
+                date_range=(start_date, end_date) if start_date or end_date else None,
+                color_target="UITI_VANO_sum",
             )
+            html_map_uiti = map_uiti.get_root().render()
+        except Exception as exc:
+            html_map_uiti = f"<p class='muted'>No se pudo renderizar el mapa GEO por UITI_VANO: {exc}</p>"
 
     # Convert figures to HTML snippets
     html_events = fig_events.to_html(full_html=False, include_plotlyjs='cdn') if fig_events else ""
     html_sums = fig_sums.to_html(full_html=False, include_plotlyjs='cdn') if fig_sums else ""
     html_clusters = fig_clusters.to_html(full_html=False, include_plotlyjs='cdn') if fig_clusters else ""
     html_critical = fig_critical.to_html(full_html=False, include_plotlyjs='cdn') if fig_critical else ""
-    html_map_events = fig_map_events.to_html(full_html=False, include_plotlyjs='cdn') if fig_map_events else ""
-    html_map_uiti = fig_map_uiti.to_html(full_html=False, include_plotlyjs='cdn') if fig_map_uiti else ""
 
     def _escape(text):
         import html
         return html.escape("" if text is None else str(text))
+
+    def _iframe_srcdoc(html: str, *, height: int = 620) -> str:
+        if not html:
+            return ""
+        return (
+            f"<iframe class='embedded-map-frame' srcdoc=\"{_escape(html)}\" "
+            f"loading='lazy' style='width:100%;height:{height}px;border:0;background:#ffffff;'></iframe>"
+        )
 
     def _text_to_items(text: str, *, max_items: int | None = None) -> str:
         """Split a prose paragraph into <ul><li> items of at most ~2 visual lines."""
@@ -1668,6 +2490,289 @@ def render_llm_analysis(
         if not html:
             return ""
         return f"<div class='chart-panel'><h3>{_escape(title)}</h3>{html}</div>"
+
+    def _simulator_risk_maps_html() -> str:
+        table = automatic_simulation_table
+        curves = automatic_simulation_softmax_curves if isinstance(automatic_simulation_softmax_curves, dict) else {}
+        vano_risk = automatic_simulation_vano_risk_df
+        curve_variables = [item for item in (curves.get("variables") or [])[:4] if isinstance(item, dict) and item.get("filas")]
+        if primary_circuit == "TODOS":
+            return ""
+        if not {"CIRCUITO", "FID_VANO", "UITI_VANO"}.issubset(set(raw_df.columns)):
+            return ""
+
+        def _risk_class_name(value) -> str:
+            try:
+                numeric = float(value)
+            except (TypeError, ValueError):
+                numeric = 1.0
+            level = int(max(1, min(4, round(numeric))))
+            return {1: "Bajo", 2: "Medio", 3: "Alto", 4: "Muy alto"}[level]
+
+        def _label_rank(label) -> int:
+            text = str(label or "").lower()
+            if "bajo" in text and "medio" not in text:
+                return 0
+            if "medio-bajo" in text or ("medio" in text and "alto" not in text):
+                return 1
+            if "medio-alto" in text:
+                return 2
+            if "alto" in text:
+                return 3
+            return 4
+
+        def _dominant_label(row) -> str:
+            probs = row.get("probabilidades") if isinstance(row.get("probabilidades"), dict) else {}
+            if not probs:
+                return ""
+            return str(max(probs, key=lambda label: float(probs.get(label, 0.0) or 0.0)))
+
+        def _best_risk_reduction_rows() -> tuple[list[dict[str, object]], list[str]]:
+            selected = []
+            kept = []
+            for item in curve_variables:
+                filas = [row for row in item.get("filas", []) if isinstance(row, dict)]
+                if not filas:
+                    continue
+                candidates = []
+                for row in filas:
+                    dominant = _dominant_label(row)
+                    rank = _label_rank(dominant)
+                    probs = row.get("probabilidades") if isinstance(row.get("probabilidades"), dict) else {}
+                    dominant_probability = float(probs.get(dominant, 0.0) or 0.0)
+                    candidates.append((rank, -dominant_probability, float(row.get("riesgo_ordinal_estimado", 99.0) or 99.0), row, dominant))
+                valid_candidates = [candidate for candidate in candidates if candidate[0] < 3]
+                if not valid_candidates:
+                    kept.append(str(item.get("variable", "")).strip())
+                    continue
+                rank, neg_probability, risk_value, best_row, dominant = sorted(valid_candidates, key=lambda candidate: candidate[:3])[0]
+                selected.append(
+                    {
+                        "variable": item.get("variable", ""),
+                        "valor": best_row.get("valor_original"),
+                        "prob_dominante": abs(float(neg_probability)),
+                        "riesgo_ordinal": risk_value,
+                        "clase": best_row.get("clase_estimacion", ""),
+                        "dominante": dominant,
+                    }
+                )
+            return selected, kept
+
+        work = raw_df[raw_df["CIRCUITO"].astype(str).eq(str(primary_circuit))].copy()
+        if start_date is not None or end_date is not None:
+            work["FECHA_parsed"] = pd.to_datetime(work["FECHA"], errors="coerce") if "FECHA" in work.columns else pd.NaT
+            if start_date is not None:
+                work = work[work["FECHA_parsed"] >= pd.to_datetime(start_date)]
+            if end_date is not None:
+                work = work[work["FECHA_parsed"] <= pd.to_datetime(end_date)]
+        if work.empty:
+            return ""
+
+        work["FID_VANO_NORM"] = _norm_map_id(work["FID_VANO"])
+        work["UITI_VANO_NUM"] = pd.to_numeric(work["UITI_VANO"], errors="coerce").fillna(0.0)
+        uiti_by_vano = work.groupby("FID_VANO_NORM")["UITI_VANO_NUM"].sum()
+        uiti_by_vano = uiti_by_vano[uiti_by_vano.index.notna()]
+        if uiti_by_vano.empty:
+            return ""
+
+        if uiti_by_vano.nunique() >= 4:
+            risk_levels = pd.qcut(uiti_by_vano.rank(method="first"), 4, labels=[1, 2, 3, 4]).astype(float)
+        else:
+            max_value = float(uiti_by_vano.max()) or 1.0
+            risk_levels = (1.0 + 3.0 * (uiti_by_vano / max_value)).clip(1.0, 4.0)
+        original_classes = risk_levels.apply(_risk_class_name)
+
+        if vano_risk is not None and hasattr(vano_risk, "empty") and not vano_risk.empty:
+            required_vano_cols = {"FID_VANO", "simulado_riesgo_ordinal", "simulado_clase"}
+            if required_vano_cols.issubset(set(vano_risk.columns)):
+                risk_work = vano_risk.copy()
+                risk_work["FID_VANO_NORM"] = _norm_map_id(risk_work["FID_VANO"])
+                suggested_levels = (
+                    pd.to_numeric(risk_work.set_index("FID_VANO_NORM")["simulado_riesgo_ordinal"], errors="coerce")
+                    + 1.0
+                ).clip(1.0, 4.0)
+
+                def _simple_model_class(label) -> str:
+                    text = str(label or "").lower()
+                    if "q1" in text or ("bajo" in text and "medio" not in text):
+                        return "Bajo"
+                    if "q2" in text or "medio-bajo" in text or ("medio" in text and "alto" not in text):
+                        return "Medio"
+                    if "q3" in text or "medio-alto" in text:
+                        return "Alto"
+                    return "Muy alto"
+
+                suggested_classes = risk_work.set_index("FID_VANO_NORM")["simulado_clase"].map(_simple_model_class)
+                applied_text = ""
+                if "variables_aplicadas" in risk_work.columns:
+                    applied_text = str(risk_work["variables_aplicadas"].dropna().iloc[0]) if not risk_work["variables_aplicadas"].dropna().empty else ""
+                quiet_text = ""
+                if "variables_quietas" in risk_work.columns:
+                    quiet_text = str(risk_work["variables_quietas"].dropna().iloc[0]) if not risk_work["variables_quietas"].dropna().empty else ""
+                try:
+                    original_map = plot_circuit_map_folium(
+                        raw_df,
+                        primary_circuit,
+                        date_range=(start_date, end_date) if start_date or end_date else None,
+                        metric_by_vano=risk_levels,
+                        metric_label="Nivel de riesgo original por UITI_VANO",
+                        metric_column="riesgo_original_uiti",
+                        metric_class_by_vano=original_classes,
+                        metric_class_column="clase",
+                    )
+                    suggested_map = plot_circuit_map_folium(
+                        raw_df,
+                        primary_circuit,
+                        date_range=(start_date, end_date) if start_date or end_date else None,
+                        metric_by_vano=suggested_levels,
+                        metric_label="Clase predicha promedio por vano",
+                        metric_column="riesgo_predicho_simulador",
+                        metric_class_by_vano=suggested_classes,
+                        metric_class_column="clase",
+                    )
+                except Exception as exc:
+                    return f"<p class='muted'>No se pudo renderizar el comparativo GEO del simulador: {_escape(exc)}</p>"
+                quiet_html = f"<li>Variables quietas: {_escape(quiet_text)}.</li>" if quiet_text else ""
+                discussion = (
+                    "<div class='summary-box'>"
+                    "<h3 style='margin-top:0;'>Discusión breve del mapa comparativo</h3>"
+                    "<ul class='report-list'>"
+                    "<li>El mapa izquierdo clasifica cada vano por UITI_VANO acumulado observado en el periodo.</li>"
+                    "<li>El mapa derecho usa predicción del modelo: para cada registro simulado se calculan probabilidades "
+                    "softmax y luego se promedian por FID_VANO; la clase del vano es la clase con mayor probabilidad promedio.</li>"
+                    "<li>Se usa promedio, no suma, para que un vano con más registros no cambie de clase solo por aparecer más veces.</li>"
+                    f"<li>Variables aplicadas en la simulación: {_escape(applied_text or 'ninguna')}.</li>"
+                    f"{quiet_html}"
+                    "</ul>"
+                    "</div>"
+                )
+                panels = (
+                    _chart_panel("Mapa de riesgo original - UITI_VANO", _iframe_srcdoc(original_map.get_root().render(), height=560))
+                    + _chart_panel("Mapa de clase predicha - simulador", _iframe_srcdoc(suggested_map.get_root().render(), height=560))
+                )
+                return (
+                    "<h4>Mapa comparativo de riesgo por vano</h4>"
+                    f"<div class='chart-grid two-col'>{panels}</div>"
+                    f"{discussion}"
+                )
+
+        if table is None or not hasattr(table, "empty") or table.empty or not curve_variables:
+            return ""
+        required = {"riesgo_base"}
+        if not required.issubset(set(table.columns)):
+            return ""
+
+        sim = table.copy()
+        sim["riesgo_base"] = pd.to_numeric(sim["riesgo_base"], errors="coerce")
+        baseline_risk = float(sim["riesgo_base"].dropna().mean()) if not sim["riesgo_base"].dropna().empty else 1.0
+        selected_rows, kept_variables = _best_risk_reduction_rows()
+        if not selected_rows:
+            return ""
+
+        suggested_score = risk_levels.astype(float).copy()
+        applied_variables = 0
+        for item in selected_rows:
+            variable = str(item.get("variable", "")).strip()
+            if not variable or variable not in work.columns:
+                kept_variables.append(variable)
+                continue
+            current_values = pd.to_numeric(work[variable], errors="coerce")
+            if current_values.dropna().empty:
+                kept_variables.append(variable)
+                continue
+            current_by_vano = current_values.groupby(work["FID_VANO_NORM"]).median()
+            try:
+                target_value = float(item.get("valor"))
+            except (TypeError, ValueError):
+                kept_variables.append(variable)
+                continue
+            spread = float(current_values.quantile(0.95) - current_values.quantile(0.05))
+            if not np.isfinite(spread) or spread <= 0:
+                spread = float(current_values.max() - current_values.min())
+            if not np.isfinite(spread) or spread <= 0:
+                kept_variables.append(variable)
+                continue
+            distance = (current_by_vano - target_value).abs() / spread
+            distance = distance.reindex(suggested_score.index).fillna(0.0).clip(0.0, 1.0)
+            improvement = max(0.0, baseline_risk - float(item.get("riesgo_ordinal", baseline_risk)))
+            if improvement <= 0:
+                kept_variables.append(variable)
+                continue
+            suggested_score = suggested_score - (distance * improvement / max(1, len(selected_rows)))
+            applied_variables += 1
+        if applied_variables == 0:
+            suggested_score = risk_levels.astype(float).copy()
+
+        if suggested_score.nunique() >= 4:
+            suggested_levels = pd.qcut(suggested_score.rank(method="first"), 4, labels=[1, 2, 3, 4]).astype(float)
+        else:
+            suggested_levels = suggested_score.clip(1.0, 4.0)
+        suggested_classes = suggested_levels.apply(_risk_class_name)
+
+        try:
+            original_map = plot_circuit_map_folium(
+                raw_df,
+                primary_circuit,
+                date_range=(start_date, end_date) if start_date or end_date else None,
+                metric_by_vano=risk_levels,
+                metric_label="Nivel de riesgo original por UITI_VANO",
+                metric_column="riesgo_original_uiti",
+                metric_class_by_vano=original_classes,
+                metric_class_column="clase",
+            )
+            suggested_map = plot_circuit_map_folium(
+                raw_df,
+                primary_circuit,
+                date_range=(start_date, end_date) if start_date or end_date else None,
+                metric_by_vano=suggested_levels,
+                metric_label="Nivel de riesgo sugerido por simulador",
+                metric_column="riesgo_sugerido_simulador",
+                metric_class_by_vano=suggested_classes,
+                metric_class_column="clase",
+            )
+        except Exception as exc:
+            return f"<p class='muted'>No se pudo renderizar el comparativo GEO del simulador: {_escape(exc)}</p>"
+
+        selected_items = "".join(
+            "<li>"
+            f"<strong>{_escape(row['variable'])}</strong>: valor {_escape(row['valor'])}, "
+            f"clase dominante {_escape(row['dominante'])} "
+            f"(P={float(row['prob_dominante']):.3f})"
+            "</li>"
+            for row in selected_rows
+        )
+        kept_items = "".join(f"<li>{_escape(variable)} queda quieta.</li>" for variable in sorted(set(kept_variables)) if variable)
+        unchanged_note = (
+            "<h4>Variables sin cambio</h4>"
+            f"<ul class='report-list'>{kept_items}</ul>"
+            if kept_items
+            else ""
+        )
+        discussion = (
+            "<div class='summary-box'>"
+            "<h3 style='margin-top:0;'>Discusión breve del mapa comparativo</h3>"
+            "<ul class='report-list'>"
+            "<li>El mapa izquierdo clasifica cada vano con eventos por cuartiles del UITI_VANO agregado "
+            "en el periodo analizado, usando solo las clases Bajo, Medio, Alto y Muy alto.</li>"
+            "<li>El mapa derecho agrupa por el mismo FID_VANO y ajusta el score espacial según qué tan lejos está "
+            "cada vano de los valores sugeridos por el simulador para las variables modificables.</li>"
+            "<li>Si ambos mapas se parecen, significa que los valores sugeridos no alteran el orden espacial de los "
+            "vanos o que varias variables quedaron quietas porque no hubo una configuración con menor clase dominante.</li>"
+            "</ul>"
+            "<h4>Valores sugeridos por softmax</h4>"
+            f"<ul class='report-list'>{selected_items}</ul>"
+            f"{unchanged_note}"
+            "</div>"
+        )
+        panels = (
+            _chart_panel("Mapa de riesgo original - UITI_VANO", _iframe_srcdoc(original_map.get_root().render(), height=560))
+            + _chart_panel("Mapa de riesgo sugerido - simulador", _iframe_srcdoc(suggested_map.get_root().render(), height=560))
+        )
+        return (
+            "<h4>Mapa comparativo de riesgo por vano</h4>"
+            f"<div class='chart-grid two-col'>{panels}</div>"
+            f"{discussion}"
+        )
 
     def _graph_panel(title, graph_path):
         if not graph_path:
@@ -2012,10 +3117,10 @@ def render_llm_analysis(
     title_html = f"Reporte Criticidad - Circuito: {primary_circuit}<br><span style='font-size: 0.6em; color: #64748b;'>{subtitle_info}</span>"
 
     map_panels = []
-    if fig_map_events:
-        map_panels.append(_chart_panel("Mapa espacial - Número de eventos", html_map_events))
-    if fig_map_uiti:
-        map_panels.append(_chart_panel("Mapa espacial - Gravedad", html_map_uiti))
+    if html_map_events:
+        map_panels.append(_chart_panel("Mapa espacial GEO - Número de eventos", _iframe_srcdoc(html_map_events)))
+    if html_map_uiti:
+        map_panels.append(_chart_panel("Mapa espacial GEO - UITI_VANO", _iframe_srcdoc(html_map_uiti)))
     html_maps_section = f"<div class='chart-grid'>{''.join(map_panels)}</div>" if map_panels else ""
 
     html_inference_characterization, html_inference_critical = _render_inference_layout(inference_results, inference_analysis)
@@ -2025,6 +3130,8 @@ def render_llm_analysis(
         automatic_simulation_table=automatic_simulation_table,
         automatic_simulation_analysis=automatic_simulation_analysis,
         automatic_simulation_cost_context=automatic_simulation_cost_context,
+        automatic_simulation_softmax_curves=automatic_simulation_softmax_curves,
+        automatic_simulation_risk_maps_html=_simulator_risk_maps_html(),
     )
 
     llm_sections_html = ""

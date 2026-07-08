@@ -9,6 +9,8 @@ from chec_local_interpreter.simulator import (
     save_prioritized_variables_table,
     simulate_automatic_minmax_sensitivity,
     simulate_feature_class_transitions,
+    simulate_suggested_vano_risk,
+    simulate_top_softmax_curves,
     simulate_feature_values,
     transform_single_feature_value,
     validate_prioritized_variables,
@@ -174,3 +176,128 @@ def test_simulate_automatic_minmax_sensitivity_uses_original_extremes():
     assert result.loc[0, "direccion_cambio_maximo"] == "aumenta riesgo"
     assert metadata["n_variables_simuladas"] == 1
     assert any("NO_EXISTE" in warning for warning in metadata["warnings"])
+
+
+def test_simulate_top_softmax_curves_keeps_four_most_relevant_variables():
+    feature_names = ["V1", "V2", "V3", "V4", "V5"]
+    X_raw = np.array(
+        [
+            [0.0, 0.0, 0.0, 0.0, 0.0],
+            [10.0, 10.0, 10.0, 10.0, 10.0],
+            [5.0, 5.0, 5.0, 5.0, 5.0],
+        ],
+        dtype=np.float32,
+    )
+    scaler = MinMaxScaler().fit(X_raw)
+    X_scaled = scaler.transform(X_raw).astype(np.float32)
+    original_df = pd.DataFrame(X_raw, columns=feature_names)
+    auto_table = pd.DataFrame(
+        {
+            "variable": ["V5", "V2", "V4", "V1", "V3"],
+            "magnitud_max_cambio_abs": [0.5, 0.4, 0.3, 0.2, 0.1],
+        }
+    )
+
+    def predict_fn(model, X, device, batch_size=1024):
+        x = np.clip(np.asarray(X)[:, 0], 0.0, 1.0)
+        probs = np.zeros((len(x), 4), dtype=float)
+        probs[:, 0] = 1.0 - x
+        probs[:, 1] = x * 0.5
+        probs[:, 2] = x * 0.3
+        probs[:, 3] = x * 0.2
+        probs = probs / probs.sum(axis=1, keepdims=True)
+        return {"fused_probs": probs, "predicted_classes": probs.argmax(axis=1)}
+
+    curves = simulate_top_softmax_curves(
+        model=object(),
+        X_scaled=X_scaled,
+        X_raw_model=X_raw,
+        original_feature_df=original_df,
+        feature_names=feature_names,
+        variables=feature_names,
+        feature_scaler=scaler,
+        predict_fn=predict_fn,
+        device="cpu",
+        mask=np.array([True, True, True]),
+        automatic_simulation_table=auto_table,
+        max_variables=4,
+        max_values=3,
+    )
+
+    assert curves["metadata"]["variables_graficadas"] == ["V5", "V2", "V4", "V1"]
+    assert len(curves["variables"]) == 4
+    first = curves["variables"][0]
+    assert first["etiquetas_clase"] == [
+        "Riesgo bajo (Q1)",
+        "Riesgo medio-bajo (Q2)",
+        "Riesgo medio-alto (Q3)",
+        "Riesgo alto (Q4)",
+    ]
+    assert first["mejor_escenario_menor_riesgo"]["clase_estimacion"] in {
+        "Riesgo bajo (Q1)",
+        "Riesgo medio-bajo (Q2)",
+    }
+
+
+def test_simulate_suggested_vano_risk_averages_probabilities_by_vano():
+    feature_names = ["CNT_TRF", "CNT_VN"]
+    X_raw = np.array(
+        [
+            [0.0, 1.0],
+            [10.0, 2.0],
+            [5.0, 3.0],
+        ],
+        dtype=np.float32,
+    )
+    scaler = MinMaxScaler().fit(X_raw)
+    X_scaled = scaler.transform(X_raw).astype(np.float32)
+
+    def predict_fn(model, X, device, batch_size=1024):
+        values = np.clip(np.asarray(X)[:, 0], 0.0, 1.0)
+        probs = np.column_stack(
+            [
+                1.0 - values,
+                values * 0.6,
+                values * 0.3,
+                values * 0.1,
+            ]
+        )
+        probs = probs / probs.sum(axis=1, keepdims=True)
+        return {"fused_probs": probs, "predicted_classes": probs.argmax(axis=1)}
+
+    curves = {
+        "variables": [
+            {
+                "variable": "CNT_TRF",
+                "filas": [
+                    {
+                        "valor_original": 0.0,
+                        "riesgo_ordinal_estimado": 0.0,
+                        "probabilidades": {
+                            "Riesgo bajo (Q1)": 0.9,
+                            "Riesgo medio-bajo (Q2)": 0.1,
+                        },
+                    }
+                ],
+            }
+        ]
+    }
+
+    result, metadata = simulate_suggested_vano_risk(
+        model=object(),
+        X_scaled=X_scaled,
+        X_raw_model=X_raw,
+        feature_names=feature_names,
+        feature_scaler=scaler,
+        predict_fn=predict_fn,
+        device="cpu",
+        mask=np.array([True, True, True]),
+        vano_ids=pd.Series(["V1", "V1", "V2"]),
+        softmax_curves=curves,
+    )
+
+    v1 = result[result["FID_VANO"] == "V1"].iloc[0]
+    assert v1["n_registros"] == 2
+    assert v1["simulado_clase"] == "Riesgo bajo (Q1)"
+    assert v1["variables_aplicadas"] == "CNT_TRF"
+    assert metadata["agregacion"] == "promedio_probabilidades_por_vano"

@@ -474,6 +474,24 @@ def _risk_label(value: float, n_classes: int) -> str:
     return labels[idx]
 
 
+def _class_label(class_idx: int, n_classes: int) -> str:
+    if n_classes == 4:
+        labels = [
+            "Riesgo bajo (Q1)",
+            "Riesgo medio-bajo (Q2)",
+            "Riesgo medio-alto (Q3)",
+            "Riesgo alto (Q4)",
+        ]
+    elif n_classes == 3:
+        labels = ["Riesgo bajo", "Riesgo medio", "Riesgo alto"]
+    elif n_classes == 2:
+        labels = ["Riesgo bajo", "Riesgo alto"]
+    else:
+        labels = [f"Clase {idx}" for idx in range(n_classes)]
+    idx = int(np.clip(class_idx, 0, max(n_classes - 1, 0)))
+    return labels[idx] if labels else "riesgo no disponible"
+
+
 def _direction(delta: float, *, tolerance: float) -> str:
     if delta > tolerance:
         return "aumenta riesgo"
@@ -642,6 +660,336 @@ def simulate_automatic_minmax_sensitivity(
         "riesgo_base": baseline_risk,
         "riesgo_base_etiqueta": _risk_label(baseline_risk, n_classes),
         "clase_mayoritaria_base": baseline_majority,
+        "warnings": warnings_out,
+    }
+    return result, metadata
+
+
+def _select_top_softmax_variables(
+    automatic_simulation_table: pd.DataFrame | None,
+    variables: list[str] | None,
+    *,
+    max_variables: int,
+) -> list[str]:
+    selected: list[str] = []
+    if automatic_simulation_table is not None and not automatic_simulation_table.empty:
+        table = automatic_simulation_table.copy()
+        if "variable" in table.columns:
+            for col in ["magnitud_max_cambio_abs", "cambio_absoluto_minimo", "cambio_absoluto_maximo"]:
+                if col not in table.columns:
+                    table[col] = 0.0
+                table[col] = pd.to_numeric(table[col], errors="coerce").fillna(0.0)
+            table["_impacto_softmax"] = table[
+                ["magnitud_max_cambio_abs", "cambio_absoluto_minimo", "cambio_absoluto_maximo"]
+            ].abs().max(axis=1)
+            table = table.sort_values("_impacto_softmax", ascending=False, kind="stable")
+            for variable in table["variable"].fillna("").astype(str):
+                text = variable.strip()
+                if text and text not in selected:
+                    selected.append(text)
+                if len(selected) >= max_variables:
+                    return selected
+    for variable in variables or []:
+        text = str(variable or "").strip()
+        if text and text not in selected:
+            selected.append(text)
+        if len(selected) >= max_variables:
+            break
+    return selected
+
+
+def simulate_top_softmax_curves(
+    *,
+    model: Any,
+    X_scaled: np.ndarray,
+    X_raw_model: np.ndarray,
+    original_feature_df: pd.DataFrame,
+    feature_names: list[str],
+    variables: list[str] | None,
+    feature_scaler: Any,
+    predict_fn: Callable[..., dict[str, Any]],
+    device: str,
+    mask: np.ndarray,
+    automatic_simulation_table: pd.DataFrame | None = None,
+    label_encoders: dict[str, Any] | None = None,
+    max_values_imputed: dict[str, Any] | None = None,
+    batch_size: int = 1024,
+    max_variables: int = 4,
+    max_values: int = 18,
+) -> dict[str, Any]:
+    """Build class-probability curves for the most relevant simulated variables."""
+    warnings_out: list[str] = []
+    curve_variables = _select_top_softmax_variables(
+        automatic_simulation_table,
+        variables,
+        max_variables=max_variables,
+    )
+    if not curve_variables:
+        return {
+            "variables": [],
+            "metadata": {
+                "max_variables": max_variables,
+                "max_values": max_values,
+                "warnings": ["No hay variables candidatas para construir curvas softmax."],
+            },
+        }
+
+    mask = np.asarray(mask, dtype=bool)
+    curves: list[dict[str, Any]] = []
+    for variable in curve_variables:
+        if variable not in feature_names:
+            warnings_out.append(f"{variable}: omitida en curvas softmax porque no está en feature_names.")
+            continue
+        if variable not in original_feature_df.columns:
+            warnings_out.append(f"{variable}: omitida en curvas softmax porque no tiene valores originales.")
+            continue
+        values = default_simulation_values(original_feature_df.loc[mask, variable], max_values=max_values)
+        if not values:
+            warnings_out.append(f"{variable}: omitida en curvas softmax porque no tiene valores simulables.")
+            continue
+        try:
+            result, metadata = simulate_feature_class_transitions(
+                model=model,
+                X_scaled=X_scaled,
+                X_raw_model=X_raw_model,
+                original_feature_df=original_feature_df,
+                feature_names=feature_names,
+                variable=variable,
+                values_original=values,
+                feature_scaler=feature_scaler,
+                predict_fn=predict_fn,
+                device=device,
+                mask=mask,
+                label_encoders=label_encoders,
+                max_values_imputed=max_values_imputed,
+                batch_size=batch_size,
+            )
+        except Exception as exc:
+            warnings_out.append(f"{variable}: no se pudo construir curva softmax: {exc}")
+            continue
+        if result.empty:
+            warnings_out.append(f"{variable}: la curva softmax no produjo filas válidas.")
+            continue
+        prob_cols = sorted(
+            [col for col in result.columns if col.startswith("prob_clase_") and col.endswith("_promedio")],
+            key=lambda name: int(name.split("_")[2]),
+        )
+        if not prob_cols:
+            warnings_out.append(f"{variable}: la curva softmax no incluye probabilidades por clase.")
+            continue
+        n_classes = len(prob_cols)
+        rows: list[dict[str, Any]] = []
+        best_row: dict[str, Any] | None = None
+        for raw_row in result.to_dict(orient="records"):
+            class_probs = {
+                _class_label(idx, n_classes): float(raw_row.get(col, 0.0) or 0.0)
+                for idx, col in enumerate(prob_cols)
+            }
+            risk_score = float(sum(idx * probability for idx, probability in enumerate(class_probs.values())))
+            majority = int(raw_row.get("clase_mayoritaria_simulada", round(risk_score)) or 0)
+            row = {
+                "valor_original": raw_row.get("valor_original"),
+                "riesgo_ordinal_estimado": risk_score,
+                "clase_estimacion": _risk_label(risk_score, n_classes),
+                "clase_mayoritaria_simulada": _class_label(majority, n_classes),
+                "probabilidades": class_probs,
+            }
+            rows.append(row)
+            if best_row is None or risk_score < float(best_row.get("riesgo_ordinal_estimado", np.inf)):
+                best_row = row
+        curves.append(
+            {
+                "variable": variable,
+                "n_clases": n_classes,
+                "etiquetas_clase": [_class_label(idx, n_classes) for idx in range(n_classes)],
+                "valores_probados": values,
+                "filas": rows,
+                "mejor_escenario_menor_riesgo": best_row or {},
+                "metadata": metadata,
+            }
+        )
+
+    return {
+        "variables": curves,
+        "metadata": {
+            "max_variables": max_variables,
+            "max_values": max_values,
+            "variables_solicitadas": curve_variables,
+            "variables_graficadas": [item["variable"] for item in curves],
+            "warnings": warnings_out,
+        },
+    }
+
+
+def _risk_reduction_softmax_values(curves: dict[str, Any] | None) -> tuple[list[dict[str, Any]], list[str]]:
+    """Select suggested values from softmax curves using lowest dominant class priority."""
+    if not isinstance(curves, dict):
+        return [], []
+    variables = [item for item in (curves.get("variables") or []) if isinstance(item, dict) and item.get("filas")]
+
+    def label_rank(label: Any) -> int:
+        text = str(label or "").lower()
+        if "q1" in text or ("bajo" in text and "medio" not in text):
+            return 0
+        if "q2" in text or "medio-bajo" in text or ("medio" in text and "alto" not in text):
+            return 1
+        if "q3" in text or "medio-alto" in text:
+            return 2
+        if "q4" in text or "alto" in text:
+            return 3
+        return 4
+
+    def dominant_label(row: dict[str, Any]) -> str:
+        probs = row.get("probabilidades") if isinstance(row.get("probabilidades"), dict) else {}
+        if not probs:
+            return ""
+        return str(max(probs, key=lambda label: float(probs.get(label, 0.0) or 0.0)))
+
+    selected: list[dict[str, Any]] = []
+    kept: list[str] = []
+    for item in variables:
+        variable = str(item.get("variable", "")).strip()
+        candidates = []
+        for row in [row for row in item.get("filas", []) if isinstance(row, dict)]:
+            dominant = dominant_label(row)
+            rank = label_rank(dominant)
+            probs = row.get("probabilidades") if isinstance(row.get("probabilidades"), dict) else {}
+            probability = float(probs.get(dominant, 0.0) or 0.0)
+            candidates.append(
+                (
+                    rank,
+                    -probability,
+                    float(row.get("riesgo_ordinal_estimado", 99.0) or 99.0),
+                    row,
+                    dominant,
+                    probability,
+                )
+            )
+        valid = [candidate for candidate in candidates if candidate[0] < 3]
+        if not valid:
+            if variable:
+                kept.append(variable)
+            continue
+        rank, _, risk_score, row, dominant, probability = sorted(valid, key=lambda candidate: candidate[:3])[0]
+        selected.append(
+            {
+                "variable": variable,
+                "valor": row.get("valor_original"),
+                "clase_dominante": dominant,
+                "probabilidad_dominante": probability,
+                "riesgo_ordinal_estimado": risk_score,
+            }
+        )
+    return selected, kept
+
+
+def simulate_suggested_vano_risk(
+    *,
+    model: Any,
+    X_scaled: np.ndarray,
+    X_raw_model: np.ndarray,
+    feature_names: list[str],
+    feature_scaler: Any,
+    predict_fn: Callable[..., dict[str, Any]],
+    device: str,
+    mask: np.ndarray,
+    vano_ids: pd.Series | np.ndarray | list[Any],
+    softmax_curves: dict[str, Any] | None,
+    label_encoders: dict[str, Any] | None = None,
+    max_values_imputed: dict[str, Any] | None = None,
+    batch_size: int = 1024,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Simulate selected softmax values and aggregate predicted probabilities by FID_VANO.
+
+    Multiple records for the same vano are handled by averaging class probabilities per vano.
+    Averaging is intentional: summing probabilities would overweight vanos with more rows.
+    """
+    X_scaled = np.asarray(X_scaled, dtype=np.float32)
+    X_raw_model = np.asarray(X_raw_model, dtype=np.float32)
+    mask = np.asarray(mask, dtype=bool)
+    if mask.shape[0] != X_scaled.shape[0]:
+        raise ValueError("La máscara no tiene la misma longitud que X_scaled.")
+    if not mask.any():
+        raise ValueError("El subconjunto base está vacío con los filtros seleccionados.")
+    vano_series = pd.Series(vano_ids).reset_index(drop=True)
+    if len(vano_series) != X_scaled.shape[0]:
+        raise ValueError("vano_ids debe tener la misma longitud que X_scaled.")
+
+    selected, kept = _risk_reduction_softmax_values(softmax_curves)
+    X_base = X_scaled[mask].copy()
+    X_raw_base = X_raw_model[mask].copy()
+    base_vanos = vano_series.loc[mask].fillna("").astype(str).reset_index(drop=True)
+    baseline_probs, _ = predict_probabilities(
+        model,
+        X_base,
+        predict_fn=predict_fn,
+        device=device,
+        batch_size=batch_size,
+    )
+    n_classes = int(baseline_probs.shape[1])
+    class_labels = [_class_label(idx, n_classes) for idx in range(n_classes)]
+
+    X_sim = X_base.copy()
+    applied: list[dict[str, Any]] = []
+    warnings_out: list[str] = []
+    for item in selected:
+        variable = str(item.get("variable", "")).strip()
+        if variable not in feature_names:
+            kept.append(variable)
+            warnings_out.append(f"{variable}: no se aplicó porque no está en feature_names.")
+            continue
+        try:
+            transformed_value = transform_single_feature_value(
+                variable,
+                item.get("valor"),
+                baseline_raw_row=X_raw_base[0],
+                feature_names=feature_names,
+                feature_scaler=feature_scaler,
+                label_encoders=label_encoders,
+                max_values_imputed=max_values_imputed,
+            )
+        except Exception as exc:
+            kept.append(variable)
+            warnings_out.append(f"{variable}: no se aplicó valor sugerido {item.get('valor')}: {exc}")
+            continue
+        X_sim[:, feature_names.index(variable)] = transformed_value
+        applied.append(item)
+
+    sim_probs, _ = predict_probabilities(
+        model,
+        X_sim,
+        predict_fn=predict_fn,
+        device=device,
+        batch_size=batch_size,
+    )
+
+    def aggregate_probs(probs: np.ndarray, prefix: str) -> pd.DataFrame:
+        prob_df = pd.DataFrame(probs, columns=[f"{prefix}_prob_clase_{idx}" for idx in range(n_classes)])
+        prob_df.insert(0, "FID_VANO", base_vanos.to_numpy())
+        grouped = prob_df.groupby("FID_VANO", dropna=False).mean()
+        counts = prob_df.groupby("FID_VANO", dropna=False).size().rename("n_registros")
+        grouped = grouped.join(counts)
+        prob_cols = [f"{prefix}_prob_clase_{idx}" for idx in range(n_classes)]
+        argmax_idx = grouped[prob_cols].to_numpy().argmax(axis=1)
+        grouped[f"{prefix}_clase_idx"] = argmax_idx
+        grouped[f"{prefix}_clase"] = [class_labels[idx] for idx in argmax_idx]
+        class_axis = np.arange(n_classes, dtype=np.float64)
+        grouped[f"{prefix}_riesgo_ordinal"] = grouped[prob_cols].to_numpy() @ class_axis
+        return grouped
+
+    baseline_grouped = aggregate_probs(baseline_probs, "base")
+    simulated_grouped = aggregate_probs(sim_probs, "simulado").drop(columns=["n_registros"])
+    result = baseline_grouped.join(simulated_grouped, how="outer").reset_index()
+    result["delta_riesgo_ordinal"] = result["simulado_riesgo_ordinal"] - result["base_riesgo_ordinal"]
+    result["variables_aplicadas"] = ", ".join(item["variable"] for item in applied)
+    result["variables_quietas"] = ", ".join(sorted(set(variable for variable in kept if variable)))
+
+    metadata = {
+        "n_vanos": int(result["FID_VANO"].nunique()),
+        "n_registros": int(mask.sum()),
+        "agregacion": "promedio_probabilidades_por_vano",
+        "variables_aplicadas": applied,
+        "variables_quietas": sorted(set(variable for variable in kept if variable)),
         "warnings": warnings_out,
     }
     return result, metadata
