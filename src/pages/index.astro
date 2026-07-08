@@ -19,7 +19,7 @@ import variables from "../data/variables.json";
 const grafoRedNivel2 = `${import.meta.env.BASE_URL}grafo_red_nivel2.html`;
 const grafoRedNivel2Seleccionadas = `${import.meta.env.BASE_URL}grafo_red_nivel2_seleccionadas.html`;
 const grafoTopUitiPeriodoMgcecdl = `${import.meta.env.BASE_URL}mgcecdl_top_uiti_periodo_grafo.html`;
-const latestInterpretabilityReport = `${import.meta.env.BASE_URL}latest_interpretability_report.html`;
+const latestInterpretabilityReport = `${import.meta.env.BASE_URL}latest_interpretability_report.html?v=20260708-softmax-maps`;
 const baseCircuitMap = `${import.meta.env.BASE_URL}base_circuit_map.html`;
 const baseCircuitMapUiti = `${import.meta.env.BASE_URL}base_circuit_map_uiti.html`;
 const baseCriticalPoints = `${import.meta.env.BASE_URL}base_critical_points.html`;
@@ -101,7 +101,7 @@ const llmNotebookFlow = [
   ["Agente base descriptor-histórico", "Interpreta el contexto estructurado del circuito: selección, serie diaria, puntos críticos, variables disponibles, causas observadas, metadatos faltantes y grafos de relación técnica."],
   ["RAG del modelo predictivo", "Interpreta las inferencias M-GCECDL: relevancias por escenario, modos climático/estructural, variables de entrada del modelo y conexiones del grafo para priorizar variables explicativas."],
   ["RAG de contraste experto", "Contrasta el modelo de datos históricos y el modelo predictivo con la tabla de discusiones técnicas extraída de PDFs; reporta coincidencias, diferencias y variables priorizadas sin usar la variable objetivo como predictor."],
-  ["Agente automático de sensibilidad y costos", "Lee la tabla mínimo/máximo del simulador, genera curvas softmax para las 4 variables más relevantes y complementa la discusión con ítems cercanos de COSTOS ITEMS CONTRATOS.xlsx."]
+  ["Agente automático de simulación softmax", "Toma las variables priorizadas, busca valores donde domine la menor clase de riesgo posible y compara mapas por vano entre UITI_VANO observado y predicción simulada."]
 ];
 const pdfExtractionSteps = [
   ["1. Lectura documental", "Carga PDFs técnicos desde el repositorio documental y extrae texto por página con PyMuPDF o pdfplumber."],
@@ -672,7 +672,7 @@ const cronograma = [
           <a class="pillar-card" href="#costos-items-contratos" aria-label="Abrir detalle de costos por ítems de contrato">
             <span>04</span>
             <h3>Costos por ítems</h3>
-            <p>El agente de sensibilidad cruza variables críticas con COSTOS ITEMS CONTRATOS.xlsx para discusión económica.</p>
+            <p>Referencia económica opcional para variables priorizadas por el simulador softmax y el análisis experto.</p>
             <strong>Ver costos del agente →</strong>
           </a>
         </div>
@@ -700,8 +700,8 @@ const cronograma = [
           </a>
           <a class="agent-card" href="#agente-simulacion" aria-label="Abrir detalle conceptual del agente de simulación">
             <span class="agent-type low">Low / Fast</span>
-            <h3>Agente automático: sensibilidad</h3>
-            <p>Interpreta escenarios mínimo/máximo, cambios de categoría, curvas softmax top 4 y costos cercanos.</p>
+            <h3>Agente automático: simulación softmax</h3>
+            <p>Propone valores por menor clase dominante y compara dos mapas por vano: riesgo observado y clase predicha simulada.</p>
           </a>
           <a class="agent-card" href="#agente-informes" aria-label="Abrir detalle del agente de informes">
             <span class="agent-type high">High / Generative</span>
@@ -824,11 +824,11 @@ const cronograma = [
             </div>
             <article class="flow-node agent-low-node">
               <span>Agente automático</span>
-              <strong>Sensibilidad mínimo/máximo y costos</strong>
+              <strong>Softmax, valores sugeridos y mapas</strong>
             </article>
             <div class="flow-connector cycle">
               <strong>9-10</strong>
-              <span>Tabla + gráfica + ítems cercanos</span>
+              <span>Curvas + mapas por vano</span>
             </div>
             <article class="flow-node agent-high-node">
               <span>Agente 6 High</span>
@@ -1505,12 +1505,12 @@ const cronograma = [
           <a class="back-link" href="#arquitectura">← Volver al simulador multimodal</a>
           <div class="section-heading">
             <p class="eyebrow">Agente automático</p>
-            <h2 id="simulacion-title">Sensibilidad mínimo/máximo y costos</h2>
+            <h2 id="simulacion-title">Simulación softmax y mapas por vano</h2>
             <p>
-              El agente automático conserva la lógica del simulador: toma variables priorizadas por los
-              agentes anteriores, evalúa su valor mínimo y máximo observado, compara el riesgo contra el
-              escenario base, calcula curvas softmax para las variables más sensibles y redacta una discusión
-              compacta enfocada en cambios de categoría de riesgo.
+              El agente automático toma variables priorizadas por los agentes anteriores, recorre valores
+              originales en curvas softmax y elige la primera configuración donde domina la menor clase de
+              riesgo posible: bajo, luego medio, luego alto. Si solo domina muy alto, deja la variable quieta
+              y lo declara en el análisis.
             </p>
           </div>
 
@@ -1518,9 +1518,9 @@ const cronograma = [
             <h3>Entradas que recibe</h3>
             <div class="process-grid">
               <article><strong>Variables priorizadas</strong><p>Provienen del agente de alineación experta o, si no están disponibles, de las variables principales del agente predictivo M-GCECDL.</p></article>
-              <article><strong>Tabla mínimo/máximo</strong><p>Incluye riesgo base, riesgo con mínimo, riesgo con máximo, cambios absolutos y etiquetas de riesgo por variable.</p></article>
-              <article><strong>Curvas softmax top 4</strong><p>Recorren valores originales de las variables más relevantes para visualizar probabilidades promedio de Q1, Q2, Q3 y Q4.</p></article>
-              <article><strong>Costos de contrato</strong><p>Lee <code>data/COSTOS ITEMS CONTRATOS.xlsx</code> y busca apartados cercanos por texto para complementar la discusión económica.</p></article>
+              <article><strong>Curvas softmax top 4</strong><p>Recorren valores originales de las variables más relevantes para visualizar probabilidades promedio de bajo, medio, alto y muy alto.</p></article>
+              <article><strong>Valores sugeridos</strong><p>Prioriza configuraciones donde la clase dominante sea la de menor riesgo disponible; no exige máxima certeza si ya cumple el criterio de menor clase.</p></article>
+              <article><strong>Predicción por vano</strong><p>Aplica los valores sugeridos a los registros del circuito y promedia probabilidades softmax por <code>FID_VANO</code>.</p></article>
               <article><strong>Contexto previo</strong><p>Reutiliza circuito, periodo, modos, grafos, inferencia y comparación experta sin inventar resultados nuevos.</p></article>
             </div>
           </div>
@@ -1528,11 +1528,11 @@ const cronograma = [
           <div class="detail-block">
             <h3>Cómo aparece en el reporte HTML</h3>
             <p>
-              La segunda pestaña del reporte conserva la tabla del simulador automático y añade una gráfica
-              ordinal para base, mínimo y máximo, más una rejilla 2x2 de curvas softmax para hasta 4 variables
-              relevantes. Si alguna variable cambia de categoría, el reporte lo resalta antes de la discusión
-              del agente. Debajo se muestra el apartado de costos y una estimación orientativa de menor riesgo
-              cotejada con los ítems de contrato cercanos.
+              La segunda pestaña del reporte muestra la tabla de variables priorizadas y, justo después,
+              las curvas softmax del simulador. Luego compara dos mapas: a la izquierda el nivel de riesgo
+              original por UITI_VANO observado, y a la derecha la clase predicha al aplicar los valores
+              sugeridos. Cuando un vano tiene varios registros, se promedian sus probabilidades por
+              <code>FID_VANO</code> y se conserva la clase con mayor promedio.
             </p>
             <a class="button primary" href={latestInterpretabilityReport} target="_blank" rel="noreferrer">
               Abrir último reporte
@@ -1549,9 +1549,9 @@ const cronograma = [
             <p class="eyebrow">Evaluación económica del agente</p>
             <h2 id="costos-items-title">Costos por ítems de contrato</h2>
             <p>
-              Esta sección documenta cómo el agente automático complementa la sensibilidad de riesgo con
-              costos de referencia. El archivo <code>data/COSTOS ITEMS CONTRATOS.xlsx</code> se normaliza,
-              se compara contra variables sensibles y se entrega al agente como contexto económico trazable.
+              Esta sección documenta una referencia económica opcional para las variables priorizadas por
+              el simulador y la comparación experta. El archivo <code>data/COSTOS ITEMS CONTRATOS.xlsx</code>
+              se normaliza, se compara contra variables revisables y se entrega como contexto trazable.
             </p>
           </div>
 
@@ -1600,11 +1600,10 @@ const cronograma = [
             <h3>Interacción con los agentes existentes</h3>
             <p>
               El agente base identifica puntos críticos, el agente predictivo prioriza variables, el agente de
-              alineación experta selecciona variables revisables y el agente automático prueba escenarios
-              mínimo/máximo y curvas softmax. El componente de costos entra al final: toma esas variables
-              sensibles, coteja los valores de menor riesgo estimado y busca apartados económicos cercanos
-              para que la discusión del reporte no sea solo técnica, sino también orientada a orden de
-              magnitud económico.
+              alineación experta selecciona variables revisables y el agente automático calcula curvas
+              softmax, valores sugeridos y mapas comparativos por vano. El componente de costos queda como
+              referencia separada: toma esas variables, coteja valores de menor clase dominante y busca
+              apartados económicos cercanos para orientar el orden de magnitud.
             </p>
           </div>
           <a class="back-link bottom" href="#arquitectura">← Volver al simulador multimodal</a>
