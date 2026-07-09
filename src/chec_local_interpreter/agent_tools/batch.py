@@ -125,65 +125,79 @@ def run_circuit(
 ) -> dict[str, Any]:
     """Run one circuit end to end: build-context -> invoke agent -> validate -> retry -> publish/fail.
 
-    Never raises for expected failure modes (schema/provenance validation
-    failure, missing agent executable, invocation timeout) — always returns
-    a manifest entry dict, so the caller (`run_batch`) can continue to the
-    next circuit unconditionally.
+    Never raises, for either expected failure modes (schema/provenance
+    validation failure, missing agent executable, invocation timeout) or any
+    other unexpected error while building context, invoking the agent, or
+    writing artifacts (e.g. an unsanitizable `circuito` value or a malformed
+    `periodo_inicio`/`periodo_fin`) — always returns a manifest entry dict, so
+    the caller (`run_batch`) can continue to the next circuit unconditionally.
+    This is the module's own documented invariant: one circuit's failure
+    never aborts the batch.
     """
     circuito = str(payload.get("circuito") or "unknown")
-    envelope = build_context(payload)
-    prompt = envelope["prompt"]
     artifact_paths: list[str] = []
     attempt = 0
 
-    while True:
-        try:
-            process = _invoke_agent(prompt, command=command)
-        except FileNotFoundError:
-            return _manifest_entry(
-                circuito=circuito,
-                status="FAILED",
-                artifact_paths=artifact_paths,
-                retries=attempt,
-                error=f"agent command not found on PATH: {' '.join(command)}",
-            )
-        except subprocess.TimeoutExpired as exc:
-            return _manifest_entry(
-                circuito=circuito,
-                status="FAILED",
-                artifact_paths=artifact_paths,
-                retries=attempt,
-                error=f"agent invocation timed out: {exc}",
-            )
+    try:
+        envelope = build_context(payload)
+        prompt = envelope["prompt"]
 
-        result, _exit_code = validate({"response_text": process.stdout, "context": envelope["context"]})
+        while True:
+            try:
+                process = _invoke_agent(prompt, command=command)
+            except FileNotFoundError:
+                return _manifest_entry(
+                    circuito=circuito,
+                    status="FAILED",
+                    artifact_paths=artifact_paths,
+                    retries=attempt,
+                    error=f"agent command not found on PATH: {' '.join(command)}",
+                )
+            except subprocess.TimeoutExpired as exc:
+                return _manifest_entry(
+                    circuito=circuito,
+                    status="FAILED",
+                    artifact_paths=artifact_paths,
+                    retries=attempt,
+                    error=f"agent invocation timed out: {exc}",
+                )
 
-        if result.get("ok"):
-            report_path = _publish_report(circuito, result["data"])
-            return _manifest_entry(
-                circuito=circuito,
-                status="ok",
-                artifact_paths=[str(report_path)],
-                retries=attempt,
-            )
+            result, _exit_code = validate({"response_text": process.stdout, "context": envelope["context"]})
 
-        # validate() already wrote the failure artifact (schema or provenance
-        # errors, combined) under reports/interpretability/artifacts/{circuito}/.
-        if "artifact_path" in result:
-            artifact_paths.append(result["artifact_path"])
+            if result.get("ok"):
+                report_path = _publish_report(circuito, result["data"])
+                return _manifest_entry(
+                    circuito=circuito,
+                    status="ok",
+                    artifact_paths=[str(report_path)],
+                    retries=attempt,
+                )
 
-        if attempt >= max_retries:
-            return _manifest_entry(
-                circuito=circuito,
-                status="FAILED",
-                artifact_paths=artifact_paths,
-                retries=attempt,
-                error="validation failed after exhausting retries",
-                errors=result.get("errors", []),
-            )
+            # validate() already wrote the failure artifact (schema or provenance
+            # errors, combined) under reports/interpretability/artifacts/{circuito}/.
+            if "artifact_path" in result:
+                artifact_paths.append(result["artifact_path"])
 
-        prompt = _build_retry_prompt(prompt, result.get("errors", []))
-        attempt += 1
+            if attempt >= max_retries:
+                return _manifest_entry(
+                    circuito=circuito,
+                    status="FAILED",
+                    artifact_paths=artifact_paths,
+                    retries=attempt,
+                    error="validation failed after exhausting retries",
+                    errors=result.get("errors", []),
+                )
+
+            prompt = _build_retry_prompt(prompt, result.get("errors", []))
+            attempt += 1
+    except Exception as exc:  # noqa: BLE001 - one circuit's failure must never abort the batch
+        return _manifest_entry(
+            circuito=circuito,
+            status="FAILED",
+            artifact_paths=artifact_paths,
+            retries=attempt,
+            error=f"unexpected error while processing circuit: {exc}",
+        )
 
 
 def run_batch(

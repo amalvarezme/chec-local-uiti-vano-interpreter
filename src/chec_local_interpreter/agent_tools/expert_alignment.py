@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -85,17 +86,27 @@ def build_context(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]")
+_MAX_CIRCUITO_DIRNAME_LENGTH = 128
+
+
 def _sanitize_circuito_dirname(circuito: str) -> str:
     """Reduce an untrusted `circuito` value to a single, safe directory name.
 
-    `Path(...).name` strips any directory separators and `..`/absolute-path
-    components, so a value like "../../../../etc/evil" collapses to "evil"
-    and can never be used to escape `ARTIFACTS_ROOT`.
+    Strips ASCII control characters first (including an embedded NUL byte,
+    which would otherwise crash `Path.resolve()`/`mkdir()`/`write_text()`
+    with `ValueError: embedded null byte`). Then `Path(...).name` strips any
+    directory separators and `..`/absolute-path components, so a value like
+    "../../../../etc/evil" collapses to "evil" and can never be used to
+    escape `ARTIFACTS_ROOT`. Falls back to "unknown" for any input that
+    collapses to nothing usable, and caps the result length so an
+    oversized `circuito` can never trip a filesystem name-length limit.
     """
-    name = Path(str(circuito or "").strip()).name
+    cleaned = _CONTROL_CHARS_RE.sub("", str(circuito or "")).strip()
+    name = Path(cleaned).name
     if not name or name in {".", ".."}:
         return "unknown"
-    return name
+    return name[:_MAX_CIRCUITO_DIRNAME_LENGTH]
 
 
 def sanitize_circuito_dirname(circuito: str) -> str:

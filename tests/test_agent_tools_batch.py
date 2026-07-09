@@ -259,6 +259,67 @@ def test_cli_accepts_a_manifest_file_containing_a_list_of_payloads(tmp_path, mon
     assert exit_code == 0
 
 
+def test_run_circuit_null_byte_circuito_does_not_crash_and_is_failed(tmp_path, monkeypatch):
+    """A `circuito` value with an embedded null byte must never propagate an
+    uncaught ValueError out of run_circuit (e.g. from Path.resolve()/mkdir()/
+    write_text() inside `_write_failure_artifact`, exercised here via an
+    invalid response) — it must be captured as a FAILED manifest entry
+    instead, never a crash."""
+    monkeypatch.chdir(tmp_path)
+    invalid_text = json.dumps(_invalid_response("BAD\x00CKT"), ensure_ascii=False)
+    monkeypatch.setattr(
+        batch_module.subprocess, "run", lambda command, **kwargs: _FakeCompletedProcess(stdout=invalid_text)
+    )
+
+    entry = batch_module.run_circuit(_sample_payload("BAD\x00CKT"), max_retries=0)
+
+    assert entry["status"] == "FAILED"
+    assert "error" in entry
+
+
+def test_run_circuit_malformed_periodo_inicio_does_not_crash_and_is_failed(tmp_path, monkeypatch):
+    """A malformed `periodo_inicio` (e.g. a dict instead of a scalar) makes
+    pandas.to_datetime(..., errors="coerce") raise inside build_context — this
+    must be captured as a FAILED manifest entry, not an uncaught exception."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        batch_module.subprocess,
+        "run",
+        lambda command, **kwargs: _FakeCompletedProcess(stdout=json.dumps(_valid_response(), ensure_ascii=False)),
+    )
+
+    payload = _sample_payload("BADPERIOD")
+    payload["periodo_inicio"] = {"a": 1}
+
+    entry = batch_module.run_circuit(payload)
+
+    assert entry["status"] == "FAILED"
+    assert "error" in entry
+
+
+def test_run_batch_continues_when_one_circuit_has_a_malformed_field(tmp_path, monkeypatch):
+    """A batch with one bad circuit (malformed periodo_inicio) and one good
+    circuit must still complete with both entries in the manifest."""
+    monkeypatch.chdir(tmp_path)
+
+    def fake_run(command, **kwargs):
+        prompt = command[-1]
+        if "OKCKT" in prompt:
+            return _FakeCompletedProcess(stdout=json.dumps(_valid_response("OKCKT"), ensure_ascii=False))
+        return _FakeCompletedProcess(stdout=json.dumps(_valid_response(), ensure_ascii=False))
+
+    monkeypatch.setattr(batch_module.subprocess, "run", fake_run)
+
+    bad_payload = _sample_payload("BADCKT")
+    bad_payload["periodo_inicio"] = {"a": 1}
+
+    manifest = batch_module.run_batch([bad_payload, _sample_payload("OKCKT")])
+
+    statuses = {entry["circuito"]: entry["status"] for entry in manifest["circuits"]}
+    assert statuses == {"BADCKT": "FAILED", "OKCKT": "ok"}
+    assert len(manifest["circuits"]) == 2
+
+
 def test_load_circuit_payloads_concatenates_multiple_file_arguments(tmp_path):
     file_a = tmp_path / "a.json"
     file_b = tmp_path / "b.json"
