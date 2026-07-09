@@ -27,6 +27,25 @@ EXPERT_ALIGNMENT_REQUIRED_KEYS = (
 
 TARGET_VARIABLES = {"UITI_VANO"}
 
+# Provenance contract (design section 3): each per-claim `provenance` object
+# names the producing agent role and the governing playbook/Skill rule id.
+# Both are small, hermetic allow-lists checked in-code (no file read), so the
+# validator stays deterministic and testable without the governance artifacts
+# (WU5a) existing yet. Keep these in sync with `.claude/agents/rules/invariants.md`
+# and `llm/skills_expert_alignment/*.md` once WU5a lands.
+EXPERT_ALIGNMENT_AGENT_ID = "expert-alignment"
+
+EXPERT_ALIGNMENT_PROVENANCE_RULES = frozenset({
+    "01_pdf_report_comparison",
+    "02_predictive_variable_prioritization",
+    "03_graph_context_for_alignment",
+})
+
+_PROVENANCE_SECTIONS = ("coincidencias", "diferencias", "variables_a_priorizar")
+
+_PDF_ROW_INDEX_REF_RE = re.compile(r"^pdf_row_index:(\d+)$", re.IGNORECASE)
+_DATE_REF_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
 
 def normalizar_circuito(value: Any) -> str:
     """Normalize circuit ids for strict, case-insensitive equality checks."""
@@ -699,6 +718,39 @@ def _allowed_variables(context: dict[str, Any]) -> set[str]:
     return variables
 
 
+def _allowed_variables_strict(context: dict[str, Any]) -> set[str]:
+    """Fail-closed variable universe for the provenance validator only.
+
+    Unlike `_allowed_variables` (used for prompt-shaping/WU1 and the schema
+    validator's own `variables_a_priorizar` check), this never falls back to
+    scraping free-text context (`llm1_analysis`, `llm2_inference_analysis`,
+    `fechas_informe`, `pdf_expert_matches`) for incidental uppercase-looking
+    tokens. When `variables_modelo_predictivo` is empty there is nothing to
+    attribute a variable-shaped `provenance.data_ref` to, so the provenance
+    validator must reject ANY such reference rather than accept it via that
+    loose scraper — the traceability guarantee this validator exists to
+    provide would otherwise be defeated by any incidental word already
+    present in unrelated context prose.
+    """
+    predictive_variables = _normalize_variable_list(context.get("variables_modelo_predictivo", []))
+    return {str(variable).strip().upper() for variable in predictive_variables if str(variable).strip()}
+
+
+def allowed_dates(context: dict[str, Any]) -> set[str]:
+    """Public re-export of `_allowed_dates` for reuse by the agent-tools CLI layer."""
+    return _allowed_dates(context)
+
+
+def allowed_variables(context: dict[str, Any]) -> set[str]:
+    """Public re-export of `_allowed_variables` for reuse by the agent-tools CLI layer."""
+    return _allowed_variables(context)
+
+
+def allowed_pdf_row_indexes(context: dict[str, Any]) -> set[str]:
+    """Public re-export of `_allowed_pdf_row_indexes` for reuse by the agent-tools CLI layer."""
+    return _allowed_pdf_row_indexes(context)
+
+
 def _evidence_is_supported(evidence: str, allowed_evidences: list[str], allowed_indexes: set[str] | None = None) -> bool:
     if not evidence:
         return True
@@ -1028,5 +1080,100 @@ def validar_respuesta_expert_alignment(response_text: str, context: dict[str, An
     for phrase in forbidden:
         if phrase in lower_blob:
             errors.append(f"Lenguaje causal no permitido: {phrase}")
+    # Bare "causa" is checked with word-boundary matching (unlike the naive
+    # substring checks above): a plain substring check would also flag
+    # unrelated Spanish words that merely contain "causa", e.g. "encausar"
+    # ("to channel/prosecute"), which is not causal language.
+    if re.search(r"\bcausa\b", lower_blob):
+        errors.append("Lenguaje causal no permitido: causa")
 
     return {"ok": not errors, "data": data, "errors": errors}
+
+
+def _validate_provenance_data_ref(
+    ref: Any,
+    *,
+    allowed_dates_set: set[str],
+    allowed_variables_set: set[str],
+    allowed_indexes_set: set[str],
+) -> str | None:
+    """Resolve one `data_ref` entry against the allowed universe for the circuit.
+
+    Returns an error message naming the offending reference, or `None` if it
+    resolves. A `data_ref` entry is either a `pdf_row_index:<n>` reference, an
+    ISO date (`YYYY-MM-DD`), or a predictive-model variable name.
+    """
+    text = str(ref).strip()
+
+    pdf_row_match = _PDF_ROW_INDEX_REF_RE.match(text)
+    if pdf_row_match:
+        index = pdf_row_match.group(1)
+        if index not in allowed_indexes_set:
+            return f"provenance.data_ref cites an unknown pdf_row_index: {text}"
+        return None
+
+    if _DATE_REF_RE.match(text):
+        if text not in allowed_dates_set:
+            return f"provenance.data_ref cites a date outside the allowed context: {text}"
+        return None
+
+    if not text or text.upper() not in allowed_variables_set:
+        return f"provenance.data_ref cites an unknown variable: {text or ref!r}"
+    return None
+
+
+def validar_provenance_expert_alignment(data: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
+    """Additively validate per-claim `provenance` objects, when present.
+
+    Provenance is optional per item (backwards compatible with responses that
+    predate the provenance contract): an item without a `provenance` key is
+    never flagged. When present, `provenance` must be `{data_ref, agent, rule}`
+    with every `data_ref` entry resolving to the circuit's already-validated
+    allowed dates/variables/pdf_row_indexes, `agent` naming the producing role
+    (`EXPERT_ALIGNMENT_AGENT_ID`), and `rule` naming an entry from the
+    hermetic `EXPERT_ALIGNMENT_PROVENANCE_RULES` allow-list.
+    """
+    errors: list[str] = []
+    allowed_dates_set = _allowed_dates(context)
+    allowed_variables_set = _allowed_variables_strict(context)
+    allowed_indexes_set = _allowed_pdf_row_indexes(context)
+
+    for section_name in _PROVENANCE_SECTIONS:
+        section = data.get(section_name, [])
+        if not isinstance(section, list):
+            continue
+        for item in section:
+            if not isinstance(item, dict):
+                continue
+            provenance = item.get("provenance")
+            if provenance is None:
+                continue
+            if not isinstance(provenance, dict):
+                errors.append(f"{section_name}: provenance debe ser un objeto.")
+                continue
+
+            agent = provenance.get("agent")
+            if agent != EXPERT_ALIGNMENT_AGENT_ID:
+                errors.append(
+                    f"{section_name}: provenance.agent debe ser '{EXPERT_ALIGNMENT_AGENT_ID}', valor recibido: {agent!r}"
+                )
+
+            rule = provenance.get("rule")
+            if rule not in EXPERT_ALIGNMENT_PROVENANCE_RULES:
+                errors.append(f"{section_name}: provenance.rule no está en la lista de reglas permitidas: {rule!r}")
+
+            data_ref = provenance.get("data_ref")
+            if not isinstance(data_ref, list) or not data_ref:
+                errors.append(f"{section_name}: provenance.data_ref debe ser una lista no vacía.")
+                continue
+            for ref in data_ref:
+                error = _validate_provenance_data_ref(
+                    ref,
+                    allowed_dates_set=allowed_dates_set,
+                    allowed_variables_set=allowed_variables_set,
+                    allowed_indexes_set=allowed_indexes_set,
+                )
+                if error:
+                    errors.append(f"{section_name}: {error}")
+
+    return {"ok": not errors, "errors": errors}
