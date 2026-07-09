@@ -36,6 +36,7 @@ from chec_local_interpreter.expert_alignment import (
     compactar_contexto_expert_alignment_para_prompt,
     construir_contexto_expert_alignment,
     construir_prompt_expert_alignment,
+    validar_provenance_expert_alignment,
     validar_respuesta_expert_alignment,
 )
 
@@ -115,21 +116,35 @@ def _write_failure_artifact(circuito: str, response_text: str, errors: list[str]
 
 
 def validate(payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
-    """Run the `validate` verb: gate a candidate response through the L1 validator.
+    """Run the `validate` verb: gate a candidate response through the L1 validators.
+
+    Runs the schema validator first, then — only if it succeeds — the
+    additive provenance validator (`validar_provenance_expert_alignment`),
+    combining both error lists. Exit code 0 requires both to pass; a response
+    without any `provenance` keys at all is unaffected (backwards compatible)
+    since the provenance validator has nothing to check.
 
     Returns `(result, exit_code)`. On failure, writes the raw response and
-    errors under `reports/interpretability/artifacts/{circuito}/` and never
-    returns `ok: true`.
+    combined errors under `reports/interpretability/artifacts/{circuito}/`
+    and never returns `ok: true`.
     """
     response_text = payload["response_text"]
     context = payload.get("context", {})
     result = validar_respuesta_expert_alignment(response_text, context)
-    if result["ok"]:
+    errors = list(result["errors"])
+    ok = result["ok"]
+
+    if ok:
+        provenance_result = validar_provenance_expert_alignment(result["data"], context)
+        errors.extend(provenance_result["errors"])
+        ok = provenance_result["ok"]
+
+    if ok:
         return {"ok": True, "data": result["data"]}, 0
 
     circuito = str(context.get("circuito") or "unknown")
-    artifact_path = _write_failure_artifact(circuito, response_text, result["errors"])
-    return {"ok": False, "errors": result["errors"], "artifact_path": str(artifact_path)}, 1
+    artifact_path = _write_failure_artifact(circuito, response_text, errors)
+    return {"ok": False, "errors": errors, "artifact_path": str(artifact_path)}, 1
 
 
 def _load_payload(verb: str) -> dict[str, Any]:

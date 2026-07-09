@@ -194,6 +194,73 @@ def test_validate_cli_valid_response_exits_zero_and_prints_ok_true(tmp_path):
     assert '"ok": true' in result.stdout
 
 
+def _valid_response_with_provenance_for(envelope: dict) -> dict:
+    response = _valid_response_for(envelope)
+    response["coincidencias"][0]["provenance"] = {
+        "data_ref": ["2026-01-10", "CNT_TRF", "pdf_row_index:3"],
+        "agent": "expert-alignment",
+        "rule": "02_predictive_variable_prioritization",
+    }
+    response["variables_a_priorizar"][0]["provenance"] = {
+        "data_ref": ["CNT_TRF"],
+        "agent": "expert-alignment",
+        "rule": "02_predictive_variable_prioritization",
+    }
+    return response
+
+
+def test_validate_cli_accepts_valid_response_with_provenance(tmp_path):
+    payload = _sample_context_payload()
+    envelope = build_context(payload)
+    response = _valid_response_with_provenance_for(envelope)
+
+    validate_payload = {"response_text": json.dumps(response, ensure_ascii=False), "context": envelope["context"]}
+    result = _run_cli("validate", validate_payload, tmp_path)
+
+    assert result.returncode == 0, result.stderr
+    stdout_data = json.loads(result.stdout)
+    assert stdout_data["ok"] is True
+
+
+def test_validate_cli_rejects_response_with_invalid_provenance(tmp_path):
+    """A response that otherwise passes the base validator must still fail the gate
+    when its provenance cites a data_ref outside the allowed universe."""
+    payload = _sample_context_payload()
+    envelope = build_context(payload)
+    response = _valid_response_with_provenance_for(envelope)
+    response["coincidencias"][0]["provenance"]["data_ref"] = ["9999-12-31"]
+
+    validate_payload = {"response_text": json.dumps(response, ensure_ascii=False), "context": envelope["context"]}
+    result = _run_cli("validate", validate_payload, tmp_path)
+
+    assert result.returncode == 1
+    assert '"ok": true' not in result.stdout
+    stdout_data = json.loads(result.stdout)
+    assert stdout_data["ok"] is False
+    assert any("9999-12-31" in error for error in stdout_data["errors"])
+
+    artifact_dir = tmp_path / "reports" / "interpretability" / "artifacts" / "DON23L13"
+    assert artifact_dir.is_dir()
+    assert list(artifact_dir.glob("*.json")), "expected a failure artifact for the provenance violation"
+
+
+def test_validate_verb_backwards_compatible_without_provenance_keys(tmp_path):
+    """Responses predating the provenance contract (no provenance keys at all)
+    must still validate exactly as before WU2."""
+    payload = _sample_context_payload()
+    envelope = build_context(payload)
+    response = _valid_response_for(envelope)
+    assert "provenance" not in response["coincidencias"][0]
+    assert "provenance" not in response["variables_a_priorizar"][0]
+
+    validate_payload = {"response_text": json.dumps(response, ensure_ascii=False), "context": envelope["context"]}
+    result = _run_cli("validate", validate_payload, tmp_path)
+
+    assert result.returncode == 0, result.stderr
+    stdout_data = json.loads(result.stdout)
+    assert stdout_data["ok"] is True
+
+
 def test_validate_verb_sanitizes_path_traversal_in_circuito(tmp_path):
     """A malicious `circuito` must never let the failure-artifact write escape ARTIFACTS_ROOT."""
     payload = _sample_context_payload()
