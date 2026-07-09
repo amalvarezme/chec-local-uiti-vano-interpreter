@@ -699,6 +699,21 @@ def _allowed_variables(context: dict[str, Any]) -> set[str]:
     return variables
 
 
+def allowed_dates(context: dict[str, Any]) -> set[str]:
+    """Public re-export of `_allowed_dates` for reuse by the agent-tools CLI layer."""
+    return _allowed_dates(context)
+
+
+def allowed_variables(context: dict[str, Any]) -> set[str]:
+    """Public re-export of `_allowed_variables` for reuse by the agent-tools CLI layer."""
+    return _allowed_variables(context)
+
+
+def allowed_pdf_row_indexes(context: dict[str, Any]) -> set[str]:
+    """Public re-export of `_allowed_pdf_row_indexes` for reuse by the agent-tools CLI layer."""
+    return _allowed_pdf_row_indexes(context)
+
+
 def _evidence_is_supported(evidence: str, allowed_evidences: list[str], allowed_indexes: set[str] | None = None) -> bool:
     if not evidence:
         return True
