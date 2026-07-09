@@ -26,9 +26,11 @@ def atomic_write_text(path: Path, content: str) -> None:
     `tempfile.mkstemp()` always creates its file at mode `0600`, and
     `os.replace()` preserves that mode — without an explicit `chmod`, every
     file written this way would be locked to owner-only access regardless of
-    the process umask. Reset the mode to a sane default (`0o644`, the same
-    default a normal `Path.write_text()` call would typically produce)
-    before it lands at `path`.
+    the process umask. Reset the mode to what a normal file-creation call
+    (e.g. `Path.write_text()`) would have produced under the CURRENT process
+    umask (`0o666 & ~umask`), instead of hardcoding `0o644` — a hardcoded
+    value would silently override a hardened host's more restrictive umask
+    policy (e.g. `umask 077` should still produce `0o600`, not `0o644`).
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
@@ -38,7 +40,11 @@ def atomic_write_text(path: Path, content: str) -> None:
             handle.write(content)
         # mkstemp() always creates the temp file at 0600; os.replace() would
         # otherwise carry that restrictive mode straight through to `path`.
-        os.chmod(tmp_path, 0o644)
+        # Read the umask without changing it (os.umask() has no read-only
+        # form), then apply it the same way a normal file-creation call would.
+        umask = os.umask(0)
+        os.umask(umask)
+        os.chmod(tmp_path, 0o666 & ~umask)
         os.replace(tmp_path, path)
     except BaseException:
         tmp_path.unlink(missing_ok=True)

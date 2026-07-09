@@ -4,6 +4,7 @@ verbatim) so the permissions fix only needs to happen in one place."""
 
 from __future__ import annotations
 
+import os
 import stat
 
 from chec_local_interpreter.agent_tools._atomic_io import atomic_write_text
@@ -25,6 +26,22 @@ def test_atomic_write_text_does_not_force_owner_only_permissions(tmp_path):
     mode = stat.S_IMODE(target.stat().st_mode)
     assert mode != 0o600, "the atomic write must not leave the file locked to owner-only access"
     assert mode == 0o644
+
+
+def test_atomic_write_text_respects_a_restrictive_process_umask(tmp_path):
+    """A hardcoded `0o644` silently overrides a hardened host's umask policy
+    (e.g. `umask 077` should produce `0o600`, not `0o644`). The helper must
+    derive the mode from the current process umask, the same as a normal
+    file-creation call would."""
+    target = tmp_path / "restrictive.json"
+    previous_umask = os.umask(0o077)
+    try:
+        atomic_write_text(target, '{"ok": true}')
+    finally:
+        os.umask(previous_umask)
+
+    mode = stat.S_IMODE(target.stat().st_mode)
+    assert mode == (0o666 & ~0o077)
 
 
 def test_batch_module_reuses_the_shared_atomic_write_helper():
