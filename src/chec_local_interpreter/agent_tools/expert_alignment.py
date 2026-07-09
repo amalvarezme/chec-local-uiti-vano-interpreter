@@ -17,21 +17,23 @@ Verbs:
 
 Both verbs read exactly one JSON document from stdin and write exactly one
 JSON document to stdout. No network access, no imports outside
-`chec_local_interpreter.expert_alignment` and the standard library.
+`chec_local_interpreter.expert_alignment`, the sibling `agent_tools._atomic_io`
+shared-utility module (the hoisted atomic-write helper, shared with
+`agent_tools.batch` so it only needs to exist in one place), and the standard
+library.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
-import tempfile
 import time
 from pathlib import Path
 from typing import Any
 
+from chec_local_interpreter.agent_tools._atomic_io import atomic_write_text as _atomic_write_text
 from chec_local_interpreter.expert_alignment import (
     allowed_dates,
     allowed_pdf_row_indexes,
@@ -79,11 +81,18 @@ def build_context(payload: dict[str, Any]) -> dict[str, Any]:
         },
         "context": compact_context,
         "prompt": prompt,
+        # `allowed` must be derived from `compact_context` — the SAME object
+        # used for the prompt and passed to `validate()` — not the full,
+        # untruncated `context`. `fechas_informe` (top 20) and
+        # `pdf_expert_matches` (top 10) are truncated in `compact_context`;
+        # advertising an "allowed" date/index that fell outside that
+        # truncation would let a genuinely correct agent response exhaust
+        # retries and fail purely from this internal inconsistency.
         "allowed": {
-            "dates": sorted(allowed_dates(context)),
-            "variables": sorted(allowed_variables(context)),
-            "pdf_row_indexes": sorted(allowed_pdf_row_indexes(context)),
-            "sources": list(context.get("fuentes_disponibles", [])),
+            "dates": sorted(allowed_dates(compact_context)),
+            "variables": sorted(allowed_variables(compact_context)),
+            "pdf_row_indexes": sorted(allowed_pdf_row_indexes(compact_context)),
+            "sources": list(compact_context.get("fuentes_disponibles", [])),
         },
     }
 
@@ -114,28 +123,6 @@ def _sanitize_circuito_dirname(circuito: str) -> str:
 def sanitize_circuito_dirname(circuito: str) -> str:
     """Public re-export of `_sanitize_circuito_dirname` for reuse by the batch runner (WU4)."""
     return _sanitize_circuito_dirname(circuito)
-
-
-def _atomic_write_text(path: Path, content: str) -> None:
-    """Write `content` to `path` atomically.
-
-    Writes to a temp file in the same directory first, then `os.replace()`s
-    it into place. `os.replace()` is atomic on the same filesystem, so a
-    crash/exception mid-write can never leave `path` truncated or corrupt —
-    either the previous content (if any) survives untouched, or the new
-    content lands whole. The temp file is cleaned up if anything raises
-    before the replace completes.
-    """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
-    tmp_path = Path(tmp_name)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(content)
-        os.replace(tmp_path, path)
-    except BaseException:
-        tmp_path.unlink(missing_ok=True)
-        raise
 
 
 def _write_failure_artifact(circuito: str, response_text: str, errors: list[str]) -> Path:

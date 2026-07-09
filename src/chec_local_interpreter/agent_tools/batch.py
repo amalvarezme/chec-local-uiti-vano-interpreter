@@ -45,17 +45,19 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Sequence
 
+from chec_local_interpreter.agent_tools._atomic_io import atomic_write_text as _atomic_write_text
 from chec_local_interpreter.agent_tools.expert_alignment import (
     TOOL_VERSION,
     build_context,
     sanitize_circuito_dirname,
     validate,
 )
+from chec_local_interpreter.expert_alignment import normalizar_circuito
 
 MAX_VALIDATION_RETRIES = 2
 
@@ -105,26 +107,23 @@ def _build_retry_prompt(previous_prompt: str, errors: list[str]) -> str:
     )
 
 
-def _atomic_write_text(path: Path, content: str) -> None:
-    """Write `content` to `path` atomically.
+def _dedupe_key(circuito: str) -> str:
+    """Compute a `circuito`'s dedup identity for `run_batch`.
 
-    Writes to a temp file in the same directory first, then `os.replace()`s
-    it into place. `os.replace()` is atomic on the same filesystem, so a
-    crash/exception mid-write can never leave `path` truncated or corrupt —
-    either the previous content (if any) survives untouched, or the new
-    content lands whole. The temp file is cleaned up if anything raises
-    before the replace completes.
+    Sanitizing first (`sanitize_circuito_dirname`) matches the actual
+    on-disk publish identity used by `_publish_report` — so two raw values
+    that would land on the same filename (e.g. a path-separator-suffix
+    collision like "AAA/BBB" vs "CCC/BBB", both becoming "BBB.json"; or two
+    distinct whitespace/control-char-only strings both falling back to
+    "unknown.json") are always recognized as the same on-disk target.
+    Normalizing on top (`normalizar_circuito`, the codebase's own
+    case/punctuation-insensitive circuit-identity check, also used to match
+    circuit ids elsewhere) additionally catches values that are the same
+    circuit but differ only in case or punctuation (e.g. "DON23L13" vs
+    "don23l13"), which would otherwise run twice and could further collide
+    on a case-insensitive filesystem with no signal in the manifest.
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
-    tmp_path = Path(tmp_name)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(content)
-        os.replace(tmp_path, path)
-    except BaseException:
-        tmp_path.unlink(missing_ok=True)
-        raise
+    return normalizar_circuito(sanitize_circuito_dirname(circuito))
 
 
 def _publish_report(circuito: str, data: dict[str, Any]) -> Path:
@@ -250,6 +249,15 @@ def run_circuit(
             prompt = _build_retry_prompt(prompt, result.get("errors", []))
             attempt += 1
     except Exception as exc:  # noqa: BLE001 - one circuit's failure must never abort the batch
+        # A genuine programming bug is indistinguishable from a routine
+        # per-circuit failure if only `str(exc)` survives into the manifest.
+        # Log the full traceback to stderr as a diagnostic side-channel —
+        # the manifest entry's `error` stays the same short message.
+        print(
+            f"[chec_local_interpreter.agent_tools.batch] unexpected error while processing "
+            f"circuit {circuito!r}:\n{traceback.format_exc()}",
+            file=sys.stderr,
+        )
         return _manifest_entry(
             circuito=circuito,
             status="FAILED",
@@ -271,13 +279,18 @@ def run_batch(
     Duplicate `circuito` values within the same batch are detected: the
     second and later occurrences are marked `SKIPPED_DUPLICATE` instead of
     being re-run, which would otherwise silently overwrite the first run's
-    published report with no signal in the manifest.
+    published report with no signal in the manifest. Duplicates are detected
+    by on-disk publish identity plus the codebase's circuit-identity
+    normalization (`_dedupe_key`), not raw string equality — two raw values
+    that sanitize to the same filename, or that only differ by case/
+    punctuation, are still caught.
     """
     seen_circuitos: set[str] = set()
     circuits: list[dict[str, Any]] = []
     for payload in payloads:
         circuito = str(payload.get("circuito") or "unknown")
-        if circuito in seen_circuitos:
+        dedupe_key = _dedupe_key(circuito)
+        if dedupe_key in seen_circuitos:
             circuits.append(
                 _manifest_entry(
                     circuito=circuito,
@@ -291,7 +304,7 @@ def run_batch(
                 )
             )
             continue
-        seen_circuitos.add(circuito)
+        seen_circuitos.add(dedupe_key)
         circuits.append(run_circuit(payload, max_retries=max_retries, command=command, timeout=timeout))
     return {
         "tool_version": TOOL_VERSION,

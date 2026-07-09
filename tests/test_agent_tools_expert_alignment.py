@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from chec_local_interpreter.agent_tools import _atomic_io
 from chec_local_interpreter.agent_tools import expert_alignment as agent_tools_module
 from chec_local_interpreter.agent_tools.expert_alignment import (
     TOOL_VERSION,
@@ -106,6 +107,46 @@ def test_build_context_envelope_shape_matches_allowed_helpers():
     assert sorted(envelope["allowed"]["variables"]) == sorted(_allowed_variables(reference_context))
     assert sorted(envelope["allowed"]["pdf_row_indexes"]) == sorted(_allowed_pdf_row_indexes(reference_context))
     assert envelope["allowed"]["sources"] == reference_context["fuentes_disponibles"]
+
+
+def test_build_context_allowed_derives_from_the_compacted_context_not_the_full_one():
+    """`fechas_informe` truncates to the top 20 entries in the compacted
+    context that is actually used for the prompt and for `validate()`
+    (`compactar_contexto_expert_alignment_para_prompt`). The advertised
+    `envelope["allowed"]["dates"]` must be computed from that SAME compacted
+    context, not the full untruncated one — otherwise the envelope would
+    advertise a date as "allowed" that `validate()` (which only ever sees
+    the compacted context) actually rejects, failing a genuinely correct
+    agent response purely due to this internal inconsistency."""
+    payload = _sample_context_payload()
+    payload["fechas_informe"] = [
+        {
+            "source": "critical_point",
+            "fecha_inicio": f"2026-03-{i + 1:02d}",
+            "fecha_fin": f"2026-03-{i + 1:02d}",
+            "descripcion": f"cp{i}",
+            "peso": 1.0,
+        }
+        for i in range(25)
+    ]
+
+    envelope = build_context(payload)
+
+    # The compacted context (used for the prompt and validate()) keeps only
+    # the top 20 fechas_informe records.
+    assert len(envelope["context"]["fechas_informe"]) == 20
+
+    # The full, untruncated context would have advertised the truncated-out
+    # date too — this is the bug's shape, asserted here before the fix check.
+    full_context = _reference_context(payload)
+    truncated_out_date = "2026-03-25"  # the 25th entry (index 24), outside the top 20
+    assert truncated_out_date in _allowed_dates(full_context)
+
+    # The fix: allowed.dates must match the compacted context exactly, so a
+    # truncated-out date is consistently rejected up front — never
+    # advertised as allowed and then rejected by validate().
+    assert sorted(envelope["allowed"]["dates"]) == sorted(_allowed_dates(envelope["context"]))
+    assert truncated_out_date not in envelope["allowed"]["dates"]
 
 
 def test_build_context_cli_matches_in_process_call(tmp_path):
@@ -361,7 +402,7 @@ def test_write_failure_artifact_is_atomic_and_never_leaves_a_partial_file(tmp_pa
     def failing_replace(*args, **kwargs):
         raise OSError("simulated crash mid-write")
 
-    monkeypatch.setattr(agent_tools_module.os, "replace", failing_replace)
+    monkeypatch.setattr(_atomic_io.os, "replace", failing_replace)
 
     with pytest.raises(OSError):
         agent_tools_module._write_failure_artifact("ATOMICCKT", "raw response text", ["some error"])

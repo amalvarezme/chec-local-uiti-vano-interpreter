@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from chec_local_interpreter.agent_tools import batch as batch_module
+from chec_local_interpreter.agent_tools import _atomic_io, batch as batch_module
 from chec_local_interpreter.agent_tools.expert_alignment import TOOL_VERSION
 
 
@@ -215,6 +215,72 @@ def test_run_batch_marks_duplicate_circuito_and_keeps_first_run_only(tmp_path, m
     published_path = tmp_path / "reports" / "interpretability" / "published" / "DUPCKT.json"
     assert published_path.is_file()
     assert json.loads(published_path.read_text())["sintesis_final"]
+
+
+def test_run_batch_dedup_catches_raw_values_that_sanitize_to_the_same_filename(tmp_path, monkeypatch):
+    """Two distinct raw `circuito` values that both sanitize to the same
+    on-disk publish filename (a path-separator-suffix collision, e.g.
+    "AAA/BBB" and "CCC/BBB" both become "BBB.json") must be caught by the
+    dedup check — raw-string equality alone would miss this and the second
+    run would silently overwrite the first's published report."""
+    monkeypatch.chdir(tmp_path)
+    calls: list[str] = []
+
+    def fake_run(command, **kwargs):
+        calls.append(command[-1])
+        return _FakeCompletedProcess(stdout=json.dumps(_valid_response("AAA/BBB"), ensure_ascii=False))
+
+    monkeypatch.setattr(batch_module.subprocess, "run", fake_run)
+
+    manifest = batch_module.run_batch([_sample_payload("AAA/BBB"), _sample_payload("CCC/BBB")])
+
+    statuses = [entry["status"] for entry in manifest["circuits"]]
+    assert statuses == ["ok", "SKIPPED_DUPLICATE"]
+    assert len(calls) == 1, "the sanitize-collision duplicate must never trigger a second agent invocation"
+
+    published_dir = tmp_path / "reports" / "interpretability" / "published"
+    assert [p.name for p in published_dir.glob("*.json")] == ["BBB.json"]
+
+
+def test_run_batch_dedup_catches_case_different_circuito_values(tmp_path, monkeypatch):
+    """`DON23L13` and `don23l13` are the same circuit per the codebase's own
+    `normalizar_circuito` case/punctuation-insensitive identity — the second
+    occurrence must be flagged as a duplicate, not run twice."""
+    monkeypatch.chdir(tmp_path)
+    calls: list[str] = []
+
+    def fake_run(command, **kwargs):
+        calls.append(command[-1])
+        return _FakeCompletedProcess(stdout=json.dumps(_valid_response("DON23L13"), ensure_ascii=False))
+
+    monkeypatch.setattr(batch_module.subprocess, "run", fake_run)
+
+    manifest = batch_module.run_batch([_sample_payload("DON23L13"), _sample_payload("don23l13")])
+
+    statuses = [entry["status"] for entry in manifest["circuits"]]
+    assert statuses == ["ok", "SKIPPED_DUPLICATE"]
+    assert len(calls) == 1, "case-different duplicates must never trigger a second agent invocation"
+
+
+def test_run_batch_does_not_false_positive_dedup_on_truly_distinct_circuits(tmp_path, monkeypatch):
+    """Confirm the smarter dedup key does not over-match: two circuits whose
+    normalized/sanitized identities are genuinely different must both run."""
+    monkeypatch.chdir(tmp_path)
+    calls: list[str] = []
+
+    def fake_run(command, **kwargs):
+        prompt = command[-1]
+        calls.append(prompt)
+        circuito = "AAA/CCC" if "AAA/CCC" in prompt else "AAA/DDD"
+        return _FakeCompletedProcess(stdout=json.dumps(_valid_response(circuito), ensure_ascii=False))
+
+    monkeypatch.setattr(batch_module.subprocess, "run", fake_run)
+
+    manifest = batch_module.run_batch([_sample_payload("AAA/CCC"), _sample_payload("AAA/DDD")])
+
+    statuses = [entry["status"] for entry in manifest["circuits"]]
+    assert statuses == ["ok", "ok"], "genuinely distinct circuits must never be falsely deduped"
+    assert len(calls) == 2
 
 
 def test_run_circuit_degrades_cleanly_when_claude_is_not_on_path(tmp_path, monkeypatch):
@@ -427,6 +493,31 @@ def test_run_circuit_malformed_periodo_inicio_does_not_crash_and_is_failed(tmp_p
     assert "error" in entry
 
 
+def test_run_circuit_unexpected_error_logs_full_traceback_to_stderr(tmp_path, monkeypatch, capsys):
+    """A genuine programming bug (e.g. a bare KeyError raised from inside
+    build_context) must still land as a clean FAILED manifest entry — but,
+    unlike a routine per-circuit failure, its full traceback must be logged
+    to stderr as a diagnostic side-channel; the manifest entry itself is
+    unaffected (still just `error`, no traceback in the manifest)."""
+    monkeypatch.chdir(tmp_path)
+
+    def raise_key_error(payload):
+        raise KeyError("simulated programming bug")
+
+    monkeypatch.setattr(batch_module, "build_context", raise_key_error)
+
+    entry = batch_module.run_circuit(_sample_payload("BUGCKT"))
+
+    assert entry["status"] == "FAILED"
+    assert "error" in entry
+    assert "Traceback" not in entry["error"], "the manifest entry must stay a clean, short error message"
+
+    captured = capsys.readouterr()
+    assert "Traceback" in captured.err
+    assert "KeyError" in captured.err
+    assert "simulated programming bug" in captured.err
+
+
 def test_run_batch_continues_when_one_circuit_has_a_malformed_field(tmp_path, monkeypatch):
     """A batch with one bad circuit (malformed periodo_inicio) and one good
     circuit must still complete with both entries in the manifest."""
@@ -464,7 +555,7 @@ def test_publish_report_is_atomic_and_never_leaves_a_partial_file(tmp_path, monk
     def failing_replace(*args, **kwargs):
         raise OSError("simulated crash mid-write")
 
-    monkeypatch.setattr(batch_module.os, "replace", failing_replace)
+    monkeypatch.setattr(_atomic_io.os, "replace", failing_replace)
 
     with pytest.raises(OSError):
         batch_module._publish_report("ATOMICCKT", {"sintesis_final": "new content"})
