@@ -230,3 +230,23 @@ frozen-model guard (no automated check); deleting `llm_client.py` in this pilot;
 provenance fields to the base agent's `output_schema.json` in this slice (that schema's
 `additionalProperties: false` risks breaking existing base-agent fixtures — deferred to whenever
 the base agent itself is ported).
+
+## Known Limitations (Pilot Slice)
+
+Four rounds of Judgment Day adversarial dual-review ran against this slice. Rounds 1–3 findings
+were fixed and re-verified. The Round 4 findings below were consciously accepted as known
+limitations rather than fixed in this slice — each is narrow, has a concrete trigger condition,
+and is cheaper to fix correctly as follow-on work than to patch under review pressure.
+
+| # | Severity | Description | Trigger | Why not fixed here |
+|---|---|---|---|---|
+| 1 | CRITICAL | `_write_failure_artifact` (`agent_tools/expert_alignment.py`) derives its artifact directory from `sanitize_circuito_dirname(circuito)` alone, while the batch runner's publish/dedup path (`agent_tools/batch.py`) uses the fuller `_canonical_circuit_identity` (sanitize + `normalizar_circuito`). Circuits whose raw `circuito` differs only by case/punctuation (e.g. `"don23l13"`, `"DON23L13"`, `"DON-23-L13"`) write validation-failure artifacts to different directories even though they publish to the same canonical filename on success. | A circuit's raw ID varies in case/punctuation across runs and validation fails. | Closing this properly requires exporting one canonical identity function that all three call sites (`_publish_report`, `_dedupe_key`, `_write_failure_artifact`) import, rather than another point patch — flagged as follow-on work. |
+| 2 | CRITICAL | The standalone L2 CLI's `main()` (`agent_tools/expert_alignment.py`) only wraps the `build-context`/`validate` verb dispatch in its Round 3 catch-all (exit code 3); it does not wrap the earlier stdin-loading/payload-parsing step. Malformed byte sequences on stdin (e.g. non-UTF-8 bytes) crash uncaught with an interpreter traceback: empty stdout, exit code 1 (Python's default), which collides with the documented "exit 1 = validation failure" contract. | The direct CLI (not the batch runner) receives non-UTF-8 or otherwise unparseable bytes on stdin. | Flagged as follow-on work to extend the catch-all to cover payload loading too. |
+| 3 | WARNING | The causal-language guard (`validar_respuesta_expert_alignment` in `expert_alignment.py`) uses the regex `\bcausa\b`, which correctly rejects the singular noun "causa" but does not catch the plural "causas" (e.g. "las causas probables") or adjective forms "causal"/"causales" (e.g. "existe una relación causal"). | An LLM response phrases a causal claim using the plural or adjective form instead of the bare singular noun. | Flagged as follow-on work to broaden the pattern. |
+| 4 | WARNING (theoretical, not currently reachable) | `atomic_write_text` (`agent_tools/_atomic_io.py`) reads and restores the process umask non-atomically (`os.umask(0)` then `os.umask(mask)`), which is not thread-safe. | Batch processing is currently strictly sequential (`run_batch` has no concurrency), so this is currently harmless. Would become a real, narrow permissions-widening race only if batch processing is ever parallelized. | Flagged for whoever parallelizes the batch runner in the future. |
+| 5 | WARNING (theoretical, not currently reachable) | In `main()` (`agent_tools/expert_alignment.py`), if JSON serialization of the response raises partway through writing to stdout, the exception handler could write a second JSON document after a partial first one, violating the "exactly one JSON document on stdout" contract. | Not reachable via any current input path (all fields are pre-validated JSON-safe types). | Worth hardening (e.g. serialize to a string first, write once) if new fields are ever added. |
+| 6 | SUGGESTION | The batch runner's `--manifest-out` write (`agent_tools/batch.py`) uses a plain `Path.write_text()` instead of the shared `atomic_write_text` helper used everywhere else (`_publish_report`, `_write_failure_artifact`). A crash mid-write could leave a truncated manifest file. | Pre-existing, not introduced by any Judgment Day round. | Low-severity cleanup; grouped with the other follow-on items rather than fixed in isolation. |
+
+These six items are the complete Round 4 finding set. None are blocking for the pilot slice; all
+are tracked here so the next contributor who touches these files has the context instead of
+re-discovering the same edge cases.
