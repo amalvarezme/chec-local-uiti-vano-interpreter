@@ -84,10 +84,10 @@ def _invalid_response(circuito: str = "DON23L13") -> dict:
 
 
 class _FakeCompletedProcess:
-    def __init__(self, stdout: str, returncode: int = 0):
+    def __init__(self, stdout: str, returncode: int = 0, stderr: str = ""):
         self.stdout = stdout
         self.returncode = returncode
-        self.stderr = ""
+        self.stderr = stderr
 
 
 def test_run_circuit_success_is_one_isolated_invocation_and_publishes_report(tmp_path, monkeypatch):
@@ -173,6 +173,48 @@ def test_run_batch_continues_after_one_circuit_fails(tmp_path, monkeypatch):
     assert len(manifest["circuits"]) == 2, "the batch must not abort after the first circuit fails"
 
 
+def test_run_circuit_reports_agent_error_on_nonzero_returncode(tmp_path, monkeypatch):
+    """A hard subprocess failure (auth error, crash, non-zero exit) must be
+    reported distinctly from a normal validation failure, with the real
+    infrastructure error (stderr) surfaced instead of a generic
+    "validation failed" message."""
+    monkeypatch.chdir(tmp_path)
+
+    def fake_run(command, **kwargs):
+        return _FakeCompletedProcess(stdout="", returncode=1, stderr="authentication error: invalid API key")
+
+    monkeypatch.setattr(batch_module.subprocess, "run", fake_run)
+
+    entry = batch_module.run_circuit(_sample_payload())
+
+    assert entry["status"] == "AGENT_ERROR"
+    assert "authentication error" in entry["error"]
+
+
+def test_run_batch_marks_duplicate_circuito_and_keeps_first_run_only(tmp_path, monkeypatch):
+    """Running the same circuito twice in one batch must not silently
+    overwrite the first run's published report — the second+ occurrence is
+    marked SKIPPED_DUPLICATE instead of being re-run."""
+    monkeypatch.chdir(tmp_path)
+    calls: list[str] = []
+
+    def fake_run(command, **kwargs):
+        calls.append(command[-1])
+        return _FakeCompletedProcess(stdout=json.dumps(_valid_response("DUPCKT"), ensure_ascii=False))
+
+    monkeypatch.setattr(batch_module.subprocess, "run", fake_run)
+
+    manifest = batch_module.run_batch([_sample_payload("DUPCKT"), _sample_payload("DUPCKT")])
+
+    statuses = [entry["status"] for entry in manifest["circuits"]]
+    assert statuses == ["ok", "SKIPPED_DUPLICATE"]
+    assert len(calls) == 1, "the duplicate must never trigger a second agent invocation"
+
+    published_path = tmp_path / "reports" / "interpretability" / "published" / "DUPCKT.json"
+    assert published_path.is_file()
+    assert json.loads(published_path.read_text())["sintesis_final"]
+
+
 def test_run_circuit_degrades_cleanly_when_claude_is_not_on_path(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
@@ -188,6 +230,92 @@ def test_run_circuit_degrades_cleanly_when_claude_is_not_on_path(tmp_path, monke
     assert "not found" in entry["error"].lower()
     # No traceback surface — the manifest entry is the only reported error.
     assert entry["retries"] == 0
+
+
+def test_run_circuit_applies_default_timeout_when_omitted(tmp_path, monkeypatch):
+    """`timeout` must be wired through with a sane, non-None default so a hung
+    `claude -p` cannot block the batch indefinitely (subprocess.TimeoutExpired
+    handling would otherwise be dead code)."""
+    monkeypatch.chdir(tmp_path)
+    response_text = json.dumps(_valid_response(), ensure_ascii=False)
+    captured_kwargs: dict = {}
+
+    def fake_run(command, **kwargs):
+        captured_kwargs.update(kwargs)
+        return _FakeCompletedProcess(stdout=response_text)
+
+    monkeypatch.setattr(batch_module.subprocess, "run", fake_run)
+
+    batch_module.run_circuit(_sample_payload())
+
+    assert captured_kwargs.get("timeout") == batch_module.DEFAULT_AGENT_TIMEOUT_SECONDS
+    assert captured_kwargs["timeout"] is not None
+
+
+def test_run_circuit_passes_through_a_custom_timeout(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    response_text = json.dumps(_valid_response(), ensure_ascii=False)
+    captured_kwargs: dict = {}
+
+    def fake_run(command, **kwargs):
+        captured_kwargs.update(kwargs)
+        return _FakeCompletedProcess(stdout=response_text)
+
+    monkeypatch.setattr(batch_module.subprocess, "run", fake_run)
+
+    batch_module.run_circuit(_sample_payload(), timeout=7.5)
+
+    assert captured_kwargs.get("timeout") == 7.5
+
+
+def test_run_batch_passes_timeout_through_to_run_circuit(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    response_text = json.dumps(_valid_response(), ensure_ascii=False)
+    captured_kwargs: dict = {}
+
+    def fake_run(command, **kwargs):
+        captured_kwargs.update(kwargs)
+        return _FakeCompletedProcess(stdout=response_text)
+
+    monkeypatch.setattr(batch_module.subprocess, "run", fake_run)
+
+    batch_module.run_batch([_sample_payload()], timeout=3.0)
+
+    assert captured_kwargs.get("timeout") == 3.0
+
+
+def test_cli_main_default_timeout_is_applied_when_flag_omitted(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    circuits_file = tmp_path / "circuits.json"
+    circuits_file.write_text(json.dumps([_sample_payload("OKCKT")], ensure_ascii=False))
+    captured_kwargs: dict = {}
+
+    def fake_run(command, **kwargs):
+        captured_kwargs.update(kwargs)
+        return _FakeCompletedProcess(stdout=json.dumps(_valid_response("OKCKT"), ensure_ascii=False))
+
+    monkeypatch.setattr(batch_module.subprocess, "run", fake_run)
+
+    batch_module.main(["--circuits", str(circuits_file)])
+
+    assert captured_kwargs.get("timeout") == batch_module.DEFAULT_AGENT_TIMEOUT_SECONDS
+
+
+def test_cli_main_custom_timeout_flag_is_passed_through(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    circuits_file = tmp_path / "circuits.json"
+    circuits_file.write_text(json.dumps([_sample_payload("OKCKT")], ensure_ascii=False))
+    captured_kwargs: dict = {}
+
+    def fake_run(command, **kwargs):
+        captured_kwargs.update(kwargs)
+        return _FakeCompletedProcess(stdout=json.dumps(_valid_response("OKCKT"), ensure_ascii=False))
+
+    monkeypatch.setattr(batch_module.subprocess, "run", fake_run)
+
+    batch_module.main(["--circuits", str(circuits_file), "--timeout", "45"])
+
+    assert captured_kwargs.get("timeout") == 45.0
 
 
 def test_run_circuit_manifest_entry_has_the_required_shape(tmp_path, monkeypatch):
