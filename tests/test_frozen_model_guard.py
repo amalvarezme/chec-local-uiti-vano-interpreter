@@ -19,6 +19,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -31,12 +32,43 @@ GOVERNANCE_MARKDOWN_ROOTS = (
     PROJECT_ROOT / ".claude" / "agents",
     PROJECT_ROOT / ".claude" / "skills" / "expert-alignment",
 )
-FORBIDDEN_TRAINING_PHRASES = ("training", ".fit(", "retrain")
+# The governance docs this guard scans (`.claude/agents/**/*.md`,
+# `.claude/skills/expert-alignment/**/*.md`) are Spanish-language documents,
+# so the forbidden-phrase list must cover the Spanish training vocabulary
+# too (e.g. "reentrenar el modelo"), not just the English terms — otherwise
+# a future Spanish-language edit would bypass this guard entirely. Matching
+# is case-insensitive (all scanned text is lowercased first).
+FORBIDDEN_TRAINING_PHRASES = (
+    "training",
+    ".fit(",
+    "retrain",
+    "entrenar",
+    "entrenamiento",
+    "reentrenar",
+    "reentrenamiento",
+)
 
 
 def _agent_tools_modules() -> list[Path]:
     assert AGENT_TOOLS_DIR.is_dir(), f"agent_tools package missing: {AGENT_TOOLS_DIR}"
-    return sorted(AGENT_TOOLS_DIR.glob("*.py"))
+    return sorted(AGENT_TOOLS_DIR.rglob("*.py"))
+
+
+def test_agent_tools_modules_scans_nested_subpackages_too(tmp_path, monkeypatch):
+    """A future subpackage under `agent_tools/` (e.g. `agent_tools/foo/bar.py`)
+    must never be silently unscanned by the import guard — a non-recursive
+    top-level-only glob would miss it entirely."""
+    (tmp_path / "top.py").write_text("x = 1\n")
+    nested_dir = tmp_path / "nested_subpkg"
+    nested_dir.mkdir()
+    nested_file = nested_dir / "mod.py"
+    nested_file.write_text("import chec_impacto.training\n")
+
+    monkeypatch.setattr(sys.modules[__name__], "AGENT_TOOLS_DIR", tmp_path)
+
+    modules = _agent_tools_modules()
+
+    assert nested_file in modules, "a nested agent_tools subpackage module must be scanned"
 
 
 def _imports_training_package(node: ast.AST) -> str | None:
@@ -131,3 +163,25 @@ def test_agent_role_and_skill_markdown_files_contain_no_training_language():
         # missing again, this still asserts explicitly rather than silently
         # no-op-ing.
         assert list(_iter_governance_markdown_files()) == []
+
+
+def test_governance_markdown_guard_catches_spanish_training_phrase(tmp_path, monkeypatch):
+    """The scanned governance docs (`.claude/agents/**/*.md`,
+    `.claude/skills/expert-alignment/**/*.md`) are Spanish-language documents
+    — an English-only forbidden-phrase list would miss a future edit adding
+    e.g. "reentrenar el modelo"."""
+    root = tmp_path / "governance"
+    root.mkdir()
+    doc = root / "example.md"
+    doc.write_text("Este agente no debe reentrenar el modelo bajo ninguna circunstancia.\n")
+
+    monkeypatch.setattr(sys.modules[__name__], "GOVERNANCE_MARKDOWN_ROOTS", (root,))
+
+    violations: list[str] = []
+    for path in _iter_governance_markdown_files():
+        lowered = path.read_text().lower()
+        for phrase in FORBIDDEN_TRAINING_PHRASES:
+            if phrase in lowered:
+                violations.append(f"{path.name}: forbidden phrase {phrase!r}")
+
+    assert violations, "expected the Spanish training phrase 'reentrenar' to be flagged"
