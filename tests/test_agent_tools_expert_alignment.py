@@ -55,11 +55,15 @@ def _sample_context_payload() -> dict:
 
 
 def _run_cli(verb: str, payload: dict, cwd: Path) -> subprocess.CompletedProcess:
+    return _run_cli_raw(verb, json.dumps(payload, ensure_ascii=False), cwd)
+
+
+def _run_cli_raw(verb: str, raw_stdin: str, cwd: Path) -> subprocess.CompletedProcess:
     env = dict(os.environ)
     env["PYTHONPATH"] = str(PROJECT_ROOT / "src")
     return subprocess.run(
         [sys.executable, "-m", "chec_local_interpreter.agent_tools.expert_alignment", verb],
-        input=json.dumps(payload, ensure_ascii=False),
+        input=raw_stdin,
         capture_output=True,
         text=True,
         cwd=str(cwd),
@@ -188,6 +192,94 @@ def test_validate_cli_valid_response_exits_zero_and_prints_ok_true(tmp_path):
     stdout_data = json.loads(result.stdout)
     assert stdout_data["ok"] is True
     assert '"ok": true' in result.stdout
+
+
+def test_validate_verb_sanitizes_path_traversal_in_circuito(tmp_path):
+    """A malicious `circuito` must never let the failure-artifact write escape ARTIFACTS_ROOT."""
+    payload = _sample_context_payload()
+    envelope = build_context(payload)
+    response = _valid_response_for(envelope)
+    del response["sintesis_final"]
+
+    malicious_context = dict(envelope["context"])
+    malicious_context["circuito"] = "../../evil-outside-artifacts"
+    validate_payload = {"response_text": json.dumps(response, ensure_ascii=False), "context": malicious_context}
+
+    result = _run_cli("validate", validate_payload, tmp_path)
+
+    assert result.returncode == 1
+
+    escape_dir = tmp_path / "evil-outside-artifacts"
+    assert not escape_dir.exists(), "circuito path traversal escaped the artifacts root"
+
+    artifacts_root = (tmp_path / "reports" / "interpretability" / "artifacts").resolve()
+    stdout_data = json.loads(result.stdout)
+    assert stdout_data["ok"] is False
+    artifact_path = Path(stdout_data["artifact_path"]).resolve()
+    assert artifacts_root in artifact_path.parents
+
+
+def test_validate_verb_sanitizes_absolute_path_in_circuito(tmp_path):
+    """An absolute-path-shaped `circuito` must also be contained under ARTIFACTS_ROOT."""
+    payload = _sample_context_payload()
+    envelope = build_context(payload)
+    response = _valid_response_for(envelope)
+    del response["sintesis_final"]
+
+    malicious_context = dict(envelope["context"])
+    malicious_context["circuito"] = "/etc/evil-circuit"
+    validate_payload = {"response_text": json.dumps(response, ensure_ascii=False), "context": malicious_context}
+
+    result = _run_cli("validate", validate_payload, tmp_path)
+
+    assert result.returncode == 1
+    artifacts_root = (tmp_path / "reports" / "interpretability" / "artifacts").resolve()
+    stdout_data = json.loads(result.stdout)
+    artifact_path = Path(stdout_data["artifact_path"]).resolve()
+    assert artifacts_root in artifact_path.parents
+
+
+def test_cli_build_context_empty_stdin_is_malformed_not_a_crash(tmp_path):
+    result = _run_cli_raw("build-context", "", tmp_path)
+
+    assert result.returncode == 2
+    assert "Traceback" not in result.stderr
+    stdout_data = json.loads(result.stdout)
+    assert stdout_data["ok"] is False
+    assert stdout_data["errors"]
+
+
+def test_cli_build_context_invalid_json_is_malformed_not_a_crash(tmp_path):
+    result = _run_cli_raw("build-context", "not json at all", tmp_path)
+
+    assert result.returncode == 2
+    assert "Traceback" not in result.stderr
+    stdout_data = json.loads(result.stdout)
+    assert stdout_data["ok"] is False
+    assert stdout_data["errors"]
+
+
+def test_cli_build_context_missing_circuito_is_malformed_not_a_crash(tmp_path):
+    payload = _sample_context_payload()
+    del payload["circuito"]
+
+    result = _run_cli("build-context", payload, tmp_path)
+
+    assert result.returncode == 2
+    assert "Traceback" not in result.stderr
+    stdout_data = json.loads(result.stdout)
+    assert stdout_data["ok"] is False
+    assert stdout_data["errors"]
+
+
+def test_cli_validate_missing_response_text_is_malformed_not_a_crash(tmp_path):
+    result = _run_cli("validate", {"context": {}}, tmp_path)
+
+    assert result.returncode == 2
+    assert "Traceback" not in result.stderr
+    stdout_data = json.loads(result.stdout)
+    assert stdout_data["ok"] is False
+    assert stdout_data["errors"]
 
 
 def test_agent_tools_expert_alignment_never_references_frozen_model_boundary():

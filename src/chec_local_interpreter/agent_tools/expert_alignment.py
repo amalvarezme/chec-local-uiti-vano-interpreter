@@ -41,7 +41,14 @@ from chec_local_interpreter.expert_alignment import (
 
 TOOL_VERSION = "expert-alignment-agent-tools/0.1.0"
 
+# Relative to the invocation cwd. Callers (e.g. the headless batch runner) are
+# expected to run this CLI from the repo root so failure artifacts land under
+# the repo's own reports/interpretability/artifacts/ directory.
 ARTIFACTS_ROOT = Path("reports/interpretability/artifacts")
+
+
+class MalformedRequestError(Exception):
+    """Raised when the stdin payload is not valid JSON or misses a required field."""
 
 
 def build_context(payload: dict[str, Any]) -> dict[str, Any]:
@@ -77,8 +84,28 @@ def build_context(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _sanitize_circuito_dirname(circuito: str) -> str:
+    """Reduce an untrusted `circuito` value to a single, safe directory name.
+
+    `Path(...).name` strips any directory separators and `..`/absolute-path
+    components, so a value like "../../../../etc/evil" collapses to "evil"
+    and can never be used to escape `ARTIFACTS_ROOT`.
+    """
+    name = Path(str(circuito or "").strip()).name
+    if not name or name in {".", ".."}:
+        return "unknown"
+    return name
+
+
 def _write_failure_artifact(circuito: str, response_text: str, errors: list[str]) -> Path:
-    artifact_dir = ARTIFACTS_ROOT / (circuito or "unknown")
+    artifacts_root = ARTIFACTS_ROOT.resolve()
+    safe_name = _sanitize_circuito_dirname(circuito)
+    artifact_dir = (ARTIFACTS_ROOT / safe_name).resolve()
+    # Defense in depth: sanitization above should already guarantee containment,
+    # but never mkdir/write outside ARTIFACTS_ROOT even if that guarantee is
+    # ever weakened by a future change.
+    if artifact_dir != artifacts_root and artifacts_root not in artifact_dir.parents:
+        artifact_dir = artifacts_root / "unknown"
     artifact_dir.mkdir(parents=True, exist_ok=True)
     artifact_path = artifact_dir / f"invalid_{time.time_ns()}.json"
     artifact_path.write_text(
@@ -105,6 +132,29 @@ def validate(payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
     return {"ok": False, "errors": result["errors"], "artifact_path": str(artifact_path)}, 1
 
 
+def _load_payload(verb: str) -> dict[str, Any]:
+    """Parse stdin as a JSON object and check the verb's required top-level keys.
+
+    Raises `MalformedRequestError` for empty/invalid JSON, a non-object
+    payload, or a missing required field — kept distinct from a validation
+    failure (exit code 1), which requires a well-formed request in the first
+    place.
+    """
+    try:
+        payload = json.load(sys.stdin)
+    except json.JSONDecodeError as exc:
+        raise MalformedRequestError(f"stdin is not valid JSON: {exc}") from exc
+
+    if not isinstance(payload, dict):
+        raise MalformedRequestError("stdin JSON payload must be an object.")
+
+    required_key = "circuito" if verb == "build-context" else "response_text"
+    if required_key not in payload:
+        raise MalformedRequestError(f"Missing required field: {required_key}")
+
+    return payload
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m chec_local_interpreter.agent_tools.expert_alignment")
     subparsers = parser.add_subparsers(dest="verb", required=True)
@@ -112,7 +162,11 @@ def main(argv: list[str] | None = None) -> int:
     subparsers.add_parser("validate", help="Validate a candidate expert-alignment response against its context.")
     args = parser.parse_args(argv)
 
-    payload = json.load(sys.stdin)
+    try:
+        payload = _load_payload(args.verb)
+    except MalformedRequestError as exc:
+        json.dump({"ok": False, "errors": [f"Malformed request: {exc}"]}, sys.stdout, ensure_ascii=False)
+        return 2
 
     if args.verb == "build-context":
         envelope = build_context(payload)
