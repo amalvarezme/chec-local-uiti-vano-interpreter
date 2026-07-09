@@ -6,15 +6,22 @@ These are not style guidance — violating any of them is a defect. Every role f
 ## Rule 1 — Frozen-Model Boundary
 
 The M-GCECDL model artifact (`data/models/mgcecdl_classifier_best.zip`) and the restricted
-model-implementation subpackage this repository denies write/edit access to (see
-`.claude/settings.json`'s `permissions.deny` block) are off-limits to every agent role. No agent
-may read or write the model artifact, and no `agent_tools` code may import that subpackage —
-directly or through any submodule.
+model-implementation subpackage are off-limits to every agent role. No agent may read or write
+the model artifact, and no `agent_tools` code may import that subpackage — directly or through
+any submodule.
 
-This is enforced structurally (the L2 tool-adapter CLI has no import path to it — see
-`docs/agents-guide.md`'s 4-layer architecture) and automatically, by an import-guard test, a
-tracked integrity manifest at `data/models/manifest.sha256.json`, and this very content guard,
-all in `tests/test_frozen_model_guard.py`.
+This is guaranteed in-repo, for every clone and CI run, by two always-enforced, code-checked
+layers in `tests/test_frozen_model_guard.py` (run by `pytest -q`): an AST-based static import
+guard (no `agent_tools` module may import the restricted subpackage) and a tracked sha256
+model-manifest check (`data/models/manifest.sha256.json`) that fails loudly if the model artifact
+ever drifts. Structurally, the L2 tool-adapter CLI also has no import path to the restricted
+subpackage in the first place (see `docs/agents-guide.md`'s 4-layer architecture).
+
+A local `.claude/settings.json` `permissions.deny` block is an **optional** additional safeguard
+some developers may configure on their own machine — it is untracked by git (confirmed:
+`git log --all -- .claude/settings.json` is empty) and does not ship with the repo or protect a
+fresh clone or CI run. Do not rely on it as a guaranteed layer; the two guarantees above are the
+ones that always apply.
 
 *Note on wording*: this file intentionally avoids spelling out the restricted subpackage's
 literal Python path, because that path's name is exactly what `tests/test_frozen_model_guard.py`'s

@@ -165,6 +165,15 @@ python -m chec_local_interpreter.agent_tools.batch \
 `retries`, `error`, and `errors` are additive fields on top of the base
 `{circuito, status, artifact_paths, tool_version, timestamp}` shape.
 
+### Manifest `status` values
+
+| Status | Meaning |
+|---|---|
+| `ok` | The response passed `validate` (schema + provenance) and was published under `reports/interpretability/published/{circuito}.json`. |
+| `FAILED` | A validation failure after exhausting retries, an unhandled/unexpected error while building context or invoking the agent, or an infrastructure issue like a missing agent command / invocation timeout — a normal run failure, not published. |
+| `AGENT_ERROR` | The agent subprocess itself exited non-zero (auth error, crash) — an infrastructure failure distinct from a validation failure; it does not consume the retry budget, and `error` carries the captured stderr. |
+| `SKIPPED_DUPLICATE` | Input hygiene: this `circuito` was already processed earlier in the same batch (by on-disk publish identity, case/punctuation-insensitive) — skipped to avoid silently overwriting the first run's published report. Not a run failure. |
+
 ## Agent roles
 
 | Role | Status | Role file | Rules | Skill | Tool contract |
