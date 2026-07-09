@@ -393,6 +393,33 @@ def test_cli_validate_missing_response_text_is_malformed_not_a_crash(tmp_path):
     assert stdout_data["errors"]
 
 
+def test_cli_build_context_malformed_nested_periodo_inicio_is_not_a_crash(tmp_path):
+    payload = _sample_context_payload()
+    payload["periodo_inicio"] = {"a": 1}
+
+    result = _run_cli("build-context", payload, tmp_path)
+
+    assert result.returncode == 3
+    assert "Traceback" not in result.stdout
+    stdout_data = json.loads(result.stdout)
+    assert stdout_data["ok"] is False
+    assert stdout_data["errors"]
+    assert "Traceback" in result.stderr
+
+
+def test_cli_validate_non_dict_context_is_not_a_crash(tmp_path):
+    payload = {"response_text": "not json", "context": "not-a-dict"}
+
+    result = _run_cli("validate", payload, tmp_path)
+
+    assert result.returncode == 3
+    assert "Traceback" not in result.stdout
+    stdout_data = json.loads(result.stdout)
+    assert stdout_data["ok"] is False
+    assert stdout_data["errors"]
+    assert "Traceback" in result.stderr
+
+
 def test_write_failure_artifact_is_atomic_and_never_leaves_a_partial_file(tmp_path, monkeypatch):
     """A crash mid-write must never leave a truncated/corrupt failure
     artifact: the write goes to a temp file first, then os.replace() swaps

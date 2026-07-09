@@ -30,6 +30,7 @@ import json
 import re
 import sys
 import time
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -211,14 +212,23 @@ def main(argv: list[str] | None = None) -> int:
         json.dump({"ok": False, "errors": [f"Malformed request: {exc}"]}, sys.stdout, ensure_ascii=False)
         return 2
 
-    if args.verb == "build-context":
-        envelope = build_context(payload)
-        json.dump(envelope, sys.stdout, ensure_ascii=False)
-        return 0
+    try:
+        if args.verb == "build-context":
+            envelope = build_context(payload)
+            json.dump(envelope, sys.stdout, ensure_ascii=False)
+            return 0
 
-    result, exit_code = validate(payload)
-    json.dump(result, sys.stdout, ensure_ascii=False)
-    return exit_code
+        result, exit_code = validate(payload)
+        json.dump(result, sys.stdout, ensure_ascii=False)
+        return exit_code
+    except Exception as exc:  # noqa: BLE001 - a well-formed request with malformed
+        # nested fields must still produce exactly one JSON document on
+        # stdout, never a bare traceback / no output at all. The full
+        # traceback still goes to stderr for diagnosability (same convention
+        # as `batch.run_circuit`'s unexpected-error handling).
+        print(f"[chec_local_interpreter.agent_tools.expert_alignment] unexpected error:\n{traceback.format_exc()}", file=sys.stderr)
+        json.dump({"ok": False, "errors": [f"Unexpected error: {exc}"]}, sys.stdout, ensure_ascii=False)
+        return 3
 
 
 if __name__ == "__main__":
