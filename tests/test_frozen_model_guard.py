@@ -1,0 +1,130 @@
+"""Frozen-model invariant guard (design section 4 / WU3).
+
+Layered, cheap, code-checked safety net — the only one this CI-less repo
+has — that the M-GCECDL model artifact and its training package are never
+touched by the agent-tools surface:
+
+(a) Static import guard — no `agent_tools` module imports `chec_impacto.training`.
+(b) sha256 manifest — the model zip's hash must match the recorded, tracked
+    manifest; any drift (accidental write/retrain) fails loudly.
+(c) Content guard — agent role / Claude Code Skill markdown files must never
+    mention training/retraining vocabulary. These files don't exist yet in
+    this slice (WU5 lands them later); this test passes vacuously with zero
+    files found today and will automatically start scanning them once WU5
+    creates `.claude/agents/**/*.md` and `.claude/skills/expert-alignment/**/*.md`.
+"""
+
+from __future__ import annotations
+
+import ast
+import hashlib
+import json
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+AGENT_TOOLS_DIR = PROJECT_ROOT / "src" / "chec_local_interpreter" / "agent_tools"
+MODEL_ZIP_PATH = PROJECT_ROOT / "data" / "models" / "mgcecdl_classifier_best.zip"
+MODEL_MANIFEST_PATH = PROJECT_ROOT / "data" / "models" / "manifest.sha256.json"
+MODEL_MANIFEST_KEY = "data/models/mgcecdl_classifier_best.zip"
+
+GOVERNANCE_MARKDOWN_ROOTS = (
+    PROJECT_ROOT / ".claude" / "agents",
+    PROJECT_ROOT / ".claude" / "skills" / "expert-alignment",
+)
+FORBIDDEN_TRAINING_PHRASES = ("training", ".fit(", "retrain")
+
+
+def _agent_tools_modules() -> list[Path]:
+    assert AGENT_TOOLS_DIR.is_dir(), f"agent_tools package missing: {AGENT_TOOLS_DIR}"
+    return sorted(AGENT_TOOLS_DIR.glob("*.py"))
+
+
+def _imports_training_package(node: ast.AST) -> str | None:
+    """Return the offending dotted module name if `node` imports chec_impacto.training, else None."""
+    if isinstance(node, ast.Import):
+        for alias in node.names:
+            name = alias.name
+            if name == "chec_impacto.training" or name.startswith("chec_impacto.training."):
+                return name
+    elif isinstance(node, ast.ImportFrom):
+        module = node.module or ""
+        if module == "chec_impacto.training" or module.startswith("chec_impacto.training."):
+            return module
+    return None
+
+
+def test_agent_tools_modules_never_import_the_training_package():
+    violations: list[str] = []
+    for path in _agent_tools_modules():
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            offending_module = _imports_training_package(node)
+            if offending_module:
+                violations.append(f"{path.relative_to(PROJECT_ROOT)}: imports {offending_module}")
+
+    assert not violations, (
+        "agent_tools must have no import path to chec_impacto.training "
+        f"(frozen-model invariant): {violations}"
+    )
+
+
+def test_agent_tools_modules_never_reference_the_model_zip_path():
+    """Defense in depth: no agent_tools source should even name the model artifact."""
+    violations: list[str] = []
+    for path in _agent_tools_modules():
+        source = path.read_text()
+        if "mgcecdl_classifier_best" in source:
+            violations.append(str(path.relative_to(PROJECT_ROOT)))
+
+    assert not violations, f"agent_tools must never reference the frozen model artifact: {violations}"
+
+
+def test_model_zip_sha256_matches_the_tracked_manifest():
+    assert MODEL_ZIP_PATH.exists(), (
+        f"Frozen model artifact is missing: {MODEL_ZIP_PATH}. "
+        "This guard must fail loudly, not silently skip, if the artifact disappears."
+    )
+    assert MODEL_MANIFEST_PATH.exists(), (
+        f"sha256 manifest is missing: {MODEL_MANIFEST_PATH}. "
+        "Generate it once via a local sha256 computation and commit it alongside this test."
+    )
+
+    manifest = json.loads(MODEL_MANIFEST_PATH.read_text())
+    assert MODEL_MANIFEST_KEY in manifest, f"manifest has no entry for {MODEL_MANIFEST_KEY}: {manifest}"
+
+    recorded_digest = manifest[MODEL_MANIFEST_KEY]
+    actual_digest = hashlib.sha256(MODEL_ZIP_PATH.read_bytes()).hexdigest()
+
+    assert actual_digest == recorded_digest, (
+        "Frozen model artifact hash drifted from the recorded manifest — the model "
+        f"must never be modified/retrained. expected={recorded_digest} actual={actual_digest}"
+    )
+
+
+def _iter_governance_markdown_files():
+    for root in GOVERNANCE_MARKDOWN_ROOTS:
+        if not root.exists():
+            continue
+        yield from sorted(root.rglob("*.md"))
+
+
+def test_agent_role_and_skill_markdown_files_contain_no_training_language():
+    """Grep guard over `.claude/agents/**/*.md` and `.claude/skills/expert-alignment/**/*.md`.
+
+    Those directories don't exist yet in this slice (WU5 creates them later);
+    with zero files found, this assertion is vacuously true today and will
+    automatically start enforcing once WU5 lands the governance markdown.
+    """
+    violations: list[str] = []
+    checked_any = False
+    for path in _iter_governance_markdown_files():
+        checked_any = True
+        lowered = path.read_text().lower()
+        for phrase in FORBIDDEN_TRAINING_PHRASES:
+            if phrase in lowered:
+                violations.append(f"{path.relative_to(PROJECT_ROOT)}: forbidden phrase {phrase!r}")
+
+    assert not violations, violations
+    if not checked_any:
+        # Explicit, not a silent no-op: documents why the assertion above is vacuous today.
+        assert list(_iter_governance_markdown_files()) == []
