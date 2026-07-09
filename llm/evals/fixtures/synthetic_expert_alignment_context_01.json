@@ -1,0 +1,54 @@
+{
+  "circuito": "DON23L13",
+  "periodo_informe": {"inicio": "2026-01-01", "fin": "2026-01-31"},
+  "fuentes_disponibles": ["Agente Descriptor", "Agente predictivo", "Modelo Experto"],
+  "fuentes_usadas": ["Agente Descriptor", "Agente predictivo", "Modelo Experto"],
+  "modelo_experto_disponible": true,
+  "modelo_experto_razon": "Se encontraron discusiones explícitamente asociadas al circuito evaluado.",
+  "fechas_informe": [
+    {
+      "source": "critical_point",
+      "fecha_inicio": "2026-01-10",
+      "fecha_fin": "2026-01-10",
+      "descripcion": "cp",
+      "peso": 3.0
+    }
+  ],
+  "llm1_analysis": {
+    "period_synthesis": "UITI_VANO sube en el punto crítico del periodo analizado."
+  },
+  "llm2_inference_analysis": {
+    "escenarios": [
+      {
+        "nombre": "Top por UITI_VANO",
+        "top_variables": ["CNT_TRF"]
+      }
+    ]
+  },
+  "variables_modelo_predictivo": ["CNT_TRF"],
+  "senales_modelo_predictivo": [
+    {
+      "variable": "CNT_TRF",
+      "escenario": "Top por UITI_VANO",
+      "rank": 1,
+      "tipo_senal": "top_variable"
+    }
+  ],
+  "pdf_expert_matches": [
+    {
+      "Circuito": "DON23L13",
+      "Fecha inicio": "2026-01-09",
+      "Fecha fin": "2026-01-11",
+      "Análisis": "UITI_VANO alto",
+      "Evidencia": "Evidencia experta verificable",
+      "matched_source": "critical_point",
+      "matched_fecha_inicio": "2026-01-10",
+      "matched_fecha_fin": "2026-01-10",
+      "matched_descripcion": "cp",
+      "temporal_score": 1.5,
+      "overlap_days": 1,
+      "distance_days": 0,
+      "pdf_row_index": 3
+    }
+  ]
+}
