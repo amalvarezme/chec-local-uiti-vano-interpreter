@@ -1080,6 +1080,12 @@ def validar_respuesta_expert_alignment(response_text: str, context: dict[str, An
     for phrase in forbidden:
         if phrase in lower_blob:
             errors.append(f"Lenguaje causal no permitido: {phrase}")
+    # Bare "causa" is checked with word-boundary matching (unlike the naive
+    # substring checks above): a plain substring check would also flag
+    # unrelated Spanish words that merely contain "causa", e.g. "encausar"
+    # ("to channel/prosecute"), which is not causal language.
+    if re.search(r"\bcausa\b", lower_blob):
+        errors.append("Lenguaje causal no permitido: causa")
 
     return {"ok": not errors, "data": data, "errors": errors}
 

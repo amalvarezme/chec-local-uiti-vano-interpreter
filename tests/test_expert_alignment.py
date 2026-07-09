@@ -187,6 +187,41 @@ def test_validar_respuesta_expert_alignment_checks_evidence_dates_and_variables(
     assert result["ok"], result["errors"]
 
 
+def test_validar_respuesta_expert_alignment_rejects_bare_causa_word():
+    context = {
+        "periodo_informe": {"inicio": "2026-01-01", "fin": "2026-01-31"},
+        "fechas_informe": [],
+        "llm1_analysis": {"period_synthesis": ""},
+        "llm2_inference_analysis": {"escenarios": []},
+        "variables_modelo_predictivo": [],
+        "pdf_expert_matches": [],
+    }
+    output = {
+        "contexto": {"circuito": "DON23L13", "periodo": {"inicio": "2026-01-01", "fin": "2026-01-31"}, "n_filas_expertas_comparadas": 0},
+        "coincidencias": [],
+        "diferencias": [],
+        "hallazgos_expertos_no_cubiertos": [],
+        "hallazgos_modelo_no_respaldados_por_pdf": [],
+        "variables_a_priorizar": [],
+        "sintesis_final": "La vegetación es la causa directa del evento observado.",
+    }
+    result = validar_respuesta_expert_alignment(json.dumps(output, ensure_ascii=False), context)
+    assert not result["ok"]
+    assert any("causa" in error.lower() for error in result["errors"])
+
+    # A word that merely contains "causa" as a substring (e.g. "encausar", a
+    # distinct Spanish verb meaning "to channel/prosecute") must not be
+    # falsely flagged by a naive substring check.
+    output["sintesis_final"] = "El equipo procederá a encausar el proceso operativo."
+    result = validar_respuesta_expert_alignment(json.dumps(output, ensure_ascii=False), context)
+    assert not any("causa" in error.lower() for error in result["errors"])
+
+    output["sintesis_final"] = "El evento causó daños en la estructura."
+    result = validar_respuesta_expert_alignment(json.dumps(output, ensure_ascii=False), context)
+    assert not result["ok"]
+    assert any("causó" in error for error in result["errors"])
+
+
 def test_render_expert_alignment_tab_uses_html_not_raw_json():
     analysis = {
         "contexto": {
