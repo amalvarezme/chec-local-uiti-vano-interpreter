@@ -210,6 +210,41 @@ def test_validar_provenance_ignores_items_without_provenance_key():
     assert result["ok"], result["errors"]
 
 
+def test_validar_provenance_rejects_fabricated_variable_when_no_predictive_variables_declared():
+    """Fail-closed: when `variables_modelo_predictivo` is empty, the loose
+    free-text scraper used elsewhere (prompt-shaping, `_allowed_variables`)
+    must NOT be used to accept a variable-shaped `data_ref` — otherwise any
+    incidental uppercase-looking word already present in unrelated context
+    prose (e.g. "VERIFICABLE", scraped straight out of the fixture's own
+    `Evidencia` text) would defeat the traceability guarantee. Verified
+    reproduction: `_allowed_variables(context)` with an empty
+    `variables_modelo_predictivo` includes "VERIFICABLE" today."""
+    context = _context()
+    context["variables_modelo_predictivo"] = []
+    data = _data_with_provenance()
+    data["variables_a_priorizar"][0]["provenance"]["data_ref"] = ["VERIFICABLE"]
+
+    result = validar_provenance_expert_alignment(data, context)
+
+    assert not result["ok"]
+    assert any("VERIFICABLE" in error for error in result["errors"])
+
+
+def test_validar_provenance_parity_preserved_when_no_predictive_variables_and_no_variable_refs():
+    """Empty `variables_modelo_predictivo` with zero variable-shaped data_refs
+    (only dates/pdf_row_index refs) must still pass — parity with prior
+    behavior when there is nothing variable-shaped to reject."""
+    context = _context()
+    context["variables_modelo_predictivo"] = []
+    data = _data_with_provenance()
+    data["coincidencias"][0]["provenance"]["data_ref"] = ["2026-01-10", "pdf_row_index:3"]
+    del data["variables_a_priorizar"][0]["provenance"]
+
+    result = validar_provenance_expert_alignment(data, context)
+
+    assert result["ok"], result["errors"]
+
+
 def test_validar_provenance_deepcopy_is_side_effect_free():
     """Guard against accidental mutation of the input data during validation."""
     context = _context()

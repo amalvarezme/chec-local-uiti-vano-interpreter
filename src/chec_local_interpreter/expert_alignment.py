@@ -718,6 +718,24 @@ def _allowed_variables(context: dict[str, Any]) -> set[str]:
     return variables
 
 
+def _allowed_variables_strict(context: dict[str, Any]) -> set[str]:
+    """Fail-closed variable universe for the provenance validator only.
+
+    Unlike `_allowed_variables` (used for prompt-shaping/WU1 and the schema
+    validator's own `variables_a_priorizar` check), this never falls back to
+    scraping free-text context (`llm1_analysis`, `llm2_inference_analysis`,
+    `fechas_informe`, `pdf_expert_matches`) for incidental uppercase-looking
+    tokens. When `variables_modelo_predictivo` is empty there is nothing to
+    attribute a variable-shaped `provenance.data_ref` to, so the provenance
+    validator must reject ANY such reference rather than accept it via that
+    loose scraper — the traceability guarantee this validator exists to
+    provide would otherwise be defeated by any incidental word already
+    present in unrelated context prose.
+    """
+    predictive_variables = _normalize_variable_list(context.get("variables_modelo_predictivo", []))
+    return {str(variable).strip().upper() for variable in predictive_variables if str(variable).strip()}
+
+
 def allowed_dates(context: dict[str, Any]) -> set[str]:
     """Public re-export of `_allowed_dates` for reuse by the agent-tools CLI layer."""
     return _allowed_dates(context)
@@ -1111,7 +1129,7 @@ def validar_provenance_expert_alignment(data: dict[str, Any], context: dict[str,
     """
     errors: list[str] = []
     allowed_dates_set = _allowed_dates(context)
-    allowed_variables_set = _allowed_variables(context)
+    allowed_variables_set = _allowed_variables_strict(context)
     allowed_indexes_set = _allowed_pdf_row_indexes(context)
 
     for section_name in _PROVENANCE_SECTIONS:
