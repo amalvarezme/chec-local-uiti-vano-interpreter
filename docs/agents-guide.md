@@ -21,7 +21,8 @@ frontmatter, loaded by the `Skill` tool). Does it live under `.claude/agents/`? 
 haven't been given enough information to classify it — ask, don't guess.
 
 Why this distinction exists: the expert-alignment pilot **ports** the three
-`llm/skills_expert_alignment/*.md` playbook files into one Claude Code Skill body (see WU5b) —
+`llm/skills_expert_alignment/*.md` playbook files into one Claude Code Skill body (see
+[`.claude/skills/expert-alignment/SKILL.md`](../.claude/skills/expert-alignment/SKILL.md)) —
 it does **not** delete the playbooks (the notebook flow still consumes them) and it does **not**
 duplicate their content by hand — the Skill is authored by porting, once, from the playbooks.
 
@@ -173,9 +174,8 @@ python -m chec_local_interpreter.agent_tools.batch \
 | inference / SHAP (Agent2) | Stub — not yet ported | — | — | — | Follow-on (out of this slice) |
 
 Only the `expert-alignment` role is implemented in this slice. The historical/base and
-inference/SHAP agents are explicitly out of scope here; a dedicated "Follow-on (out of this
-slice)" section listing them and the other deferred items is appended to this guide once the
-slice's wrap-up work unit runs.
+inference/SHAP agents are explicitly out of scope here — see "Follow-on (out of this slice)"
+below for the full deferred-work ledger.
 
 ## Related artifacts
 
@@ -188,3 +188,36 @@ slice's wrap-up work unit runs.
 - L2 CLI: `src/chec_local_interpreter/agent_tools/expert_alignment.py`
 - L4 batch runner: `src/chec_local_interpreter/agent_tools/batch.py`
 - Frozen-model guard (tests): `tests/test_frozen_model_guard.py`
+- Offline eval gate (no API call): `llm/evals/run_llm_eval.py` — run it directly with
+  `python llm/evals/run_llm_eval.py`; it validates a synthetic expert-alignment response through
+  both the schema validator and the provenance validator, alongside the existing base-agent eval
+  case in the same file.
+
+## Follow-on (out of this slice)
+
+This slice ports the expert-alignment pilot only. The following items are explicitly deferred,
+listed verbatim from the design's own "Open items carried to tasks" and "Rejected alternatives"
+sequencing:
+
+- **(a) `llm_client.py` multi-provider retirement** (google/openai/ollama branches) — blocked on
+  (b); do not start this before the characterization tests below exist.
+- **(b) Characterization tests for `web_export.py` and `graph_extractor.py`** (golden-file on
+  `interpretabilidad.json` / `src/assets/site/results/*` shape) — required BEFORE any
+  `llm_client.py` removal, since both currently have zero tests and must not regress silently.
+- **(c) Agent1 (historical/base) and Agent2 (inference/SHAP) ports** to the agent-role pattern
+  this slice establishes for `expert-alignment` — stubs only in the Agent roles table above.
+- **(d) Expert-Correction Metric measurement** — requires observing real CHEC domain-expert
+  correction rates over time; cannot be satisfied by a one-time code change, so it stays open
+  indefinitely until that observation process exists.
+- **(e) Retry-count tuning** based on observed `claude -p` run behavior — starting point is
+  `MAX_VALIDATION_RETRIES = 2` (see WU4 / `agent_tools/batch.py`), exposed as an overridable
+  `--max-retries` CLI flag precisely so this tuning needs no code change later.
+
+Also recorded, for completeness (rejected during design, not follow-on work — do not revisit
+without a new proposal): an MCP tool server for the Python tools (adds a server/framework surface
+adjacent to the FastAPI prohibition); an additional LLM-provider branch in `llm_client.py`; a
+parallel provenance/vector store (violates the no-RAG/vector-store prohibition); a convention-only
+frozen-model guard (no automated check); deleting `llm_client.py` in this pilot; and adding
+provenance fields to the base agent's `output_schema.json` in this slice (that schema's
+`additionalProperties: false` risks breaking existing base-agent fixtures — deferred to whenever
+the base agent itself is ported).
