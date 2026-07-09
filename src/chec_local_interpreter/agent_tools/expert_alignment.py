@@ -98,6 +98,11 @@ def _sanitize_circuito_dirname(circuito: str) -> str:
     return name
 
 
+def sanitize_circuito_dirname(circuito: str) -> str:
+    """Public re-export of `_sanitize_circuito_dirname` for reuse by the batch runner (WU4)."""
+    return _sanitize_circuito_dirname(circuito)
+
+
 def _write_failure_artifact(circuito: str, response_text: str, errors: list[str]) -> Path:
     artifacts_root = ARTIFACTS_ROOT.resolve()
     safe_name = _sanitize_circuito_dirname(circuito)
