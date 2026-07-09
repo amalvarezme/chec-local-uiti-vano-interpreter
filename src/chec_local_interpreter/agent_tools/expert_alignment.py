@@ -24,8 +24,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -114,6 +116,28 @@ def sanitize_circuito_dirname(circuito: str) -> str:
     return _sanitize_circuito_dirname(circuito)
 
 
+def _atomic_write_text(path: Path, content: str) -> None:
+    """Write `content` to `path` atomically.
+
+    Writes to a temp file in the same directory first, then `os.replace()`s
+    it into place. `os.replace()` is atomic on the same filesystem, so a
+    crash/exception mid-write can never leave `path` truncated or corrupt —
+    either the previous content (if any) survives untouched, or the new
+    content lands whole. The temp file is cleaned up if anything raises
+    before the replace completes.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(content)
+        os.replace(tmp_path, path)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
+
+
 def _write_failure_artifact(circuito: str, response_text: str, errors: list[str]) -> Path:
     artifacts_root = ARTIFACTS_ROOT.resolve()
     safe_name = _sanitize_circuito_dirname(circuito)
@@ -125,8 +149,9 @@ def _write_failure_artifact(circuito: str, response_text: str, errors: list[str]
         artifact_dir = artifacts_root / "unknown"
     artifact_dir.mkdir(parents=True, exist_ok=True)
     artifact_path = artifact_dir / f"invalid_{time.time_ns()}.json"
-    artifact_path.write_text(
-        json.dumps({"response_text": response_text, "errors": errors}, ensure_ascii=False, indent=2)
+    _atomic_write_text(
+        artifact_path,
+        json.dumps({"response_text": response_text, "errors": errors}, ensure_ascii=False, indent=2),
     )
     return artifact_path
 

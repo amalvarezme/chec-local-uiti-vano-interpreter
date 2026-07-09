@@ -42,8 +42,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Sequence
@@ -103,11 +105,33 @@ def _build_retry_prompt(previous_prompt: str, errors: list[str]) -> str:
     )
 
 
+def _atomic_write_text(path: Path, content: str) -> None:
+    """Write `content` to `path` atomically.
+
+    Writes to a temp file in the same directory first, then `os.replace()`s
+    it into place. `os.replace()` is atomic on the same filesystem, so a
+    crash/exception mid-write can never leave `path` truncated or corrupt —
+    either the previous content (if any) survives untouched, or the new
+    content lands whole. The temp file is cleaned up if anything raises
+    before the replace completes.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(content)
+        os.replace(tmp_path, path)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
+
+
 def _publish_report(circuito: str, data: dict[str, Any]) -> Path:
     safe_name = sanitize_circuito_dirname(circuito)
     PUBLISHED_REPORTS_ROOT.mkdir(parents=True, exist_ok=True)
     report_path = PUBLISHED_REPORTS_ROOT / f"{safe_name}.json"
-    report_path.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+    _atomic_write_text(report_path, json.dumps(data, ensure_ascii=False, indent=2))
     return report_path
 
 

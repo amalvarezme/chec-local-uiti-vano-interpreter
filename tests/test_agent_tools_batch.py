@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from chec_local_interpreter.agent_tools import batch as batch_module
 from chec_local_interpreter.agent_tools.expert_alignment import TOOL_VERSION
 
@@ -446,6 +448,30 @@ def test_run_batch_continues_when_one_circuit_has_a_malformed_field(tmp_path, mo
     statuses = {entry["circuito"]: entry["status"] for entry in manifest["circuits"]}
     assert statuses == {"BADCKT": "FAILED", "OKCKT": "ok"}
     assert len(manifest["circuits"]) == 2
+
+
+def test_publish_report_is_atomic_and_never_leaves_a_partial_file(tmp_path, monkeypatch):
+    """A crash mid-write must never leave a truncated/corrupt published
+    report: the write goes to a temp file first, then os.replace() swaps it
+    into place; if the replace itself fails, the pre-existing file (if any)
+    must be untouched."""
+    monkeypatch.chdir(tmp_path)
+    published_dir = tmp_path / "reports" / "interpretability" / "published"
+    published_dir.mkdir(parents=True)
+    report_path = published_dir / "ATOMICCKT.json"
+    report_path.write_text('{"existing": "valid"}')
+
+    def failing_replace(*args, **kwargs):
+        raise OSError("simulated crash mid-write")
+
+    monkeypatch.setattr(batch_module.os, "replace", failing_replace)
+
+    with pytest.raises(OSError):
+        batch_module._publish_report("ATOMICCKT", {"sintesis_final": "new content"})
+
+    assert report_path.read_text() == '{"existing": "valid"}', (
+        "the pre-existing published report must never be left partially overwritten"
+    )
 
 
 def test_load_circuit_payloads_concatenates_multiple_file_arguments(tmp_path):

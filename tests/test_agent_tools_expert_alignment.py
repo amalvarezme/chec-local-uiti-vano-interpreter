@@ -7,6 +7,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
+from chec_local_interpreter.agent_tools import expert_alignment as agent_tools_module
 from chec_local_interpreter.agent_tools.expert_alignment import (
     TOOL_VERSION,
     build_context,
@@ -347,6 +350,25 @@ def test_cli_validate_missing_response_text_is_malformed_not_a_crash(tmp_path):
     stdout_data = json.loads(result.stdout)
     assert stdout_data["ok"] is False
     assert stdout_data["errors"]
+
+
+def test_write_failure_artifact_is_atomic_and_never_leaves_a_partial_file(tmp_path, monkeypatch):
+    """A crash mid-write must never leave a truncated/corrupt failure
+    artifact: the write goes to a temp file first, then os.replace() swaps
+    it into place; if the replace itself fails, no partial file is left."""
+    monkeypatch.chdir(tmp_path)
+
+    def failing_replace(*args, **kwargs):
+        raise OSError("simulated crash mid-write")
+
+    monkeypatch.setattr(agent_tools_module.os, "replace", failing_replace)
+
+    with pytest.raises(OSError):
+        agent_tools_module._write_failure_artifact("ATOMICCKT", "raw response text", ["some error"])
+
+    artifact_dir = tmp_path / "reports" / "interpretability" / "artifacts" / "ATOMICCKT"
+    if artifact_dir.exists():
+        assert list(artifact_dir.glob("*")) == [], "no partial/truncated artifact file must be left behind"
 
 
 def test_agent_tools_expert_alignment_never_references_frozen_model_boundary():
