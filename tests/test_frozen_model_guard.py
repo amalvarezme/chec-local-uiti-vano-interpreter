@@ -8,10 +8,10 @@ touched by the agent-tools surface:
 (b) sha256 manifest — the model zip's hash must match the recorded, tracked
     manifest; any drift (accidental write/retrain) fails loudly.
 (c) Content guard — agent role / Claude Code Skill markdown files must never
-    mention training/retraining vocabulary. These files don't exist yet in
-    this slice (WU5 lands them later); this test passes vacuously with zero
-    files found today and will automatically start scanning them once WU5
-    creates `.claude/agents/**/*.md` and `.claude/skills/expert-alignment/**/*.md`.
+    mention training/retraining vocabulary. WU5a/WU5b have since landed
+    `.claude/agents/**/*.md` and `.claude/skills/expert-alignment/**/*.md`;
+    this test now actively scans those real, tracked files (no vacuous case
+    in this branch's state).
 """
 
 from __future__ import annotations
@@ -111,9 +111,10 @@ def _iter_governance_markdown_files():
 def test_agent_role_and_skill_markdown_files_contain_no_training_language():
     """Grep guard over `.claude/agents/**/*.md` and `.claude/skills/expert-alignment/**/*.md`.
 
-    Those directories don't exist yet in this slice (WU5 creates them later);
-    with zero files found, this assertion is vacuously true today and will
-    automatically start enforcing once WU5 lands the governance markdown.
+    Governance markdown now exists (`.claude/agents/expert-alignment.md`,
+    `.claude/agents/rules/invariants.md`, `.claude/skills/expert-alignment/SKILL.md`,
+    landed in WU5a/WU5b) and is actively scanned by this test — no vacuous
+    case in this branch's state.
     """
     violations: list[str] = []
     checked_any = False
@@ -126,5 +127,7 @@ def test_agent_role_and_skill_markdown_files_contain_no_training_language():
 
     assert not violations, violations
     if not checked_any:
-        # Explicit, not a silent no-op: documents why the assertion above is vacuous today.
+        # Defensive fallback only: if the governance markdown roots ever go
+        # missing again, this still asserts explicitly rather than silently
+        # no-op-ing.
         assert list(_iter_governance_markdown_files()) == []
