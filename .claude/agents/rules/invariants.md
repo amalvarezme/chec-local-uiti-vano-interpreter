@@ -62,21 +62,27 @@ except inside the already-validated inference-agent flow (out of scope for the e
 role in this slice). The expert-alignment role compares existing descriptive and predictive-model
 signals against expert discussion; it does not itself predict or forecast anything.
 
-## Rule 6 — Provenance Required (Additive)
+## Rule 6 — Provenance Optional Per Claim, Strictly Validated When Present
 
-Every claim in `coincidencias`, `diferencias`, or `variables_a_priorizar` SHOULD carry a
-`provenance` object: `{"data_ref": [...], "agent": "expert-alignment", "rule": "<playbook id>"}`.
+Provenance is **optional per claim, not required**: a claim in `coincidencias`, `diferencias`, or
+`variables_a_priorizar` MAY carry a `provenance` object —
+`{"data_ref": [...], "agent": "expert-alignment", "rule": "<playbook id>"}` — but omitting it
+never fails validation on its own. This is a deliberate design choice for backward compatibility
+with pre-provenance response shapes (additive keys), not a gap to be closed.
 
-- `data_ref` entries must resolve against the circuit's own already-validated allowed dates,
+**When a `data_ref` IS provided, it is strictly validated and fails closed:**
+
+- Every `data_ref` entry MUST resolve against the circuit's own already-validated allowed dates,
   variables, and PDF row references — never a fact outside what the envelope handed you.
+  Validation rejects (fails closed) any `data_ref` that does not resolve, including the case where
+  `variables_modelo_predictivo` is empty.
 - `agent` must equal `expert-alignment` (the producing role's id).
 - `rule` must be one of: `01_pdf_report_comparison`, `02_predictive_variable_prioritization`,
   `03_graph_context_for_alignment` — the three playbook ids ported into
   `.claude/skills/expert-alignment/SKILL.md`.
 
-Provenance is additive and optional per claim: omitting it never fails validation on its own, but
-every claim you can trace to a specific source should carry one, so the (data, agent, rule) trail
-is enforceable rather than decorative.
+Do not read this rule as "provenance is required" (it isn't) or as "validation is loose when
+present" (it isn't — any `data_ref` you do supply is held to the full resolvability check above).
 
 ## Rule 7 — Cautious Language Register
 
