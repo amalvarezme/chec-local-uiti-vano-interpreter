@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -281,6 +282,74 @@ def test_run_batch_does_not_false_positive_dedup_on_truly_distinct_circuits(tmp_
     statuses = [entry["status"] for entry in manifest["circuits"]]
     assert statuses == ["ok", "ok"], "genuinely distinct circuits must never be falsely deduped"
     assert len(calls) == 2
+
+
+def test_run_batch_dedup_and_publish_share_the_same_canonical_filename_identity(tmp_path, monkeypatch):
+    """`DON23L13` and `don23l13` are the same circuit for dedup purposes
+    (`_dedupe_key` uses `normalizar_circuito`); `_publish_report` must derive
+    the on-disk filename with the SAME identity function, so the manifest's
+    SKIPPED_DUPLICATE claim ("to avoid overwriting the first run's published
+    report") stays factually true — a case-only difference in the raw value
+    must not silently produce two different-case filenames that would never
+    actually collide on a case-sensitive filesystem."""
+    monkeypatch.chdir(tmp_path)
+
+    def fake_run(command, **kwargs):
+        return _FakeCompletedProcess(stdout=json.dumps(_valid_response("don23l13"), ensure_ascii=False))
+
+    monkeypatch.setattr(batch_module.subprocess, "run", fake_run)
+
+    manifest = batch_module.run_batch([_sample_payload("don23l13"), _sample_payload("DON23L13")])
+
+    statuses = [entry["status"] for entry in manifest["circuits"]]
+    assert statuses == ["ok", "SKIPPED_DUPLICATE"]
+
+    published_dir = tmp_path / "reports" / "interpretability" / "published"
+    published_files = list(published_dir.glob("*.json"))
+    assert len(published_files) == 1
+
+    expected_canonical = batch_module._dedupe_key("DON23L13")
+    assert published_files[0].stem == expected_canonical, (
+        "the published filename must be governed by the same canonical identity "
+        "function as the dedup key, not a narrower sanitize-only transform"
+    )
+
+
+def test_run_circuit_canonicalizes_falsy_circuito_consistently_across_context_and_manifest(tmp_path, monkeypatch):
+    """A falsy-but-non-empty `circuito` (None here) must resolve to the SAME
+    canonical string everywhere: `context["circuito"]` (seen by `validate`),
+    the manifest entry's `circuito`, and the failure artifact's on-disk
+    directory name — never two independently-derived values that can
+    disagree (e.g. context landing on the literal string "None" while the
+    manifest/artifact path says "unknown")."""
+    monkeypatch.chdir(tmp_path)
+    captured_contexts: list[Any] = []
+    real_validate = batch_module.validate
+
+    def spy_validate(payload):
+        captured_contexts.append(payload.get("context", {}).get("circuito"))
+        return real_validate(payload)
+
+    monkeypatch.setattr(batch_module, "validate", spy_validate)
+    monkeypatch.setattr(
+        batch_module.subprocess,
+        "run",
+        lambda command, **kwargs: _FakeCompletedProcess(stdout=json.dumps(_invalid_response(), ensure_ascii=False)),
+    )
+
+    payload = _sample_payload()
+    payload["circuito"] = None
+
+    entry = batch_module.run_circuit(payload, max_retries=0)
+
+    assert entry["status"] == "FAILED"
+    assert entry["circuito"] == "unknown"
+    assert captured_contexts == ["unknown"], "context['circuito'] must match the manifest's canonical circuito"
+
+    artifact_path = Path(entry["artifact_paths"][0])
+    assert artifact_path.parent.name == entry["circuito"], (
+        "the failure artifact's on-disk directory must match the manifest's canonical circuito"
+    )
 
 
 def test_run_circuit_degrades_cleanly_when_claude_is_not_on_path(tmp_path, monkeypatch):

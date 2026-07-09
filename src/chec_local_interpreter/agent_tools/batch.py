@@ -107,27 +107,43 @@ def _build_retry_prompt(previous_prompt: str, errors: list[str]) -> str:
     )
 
 
-def _dedupe_key(circuito: str) -> str:
-    """Compute a `circuito`'s dedup identity for `run_batch`.
+def _canonical_circuit_identity(circuito: str) -> str:
+    """Compute the single canonical on-disk identity for a `circuito` value.
 
-    Sanitizing first (`sanitize_circuito_dirname`) matches the actual
-    on-disk publish identity used by `_publish_report` — so two raw values
-    that would land on the same filename (e.g. a path-separator-suffix
-    collision like "AAA/BBB" vs "CCC/BBB", both becoming "BBB.json"; or two
-    distinct whitespace/control-char-only strings both falling back to
-    "unknown.json") are always recognized as the same on-disk target.
-    Normalizing on top (`normalizar_circuito`, the codebase's own
-    case/punctuation-insensitive circuit-identity check, also used to match
-    circuit ids elsewhere) additionally catches values that are the same
-    circuit but differ only in case or punctuation (e.g. "DON23L13" vs
-    "don23l13"), which would otherwise run twice and could further collide
-    on a case-insensitive filesystem with no signal in the manifest.
+    Sanitizing first (`sanitize_circuito_dirname`) matches filesystem-safe
+    naming — so two raw values that would land on the same filename (e.g. a
+    path-separator-suffix collision like "AAA/BBB" vs "CCC/BBB", both
+    becoming "BBB"; or two distinct whitespace/control-char-only strings
+    both falling back to "unknown") are always recognized as the same
+    on-disk target. Normalizing on top (`normalizar_circuito`, the
+    codebase's own case/punctuation-insensitive circuit-identity check, also
+    used to match circuit ids elsewhere) additionally catches values that
+    are the same circuit but differ only in case or punctuation (e.g.
+    "DON23L13" vs "don23l13"), which would otherwise run twice and could
+    further collide on a case-insensitive filesystem with no signal in the
+    manifest.
+
+    This is the SINGLE identity function used both to decide "is this a
+    duplicate" (`_dedupe_key`) and to derive the actual publish filename
+    (`_publish_report`) — using two different functions for those two
+    questions would let them disagree (e.g. dedup treating two values as the
+    same circuit while the actual filenames it would produce for them are
+    genuinely different), which either silently drops a legitimate distinct
+    run or makes the "avoid overwriting" justification for a skip factually
+    wrong.
     """
     return normalizar_circuito(sanitize_circuito_dirname(circuito))
 
 
+def _dedupe_key(circuito: str) -> str:
+    """Compute a `circuito`'s dedup identity for `run_batch`. See
+    `_canonical_circuit_identity` for the rationale; this is a thin alias
+    kept for readability at call sites that are specifically about dedup."""
+    return _canonical_circuit_identity(circuito)
+
+
 def _publish_report(circuito: str, data: dict[str, Any]) -> Path:
-    safe_name = sanitize_circuito_dirname(circuito)
+    safe_name = _canonical_circuit_identity(circuito)
     PUBLISHED_REPORTS_ROOT.mkdir(parents=True, exist_ok=True)
     report_path = PUBLISHED_REPORTS_ROOT / f"{safe_name}.json"
     _atomic_write_text(report_path, json.dumps(data, ensure_ascii=False, indent=2))
@@ -176,7 +192,17 @@ def run_circuit(
     This is the module's own documented invariant: one circuit's failure
     never aborts the batch.
     """
+    # Canonicalize once, as early as possible: this is the single source of
+    # truth for "what is this circuit called" for the rest of this function.
+    # `payload` is shallow-copied with the canonical value so `build_context`
+    # (and, downstream, `context["circuito"]`) sees the SAME string as the
+    # manifest/dedup/publish-path logic below — a falsy-but-non-empty raw
+    # value (None, 0, False, [], {}) would otherwise flow into the context
+    # as its raw `str(...)` form (e.g. "None") while the manifest/publish
+    # path used the "unknown" fallback, breaking the correlation between a
+    # failure artifact's directory and the manifest entry that references it.
     circuito = str(payload.get("circuito") or "unknown")
+    payload = {**payload, "circuito": circuito}
     artifact_paths: list[str] = []
     attempt = 0
 
