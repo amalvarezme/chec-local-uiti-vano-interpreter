@@ -10,7 +10,7 @@ called "skills" in conversation.
 | Term | Artifact | Has frontmatter? | Consumed by |
 |---|---|---|---|
 | Prompt **playbook** | `llm/skills_expert_alignment/*.md` (existing, pre-dates this framework) | No | `assemble_skill_bundle()` in `chec_local_interpreter.llm_skills`, used by the pre-existing notebook flow |
-| Claude Code **Skill** | `.claude/skills/expert-alignment/SKILL.md` (new — lands in WU5b) | Yes | Claude Code's `Skill` tool |
+| Claude Code **Skill** | `.claude/skills/expert-alignment/SKILL.md` (new) | Yes | Claude Code's `Skill` tool |
 | Agent **role** | `.claude/agents/expert-alignment.md` (new) | Yes | The Claude Code agent runtime (this is what you invoke as a headless/interactive agent) |
 
 Given any file path in this repo, classify it with this rule: does it live under `llm/skills*/`?
@@ -41,7 +41,7 @@ duplicate their content by hand — the Skill is authored by porting, once, from
                                                error, returns an exit code (see "Exit codes" below)
         |  Bash tool: stdin/stdout, JSON only
 [L3 Claude Code agent]     .claude/agents/expert-alignment.md (role) +
-                           .claude/skills/expert-alignment/SKILL.md (Skill, WU5b)
+                           .claude/skills/expert-alignment/SKILL.md (Skill)
                            Reads the envelope -> reasons/authors the 7-key JSON + provenance ->
                            calls `validate` -> retries on failure, up to the retry limit.
         |
@@ -168,7 +168,7 @@ python -m chec_local_interpreter.agent_tools.batch \
 
 | Role | Status | Role file | Rules | Skill | Tool contract |
 |---|---|---|---|---|---|
-| `expert-alignment` | Implemented (this slice) | `.claude/agents/expert-alignment.md` | `.claude/agents/rules/invariants.md` | `.claude/skills/expert-alignment/SKILL.md` (WU5b) | `python -m chec_local_interpreter.agent_tools.expert_alignment` |
+| `expert-alignment` | Implemented (this slice) | `.claude/agents/expert-alignment.md` | `.claude/agents/rules/invariants.md` | `.claude/skills/expert-alignment/SKILL.md` | `python -m chec_local_interpreter.agent_tools.expert_alignment` |
 | historical / base (Agent1) | Stub — not yet ported | — | — | — | Follow-on (out of this slice) |
 | inference / SHAP (Agent2) | Stub — not yet ported | — | — | — | Follow-on (out of this slice) |
 
@@ -181,9 +181,9 @@ slice's wrap-up work unit runs.
 
 - Role definition: [`.claude/agents/expert-alignment.md`](../.claude/agents/expert-alignment.md)
 - Rules (binding invariants): [`.claude/agents/rules/invariants.md`](../.claude/agents/rules/invariants.md)
-- Claude Code Skill: `.claude/skills/expert-alignment/SKILL.md` — **not created yet**, arrives in
-  WU5b (ports `llm/skills_expert_alignment/01_pdf_report_comparison.md`,
-  `02_predictive_variable_prioritization.md`, and `03_graph_context_for_alignment.md`).
+- Claude Code Skill: [`.claude/skills/expert-alignment/SKILL.md`](../.claude/skills/expert-alignment/SKILL.md)
+  — ports `llm/skills_expert_alignment/01_pdf_report_comparison.md`,
+  `02_predictive_variable_prioritization.md`, and `03_graph_context_for_alignment.md`.
 - L1 deterministic Python: `src/chec_local_interpreter/expert_alignment.py`
 - L2 CLI: `src/chec_local_interpreter/agent_tools/expert_alignment.py`
 - L4 batch runner: `src/chec_local_interpreter/agent_tools/batch.py`
