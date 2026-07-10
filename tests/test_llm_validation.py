@@ -1,9 +1,18 @@
 from __future__ import annotations
 
+import copy
 import json
 
 from chec_local_interpreter.llm_contracts import PROMPT_VERSION, load_output_schema
-from chec_local_interpreter.llm_validation import validate_llm_response
+from chec_local_interpreter.llm_validation import (
+    BASE_AGENT_ID,
+    BASE_PROVENANCE_RULES,
+    allowed_critical_point_ids,
+    allowed_dates,
+    unavailable_columns,
+    validar_provenance_base,
+    validate_llm_response,
+)
 
 
 def _context(unavailable: list[str] | None = None) -> dict:
@@ -133,3 +142,141 @@ def test_unavailable_column_referenced_as_present_fails():
     result = validate_llm_response(json.dumps(output), _context(["NR_T"]), load_output_schema())
     assert not result.ok
     assert any("Unavailable column" in error for error in result.errors)
+
+
+# --- Phase 6: public context accessors + validar_provenance_base -----------
+
+
+def _domain_context() -> dict:
+    return {
+        "variable_groups": {
+            "Entorno/Riesgo": {"variables": ["NR_T", "DDT"]},
+            "Evento/Impacto": {"variables": ["UITI_VANO", "CNT_TRF"]},
+        }
+    }
+
+
+def _base_context(unavailable: list[str] | None = None) -> dict:
+    context = _context(unavailable)
+    context["domain"] = _domain_context()
+    return context
+
+
+def _finding_with_provenance(data_ref: list[str]) -> dict:
+    return {
+        "title": "Punto dominante",
+        "text": "El punto concentra el comportamiento del periodo.",
+        "evidence": [
+            {
+                "date": "2026-01-02",
+                "critical_point_id": "cp-2026-01-02",
+                "variable": "UITI_VANO",
+                "summary": "Punto critico entregado por codigo.",
+            }
+        ],
+        "referenced_events": [],
+        "variable_groups_used": ["Evento/Impacto"],
+        "confidence": "media",
+        "provenance": {
+            "data_ref": data_ref,
+            "agent": BASE_AGENT_ID,
+            "rule": "03_uiti_vano_behavior_explainer",
+        },
+    }
+
+
+def test_public_context_accessors_exist_and_match_internal_helpers():
+    context = _base_context()
+    assert allowed_dates(context) == {"2026-01-01", "2026-01-02"}
+    assert allowed_critical_point_ids(context) == {"cp-2026-01-02", "period-2026-01-01-2026-01-02"}
+    assert unavailable_columns(context) == set()
+    assert unavailable_columns(_base_context(["NR_T"])) == {"NR_T"}
+
+
+def test_base_agent_id_and_provenance_rules_are_hermetic():
+    assert BASE_AGENT_ID == "historical"
+    assert BASE_PROVENANCE_RULES == {
+        "01_structured_context_builder",
+        "02_critical_point_interpreter",
+        "03_uiti_vano_behavior_explainer",
+        "04_domain_grounding_guardrails",
+        "05_llm_output_validator",
+        "06_base_repair",
+        "07_base_output_contract",
+    }
+
+
+def test_validar_provenance_base_passes_when_absent():
+    """Backward compatible: a key_finding without a provenance key is never flagged."""
+    context = _base_context()
+    data = {"key_findings": [{"title": "t", "text": "x"}]}
+    result = validar_provenance_base(data, context)
+    assert result["ok"], result["errors"]
+    assert result["errors"] == []
+
+
+def test_validar_provenance_base_passes_when_every_data_ref_resolves():
+    context = _base_context()
+    data = {"key_findings": [_finding_with_provenance(["2026-01-02", "cp-2026-01-02", "UITI_VANO"])]}
+    result = validar_provenance_base(data, context)
+    assert result["ok"], result["errors"]
+
+
+def test_validar_provenance_base_fails_closed_on_unresolvable_date():
+    context = _base_context()
+    data = {"key_findings": [_finding_with_provenance(["2099-12-31"])]}
+    result = validar_provenance_base(data, context)
+    assert not result["ok"]
+    assert any("2099-12-31" in error for error in result["errors"])
+
+
+def test_validar_provenance_base_fails_closed_on_unresolvable_critical_point_id():
+    context = _base_context()
+    data = {"key_findings": [_finding_with_provenance(["cp-2099-12-31"])]}
+    result = validar_provenance_base(data, context)
+    assert not result["ok"]
+    assert any("cp-2099-12-31" in error for error in result["errors"])
+
+
+def test_validar_provenance_base_fails_closed_on_unavailable_variable():
+    context = _base_context(["NR_T"])
+    data = {"key_findings": [_finding_with_provenance(["NR_T"])]}
+    result = validar_provenance_base(data, context)
+    assert not result["ok"]
+    assert any("NR_T" in error for error in result["errors"])
+
+
+def test_validar_provenance_base_fails_closed_on_unknown_variable():
+    context = _base_context()
+    data = {"key_findings": [_finding_with_provenance(["NOT_A_REAL_VARIABLE"])]}
+    result = validar_provenance_base(data, context)
+    assert not result["ok"]
+    assert any("NOT_A_REAL_VARIABLE" in error for error in result["errors"])
+
+
+def test_validar_provenance_base_fails_when_agent_does_not_match():
+    context = _base_context()
+    finding = _finding_with_provenance(["UITI_VANO"])
+    finding["provenance"]["agent"] = "expert-alignment"
+    data = {"key_findings": [finding]}
+    result = validar_provenance_base(data, context)
+    assert not result["ok"]
+    assert any("agent" in error.lower() for error in result["errors"])
+
+
+def test_validar_provenance_base_fails_when_rule_not_in_allow_list():
+    context = _base_context()
+    finding = _finding_with_provenance(["UITI_VANO"])
+    finding["provenance"]["rule"] = "not-a-real-rule"
+    data = {"key_findings": [finding]}
+    result = validar_provenance_base(data, context)
+    assert not result["ok"]
+    assert any("rule" in error.lower() for error in result["errors"])
+
+
+def test_validar_provenance_base_is_side_effect_free():
+    context = _base_context()
+    data = {"key_findings": [_finding_with_provenance(["UITI_VANO"])]}
+    snapshot = copy.deepcopy(data)
+    validar_provenance_base(data, context)
+    assert data == snapshot

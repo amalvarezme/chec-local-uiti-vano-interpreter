@@ -198,6 +198,162 @@ def validate_llm_response(
     return ValidationResult(ok=not errors, data=data if not errors else data, errors=errors)
 
 
+# --- Public context accessors (Slice 1b: reused by the historical agent's L2 CLI) ---
+#
+# Wrap the existing private helpers rather than duplicating them, so the base/
+# historical agent's `build-context` envelope and provenance validator stay
+# consistent with the exact same allow-lists the schema/guardrail validator
+# already enforces (mirrors `expert_alignment.py`'s `allowed_dates`/
+# `allowed_variables`/`allowed_pdf_row_indexes` public re-exports).
+
+
+def allowed_dates(context: dict[str, Any]) -> set[str]:
+    """Public re-export of `_context_dates` for reuse by the agent-tools CLI layer."""
+    return _context_dates(context)
+
+
+def allowed_critical_point_ids(context: dict[str, Any]) -> set[str]:
+    """Public re-export of `_critical_point_ids` for reuse by the agent-tools CLI layer."""
+    return _critical_point_ids(context)
+
+
+def unavailable_columns(context: dict[str, Any]) -> set[str]:
+    """Public re-export of `_unavailable_columns` for reuse by the agent-tools CLI layer."""
+    return _unavailable_columns(context)
+
+
+# --- Provenance/traceability for the historical/base agent (ADR-7) ---------
+#
+# Mirrors `expert_alignment.py`'s `validar_provenance_expert_alignment`: a
+# small, hermetic allow-list of playbook rule ids checked in-code (no file
+# read), and a producing-agent id constant. Kept in sync with
+# `.claude/agents/rules/invariants.md` and the 7 `llm/skills/*.md` base
+# playbooks (ids derived by stripping the `NN_` prefix and `.md` suffix,
+# preserving `assemble_skill_bundle(profile="base")` order).
+BASE_AGENT_ID = "historical"
+
+BASE_PROVENANCE_RULES = frozenset({
+    "01_structured_context_builder",
+    "02_critical_point_interpreter",
+    "03_uiti_vano_behavior_explainer",
+    "04_domain_grounding_guardrails",
+    "05_llm_output_validator",
+    "06_base_repair",
+    "07_base_output_contract",
+})
+
+_CP_REF_RE = re.compile(r"^cp-\d{4}-\d{2}-\d{2}$")
+_BASE_DATE_REF_RE = re.compile(r"^20\d{2}-\d{2}-\d{2}$")
+
+
+def _allowed_variable_tokens(context: dict[str, Any]) -> set[str]:
+    """The base agent's citable variable universe: every variable name across
+    `context["domain"]["variable_groups"]` (the same domain payload the
+    context builder always attaches), upper-cased for case-insensitive
+    matching against a `data_ref` token."""
+    domain = context.get("domain") if isinstance(context.get("domain"), dict) else {}
+    groups = domain.get("variable_groups") if isinstance(domain.get("variable_groups"), dict) else {}
+    tokens: set[str] = set()
+    for group in groups.values():
+        if not isinstance(group, dict):
+            continue
+        for variable in group.get("variables", []):
+            if variable:
+                tokens.add(str(variable).upper())
+    return tokens
+
+
+def _validate_provenance_data_ref_base(
+    ref: Any,
+    *,
+    allowed_dates_set: set[str],
+    allowed_critical_point_ids_set: set[str],
+    allowed_variable_tokens: set[str],
+    unavailable: set[str],
+) -> str | None:
+    """Resolve one base-agent `data_ref` entry against its allowed universe.
+
+    Returns an error message naming the offending reference, or `None` if it
+    resolves. A `data_ref` entry is either a `cp-YYYY-MM-DD` critical-point
+    id, an ISO date (`YYYY-MM-DD`), or a domain variable name — fails closed
+    (rejected) for anything else, including a variable explicitly marked
+    unavailable for this context.
+    """
+    text = str(ref).strip()
+
+    if _CP_REF_RE.match(text):
+        if text not in allowed_critical_point_ids_set:
+            return f"provenance.data_ref cites an unknown critical_point_id: {text}"
+        return None
+
+    if _BASE_DATE_REF_RE.match(text):
+        if text not in allowed_dates_set:
+            return f"provenance.data_ref cites a date outside the allowed context: {text}"
+        return None
+
+    token = text.upper()
+    if not token or token in unavailable or token not in allowed_variable_tokens:
+        return f"provenance.data_ref cites an unknown or unavailable variable: {text or ref!r}"
+    return None
+
+
+def validar_provenance_base(data: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
+    """Additively validate per-`key_finding` `provenance` objects, when present.
+
+    Provenance is optional per item (backwards compatible with responses that
+    predate the provenance contract): a `key_finding` without a `provenance`
+    key is never flagged. When present, `provenance` must be
+    `{data_ref, agent, rule}` with every `data_ref` entry resolving to the
+    circuit's already-validated allowed dates/critical-point-ids/variables,
+    `agent` naming the producing role (`BASE_AGENT_ID`), and `rule` naming an
+    entry from the hermetic `BASE_PROVENANCE_RULES` allow-list.
+    """
+    errors: list[str] = []
+    findings = data.get("key_findings", [])
+    if not isinstance(findings, list):
+        return {"ok": True, "errors": []}
+
+    allowed_dates_set = allowed_dates(context)
+    allowed_critical_point_ids_set = allowed_critical_point_ids(context)
+    allowed_variable_tokens = _allowed_variable_tokens(context)
+    unavailable = unavailable_columns(context)
+
+    for finding in findings:
+        if not isinstance(finding, dict):
+            continue
+        provenance = finding.get("provenance")
+        if provenance is None:
+            continue
+        if not isinstance(provenance, dict):
+            errors.append("key_findings: provenance must be an object.")
+            continue
+
+        agent = provenance.get("agent")
+        if agent != BASE_AGENT_ID:
+            errors.append(f"key_findings: provenance.agent must be '{BASE_AGENT_ID}', got: {agent!r}")
+
+        rule = provenance.get("rule")
+        if rule not in BASE_PROVENANCE_RULES:
+            errors.append(f"key_findings: provenance.rule not in the allowed rule list: {rule!r}")
+
+        data_ref = provenance.get("data_ref")
+        if not isinstance(data_ref, list) or not data_ref:
+            errors.append("key_findings: provenance.data_ref must be a non-empty list.")
+            continue
+        for ref in data_ref:
+            error = _validate_provenance_data_ref_base(
+                ref,
+                allowed_dates_set=allowed_dates_set,
+                allowed_critical_point_ids_set=allowed_critical_point_ids_set,
+                allowed_variable_tokens=allowed_variable_tokens,
+                unavailable=unavailable,
+            )
+            if error:
+                errors.append(f"key_findings: {error}")
+
+    return {"ok": not errors, "errors": errors}
+
+
 def save_invalid_output(response_text: str, errors: list[str], output_dir: str | Path, timestamp: str) -> tuple[Path, Path]:
     directory = Path(output_dir)
     directory.mkdir(parents=True, exist_ok=True)

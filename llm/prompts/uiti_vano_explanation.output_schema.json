@@ -59,7 +59,28 @@
               "enum": ["Evento/Impacto", "Proteccion", "Topologia", "Fisicas/Electricas", "Activos", "Entorno/Riesgo"]
             }
           },
-          "confidence": {"type": "string", "enum": ["alta", "media", "baja"]}
+          "confidence": {"type": "string", "enum": ["alta", "media", "baja"]},
+          "provenance": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["data_ref", "agent", "rule"],
+            "properties": {
+              "data_ref": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+              "agent": {"const": "historical"},
+              "rule": {
+                "type": "string",
+                "enum": [
+                  "01_structured_context_builder",
+                  "02_critical_point_interpreter",
+                  "03_uiti_vano_behavior_explainer",
+                  "04_domain_grounding_guardrails",
+                  "05_llm_output_validator",
+                  "06_base_repair",
+                  "07_base_output_contract"
+                ]
+              }
+            }
+          }
         }
       }
     },
