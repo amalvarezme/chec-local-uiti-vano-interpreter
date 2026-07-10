@@ -3,6 +3,11 @@
 Every test stubs the subprocess boundary (`subprocess.run`) — no real
 `claude` process is ever invoked. Each test also chdirs into `tmp_path` so
 published reports and failure artifacts never touch the real repo.
+
+`agent=` is a required keyword-only argument on `run_circuit`/`run_batch`
+(an `AgentSpec`, generalized in the shared-infra hardening slice so the
+runner is not hardcoded to a single agent role) — every call site below
+passes `batch_module.EXPERT_ALIGNMENT_AGENT` explicitly.
 """
 
 from __future__ import annotations
@@ -15,6 +20,8 @@ import pytest
 
 from chec_local_interpreter.agent_tools import _atomic_io, batch as batch_module
 from chec_local_interpreter.agent_tools.expert_alignment import TOOL_VERSION
+
+EXPERT_ALIGNMENT_AGENT = batch_module.EXPERT_ALIGNMENT_AGENT
 
 
 def _sample_payload(circuito: str = "DON23L13") -> dict:
@@ -104,7 +111,7 @@ def test_run_circuit_success_is_one_isolated_invocation_and_publishes_report(tmp
 
     monkeypatch.setattr(batch_module.subprocess, "run", fake_run)
 
-    entry = batch_module.run_circuit(_sample_payload())
+    entry = batch_module.run_circuit(_sample_payload(), agent=EXPERT_ALIGNMENT_AGENT)
 
     assert len(calls) == 1, "success on the first attempt must be exactly one isolated invocation"
     assert calls[0][:2] == list(batch_module.DEFAULT_AGENT_COMMAND)
@@ -117,6 +124,9 @@ def test_run_circuit_success_is_one_isolated_invocation_and_publishes_report(tmp
 
     published_path = Path(entry["artifact_paths"][0])
     assert published_path.is_file()
+    assert published_path.parent.name == "expert-alignment", (
+        "the published report must be namespaced under the agent's role directory"
+    )
     published_data = json.loads(published_path.read_text())
     assert published_data["sintesis_final"]
 
@@ -132,7 +142,7 @@ def test_run_circuit_retries_then_fails_and_never_publishes_invalid_output(tmp_p
 
     monkeypatch.setattr(batch_module.subprocess, "run", fake_run)
 
-    entry = batch_module.run_circuit(_sample_payload(), max_retries=2)
+    entry = batch_module.run_circuit(_sample_payload(), agent=EXPERT_ALIGNMENT_AGENT, max_retries=2)
 
     assert len(calls) == 3, "expected the first attempt plus 2 retries (MAX_VALIDATION_RETRIES default)"
     # The repair pattern must feed validator errors back — later prompts differ from the first.
@@ -145,7 +155,7 @@ def test_run_circuit_retries_then_fails_and_never_publishes_invalid_output(tmp_p
     for artifact_path in entry["artifact_paths"]:
         assert Path(artifact_path).is_file()
 
-    published_dir = tmp_path / "reports" / "interpretability" / "published"
+    published_dir = tmp_path / "reports" / "interpretability" / "published" / "expert-alignment"
     assert not published_dir.exists(), "invalid output must never be written to the published report path"
 
 
@@ -165,10 +175,10 @@ def test_run_batch_continues_after_one_circuit_fails(tmp_path, monkeypatch):
 
     monkeypatch.setattr(batch_module.subprocess, "run", fake_run)
 
-    manifest = batch_module.run_batch([
-        _sample_payload("FAILCKT"),
-        _sample_payload("OKCKT"),
-    ])
+    manifest = batch_module.run_batch(
+        [_sample_payload("FAILCKT"), _sample_payload("OKCKT")],
+        agent=EXPERT_ALIGNMENT_AGENT,
+    )
 
     statuses = {entry["circuito"]: entry["status"] for entry in manifest["circuits"]}
     assert statuses == {"FAILCKT": "FAILED", "OKCKT": "ok"}
@@ -188,7 +198,7 @@ def test_run_circuit_reports_agent_error_on_nonzero_returncode(tmp_path, monkeyp
 
     monkeypatch.setattr(batch_module.subprocess, "run", fake_run)
 
-    entry = batch_module.run_circuit(_sample_payload())
+    entry = batch_module.run_circuit(_sample_payload(), agent=EXPERT_ALIGNMENT_AGENT)
 
     assert entry["status"] == "AGENT_ERROR"
     assert "authentication error" in entry["error"]
@@ -207,13 +217,16 @@ def test_run_batch_marks_duplicate_circuito_and_keeps_first_run_only(tmp_path, m
 
     monkeypatch.setattr(batch_module.subprocess, "run", fake_run)
 
-    manifest = batch_module.run_batch([_sample_payload("DUPCKT"), _sample_payload("DUPCKT")])
+    manifest = batch_module.run_batch(
+        [_sample_payload("DUPCKT"), _sample_payload("DUPCKT")],
+        agent=EXPERT_ALIGNMENT_AGENT,
+    )
 
     statuses = [entry["status"] for entry in manifest["circuits"]]
     assert statuses == ["ok", "SKIPPED_DUPLICATE"]
     assert len(calls) == 1, "the duplicate must never trigger a second agent invocation"
 
-    published_path = tmp_path / "reports" / "interpretability" / "published" / "DUPCKT.json"
+    published_path = tmp_path / "reports" / "interpretability" / "published" / "expert-alignment" / "DUPCKT.json"
     assert published_path.is_file()
     assert json.loads(published_path.read_text())["sintesis_final"]
 
@@ -233,13 +246,16 @@ def test_run_batch_dedup_catches_raw_values_that_sanitize_to_the_same_filename(t
 
     monkeypatch.setattr(batch_module.subprocess, "run", fake_run)
 
-    manifest = batch_module.run_batch([_sample_payload("AAA/BBB"), _sample_payload("CCC/BBB")])
+    manifest = batch_module.run_batch(
+        [_sample_payload("AAA/BBB"), _sample_payload("CCC/BBB")],
+        agent=EXPERT_ALIGNMENT_AGENT,
+    )
 
     statuses = [entry["status"] for entry in manifest["circuits"]]
     assert statuses == ["ok", "SKIPPED_DUPLICATE"]
     assert len(calls) == 1, "the sanitize-collision duplicate must never trigger a second agent invocation"
 
-    published_dir = tmp_path / "reports" / "interpretability" / "published"
+    published_dir = tmp_path / "reports" / "interpretability" / "published" / "expert-alignment"
     assert [p.name for p in published_dir.glob("*.json")] == ["BBB.json"]
 
 
@@ -256,7 +272,10 @@ def test_run_batch_dedup_catches_case_different_circuito_values(tmp_path, monkey
 
     monkeypatch.setattr(batch_module.subprocess, "run", fake_run)
 
-    manifest = batch_module.run_batch([_sample_payload("DON23L13"), _sample_payload("don23l13")])
+    manifest = batch_module.run_batch(
+        [_sample_payload("DON23L13"), _sample_payload("don23l13")],
+        agent=EXPERT_ALIGNMENT_AGENT,
+    )
 
     statuses = [entry["status"] for entry in manifest["circuits"]]
     assert statuses == ["ok", "SKIPPED_DUPLICATE"]
@@ -277,7 +296,10 @@ def test_run_batch_does_not_false_positive_dedup_on_truly_distinct_circuits(tmp_
 
     monkeypatch.setattr(batch_module.subprocess, "run", fake_run)
 
-    manifest = batch_module.run_batch([_sample_payload("AAA/CCC"), _sample_payload("AAA/DDD")])
+    manifest = batch_module.run_batch(
+        [_sample_payload("AAA/CCC"), _sample_payload("AAA/DDD")],
+        agent=EXPERT_ALIGNMENT_AGENT,
+    )
 
     statuses = [entry["status"] for entry in manifest["circuits"]]
     assert statuses == ["ok", "ok"], "genuinely distinct circuits must never be falsely deduped"
@@ -286,12 +308,12 @@ def test_run_batch_does_not_false_positive_dedup_on_truly_distinct_circuits(tmp_
 
 def test_run_batch_dedup_and_publish_share_the_same_canonical_filename_identity(tmp_path, monkeypatch):
     """`DON23L13` and `don23l13` are the same circuit for dedup purposes
-    (`_dedupe_key` uses `normalizar_circuito`); `_publish_report` must derive
-    the on-disk filename with the SAME identity function, so the manifest's
-    SKIPPED_DUPLICATE claim ("to avoid overwriting the first run's published
-    report") stays factually true — a case-only difference in the raw value
-    must not silently produce two different-case filenames that would never
-    actually collide on a case-sensitive filesystem."""
+    (`_dedupe_key` uses `canonical_circuit_identity`); `_publish_report` must
+    derive the on-disk filename with the SAME identity function, so the
+    manifest's SKIPPED_DUPLICATE claim ("to avoid overwriting the first
+    run's published report") stays factually true — a case-only difference
+    in the raw value must not silently produce two different-case filenames
+    that would never actually collide on a case-sensitive filesystem."""
     monkeypatch.chdir(tmp_path)
 
     def fake_run(command, **kwargs):
@@ -299,12 +321,15 @@ def test_run_batch_dedup_and_publish_share_the_same_canonical_filename_identity(
 
     monkeypatch.setattr(batch_module.subprocess, "run", fake_run)
 
-    manifest = batch_module.run_batch([_sample_payload("don23l13"), _sample_payload("DON23L13")])
+    manifest = batch_module.run_batch(
+        [_sample_payload("don23l13"), _sample_payload("DON23L13")],
+        agent=EXPERT_ALIGNMENT_AGENT,
+    )
 
     statuses = [entry["status"] for entry in manifest["circuits"]]
     assert statuses == ["ok", "SKIPPED_DUPLICATE"]
 
-    published_dir = tmp_path / "reports" / "interpretability" / "published"
+    published_dir = tmp_path / "reports" / "interpretability" / "published" / "expert-alignment"
     published_files = list(published_dir.glob("*.json"))
     assert len(published_files) == 1
 
@@ -324,13 +349,20 @@ def test_run_circuit_canonicalizes_falsy_circuito_consistently_across_context_an
     manifest/artifact path says "unknown")."""
     monkeypatch.chdir(tmp_path)
     captured_contexts: list[Any] = []
-    real_validate = batch_module.validate
+    real_validate = EXPERT_ALIGNMENT_AGENT.validate
 
     def spy_validate(payload):
         captured_contexts.append(payload.get("context", {}).get("circuito"))
         return real_validate(payload)
 
-    monkeypatch.setattr(batch_module, "validate", spy_validate)
+    # `agent` is a frozen AgentSpec, so a "spy" is a fresh spec with only
+    # `validate` swapped — not a monkeypatched module attribute.
+    spied_agent = batch_module.AgentSpec(
+        role=EXPERT_ALIGNMENT_AGENT.role,
+        build_context=EXPERT_ALIGNMENT_AGENT.build_context,
+        validate=spy_validate,
+        tool_version=EXPERT_ALIGNMENT_AGENT.tool_version,
+    )
     monkeypatch.setattr(
         batch_module.subprocess,
         "run",
@@ -340,7 +372,7 @@ def test_run_circuit_canonicalizes_falsy_circuito_consistently_across_context_an
     payload = _sample_payload()
     payload["circuito"] = None
 
-    entry = batch_module.run_circuit(payload, max_retries=0)
+    entry = batch_module.run_circuit(payload, agent=spied_agent, max_retries=0)
 
     assert entry["status"] == "FAILED"
     assert entry["circuito"] == "unknown"
@@ -368,7 +400,7 @@ def test_run_circuit_degrades_cleanly_when_claude_is_not_on_path(tmp_path, monke
 
     monkeypatch.setattr(batch_module.subprocess, "run", fake_run)
 
-    entry = batch_module.run_circuit(_sample_payload())
+    entry = batch_module.run_circuit(_sample_payload(), agent=EXPERT_ALIGNMENT_AGENT)
 
     assert entry["status"] == "FAILED"
     assert "error" in entry
@@ -391,7 +423,7 @@ def test_run_circuit_applies_default_timeout_when_omitted(tmp_path, monkeypatch)
 
     monkeypatch.setattr(batch_module.subprocess, "run", fake_run)
 
-    batch_module.run_circuit(_sample_payload())
+    batch_module.run_circuit(_sample_payload(), agent=EXPERT_ALIGNMENT_AGENT)
 
     assert captured_kwargs.get("timeout") == batch_module.DEFAULT_AGENT_TIMEOUT_SECONDS
     assert captured_kwargs["timeout"] is not None
@@ -408,7 +440,7 @@ def test_run_circuit_passes_through_a_custom_timeout(tmp_path, monkeypatch):
 
     monkeypatch.setattr(batch_module.subprocess, "run", fake_run)
 
-    batch_module.run_circuit(_sample_payload(), timeout=7.5)
+    batch_module.run_circuit(_sample_payload(), agent=EXPERT_ALIGNMENT_AGENT, timeout=7.5)
 
     assert captured_kwargs.get("timeout") == 7.5
 
@@ -424,7 +456,7 @@ def test_run_batch_passes_timeout_through_to_run_circuit(tmp_path, monkeypatch):
 
     monkeypatch.setattr(batch_module.subprocess, "run", fake_run)
 
-    batch_module.run_batch([_sample_payload()], timeout=3.0)
+    batch_module.run_batch([_sample_payload()], agent=EXPERT_ALIGNMENT_AGENT, timeout=3.0)
 
     assert captured_kwargs.get("timeout") == 3.0
 
@@ -470,7 +502,7 @@ def test_run_circuit_manifest_entry_has_the_required_shape(tmp_path, monkeypatch
         batch_module.subprocess, "run", lambda command, **kwargs: _FakeCompletedProcess(stdout=response_text)
     )
 
-    entry = batch_module.run_circuit(_sample_payload())
+    entry = batch_module.run_circuit(_sample_payload(), agent=EXPERT_ALIGNMENT_AGENT)
 
     for key in ("circuito", "status", "artifact_paths", "tool_version", "timestamp"):
         assert key in entry
@@ -544,7 +576,7 @@ def test_run_circuit_null_byte_circuito_does_not_crash_and_is_failed(tmp_path, m
         batch_module.subprocess, "run", lambda command, **kwargs: _FakeCompletedProcess(stdout=invalid_text)
     )
 
-    entry = batch_module.run_circuit(_sample_payload("BAD\x00CKT"), max_retries=0)
+    entry = batch_module.run_circuit(_sample_payload("BAD\x00CKT"), agent=EXPERT_ALIGNMENT_AGENT, max_retries=0)
 
     assert entry["status"] == "FAILED"
     assert "error" in entry
@@ -564,7 +596,7 @@ def test_run_circuit_malformed_periodo_inicio_does_not_crash_and_is_failed(tmp_p
     payload = _sample_payload("BADPERIOD")
     payload["periodo_inicio"] = {"a": 1}
 
-    entry = batch_module.run_circuit(payload)
+    entry = batch_module.run_circuit(payload, agent=EXPERT_ALIGNMENT_AGENT)
 
     assert entry["status"] == "FAILED"
     assert "error" in entry
@@ -581,9 +613,14 @@ def test_run_circuit_unexpected_error_logs_full_traceback_to_stderr(tmp_path, mo
     def raise_key_error(payload):
         raise KeyError("simulated programming bug")
 
-    monkeypatch.setattr(batch_module, "build_context", raise_key_error)
+    fake_agent = batch_module.AgentSpec(
+        role=EXPERT_ALIGNMENT_AGENT.role,
+        build_context=raise_key_error,
+        validate=EXPERT_ALIGNMENT_AGENT.validate,
+        tool_version=EXPERT_ALIGNMENT_AGENT.tool_version,
+    )
 
-    entry = batch_module.run_circuit(_sample_payload("BUGCKT"))
+    entry = batch_module.run_circuit(_sample_payload("BUGCKT"), agent=fake_agent)
 
     assert entry["status"] == "FAILED"
     assert "error" in entry
@@ -611,7 +648,10 @@ def test_run_batch_continues_when_one_circuit_has_a_malformed_field(tmp_path, mo
     bad_payload = _sample_payload("BADCKT")
     bad_payload["periodo_inicio"] = {"a": 1}
 
-    manifest = batch_module.run_batch([bad_payload, _sample_payload("OKCKT")])
+    manifest = batch_module.run_batch(
+        [bad_payload, _sample_payload("OKCKT")],
+        agent=EXPERT_ALIGNMENT_AGENT,
+    )
 
     statuses = {entry["circuito"]: entry["status"] for entry in manifest["circuits"]}
     assert statuses == {"BADCKT": "FAILED", "OKCKT": "ok"}
@@ -624,7 +664,7 @@ def test_publish_report_is_atomic_and_never_leaves_a_partial_file(tmp_path, monk
     into place; if the replace itself fails, the pre-existing file (if any)
     must be untouched."""
     monkeypatch.chdir(tmp_path)
-    published_dir = tmp_path / "reports" / "interpretability" / "published"
+    published_dir = tmp_path / "reports" / "interpretability" / "published" / "expert-alignment"
     published_dir.mkdir(parents=True)
     report_path = published_dir / "ATOMICCKT.json"
     report_path.write_text('{"existing": "valid"}')
@@ -635,7 +675,7 @@ def test_publish_report_is_atomic_and_never_leaves_a_partial_file(tmp_path, monk
     monkeypatch.setattr(_atomic_io.os, "replace", failing_replace)
 
     with pytest.raises(OSError):
-        batch_module._publish_report("ATOMICCKT", {"sintesis_final": "new content"})
+        batch_module._publish_report("ATOMICCKT", {"sintesis_final": "new content"}, role="expert-alignment")
 
     assert report_path.read_text() == '{"existing": "valid"}', (
         "the pre-existing published report must never be left partially overwritten"
@@ -651,3 +691,111 @@ def test_load_circuit_payloads_concatenates_multiple_file_arguments(tmp_path):
     payloads = batch_module._load_circuit_payloads([str(file_a), str(file_b)])
 
     assert [p["circuito"] for p in payloads] == ["CKTA", "CKTB", "CKTC"]
+
+
+# --- AgentSpec generalization (Phase 4) ---------------------------------
+
+
+def test_agent_is_a_required_keyword_only_argument_on_run_circuit():
+    with pytest.raises(TypeError):
+        batch_module.run_circuit(_sample_payload())  # missing required `agent` kwarg
+
+    with pytest.raises(TypeError):
+        batch_module.run_circuit(_sample_payload(), EXPERT_ALIGNMENT_AGENT)  # positional not allowed
+
+
+def test_agent_is_a_required_keyword_only_argument_on_run_batch():
+    with pytest.raises(TypeError):
+        batch_module.run_batch([_sample_payload()])  # missing required `agent` kwarg
+
+    with pytest.raises(TypeError):
+        batch_module.run_batch([_sample_payload()], EXPERT_ALIGNMENT_AGENT)  # positional not allowed
+
+
+def test_two_agent_specs_publish_the_same_circuito_without_colliding(tmp_path, monkeypatch):
+    """The whole point of role-namespacing (spec: agent-namespaced-reports):
+    two different agents publishing a report for the SAME circuito must
+    never overwrite each other."""
+    monkeypatch.chdir(tmp_path)
+
+    def fake_run(command, **kwargs):
+        return _FakeCompletedProcess(stdout=json.dumps(_valid_response("SHARED01"), ensure_ascii=False))
+
+    monkeypatch.setattr(batch_module.subprocess, "run", fake_run)
+
+    historical_agent = batch_module.AgentSpec(
+        role="historical",
+        build_context=EXPERT_ALIGNMENT_AGENT.build_context,
+        validate=EXPERT_ALIGNMENT_AGENT.validate,
+        tool_version="historical-agent-tools/0.1.0",
+    )
+
+    expert_entry = batch_module.run_circuit(_sample_payload("SHARED01"), agent=EXPERT_ALIGNMENT_AGENT)
+    historical_entry = batch_module.run_circuit(_sample_payload("SHARED01"), agent=historical_agent)
+
+    assert expert_entry["status"] == "ok"
+    assert historical_entry["status"] == "ok"
+
+    expert_path = Path(expert_entry["artifact_paths"][0])
+    historical_path = Path(historical_entry["artifact_paths"][0])
+    assert expert_path != historical_path
+    assert expert_path.parent.name == "expert-alignment"
+    assert historical_path.parent.name == "historical"
+    assert expert_path.is_file()
+    assert historical_path.is_file()
+
+
+def test_manifest_tool_version_comes_from_the_agent_spec_not_a_hardcoded_constant(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        batch_module.subprocess,
+        "run",
+        lambda command, **kwargs: _FakeCompletedProcess(stdout=json.dumps(_valid_response("OKCKT"), ensure_ascii=False)),
+    )
+
+    custom_agent = batch_module.AgentSpec(
+        role="historical",
+        build_context=EXPERT_ALIGNMENT_AGENT.build_context,
+        validate=EXPERT_ALIGNMENT_AGENT.validate,
+        tool_version="historical-agent-tools/9.9.9",
+    )
+
+    entry = batch_module.run_circuit(_sample_payload("OKCKT"), agent=custom_agent)
+    assert entry["tool_version"] == "historical-agent-tools/9.9.9"
+
+    manifest = batch_module.run_batch([_sample_payload("OKCKT")], agent=custom_agent)
+    assert manifest["tool_version"] == "historical-agent-tools/9.9.9"
+    assert manifest["circuits"][0]["tool_version"] == "historical-agent-tools/9.9.9"
+
+
+def test_cli_agent_flag_selects_the_registered_agent_spec(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    circuits_file = tmp_path / "circuits.json"
+    circuits_file.write_text(json.dumps([_sample_payload("OKCKT")], ensure_ascii=False))
+
+    monkeypatch.setattr(
+        batch_module.subprocess,
+        "run",
+        lambda command, **kwargs: _FakeCompletedProcess(stdout=json.dumps(_valid_response("OKCKT"), ensure_ascii=False)),
+    )
+
+    exit_code = batch_module.main(["--circuits", str(circuits_file), "--agent", "expert-alignment"])
+
+    assert exit_code == 0
+    published_path = tmp_path / "reports" / "interpretability" / "published" / "expert-alignment" / "OKCKT.json"
+    assert published_path.is_file()
+
+
+def test_no_other_source_module_hardcodes_the_flat_published_path():
+    """Only agent_tools/batch.py may reference the published-reports root —
+    every publish must go through the role-namespaced
+    `PUBLISHED_REPORTS_ROOT / agent.role` composition, never the flat
+    (pre-namespacing) path string, so a future agent's L2 CLI can never
+    reintroduce a cross-agent publish collision by bypassing the runner."""
+    src_root = Path(__file__).resolve().parents[1] / "src" / "chec_local_interpreter"
+    offenders = [
+        str(path)
+        for path in src_root.rglob("*.py")
+        if path.name != "batch.py" and "reports/interpretability/published" in path.read_text()
+    ]
+    assert offenders == []

@@ -21,7 +21,7 @@ data/*
 
 reports/interpretability/artifacts/*
 !reports/interpretability/artifacts/.gitkeep
-reports/interpretability/published/*
+reports/interpretability/published/**
 !reports/interpretability/published/.gitkeep
 reports/graphify/*
 !reports/graphify/.gitkeep

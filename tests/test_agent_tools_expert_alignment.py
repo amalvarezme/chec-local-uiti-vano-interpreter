@@ -457,7 +457,7 @@ def test_write_failure_artifact_directory_matches_canonical_publish_identity(tmp
     expected_identity = canonical_circuit_identity(raw_circuito)
     assert artifact_path.parent.name == expected_identity
 
-    published_path = batch_module._publish_report(raw_circuito, {"sintesis_final": "ok"})
+    published_path = batch_module._publish_report(raw_circuito, {"sintesis_final": "ok"}, role="expert-alignment")
     assert published_path.stem == expected_identity
     assert artifact_path.parent.name == published_path.stem, (
         "failure-artifact directory and publish filename must use the same canonical identity"

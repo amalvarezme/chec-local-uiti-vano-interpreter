@@ -1,12 +1,16 @@
-"""L4 headless batch orchestration for the expert-alignment pilot agent.
+"""L4 headless batch orchestration, generalized across agent roles.
 
 Runs one isolated headless agent invocation per circuit, gates every
-response through the L2 `validate` verb (schema + provenance, WU1/WU2), and
-never publishes invalid output. This module reuses the L1/L2 building
-blocks (`build_context`, `validate`, `TOOL_VERSION`) from
-`chec_local_interpreter.agent_tools.expert_alignment`, and the shared
+response through the injected `AgentSpec.validate` verb (schema +
+provenance, WU1/WU2), and never publishes invalid output. The runner itself
+has no agent-specific logic: `agent` (an `AgentSpec`) supplies the role name,
+`build_context`/`validate` callables, and `tool_version` — the module reuses
+whichever L1/L2 building blocks the caller supplies (by default
+`chec_local_interpreter.agent_tools.expert_alignment`'s), and the shared
 `canonical_circuit_identity` from `chec_local_interpreter.circuit_identity`,
-in-process — it does not duplicate their logic.
+in-process. `agent` is a required, keyword-only argument on `run_circuit`/
+`run_batch` (no default) so a call can never silently publish to the wrong
+namespace by forgetting to specify which agent it is running.
 
 Per design's Failure handling section:
     - Each circuit run is isolated; result = exit code + validated/not.
@@ -47,16 +51,15 @@ import os
 import subprocess
 import sys
 import traceback
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence
 
 from chec_local_interpreter.agent_tools._atomic_io import atomic_write_text as _atomic_write_text
-from chec_local_interpreter.agent_tools.expert_alignment import (
-    TOOL_VERSION,
-    build_context,
-    validate,
-)
+from chec_local_interpreter.agent_tools.expert_alignment import TOOL_VERSION as _EXPERT_ALIGNMENT_TOOL_VERSION
+from chec_local_interpreter.agent_tools.expert_alignment import build_context as _expert_alignment_build_context
+from chec_local_interpreter.agent_tools.expert_alignment import validate as _expert_alignment_validate
 from chec_local_interpreter.circuit_identity import canonical_circuit_identity
 
 MAX_VALIDATION_RETRIES = 2
@@ -73,8 +76,45 @@ DEFAULT_AGENT_COMMAND: tuple[str, ...] = ("claude", "-p")
 
 # Relative to the invocation cwd, same convention as
 # `agent_tools.expert_alignment.ARTIFACTS_ROOT` — callers are expected to
-# run this CLI from the repo root.
+# run this CLI from the repo root. The actual on-disk path is always
+# role-namespaced under this root (`PUBLISHED_REPORTS_ROOT / agent.role`);
+# no consumer should hardcode this string directly (pinned by
+# `tests/test_agent_tools_batch.py::test_no_other_source_module_hardcodes_the_flat_published_path`).
 PUBLISHED_REPORTS_ROOT = Path("reports/interpretability/published")
+
+
+@dataclass(frozen=True)
+class AgentSpec:
+    """Everything the batch runner needs to run one agent role, generically.
+
+    `role` names the agent for publish-path namespacing (spec:
+    agent-namespaced-reports) and is also used verbatim as the CLI's
+    `--agent` selector key. `build_context`/`validate` are the agent's own
+    L2 verbs (same call signature as `agent_tools.expert_alignment`'s), and
+    `tool_version` is recorded on every manifest entry instead of a
+    module-level constant — so the manifest always reflects which agent
+    actually produced it, not whichever agent this module happened to
+    import first.
+    """
+
+    role: str
+    build_context: Callable[[dict[str, Any]], dict[str, Any]]
+    validate: Callable[[dict[str, Any]], tuple[dict[str, Any], int]]
+    tool_version: str
+
+
+EXPERT_ALIGNMENT_AGENT = AgentSpec(
+    role="expert-alignment",
+    build_context=_expert_alignment_build_context,
+    validate=_expert_alignment_validate,
+    tool_version=_EXPERT_ALIGNMENT_TOOL_VERSION,
+)
+
+# CLI `--agent` selector. The historical/base agent's entry is added in the
+# slice that ports it (Slice 1b), following the same registration pattern.
+AGENT_SPECS: dict[str, AgentSpec] = {
+    EXPERT_ALIGNMENT_AGENT.role: EXPERT_ALIGNMENT_AGENT,
+}
 
 
 def _utc_timestamp() -> str:
@@ -119,10 +159,17 @@ def _dedupe_key(circuito: str) -> str:
     return canonical_circuit_identity(circuito)
 
 
-def _publish_report(circuito: str, data: dict[str, Any]) -> Path:
+def _publish_report(circuito: str, data: dict[str, Any], *, role: str) -> Path:
+    """Publish under `PUBLISHED_REPORTS_ROOT/{role}/{canonical}.json`.
+
+    `role` (from `AgentSpec.role`) namespaces every agent's published reports
+    into its own directory, so two agents processing the same circuit can
+    never overwrite each other's report (spec: agent-namespaced-reports).
+    """
     safe_name = canonical_circuit_identity(circuito)
-    PUBLISHED_REPORTS_ROOT.mkdir(parents=True, exist_ok=True)
-    report_path = PUBLISHED_REPORTS_ROOT / f"{safe_name}.json"
+    target_dir = PUBLISHED_REPORTS_ROOT / role
+    target_dir.mkdir(parents=True, exist_ok=True)
+    report_path = target_dir / f"{safe_name}.json"
     _atomic_write_text(report_path, json.dumps(data, ensure_ascii=False, indent=2))
     return report_path
 
@@ -133,6 +180,7 @@ def _manifest_entry(
     status: str,
     artifact_paths: list[str],
     retries: int,
+    tool_version: str,
     error: str | None = None,
     errors: list[str] | None = None,
 ) -> dict[str, Any]:
@@ -140,7 +188,7 @@ def _manifest_entry(
         "circuito": circuito,
         "status": status,
         "artifact_paths": artifact_paths,
-        "tool_version": TOOL_VERSION,
+        "tool_version": tool_version,
         "timestamp": _utc_timestamp(),
         "retries": retries,
     }
@@ -154,11 +202,16 @@ def _manifest_entry(
 def run_circuit(
     payload: dict[str, Any],
     *,
+    agent: AgentSpec,
     max_retries: int = MAX_VALIDATION_RETRIES,
     command: Sequence[str] = DEFAULT_AGENT_COMMAND,
     timeout: float | None = DEFAULT_AGENT_TIMEOUT_SECONDS,
 ) -> dict[str, Any]:
     """Run one circuit end to end: build-context -> invoke agent -> validate -> retry -> publish/fail.
+
+    `agent` is required and keyword-only (no default): every call site must
+    say explicitly which `AgentSpec` it is running, so a circuit can never
+    be silently published under the wrong agent's namespace.
 
     Never raises, for either expected failure modes (schema/provenance
     validation failure, missing agent executable, invocation timeout) or any
@@ -184,7 +237,7 @@ def run_circuit(
     attempt = 0
 
     try:
-        envelope = build_context(payload)
+        envelope = agent.build_context(payload)
         prompt = envelope["prompt"]
 
         while True:
@@ -196,6 +249,7 @@ def run_circuit(
                     status="FAILED",
                     artifact_paths=artifact_paths,
                     retries=attempt,
+                    tool_version=agent.tool_version,
                     error=f"agent command not found on PATH: {' '.join(command)}",
                 )
             except subprocess.TimeoutExpired as exc:
@@ -204,6 +258,7 @@ def run_circuit(
                     status="FAILED",
                     artifact_paths=artifact_paths,
                     retries=attempt,
+                    tool_version=agent.tool_version,
                     error=f"agent invocation timed out: {exc}",
                 )
 
@@ -217,25 +272,27 @@ def run_circuit(
                     status="AGENT_ERROR",
                     artifact_paths=artifact_paths,
                     retries=attempt,
+                    tool_version=agent.tool_version,
                     error=(
                         f"agent process exited with a non-zero return code "
                         f"({process.returncode}): {process.stderr}"
                     ),
                 )
 
-            result, _exit_code = validate({"response_text": process.stdout, "context": envelope["context"]})
+            result, _exit_code = agent.validate({"response_text": process.stdout, "context": envelope["context"]})
 
             if result.get("ok"):
-                report_path = _publish_report(circuito, result["data"])
+                report_path = _publish_report(circuito, result["data"], role=agent.role)
                 return _manifest_entry(
                     circuito=circuito,
                     status="ok",
                     artifact_paths=[str(report_path)],
                     retries=attempt,
+                    tool_version=agent.tool_version,
                 )
 
-            # validate() already wrote the failure artifact (schema or provenance
-            # errors, combined) under reports/interpretability/artifacts/{circuito}/.
+            # agent.validate() already wrote the failure artifact (schema or
+            # provenance errors, combined) under that agent's own artifacts root.
             if "artifact_path" in result:
                 artifact_paths.append(result["artifact_path"])
 
@@ -245,6 +302,7 @@ def run_circuit(
                     status="FAILED",
                     artifact_paths=artifact_paths,
                     retries=attempt,
+                    tool_version=agent.tool_version,
                     error="validation failed after exhausting retries",
                     errors=result.get("errors", []),
                 )
@@ -266,6 +324,7 @@ def run_circuit(
             status="FAILED",
             artifact_paths=artifact_paths,
             retries=attempt,
+            tool_version=agent.tool_version,
             error=f"unexpected error while processing circuit: {exc}",
         )
 
@@ -273,11 +332,14 @@ def run_circuit(
 def run_batch(
     payloads: list[dict[str, Any]],
     *,
+    agent: AgentSpec,
     max_retries: int = MAX_VALIDATION_RETRIES,
     command: Sequence[str] = DEFAULT_AGENT_COMMAND,
     timeout: float | None = DEFAULT_AGENT_TIMEOUT_SECONDS,
 ) -> dict[str, Any]:
     """Run every circuit in `payloads`; a failing circuit never aborts the batch.
+
+    `agent` is required and keyword-only (no default) — see `run_circuit`.
 
     Duplicate `circuito` values within the same batch are detected: the
     second and later occurrences are marked `SKIPPED_DUPLICATE` instead of
@@ -300,6 +362,7 @@ def run_batch(
                     status="SKIPPED_DUPLICATE",
                     artifact_paths=[],
                     retries=0,
+                    tool_version=agent.tool_version,
                     error=(
                         f"duplicate circuito '{circuito}' in this batch; skipped to avoid "
                         "silently overwriting the first run's published report"
@@ -308,9 +371,9 @@ def run_batch(
             )
             continue
         seen_circuitos.add(dedupe_key)
-        circuits.append(run_circuit(payload, max_retries=max_retries, command=command, timeout=timeout))
+        circuits.append(run_circuit(payload, agent=agent, max_retries=max_retries, command=command, timeout=timeout))
     return {
-        "tool_version": TOOL_VERSION,
+        "tool_version": agent.tool_version,
         "generated_at": _utc_timestamp(),
         "circuits": circuits,
     }
@@ -369,10 +432,17 @@ def main(argv: list[str] | None = None) -> int:
             f"(default: {DEFAULT_AGENT_TIMEOUT_SECONDS})."
         ),
     )
+    parser.add_argument(
+        "--agent",
+        choices=sorted(AGENT_SPECS),
+        default=EXPERT_ALIGNMENT_AGENT.role,
+        help=f"Which registered agent role to run (default: {EXPERT_ALIGNMENT_AGENT.role}).",
+    )
     args = parser.parse_args(argv)
 
+    agent = AGENT_SPECS[args.agent]
     payloads = _load_circuit_payloads(args.circuits)
-    manifest = run_batch(payloads, max_retries=args.max_retries, timeout=args.timeout)
+    manifest = run_batch(payloads, agent=agent, max_retries=args.max_retries, timeout=args.timeout)
 
     json.dump(manifest, sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")
