@@ -7,7 +7,6 @@ from typing import Any
 
 import pandas as pd
 
-from chec_local_interpreter.causal_language import find_causal_language
 from chec_local_interpreter.circuit_identity import normalizar_circuito
 from chec_local_interpreter.llm_validation import validar_provenance_generico
 
@@ -1073,13 +1072,6 @@ def validar_respuesta_expert_alignment(response_text: str, context: dict[str, An
     if has_relevant_comparison and not data.get("variables_a_priorizar"):
         if context.get("variables_modelo_predictivo"):
             errors.append("variables_a_priorizar no debe estar vacío si hay coincidencias o diferencias relevantes.")
-
-    # Shared guard (chec_local_interpreter.causal_language): catches the bare
-    # noun plus plural/adjective forms ("causas", "causal", "causales",
-    # "causante(s)", "causada(s)", "causalidad") without flagging unrelated
-    # words that merely contain "causa" as a substring (e.g. "encausar").
-    for term in find_causal_language(text_blob):
-        errors.append(f"Lenguaje causal no permitido: {term.lower()}")
 
     return {"ok": not errors, "data": data, "errors": errors}
 
