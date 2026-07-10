@@ -60,6 +60,9 @@ from chec_local_interpreter.agent_tools._atomic_io import atomic_write_text as _
 from chec_local_interpreter.agent_tools.expert_alignment import TOOL_VERSION as _EXPERT_ALIGNMENT_TOOL_VERSION
 from chec_local_interpreter.agent_tools.expert_alignment import build_context as _expert_alignment_build_context
 from chec_local_interpreter.agent_tools.expert_alignment import validate as _expert_alignment_validate
+from chec_local_interpreter.agent_tools.historical import TOOL_VERSION as _HISTORICAL_TOOL_VERSION
+from chec_local_interpreter.agent_tools.historical import build_context as _historical_build_context
+from chec_local_interpreter.agent_tools.historical import validate as _historical_validate
 from chec_local_interpreter.circuit_identity import canonical_circuit_identity
 
 MAX_VALIDATION_RETRIES = 2
@@ -110,10 +113,17 @@ EXPERT_ALIGNMENT_AGENT = AgentSpec(
     tool_version=_EXPERT_ALIGNMENT_TOOL_VERSION,
 )
 
-# CLI `--agent` selector. The historical/base agent's entry is added in the
-# slice that ports it (Slice 1b), following the same registration pattern.
+HISTORICAL_AGENT = AgentSpec(
+    role="historical",
+    build_context=_historical_build_context,
+    validate=_historical_validate,
+    tool_version=_HISTORICAL_TOOL_VERSION,
+)
+
+# CLI `--agent` selector.
 AGENT_SPECS: dict[str, AgentSpec] = {
     EXPERT_ALIGNMENT_AGENT.role: EXPERT_ALIGNMENT_AGENT,
+    HISTORICAL_AGENT.role: HISTORICAL_AGENT,
 }
 
 

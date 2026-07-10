@@ -786,6 +786,130 @@ def test_cli_agent_flag_selects_the_registered_agent_spec(tmp_path, monkeypatch)
     assert published_path.is_file()
 
 
+# --- Historical AgentSpec registration (Phase 9) ------------------------
+
+
+def _sample_historical_context(circuito: str = "DON23L13") -> dict:
+    return {
+        # `run_circuit` keys its own manifest/dedupe/publish bookkeeping off a
+        # top-level "circuito" field for every agent, regardless of how that
+        # agent's own `build_context` derives its identity internally (the
+        # historical agent derives its own from `metadata.circuitos`) — a
+        # real caller assembling this payload for the batch runner must
+        # supply both.
+        "circuito": circuito,
+        "analysis_name": "local_uiti_vano_interpretability",
+        "metadata": {
+            "v": "test",
+            "schema": "test",
+            "ts": "2026-01-01T00:00",
+            "circuitos": [circuito],
+            "start": "2026-01-01",
+            "end": "2026-01-03",
+            "unavailable_cols": [],
+        },
+        "selected_context": {"circuitos": [circuito], "indicator": "UITI_VANO"},
+        "summary": {"events": 2, "nonzero_days": 2, "total_uv": 15.0},
+        "daily": [
+            {"d": "2026-01-01", "uv": 5.0, "n": 1, "dur": 1.0},
+            {"d": "2026-01-02", "uv": 10.0, "n": 1, "dur": 2.0},
+        ],
+        "critical_points": [
+            {
+                "critical_point_id": "cp-2026-01-02",
+                "fecha_dia": "2026-01-02",
+                "rank": 1,
+                "score": 2.0,
+                "types": ["top_contribution_day"],
+                "selection_reason": "El dia aporta una fraccion alta del UITI_VANO total.",
+                "metrics": {"UITI_VANO": 10.0},
+                "daily_aggregates": {"events": 1},
+            }
+        ],
+        "critical_periods": [],
+        "domain": {
+            "variable_groups": {
+                "Entorno/Riesgo": {"variables": ["NR_T", "DDT"]},
+                "Evento/Impacto": {"variables": ["UITI_VANO", "CNT_TRF"]},
+            },
+            "relationship_rules": [],
+        },
+        "graph_knowledge": "Grafo no disponible en pruebas.",
+    }
+
+
+def _valid_historical_response(circuito: str = "DON23L13") -> dict:
+    from chec_local_interpreter.llm_contracts import PROMPT_VERSION
+
+    return {
+        "source": "llm",
+        "prompt_version": PROMPT_VERSION,
+        "headline": "Concentracion de UITI_VANO",
+        "section_title": "Hallazgos del periodo",
+        "executive_summary": ["La evidencia tabular muestra un punto dominante."],
+        "key_findings": [
+            {
+                "title": "Punto dominante",
+                "text": "El punto concentra el comportamiento del periodo.",
+                "evidence": [
+                    {
+                        "date": "2026-01-02",
+                        "critical_point_id": "cp-2026-01-02",
+                        "variable": "UITI_VANO",
+                        "summary": "El dia aporta una fraccion alta del UITI_VANO total.",
+                    }
+                ],
+                "referenced_events": [],
+                "variable_groups_used": ["Evento/Impacto"],
+                "confidence": "media",
+            }
+        ],
+        "circuit_characterization": {
+            "text": "Characterization text.",
+            "p97_vanos_uiti_vano": ["V1"],
+            "p97_vanos_eventos": ["V2"],
+            "top_3_modes_related": ["Mode1"],
+            "probable_justifications_rules": ["Rule1"],
+        },
+        "period_synthesis": "El comportamiento del periodo se concentra en el punto critico.",
+        "data_gaps": [],
+        "limitations": ["Solo se usa la informacion estructurada disponible."],
+        "recommended_actions": ["Revisar los eventos fuente del punto critico."],
+    }
+
+
+def test_historical_agent_is_registered_in_agent_specs():
+    assert "historical" in batch_module.AGENT_SPECS
+    assert batch_module.AGENT_SPECS["historical"] is batch_module.HISTORICAL_AGENT
+    assert batch_module.HISTORICAL_AGENT.role == "historical"
+
+
+def test_historical_agent_end_to_end_build_context_validate_publish(tmp_path, monkeypatch):
+    """End-to-end using the REAL `HISTORICAL_AGENT` spec (not a synthetic
+    stand-in): build-context -> invoke -> validate -> publish
+    `published/historical/{circuito}.json`."""
+    monkeypatch.chdir(tmp_path)
+    response_text = json.dumps(_valid_historical_response(), ensure_ascii=False)
+
+    monkeypatch.setattr(
+        batch_module.subprocess,
+        "run",
+        lambda command, **kwargs: _FakeCompletedProcess(stdout=response_text),
+    )
+
+    payload = _sample_historical_context("DON23L13")
+    entry = batch_module.run_circuit(payload, agent=batch_module.HISTORICAL_AGENT)
+
+    assert entry["status"] == "ok", entry
+    assert entry["tool_version"] == batch_module.HISTORICAL_AGENT.tool_version
+
+    published_path = Path(entry["artifact_paths"][0])
+    assert published_path.is_file()
+    assert published_path.parent.name == "historical"
+    published_data = json.loads(published_path.read_text())
+    assert published_data["headline"]
+
+
 def test_no_other_source_module_hardcodes_the_flat_published_path():
     """Only agent_tools/batch.py may reference the published-reports root —
     every publish must go through the role-namespaced
