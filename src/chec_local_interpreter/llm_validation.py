@@ -11,6 +11,7 @@ try:
 except ImportError:  # pragma: no cover - exercised only in minimal environments
     Draft202012Validator = None
 
+from chec_local_interpreter.causal_language import find_causal_language
 from chec_local_interpreter.llm_contracts import load_output_schema
 
 @dataclass
@@ -160,6 +161,14 @@ def _guardrail_errors(data: dict[str, Any], context: dict[str, Any]) -> list[str
 
     if unavailable and not data.get("data_gaps"):
         errors.append("Output must include data_gaps when optional variables are unavailable.")
+
+    # Shared guard (chec_local_interpreter.causal_language): the base/
+    # historical agent's invariants claim causal-language is forbidden, but
+    # this validator previously had no check for it at all (a latent gap —
+    # only the expert-alignment validator enforced it). Reuse the exact same
+    # matcher so both agents enforce the identical rule.
+    for term in find_causal_language(full_text_blob):
+        errors.append(f"Causal language not allowed: {term.lower()}")
     return errors
 
 

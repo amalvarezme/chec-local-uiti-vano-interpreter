@@ -222,6 +222,38 @@ def test_validar_respuesta_expert_alignment_rejects_bare_causa_word():
     assert any("causó" in error for error in result["errors"])
 
 
+def test_validar_respuesta_expert_alignment_rejects_plural_and_adjective_causal_forms():
+    """Broadened guard (chec_local_interpreter.causal_language): plural
+    ("causas") and adjective ("causal"/"causales") forms must be rejected the
+    same way the bare singular noun already was — pilot Known Limitation #3."""
+    context = {
+        "periodo_informe": {"inicio": "2026-01-01", "fin": "2026-01-31"},
+        "fechas_informe": [],
+        "llm1_analysis": {"period_synthesis": ""},
+        "llm2_inference_analysis": {"escenarios": []},
+        "variables_modelo_predictivo": [],
+        "pdf_expert_matches": [],
+    }
+    base_output = {
+        "contexto": {"circuito": "DON23L13", "periodo": {"inicio": "2026-01-01", "fin": "2026-01-31"}, "n_filas_expertas_comparadas": 0},
+        "coincidencias": [],
+        "diferencias": [],
+        "hallazgos_expertos_no_cubiertos": [],
+        "hallazgos_modelo_no_respaldados_por_pdf": [],
+        "variables_a_priorizar": [],
+    }
+
+    for phrase in (
+        "Estas son las causas probables del evento.",
+        "Existe una relación causal entre las variables.",
+        "Los factores causales fueron identificados.",
+    ):
+        output = {**base_output, "sintesis_final": phrase}
+        result = validar_respuesta_expert_alignment(json.dumps(output, ensure_ascii=False), context)
+        assert not result["ok"], phrase
+        assert any("causal no permitido" in error.lower() for error in result["errors"]), phrase
+
+
 def test_render_expert_alignment_tab_uses_html_not_raw_json():
     analysis = {
         "contexto": {
