@@ -167,7 +167,7 @@ requires both stages to pass; failure artifacts are written under
 ```bash
 python -m chec_local_interpreter.agent_tools.batch \
   --circuits path/to/circuits.json \
-  [--agent expert-alignment|historical] \
+  [--agent expert-alignment|historical|inference] \
   [--max-retries 2] \
   [--manifest-out path/to/run-manifest.json]
 ```
@@ -176,8 +176,8 @@ python -m chec_local_interpreter.agent_tools.batch \
   context-build payload (an object with a `circuito` key, shaped like the selected agent's
   `build-context` stdin) or a list of such payload objects (a circuits manifest). Multiple
   `--circuits` arguments concatenate, in order.
-- `--agent` selects which registered `AgentSpec` to run (default `expert-alignment`); the two
-  registered roles today are `expert-alignment` and `historical`.
+- `--agent` selects which registered `AgentSpec` to run (default `expert-alignment`); the three
+  registered roles today are `expert-alignment`, `historical`, and `inference`.
 - `--max-retries` overrides `MAX_VALIDATION_RETRIES` (default `2`) without a code change.
 - `--manifest-out` additionally writes the run manifest to a file (it is always printed to
   stdout).
@@ -222,8 +222,8 @@ python -m chec_local_interpreter.agent_tools.batch \
 `{circuito, status, artifact_paths, tool_version, timestamp}` shape. The published path is always
 role-namespaced (`published/{agent_role}/{circuito}.json`, per `AgentSpec.role` — spec:
 agent-namespaced-reports) so two agents processing the same circuit can never overwrite each
-other's report; `--agent` selects which registered `AgentSpec` (`expert-alignment` or
-`historical`) the batch runner uses, defaulting to `expert-alignment`.
+other's report; `--agent` selects which registered `AgentSpec` (`expert-alignment`, `historical`,
+or `inference`) the batch runner uses, defaulting to `expert-alignment`.
 
 ### Manifest `status` values
 
@@ -240,11 +240,19 @@ other's report; `--agent` selects which registered `AgentSpec` (`expert-alignmen
 |---|---|---|---|---|---|
 | `expert-alignment` | Implemented | `.claude/agents/expert-alignment.md` | `.claude/agents/rules/invariants.md` | `.claude/skills/expert-alignment/SKILL.md` | `python -m chec_local_interpreter.agent_tools.expert_alignment` |
 | `historical` / base (Agent1) | Implemented (`historical-inference-agents` change, Slice 1b) | `.claude/agents/historical.md` | `.claude/agents/rules/invariants.md` | `.claude/skills/historical/SKILL.md` | `python -m chec_local_interpreter.agent_tools.historical` |
-| inference / SHAP (Agent2) | Stub — not yet ported | — | — | — | Follow-on (Slice 2). See "Recorded Constraint for Slice 2" in `sdd/historical-inference-agents/spec` — Agent2's validator MUST reach expert-alignment-grade rigor before it can be called Implemented; it must NOT ship with today's 2-of-9-key `validar_respuesta_inferencia`. |
+| `inference` / MGCECDL-SHAP (Agent2) | Implemented (`report-command-pipeline` change, Slice A) | `.claude/agents/inference.md` | `.claude/agents/rules/invariants.md` | `.claude/skills/inference/SKILL.md` | `python -m chec_local_interpreter.agent_tools.inference` |
 
-Both `expert-alignment` and `historical` are implemented and registered in
-`agent_tools/batch.py`'s `AGENT_SPECS`. The inference/SHAP agent remains explicitly out of scope
-— see "Follow-on" below for the full deferred-work ledger and the Slice 2 quality bar it must meet.
+`expert-alignment`, `historical`, and `inference` are all implemented and registered in
+`agent_tools/batch.py`'s `AGENT_SPECS`. The inference agent's validator
+(`inference_validation.validar_respuesta_inferencia_strict` + `validar_provenance_inferencia`)
+reaches expert-alignment-grade rigor per the constraint recorded in
+`sdd/historical-inference-agents/spec` — full 9-key schema coverage (jsonschema
+`additionalProperties: false`), dedicated test files
+(`tests/test_inference_validation_strict.py`, `tests/test_agent_tools_inference.py`), and the
+shared provenance-core wrapper — replacing the old frozen, 2-of-9-key
+`chec_impacto.interpretability.circuit_analysis.validar_respuesta_inferencia` for every code path
+governed by this framework (that frozen function itself is untouched and still covered by its own
+`tests/test_inference_validation.py`).
 
 ## Related artifacts
 
@@ -271,6 +279,26 @@ Both `expert-alignment` and `historical` are implemented and registered in
   (`validar_provenance_base` and the public `allowed_dates`/`allowed_critical_point_ids`/
   `unavailable_columns` accessors)
 - L2 CLI: `src/chec_local_interpreter/agent_tools/historical.py`
+
+### inference
+
+- Role definition: [`.claude/agents/inference.md`](../.claude/agents/inference.md)
+- Rules (binding invariants, shared with expert-alignment/historical): [`.claude/agents/rules/invariants.md`](../.claude/agents/rules/invariants.md)
+- Claude Code Skill: [`.claude/skills/inference/SKILL.md`](../.claude/skills/inference/SKILL.md)
+  — ports `llm/skills_inference/01_structured_context_builder.md`,
+  `02_circuit_scenario_interpreter.md`, `03_uiti_vano_behavior_explainer.md`,
+  `04_graph_connectivity_guardrails.md`, `05_llm_output_validator.md`, and
+  `06_inference_output_contract.md`.
+- L1 deterministic Python: `src/chec_local_interpreter/inference_validation.py`
+  (`validar_respuesta_inferencia_strict`, `validar_provenance_inferencia`, and the public
+  `allowed_dates`/`allowed_critical_point_ids`/`allowed_variables`/`allowed_scenario_names`
+  accessors), `llm/prompts/inference.output_schema.json`
+- L2 CLI: `src/chec_local_interpreter/agent_tools/inference.py`
+- Frozen boundary: the L1/L2 layers above never import the frozen
+  `chec_impacto.interpretability.circuit_analysis` module's model-implementation subpackage or its
+  weak `validar_respuesta_inferencia` — that function stays untouched and is still covered by its
+  own `tests/test_inference_validation.py`; the new strict validator is a separate, additive
+  module living inside `chec_local_interpreter`.
 
 ### Shared
 
