@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "inference.output_schema.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contexto", "entregables", "escenarios", "discusion_grafos",
+    "coherencia_grafo_modelo", "hallazgos", "limitaciones",
+    "inferencias_predictivas", "hipotesis_modelo_predictivo"
+  ],
+  "properties": {
+    "contexto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["circuito", "periodo", "modelo"],
+      "properties": {
+        "circuito": {"type": "string", "minLength": 1},
+        "periodo": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["inicio", "fin"],
+          "properties": {
+            "inicio": {"type": ["string", "null"]},
+            "fin": {"type": ["string", "null"]}
+          }
+        },
+        "modelo": {"type": "string"}
+      }
+    },
+    "entregables": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["grafos_html"],
+      "properties": {
+        "grafos_html": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["escenario", "path"],
+            "properties": {
+              "escenario": {"type": "string"},
+              "path": {"type": "string"},
+              "fuente": {"type": ["string", "null"]},
+              "pesos": {"type": ["string", "null"]}
+            }
+          }
+        }
+      }
+    },
+    "escenarios": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["nombre", "interpretacion"],
+        "properties": {
+          "nombre": {"type": "string", "minLength": 1},
+          "interpretacion": {"type": "string", "minLength": 1},
+          "provenance": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["data_ref", "agent", "rule"],
+            "properties": {
+              "data_ref": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+              "agent": {"const": "inference"},
+              "rule": {
+                "type": "string",
+                "enum": [
+                  "01_structured_context_builder",
+                  "02_circuit_scenario_interpreter",
+                  "03_uiti_vano_behavior_explainer",
+                  "04_graph_connectivity_guardrails",
+                  "05_llm_output_validator",
+                  "06_inference_output_contract"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "discusion_grafos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["seccion", "lectura"],
+        "properties": {
+          "seccion": {"type": "string", "enum": ["periodo_completo", "puntos_criticos"]},
+          "lectura": {"type": "string", "minLength": 1},
+          "provenance": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["data_ref", "agent", "rule"],
+            "properties": {
+              "data_ref": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+              "agent": {"const": "inference"},
+              "rule": {
+                "type": "string",
+                "enum": [
+                  "01_structured_context_builder",
+                  "02_circuit_scenario_interpreter",
+                  "03_uiti_vano_behavior_explainer",
+                  "04_graph_connectivity_guardrails",
+                  "05_llm_output_validator",
+                  "06_inference_output_contract"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "coherencia_grafo_modelo": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {"type": "string", "minLength": 1},
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["variable", "lectura"],
+            "properties": {
+              "variable": {"type": "string", "minLength": 1},
+              "tiene_camino_a_uiti_vano": {"type": ["boolean", "string", "null"]},
+              "ruta_resumida": {"type": ["string", "null"]},
+              "tipo_conexion": {"type": ["string", "null"]},
+              "peso_minimo_ruta": {"type": ["number", "null"]},
+              "lectura": {"type": "string", "minLength": 1}
+            }
+          }
+        ]
+      }
+    },
+    "hallazgos": {"type": "array", "items": {"type": "string"}},
+    "limitaciones": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "inferencias_predictivas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["horizonte", "riesgo", "justificacion_modelo"],
+        "properties": {
+          "horizonte": {"type": "string"},
+          "riesgo": {"type": "string"},
+          "justificacion_modelo": {"type": "string"}
+        }
+      }
+    },
+    "hipotesis_modelo_predictivo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["periodo_completo", "puntos_criticos"],
+      "properties": {
+        "periodo_completo": {"type": "array", "maxItems": 5, "items": {"type": "string"}},
+        "puntos_criticos": {"type": "array", "maxItems": 5, "items": {"type": "string"}}
+      }
+    }
+  }
+}
