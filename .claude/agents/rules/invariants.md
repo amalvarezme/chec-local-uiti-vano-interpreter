@@ -57,32 +57,53 @@ or workflow step naming one of them.)
 
 ## Rule 5 — No Forecasting Language Outside the Validated Inference Flow
 
-Predictive or forecasting language about circuit behavior is prohibited in this pilot's output,
-except inside the already-validated inference-agent flow (out of scope for the expert-alignment
-role in this slice). The expert-alignment role compares existing descriptive and predictive-model
-signals against expert discussion; it does not itself predict or forecast anything.
+Predictive or forecasting language about circuit behavior is prohibited in every role's output
+governed by this file, except inside the already-validated inference-agent flow (Agent 2 —
+inference/SHAP — out of scope for this slice). This binds both current roles:
+
+- **expert-alignment** compares existing descriptive and predictive-model signals against expert
+  discussion; it does not itself predict or forecast anything.
+- **historical** (descriptive/base) describes PAST `UITI_VANO` behavior for the selected circuit(s)
+  and period, using only already-selected structured context; it does not itself predict or
+  forecast anything either. "Describing what the data shows happened" is not forecasting; stating
+  what will happen, or asserting a definitive future outcome, is — and is prohibited here.
 
 ## Rule 6 — Provenance Optional Per Claim, Strictly Validated When Present
 
-Provenance is **optional per claim, not required**: a claim in `coincidencias`, `diferencias`, or
-`variables_a_priorizar` MAY carry a `provenance` object —
-`{"data_ref": [...], "agent": "expert-alignment", "rule": "<playbook id>"}` — but omitting it
-never fails validation on its own. This is a deliberate design choice for backward compatibility
-with pre-provenance response shapes (additive keys), not a gap to be closed.
+Provenance is **optional per claim, not required**, for every role governed by this file: a claim
+MAY carry a `provenance` object — `{"data_ref": [...], "agent": "<role id>", "rule": "<playbook
+id>"}` — but omitting it never fails validation on its own. This is a deliberate design choice for
+backward compatibility with pre-provenance response shapes (additive keys), not a gap to be
+closed.
 
-**When a `data_ref` IS provided, it is strictly validated and fails closed:**
+**When a `data_ref` IS provided, it is strictly validated and fails closed, for every role:**
 
-- Every `data_ref` entry MUST resolve against the circuit's own already-validated allowed dates,
-  variables, and PDF row references — never a fact outside what the envelope handed you.
-  Validation rejects (fails closed) any `data_ref` that does not resolve, including the case where
-  `variables_modelo_predictivo` is empty.
-- `agent` must equal `expert-alignment` (the producing role's id).
-- `rule` must be one of: `01_pdf_report_comparison`, `02_predictive_variable_prioritization`,
-  `03_graph_context_for_alignment` — the three playbook ids ported into
-  `.claude/skills/expert-alignment/SKILL.md`.
+- Every `data_ref` entry MUST resolve against that role's own already-validated allowed context
+  universe — never a fact outside what its envelope handed it. Validation rejects (fails closed)
+  any `data_ref` that does not resolve.
+- `agent` must equal the producing role's own id.
+- `rule` must be one of that role's own declared playbook/Skill rule ids (each role's Skill
+  declares its allowed `rule` ids and the response locations its provenance attaches to).
 
 Do not read this rule as "provenance is required" (it isn't) or as "validation is loose when
-present" (it isn't — any `data_ref` you do supply is held to the full resolvability check above).
+present" (it isn't — any `data_ref` supplied is held to the full resolvability check below).
+
+**Per-role instances:**
+
+- **expert-alignment** — attaches provenance per item in `coincidencias`, `diferencias`, and
+  `variables_a_priorizar`. `agent` must equal `expert-alignment`. `rule` must be one of:
+  `01_pdf_report_comparison`, `02_predictive_variable_prioritization`,
+  `03_graph_context_for_alignment` — the three playbook ids ported into
+  `.claude/skills/expert-alignment/SKILL.md`. `data_ref` entries resolve against the circuit's
+  allowed dates, predictive-model variables, and PDF row references.
+- **historical** — attaches provenance per item in `key_findings` (the base agent's per-claim
+  evidence-bearing list, the analog of expert-alignment's per-item sections). `agent` must equal
+  `historical`. `rule` must be one of the seven base playbook ids ported into
+  `.claude/skills/historical/SKILL.md`: `01_structured_context_builder`,
+  `02_critical_point_interpreter`, `03_uiti_vano_behavior_explainer`,
+  `04_domain_grounding_guardrails`, `05_llm_output_validator`, `06_base_repair`,
+  `07_base_output_contract`. `data_ref` entries resolve against the circuit's allowed dates,
+  critical-point ids, and domain variables (never a variable marked unavailable for that context).
 
 ## Rule 7 — Cautious Language Register
 
