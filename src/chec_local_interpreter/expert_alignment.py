@@ -7,6 +7,8 @@ from typing import Any
 
 import pandas as pd
 
+from chec_local_interpreter.circuit_identity import normalizar_circuito
+
 REQUIRED_PDF_DISCUSSION_COLUMNS = (
     "Circuito",
     "Fecha inicio",
@@ -45,11 +47,6 @@ _PROVENANCE_SECTIONS = ("coincidencias", "diferencias", "variables_a_priorizar")
 
 _PDF_ROW_INDEX_REF_RE = re.compile(r"^pdf_row_index:(\d+)$", re.IGNORECASE)
 _DATE_REF_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-
-
-def normalizar_circuito(value: Any) -> str:
-    """Normalize circuit ids for strict, case-insensitive equality checks."""
-    return re.sub(r"[^A-Z0-9]", "", str(value or "").upper())
 
 
 def _date_text(value: Any) -> str | None:

@@ -17,17 +17,17 @@ Verbs:
 
 Both verbs read exactly one JSON document from stdin and write exactly one
 JSON document to stdout. No network access, no imports outside
-`chec_local_interpreter.expert_alignment`, the sibling `agent_tools._atomic_io`
-shared-utility module (the hoisted atomic-write helper, shared with
-`agent_tools.batch` so it only needs to exist in one place), and the standard
-library.
+`chec_local_interpreter.expert_alignment`, `chec_local_interpreter.circuit_identity`
+(the shared, agent-agnostic canonical-identity module), the sibling
+`agent_tools._atomic_io` shared-utility module (the hoisted atomic-write
+helper, shared with `agent_tools.batch` so it only needs to exist in one
+place), and the standard library.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 import time
 import traceback
@@ -35,6 +35,10 @@ from pathlib import Path
 from typing import Any
 
 from chec_local_interpreter.agent_tools._atomic_io import atomic_write_text as _atomic_write_text
+from chec_local_interpreter.circuit_identity import (
+    canonical_circuit_identity,
+    sanitize_circuito_dirname as _shared_sanitize_circuito_dirname,
+)
 from chec_local_interpreter.expert_alignment import (
     allowed_dates,
     allowed_pdf_row_indexes,
@@ -98,37 +102,29 @@ def build_context(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-_CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]")
-_MAX_CIRCUITO_DIRNAME_LENGTH = 128
-
-
-def _sanitize_circuito_dirname(circuito: str) -> str:
-    """Reduce an untrusted `circuito` value to a single, safe directory name.
-
-    Strips ASCII control characters first (including an embedded NUL byte,
-    which would otherwise crash `Path.resolve()`/`mkdir()`/`write_text()`
-    with `ValueError: embedded null byte`). Then `Path(...).name` strips any
-    directory separators and `..`/absolute-path components, so a value like
-    "../../../../etc/evil" collapses to "evil" and can never be used to
-    escape `ARTIFACTS_ROOT`. Falls back to "unknown" for any input that
-    collapses to nothing usable, and caps the result length so an
-    oversized `circuito` can never trip a filesystem name-length limit.
-    """
-    cleaned = _CONTROL_CHARS_RE.sub("", str(circuito or "")).strip()
-    name = Path(cleaned).name
-    if not name or name in {".", ".."}:
-        return "unknown"
-    return name[:_MAX_CIRCUITO_DIRNAME_LENGTH]
-
-
 def sanitize_circuito_dirname(circuito: str) -> str:
-    """Public re-export of `_sanitize_circuito_dirname` for reuse by the batch runner (WU4)."""
-    return _sanitize_circuito_dirname(circuito)
+    """Public re-export of the shared `circuit_identity.sanitize_circuito_dirname`.
+
+    Kept as a module-level name here for backward compatibility with callers
+    that import it from this module (e.g. `agent_tools/batch.py` prior to the
+    shared-infra hardening); new code should import directly from
+    `chec_local_interpreter.circuit_identity`.
+    """
+    return _shared_sanitize_circuito_dirname(circuito)
 
 
 def _write_failure_artifact(circuito: str, response_text: str, errors: list[str]) -> Path:
+    """Write the raw response + validation errors under `ARTIFACTS_ROOT/{identity}/`.
+
+    Uses `canonical_circuit_identity` (sanitize + normalize) — the SAME
+    identity function `agent_tools/batch.py` uses to derive the publish
+    filename — so a circuit's failure-artifact directory always matches the
+    identity it would publish under on success (previously this used
+    sanitize only, diverging from the batch runner for any circuit whose raw
+    value varied by case/punctuation across runs).
+    """
     artifacts_root = ARTIFACTS_ROOT.resolve()
-    safe_name = _sanitize_circuito_dirname(circuito)
+    safe_name = canonical_circuit_identity(circuito)
     artifact_dir = (ARTIFACTS_ROOT / safe_name).resolve()
     # Defense in depth: sanitization above should already guarantee containment,
     # but never mkdir/write outside ARTIFACTS_ROOT even if that guarantee is

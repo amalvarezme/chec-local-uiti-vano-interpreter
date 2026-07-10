@@ -346,9 +346,17 @@ def test_run_circuit_canonicalizes_falsy_circuito_consistently_across_context_an
     assert entry["circuito"] == "unknown"
     assert captured_contexts == ["unknown"], "context['circuito'] must match the manifest's canonical circuito"
 
+    # The manifest keeps the raw/fallback circuito string ("unknown") for
+    # human-readable reporting; the on-disk failure-artifact directory uses
+    # the shared `canonical_circuit_identity` (sanitize + normalize, same as
+    # the publish path) — for this literal that means an upper-cased
+    # "UNKNOWN" directory, not a literal string match against the manifest
+    # field. What must never diverge is the SAME canonical identity being
+    # used for both the artifact directory and the publish filename.
     artifact_path = Path(entry["artifact_paths"][0])
-    assert artifact_path.parent.name == entry["circuito"], (
-        "the failure artifact's on-disk directory must match the manifest's canonical circuito"
+    expected_identity = batch_module.canonical_circuit_identity(entry["circuito"])
+    assert artifact_path.parent.name == expected_identity, (
+        "the failure artifact's on-disk directory must match the canonical identity of the manifest's circuito"
     )
 
 

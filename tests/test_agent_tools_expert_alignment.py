@@ -10,12 +10,14 @@ from pathlib import Path
 import pytest
 
 from chec_local_interpreter.agent_tools import _atomic_io
+from chec_local_interpreter.agent_tools import batch as batch_module
 from chec_local_interpreter.agent_tools import expert_alignment as agent_tools_module
 from chec_local_interpreter.agent_tools.expert_alignment import (
     TOOL_VERSION,
     build_context,
     validate,
 )
+from chec_local_interpreter.circuit_identity import canonical_circuit_identity
 from chec_local_interpreter.expert_alignment import (
     _allowed_dates,
     _allowed_pdf_row_indexes,
@@ -437,6 +439,29 @@ def test_write_failure_artifact_is_atomic_and_never_leaves_a_partial_file(tmp_pa
     artifact_dir = tmp_path / "reports" / "interpretability" / "artifacts" / "ATOMICCKT"
     if artifact_dir.exists():
         assert list(artifact_dir.glob("*")) == [], "no partial/truncated artifact file must be left behind"
+
+
+def test_write_failure_artifact_directory_matches_canonical_publish_identity(tmp_path, monkeypatch):
+    """Regression for the fixed divergence: the failure-artifact directory
+    (`_write_failure_artifact`, this module) and the published-report
+    filename (`agent_tools.batch._publish_report`) must resolve to the SAME
+    canonical identity for the same raw `circuito` — previously the failure
+    artifact used sanitize-only while the batch publisher used sanitize +
+    normalize, so a mixed-case/punctuation `circuito` diverged between the
+    two."""
+    monkeypatch.chdir(tmp_path)
+    raw_circuito = "don-23-l13"
+
+    artifact_path = agent_tools_module._write_failure_artifact(raw_circuito, "raw response text", ["some error"])
+
+    expected_identity = canonical_circuit_identity(raw_circuito)
+    assert artifact_path.parent.name == expected_identity
+
+    published_path = batch_module._publish_report(raw_circuito, {"sintesis_final": "ok"})
+    assert published_path.stem == expected_identity
+    assert artifact_path.parent.name == published_path.stem, (
+        "failure-artifact directory and publish filename must use the same canonical identity"
+    )
 
 
 def test_agent_tools_expert_alignment_never_references_frozen_model_boundary():
