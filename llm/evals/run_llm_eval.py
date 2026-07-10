@@ -12,7 +12,7 @@ from chec_local_interpreter.expert_alignment import (
     validar_respuesta_expert_alignment,
 )
 from chec_local_interpreter.llm_contracts import PROMPT_VERSION, load_output_schema, render_prompt
-from chec_local_interpreter.llm_validation import validate_llm_response
+from chec_local_interpreter.llm_validation import validar_provenance_base, validate_llm_response
 
 
 def _load_json(path: Path) -> dict:
@@ -127,6 +127,59 @@ def _valid_expert_alignment_output(context: dict) -> dict:
     }
 
 
+def _valid_historical_output(context: dict) -> dict:
+    """Synthetic, offline historical/base agent response: the 10 required base
+    keys plus a resolving `provenance` object on its one `key_finding`, giving
+    the historical agent an eval gate parallel to the base `_valid_output` and
+    the expert-alignment `_valid_expert_alignment_output` above — no API
+    call, no real `claude` subprocess, everything checked through the same
+    code-level validators the L2 CLI's `validate` verb runs (two-stage:
+    schema/guardrails then provenance)."""
+    point = context["critical_points"][0]
+    return {
+        "source": "llm",
+        "prompt_version": PROMPT_VERSION,
+        "headline": "Concentracion de UITI_VANO en el periodo analizado",
+        "section_title": "Hallazgos del periodo",
+        "executive_summary": [
+            "La evidencia tabular muestra que el comportamiento del periodo se concentra en el punto critico entregado."
+        ],
+        "key_findings": [
+            {
+                "title": "Dia dominante del periodo",
+                "text": "El punto critico entregado concentra el mayor aporte de UITI_VANO dentro de la ventana.",
+                "evidence": [
+                    {
+                        "date": point["fecha_dia"],
+                        "critical_point_id": point["critical_point_id"],
+                        "variable": "UITI_VANO",
+                        "summary": point["selection_reason"],
+                    }
+                ],
+                "referenced_events": [],
+                "variable_groups_used": ["Evento/Impacto"],
+                "confidence": "media",
+                "provenance": {
+                    "data_ref": [point["fecha_dia"], point["critical_point_id"], "UITI_VANO"],
+                    "agent": "historical",
+                    "rule": "03_uiti_vano_behavior_explainer",
+                },
+            }
+        ],
+        "circuit_characterization": {
+            "text": "Characterization text.",
+            "p97_vanos_uiti_vano": ["V1"],
+            "p97_vanos_eventos": ["V2"],
+            "top_3_modes_related": ["Mode1"],
+            "probable_justifications_rules": ["Rule1"],
+        },
+        "period_synthesis": "El periodo se explica principalmente por la concentracion de UITI_VANO en el punto ya detectado por el codigo.",
+        "data_gaps": [],
+        "limitations": ["El analisis usa solo datos estructurados disponibles en la ventana seleccionada."],
+        "recommended_actions": ["Revisar las filas fuente asociadas al punto critico detectado."],
+    }
+
+
 def _assert_prompt_contents(prompt: str, context: dict, schema: dict) -> list[str]:
     errors: list[str] = []
     required = [
@@ -187,6 +240,21 @@ def main() -> int:
         if not provenance_result["ok"]:
             errors.append(
                 f"{path.name}: valid synthetic expert-alignment output failed provenance validation: {provenance_result['errors']}"
+            )
+
+    for path in sorted(fixture_dir.glob("synthetic_historical_context_*.json")):
+        historical_context = _load_json(path)
+        historical_response = json.dumps(_valid_historical_output(historical_context), ensure_ascii=False)
+        schema_result = validate_llm_response(historical_response, historical_context, schema)
+        if not schema_result.ok:
+            errors.append(
+                f"{path.name}: valid synthetic historical output failed schema/guardrail validation: {schema_result.errors}"
+            )
+            continue
+        provenance_result = validar_provenance_base(schema_result.data, historical_context)
+        if not provenance_result["ok"]:
+            errors.append(
+                f"{path.name}: valid synthetic historical output failed provenance validation: {provenance_result['errors']}"
             )
 
     if errors:

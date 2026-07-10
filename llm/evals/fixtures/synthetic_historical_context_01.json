@@ -1,0 +1,55 @@
+{
+  "analysis_name": "local_uiti_vano_interpretability",
+  "metadata": {
+    "v": "uiti-vano-explanation-v1",
+    "schema": "uiti-vano-output-schema-v1",
+    "ts": "2026-01-10T00:00",
+    "circuitos": ["C1"],
+    "start": "2026-01-01",
+    "end": "2026-01-03",
+    "unavailable_cols": []
+  },
+  "selected_context": {
+    "circuitos": ["C1"],
+    "indicator": "UITI_VANO"
+  },
+  "summary": {
+    "events": 3,
+    "nonzero_days": 2,
+    "total_uv": 15.0,
+    "max_date": "2026-01-02",
+    "max_uv": 10.0
+  },
+  "daily": [
+    {"d": "2026-01-01", "uv": 5.0, "n": 1, "dur": 1.0},
+    {"d": "2026-01-02", "uv": 10.0, "n": 1, "dur": 2.0},
+    {"d": "2026-01-03", "uv": 0.0, "n": 0, "dur": 0.0}
+  ],
+  "critical_points": [
+    {
+      "critical_point_id": "cp-2026-01-02",
+      "fecha_dia": "2026-01-02",
+      "rank": 1,
+      "score": 2.0,
+      "types": ["top_contribution_day"],
+      "selection_reason": "El dia aporta una fraccion alta del UITI_VANO total de la ventana.",
+      "metrics": {"UITI_VANO": 10.0},
+      "daily_aggregates": {"events": 1}
+    }
+  ],
+  "critical_periods": [],
+  "domain": {
+    "variable_groups": {
+      "Entorno/Riesgo": {
+        "description": "Riesgo vegetal, descargas y series climaticas como estresores ambientales.",
+        "variables": ["NR_T", "DDT"]
+      },
+      "Evento/Impacto": {
+        "description": "Fecha, duracion, usuarios, transformadores, causas e indicadores de impacto.",
+        "variables": ["UITI_VANO", "CNT_TRF"]
+      }
+    },
+    "relationship_rules": []
+  },
+  "graph_knowledge": "Grafo no disponible en el eval offline."
+}

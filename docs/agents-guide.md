@@ -106,22 +106,78 @@ one.
 | Exit code | Meaning | What it means for the caller |
 |---|---|---|
 | `0` | Both the schema validator and the provenance validator passed. | The response is a valid report; publish it. |
-| `1` | A validation failure — schema, provenance, or both (errors are combined). | Not a valid report. The raw response and errors were saved under `reports/interpretability/artifacts/{circuito}/`. Retry with the errors fed back into the prompt, up to the retry limit. Never present this output as final. |
-| `2` | The request to `validate` itself was malformed (invalid JSON on stdin, or a missing required field). | This is a wiring/integration defect in how the CLI was invoked — not a content problem with the report. Do not retry it as if it were a validation failure; it means something is wrong with how the agent (or batch runner) is calling the tool. |
+| `1` | A validation failure — schema, provenance, or both (errors are combined). | Not a valid report. The raw response and errors were saved under the agent's own artifacts root (`reports/interpretability/artifacts/{circuito}/` for expert-alignment, `reports/interpretability/artifacts/historical/{circuito}/` for the historical agent). Retry with the errors fed back into the prompt, up to the retry limit. Never present this output as final. |
+| `2` | The request to `validate` (or `build-context`) itself was malformed (invalid/empty JSON on stdin, a non-object payload, or a missing required field). | This is a wiring/integration defect in how the CLI was invoked — not a content problem with the report. Do not retry it as if it were a validation failure; it means something is wrong with how the agent (or batch runner) is calling the tool. |
+| `3` | An unexpected error — anything else, including a genuinely unanticipated failure while reading/parsing stdin (e.g. non-UTF-8 bytes) or while running the verb's own handler. | The full traceback is logged to stderr only; stdout still contains exactly one JSON document (`{"ok": false, "errors": [...]}`), via the shared `agent_tools/cli_support.py::dispatch` contract both CLIs delegate to. Treat this as an infrastructure/bug signal, not a content problem with the report. |
+
+## The historical/base agent's envelope contract (L1 -> L2 -> L3)
+
+The historical agent's `build-context` reads the already-built
+`context_builder.build_context_package(...)` JSON directly from stdin (no DataFrames, deterministic
+selection stays entirely upstream — Rule 2) and emits this envelope on stdout:
+
+```json
+{
+  "meta": {"circuito": "...", "tool_version": "historical-agent-tools/0.1.0"},
+  "context": { "...": "the same context_builder.build_context_package(...) output, unchanged" },
+  "prompt": "the full prompt string, from render_prompt(..., skill_bundle=assemble_skill_bundle(profile=\"base\"))",
+  "allowed": {
+    "dates": ["2026-01-01", "2026-01-02", "..."],
+    "critical_point_ids": ["cp-2026-01-02", "..."],
+    "unavailable_columns": ["..."]
+  }
+}
+```
+
+`meta.circuito` is `"_".join(context["metadata"]["circuitos"])` — the same multi-circuit join
+convention used elsewhere in the codebase. The agent authors the ten required base keys (`source`,
+`prompt_version`, `headline`, `section_title`, `executive_summary`, `key_findings`,
+`circuit_characterization`, `period_synthesis`, `data_gaps`, `recommended_actions`) plus an
+optional per-`key_finding` `provenance` object (see below), and hands the result to `validate` as
+`{"response_text": "<the JSON string>", "context": <the envelope's "context">}`.
+
+### Historical provenance (additive, optional per `key_finding`)
+
+Each item in `key_findings` MAY carry:
+
+```json
+"provenance": {
+  "data_ref": ["2026-01-02", "cp-2026-01-02", "UITI_VANO"],
+  "agent": "historical",
+  "rule": "03_uiti_vano_behavior_explainer"
+}
+```
+
+`data_ref` entries resolve against the envelope's own `allowed` sets (dates, critical-point ids) or
+the context's `domain.variable_groups` variable universe (never a variable marked unavailable for
+that context). `agent` must equal `historical`. `rule` must be one of the seven base playbook ids
+ported into `.claude/skills/historical/SKILL.md`: `01_structured_context_builder`,
+`02_critical_point_interpreter`, `03_uiti_vano_behavior_explainer`, `04_domain_grounding_guardrails`,
+`05_llm_output_validator`, `06_base_repair`, `07_base_output_contract`. Omitting `provenance` never
+fails validation (it's additive, not required).
+
+The historical agent's `validate` verb runs a **two-stage gate**: the schema/guardrail validator
+(`validate_llm_response`, reused unmodified) first, then — only if that passes — the additive
+provenance validator (`validar_provenance_base`), combining both error lists. Exit code `0`
+requires both stages to pass; failure artifacts are written under
+`reports/interpretability/artifacts/historical/{circuito}/`.
 
 ## How to run headless
 
 ```bash
 python -m chec_local_interpreter.agent_tools.batch \
   --circuits path/to/circuits.json \
+  [--agent expert-alignment|historical] \
   [--max-retries 2] \
   [--manifest-out path/to/run-manifest.json]
 ```
 
 - `--circuits` accepts one or more JSON file paths. Each file contains either a single circuit
-  context-build payload (an object with a `circuito` key, shaped like `build-context`'s stdin) or
-  a list of such payload objects (a circuits manifest). Multiple `--circuits` arguments
-  concatenate, in order.
+  context-build payload (an object with a `circuito` key, shaped like the selected agent's
+  `build-context` stdin) or a list of such payload objects (a circuits manifest). Multiple
+  `--circuits` arguments concatenate, in order.
+- `--agent` selects which registered `AgentSpec` to run (default `expert-alignment`); the two
+  registered roles today are `expert-alignment` and `historical`.
 - `--max-retries` overrides `MAX_VALIDATION_RETRIES` (default `2`) without a code change.
 - `--manifest-out` additionally writes the run manifest to a file (it is always printed to
   stdout).
@@ -143,7 +199,7 @@ python -m chec_local_interpreter.agent_tools.batch \
     {
       "circuito": "DON23L13",
       "status": "ok",
-      "artifact_paths": ["reports/interpretability/published/DON23L13.json"],
+      "artifact_paths": ["reports/interpretability/published/expert-alignment/DON23L13.json"],
       "tool_version": "expert-alignment-agent-tools/0.1.0",
       "timestamp": "20260709T120000Z",
       "retries": 0
@@ -163,13 +219,17 @@ python -m chec_local_interpreter.agent_tools.batch \
 ```
 
 `retries`, `error`, and `errors` are additive fields on top of the base
-`{circuito, status, artifact_paths, tool_version, timestamp}` shape.
+`{circuito, status, artifact_paths, tool_version, timestamp}` shape. The published path is always
+role-namespaced (`published/{agent_role}/{circuito}.json`, per `AgentSpec.role` — spec:
+agent-namespaced-reports) so two agents processing the same circuit can never overwrite each
+other's report; `--agent` selects which registered `AgentSpec` (`expert-alignment` or
+`historical`) the batch runner uses, defaulting to `expert-alignment`.
 
 ### Manifest `status` values
 
 | Status | Meaning |
 |---|---|
-| `ok` | The response passed `validate` (schema + provenance) and was published under `reports/interpretability/published/{circuito}.json`. |
+| `ok` | The response passed `validate` (schema + provenance) and was published under `reports/interpretability/published/{agent_role}/{circuito}.json`. |
 | `FAILED` | A validation failure after exhausting retries, an unhandled/unexpected error while building context or invoking the agent, or an infrastructure issue like a missing agent command / invocation timeout — a normal run failure, not published. |
 | `AGENT_ERROR` | The agent subprocess itself exited non-zero (auth error, crash) — an infrastructure failure distinct from a validation failure; it does not consume the retry budget, and `error` carries the captured stderr. |
 | `SKIPPED_DUPLICATE` | Input hygiene: this `circuito` was already processed earlier in the same batch (by on-disk publish identity, case/punctuation-insensitive) — skipped to avoid silently overwriting the first run's published report. Not a run failure. |
@@ -178,15 +238,17 @@ python -m chec_local_interpreter.agent_tools.batch \
 
 | Role | Status | Role file | Rules | Skill | Tool contract |
 |---|---|---|---|---|---|
-| `expert-alignment` | Implemented (this slice) | `.claude/agents/expert-alignment.md` | `.claude/agents/rules/invariants.md` | `.claude/skills/expert-alignment/SKILL.md` | `python -m chec_local_interpreter.agent_tools.expert_alignment` |
-| historical / base (Agent1) | Stub — not yet ported | — | — | — | Follow-on (out of this slice) |
-| inference / SHAP (Agent2) | Stub — not yet ported | — | — | — | Follow-on (out of this slice) |
+| `expert-alignment` | Implemented | `.claude/agents/expert-alignment.md` | `.claude/agents/rules/invariants.md` | `.claude/skills/expert-alignment/SKILL.md` | `python -m chec_local_interpreter.agent_tools.expert_alignment` |
+| `historical` / base (Agent1) | Implemented (`historical-inference-agents` change, Slice 1b) | `.claude/agents/historical.md` | `.claude/agents/rules/invariants.md` | `.claude/skills/historical/SKILL.md` | `python -m chec_local_interpreter.agent_tools.historical` |
+| inference / SHAP (Agent2) | Stub — not yet ported | — | — | — | Follow-on (Slice 2). See "Recorded Constraint for Slice 2" in `sdd/historical-inference-agents/spec` — Agent2's validator MUST reach expert-alignment-grade rigor before it can be called Implemented; it must NOT ship with today's 2-of-9-key `validar_respuesta_inferencia`. |
 
-Only the `expert-alignment` role is implemented in this slice. The historical/base and
-inference/SHAP agents are explicitly out of scope here — see "Follow-on (out of this slice)"
-below for the full deferred-work ledger.
+Both `expert-alignment` and `historical` are implemented and registered in
+`agent_tools/batch.py`'s `AGENT_SPECS`. The inference/SHAP agent remains explicitly out of scope
+— see "Follow-on" below for the full deferred-work ledger and the Slice 2 quality bar it must meet.
 
 ## Related artifacts
+
+### expert-alignment
 
 - Role definition: [`.claude/agents/expert-alignment.md`](../.claude/agents/expert-alignment.md)
 - Rules (binding invariants): [`.claude/agents/rules/invariants.md`](../.claude/agents/rules/invariants.md)
@@ -195,17 +257,38 @@ below for the full deferred-work ledger.
   `02_predictive_variable_prioritization.md`, and `03_graph_context_for_alignment.md`.
 - L1 deterministic Python: `src/chec_local_interpreter/expert_alignment.py`
 - L2 CLI: `src/chec_local_interpreter/agent_tools/expert_alignment.py`
-- L4 batch runner: `src/chec_local_interpreter/agent_tools/batch.py`
+
+### historical
+
+- Role definition: [`.claude/agents/historical.md`](../.claude/agents/historical.md)
+- Rules (binding invariants, shared with expert-alignment): [`.claude/agents/rules/invariants.md`](../.claude/agents/rules/invariants.md)
+- Claude Code Skill: [`.claude/skills/historical/SKILL.md`](../.claude/skills/historical/SKILL.md)
+  — ports `llm/skills/01_structured_context_builder.md`, `02_critical_point_interpreter.md`,
+  `03_uiti_vano_behavior_explainer.md`, `04_domain_grounding_guardrails.md`,
+  `05_llm_output_validator.md`, `06_base_repair.md`, and `07_base_output_contract.md`.
+- L1 deterministic Python: `src/chec_local_interpreter/context_builder.py`,
+  `src/chec_local_interpreter/llm_contracts.py`, `src/chec_local_interpreter/llm_validation.py`
+  (`validar_provenance_base` and the public `allowed_dates`/`allowed_critical_point_ids`/
+  `unavailable_columns` accessors)
+- L2 CLI: `src/chec_local_interpreter/agent_tools/historical.py`
+
+### Shared
+
+- Canonical circuit identity: `src/chec_local_interpreter/circuit_identity.py`
+- Shared causal-language guard: `src/chec_local_interpreter/causal_language.py`
+- Shared L2 CLI stdin/dispatch contract: `src/chec_local_interpreter/agent_tools/cli_support.py`
+- L4 batch runner (`AgentSpec`-generalized): `src/chec_local_interpreter/agent_tools/batch.py`
 - Frozen-model guard (tests): `tests/test_frozen_model_guard.py`
 - Offline eval gate (no API call): `llm/evals/run_llm_eval.py` — run it directly with
-  `python llm/evals/run_llm_eval.py`; it validates a synthetic expert-alignment response through
-  both the schema validator and the provenance validator, alongside the existing base-agent eval
-  case in the same file.
+  `python llm/evals/run_llm_eval.py`; it validates synthetic expert-alignment AND historical
+  responses (including a resolving-provenance case for each) through both the schema validator and
+  their respective provenance validators, alongside the pre-existing base-agent eval case in the
+  same file.
 
 ## Follow-on (out of this slice)
 
-This slice ports the expert-alignment pilot only. The following items are explicitly deferred,
-listed verbatim from the design's own "Open items carried to tasks" and "Rejected alternatives"
+Agent2 (inference/SHAP) remains unported. The following items are explicitly deferred, listed
+verbatim from the design's own "Open items carried to tasks" and "Rejected alternatives"
 sequencing:
 
 - **(a) `llm_client.py` multi-provider retirement** (google/openai/ollama branches) — blocked on
@@ -213,8 +296,11 @@ sequencing:
 - **(b) Characterization tests for `web_export.py` and `graph_extractor.py`** (golden-file on
   `interpretabilidad.json` / `src/assets/site/results/*` shape) — required BEFORE any
   `llm_client.py` removal, since both currently have zero tests and must not regress silently.
-- **(c) Agent1 (historical/base) and Agent2 (inference/SHAP) ports** to the agent-role pattern
-  this slice establishes for `expert-alignment` — stubs only in the Agent roles table above.
+- **(c) Agent2 (inference/SHAP) port** to the agent-role pattern established for `expert-alignment`
+  and `historical` — stub only in the Agent roles table above. Its validator MUST reach
+  expert-alignment-grade rigor (full 9-key coverage, dedicated test files, the shared
+  causal-language fix) before it can be called "Implemented" — it MUST NOT ship with today's
+  2-of-9-key `validar_respuesta_inferencia`.
 - **(d) Expert-Correction Metric measurement** — requires observing real CHEC domain-expert
   correction rates over time; cannot be satisfied by a one-time code change, so it stays open
   indefinitely until that observation process exists.
@@ -226,10 +312,14 @@ Also recorded, for completeness (rejected during design, not follow-on work — 
 without a new proposal): an MCP tool server for the Python tools (adds a server/framework surface
 adjacent to the FastAPI prohibition); an additional LLM-provider branch in `llm_client.py`; a
 parallel provenance/vector store (violates the no-RAG/vector-store prohibition); a convention-only
-frozen-model guard (no automated check); deleting `llm_client.py` in this pilot; and adding
-provenance fields to the base agent's `output_schema.json` in this slice (that schema's
-`additionalProperties: false` risks breaking existing base-agent fixtures — deferred to whenever
-the base agent itself is ported).
+frozen-model guard (no automated check); and deleting `llm_client.py` in this pilot.
+
+*Historical note*: an earlier revision of this section deferred adding provenance fields to the
+base agent's `output_schema.json` "until the base agent itself is ported" — that porting has now
+happened (`historical-inference-agents` change, Slice 1b): `provenance` is an additive, optional
+per-`key_finding` property (see "The historical/base agent's envelope contract" above), so the
+`additionalProperties: false` concern that motivated the original deferral was resolved by making
+the new property explicit and optional, not by working around it.
 
 ## Known Limitations (Pilot Slice)
 
