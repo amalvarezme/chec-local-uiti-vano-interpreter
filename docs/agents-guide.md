@@ -313,6 +313,28 @@ governed by this framework (that frozen function itself is untouched and still c
   their respective provenance validators, alongside the pre-existing base-agent eval case in the
   same file.
 
+### `/reporte` orchestrator (Implemented, `report-command-pipeline` change, Slice B)
+
+`/reporte` is **not** a fourth entry in the "Agent roles" table above — it does not itself author
+or validate one persona's JSON output, so it does not fit that table's L1/L2/L3/L4 shape. It is the
+orchestrating Claude Code Skill that sequences the three existing agent roles
+(`historical` -> `inference` -> `expert-alignment`, either order for the first two) around a
+pure-Python, LLM-call-free orchestrator, and produces the final HTML report.
+
+- Claude Code Skill (runbook): [`.claude/skills/reporte/SKILL.md`](../.claude/skills/reporte/SKILL.md)
+  — no distinct `.claude/agents/reporte.md` role file (see that Skill's own "Allowed tools" section
+  for why: no `agent_tools.report_pipeline` CLI exists in this change's scope to restrict Bash to).
+- Orchestrator (L1, pure Python, no LLM call in this module):
+  `src/chec_local_interpreter/report_pipeline.py` — `prepare(circuito, fecha_inicio=None,
+  fecha_fin=None) -> Path`, `prepare_expert_alignment(run_dir) -> Path`, `render(run_dir) -> Path`.
+- Per-circuit date-range default: `data_loader.circuit_date_range(frame, circuito)`.
+- Argument contract: `circuito` required; `fecha_inicio`/`fecha_fin` optional as a pair — giving
+  exactly one is a usage error, rejected by `prepare` itself (`ReportPipelineError`) before touching
+  the dataset, not just documented in the Skill.
+- Supersedes phases 1-8 of `notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`
+  (deprecated in place, not deleted — see that notebook's own top cell); phases 9-11 are untouched.
+- Tests: `tests/test_report_pipeline.py`.
+
 ## Follow-on (out of this slice)
 
 Agent2 (inference/SHAP) remains unported. The following items are explicitly deferred, listed
