@@ -9,6 +9,7 @@ import pandas as pd
 
 from chec_local_interpreter.causal_language import find_causal_language
 from chec_local_interpreter.circuit_identity import normalizar_circuito
+from chec_local_interpreter.llm_validation import validar_provenance_generico
 
 REQUIRED_PDF_DISCUSSION_COLUMNS = (
     "Circuito",
@@ -1126,47 +1127,28 @@ def validar_provenance_expert_alignment(data: dict[str, Any], context: dict[str,
     (`EXPERT_ALIGNMENT_AGENT_ID`), and `rule` naming an entry from the
     hermetic `EXPERT_ALIGNMENT_PROVENANCE_RULES` allow-list.
     """
-    errors: list[str] = []
     allowed_dates_set = _allowed_dates(context)
     allowed_variables_set = _allowed_variables_strict(context)
     allowed_indexes_set = _allowed_pdf_row_indexes(context)
 
-    for section_name in _PROVENANCE_SECTIONS:
-        section = data.get(section_name, [])
-        if not isinstance(section, list):
-            continue
-        for item in section:
-            if not isinstance(item, dict):
-                continue
-            provenance = item.get("provenance")
-            if provenance is None:
-                continue
-            if not isinstance(provenance, dict):
-                errors.append(f"{section_name}: provenance debe ser un objeto.")
-                continue
+    def resolve_data_ref(ref: Any) -> str | None:
+        return _validate_provenance_data_ref(
+            ref,
+            allowed_dates_set=allowed_dates_set,
+            allowed_variables_set=allowed_variables_set,
+            allowed_indexes_set=allowed_indexes_set,
+        )
 
-            agent = provenance.get("agent")
-            if agent != EXPERT_ALIGNMENT_AGENT_ID:
-                errors.append(
-                    f"{section_name}: provenance.agent debe ser '{EXPERT_ALIGNMENT_AGENT_ID}', valor recibido: {agent!r}"
-                )
-
-            rule = provenance.get("rule")
-            if rule not in EXPERT_ALIGNMENT_PROVENANCE_RULES:
-                errors.append(f"{section_name}: provenance.rule no está en la lista de reglas permitidas: {rule!r}")
-
-            data_ref = provenance.get("data_ref")
-            if not isinstance(data_ref, list) or not data_ref:
-                errors.append(f"{section_name}: provenance.data_ref debe ser una lista no vacía.")
-                continue
-            for ref in data_ref:
-                error = _validate_provenance_data_ref(
-                    ref,
-                    allowed_dates_set=allowed_dates_set,
-                    allowed_variables_set=allowed_variables_set,
-                    allowed_indexes_set=allowed_indexes_set,
-                )
-                if error:
-                    errors.append(f"{section_name}: {error}")
-
-    return {"ok": not errors, "errors": errors}
+    return validar_provenance_generico(
+        data,
+        sections=_PROVENANCE_SECTIONS,
+        agent_id=EXPERT_ALIGNMENT_AGENT_ID,
+        allowed_rules=EXPERT_ALIGNMENT_PROVENANCE_RULES,
+        resolve_data_ref=resolve_data_ref,
+        error_not_object=lambda: "provenance debe ser un objeto.",
+        error_bad_agent=lambda agent: (
+            f"provenance.agent debe ser '{EXPERT_ALIGNMENT_AGENT_ID}', valor recibido: {agent!r}"
+        ),
+        error_bad_rule=lambda rule: f"provenance.rule no está en la lista de reglas permitidas: {rule!r}",
+        error_empty_data_ref=lambda: "provenance.data_ref debe ser una lista no vacía.",
+    )
