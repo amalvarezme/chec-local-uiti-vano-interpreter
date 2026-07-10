@@ -242,3 +242,168 @@ def test_full_run_dir_handoff_prepare_to_render(tmp_path):
     html_path = render(run_dir, output_dir=tmp_path / "html")
 
     assert html_path.exists()
+
+
+# ---------------------------------------------------------------------------
+# prepare_expert_alignment() — real PDF-discussion wiring (fix for the
+# hardcoded-empty bug: the xlsx table BUILT by the out-of-scope extraction
+# notebook must still be read and matched against the circuit here).
+# ---------------------------------------------------------------------------
+
+
+def _write_pdf_discussions_xlsx(path: Path, rows: list[dict]) -> Path:
+    pd.DataFrame(rows).to_excel(path, index=False)
+    return path
+
+
+def _prepare_with_canned_agent_outputs(tmp_path: Path) -> Path:
+    data_path = _write_fixture_dataset(tmp_path)
+    run_dir = prepare("C1", data_path=data_path, runs_root=tmp_path / "runs")
+    (run_dir / "historical.out.json").write_text(
+        json.dumps(_canned_ok({"hallazgos": ["Hallazgo historico."]})), encoding="utf-8"
+    )
+    (run_dir / "inference.out.json").write_text(
+        json.dumps(_canned_ok({"hallazgos": ["Hallazgo de inferencia."]})), encoding="utf-8"
+    )
+    return run_dir
+
+
+def test_prepare_expert_alignment_wires_real_pdf_matches_for_matching_circuit(tmp_path):
+    run_dir = _prepare_with_canned_agent_outputs(tmp_path)
+    # The fixture dataset's spike/critical day falls inside 2026-01-01..2026-01-10;
+    # this row's interval overlaps that window for circuit C1.
+    xlsx_path = _write_pdf_discussions_xlsx(
+        tmp_path / "tabla_pdfs_intervalo_test.xlsx",
+        [
+            {
+                "Circuito": "C1",
+                "Fecha inicio": "2026-01-05",
+                "Fecha fin": "2026-01-07",
+                "Análisis": "Análisis experto sobre el pico de C1.",
+                "Evidencia": "Evidencia documentada en el informe experto.",
+            }
+        ],
+    )
+
+    result = prepare_expert_alignment(run_dir, pdf_discussions_path=xlsx_path)
+
+    assert result == run_dir
+    bc = _read_json(run_dir / "expert-alignment.bc.json")
+    assert bc["pdf_expert_matches"], "expected at least one temporal PDF match for circuit C1"
+    assert bc["pdf_expert_matches"][0]["Circuito"] == "C1"
+    assert bc["modelo_experto_disponible"] is True
+
+
+def test_prepare_expert_alignment_pools_fechas_informe_from_all_sources(tmp_path):
+    run_dir = _prepare_with_canned_agent_outputs(tmp_path)
+
+    result = prepare_expert_alignment(run_dir, pdf_discussions_path=tmp_path / "does-not-exist.xlsx")
+
+    assert result == run_dir
+    bc = _read_json(run_dir / "expert-alignment.bc.json")
+    assert bc["fechas_informe"], "fechas_informe must be pooled, not left empty"
+    sources = {record["source"] for record in bc["fechas_informe"]}
+    # At minimum the critical-point-derived date and the global report window
+    # must be present — confirms pooling from critical points + period bounds,
+    # not just a hardcoded empty list.
+    assert "critical_point" in sources
+    assert "context" in sources
+
+
+def test_prepare_expert_alignment_missing_pdf_file_degrades_gracefully(tmp_path):
+    run_dir = _prepare_with_canned_agent_outputs(tmp_path)
+
+    result = prepare_expert_alignment(run_dir, pdf_discussions_path=tmp_path / "does-not-exist.xlsx")
+
+    assert result == run_dir
+    bc = _read_json(run_dir / "expert-alignment.bc.json")
+    assert bc["pdf_expert_matches"] == []
+    assert bc["modelo_experto_disponible"] is False
+
+
+def test_prepare_expert_alignment_empty_pdf_table_degrades_gracefully(tmp_path):
+    run_dir = _prepare_with_canned_agent_outputs(tmp_path)
+    xlsx_path = _write_pdf_discussions_xlsx(
+        tmp_path / "tabla_pdfs_intervalo_empty.xlsx",
+        [
+            {
+                "Circuito": "",
+                "Fecha inicio": None,
+                "Fecha fin": None,
+                "Análisis": "",
+                "Evidencia": "",
+            }
+        ],
+    )
+
+    result = prepare_expert_alignment(run_dir, pdf_discussions_path=xlsx_path)
+
+    assert result == run_dir
+    bc = _read_json(run_dir / "expert-alignment.bc.json")
+    assert bc["pdf_expert_matches"] == []
+    assert bc["modelo_experto_disponible"] is False
+
+
+def test_prepare_expert_alignment_zero_rows_for_circuit_degrades_gracefully(tmp_path):
+    run_dir = _prepare_with_canned_agent_outputs(tmp_path)
+    xlsx_path = _write_pdf_discussions_xlsx(
+        tmp_path / "tabla_pdfs_intervalo_other_circuit.xlsx",
+        [
+            {
+                "Circuito": "OTHER-CIRCUIT",
+                "Fecha inicio": "2026-01-05",
+                "Fecha fin": "2026-01-07",
+                "Análisis": "Análisis de un circuito distinto.",
+                "Evidencia": "Evidencia no relacionada con C1.",
+            }
+        ],
+    )
+
+    result = prepare_expert_alignment(run_dir, pdf_discussions_path=xlsx_path)
+
+    assert result == run_dir
+    bc = _read_json(run_dir / "expert-alignment.bc.json")
+    assert bc["pdf_expert_matches"] == []
+    assert bc["modelo_experto_disponible"] is False
+
+
+def test_prepare_expert_alignment_default_path_resolves_via_glob(tmp_path, monkeypatch):
+    import chec_local_interpreter.report_pipeline as report_pipeline_module
+
+    run_dir = _prepare_with_canned_agent_outputs(tmp_path)
+    discussions_dir = tmp_path / "analysis-documents"
+    discussions_dir.mkdir()
+    # Two candidates matching the glob; the resolver must deterministically
+    # pick exactly one (most recent by sorted name) rather than crashing.
+    _write_pdf_discussions_xlsx(
+        discussions_dir / "tabla_pdfs_intervalo_2025-01-01_2025-06-30.xlsx",
+        [
+            {
+                "Circuito": "C1",
+                "Fecha inicio": "2025-01-05",
+                "Fecha fin": "2025-01-07",
+                "Análisis": "Tabla antigua.",
+                "Evidencia": "No debe usarse.",
+            }
+        ],
+    )
+    _write_pdf_discussions_xlsx(
+        discussions_dir / "tabla_pdfs_intervalo_2025-11-01_2026-04-30.xlsx",
+        [
+            {
+                "Circuito": "C1",
+                "Fecha inicio": "2026-01-05",
+                "Fecha fin": "2026-01-07",
+                "Análisis": "Tabla vigente.",
+                "Evidencia": "Debe usarse esta.",
+            }
+        ],
+    )
+    monkeypatch.setattr(report_pipeline_module, "DEFAULT_PDF_DISCUSSIONS_DIR", discussions_dir)
+
+    result = prepare_expert_alignment(run_dir)
+
+    assert result == run_dir
+    bc = _read_json(run_dir / "expert-alignment.bc.json")
+    assert bc["pdf_expert_matches"], "expected the glob-resolved xlsx to be picked up by default"
+    assert bc["pdf_expert_matches"][0]["Análisis"] == "Tabla vigente."

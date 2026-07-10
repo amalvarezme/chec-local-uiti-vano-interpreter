@@ -18,16 +18,23 @@ Stages:
         resolved window has zero events — no context is built and no
         run_dir is created in either case.
 
-    prepare_expert_alignment(run_dir)
+    prepare_expert_alignment(run_dir, *, pdf_discussions_path=None)
         Reads the historical and inference agents' VALIDATED outputs
         (`historical.out.json`, `inference.out.json` — written by the
         interactive Skills after `agent_tools.*.validate` returns `ok:
-        true`) and builds `expert-alignment.bc.json`. Fails fast with
-        `ReportPipelineError` if either validated output is missing or
-        marked `ok: false` (schema/guardrail and provenance failures are
-        indistinguishable at this layer — both are simply `ok: false` from
-        the combined L1 `validate()` contract, so a retries-exhausted
-        circuit never reaches this stage with a usable file).
+        true`), pools report dates from them plus the circuit's critical
+        points, matches the already-extracted PDF-discussion xlsx table
+        (`reports/analysis-documents/tabla_pdfs_intervalo_*.xlsx` — built by
+        the separate, out-of-scope `01_pdf_discussion_table_from_pdfs.ipynb`
+        notebook) against the circuit, and builds
+        `expert-alignment.bc.json`. Fails fast with `ReportPipelineError` if
+        either agent's validated output is missing or marked `ok: false`
+        (schema/guardrail and provenance failures are indistinguishable at
+        this layer — both are simply `ok: false` from the combined L1
+        `validate()` contract, so a retries-exhausted circuit never reaches
+        this stage with a usable file). The PDF-discussion match is a
+        graceful-degradation path, not a hard failure: a missing/empty xlsx
+        or zero rows for the circuit simply yields `pdf_expert_matches=[]`.
 
     render(run_dir, *, output_dir=None)
         Reads all three validated outputs (historical, inference,
@@ -38,9 +45,10 @@ Stages:
         output is missing/invalid — `render_llm_analysis` is never called
         in that case.
 
-`runs_root` (on `prepare`) and `output_dir` (on `render`) are additive,
+`runs_root` (on `prepare`), `pdf_discussions_path` (on
+`prepare_expert_alignment`), and `output_dir` (on `render`) are additive,
 optional keyword-only parameters beyond the design's documented signatures,
-needed so tests never write into the real `reports/` tree. Both default to
+needed so tests never write into the real `reports/` tree. All default to
 the design's proposed locations when omitted.
 """
 
@@ -71,7 +79,13 @@ from chec_local_interpreter.data_loader import (
     filter_events,
     load_dataset,
 )
-from chec_local_interpreter.expert_alignment import construir_contexto_expert_alignment
+from chec_local_interpreter.expert_alignment import (
+    cargar_discussiones_pdf_excel,
+    construir_contexto_expert_alignment,
+    extraer_fechas_informe,
+    filtrar_discussiones_por_circuito,
+    seleccionar_top_coincidencias_temporales,
+)
 from chec_local_interpreter.plotting import render_llm_analysis
 
 # Mirrors the notebook's own defaults (`TOP_N_VANOS`/`TOP_K_VARS`/
@@ -92,6 +106,18 @@ _NO_SIMULATOR_MODEL_LABEL = "sin_simulador_automatico"
 
 DEFAULT_RUNS_ROOT = project_root() / "reports" / "interpretability" / "runs"
 
+# Directory conventionally populated by the (out-of-scope in this change)
+# PDF-discussion *extraction* notebook (`01_pdf_discussion_table_from_pdfs.ipynb`),
+# which writes `tabla_pdfs_intervalo_*.xlsx` there. This orchestrator only
+# READS that already-built table — it never touches PDFs itself.
+DEFAULT_PDF_DISCUSSIONS_DIR = project_root() / "reports" / "analysis-documents"
+_PDF_DISCUSSIONS_GLOB = "tabla_pdfs_intervalo_*.xlsx"
+
+# Mirrors the notebook's `min(TOP_K_PDF_DATE_MATCHES, MAX_EXPERT_ROWS_FOR_LLM3)`
+# (10, 30) => 10 (cell ~55 of the superseded
+# `02_local_uiti_vano_interpretability_v3.ipynb`).
+_TOP_K_PDF_DATE_MATCHES = 10
+
 
 class ReportPipelineError(ValueError):
     """Raised when the report pipeline cannot proceed for a given circuit or run_dir.
@@ -103,6 +129,27 @@ class ReportPipelineError(ValueError):
 
 def _read_json(path: Path) -> Any:
     return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+def _resolve_pdf_discussions_path(pdf_discussions_path: str | Path | None = None) -> Path:
+    """Resolve "the" PDF-discussion xlsx table for this run.
+
+    If an explicit path is given, use it as-is (test isolation / callers that
+    already know which file to use). Otherwise glob
+    `DEFAULT_PDF_DISCUSSIONS_DIR` for `tabla_pdfs_intervalo_*.xlsx` and, when
+    more than one candidate matches, deterministically pick the
+    lexicographically last one (mirrors the notebook's own
+    `_modelo_mas_reciente` convention for resolving "the" file among several
+    dated candidates: `sorted(candidates)[-1]`). When no candidate exists,
+    return a non-existent sentinel path so `cargar_discussiones_pdf_excel`'s
+    own not-found handling triggers graceful degradation.
+    """
+    if pdf_discussions_path is not None:
+        return Path(pdf_discussions_path)
+    candidates = sorted(DEFAULT_PDF_DISCUSSIONS_DIR.glob(_PDF_DISCUSSIONS_GLOB))
+    if not candidates:
+        return DEFAULT_PDF_DISCUSSIONS_DIR / _PDF_DISCUSSIONS_GLOB.replace("*", "not-found")
+    return candidates[-1]
 
 
 def _new_run_dir(circuito: str, *, runs_root: str | Path | None = None) -> Path:
@@ -226,9 +273,29 @@ def prepare(
     return run_dir
 
 
-def prepare_expert_alignment(run_dir: str | Path) -> Path:
+def prepare_expert_alignment(
+    run_dir: str | Path,
+    *,
+    pdf_discussions_path: str | Path | None = None,
+) -> Path:
     """Build `expert-alignment.bc.json` from the historical and inference
-    agents' validated outputs already written under `run_dir`.
+    agents' validated outputs already written under `run_dir`, plus the
+    already-extracted PDF-discussion xlsx table matched against the circuit.
+
+    The PDF-discussion *extraction* notebook
+    (`01_pdf_discussion_table_from_pdfs.ipynb`, which BUILDS
+    `reports/analysis-documents/tabla_pdfs_intervalo_*.xlsx`) is out of scope
+    for this change. This function only READS that already-built table and
+    matches it against the circuit, exactly like the original notebook flow
+    (`notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`, cell ~55):
+    `cargar_discussiones_pdf_excel` -> `extraer_fechas_informe` ->
+    `filtrar_discussiones_por_circuito` -> `seleccionar_top_coincidencias_temporales`.
+
+    This is a graceful-degradation path, not a hard failure: if the xlsx
+    table doesn't exist, is empty, or has zero rows for this circuit,
+    expert-alignment still proceeds with `pdf_expert_matches=[]` (and
+    `construir_contexto_expert_alignment` derives `modelo_experto_disponible:
+    false` from that empty list) rather than raising.
 
     Returns `run_dir` (chainable, mirrors `prepare`'s return) rather than the
     artifact file path, so `render(prepare_expert_alignment(prepare(...)))`
@@ -240,17 +307,36 @@ def prepare_expert_alignment(run_dir: str | Path) -> Path:
     inference_data = _load_validated_agent_output(run_dir, "inference")
     inference_context = _read_json(run_dir / "inference.bc.json")
 
-    # No PDF discussion-extraction wiring in this change (out of scope —
-    # see apply-progress deviations): fechas_informe/pdf_expert_matches are
-    # intentionally empty rather than fabricated.
+    fechas_informe = extraer_fechas_informe(
+        validation_data=historical_data,
+        inference_validation_data=inference_data,
+        critical_points=state.get("critical_points"),
+        fecha_inicio=state["fecha_inicio"],
+        fecha_fin=state["fecha_fin"],
+    )
+
+    resolved_pdf_path = _resolve_pdf_discussions_path(pdf_discussions_path)
+    pdf_discussions_df, _pdf_discussion_warnings = cargar_discussiones_pdf_excel(resolved_pdf_path)
+
+    pdf_expert_matches: list[dict[str, Any]] = []
+    if not pdf_discussions_df.empty:
+        pdf_discussions_circuit_df = filtrar_discussiones_por_circuito(pdf_discussions_df, state["circuito"])
+        if not pdf_discussions_circuit_df.empty:
+            pdf_expert_matches = seleccionar_top_coincidencias_temporales(
+                fechas_informe=fechas_informe,
+                pdf_df=pdf_discussions_circuit_df,
+                circuito_interes=state["circuito"],
+                top_k=_TOP_K_PDF_DATE_MATCHES,
+            )
+
     context = construir_contexto_expert_alignment(
         circuito=state["circuito"],
         periodo_inicio=state["fecha_inicio"],
         periodo_fin=state["fecha_fin"],
-        fechas_informe=[],
+        fechas_informe=fechas_informe,
         validation_data=historical_data,
         inference_validation_data=inference_data,
-        pdf_expert_matches=[],
+        pdf_expert_matches=pdf_expert_matches,
         inference_context_package=inference_context,
         variables_modelo_predictivo=None,
     )
