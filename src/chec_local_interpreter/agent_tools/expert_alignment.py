@@ -16,12 +16,12 @@ Verbs:
                     `reports/interpretability/artifacts/{circuito}/`.
 
 Both verbs read exactly one JSON document from stdin and write exactly one
-JSON document to stdout. No network access, no imports outside
+JSON document to stdout, via the shared `agent_tools.cli_support.dispatch`
+0/1/2/3 exit-code contract. No network access, no imports outside
 `chec_local_interpreter.expert_alignment`, `chec_local_interpreter.circuit_identity`
 (the shared, agent-agnostic canonical-identity module), the sibling
-`agent_tools._atomic_io` shared-utility module (the hoisted atomic-write
-helper, shared with `agent_tools.batch` so it only needs to exist in one
-place), and the standard library.
+`agent_tools._atomic_io` and `agent_tools.cli_support` shared-utility modules,
+and the standard library.
 """
 
 from __future__ import annotations
@@ -30,11 +30,11 @@ import argparse
 import json
 import sys
 import time
-import traceback
 from pathlib import Path
 from typing import Any
 
 from chec_local_interpreter.agent_tools._atomic_io import atomic_write_text as _atomic_write_text
+from chec_local_interpreter.agent_tools.cli_support import dispatch as cli_dispatch
 from chec_local_interpreter.circuit_identity import (
     canonical_circuit_identity,
     sanitize_circuito_dirname as _shared_sanitize_circuito_dirname,
@@ -56,10 +56,6 @@ TOOL_VERSION = "expert-alignment-agent-tools/0.1.0"
 # expected to run this CLI from the repo root so failure artifacts land under
 # the repo's own reports/interpretability/artifacts/ directory.
 ARTIFACTS_ROOT = Path("reports/interpretability/artifacts")
-
-
-class MalformedRequestError(Exception):
-    """Raised when the stdin payload is not valid JSON or misses a required field."""
 
 
 def build_context(payload: dict[str, Any]) -> dict[str, Any]:
@@ -172,27 +168,14 @@ def validate(payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
     return {"ok": False, "errors": errors, "artifact_path": str(artifact_path)}, 1
 
 
-def _load_payload(verb: str) -> dict[str, Any]:
-    """Parse stdin as a JSON object and check the verb's required top-level keys.
+def _build_context_handler(payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
+    return build_context(payload), 0
 
-    Raises `MalformedRequestError` for empty/invalid JSON, a non-object
-    payload, or a missing required field — kept distinct from a validation
-    failure (exit code 1), which requires a well-formed request in the first
-    place.
-    """
-    try:
-        payload = json.load(sys.stdin)
-    except json.JSONDecodeError as exc:
-        raise MalformedRequestError(f"stdin is not valid JSON: {exc}") from exc
 
-    if not isinstance(payload, dict):
-        raise MalformedRequestError("stdin JSON payload must be an object.")
-
-    required_key = "circuito" if verb == "build-context" else "response_text"
-    if required_key not in payload:
-        raise MalformedRequestError(f"Missing required field: {required_key}")
-
-    return payload
+_HANDLERS: dict[str, tuple[str, Any]] = {
+    "build-context": ("circuito", _build_context_handler),
+    "validate": ("response_text", validate),
+}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -202,29 +185,11 @@ def main(argv: list[str] | None = None) -> int:
     subparsers.add_parser("validate", help="Validate a candidate expert-alignment response against its context.")
     args = parser.parse_args(argv)
 
-    try:
-        payload = _load_payload(args.verb)
-    except MalformedRequestError as exc:
-        json.dump({"ok": False, "errors": [f"Malformed request: {exc}"]}, sys.stdout, ensure_ascii=False)
-        return 2
-
-    try:
-        if args.verb == "build-context":
-            envelope = build_context(payload)
-            json.dump(envelope, sys.stdout, ensure_ascii=False)
-            return 0
-
-        result, exit_code = validate(payload)
-        json.dump(result, sys.stdout, ensure_ascii=False)
-        return exit_code
-    except Exception as exc:  # noqa: BLE001 - a well-formed request with malformed
-        # nested fields must still produce exactly one JSON document on
-        # stdout, never a bare traceback / no output at all. The full
-        # traceback still goes to stderr for diagnosability (same convention
-        # as `batch.run_circuit`'s unexpected-error handling).
-        print(f"[chec_local_interpreter.agent_tools.expert_alignment] unexpected error:\n{traceback.format_exc()}", file=sys.stderr)
-        json.dump({"ok": False, "errors": [f"Unexpected error: {exc}"]}, sys.stdout, ensure_ascii=False)
-        return 3
+    return cli_dispatch(
+        args.verb,
+        _HANDLERS,
+        module_name="chec_local_interpreter.agent_tools.expert_alignment",
+    )
 
 
 if __name__ == "__main__":
