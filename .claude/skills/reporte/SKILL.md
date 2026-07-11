@@ -136,9 +136,18 @@ Given `circuito` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair)
    `run_dir/expert-alignment.bc.json` and `agent_tools.expert_alignment build-context`/`validate`,
    writing `run_dir/expert-alignment.out.json`.
 7. **`render`** — run `report_pipeline.render(run_dir)`. Reads all three validated outputs and
-   calls `plotting.render_llm_analysis` (no `automatic_simulation_*` kwargs — no simulator in this
-   flow) to produce the final HTML report. Raises `ReportPipelineError` if the expert-alignment
-   output is missing/invalid; no HTML is written in that case.
+   calls `plotting.render_llm_analysis` (no `automatic_simulation_*` kwargs — the separate
+   "simulador automático mínimo/máximo" is still untouched, out of scope). Raises
+   `ReportPipelineError` if the expert-alignment output is missing/invalid; no HTML is written in
+   that case.
+
+   `render` stays model-free: it never reloads the MGCECDL classifier or recomputes SHAP. If
+   `prepare` persisted `run_dir/inference_render_assets.json` (the healthy-run case above), `render`
+   resolves every figure/graph path in it against `run_dir` and passes a populated
+   `inference_results` mapping into `plotting.render_llm_analysis`, so the bars/radar/estimated-graph
+   section actually renders. If the sidecar is absent (no trained model, or every scenario was
+   skipped), `inference_results` stays `None` — the inference-figures section is empty, same as
+   before this change, and this is never a crash or a `ReportPipelineError`.
 8. **Report the result** — tell the user the returned HTML `Path`. Do not claim the report is final
    if any stage above raised and stopped the run early.
 
@@ -151,6 +160,20 @@ Given `circuito` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair)
 | Zero events in window | `prepare` | `ReportPipelineError`, no run_dir created, no agent invoked |
 | Agent validation retries exhausted | Steps 3, 4, or 6 | Stop this circuit's run; surface the last `validate` errors; never invoke a later stage |
 | Missing/invalid validated output reaching a later stage | `prepare_expert_alignment` / `render` | `ReportPipelineError`; the affected artifact is never written |
+
+### Simulator degrade paths (NOT `ReportPipelineError`)
+
+These are graceful-degradation outcomes from the MGCECDL/SHAP simulator inside `prepare` — the run
+always continues, the report always generates:
+
+| Case | Where | Resulting shape |
+|---|---|---|
+| No trained model file on disk | `prepare` (`_load_mgcecdl_model_and_sigma`) | `features: []`, `escenarios: []`, `modelo` stays the placeholder label; no `inference_render_assets.json` sidecar; `render` gets `inference_results=None` |
+| Model present, Optuna study file missing | `prepare` (`_load_mgcecdl_model_and_sigma`) | Falls back to `rbf_sigma=1.0`; simulator runs fully, NOT the gap above |
+| One scenario (of four) has too few events for valid SHAP | `prepare` (`_compute_inference_scenarios`) | That scenario is silently omitted from `escenarios`; the other surviving scenarios are unaffected |
+| All four scenarios have too few events | `prepare` (`_compute_inference_scenarios`) | `escenarios: []` but `features` non-empty and `modelo` is the real model's class name — distinguishes this from the "no trained model" row above |
+| `inference_render_assets.json` sidecar present at render time | `render` | Figures/graphs resolved against `run_dir` and embedded (PNGs as base64 `<img>`, HTML graphs as an iframe) |
+| Sidecar absent at render time | `render` | `inference_results=None`, inference-figures section stays empty, no crash |
 
 ## Related artifacts
 
@@ -169,5 +192,9 @@ Given `circuito` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair)
 - Architecture and envelope contract: `docs/agents-guide.md`
 - Deprecated (in-place, not deleted) notebook this Skill supersedes for phases 1-8:
   `notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`
-- Tests: `tests/test_report_pipeline.py` (includes the argument-pair contract and the final
-  end-to-end smoke test with canned validated outputs and no live LLM call)
+- Tests: `tests/test_report_pipeline.py` (argument-pair contract, simulator wiring/degrade paths, the
+  real-simulator integration tests using the committed model/Optuna/Variables artifacts, and the
+  end-to-end smoke test with canned validated outputs and no live LLM call);
+  `tests/test_report_pipeline_inference_simulator.py` (unit tests for the standalone
+  `_load_mgcecdl_model_and_sigma`/`_compute_inference_scenarios`/`_run_inference_simulator`
+  functions, also against the real committed artifacts, read-only)
