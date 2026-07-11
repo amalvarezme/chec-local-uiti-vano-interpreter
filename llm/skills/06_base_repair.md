@@ -11,7 +11,6 @@ Este modo se usa solo cuando una respuesta anterior no validó.
 - No incluyas markdown, etiquetas `<think>`, comentarios ni texto antes o después del JSON.
 - Usa únicamente el contexto de reparación entregado.
 - Usa solo fechas y `critical_point_id` presentes en `critical_points` o `metadata.start` / `metadata.end`.
-- No afirmes causalidad definitiva; usa lenguaje cauteloso.
 - No menciones RAG, bitácoras, normativa, what-if, simulación, máscaras ni reporte final.
 - Si hay columnas opcionales no disponibles en `metadata`, inclúyelas en `data_gaps`.
 - Uno de esos ítems debe tratar `NR_T` y `DDT` si aparecen en el contexto.

@@ -51,7 +51,6 @@ sample outputs that should pass or fail.
 
 ## Unacceptable Claims
 
-- "La causa fue X."
 - "Segun la normativa..."
 - "La bitacora evidencia..."
 - "El modelo predice..."

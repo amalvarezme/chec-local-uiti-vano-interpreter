@@ -50,7 +50,6 @@
   "domain_context": {"variable_groups": {}, "relationship_rules": []},
   "guardrails": {
     "do_not_detect_new_points": true,
-    "do_not_claim_definitive_causality": true,
     "do_not_use_rag_or_normative_evidence": true,
     "use_only_structured_data_and_domain_context": true
   }

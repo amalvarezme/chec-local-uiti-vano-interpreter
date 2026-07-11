@@ -71,8 +71,6 @@ No inventes variables nuevas ni propongas variables que no estén en `variables_
 ## Lenguaje
 
 - Mantén lenguaje cauteloso: asociación, consistencia, diferencia, posible explicación, requiere validación.
-- No afirmes causalidad directa si ninguna fuente la afirma.
-- No conviertas una coincidencia temporal en una causa.
 - No digas que el reporte experto observó una variable si esa variable no aparece en `Análisis` o `Evidencia`.
 
 ## Salida

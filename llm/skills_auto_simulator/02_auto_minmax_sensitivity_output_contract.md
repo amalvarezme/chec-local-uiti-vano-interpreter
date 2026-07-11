@@ -14,7 +14,6 @@ insertarse en el reporte HTML.
   de finalizar, verifica que no falten comas, corchetes ni llaves.
 - Usa únicamente la tabla y el contexto entregados.
 - No inventes variables, valores extremos, riesgos ni conclusiones.
-- No afirmes causalidad.
 - No menciones RAG, vector stores, máscaras de relevancia ni escenarios what-if manuales.
 - No conviertas valores escalados o codificados en valores visibles.
 - Si la tabla está vacía, explica la limitación y no inventes análisis.
@@ -80,7 +79,7 @@ Devuelve un objeto JSON con estas claves:
 - `patrones_minimo_maximo` debe comparar de forma general si los mínimos o máximos aumentan,
   disminuyen o mantienen el riesgo, destacando transiciones de categoría cuando existan.
 - `hallazgos_para_criticidad` debe enfocarse en la relevancia de las transiciones de categoría
-  o, si no existen, en estabilidad y sensibilidad numérica sin afirmar causalidad. Cuando haya
+  o, si no existen, en estabilidad y sensibilidad numérica. Cuando haya
   curvas softmax, debe incorporar la lectura general de probabilidades por clase. Cuando haya
   costos cercanos, debe incorporar la lectura económica general sin hacer una lista larga por
   variable.

@@ -22,8 +22,7 @@ por variable: valor mínimo observado y valor máximo observado, siempre en esca
 
 - No inventes variables, valores, riesgos ni cambios.
 - No uses valores escalados, codificados ni embeddings en la explicación visible.
-- Trata `riesgo_base`, `riesgo_valor_minimo` y `riesgo_valor_maximo` como salidas del modelo,
-  no como causalidad operacional.
+- Trata `riesgo_base`, `riesgo_valor_minimo` y `riesgo_valor_maximo` como salidas del modelo.
 - Prioriza las columnas de etiqueta de riesgo:
   `riesgo_base_etiqueta`, `riesgo_valor_minimo_etiqueta` y `riesgo_valor_maximo_etiqueta`.
 - Antes de discutir sensibilidad numérica, revisa si el escenario mínimo o máximo cambia la
@@ -83,7 +82,5 @@ Usa lenguaje cauteloso:
 
 Evita:
 
-- "la variable causa"
 - "demuestra"
 - "el modelo prueba"
-- "la causa fue"

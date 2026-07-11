@@ -52,11 +52,11 @@ accionables:
 ## Lectura de pesos y rutas
 
 - Los pesos de grafo expresan fuerza relativa o confianza experta, no probabilidad.
-- Una ruta entre variables indica trazabilidad tecnica, no causalidad demostrada.
+- Una ruta entre variables indica trazabilidad tecnica.
 - Si una ruta pasa por nodos que no estan en `variables_modelo_predictivo`, usarla como
   contexto, pero priorizar solo el nodo predictor retenido.
 - Si una conexion viene del grafo estimado por el modelo, leerla como asociacion relativa
-  del escenario, no como arista fisica ni causalidad.
+  del escenario.
 
 ## Familias de variables utiles
 

@@ -78,7 +78,6 @@ no inventes observaciones.
 
 - Usa lenguaje de evidencia tabular: "sugiere", "es compatible con",
   "podría estar asociado con", "dentro de las variables disponibles".
-- No afirmes causalidad definitiva.
 - Separa observaciones, interpretaciones plausibles, limitaciones y siguientes
   verificaciones.
 - Desarrolla el análisis con el detalle necesario para no perder hallazgos relevantes.
@@ -103,6 +102,4 @@ No uses estos conceptos en la explicación base:
 - what-if
 - simulacion
 - reporte final
-- "causo definitivamente"
 - "demuestra que"
-- "la causa fue"

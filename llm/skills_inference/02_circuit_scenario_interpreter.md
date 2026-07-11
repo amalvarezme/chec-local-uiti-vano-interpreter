@@ -13,8 +13,7 @@ En el flujo MGCECDL actual, el cuaderno
 `notebooks/inference/05_mgcecdl_circuit_analysis.ipynb` agrega un entregable adicional por
 escenario: un HTML de grafo estimado. Ese grafo no es la matriz experta original; se deriva
 de la capa de reconstrucción del modelo para las muestras del escenario y de una similitud
-RBF entre variables. Se usa para explorar asociaciones inducidas por el modelo, no para
-afirmar causalidad.
+RBF entre variables. Se usa para explorar asociaciones inducidas por el modelo.
 
 ## Unidad de Análisis
 
@@ -130,7 +129,7 @@ Como interpretarlo:
   impacto operativo.
 - Si domina topologia, ubicacion o activos, la lectura apunta a condiciones estructurales
   del tramo o su posicion.
-- Si domina clima/riesgo, hablar de condiciones asociadas al evento, no de causa probada.
+- Si domina clima/riesgo, hablar de condiciones asociadas al evento.
 
 ## Escenario de recurrencia por frecuencia
 
@@ -167,7 +166,7 @@ Pregunta que responde:
 
 Como interpretarlo:
 
-- Las fechas de interes son una ventana de foco, no una demostracion causal.
+- Las fechas de interes son una ventana de foco.
 - Si una fecha no tiene eventos despues del filtro, no debe narrarse como evidencia.
 - Si el escenario concatena varias fechas, la interpretacion corresponde al conjunto de
   fechas, no necesariamente a cada dia por separado.
@@ -194,7 +193,7 @@ Como interpretarlo:
 - Si coincide con alto `UITI_VANO_PROM`, hablar de doble prioridad: frecuencia puntual e
   impacto promedio.
 - Si domina clima, riesgo o fecha, la lectura debe limitarse a condiciones asociadas a los
-  dias incluidos, no a una causa probada.
+  dias incluidos.
 - Si dominan topologia o proteccion, la interpretacion puede apuntar a tramos o equipos que
   concentran repeticiones durante las fechas de interes.
 
@@ -249,7 +248,7 @@ las barras y el radar. Reglas de lectura:
 - El peso mostrado en tooltip ya esta normalizado por el maximo del grafo y se escribe en
   notacion cientifica, por ejemplo `1.000e+00` o `6.667e-03`.
 - Un peso muy pequeno indica asociacion debil relativa dentro del grafo, no ausencia
-  absoluta ni causalidad.
+  absoluta.
 
 ## Lectura operativa por familias
 
@@ -281,12 +280,6 @@ Usar siempre lenguaje de modelo:
 
 ```text
 El modelo asigno mayor relevancia a...
-```
-
-No usar lenguaje causal fuerte:
-
-```text
-La variable causo...
 ```
 
 ## Si falta contexto

@@ -44,7 +44,7 @@ Reglas estrictas:
 14. Usa el periodo general del informe solo cuando la discusion no tenga fecha propia pero claramente pertenezca al analisis global del informe.
 15. Si la discusion no se traslapa con el rango solicitado por el usuario, no generes fila.
 16. La evidencia debe ser breve y tomada del fragmento.
-17. El analisis debe ser una sintesis tecnica corta, verificable y sin exagerar causalidad.
+17. El analisis debe ser una sintesis tecnica corta y verificable.
 18. Si el fragmento menciona una discusion general del informe sin fecha propia, pero claramente corresponde al periodo general del informe, usa el periodo general del informe.
 19. Si no estas seguro de la fecha, no generes fila.
 

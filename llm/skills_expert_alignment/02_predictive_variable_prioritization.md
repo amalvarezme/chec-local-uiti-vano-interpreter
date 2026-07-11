@@ -72,7 +72,7 @@ Prioriza una variable cuando haya consistencia entre al menos dos de estas senal
 
 Cuando una variable no coincida literalmente con un reporte experto, puedes priorizarla si
 el grafo muestra una conexion tecnica razonable con el hallazgo comparado. La redaccion debe
-decir "asociada", "conectada" o "consistente con", no "causante".
+decir "asociada", "conectada" o "consistente con".
 
 ## Salida esperada
 

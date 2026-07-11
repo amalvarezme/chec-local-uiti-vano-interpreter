@@ -22,7 +22,7 @@ La respuesta debe preservar el analisis y mantener una estructura apta para el r
   `seccion="periodo_completo"` y otra para `seccion="puntos_criticos"` cuando existan
   grafos HTML en ambas secciones.
 - Cada lectura de `discusion_grafos` debe ser apta para renderizarse como viñeta del
-  apartado correspondiente del reporte, sin afirmar causalidad.
+  apartado correspondiente del reporte.
 - `coherencia_grafo_modelo` debe incluir las entradas necesarias para explicar la relacion
   entre modelo y grafo.
 - `hallazgos`, `limitaciones` e `interpretacion` deben contener el detalle necesario para
@@ -210,9 +210,7 @@ Reemplazar frases fuertes:
 
 | Evitar | Usar |
 |---|---|
-| "X causo la falla" | "El modelo asigno alta relevancia a X" |
 | "X demuestra el origen del evento" | "X es coherente con una hipotesis operativa" |
-| "El grafo prueba causalidad" | "El grafo codifica una relacion experta" |
 | "inferencia uso el grafo" | "El grafo se usa para contrastar la interpretacion" |
 | "La variable aislada explica el resultado" | "La variable se interpreta junto con su modo y ruta en el grafo" |
 | "El vano es malo" | "El vano aparece como prioritario en este escenario" |
@@ -237,7 +235,7 @@ Para cada variable mencionada en coherencia grafo-modelo:
 - Confirmar direccion hacia `UITI_VANO` cuando se afirma camino.
 - Marcar `sin_camino_experto_detectado` si no hay ruta conocida.
 - Si la ruta es preservada o virtual, decirlo explicitamente.
-- No convertir peso del grafo en probabilidad o efecto causal.
+- No convertir peso del grafo en probabilidad.
 - Si la ruta usa nodos originales no retenidos, aclarar que esos nodos contextualizan la
   relacion pero no fueron predictores.
 - Si una variable esta ausente de `features`, no incluirla como variable explicativa del
@@ -263,8 +261,7 @@ Para cada variable mencionada en coherencia grafo-modelo:
 - Si se reportan modalidades del modelo, distinguirlas de los seis modos interpretativos
   CHEC. Las modalidades de entrenamiento MGCECDL pueden ser climaticos/exogenos y
   estructurales/endogenos, mientras que los modos CHEC son una capa semantica para explicar.
-- Si se reporta atencion o soporte por modalidad, aclarar que es comportamiento del modelo,
-  no causalidad.
+- Si se reporta atencion o soporte por modalidad, aclarar que es comportamiento del modelo.
 
 ### inferencia
 
@@ -276,13 +273,13 @@ Para cada variable mencionada en coherencia grafo-modelo:
 
 Toda salida interpretativa debe incluir limitaciones equivalentes a:
 
-- Kernel SHAP explica comportamiento del modelo, no causalidad operacional comprobada.
+- Kernel SHAP explica comportamiento del modelo.
 - La normalizacion min-max facilita comparacion dentro de cada escenario.
 - inferencia no usa directamente la matriz de adyacencia del grafo experto.
 - MGCECDL puede incorporar el grafo en entrenamiento, pero sus importancias siguen siendo
   explicaciones del modelo y requieren validacion operativa.
-- Los grafos HTML del cuaderno 05 muestran asociaciones estimadas para un escenario; no son
-  prueba causal ni sustituyen la lectura de SHAP+Borda y modos.
+- Los grafos HTML del cuaderno 05 muestran asociaciones estimadas para un escenario; no
+  sustituyen la lectura de SHAP+Borda y modos.
 - Las fechas de interes solo explican eventos presentes en el periodo filtrado.
 - Los resultados dependen del circuito, periodo, filtro y variables recibidos.
 - Las relaciones no documentadas deben marcarse como ausentes o hipoteticas.
@@ -296,7 +293,7 @@ Antes de responder, el agente debe poder contestar "si" a:
 - Use circuito, periodo, features y modelo recibidos.
 - Diferencie severidad, frecuencia y fechas de interes.
 - Interprete variables mediante modos CHEC.
-- Contraste con el grafo sin afirmar causalidad.
+- Contraste con el grafo.
 - Conserve contexto de nodos originales sin tratarlos como predictores si no estan en
   `features`.
 - Valide scores, nombres de variables y granularidad.

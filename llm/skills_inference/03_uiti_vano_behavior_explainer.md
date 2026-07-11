@@ -61,7 +61,7 @@ Donde:
 - `FECHA` puede conectar contexto temporal con `UITI_VANO`, pero con interpretacion
   contextual.
 - Variables aguas arriba como clima, riesgo, topologia, proteccion, activos o conductor
-  deben narrarse como contexto predictivo o hipotesis operativa, no como prueba causal.
+  deben narrarse como contexto predictivo o hipotesis operativa.
 
 Por tanto, valores altos pueden estar asociados a:
 
@@ -113,7 +113,6 @@ Si el agente recibe probabilidades o atribuciones SHAP, debe aclarar:
 
 - La explicacion corresponde a la salida del modelo usada por el explicador.
 - No necesariamente resume todas las clases ordinales.
-- La importancia de una variable no equivale a causalidad operacional.
 
 ## Grafos HTML como entregable interpretativo
 
@@ -125,7 +124,7 @@ El cuaderno 05 puede generar grafos interactivos HTML por escenario en
 - Usan similitud RBF entre perfiles reconstruidos de variables.
 - Muestran pesos normalizados por la conexion maxima del grafo (`0-1`) en notacion
   cientifica.
-- Eliminan doble direccion y flechas para evitar sugerir causalidad.
+- Eliminan doble direccion y flechas.
 - Complementan barras SHAP+Borda y radar por modos; no los reemplazan.
 
 Al narrarlos, usar frases como "el grafo estimado muestra asociacion relativa entre..." y
@@ -136,7 +135,7 @@ HTML recibidos deben sintetizarse en dos entradas generales de `discusion_grafos
 apliquen: `seccion="periodo_completo"` para los grafos del periodo completo y
 `seccion="puntos_criticos"` para los grafos de fechas o puntos criticos. Cada lectura debe
 conectar variables o modos relevantes con asociaciones relativas del grafo estimado, sin
-afirmar causalidad, sin repetir solo rutas de archivo y sin duplicar discusion por
+repetir solo rutas de archivo y sin duplicar discusion por
 escenario.
 
 La forma JSON obligatoria de esas lecturas es una lista de objetos:
@@ -259,9 +258,7 @@ Usar:
 
 Evitar:
 
-- "Esta variable causo la falla."
 - "El modelo probo el origen del evento."
-- "El grafo demuestra causalidad real."
 - "El vano falla por esta variable."
 
 ## Narrativa recomendada
@@ -282,5 +279,5 @@ En el escenario <nombre>, el modelo concentra la explicacion en <modo/variables>
 circuito y periodo analizados, esto sugiere que los vanos priorizados se distinguen por
 <lectura_operativa>. En el grafo, <variable/ruta> conecta con <nodo_objetivo_o_intermedio>
 mediante <tipo_de_conexion>. La conclusion describe el comportamiento del modelo sobre los
-eventos filtrados y debe contrastarse con inspeccion operativa antes de afirmar causalidad.
+eventos filtrados y debe contrastarse con inspeccion operativa.
 ```

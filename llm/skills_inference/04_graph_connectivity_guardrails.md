@@ -59,7 +59,6 @@ Uso incorrecto:
 - Decir que inferencia uso directamente el grafo para predecir.
 - Decir que una variable aislada explica el resultado sin revisar su posicion en el grafo.
 - Tratar pesos del grafo como coeficientes aprendidos por el modelo.
-- Afirmar causalidad operacional solo porque existe una ruta experta.
 - Ignorar la direccion de las aristas.
 
 ## Tipos de grafo en el flujo actual
@@ -84,7 +83,7 @@ El grafo estimado HTML:
 - Normaliza cada peso por la conexion maxima del grafo (`peso / max_peso`), por lo que el
   mayor valor se reporta como `1.000e+00` y los pesos pequenos en notacion cientifica.
 - Debe leerse como asociacion relativa estimada por el modelo para ese subconjunto de
-  muestras, no como causalidad ni como peso experto original.
+  muestras, no como peso experto original.
 
 ## Grafo completo, grafo de entrenamiento y nodos originales
 
@@ -166,8 +165,7 @@ Interpretacion:
 
 - Lags consecutivos relevantes pueden sugerir persistencia climatica.
 - `lag_0` es la condicion mas cercana al evento dentro de la ventana usada.
-- Clima relevante para inferencia debe narrarse como condicion asociada o predictiva, no como
-  causa demostrada.
+- Clima relevante para inferencia debe narrarse como condicion asociada o predictiva.
 - Si el modelo uso una ventana de lags distinta a 12 horas, solo interpretar los lags
   presentes en `features`. Los lags documentados pero ausentes quedan como contexto original,
   no como predictores.
@@ -372,7 +370,6 @@ Una variable top debe explicarse idealmente con:
 
 El agente no debe:
 
-- Afirmar causalidad fisica solo por SHAP, Borda, atencion o grafo.
 - Confundir importancia del modelo con criticidad real sin mirar severidad y recurrencia.
 - Comparar Borda crudo entre escenarios con distinto numero de eventos.
 - Interpretar una ruta virtual como conexion electrica directa.
@@ -388,7 +385,7 @@ El agente no debe:
 La variable <variable> pertenece al modo <modo>. En el grafo experto se conecta con
 UITI_VANO mediante <ruta>, con una relacion <fuerte/moderada/debil>. Esto hace que su
 aparicion en el ranking del modelo sea <coherente/parcialmente coherente/no explicada por
-el grafo>, aunque sigue siendo una explicacion del modelo y no una prueba causal.
+el grafo>, aunque sigue siendo una explicacion del modelo.
 ```
 
 ## Plantilla para aristas preservadas

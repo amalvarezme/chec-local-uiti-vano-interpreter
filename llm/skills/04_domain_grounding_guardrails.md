@@ -16,9 +16,7 @@ para el dataset estructurado. Trátalo como guía interpretativa, no como prueba
 
 ## Lenguaje Prohibido
 
-- "causo definitivamente"
 - "demuestra que"
-- "la causa fue"
 - "segun la normativa"
 - "la bitacora evidencia"
 - "el modelo predice"
@@ -28,10 +26,6 @@ para el dataset estructurado. Trátalo como guía interpretativa, no como prueba
 - "NR_T no está disponible"
 - "no contamos con datos de DDT"
 - cualquier frase que indique ausencia de datos para `DDT` o `NR_T`
-
-## Asociaciones Prohibidas
-
-- **CRÍTICO**: Evita relacionar operaciones manuales con causas, caracterizaciones o justificaciones de fallo. Las operaciones manuales son intervenciones controladas por el personal de la empresa y no afectan el funcionamiento principal del circuito.
 
 ## Lenguaje Preferido
 

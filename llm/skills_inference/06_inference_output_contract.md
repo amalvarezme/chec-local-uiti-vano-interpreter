@@ -14,7 +14,6 @@ variables, modos, SHAP/Borda y grafos HTML referenciados en el contexto estructu
   o después del JSON.
 - La respuesta debe ser compacta y debe cerrar completamente todos los arreglos y el objeto
   raíz. Antes de finalizar, verifica mentalmente que el JSON pueda parsearse.
-- No afirmes causalidad.
 - Describe SHAP, Borda y grafos como comportamiento del modelo y asociaciones estimadas.
 - No copies literalmente `features`, `graph_feature_order`, `top_variables`, `modos` ni
   `tabla_top_vanos`; sintetiza patrones.
@@ -83,7 +82,6 @@ Agregar en `discusion_grafos`:
 Cada lectura debe:
 
 - Conectar variables o modos relevantes con asociaciones del grafo.
-- Evitar causalidad.
 - Evitar repetir solo rutas de archivo.
 - Antes de responder, verificar que si `entregables.grafos_html` contiene rutas de periodo
   completo y puntos criticos, entonces existen exactamente entradas equivalentes en
@@ -102,14 +100,12 @@ dos aspectos cuando ambos existan.
 ## Inferencias predictivas
 
 `inferencias_predictivas` debe expresar riesgo o lectura predictiva para el periodo
-analizado con lenguaje cauteloso. No debe presentarse como pronostico operacional ni como
-causalidad demostrada.
+analizado con lenguaje cauteloso. No debe presentarse como pronostico operacional.
 
 ## Hipótesis del Modelo Predictivo
 
 `hipotesis_modelo_predictivo` debe sintetizar una hipótesis interpretativa del modelo, con
-el mismo estilo ejecutivo de la hipótesis del agente de análisis histórico, pero sin afirmar
-causalidad.
+el mismo estilo ejecutivo de la hipótesis del agente de análisis histórico.
 
 Debe incluir:
 
