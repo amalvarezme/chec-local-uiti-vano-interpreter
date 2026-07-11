@@ -8,20 +8,22 @@ metadata:
   role: .claude/agents/expert-alignment.md
   rules: .claude/agents/rules/invariants.md
   ported_from:
-    - llm/skills_expert_alignment/01_pdf_report_comparison.md
-    - llm/skills_expert_alignment/02_predictive_variable_prioritization.md
-    - llm/skills_expert_alignment/03_graph_context_for_alignment.md
+    - .claude/skills/expert-alignment/prompt/01_pdf_report_comparison.md
+    - .claude/skills/expert-alignment/prompt/02_predictive_variable_prioritization.md
+    - .claude/skills/expert-alignment/prompt/03_graph_context_for_alignment.md
 ---
 
 ## Overview
 
 This Skill is the single, current source of the expert-alignment reasoning guidance. It **ports**
-(does not duplicate) the three existing prompt playbooks listed in `ported_from` above into one
-Skill body with frontmatter, per `docs/agents-guide.md`'s three-meanings-of-"skills" table. The
-original playbook files stay in place, untouched, in `llm/skills_expert_alignment/` — they are
-still consumed by the pre-existing notebook flow via `assemble_skill_bundle()` until that flow is
-retired in a later slice. Going forward, author and revise the expert-alignment reasoning guidance
-here, not in the playbook files.
+(does not duplicate) the three prompt playbooks listed in `ported_from` above into one Skill body
+with frontmatter, per `docs/agents-guide.md`'s three-meanings-of-"skills" table. The `prompt/`
+subdir IS the machine-fed source: `assemble_skill_bundle(profile="expert_alignment")` loads those
+same files directly from `.claude/skills/expert-alignment/prompt/` (relocated from
+`llm/skills_expert_alignment/` in `sdd/retire-llm-directory`); `SKILL.md` is this English
+condensation for human/agent context, not a separate copy. Going forward, author and revise the
+expert-alignment reasoning guidance in the `prompt/` playbooks, and keep this condensation in
+sync.
 
 This Skill governs how the `expert-alignment` agent role
 (`.claude/agents/expert-alignment.md`) authors its comparison. Every binding invariant (frozen
@@ -106,7 +108,7 @@ presencia en `top_variables` o en modos CHEC relevantes; peso o lectura relevant
 radar o salida equivalente; ruta o conexión en el grafo general o en el grafo de variables
 seleccionadas. Cuando una variable no coincida literalmente con un reporte experto, puedes
 priorizarla si el grafo muestra una conexión técnica razonable — usa "asociada", "conectada" o
-"consistente con", nunca "causante".
+"consistente con".
 
 **Salida esperada por variable:** `variable` (identificador técnico exacto presente en
 `variables_modelo_predictivo`), `prioridad` (`alta`/`media`/`baja`), `fuentes_que_la_respaldan`
@@ -139,10 +141,10 @@ Usa las conexiones del grafo para traducir coincidencias y diferencias en variab
   topología.
 
 Lectura de pesos y rutas: los pesos de grafo expresan fuerza relativa o confianza experta, no
-probabilidad; una ruta entre variables indica trazabilidad técnica, no causalidad demostrada. Si
-una ruta pasa por nodos ausentes de `variables_modelo_predictivo`, úsala como contexto pero
-prioriza solo el nodo predictor retenido. Una conexión que viene del grafo estimado por el modelo
-se lee como asociación relativa del escenario, no como arista física ni causalidad.
+probabilidad; una ruta entre variables indica trazabilidad técnica. Si una ruta pasa por nodos
+ausentes de `variables_modelo_predictivo`, úsala como contexto pero prioriza solo el nodo predictor
+retenido. Una conexión que viene del grafo estimado por el modelo se lee como asociación relativa
+del escenario.
 
 Familias de variables útiles: protección y maniobra (`TIPO`, `COD_EQ_PROTEGE`, `FID_SW`,
 `CNT_VN`, `CNT_VN_SW`, `T_USUS_EQ_PROT`); topología y configuración espacial (`FID_VANO`, `X1`,
@@ -159,8 +161,6 @@ because it directly shapes how you write the comparison, not just what you're al
 
 - Mantén lenguaje cauteloso: asociación, consistencia, diferencia, posible explicación, requiere
   validación.
-- No afirmes causalidad directa si ninguna fuente la afirma; no conviertas una coincidencia
-  temporal en una causa.
 - No digas que el reporte experto observó una variable si esa variable no aparece en `Análisis` o
   `Evidencia`.
 
@@ -191,7 +191,8 @@ ni evidencia textual dentro del ítem; las fuentes deben ser trazables (`Agente 
 - Binding rules: `.claude/agents/rules/invariants.md`
 - Architecture and envelope contract: `docs/agents-guide.md`
 - L1 deterministic Python: `src/chec_local_interpreter/expert_alignment.py`
-- Ported-from playbooks (unchanged, still consumed by the notebook flow):
-  `llm/skills_expert_alignment/01_pdf_report_comparison.md`,
-  `llm/skills_expert_alignment/02_predictive_variable_prioritization.md`,
-  `llm/skills_expert_alignment/03_graph_context_for_alignment.md`
+- Ported-from playbooks (the machine-fed source, loaded by
+  `assemble_skill_bundle(profile="expert_alignment")`):
+  `.claude/skills/expert-alignment/prompt/01_pdf_report_comparison.md`,
+  `.claude/skills/expert-alignment/prompt/02_predictive_variable_prioritization.md`,
+  `.claude/skills/expert-alignment/prompt/03_graph_context_for_alignment.md`

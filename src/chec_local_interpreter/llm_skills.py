@@ -51,18 +51,18 @@ def skills_dir(base_dir: str | Path | None = None, *, profile: str = "base") -> 
     if base_dir is not None:
         return Path(base_dir)
     # Migrated profiles (sdd/retire-llm-directory, per-profile incremental
-    # repoint, design D3): base/historical and inferencia/inference now
-    # resolve to their code-owned `.claude/skills/<agent>/prompt/` home.
-    # Un-migrated profiles keep resolving via `llm_root()` until their own
-    # slice lands (expert_alignment/pdf_report_comparison in Slice B,
-    # auto_simulator/simulador_automatico in Slice D).
+    # repoint, design D3): base/historical, inferencia/inference, and
+    # expert_alignment/pdf_report_comparison now resolve to their code-owned
+    # `.claude/skills/<agent>/prompt/` home. Un-migrated profiles keep
+    # resolving via `llm_root()` until their own slice lands
+    # (auto_simulator/simulador_automatico in Slice D).
     if profile == "base":
         return agent_prompt_dir("historical")
     if profile == "inferencia":
         return agent_prompt_dir("inference")
     if profile in {"expert_alignment", "pdf_report_comparison"}:
-        suffix = "skills_expert_alignment"
-    elif profile in {"auto_simulator", "simulador_automatico"}:
+        return agent_prompt_dir("expert-alignment")
+    if profile in {"auto_simulator", "simulador_automatico"}:
         suffix = "skills_auto_simulator"
     else:
         raise ValueError("profile debe ser 'base', 'inferencia', 'expert_alignment' o 'auto_simulator'.")

@@ -35,7 +35,7 @@ TARGET_VARIABLES = {"UITI_VANO"}
 # Both are small, hermetic allow-lists checked in-code (no file read), so the
 # validator stays deterministic and testable without the governance artifacts
 # (WU5a) existing yet. Keep these in sync with `.claude/agents/rules/invariants.md`
-# and `llm/skills_expert_alignment/*.md` once WU5a lands.
+# and `.claude/skills/expert-alignment/prompt/*.md` once WU5a lands.
 EXPERT_ALIGNMENT_AGENT_ID = "expert-alignment"
 
 EXPERT_ALIGNMENT_PROVENANCE_RULES = frozenset({
