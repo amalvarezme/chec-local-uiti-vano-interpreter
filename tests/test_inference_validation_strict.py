@@ -183,6 +183,24 @@ def test_schema_invalid_missing_required_key_fails():
     assert result["errors"]
 
 
+def test_schema_allows_empty_escenarios_r1_r3_gap_shape():
+    """`escenarios.minItems` is 0 (task 1.3): an empty `escenarios` array is a
+    VALID terminal state (R1/R3 gap shapes, obs#219), not a schema violation.
+    A context with zero scenarios has an empty allowed-scenario-names set, so
+    this response can never fabricate one either."""
+    context = _context()
+    context["escenarios"] = []
+    context["graph_html_paths"] = []
+    response = _valid_response(context)
+    response["escenarios"] = []
+    response["entregables"]["grafos_html"] = []
+    response["discusion_grafos"] = []
+
+    result = validar_respuesta_inferencia_strict(json.dumps(response, ensure_ascii=False), context)
+
+    assert result["ok"], result["errors"]
+
+
 def test_response_citing_critical_point_id_outside_allowed_fails():
     """Regression case vs the old weak validator: a response that would pass
     the legacy escenarios/discusion_grafos-name-only check but references a
