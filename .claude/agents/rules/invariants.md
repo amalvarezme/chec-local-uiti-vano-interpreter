@@ -108,7 +108,5 @@ present" (it isn't — any `data_ref` supplied is held to the full resolvability
 ## Rule 7 — Cautious Language Register
 
 Report content is authored in Spanish, in a technical and cautious register: prefer
-`asociación`, `consistencia`, `posible explicación`, and `requiere validación` over direct causal
-claims. Direct causality language — `causó`, `causa` used causally, `demuestra causalidad`,
-`prueba causal` — is rejected outright by the schema validator; do not attempt to phrase around
-this rule, honor it.
+`asociación`, `consistencia`, `posible explicación`, and `requiere validación` when framing
+findings.

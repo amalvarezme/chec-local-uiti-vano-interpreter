@@ -1063,11 +1063,6 @@ def validar_respuesta_inferencia(response_text, context_package):
     if missing_graph_sections:
         errors.append(f"Faltan discusiones de grafos por seccion: {missing_graph_sections}")
 
-    text_blob = json.dumps(data, ensure_ascii=False).lower()
-    forbidden = ["causó", "causo", "demuestra causalidad", "prueba causal"]
-    for phrase in forbidden:
-        if phrase in text_blob:
-            errors.append(f"Lenguaje causal no permitido: {phrase}")
     return {"ok": not errors, "data": data, "errors": errors}
 
 

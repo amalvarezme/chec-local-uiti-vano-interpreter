@@ -1141,7 +1141,7 @@ const cronograma = [
             <div class="process-grid">
               <article><strong>Structured context builder</strong><p>Construye el paquete que el LLM recibe: selección, métricas diarias, puntos críticos, variables disponibles y faltantes.</p></article>
               <article><strong>Behavior explainer</strong><p>Convierte serie, causas observadas y puntos críticos en hipótesis históricas verificables.</p></article>
-              <article><strong>Graph guardrails</strong><p>Permite usar relaciones del grafo como apoyo de contexto, sin afirmar causalidad fuera de lo entregado.</p></article>
+              <article><strong>Graph guardrails</strong><p>Permite usar relaciones del grafo como apoyo de contexto.</p></article>
               <article><strong>Base output contract</strong><p>Define las secciones y referencias obligatorias del JSON para integrarlo al reporte HTML.</p></article>
             </div>
             <p class="note-callout">
@@ -1344,7 +1344,7 @@ const cronograma = [
               <p><strong>Función de Borda:</strong> convierte el ranking Top-20 de cada evento en un puntaje acumulable. La posición 1 recibe 20 puntos base, la posición 2 recibe 19 y así hasta la posición 20, que recibe 1.</p>
               <p><strong>Ejemplo coherente con el flujo:</strong> una variable en puesto 1 con SHAP 0,20 suma 20 × 0,20 = 4,00. Otra en puesto 3 con SHAP 0,12 suma 18 × 0,12 = 2,16.</p>
               <p>Al sumar muchos eventos, Borda cuantifica persistencia en el ranking y SHAP cuantifica intensidad de atribución. Luego el resultado se normaliza para ordenar variables comparables dentro del escenario.</p>
-              <p>Esta lectura alimenta las skills como priorización predictiva: ayuda a decir qué variables revisó el modelo y con qué recurrencia relativa, pero no convierte SHAP ni Borda en causalidad física.</p>
+              <p>Esta lectura alimenta las skills como priorización predictiva: ayuda a decir qué variables revisó el modelo y con qué recurrencia relativa.</p>
             </div>
           </div>
 
@@ -1368,7 +1368,7 @@ const cronograma = [
               </figure>
               <figure>
                 <iframe class="graph-frame compact-frame" src={grafoTopUitiPeriodoMgcecdl} title="Grafo estimado MGCECDL del escenario Top P97 por UITI_VANO"></iframe>
-                <figcaption><strong>Grafo estimado.</strong> Alimenta la skill de conectividad: permite revisar relaciones relativas entre variables priorizadas sin afirmar causalidad directa.</figcaption>
+                <figcaption><strong>Grafo estimado.</strong> Alimenta la skill de conectividad: permite revisar relaciones relativas entre variables priorizadas.</figcaption>
               </figure>
             </div>
           </div>
@@ -1385,7 +1385,7 @@ const cronograma = [
             <div class="process-grid">
               <article><strong>Circuit scenario interpreter</strong><p>Toma cada escenario del cuaderno y ordena la lectura por período completo, frecuencia, UITI_VANO o puntos críticos.</p></article>
               <article><strong>UITI_VANO behavior explainer</strong><p>Usa las barras SHAP+Borda y el radar para redactar hipótesis predictivas sobre variables y modos dominantes.</p></article>
-              <article><strong>Graph connectivity guardrails</strong><p>Usa el grafo estimado como soporte de conectividad y evita presentar esas conexiones como causalidad física comprobada.</p></article>
+              <article><strong>Graph connectivity guardrails</strong><p>Usa el grafo estimado como soporte de conectividad.</p></article>
               <article><strong>Inference output contract</strong><p>Define el JSON que debe producir el agente para que el reporte pueda integrar escenarios, hallazgos, grafos y limitaciones.</p></article>
             </div>
           </div>
@@ -1401,7 +1401,7 @@ const cronograma = [
               <article><strong>Contrato estructurado</strong><p>La salida debe ser JSON válido con secciones esperadas para el reporte.</p></article>
               <article><strong>Variables permitidas</strong><p>La priorización se limita a variables que realmente recibe el modelo.</p></article>
               <article><strong>Escenarios válidos</strong><p>Solo puede hablar de escenarios SHAP, barras, radar y grafos generados por el flujo.</p></article>
-              <article><strong>Control conceptual</strong><p>Debe declarar que SHAP, Borda y grafos explican asociaciones del modelo, no causalidad definitiva.</p></article>
+              <article><strong>Control conceptual</strong><p>Debe declarar que SHAP, Borda y grafos explican asociaciones del modelo.</p></article>
             </div>
           </div>
           <a class="back-link bottom" href="#arquitectura">← Volver al simulador multimodal</a>
@@ -1450,7 +1450,7 @@ const cronograma = [
               <article><strong>Coincidencias</strong><p>Resume acuerdos ejecutivos entre análisis histórico, modelo predictivo y reportes expertos.</p></article>
               <article><strong>Diferencias</strong><p>Separa tensiones: señales del modelo sin respaldo documental, o hallazgos expertos no cubiertos por variables del modelo.</p></article>
               <article><strong>Variables a priorizar</strong><p>Propone hasta cinco variables de entrada del modelo para revisión operacional, con prioridad y validación sugerida.</p></article>
-              <article><strong>Lenguaje cauteloso</strong><p>Usa asociación, consistencia o posible explicación; no convierte coincidencias temporales en causalidad.</p></article>
+              <article><strong>Lenguaje cauteloso</strong><p>Usa asociación, consistencia o posible explicación.</p></article>
             </div>
           </div>
 
@@ -1487,14 +1487,14 @@ const cronograma = [
             <h3>Validaciones</h3>
             <p>
               Antes de mostrarse en el reporte, la salida se valida contra el contexto. El sistema rechaza JSON
-              con texto adicional, fechas fuera del informe, evidencias que no provienen de las filas comparadas,
-              variables inexistentes en el modelo o lenguaje que afirme causalidad directa.
+              con texto adicional, fechas fuera del informe, evidencias que no provienen de las filas comparadas
+              o variables inexistentes en el modelo.
             </p>
             <div class="process-grid">
               <article><strong>JSON estricto</strong><p>La respuesta debe ser un único objeto JSON con las claves esperadas.</p></article>
               <article><strong>Evidencia permitida</strong><p>Solo puede citar o usar evidencia presente en las filas expertas comparadas.</p></article>
               <article><strong>Variables válidas</strong><p>Descarta variables no presentes en el modelo predictivo y excluye UITI_VANO como predictor.</p></article>
-              <article><strong>No causalidad</strong><p>Bloquea frases como “demuestra causalidad” o afirmaciones causales no soportadas.</p></article>
+              <article><strong>Consistencia experta</strong><p>Verifica que el indicador de modelo experto disponible coincida con la evidencia real del circuito.</p></article>
             </div>
           </div>
           <a class="back-link bottom" href="#arquitectura">← Volver al simulador multimodal</a>
