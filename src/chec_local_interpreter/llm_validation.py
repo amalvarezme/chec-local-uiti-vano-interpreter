@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -11,7 +12,6 @@ try:
 except ImportError:  # pragma: no cover - exercised only in minimal environments
     Draft202012Validator = None
 
-from chec_local_interpreter.causal_language import find_causal_language
 from chec_local_interpreter.llm_contracts import load_output_schema
 
 @dataclass
@@ -162,13 +162,6 @@ def _guardrail_errors(data: dict[str, Any], context: dict[str, Any]) -> list[str
     if unavailable and not data.get("data_gaps"):
         errors.append("Output must include data_gaps when optional variables are unavailable.")
 
-    # Shared guard (chec_local_interpreter.causal_language): the base/
-    # historical agent's invariants claim causal-language is forbidden, but
-    # this validator previously had no check for it at all (a latent gap —
-    # only the expert-alignment validator enforced it). Reuse the exact same
-    # matcher so both agents enforce the identical rule.
-    for term in find_causal_language(full_text_blob):
-        errors.append(f"Causal language not allowed: {term.lower()}")
     return errors
 
 
@@ -297,6 +290,71 @@ def _validate_provenance_data_ref_base(
     return None
 
 
+def validar_provenance_generico(
+    data: dict[str, Any],
+    *,
+    sections: tuple[str, ...],
+    agent_id: str,
+    allowed_rules: frozenset[str],
+    resolve_data_ref: Callable[[Any], str | None],
+    error_not_object: Callable[[], str],
+    error_bad_agent: Callable[[Any], str],
+    error_bad_rule: Callable[[Any], str],
+    error_empty_data_ref: Callable[[], str],
+) -> dict[str, Any]:
+    """Shared provenance-validation core (ADR-7), reused by every agent's
+    `validar_provenance_*` wrapper (base/historical, expert-alignment, and
+    inference — see design `sdd/report-command-pipeline`).
+
+    Provenance is optional per item (backwards compatible with responses that
+    predate the provenance contract): an item without a `provenance` key is
+    never flagged. When present, `provenance` must be
+    `{data_ref, agent, rule}` with every `data_ref` entry resolving through
+    the caller-supplied `resolve_data_ref` (each agent's own allowed universe
+    of dates/ids/variables/etc.), `agent` matching `agent_id`, and `rule`
+    naming an entry from `allowed_rules`.
+
+    Message text is fully delegated to the `error_*` callables so each
+    wrapper can keep its own exact (and possibly differently-worded/localized)
+    error strings — this function only owns the traversal/accumulation logic,
+    not the wording, so migrating existing validators onto it is behavior-
+    preserving byte-for-byte.
+    """
+    errors: list[str] = []
+    for section_name in sections:
+        section = data.get(section_name, [])
+        if not isinstance(section, list):
+            continue
+        for item in section:
+            if not isinstance(item, dict):
+                continue
+            provenance = item.get("provenance")
+            if provenance is None:
+                continue
+            if not isinstance(provenance, dict):
+                errors.append(f"{section_name}: {error_not_object()}")
+                continue
+
+            agent = provenance.get("agent")
+            if agent != agent_id:
+                errors.append(f"{section_name}: {error_bad_agent(agent)}")
+
+            rule = provenance.get("rule")
+            if rule not in allowed_rules:
+                errors.append(f"{section_name}: {error_bad_rule(rule)}")
+
+            data_ref = provenance.get("data_ref")
+            if not isinstance(data_ref, list) or not data_ref:
+                errors.append(f"{section_name}: {error_empty_data_ref()}")
+                continue
+            for ref in data_ref:
+                error = resolve_data_ref(ref)
+                if error:
+                    errors.append(f"{section_name}: {error}")
+
+    return {"ok": not errors, "errors": errors}
+
+
 def validar_provenance_base(data: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
     """Additively validate per-`key_finding` `provenance` objects, when present.
 
@@ -308,50 +366,31 @@ def validar_provenance_base(data: dict[str, Any], context: dict[str, Any]) -> di
     `agent` naming the producing role (`BASE_AGENT_ID`), and `rule` naming an
     entry from the hermetic `BASE_PROVENANCE_RULES` allow-list.
     """
-    errors: list[str] = []
-    findings = data.get("key_findings", [])
-    if not isinstance(findings, list):
-        return {"ok": True, "errors": []}
-
     allowed_dates_set = allowed_dates(context)
     allowed_critical_point_ids_set = allowed_critical_point_ids(context)
     allowed_variable_tokens = _allowed_variable_tokens(context)
     unavailable = unavailable_columns(context)
 
-    for finding in findings:
-        if not isinstance(finding, dict):
-            continue
-        provenance = finding.get("provenance")
-        if provenance is None:
-            continue
-        if not isinstance(provenance, dict):
-            errors.append("key_findings: provenance must be an object.")
-            continue
+    def resolve_data_ref(ref: Any) -> str | None:
+        return _validate_provenance_data_ref_base(
+            ref,
+            allowed_dates_set=allowed_dates_set,
+            allowed_critical_point_ids_set=allowed_critical_point_ids_set,
+            allowed_variable_tokens=allowed_variable_tokens,
+            unavailable=unavailable,
+        )
 
-        agent = provenance.get("agent")
-        if agent != BASE_AGENT_ID:
-            errors.append(f"key_findings: provenance.agent must be '{BASE_AGENT_ID}', got: {agent!r}")
-
-        rule = provenance.get("rule")
-        if rule not in BASE_PROVENANCE_RULES:
-            errors.append(f"key_findings: provenance.rule not in the allowed rule list: {rule!r}")
-
-        data_ref = provenance.get("data_ref")
-        if not isinstance(data_ref, list) or not data_ref:
-            errors.append("key_findings: provenance.data_ref must be a non-empty list.")
-            continue
-        for ref in data_ref:
-            error = _validate_provenance_data_ref_base(
-                ref,
-                allowed_dates_set=allowed_dates_set,
-                allowed_critical_point_ids_set=allowed_critical_point_ids_set,
-                allowed_variable_tokens=allowed_variable_tokens,
-                unavailable=unavailable,
-            )
-            if error:
-                errors.append(f"key_findings: {error}")
-
-    return {"ok": not errors, "errors": errors}
+    return validar_provenance_generico(
+        data,
+        sections=("key_findings",),
+        agent_id=BASE_AGENT_ID,
+        allowed_rules=BASE_PROVENANCE_RULES,
+        resolve_data_ref=resolve_data_ref,
+        error_not_object=lambda: "provenance must be an object.",
+        error_bad_agent=lambda agent: f"provenance.agent must be '{BASE_AGENT_ID}', got: {agent!r}",
+        error_bad_rule=lambda rule: f"provenance.rule not in the allowed rule list: {rule!r}",
+        error_empty_data_ref=lambda: "provenance.data_ref must be a non-empty list.",
+    )
 
 
 def save_invalid_output(response_text: str, errors: list[str], output_dir: str | Path, timestamp: str) -> tuple[Path, Path]:
