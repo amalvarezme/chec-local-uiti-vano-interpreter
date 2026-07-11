@@ -303,7 +303,6 @@ governed by this framework (that frozen function itself is untouched and still c
 ### Shared
 
 - Canonical circuit identity: `src/chec_local_interpreter/circuit_identity.py`
-- Shared causal-language guard: `src/chec_local_interpreter/causal_language.py`
 - Shared L2 CLI stdin/dispatch contract: `src/chec_local_interpreter/agent_tools/cli_support.py`
 - L4 batch runner (`AgentSpec`-generalized): `src/chec_local_interpreter/agent_tools/batch.py`
 - Frozen-model guard (tests): `tests/test_frozen_model_guard.py`
@@ -312,6 +311,28 @@ governed by this framework (that frozen function itself is untouched and still c
   responses (including a resolving-provenance case for each) through both the schema validator and
   their respective provenance validators, alongside the pre-existing base-agent eval case in the
   same file.
+
+### `/reporte` orchestrator (Implemented, `report-command-pipeline` change, Slice B)
+
+`/reporte` is **not** a fourth entry in the "Agent roles" table above — it does not itself author
+or validate one persona's JSON output, so it does not fit that table's L1/L2/L3/L4 shape. It is the
+orchestrating Claude Code Skill that sequences the three existing agent roles
+(`historical` -> `inference` -> `expert-alignment`, either order for the first two) around a
+pure-Python, LLM-call-free orchestrator, and produces the final HTML report.
+
+- Claude Code Skill (runbook): [`.claude/skills/reporte/SKILL.md`](../.claude/skills/reporte/SKILL.md)
+  — no distinct `.claude/agents/reporte.md` role file (see that Skill's own "Allowed tools" section
+  for why: no `agent_tools.report_pipeline` CLI exists in this change's scope to restrict Bash to).
+- Orchestrator (L1, pure Python, no LLM call in this module):
+  `src/chec_local_interpreter/report_pipeline.py` — `prepare(circuito, fecha_inicio=None,
+  fecha_fin=None) -> Path`, `prepare_expert_alignment(run_dir) -> Path`, `render(run_dir) -> Path`.
+- Per-circuit date-range default: `data_loader.circuit_date_range(frame, circuito)`.
+- Argument contract: `circuito` required; `fecha_inicio`/`fecha_fin` optional as a pair — giving
+  exactly one is a usage error, rejected by `prepare` itself (`ReportPipelineError`) before touching
+  the dataset, not just documented in the Skill.
+- Supersedes phases 1-8 of `notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`
+  (deprecated in place, not deleted — see that notebook's own top cell); phases 9-11 are untouched.
+- Tests: `tests/test_report_pipeline.py`.
 
 ## Follow-on (out of this slice)
 
@@ -326,9 +347,11 @@ sequencing:
   `llm_client.py` removal, since both currently have zero tests and must not regress silently.
 - **(c) Agent2 (inference/SHAP) port** to the agent-role pattern established for `expert-alignment`
   and `historical` — stub only in the Agent roles table above. Its validator MUST reach
-  expert-alignment-grade rigor (full 9-key coverage, dedicated test files, the shared
-  causal-language fix) before it can be called "Implemented" — it MUST NOT ship with today's
-  2-of-9-key `validar_respuesta_inferencia`.
+  expert-alignment-grade rigor (full 9-key coverage, dedicated test files) before it can be called
+  "Implemented" — it MUST NOT ship with today's 2-of-9-key `validar_respuesta_inferencia`. (Note:
+  this item previously also required "the shared causal-language fix" — that guard was
+  subsequently removed from the codebase in a later, separate change; see Known Limitation #3
+  below.)
 - **(d) Expert-Correction Metric measurement** — requires observing real CHEC domain-expert
   correction rates over time; cannot be satisfied by a one-time code change, so it stays open
   indefinitely until that observation process exists.
@@ -362,7 +385,7 @@ hardening slice (Slice 1a): see the "Closed" column below.
 |---|---|---|---|---|
 | 1 | CRITICAL | `_write_failure_artifact` (`agent_tools/expert_alignment.py`) derives its artifact directory from `sanitize_circuito_dirname(circuito)` alone, while the batch runner's publish/dedup path (`agent_tools/batch.py`) uses the fuller `_canonical_circuit_identity` (sanitize + `normalizar_circuito`). Circuits whose raw `circuito` differs only by case/punctuation (e.g. `"don23l13"`, `"DON23L13"`, `"DON-23-L13"`) write validation-failure artifacts to different directories even though they publish to the same canonical filename on success. | A circuit's raw ID varies in case/punctuation across runs and validation fails. | **CLOSED** — `canonical_circuit_identity` now lives in the single shared module `src/chec_local_interpreter/circuit_identity.py`, imported by both `_write_failure_artifact` and `agent_tools/batch.py` (`_publish_report`/`_dedupe_key`). A regression test (`test_write_failure_artifact_directory_matches_canonical_publish_identity` in `tests/test_agent_tools_expert_alignment.py`) pins the two paths converging. |
 | 2 | CRITICAL | The standalone L2 CLI's `main()` (`agent_tools/expert_alignment.py`) only wraps the `build-context`/`validate` verb dispatch in its Round 3 catch-all (exit code 3); it does not wrap the earlier stdin-loading/payload-parsing step. Malformed byte sequences on stdin (e.g. non-UTF-8 bytes) crash uncaught with an interpreter traceback: empty stdout, exit code 1 (Python's default), which collides with the documented "exit 1 = validation failure" contract. | The direct CLI (not the batch runner) receives non-UTF-8 or otherwise unparseable bytes on stdin. | **CLOSED** — `main()` now delegates entirely to the shared `agent_tools/cli_support.py::dispatch`, which wraps stdin loading (`load_stdin_object`) AND verb dispatch inside the same outer catch-all, guaranteeing exactly one JSON document on stdout with the correct 0/1/2/3 exit code on every path. Pinned by `tests/test_cli_support.py`. |
-| 3 | WARNING | The causal-language guard (`validar_respuesta_expert_alignment` in `expert_alignment.py`) uses the regex `\bcausa\b`, which correctly rejects the singular noun "causa" but does not catch the plural "causas" (e.g. "las causas probables") or adjective forms "causal"/"causales" (e.g. "existe una relación causal"). | An LLM response phrases a causal claim using the plural or adjective form instead of the bare singular noun. | **CLOSED** — the shared `src/chec_local_interpreter/causal_language.py::find_causal_language` broadens matching to plural/adjective/participle/noun forms (`causa(s)`, `causal(es)`, `causante(s)`, `causad[oa](s)`, `causalidad(es)`, `causó/causo`), while still excluding unrelated words like `encausar`. Used by both `expert_alignment.py`'s validator and `llm_validation._guardrail_errors` (closing the base agent's latent gap too). Pinned by `tests/test_causal_language.py` and `tests/test_expert_alignment.py`. |
+| 3 | WARNING | The causal-language guard (`validar_respuesta_expert_alignment` in `expert_alignment.py`) uses the regex `\bcausa\b`, which correctly rejects the singular noun "causa" but does not catch the plural "causas" (e.g. "las causas probables") or adjective forms "causal"/"causales" (e.g. "existe una relación causal"). | An LLM response phrases a causal claim using the plural or adjective form instead of the bare singular noun. | **CLOSED** (historical — subsequently REMOVED, see note below) — the shared `src/chec_local_interpreter/causal_language.py::find_causal_language` broadened matching to plural/adjective/participle/noun forms (`causa(s)`, `causal(es)`, `causante(s)`, `causad[oa](s)`, `causalidad(es)`, `causó/causo`), while still excluding unrelated words like `encausar`. Was used by both `expert_alignment.py`'s validator and `llm_validation._guardrail_errors` (closing the base agent's latent gap too). Was pinned by `tests/test_causal_language.py` and `tests/test_expert_alignment.py`. **Note (added later, documentation-only correction): this guard, its module, and the two pinning test files were deliberately removed in a later, separate change (not part of this table's original slice). The causal-language guard no longer exists in `llm_validation.py` or `expert_alignment.py`, and `src/chec_local_interpreter/causal_language.py` / `tests/test_causal_language.py` no longer exist. This row is kept for historical record of the original fix; it no longer reflects the current codebase.** |
 | 4 | WARNING (theoretical, not currently reachable) | `atomic_write_text` (`agent_tools/_atomic_io.py`) reads and restores the process umask non-atomically (`os.umask(0)` then `os.umask(mask)`), which is not thread-safe. | Batch processing is currently strictly sequential (`run_batch` has no concurrency), so this is currently harmless. Would become a real, narrow permissions-widening race only if batch processing is ever parallelized. | Flagged for whoever parallelizes the batch runner in the future. |
 | 5 | WARNING (theoretical, not currently reachable) | In `main()` (`agent_tools/expert_alignment.py`), if JSON serialization of the response raises partway through writing to stdout, the exception handler could write a second JSON document after a partial first one, violating the "exactly one JSON document on stdout" contract. | Not reachable via any current input path (all fields are pre-validated JSON-safe types). | Worth hardening (e.g. serialize to a string first, write once) if new fields are ever added. |
 | 6 | SUGGESTION | The batch runner's `--manifest-out` write (`agent_tools/batch.py`) uses a plain `Path.write_text()` instead of the shared `atomic_write_text` helper used everywhere else (`_publish_report`, `_write_failure_artifact`). A crash mid-write could leave a truncated manifest file. | Pre-existing, not introduced by any Judgment Day round. | Low-severity cleanup; grouped with the other follow-on items rather than fixed in isolation. |

@@ -196,10 +196,24 @@ def prepare(
     """Load/filter data for `circuito`, detect critical points, and write the
     historical + inference raw context payloads to a fresh run_dir.
 
+    `fecha_inicio`/`fecha_fin` are a PAIR (the `/reporte` Skill's argument
+    contract): give both (pass-through, unchanged) or omit both (both default
+    via `circuit_date_range` to the circuit's full range). Giving exactly one
+    is a usage error, rejected before any other check.
+
     Returns the run_dir `Path`. Raises `ReportPipelineError` before any
-    context is built or any run_dir is created if the circuit does not
-    exist in the dataset, or if the resolved date window has zero events.
+    context is built or any run_dir is created if only one date bound is
+    given, if the circuit does not exist in the dataset, or if the resolved
+    date window has zero events.
     """
+    if (fecha_inicio is None) != (fecha_fin is None):
+        raise ReportPipelineError(
+            "fecha_inicio and fecha_fin must be given as a pair: provide both "
+            "(pass-through) or omit both (defaults via circuit_date_range to "
+            "the circuit's full range) -- exactly one date was given, which "
+            "is a usage error and is never silently defaulted."
+        )
+
     source_path = Path(data_path) if data_path is not None else DEFAULT_DATA_PATH
     frame = load_dataset(source_path)
 

@@ -113,6 +113,33 @@ def test_prepare_zero_events_in_window_fails_fast(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# `/reporte` argument-pair contract (Phase 7): `fecha_inicio`/`fecha_fin` are a
+# PAIR — both given or both omitted. Exactly one given is a usage error, never
+# silently defaulted by treating the missing bound as absent.
+# ---------------------------------------------------------------------------
+
+
+def test_prepare_rejects_lone_fecha_inicio_without_fecha_fin(tmp_path):
+    data_path = _write_fixture_dataset(tmp_path)
+    runs_root = tmp_path / "runs"
+
+    with pytest.raises(ReportPipelineError, match="pair"):
+        prepare("C1", "2026-01-02", None, data_path=data_path, runs_root=runs_root)
+
+    assert not runs_root.exists()
+
+
+def test_prepare_rejects_lone_fecha_fin_without_fecha_inicio(tmp_path):
+    data_path = _write_fixture_dataset(tmp_path)
+    runs_root = tmp_path / "runs"
+
+    with pytest.raises(ReportPipelineError, match="pair"):
+        prepare("C1", None, "2026-01-04", data_path=data_path, runs_root=runs_root)
+
+    assert not runs_root.exists()
+
+
+# ---------------------------------------------------------------------------
 # prepare_expert_alignment()
 # ---------------------------------------------------------------------------
 
@@ -365,6 +392,69 @@ def test_prepare_expert_alignment_zero_rows_for_circuit_degrades_gracefully(tmp_
     bc = _read_json(run_dir / "expert-alignment.bc.json")
     assert bc["pdf_expert_matches"] == []
     assert bc["modelo_experto_disponible"] is False
+
+
+# ---------------------------------------------------------------------------
+# Final Slice B / whole-change gate (task 8.2): end-to-end `/reporte` smoke
+# check as close to real as the harness allows without a live LLM call --
+# `prepare` -> canned validated agent outputs -> `prepare_expert_alignment`
+# (with REAL PDF-discussion matching, not an empty table) -> canned
+# expert-alignment output -> `render` -> a real, non-empty HTML file.
+# Reuses the existing fixture-dataset/xlsx helpers above rather than inventing
+# new large fixture data.
+# ---------------------------------------------------------------------------
+
+
+def test_reporte_end_to_end_smoke_produces_html_with_real_pdf_matches(tmp_path):
+    data_path = _write_fixture_dataset(tmp_path)
+    xlsx_path = _write_pdf_discussions_xlsx(
+        tmp_path / "tabla_pdfs_intervalo_smoke.xlsx",
+        [
+            {
+                "Circuito": "C1",
+                "Fecha inicio": "2026-01-05",
+                "Fecha fin": "2026-01-07",
+                "Análisis": "Análisis experto sobre el pico de C1 (smoke test).",
+                "Evidencia": "Evidencia documentada en el informe experto.",
+            }
+        ],
+    )
+
+    # Step 1: prepare() -- circuit only, no dates, mirrors `/reporte C1`.
+    run_dir = prepare("C1", data_path=data_path, runs_root=tmp_path / "runs")
+    assert (run_dir / "historical.bc.json").exists()
+    assert (run_dir / "inference.bc.json").exists()
+
+    # Step 2/3: canned validated outputs, standing in for the interactive
+    # `historical` and `inference` Skills (no live LLM call in this harness).
+    (run_dir / "historical.out.json").write_text(
+        json.dumps(_canned_ok({"hallazgos": ["Hallazgo historico de humo."]})), encoding="utf-8"
+    )
+    (run_dir / "inference.out.json").write_text(
+        json.dumps(_canned_ok({"hallazgos": ["Hallazgo de inferencia de humo."]})), encoding="utf-8"
+    )
+
+    # Step 4: prepare_expert_alignment() -- real PDF-discussion matching wired.
+    run_dir_after_ea = prepare_expert_alignment(run_dir, pdf_discussions_path=xlsx_path)
+    assert run_dir_after_ea == run_dir
+    bc = _read_json(run_dir / "expert-alignment.bc.json")
+    assert bc["pdf_expert_matches"], "expected the smoke fixture's PDF match to be wired through"
+    assert bc["modelo_experto_disponible"] is True
+
+    # Step 5: canned validated expert-alignment output, standing in for the
+    # interactive `expert-alignment` Skill.
+    (run_dir / "expert-alignment.out.json").write_text(
+        json.dumps(_canned_ok({"sintesis_final": "Todo alineado (smoke test)."})), encoding="utf-8"
+    )
+
+    # Step 6: render() -- the actual HTML report artifact `/reporte` returns.
+    html_path = render(run_dir, output_dir=tmp_path / "html")
+
+    assert html_path.exists()
+    assert html_path.suffix == ".html"
+    html_content = html_path.read_text(encoding="utf-8")
+    assert html_content.strip() != ""
+    assert "C1" in html_content
 
 
 def test_prepare_expert_alignment_default_path_resolves_via_glob(tmp_path, monkeypatch):
