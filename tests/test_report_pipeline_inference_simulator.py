@@ -21,6 +21,7 @@ from chec_local_interpreter.report_pipeline import (
     _compute_inference_scenarios,
     _load_mgcecdl_model_and_sigma,
     _modelo_mas_reciente,
+    _run_inference_simulator,
 )
 import chec_local_interpreter.report_pipeline as report_pipeline_module
 
@@ -287,3 +288,117 @@ def test_compute_inference_scenarios_skips_one_scenario_on_value_error_without_l
     # No figure leak: `plt.get_fignums()` returns to its pre-call baseline,
     # whether a scenario succeeded or was skipped after a `ValueError`.
     assert set(plt.get_fignums()) == fignums_baseline
+
+
+# ---------------------------------------------------------------------------
+# Task 3.1 -- `_run_inference_simulator` orchestration (model-missing R3 short
+# circuit + R1 "all scenarios insufficient" shape). These are isolated
+# orchestration-level tests: the R3/R1 *internals* of `_load_mgcecdl_model_
+# and_sigma`/`_compute_inference_scenarios` are already covered above with
+# real data -- these tests only need to confirm `_run_inference_simulator`
+# wires them together correctly (short-circuits on model=None without ever
+# touching `_compute_inference_scenarios`'s expensive real-data path, and
+# resolves `modelo_label` from the real model's class name otherwise).
+# ---------------------------------------------------------------------------
+
+
+def test_run_inference_simulator_model_missing_returns_r3_shape_without_computing_scenarios(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(
+        report_pipeline_module, "_load_mgcecdl_model_and_sigma", lambda: (None, None)
+    )
+
+    def _must_not_be_called(*args, **kwargs):
+        raise AssertionError(
+            "_compute_inference_scenarios must never be called when the model is "
+            "missing (R3: 'the simulator never runs', obs#219)"
+        )
+
+    monkeypatch.setattr(
+        report_pipeline_module, "_compute_inference_scenarios", _must_not_be_called
+    )
+
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+
+    features, escenarios, modelo_label, rbf_sigma, render_assets = _run_inference_simulator(
+        "ANY-CIRCUIT", "2026-01-01", "2026-01-01", [], run_dir
+    )
+
+    assert features == []
+    assert escenarios == []
+    assert modelo_label == report_pipeline_module._NO_SIMULATOR_MODEL_LABEL
+    assert rbf_sigma is None
+    assert render_assets == {}
+
+
+class _FakeMGCECDLModel:
+    """Stand-in model object so `type(model).__name__` resolves to a stable,
+    real-looking class name without loading the actual (slow) artifact."""
+
+
+def test_run_inference_simulator_all_scenarios_insufficient_returns_r1_shape(
+    tmp_path, monkeypatch
+):
+    fake_model = _FakeMGCECDLModel()
+    monkeypatch.setattr(
+        report_pipeline_module, "_load_mgcecdl_model_and_sigma", lambda: (fake_model, 1.0)
+    )
+    monkeypatch.setattr(
+        report_pipeline_module,
+        "_compute_inference_scenarios",
+        lambda *args, **kwargs: (["feature_a", "feature_b"], []),
+    )
+
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+
+    features, escenarios, modelo_label, rbf_sigma, render_assets = _run_inference_simulator(
+        "ANY-CIRCUIT", "2026-01-01", "2026-01-01", [], run_dir
+    )
+
+    assert features == ["feature_a", "feature_b"], "features must be non-empty (R1 shape, obs#219)"
+    assert escenarios == []
+    assert modelo_label == "_FakeMGCECDLModel"
+    assert rbf_sigma == 1.0
+    assert render_assets == {}
+
+
+# ---------------------------------------------------------------------------
+# Task 3.2 -- `_run_inference_simulator` persists surviving scenarios' PNGs
+# under `run_dir/inference_figures/` and HTML graphs under
+# `run_dir/inference_graphs/`, and builds `render_assets` with paths relative
+# to `run_dir` (never absolute).
+# ---------------------------------------------------------------------------
+
+
+def test_run_inference_simulator_persists_figures_with_run_dir_relative_paths(tmp_path):
+    model, rbf_sigma = _load_mgcecdl_model_and_sigma()
+    assert model is not None, "expected the real committed model artifact to load"
+
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+
+    features, escenarios, modelo_label, resolved_sigma, render_assets = _run_inference_simulator(
+        _SUFFICIENT_CIRCUIT, *_SUFFICIENT_WINDOW, ["2026-03-01"], run_dir
+    )
+
+    assert features
+    assert len(escenarios) == 4
+    assert modelo_label == type(model).__name__
+    assert resolved_sigma == rbf_sigma
+    assert len(render_assets) == 4
+
+    for scenario_key, asset in render_assets.items():
+        for field in ("fig_barras_png", "fig_radar_png", "grafo_interactivo_html"):
+            value = asset[field]
+            assert value is not None, f"{scenario_key}.{field} must be set for a surviving scenario"
+            assert not Path(value).is_absolute(), f"{scenario_key}.{field} must be run_dir-relative"
+            resolved = (run_dir / value).resolve()
+            assert resolved.exists(), f"{scenario_key}.{field} must resolve against run_dir"
+
+    figures_dir = run_dir / "inference_figures"
+    graphs_dir = run_dir / "inference_graphs"
+    assert len(list(figures_dir.glob("*.png"))) == 8  # 4 scenarios x (barras + radar)
+    assert len(list(graphs_dir.glob("*.html"))) == 4

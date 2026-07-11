@@ -276,6 +276,37 @@ def _load_mgcecdl_model_and_sigma() -> tuple[Any, float | None]:
     return model, rbf_sigma
 
 
+def _persist_scenario_render_assets(
+    *,
+    scenario_key: str,
+    nombre: str,
+    resultado: dict[str, Any],
+    figures_output_dir: Path,
+    render_assets_sink: dict[str, Any],
+) -> None:
+    """Save one surviving scenario's `fig_barras`/`fig_radar` as PNGs under
+    `figures_output_dir` (BEFORE the caller closes them) and record every
+    render asset path (figures + the already-persisted `grafo_interactivo`
+    HTML) into `render_assets_sink[scenario_key]`.
+
+    Paths are stored ABSOLUTE here -- `_run_inference_simulator` (task 3.2)
+    rewrites them relative to `run_dir` afterward, once it knows `run_dir`.
+    """
+    figures_output_dir.mkdir(parents=True, exist_ok=True)
+    fig_barras_path = figures_output_dir / f"{scenario_key}_barras.png"
+    fig_radar_path = figures_output_dir / f"{scenario_key}_radar.png"
+    resultado["fig_barras"].savefig(fig_barras_path)
+    resultado["fig_radar"].savefig(fig_radar_path)
+
+    grafo_path = resultado.get("grafo_interactivo")
+    render_assets_sink[scenario_key] = {
+        "nombre": nombre,
+        "fig_barras_png": str(fig_barras_path),
+        "fig_radar_png": str(fig_radar_path),
+        "grafo_interactivo_html": str(grafo_path) if grafo_path is not None else None,
+    }
+
+
 def _compute_inference_scenarios(
     circuito: str,
     fecha_inicio: str,
@@ -291,6 +322,8 @@ def _compute_inference_scenarios(
     top_k_vars: int = _TOP_K_VARS,
     filtro_uiti_max: float | None = _FILTRO_UITI_MAX,
     ventana_climatica_horas: int = _VENTANA_CLIMATICA_HORAS,
+    figures_output_dir: str | Path | None = None,
+    render_assets_sink: dict[str, Any] | None = None,
 ) -> tuple[list[str], list[dict[str, Any]]]:
     """Compute `features` (always, once per circuit/window) and up to four
     scenario context dicts (severity/frequency x período completo/fechas de
@@ -302,6 +335,16 @@ def _compute_inference_scenarios(
     the circuit/window has zero events at all, `features` is still returned
     (computed over the full dataset) but `escenarios` is `[]` without ever
     constructing the SHAP explainer.
+
+    `figures_output_dir`/`render_assets_sink` are additive, optional keyword-
+    only parameters (task 3.2): when both are given, each surviving
+    scenario's `fig_barras`/`fig_radar` PNGs are saved under
+    `figures_output_dir` (ABSOLUTE paths) and recorded into
+    `render_assets_sink`, keyed by scenario key
+    (`top_uiti_periodo`/`top_frecuencia_periodo`/`top_uiti_puntos_criticos`/
+    `top_frecuencia_puntos_criticos`). When omitted (the default), behavior
+    is byte-for-byte unchanged from Phase 2 (PR1) -- existing callers/tests
+    are unaffected.
     """
     source_path = Path(data_path) if data_path is not None else DEFAULT_DATA_PATH
     variables_path = (
@@ -423,6 +466,7 @@ def _compute_inference_scenarios(
             tabla_top: pd.DataFrame,
             eventos: pd.DataFrame,
             graph_output_name: str,
+            scenario_key: str,
             fechas: list[str] | None = None,
         ) -> dict[str, Any] | None:
             # Snapshot open figure numbers BEFORE calling
@@ -451,7 +495,7 @@ def _compute_inference_scenarios(
                     graph_output_dir=graph_dir,
                     graph_output_name=graph_output_name,
                 )
-                return construir_contexto_escenario_inferencia(
+                contexto = construir_contexto_escenario_inferencia(
                     nombre=nombre,
                     criterio=criterio,
                     resultado=resultado,
@@ -461,6 +505,18 @@ def _compute_inference_scenarios(
                     fechas_interes=fechas,
                     ventana_climatica_horas=ventana_climatica_horas,
                 )
+                if figures_output_dir is not None and render_assets_sink is not None:
+                    # Persist PNGs BEFORE the `finally` block below closes the
+                    # figures -- once closed, `fig.savefig(...)` would render
+                    # a blank image (task 3.2).
+                    _persist_scenario_render_assets(
+                        scenario_key=scenario_key,
+                        nombre=nombre,
+                        resultado=resultado,
+                        figures_output_dir=Path(figures_output_dir),
+                        render_assets_sink=render_assets_sink,
+                    )
+                return contexto
             except ValueError as exc:
                 # A `ValueError` raised anywhere inside
                 # `graficar_barras_y_radar`/`construir_contexto_escenario_inferencia`
@@ -517,6 +573,7 @@ def _compute_inference_scenarios(
                 tabla_top_uiti,
                 base_top_uiti,
                 "top_uiti_periodo.html",
+                "top_uiti_periodo",
             )
             if resultado_escenario is not None:
                 escenarios.append(resultado_escenario)
@@ -537,6 +594,7 @@ def _compute_inference_scenarios(
                 tabla_top_frecuencia,
                 base_top_frecuencia,
                 "top_frecuencia_periodo.html",
+                "top_frecuencia_periodo",
             )
             if resultado_escenario is not None:
                 escenarios.append(resultado_escenario)
@@ -560,6 +618,7 @@ def _compute_inference_scenarios(
                     tabla_top_fechas_uiti,
                     base_top_fechas_uiti,
                     "top_uiti_fechas.html",
+                    "top_uiti_puntos_criticos",
                     fechas=fechas_interes,
                 )
                 if resultado_escenario is not None:
@@ -586,6 +645,7 @@ def _compute_inference_scenarios(
                     tabla_top_fechas_frecuencia,
                     base_top_fechas_frecuencia,
                     "top_frecuencia_fechas.html",
+                    "top_frecuencia_puntos_criticos",
                     fechas=fechas_interes,
                 )
                 if resultado_escenario is not None:
@@ -594,6 +654,67 @@ def _compute_inference_scenarios(
         return features, escenarios
     finally:
         np.random.set_state(rng_state)
+
+
+def _run_inference_simulator(
+    circuito: str,
+    fecha_inicio: str,
+    fecha_fin: str,
+    fechas_interes: list[str],
+    run_dir: str | Path,
+    *,
+    data_path: str | Path | None = None,
+) -> tuple[list[str], list[dict[str, Any]], str, float | None, dict[str, Any]]:
+    """Orchestrate the read-only MGCECDL/SHAP simulator for one `prepare()`
+    run: load the model/Optuna sigma (task 2.1), compute the four scenario
+    contexts (task 2.3), and persist each surviving scenario's figures under
+    `run_dir` (task 3.2).
+
+    Returns `(features, escenarios, modelo_label, rbf_sigma, render_assets)`.
+
+    `render_assets` maps scenario key
+    (`top_uiti_periodo`/`top_frecuencia_periodo`/`top_uiti_puntos_criticos`/
+    `top_frecuencia_puntos_criticos`) to
+    `{"nombre", "fig_barras_png", "fig_radar_png", "grafo_interactivo_html"}`,
+    every path **relative to `run_dir`** (never absolute) so the sidecar
+    stays portable if `run_dir` is copied/moved.
+
+    R3 gap (obs#219, structural -- no model artifact on disk): the simulator
+    "never runs" -- this function returns immediately WITHOUT calling
+    `_compute_inference_scenarios` at all, so `features` stays `[]` too. This
+    is intentionally different from `_compute_inference_scenarios`'s own
+    `model=None` branch (task 2.3), which still computes `features` as a
+    narrower defense-in-depth degrade for callers that invoke it directly
+    with `model=None` -- the two are not the same case, and only THIS
+    early-return path is the real production R3 shape (features=[]).
+    """
+    run_dir = Path(run_dir)
+    model, rbf_sigma = _load_mgcecdl_model_and_sigma()
+    if model is None:
+        return [], [], _NO_SIMULATOR_MODEL_LABEL, None, {}
+
+    modelo_label = type(model).__name__
+    render_assets: dict[str, Any] = {}
+    features, escenarios = _compute_inference_scenarios(
+        circuito,
+        fecha_inicio,
+        fecha_fin,
+        fechas_interes,
+        model,
+        rbf_sigma,
+        graph_output_dir=run_dir / "inference_graphs",
+        data_path=data_path,
+        figures_output_dir=run_dir / "inference_figures",
+        render_assets_sink=render_assets,
+    )
+
+    for asset in render_assets.values():
+        for field in ("fig_barras_png", "fig_radar_png", "grafo_interactivo_html"):
+            value = asset.get(field)
+            if value is not None:
+                asset[field] = str(Path(value).relative_to(run_dir))
+
+    return features, escenarios, modelo_label, rbf_sigma, render_assets
 
 
 def _load_validated_agent_output(run_dir: Path, agent_name: str) -> dict[str, Any]:
