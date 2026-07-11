@@ -424,25 +424,33 @@ def _compute_inference_scenarios(
             eventos: pd.DataFrame,
             graph_output_name: str,
             fechas: list[str] | None = None,
-        ) -> dict[str, Any]:
-            resultado = graficar_barras_y_radar(
-                eventos,
-                nombre,
-                circuito=circuito,
-                features=features,
-                modos=modos,
-                shap_extractor=shap_extractor,
-                top_k=top_k_vars,
-                graph_source="estimated",
-                estimated_graph_model=model,
-                X_model=X_inf,
-                estimated_graph_rbf_sigma=rbf_sigma,
-                estimated_graph_device=device,
-                estimated_graph_batch_size=_SHAP_BATCH_SIZE,
-                graph_output_dir=graph_dir,
-                graph_output_name=graph_output_name,
-            )
+        ) -> dict[str, Any] | None:
+            # Snapshot open figure numbers BEFORE calling
+            # `graficar_barras_y_radar`, not after: it can raise partway
+            # through (e.g. `PermissionError` writing the graph HTML, or a
+            # `ValueError` deep inside graph estimation) after creating
+            # `fig_barras`/`fig_radar` but before returning, in which case
+            # `resultado` is never assigned and those figures would
+            # otherwise never be closed.
+            fignums_before = set(plt.get_fignums())
             try:
+                resultado = graficar_barras_y_radar(
+                    eventos,
+                    nombre,
+                    circuito=circuito,
+                    features=features,
+                    modos=modos,
+                    shap_extractor=shap_extractor,
+                    top_k=top_k_vars,
+                    graph_source="estimated",
+                    estimated_graph_model=model,
+                    X_model=X_inf,
+                    estimated_graph_rbf_sigma=rbf_sigma,
+                    estimated_graph_device=device,
+                    estimated_graph_batch_size=_SHAP_BATCH_SIZE,
+                    graph_output_dir=graph_dir,
+                    graph_output_name=graph_output_name,
+                )
                 return construir_contexto_escenario_inferencia(
                     nombre=nombre,
                     criterio=criterio,
@@ -453,68 +461,90 @@ def _compute_inference_scenarios(
                     fechas_interes=fechas,
                     ventana_climatica_horas=ventana_climatica_horas,
                 )
+            except ValueError as exc:
+                # A `ValueError` raised anywhere inside
+                # `graficar_barras_y_radar`/`construir_contexto_escenario_inferencia`
+                # for THIS scenario (e.g.
+                # `construir_grafo_interactivo_muestras`'s "no hay variables
+                # con puntaje positivo para construir el grafo") is a
+                # legitimate per-scenario gap, not a reason to abort the
+                # other scenarios already computed in this same call (R1 gap
+                # shape, obs#219: "a scenario with insufficient signal is
+                # skipped individually; the other scenarios still
+                # complete"). The message is surfaced via `warnings.warn`
+                # (not silently discarded) so a genuine bug is still visible
+                # in logs instead of being indistinguishable from a clean
+                # skip.
+                warnings.warn(
+                    f"Escenario de inferencia '{nombre}' omitido por ValueError: {exc}",
+                    stacklevel=2,
+                )
+                return None
             finally:
                 # `graficar_barras_y_radar` returns open matplotlib Figure
                 # objects (`fig_barras`/`fig_radar`) purely as a side effect of
                 # plotting -- the JSON context above never references them, so
                 # they must be closed here or they leak for the lifetime of the
-                # process (observed as "More than 20 figures have been opened").
-                fig_barras = resultado.get("fig_barras")
-                fig_radar = resultado.get("fig_radar")
-                if fig_barras is not None:
-                    plt.close(fig_barras)
-                if fig_radar is not None:
-                    plt.close(fig_radar)
+                # process (observed as "More than 20 figures have been
+                # opened"). Diff `plt.get_fignums()` against the snapshot
+                # above rather than reading `resultado["fig_barras"]`/
+                # `["fig_radar"]`: on the exception path `resultado` may
+                # never get assigned at all, so any figure created before the
+                # raise would otherwise leak.
+                for fignum in set(plt.get_fignums()) - fignums_before:
+                    plt.close(fignum)
 
         escenarios: list[dict[str, Any]] = []
         fechas_label = ", ".join(fechas_interes or [])
 
         # Scenario 1/4: severity (UITI_VANO_PROM), full period.
-        # No bare `except ValueError: pass` here: `graficar_barras_y_radar`'s
-        # only *legitimate* `ValueError` for this scenario is "no events
-        # survived the selection" (`df_eventos.empty`), which is checked
-        # explicitly below before calling it. Any other `ValueError` raised
-        # inside (e.g. a real SHAP/graph bug) now propagates instead of being
-        # silently swallowed and mistaken for a legitimate empty-scenario
-        # skip.
+        # The cheap "no events" pre-check below stays as-is (nothing to
+        # compute). Any *other* `ValueError` `_ejecutar_escenario` can
+        # legitimately raise for THIS scenario (e.g. a real SHAP/graph gap)
+        # is caught and warned inside `_ejecutar_escenario` itself, which
+        # returns `None` in that case -- `escenarios.append` only runs for a
+        # non-`None` result so one scenario's failure never discards the
+        # others already computed in this same call (R1 gap shape, obs#219).
         tabla_top_uiti, _ = _seleccionar_vanos_por_percentil(
             tabla_periodo_inf, "UITI_VANO_PROM", top_n_vanos_percentile
         )
         ids_top_uiti = tabla_top_uiti["FID_VANO"].tolist()
         base_top_uiti = base_inf[base_inf["FID_VANO"].isin(ids_top_uiti)].copy()
         if not base_top_uiti.empty:
-            escenarios.append(
-                _ejecutar_escenario(
-                    f"Top P{top_n_vanos_percentile:g} por UITI_VANO — período completo",
-                    f"seleccionar vanos con UITI_VANO_PROM >= percentil {top_n_vanos_percentile} del período completo",
-                    tabla_top_uiti,
-                    base_top_uiti,
-                    "top_uiti_periodo.html",
-                )
+            resultado_escenario = _ejecutar_escenario(
+                f"Top P{top_n_vanos_percentile:g} por UITI_VANO — período completo",
+                f"seleccionar vanos con UITI_VANO_PROM >= percentil {top_n_vanos_percentile} del período completo",
+                tabla_top_uiti,
+                base_top_uiti,
+                "top_uiti_periodo.html",
             )
+            if resultado_escenario is not None:
+                escenarios.append(resultado_escenario)
 
         # Scenario 2/4: frequency (N_APARICIONES), full period. Same
-        # explicit-empty-check rationale as scenario 1/4 above.
+        # explicit-empty-check and skip-on-`ValueError` rationale as scenario
+        # 1/4 above.
         tabla_top_frecuencia, _ = _seleccionar_vanos_por_percentil(
             tabla_periodo_inf, "N_APARICIONES", top_n_vanos_percentile
         )
         ids_top_frecuencia = tabla_top_frecuencia["FID_VANO"].tolist()
         base_top_frecuencia = base_inf[base_inf["FID_VANO"].isin(ids_top_frecuencia)].copy()
         if not base_top_frecuencia.empty:
-            escenarios.append(
-                _ejecutar_escenario(
-                    f"Top P{top_n_vanos_percentile:g} por frecuencia — período completo",
-                    f"seleccionar vanos con N_APARICIONES >= percentil {top_n_vanos_percentile} del período completo; "
-                    "UITI_VANO_PROM solo ordena empates",
-                    tabla_top_frecuencia,
-                    base_top_frecuencia,
-                    "top_frecuencia_periodo.html",
-                )
+            resultado_escenario = _ejecutar_escenario(
+                f"Top P{top_n_vanos_percentile:g} por frecuencia — período completo",
+                f"seleccionar vanos con N_APARICIONES >= percentil {top_n_vanos_percentile} del período completo; "
+                "UITI_VANO_PROM solo ordena empates",
+                tabla_top_frecuencia,
+                base_top_frecuencia,
+                "top_frecuencia_periodo.html",
             )
+            if resultado_escenario is not None:
+                escenarios.append(resultado_escenario)
 
         # Scenario 3/4: severity (UITI_VANO_PROM), dates of interest. Same
-        # explicit-empty-check rationale as scenario 1/4 above; the dates-of-
-        # interest filter itself is checked before grouping/selecting too.
+        # explicit-empty-check and skip-on-`ValueError` rationale as scenario
+        # 1/4 above; the dates-of-interest filter itself is checked before
+        # grouping/selecting too.
         base_fechas_inf = base_inf[base_inf["_FECHA_DIA"].isin(fechas_interes or [])].copy()
         if not base_fechas_inf.empty:
             tabla_fechas_inf = agrupar_por_vano(base_fechas_inf)
@@ -524,19 +554,20 @@ def _compute_inference_scenarios(
             ids_top_fechas_uiti = tabla_top_fechas_uiti["FID_VANO"].tolist()
             base_top_fechas_uiti = base_fechas_inf[base_fechas_inf["FID_VANO"].isin(ids_top_fechas_uiti)].copy()
             if not base_top_fechas_uiti.empty:
-                escenarios.append(
-                    _ejecutar_escenario(
-                        f"Top P{top_n_vanos_percentile:g} por UITI_VANO — puntos críticos ({fechas_label})",
-                        f"filtrar fechas críticas y seleccionar vanos con UITI_VANO_PROM >= percentil {top_n_vanos_percentile}",
-                        tabla_top_fechas_uiti,
-                        base_top_fechas_uiti,
-                        "top_uiti_fechas.html",
-                        fechas=fechas_interes,
-                    )
+                resultado_escenario = _ejecutar_escenario(
+                    f"Top P{top_n_vanos_percentile:g} por UITI_VANO — puntos críticos ({fechas_label})",
+                    f"filtrar fechas críticas y seleccionar vanos con UITI_VANO_PROM >= percentil {top_n_vanos_percentile}",
+                    tabla_top_fechas_uiti,
+                    base_top_fechas_uiti,
+                    "top_uiti_fechas.html",
+                    fechas=fechas_interes,
                 )
+                if resultado_escenario is not None:
+                    escenarios.append(resultado_escenario)
 
         # Scenario 4/4: frequency (N_APARICIONES), dates of interest. Same
-        # explicit-empty-check rationale as scenario 1/4 above.
+        # explicit-empty-check and skip-on-`ValueError` rationale as scenario
+        # 1/4 above.
         base_fechas_inf = base_inf[base_inf["_FECHA_DIA"].isin(fechas_interes or [])].copy()
         if not base_fechas_inf.empty:
             tabla_fechas_inf = agrupar_por_vano(base_fechas_inf)
@@ -548,17 +579,17 @@ def _compute_inference_scenarios(
                 base_fechas_inf["FID_VANO"].isin(ids_top_fechas_frecuencia)
             ].copy()
             if not base_top_fechas_frecuencia.empty:
-                escenarios.append(
-                    _ejecutar_escenario(
-                        f"Top P{top_n_vanos_percentile:g} por frecuencia — puntos críticos ({fechas_label})",
-                        f"filtrar fechas críticas y seleccionar vanos con N_APARICIONES >= percentil {top_n_vanos_percentile}; "
-                        "UITI_VANO_PROM solo ordena empates",
-                        tabla_top_fechas_frecuencia,
-                        base_top_fechas_frecuencia,
-                        "top_frecuencia_fechas.html",
-                        fechas=fechas_interes,
-                    )
+                resultado_escenario = _ejecutar_escenario(
+                    f"Top P{top_n_vanos_percentile:g} por frecuencia — puntos críticos ({fechas_label})",
+                    f"filtrar fechas críticas y seleccionar vanos con N_APARICIONES >= percentil {top_n_vanos_percentile}; "
+                    "UITI_VANO_PROM solo ordena empates",
+                    tabla_top_fechas_frecuencia,
+                    base_top_fechas_frecuencia,
+                    "top_frecuencia_fechas.html",
+                    fechas=fechas_interes,
                 )
+                if resultado_escenario is not None:
+                    escenarios.append(resultado_escenario)
 
         return features, escenarios
     finally:

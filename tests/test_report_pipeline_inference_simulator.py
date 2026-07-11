@@ -11,6 +11,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import matplotlib.pyplot as plt
+import pytest
+
+from chec_impacto.interpretability.circuit_analysis import (
+    graficar_barras_y_radar as _real_graficar_barras_y_radar,
+)
 from chec_local_interpreter.report_pipeline import (
     _compute_inference_scenarios,
     _load_mgcecdl_model_and_sigma,
@@ -226,3 +232,58 @@ def test_compute_inference_scenarios_persists_graph_html_for_each_surviving_scen
         graph_path = escenario["grafo"]["path"]
         assert graph_path is not None
         assert Path(graph_path).exists()
+
+
+# ---------------------------------------------------------------------------
+# Round 2 fix -- a `ValueError` raised inside `graficar_barras_y_radar` for ONE
+# scenario must: (a) skip only that scenario (the other three still survive,
+# R1 gap shape, obs#219), (b) never leak the figures created before the raise,
+# and (c) surface a `warnings.warn` naming the skipped scenario instead of
+# silently discarding the error.
+# ---------------------------------------------------------------------------
+
+
+def test_compute_inference_scenarios_skips_one_scenario_on_value_error_without_leaking_or_aborting(
+    tmp_path, monkeypatch
+):
+    model, rbf_sigma = _load_mgcecdl_model_and_sigma()
+    assert model is not None
+
+    _TARGET_NOMBRE_FRAGMENT = "frecuencia — período completo"
+
+    def _raising_for_one_scenario(eventos, nombre, *args, **kwargs):
+        # Run the real implementation first so `fig_barras`/`fig_radar` are
+        # actually created (mirrors a real `ValueError` raised AFTER figure
+        # creation but before `graficar_barras_y_radar` returns, e.g. inside
+        # graph estimation), then discard the result and raise for exactly
+        # one scenario -- the other three calls pass through untouched.
+        resultado = _real_graficar_barras_y_radar(eventos, nombre, *args, **kwargs)
+        if _TARGET_NOMBRE_FRAGMENT in nombre:
+            raise ValueError("forced failure for round-2 regression test")
+        return resultado
+
+    monkeypatch.setattr(
+        report_pipeline_module, "graficar_barras_y_radar", _raising_for_one_scenario
+    )
+
+    fignums_baseline = set(plt.get_fignums())
+
+    with pytest.warns(UserWarning, match="omitido"):
+        features, escenarios = _compute_inference_scenarios(
+            _SUFFICIENT_CIRCUIT,
+            *_SUFFICIENT_WINDOW,
+            ["2026-03-01"],
+            model,
+            rbf_sigma,
+            graph_output_dir=tmp_path / "graphs",
+        )
+
+    assert features
+    # Only the targeted scenario is skipped -- the other three still survive.
+    assert len(escenarios) == 3
+    nombres = {escenario["nombre"] for escenario in escenarios}
+    assert not any(_TARGET_NOMBRE_FRAGMENT in nombre for nombre in nombres)
+
+    # No figure leak: `plt.get_fignums()` returns to its pre-call baseline,
+    # whether a scenario succeeded or was skipped after a `ValueError`.
+    assert set(plt.get_fignums()) == fignums_baseline
