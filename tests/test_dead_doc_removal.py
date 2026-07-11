@@ -35,8 +35,10 @@ OLD_PATHS = (
     "llm/prompts/arquitecturayflujo.md",
 )
 
-# Pre-existing, untracked, out-of-scope scratch doc (see module docstring).
-EXCLUDED_FILES = {"docs/project-workflow-analysis.md"}
+# Pre-existing, untracked, out-of-scope scratch doc (see module docstring), plus
+# this test file itself, which necessarily cites the old paths literally in
+# OLD_PATHS/the docstring above and would otherwise flag itself as an offender.
+EXCLUDED_FILES = {"docs/project-workflow-analysis.md", "tests/test_dead_doc_removal.py"}
 
 
 def test_dead_docs_no_longer_exist():
