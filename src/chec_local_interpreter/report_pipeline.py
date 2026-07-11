@@ -62,6 +62,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import matplotlib
+
+# Force a non-interactive backend BEFORE any transitive import below pulls in
+# `matplotlib.pyplot` (e.g. `chec_impacto.data`/`chec_impacto.interpretability
+# .circuit_analysis`, whose `graficar_barras_y_radar` calls `plt.show()`
+# twice per scenario). Without this, running this pipeline outside pytest
+# (only `tests/conftest.py` sets `matplotlib.use("Agg")`, for test isolation)
+# would try to pop GUI windows or hang on a headless/server environment.
+# Must run before the first `import matplotlib.pyplot` anywhere in the
+# process, since the backend is resolved on first use.
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402 (must follow matplotlib.use("Agg"))
 import numpy as np
 import pandas as pd
 
@@ -329,6 +341,16 @@ def _compute_inference_scenarios(
     if not mascara.any():
         return features, []
 
+    if model is None:
+        # R3 gap: no MGCECDL model was loaded (`_load_mgcecdl_model_and_sigma`
+        # returns `(None, None)` when no model artifact exists on disk). Degrade
+        # gracefully here -- same `(features, [])` shape as the zero-events gap
+        # above -- rather than crashing later inside
+        # `KernelShapTopVarsExtractor.__init__`/`_MGCECDLClassifierShapAdapter`
+        # with an unguarded `AttributeError: 'NoneType' object has no
+        # attribute 'to'` when a SHAP-driving call touches `model.to(device)`.
+        return features, []
+
     with redirect_stdout(io.StringIO()):
         splits = escalar_features_minmax_mgcecdl(
             preparar_splits_estratificados(
@@ -339,6 +361,23 @@ def _compute_inference_scenarios(
             )
         )
     feature_scaler = splits["feature_scaler"]
+    # KNOWN LIMITATION (bounded scope): this MinMax scaler is re-fit here from
+    # a fresh stratified split of the CURRENT full CSV, not loaded from any
+    # artifact persisted alongside the trained model (`cargar_modelo_mgcecdl`'s
+    # zip does not currently store scaler stats). If the underlying CSV
+    # changes between the model's training time and a later report run, input
+    # scaling silently drifts from what the model actually learned. Fixing
+    # this properly requires a model-export format change (persisting
+    # training-time scaler stats) that is out of scope for this report-only
+    # change -- see `_load_mgcecdl_model_and_sigma`'s own read-only contract.
+    warnings.warn(
+        "El escalador MinMax de features se recalcula a partir del dataset "
+        "actual en tiempo de reporte, no se carga desde la distribución de "
+        "entrenamiento original del modelo. Si el CSV subyacente cambió desde "
+        "el entrenamiento, el escalado de entradas puede diverger silenciosamente "
+        "de lo que el modelo aprendió.",
+        stacklevel=2,
+    )
     X_full = feature_scaler.transform(X_full_raw).astype(np.float32)
 
     mask_np = mascara.to_numpy()
@@ -348,158 +387,182 @@ def _compute_inference_scenarios(
 
     device = resolve_training_device("auto")
     shap_adapter = _MGCECDLClassifierShapAdapter(model, device)
-    # `KernelShapTopVarsExtractor(random_state=...)` only seeds the LOCAL
-    # generator used to draw the SHAP background sample. `shap.KernelExplainer`
-    # itself samples feature coalitions via the numpy GLOBAL RNG
-    # (`np.random.choice`/`permutation`), so reproducible top-vars rankings
-    # across runs also require seeding that global state explicitly here.
-    np.random.seed(SHAP_RANDOM_STATE)
-    shap_extractor = KernelShapTopVarsExtractor(
-        model=shap_adapter,
-        X=X_inf,
-        features=features,
-        top_k=top_k_vars,
-        background_size=_SHAP_BACKGROUND_SIZE,
-        nsamples=_SHAP_NSAMPLES,
-        batch_size=_SHAP_BATCH_SIZE,
-        random_state=SHAP_RANDOM_STATE,
-    )
-    modos = construir_modos_chec(features, variables_path)
-    tabla_periodo_inf = agrupar_por_vano(base_inf)
-
-    graph_dir = Path(graph_output_dir)
-    graph_dir.mkdir(parents=True, exist_ok=True)
-
-    def _ejecutar_escenario(
-        nombre: str,
-        criterio: str,
-        tabla_top: pd.DataFrame,
-        eventos: pd.DataFrame,
-        graph_output_name: str,
-        fechas: list[str] | None = None,
-    ) -> dict[str, Any]:
-        resultado = graficar_barras_y_radar(
-            eventos,
-            nombre,
-            circuito=circuito,
-            features=features,
-            modos=modos,
-            shap_extractor=shap_extractor,
-            top_k=top_k_vars,
-            graph_source="estimated",
-            estimated_graph_model=model,
-            X_model=X_inf,
-            estimated_graph_rbf_sigma=rbf_sigma,
-            estimated_graph_device=device,
-            estimated_graph_batch_size=_SHAP_BATCH_SIZE,
-            graph_output_dir=graph_dir,
-            graph_output_name=graph_output_name,
-        )
-        return construir_contexto_escenario_inferencia(
-            nombre=nombre,
-            criterio=criterio,
-            resultado=resultado,
-            tabla_top=tabla_top,
-            modos=modos,
-            top_k=top_k_vars,
-            fechas_interes=fechas,
-            ventana_climatica_horas=ventana_climatica_horas,
-        )
-
-    escenarios: list[dict[str, Any]] = []
-    fechas_label = ", ".join(fechas_interes or [])
-
-    # Scenario 1/4: severity (UITI_VANO_PROM), full period.
+    # `shap.KernelExplainer` samples feature coalitions via the numpy
+    # GLOBAL RNG (see comment below), so seeding it here is a process-wide
+    # side effect. Save/restore the global state around the SHAP
+    # computation so this function never silently resets or correlates
+    # unrelated randomness for other code sharing the process afterward
+    # (e.g. other circuits processed in the same run).
+    rng_state = np.random.get_state()
     try:
+        # `KernelShapTopVarsExtractor(random_state=...)` only seeds the LOCAL
+        # generator used to draw the SHAP background sample. `shap.KernelExplainer`
+        # itself samples feature coalitions via the numpy GLOBAL RNG
+        # (`np.random.choice`/`permutation`), so reproducible top-vars rankings
+        # across runs also require seeding that global state explicitly here.
+        np.random.seed(SHAP_RANDOM_STATE)
+        shap_extractor = KernelShapTopVarsExtractor(
+            model=shap_adapter,
+            X=X_inf,
+            features=features,
+            top_k=top_k_vars,
+            background_size=_SHAP_BACKGROUND_SIZE,
+            nsamples=_SHAP_NSAMPLES,
+            batch_size=_SHAP_BATCH_SIZE,
+            random_state=SHAP_RANDOM_STATE,
+        )
+        modos = construir_modos_chec(features, variables_path)
+        tabla_periodo_inf = agrupar_por_vano(base_inf)
+
+        graph_dir = Path(graph_output_dir)
+        graph_dir.mkdir(parents=True, exist_ok=True)
+
+        def _ejecutar_escenario(
+            nombre: str,
+            criterio: str,
+            tabla_top: pd.DataFrame,
+            eventos: pd.DataFrame,
+            graph_output_name: str,
+            fechas: list[str] | None = None,
+        ) -> dict[str, Any]:
+            resultado = graficar_barras_y_radar(
+                eventos,
+                nombre,
+                circuito=circuito,
+                features=features,
+                modos=modos,
+                shap_extractor=shap_extractor,
+                top_k=top_k_vars,
+                graph_source="estimated",
+                estimated_graph_model=model,
+                X_model=X_inf,
+                estimated_graph_rbf_sigma=rbf_sigma,
+                estimated_graph_device=device,
+                estimated_graph_batch_size=_SHAP_BATCH_SIZE,
+                graph_output_dir=graph_dir,
+                graph_output_name=graph_output_name,
+            )
+            try:
+                return construir_contexto_escenario_inferencia(
+                    nombre=nombre,
+                    criterio=criterio,
+                    resultado=resultado,
+                    tabla_top=tabla_top,
+                    modos=modos,
+                    top_k=top_k_vars,
+                    fechas_interes=fechas,
+                    ventana_climatica_horas=ventana_climatica_horas,
+                )
+            finally:
+                # `graficar_barras_y_radar` returns open matplotlib Figure
+                # objects (`fig_barras`/`fig_radar`) purely as a side effect of
+                # plotting -- the JSON context above never references them, so
+                # they must be closed here or they leak for the lifetime of the
+                # process (observed as "More than 20 figures have been opened").
+                fig_barras = resultado.get("fig_barras")
+                fig_radar = resultado.get("fig_radar")
+                if fig_barras is not None:
+                    plt.close(fig_barras)
+                if fig_radar is not None:
+                    plt.close(fig_radar)
+
+        escenarios: list[dict[str, Any]] = []
+        fechas_label = ", ".join(fechas_interes or [])
+
+        # Scenario 1/4: severity (UITI_VANO_PROM), full period.
+        # No bare `except ValueError: pass` here: `graficar_barras_y_radar`'s
+        # only *legitimate* `ValueError` for this scenario is "no events
+        # survived the selection" (`df_eventos.empty`), which is checked
+        # explicitly below before calling it. Any other `ValueError` raised
+        # inside (e.g. a real SHAP/graph bug) now propagates instead of being
+        # silently swallowed and mistaken for a legitimate empty-scenario
+        # skip.
         tabla_top_uiti, _ = _seleccionar_vanos_por_percentil(
             tabla_periodo_inf, "UITI_VANO_PROM", top_n_vanos_percentile
         )
         ids_top_uiti = tabla_top_uiti["FID_VANO"].tolist()
         base_top_uiti = base_inf[base_inf["FID_VANO"].isin(ids_top_uiti)].copy()
-        escenarios.append(
-            _ejecutar_escenario(
-                f"Top P{top_n_vanos_percentile:g} por UITI_VANO — período completo",
-                f"seleccionar vanos con UITI_VANO_PROM >= percentil {top_n_vanos_percentile} del período completo",
-                tabla_top_uiti,
-                base_top_uiti,
-                "top_uiti_periodo.html",
+        if not base_top_uiti.empty:
+            escenarios.append(
+                _ejecutar_escenario(
+                    f"Top P{top_n_vanos_percentile:g} por UITI_VANO — período completo",
+                    f"seleccionar vanos con UITI_VANO_PROM >= percentil {top_n_vanos_percentile} del período completo",
+                    tabla_top_uiti,
+                    base_top_uiti,
+                    "top_uiti_periodo.html",
+                )
             )
-        )
-    except ValueError:
-        pass
 
-    # Scenario 2/4: frequency (N_APARICIONES), full period.
-    try:
+        # Scenario 2/4: frequency (N_APARICIONES), full period. Same
+        # explicit-empty-check rationale as scenario 1/4 above.
         tabla_top_frecuencia, _ = _seleccionar_vanos_por_percentil(
             tabla_periodo_inf, "N_APARICIONES", top_n_vanos_percentile
         )
         ids_top_frecuencia = tabla_top_frecuencia["FID_VANO"].tolist()
         base_top_frecuencia = base_inf[base_inf["FID_VANO"].isin(ids_top_frecuencia)].copy()
-        escenarios.append(
-            _ejecutar_escenario(
-                f"Top P{top_n_vanos_percentile:g} por frecuencia — período completo",
-                f"seleccionar vanos con N_APARICIONES >= percentil {top_n_vanos_percentile} del período completo; "
-                "UITI_VANO_PROM solo ordena empates",
-                tabla_top_frecuencia,
-                base_top_frecuencia,
-                "top_frecuencia_periodo.html",
+        if not base_top_frecuencia.empty:
+            escenarios.append(
+                _ejecutar_escenario(
+                    f"Top P{top_n_vanos_percentile:g} por frecuencia — período completo",
+                    f"seleccionar vanos con N_APARICIONES >= percentil {top_n_vanos_percentile} del período completo; "
+                    "UITI_VANO_PROM solo ordena empates",
+                    tabla_top_frecuencia,
+                    base_top_frecuencia,
+                    "top_frecuencia_periodo.html",
+                )
             )
-        )
-    except ValueError:
-        pass
 
-    # Scenario 3/4: severity (UITI_VANO_PROM), dates of interest.
-    try:
+        # Scenario 3/4: severity (UITI_VANO_PROM), dates of interest. Same
+        # explicit-empty-check rationale as scenario 1/4 above; the dates-of-
+        # interest filter itself is checked before grouping/selecting too.
         base_fechas_inf = base_inf[base_inf["_FECHA_DIA"].isin(fechas_interes or [])].copy()
-        if base_fechas_inf.empty:
-            raise ValueError("Sin eventos de inferencia para las fechas de interés.")
-        tabla_fechas_inf = agrupar_por_vano(base_fechas_inf)
-        tabla_top_fechas_uiti, _ = _seleccionar_vanos_por_percentil(
-            tabla_fechas_inf, "UITI_VANO_PROM", top_n_vanos_percentile
-        )
-        ids_top_fechas_uiti = tabla_top_fechas_uiti["FID_VANO"].tolist()
-        base_top_fechas_uiti = base_fechas_inf[base_fechas_inf["FID_VANO"].isin(ids_top_fechas_uiti)].copy()
-        escenarios.append(
-            _ejecutar_escenario(
-                f"Top P{top_n_vanos_percentile:g} por UITI_VANO — puntos críticos ({fechas_label})",
-                f"filtrar fechas críticas y seleccionar vanos con UITI_VANO_PROM >= percentil {top_n_vanos_percentile}",
-                tabla_top_fechas_uiti,
-                base_top_fechas_uiti,
-                "top_uiti_fechas.html",
-                fechas=fechas_interes,
+        if not base_fechas_inf.empty:
+            tabla_fechas_inf = agrupar_por_vano(base_fechas_inf)
+            tabla_top_fechas_uiti, _ = _seleccionar_vanos_por_percentil(
+                tabla_fechas_inf, "UITI_VANO_PROM", top_n_vanos_percentile
             )
-        )
-    except ValueError:
-        pass
+            ids_top_fechas_uiti = tabla_top_fechas_uiti["FID_VANO"].tolist()
+            base_top_fechas_uiti = base_fechas_inf[base_fechas_inf["FID_VANO"].isin(ids_top_fechas_uiti)].copy()
+            if not base_top_fechas_uiti.empty:
+                escenarios.append(
+                    _ejecutar_escenario(
+                        f"Top P{top_n_vanos_percentile:g} por UITI_VANO — puntos críticos ({fechas_label})",
+                        f"filtrar fechas críticas y seleccionar vanos con UITI_VANO_PROM >= percentil {top_n_vanos_percentile}",
+                        tabla_top_fechas_uiti,
+                        base_top_fechas_uiti,
+                        "top_uiti_fechas.html",
+                        fechas=fechas_interes,
+                    )
+                )
 
-    # Scenario 4/4: frequency (N_APARICIONES), dates of interest.
-    try:
+        # Scenario 4/4: frequency (N_APARICIONES), dates of interest. Same
+        # explicit-empty-check rationale as scenario 1/4 above.
         base_fechas_inf = base_inf[base_inf["_FECHA_DIA"].isin(fechas_interes or [])].copy()
-        if base_fechas_inf.empty:
-            raise ValueError("Sin eventos de inferencia para las fechas de interés.")
-        tabla_fechas_inf = agrupar_por_vano(base_fechas_inf)
-        tabla_top_fechas_frecuencia, _ = _seleccionar_vanos_por_percentil(
-            tabla_fechas_inf, "N_APARICIONES", top_n_vanos_percentile
-        )
-        ids_top_fechas_frecuencia = tabla_top_fechas_frecuencia["FID_VANO"].tolist()
-        base_top_fechas_frecuencia = base_fechas_inf[
-            base_fechas_inf["FID_VANO"].isin(ids_top_fechas_frecuencia)
-        ].copy()
-        escenarios.append(
-            _ejecutar_escenario(
-                f"Top P{top_n_vanos_percentile:g} por frecuencia — puntos críticos ({fechas_label})",
-                f"filtrar fechas críticas y seleccionar vanos con N_APARICIONES >= percentil {top_n_vanos_percentile}; "
-                "UITI_VANO_PROM solo ordena empates",
-                tabla_top_fechas_frecuencia,
-                base_top_fechas_frecuencia,
-                "top_frecuencia_fechas.html",
-                fechas=fechas_interes,
+        if not base_fechas_inf.empty:
+            tabla_fechas_inf = agrupar_por_vano(base_fechas_inf)
+            tabla_top_fechas_frecuencia, _ = _seleccionar_vanos_por_percentil(
+                tabla_fechas_inf, "N_APARICIONES", top_n_vanos_percentile
             )
-        )
-    except ValueError:
-        pass
+            ids_top_fechas_frecuencia = tabla_top_fechas_frecuencia["FID_VANO"].tolist()
+            base_top_fechas_frecuencia = base_fechas_inf[
+                base_fechas_inf["FID_VANO"].isin(ids_top_fechas_frecuencia)
+            ].copy()
+            if not base_top_fechas_frecuencia.empty:
+                escenarios.append(
+                    _ejecutar_escenario(
+                        f"Top P{top_n_vanos_percentile:g} por frecuencia — puntos críticos ({fechas_label})",
+                        f"filtrar fechas críticas y seleccionar vanos con N_APARICIONES >= percentil {top_n_vanos_percentile}; "
+                        "UITI_VANO_PROM solo ordena empates",
+                        tabla_top_fechas_frecuencia,
+                        base_top_fechas_frecuencia,
+                        "top_frecuencia_fechas.html",
+                        fechas=fechas_interes,
+                    )
+                )
 
-    return features, escenarios
+        return features, escenarios
+    finally:
+        np.random.set_state(rng_state)
 
 
 def _load_validated_agent_output(run_dir: Path, agent_name: str) -> dict[str, Any]:

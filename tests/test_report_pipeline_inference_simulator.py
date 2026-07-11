@@ -151,6 +151,24 @@ def test_compute_inference_scenarios_zero_survival_when_window_has_no_events(tmp
     assert escenarios == []
 
 
+def test_compute_inference_scenarios_returns_r3_gap_when_model_is_none_and_window_has_events(tmp_path):
+    """R3 gap: `model=None` (no MGCECDL artifact loaded) with a window that
+    DOES have events must degrade gracefully -- `(features, [])` -- instead of
+    crashing inside `KernelShapTopVarsExtractor.__init__` with an unguarded
+    `AttributeError: 'NoneType' object has no attribute 'to'`."""
+    features, escenarios = _compute_inference_scenarios(
+        _SUFFICIENT_CIRCUIT,
+        *_SUFFICIENT_WINDOW,
+        ["2026-03-01"],
+        None,
+        None,
+        graph_output_dir=tmp_path / "graphs",
+    )
+
+    assert features, "features must be computed even when model is None"
+    assert escenarios == []
+
+
 # ---------------------------------------------------------------------------
 # Task 2.2 -- `SHAP_RANDOM_STATE` threaded explicitly into every
 # `KernelShapTopVarsExtractor(...)` call (and the stratified-split random
