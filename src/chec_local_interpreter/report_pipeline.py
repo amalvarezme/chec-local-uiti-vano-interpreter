@@ -931,13 +931,56 @@ def prepare_expert_alignment(
     return run_dir
 
 
+def _build_inference_results(run_dir: Path) -> dict[str, Any] | None:
+    """Read `run_dir/inference_render_assets.json` (task 3.2's sidecar) if
+    present and rebuild the `inference_results` mapping `render_llm_analysis`
+    expects: scenario key -> `{fig_barras, fig_radar, grafo_interactivo,
+    contexto}`, every figure/graph path resolved to absolute against
+    `run_dir`.
+
+    Returns `None` (no crash) when the sidecar is absent -- the simulator
+    either never ran (R3) or every scenario was skipped (R1), so there is
+    nothing to render.
+    """
+    sidecar_path = run_dir / "inference_render_assets.json"
+    if not sidecar_path.exists():
+        return None
+
+    render_assets = _read_json(sidecar_path)
+    inference_bc = _read_json(run_dir / "inference.bc.json")
+    escenarios_by_nombre = {
+        escenario.get("nombre"): escenario
+        for escenario in inference_bc.get("escenarios", [])
+        if isinstance(escenario, dict)
+    }
+
+    def _resolve(value: str | None) -> str | None:
+        return str(run_dir / value) if value is not None else None
+
+    inference_results: dict[str, Any] = {}
+    for scenario_key, asset in render_assets.items():
+        if not isinstance(asset, dict):
+            continue
+        nombre = asset.get("nombre")
+        inference_results[scenario_key] = {
+            "fig_barras": _resolve(asset.get("fig_barras_png")),
+            "fig_radar": _resolve(asset.get("fig_radar_png")),
+            "grafo_interactivo": _resolve(asset.get("grafo_interactivo_html")),
+            "contexto": escenarios_by_nombre.get(nombre, {}),
+        }
+    return inference_results
+
+
 def render(run_dir: str | Path, *, output_dir: str | Path | None = None) -> Path:
     """Read all three validated outputs from `run_dir` and render the final
-    HTML report via `plotting.render_llm_analysis` (no simulator kwargs).
+    HTML report via `plotting.render_llm_analysis`.
 
     Reconstructs `raw_df`/`daily_df` deterministically from `l1_state.json`
     (data_path + circuito + resolved date window) rather than serializing
-    DataFrames to disk, so the run_dir stays plain-JSON.
+    DataFrames to disk, so the run_dir stays plain-JSON. `render()` itself
+    stays model-free: `inference_results` (task 3.4) is rebuilt purely from
+    persisted paths in `inference_render_assets.json`, never by reloading the
+    MGCECDL model or recomputing SHAP.
     """
     run_dir = Path(run_dir)
     state = _read_json(run_dir / "l1_state.json")
@@ -957,7 +1000,7 @@ def render(run_dir: str | Path, *, output_dir: str | Path | None = None) -> Path
     kwargs: dict[str, Any] = {
         "start_date": state["fecha_inicio"],
         "end_date": state["fecha_fin"],
-        "inference_results": None,
+        "inference_results": _build_inference_results(run_dir),
         "inference_analysis": inference_data,
         "expert_alignment_analysis": expert_alignment_data,
         "expert_alignment_matches": None,

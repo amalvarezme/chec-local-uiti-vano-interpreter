@@ -306,6 +306,97 @@ def test_render_produces_html_file_from_canned_validated_envelopes(tmp_path):
     assert html_path.read_text(encoding="utf-8").strip() != ""
 
 
+def test_render_sidecar_absent_inference_results_stays_none_no_crash(tmp_path, monkeypatch):
+    """Task 3.4: with the (default, autoused) empty model dir, prepare() never
+    writes `inference_render_assets.json` -- `render()` must pass
+    `inference_results=None` (same as before wiring) rather than crashing."""
+    data_path = _write_fixture_dataset(tmp_path)
+    run_dir = prepare("C1", data_path=data_path, runs_root=tmp_path / "runs")
+    assert not (run_dir / "inference_render_assets.json").exists()
+    (run_dir / "historical.out.json").write_text(json.dumps(_canned_ok({"hallazgos": ["H1"]})), encoding="utf-8")
+    (run_dir / "inference.out.json").write_text(json.dumps(_canned_ok({"hallazgos": ["I1"]})), encoding="utf-8")
+    prepare_expert_alignment(run_dir)
+    (run_dir / "expert-alignment.out.json").write_text(
+        json.dumps(_canned_ok({"sintesis_final": "Todo alineado."})), encoding="utf-8"
+    )
+
+    captured: dict = {}
+
+    def _spy_render_llm_analysis(*args, **kwargs):
+        captured["inference_results"] = kwargs.get("inference_results")
+        html_path = tmp_path / "html" / "fake.html"
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        html_path.write_text("<html></html>", encoding="utf-8")
+        return html_path
+
+    monkeypatch.setattr(report_pipeline_module, "render_llm_analysis", _spy_render_llm_analysis)
+
+    render(run_dir, output_dir=tmp_path / "html")
+
+    assert captured["inference_results"] is None
+
+
+def test_render_sidecar_present_builds_non_none_inference_results(tmp_path, monkeypatch):
+    """Task 3.4: when `inference_render_assets.json` exists, `render()` must
+    resolve each path against `run_dir` and rebuild `inference_results`
+    (keyed by scenario key, each `{fig_barras, fig_radar, grafo_interactivo,
+    contexto}`) instead of passing `None`."""
+    data_path = _write_fixture_dataset(tmp_path)
+    run_dir = prepare("C1", data_path=data_path, runs_root=tmp_path / "runs")
+    (run_dir / "historical.out.json").write_text(json.dumps(_canned_ok({"hallazgos": ["H1"]})), encoding="utf-8")
+    (run_dir / "inference.out.json").write_text(json.dumps(_canned_ok({"hallazgos": ["I1"]})), encoding="utf-8")
+    prepare_expert_alignment(run_dir)
+    (run_dir / "expert-alignment.out.json").write_text(
+        json.dumps(_canned_ok({"sintesis_final": "Todo alineado."})), encoding="utf-8"
+    )
+
+    # Simulate what a healthy `_run_inference_simulator` run would have
+    # written: a matching scenario contexto in inference.bc.json plus the
+    # sidecar + the (fake) persisted PNG/HTML files it references.
+    scenario_nombre = "Top P97 por UITI_VANO — período completo"
+    inference_bc = _read_json(run_dir / "inference.bc.json")
+    inference_bc["escenarios"] = [{"nombre": scenario_nombre, "criterio": "x"}]
+    (run_dir / "inference.bc.json").write_text(json.dumps(inference_bc), encoding="utf-8")
+
+    (run_dir / "inference_figures").mkdir()
+    (run_dir / "inference_figures" / "top_uiti_periodo_barras.png").write_bytes(b"fakepng")
+    (run_dir / "inference_figures" / "top_uiti_periodo_radar.png").write_bytes(b"fakepng")
+    (run_dir / "inference_graphs").mkdir()
+    (run_dir / "inference_graphs" / "top_uiti_periodo.html").write_text("<html></html>", encoding="utf-8")
+
+    render_assets = {
+        "top_uiti_periodo": {
+            "nombre": scenario_nombre,
+            "fig_barras_png": "inference_figures/top_uiti_periodo_barras.png",
+            "fig_radar_png": "inference_figures/top_uiti_periodo_radar.png",
+            "grafo_interactivo_html": "inference_graphs/top_uiti_periodo.html",
+        }
+    }
+    (run_dir / "inference_render_assets.json").write_text(json.dumps(render_assets), encoding="utf-8")
+
+    captured: dict = {}
+
+    def _spy_render_llm_analysis(*args, **kwargs):
+        captured["inference_results"] = kwargs.get("inference_results")
+        html_path = tmp_path / "html" / "fake.html"
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        html_path.write_text("<html></html>", encoding="utf-8")
+        return html_path
+
+    monkeypatch.setattr(report_pipeline_module, "render_llm_analysis", _spy_render_llm_analysis)
+
+    render(run_dir, output_dir=tmp_path / "html")
+
+    inference_results = captured["inference_results"]
+    assert inference_results is not None
+    assert set(inference_results.keys()) == {"top_uiti_periodo"}
+    entry = inference_results["top_uiti_periodo"]
+    assert entry["fig_barras"] == str(run_dir / "inference_figures" / "top_uiti_periodo_barras.png")
+    assert entry["fig_radar"] == str(run_dir / "inference_figures" / "top_uiti_periodo_radar.png")
+    assert entry["grafo_interactivo"] == str(run_dir / "inference_graphs" / "top_uiti_periodo.html")
+    assert entry["contexto"]["nombre"] == scenario_nombre
+
+
 def test_render_missing_expert_alignment_output_raises_before_writing_html(tmp_path):
     data_path = _write_fixture_dataset(tmp_path)
     run_dir = prepare("C1", data_path=data_path, runs_root=tmp_path / "runs")
