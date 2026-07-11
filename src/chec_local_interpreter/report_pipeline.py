@@ -220,9 +220,10 @@ def prepare(
     if circuito not in available_circuits(frame):
         raise ReportPipelineError(f"Circuit not found in dataset: {circuito!r}")
 
-    range_start, range_end = circuit_date_range(frame, circuito)
-    start = fecha_inicio or range_start
-    end = fecha_fin or range_end
+    if fecha_inicio is None:
+        start, end = circuit_date_range(frame, circuito)
+    else:
+        start, end = fecha_inicio, fecha_fin
 
     events_df = filter_events(frame, selected_circuitos=[circuito], start_date=start, end_date=end)
     if events_df.empty:
@@ -324,7 +325,7 @@ def prepare_expert_alignment(
     fechas_informe = extraer_fechas_informe(
         validation_data=historical_data,
         inference_validation_data=inference_data,
-        critical_points=state.get("critical_points"),
+        critical_points=state["critical_points"],
         fecha_inicio=state["fecha_inicio"],
         fecha_fin=state["fecha_fin"],
     )
