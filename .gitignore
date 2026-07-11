@@ -51,3 +51,6 @@ node_modules/
 dist/
 .astro/
 .npm-cache/
+
+# Gentle AI skill-registry cache
+.atl/
