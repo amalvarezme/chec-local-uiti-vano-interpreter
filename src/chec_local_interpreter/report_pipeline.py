@@ -478,64 +478,94 @@ def _compute_inference_scenarios(
             # otherwise never be closed.
             fignums_before = set(plt.get_fignums())
             try:
-                resultado = graficar_barras_y_radar(
-                    eventos,
-                    nombre,
-                    circuito=circuito,
-                    features=features,
-                    modos=modos,
-                    shap_extractor=shap_extractor,
-                    top_k=top_k_vars,
-                    graph_source="estimated",
-                    estimated_graph_model=model,
-                    X_model=X_inf,
-                    estimated_graph_rbf_sigma=rbf_sigma,
-                    estimated_graph_device=device,
-                    estimated_graph_batch_size=_SHAP_BATCH_SIZE,
-                    graph_output_dir=graph_dir,
-                    graph_output_name=graph_output_name,
-                )
-                contexto = construir_contexto_escenario_inferencia(
-                    nombre=nombre,
-                    criterio=criterio,
-                    resultado=resultado,
-                    tabla_top=tabla_top,
-                    modos=modos,
-                    top_k=top_k_vars,
-                    fechas_interes=fechas,
-                    ventana_climatica_horas=ventana_climatica_horas,
-                )
+                try:
+                    resultado = graficar_barras_y_radar(
+                        eventos,
+                        nombre,
+                        circuito=circuito,
+                        features=features,
+                        modos=modos,
+                        shap_extractor=shap_extractor,
+                        top_k=top_k_vars,
+                        graph_source="estimated",
+                        estimated_graph_model=model,
+                        X_model=X_inf,
+                        estimated_graph_rbf_sigma=rbf_sigma,
+                        estimated_graph_device=device,
+                        estimated_graph_batch_size=_SHAP_BATCH_SIZE,
+                        graph_output_dir=graph_dir,
+                        graph_output_name=graph_output_name,
+                    )
+                    contexto = construir_contexto_escenario_inferencia(
+                        nombre=nombre,
+                        criterio=criterio,
+                        resultado=resultado,
+                        tabla_top=tabla_top,
+                        modos=modos,
+                        top_k=top_k_vars,
+                        fechas_interes=fechas,
+                        ventana_climatica_horas=ventana_climatica_horas,
+                    )
+                except ValueError as exc:
+                    # A `ValueError` raised anywhere inside
+                    # `graficar_barras_y_radar`/`construir_contexto_escenario_inferencia`
+                    # for THIS scenario (e.g.
+                    # `construir_grafo_interactivo_muestras`'s "no hay variables
+                    # con puntaje positivo para construir el grafo") is a
+                    # legitimate per-scenario gap, not a reason to abort the
+                    # other scenarios already computed in this same call (R1 gap
+                    # shape, obs#219: "a scenario with insufficient signal is
+                    # skipped individually; the other scenarios still
+                    # complete"). The message is surfaced via `warnings.warn`
+                    # (not silently discarded) so a genuine bug is still visible
+                    # in logs instead of being indistinguishable from a clean
+                    # skip.
+                    #
+                    # This `except` is scoped ONLY to the computation calls
+                    # above -- it must never also catch a `ValueError` raised
+                    # by the render-asset persistence step below, or a
+                    # file-write problem would be misreported as an
+                    # insufficient-signal gap and the already-computed
+                    # `contexto` would be discarded even though it is valid.
+                    warnings.warn(
+                        f"Escenario de inferencia '{nombre}' omitido por ValueError: {exc}",
+                        stacklevel=2,
+                    )
+                    return None
+
                 if figures_output_dir is not None and render_assets_sink is not None:
                     # Persist PNGs BEFORE the `finally` block below closes the
                     # figures -- once closed, `fig.savefig(...)` would render
                     # a blank image (task 3.2).
-                    _persist_scenario_render_assets(
-                        scenario_key=scenario_key,
-                        nombre=nombre,
-                        resultado=resultado,
-                        figures_output_dir=Path(figures_output_dir),
-                        render_assets_sink=render_assets_sink,
-                    )
+                    #
+                    # This step has its own narrow error boundary, separate
+                    # from the computation `except ValueError` above: a
+                    # persistence-layer failure (`OSError`/`PermissionError`
+                    # from `mkdir`/`savefig`/the graph-HTML write, or a
+                    # `ValueError` `Figure.savefig` can raise for a
+                    # backend/format issue) must never discard the already-
+                    # successfully-computed `contexto`, and must never
+                    # propagate out of `prepare()` -- per the documented
+                    # degrade contract, the run always continues and the
+                    # report always generates. The scenario simply ends up
+                    # without a `render_assets_sink` entry (same shape
+                    # `render()` already tolerates for a scenario missing
+                    # from the sidecar).
+                    try:
+                        _persist_scenario_render_assets(
+                            scenario_key=scenario_key,
+                            nombre=nombre,
+                            resultado=resultado,
+                            figures_output_dir=Path(figures_output_dir),
+                            render_assets_sink=render_assets_sink,
+                        )
+                    except (OSError, ValueError) as exc:
+                        warnings.warn(
+                            "No se pudieron persistir los activos de render "
+                            f"para el escenario '{nombre}': {exc}",
+                            stacklevel=2,
+                        )
                 return contexto
-            except ValueError as exc:
-                # A `ValueError` raised anywhere inside
-                # `graficar_barras_y_radar`/`construir_contexto_escenario_inferencia`
-                # for THIS scenario (e.g.
-                # `construir_grafo_interactivo_muestras`'s "no hay variables
-                # con puntaje positivo para construir el grafo") is a
-                # legitimate per-scenario gap, not a reason to abort the
-                # other scenarios already computed in this same call (R1 gap
-                # shape, obs#219: "a scenario with insufficient signal is
-                # skipped individually; the other scenarios still
-                # complete"). The message is surfaced via `warnings.warn`
-                # (not silently discarded) so a genuine bug is still visible
-                # in logs instead of being indistinguishable from a clean
-                # skip.
-                warnings.warn(
-                    f"Escenario de inferencia '{nombre}' omitido por ValueError: {exc}",
-                    stacklevel=2,
-                )
-                return None
             finally:
                 # `graficar_barras_y_radar` returns open matplotlib Figure
                 # objects (`fig_barras`/`fig_radar`) purely as a side effect of

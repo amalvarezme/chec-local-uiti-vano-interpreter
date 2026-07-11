@@ -775,6 +775,70 @@ def test_prepare_wires_real_inference_simulator_with_sufficient_events(tmp_path,
     assert list(graphs_dir.glob("*.html")), "expected persisted grafo_interactivo HTML"
 
 
+def test_prepare_survives_persistence_failure_for_one_scenario_keeps_others_and_completes(
+    tmp_path, monkeypatch
+):
+    """Persistence-layer failure (`OSError`) while saving one scenario's
+    render assets (PNG/HTML) must NOT discard that scenario's already-
+    computed `contexto`, must NOT crash `prepare()`, and must be reported
+    with wording distinct from the "omitido por ValueError"/insufficient-
+    signal warning -- the run always continues and the report always
+    generates (per the reporte Skill's documented degrade contract)."""
+    _enable_real_mgcecdl_model(monkeypatch)
+
+    original_persist = report_pipeline_module._persist_scenario_render_assets
+    _FAILING_SCENARIO_KEY = "top_frecuencia_periodo"
+    failed_calls: list[str] = []
+
+    def _persist_failing_for_one_scenario(*, scenario_key, **kwargs):
+        if scenario_key == _FAILING_SCENARIO_KEY:
+            failed_calls.append(scenario_key)
+            raise OSError("simulated disk-full failure while saving render assets")
+        return original_persist(scenario_key=scenario_key, **kwargs)
+
+    monkeypatch.setattr(
+        report_pipeline_module,
+        "_persist_scenario_render_assets",
+        _persist_failing_for_one_scenario,
+    )
+
+    with pytest.warns(UserWarning, match="persistir los activos de render"):
+        run_dir = prepare(
+            _REAL_SUFFICIENT_CIRCUIT, *_REAL_SUFFICIENT_WINDOW, runs_root=tmp_path / "runs"
+        )
+
+    assert failed_calls == [_FAILING_SCENARIO_KEY], "expected the forced failure to actually fire"
+
+    # (b) prepare() completed and produced the three JSON artifacts -- no
+    # crash, no orphan run_dir missing them.
+    assert (run_dir / "historical.bc.json").exists()
+    assert (run_dir / "inference.bc.json").exists()
+    assert (run_dir / "l1_state.json").exists()
+
+    # (a) the scenario whose PERSISTENCE failed is still present in
+    # `escenarios` with real interpretation/context data -- its SHAP
+    # computation succeeded, only the render-asset save failed.
+    inference_context = _read_json(run_dir / "inference.bc.json")
+    nombres = {escenario["nombre"] for escenario in inference_context["escenarios"]}
+    frecuencia_periodo_nombres = [
+        nombre for nombre in nombres if "frecuencia" in nombre and "período completo" in nombre
+    ]
+    assert frecuencia_periodo_nombres, "expected the scenario to survive despite the persistence failure"
+    assert len(inference_context["escenarios"]) >= 3, (
+        "expected the other scenarios' render assets to be unaffected by one scenario's "
+        "persistence failure"
+    )
+
+    # (d) the failed scenario has no render_assets entry (its sidecar entry
+    # is simply absent, the same shape `render()` already tolerates), while
+    # the other scenarios' render assets are unaffected.
+    sidecar_path = run_dir / "inference_render_assets.json"
+    assert sidecar_path.exists()
+    render_assets = _read_json(sidecar_path)
+    assert _FAILING_SCENARIO_KEY not in render_assets
+    assert len(render_assets) == len(inference_context["escenarios"]) - 1
+
+
 def test_reporte_end_to_end_with_real_simulator_renders_non_empty_inference_section(
     tmp_path, monkeypatch
 ):
