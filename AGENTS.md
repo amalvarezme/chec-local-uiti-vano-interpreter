@@ -52,4 +52,4 @@ under `reports/interpretability/artifacts/`, print a clear notebook message, and
 
 ## Testing Expectations
 
-Run `pytest -q` and `python llm/evals/run_llm_eval.py` before considering changes complete.
+Run `pytest -q` and `python evals/run_llm_eval.py` before considering changes complete.

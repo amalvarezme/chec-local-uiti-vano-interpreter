@@ -142,5 +142,5 @@ as final analysis.
 
 ```bash
 pytest -q
-python llm/evals/run_llm_eval.py
+python evals/run_llm_eval.py
 ```

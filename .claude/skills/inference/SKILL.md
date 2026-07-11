@@ -8,23 +8,25 @@ metadata:
   role: .claude/agents/inference.md
   rules: .claude/agents/rules/invariants.md
   ported_from:
-    - llm/skills_inference/01_structured_context_builder.md
-    - llm/skills_inference/02_circuit_scenario_interpreter.md
-    - llm/skills_inference/03_uiti_vano_behavior_explainer.md
-    - llm/skills_inference/04_graph_connectivity_guardrails.md
-    - llm/skills_inference/05_llm_output_validator.md
-    - llm/skills_inference/06_inference_output_contract.md
+    - .claude/skills/inference/prompt/01_structured_context_builder.md
+    - .claude/skills/inference/prompt/02_circuit_scenario_interpreter.md
+    - .claude/skills/inference/prompt/03_uiti_vano_behavior_explainer.md
+    - .claude/skills/inference/prompt/04_graph_connectivity_guardrails.md
+    - .claude/skills/inference/prompt/05_llm_output_validator.md
+    - .claude/skills/inference/prompt/06_inference_output_contract.md
 ---
 
 ## Overview
 
 This Skill is the single, current source of the inference/MGCECDL agent's reasoning guidance. It
-**ports** (does not duplicate) the six existing prompt playbooks listed in `ported_from` above
-into one Skill body with frontmatter, per `docs/agents-guide.md`'s three-meanings-of-"skills"
-table, matching the `historical` port precedent. The original playbook files stay in place,
-untouched, in `llm/skills_inference/` — they remain consumed by the pre-existing notebook flow via
-`assemble_skill_bundle(profile="inferencia")` until that flow is retired in a later slice. Going
-forward, author and revise the inference reasoning guidance here, not in the playbook files.
+**ports** (does not duplicate) the six prompt playbooks listed in `ported_from` above into one
+Skill body with frontmatter, per `docs/agents-guide.md`'s three-meanings-of-"skills" table,
+matching the `historical` port precedent. The `prompt/` subdir IS the machine-fed source:
+`assemble_skill_bundle(profile="inferencia")` loads those same files directly from
+`.claude/skills/inference/prompt/` (relocated from `llm/skills_inference/` in
+`sdd/retire-llm-directory`); `SKILL.md` is this English condensation for human/agent context, not
+a separate copy. Going forward, author and revise the inference reasoning guidance in the
+`prompt/` playbooks, and keep this condensation in sync.
 
 This Skill governs how the `inference` agent role (`.claude/agents/inference.md`) authors its
 predictive-model interpretation. Every binding invariant (frozen boundaries, validator-gated
@@ -231,12 +233,13 @@ validator and `.claude/agents/rules/invariants.md` Rule 7 enforce):
 - Binding rules: `.claude/agents/rules/invariants.md`
 - Architecture and envelope contract: `docs/agents-guide.md`
 - L1 deterministic Python: `src/chec_local_interpreter/inference_validation.py`,
-  `llm/prompts/inference.output_schema.json`
+  `src/chec_local_interpreter/prompt_assets/inference.output_schema.json`
 - L2 CLI: `src/chec_local_interpreter/agent_tools/inference.py`
-- Ported-from playbooks (unchanged, still consumed by the notebook flow):
-  `llm/skills_inference/01_structured_context_builder.md`,
-  `llm/skills_inference/02_circuit_scenario_interpreter.md`,
-  `llm/skills_inference/03_uiti_vano_behavior_explainer.md`,
-  `llm/skills_inference/04_graph_connectivity_guardrails.md`,
-  `llm/skills_inference/05_llm_output_validator.md`,
-  `llm/skills_inference/06_inference_output_contract.md`
+- Ported-from playbooks (the machine-fed source, loaded by
+  `assemble_skill_bundle(profile="inferencia")`):
+  `.claude/skills/inference/prompt/01_structured_context_builder.md`,
+  `.claude/skills/inference/prompt/02_circuit_scenario_interpreter.md`,
+  `.claude/skills/inference/prompt/03_uiti_vano_behavior_explainer.md`,
+  `.claude/skills/inference/prompt/04_graph_connectivity_guardrails.md`,
+  `.claude/skills/inference/prompt/05_llm_output_validator.md`,
+  `.claude/skills/inference/prompt/06_inference_output_contract.md`

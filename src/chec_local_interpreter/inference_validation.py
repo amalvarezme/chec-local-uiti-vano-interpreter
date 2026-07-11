@@ -8,7 +8,7 @@ no guardrails, no provenance) with a two-stage gate reaching the same rigor as
 `expert_alignment.validar_respuesta_expert_alignment`:
 
     1. `validar_respuesta_inferencia_strict` — JSON-Schema conformance against
-       `llm/prompts/inference.output_schema.json`, plus domain guardrails
+       `src/chec_local_interpreter/prompt_assets/inference.output_schema.json`, plus domain guardrails
        (no forbidden causal-certainty phrasing; every date/`critical_point_id`
        -shaped and scenario-name token referenced in the free text of the
        response must resolve against the circuit's own inference context).
@@ -34,13 +34,13 @@ try:
 except ImportError:  # pragma: no cover - exercised only in minimal environments
     Draft202012Validator = None
 
-from chec_local_interpreter.config import llm_root
+from chec_local_interpreter.config import prompt_assets_dir
 from chec_local_interpreter.llm_validation import parse_llm_json, validar_provenance_generico
 
 INFERENCE_AGENT_ID = "inference"
 
-# Mirrors `llm/skills_inference/*.md` filenames (stripped of the `.md`
-# suffix), same convention as `BASE_PROVENANCE_RULES` /
+# Mirrors `.claude/skills/inference/prompt/*.md` filenames (stripped of the
+# `.md` suffix), same convention as `BASE_PROVENANCE_RULES` /
 # `EXPERT_ALIGNMENT_PROVENANCE_RULES`. Kept in sync with
 # `.claude/agents/rules/invariants.md` once the inference role/Skill land
 # (Phase 4).
@@ -56,8 +56,8 @@ INFERENCE_PROVENANCE_RULES = frozenset({
 _OUTPUT_SCHEMA_FILE = "inference.output_schema.json"
 
 # Domain-guardrail phrasing to reject regardless of schema conformance
-# (mirrors `llm/skills_inference/05_llm_output_validator.md`'s "Validaciones
-# de lenguaje" table plus the spec's own literal example scenario).
+# (mirrors `.claude/skills/inference/prompt/05_llm_output_validator.md`'s
+# "Validaciones de lenguaje" table plus the spec's own literal example scenario).
 FORBIDDEN_CAUSAL_PHRASES = (
     "demonstrates that",
     "demuestra el origen del evento",
@@ -76,7 +76,7 @@ _TEXT_CP_REF_RE = re.compile(r"\bcp-\d{4}-\d{2}-\d{2}\b")
 def _load_schema() -> dict[str, Any]:
     import json
 
-    path = llm_root() / "prompts" / _OUTPUT_SCHEMA_FILE
+    path = prompt_assets_dir() / _OUTPUT_SCHEMA_FILE
     if not path.exists():
         raise FileNotFoundError(f"Inference output schema not found: {path}")
     return json.loads(path.read_text(encoding="utf-8"))

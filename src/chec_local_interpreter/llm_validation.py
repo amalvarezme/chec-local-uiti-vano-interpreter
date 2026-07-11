@@ -220,8 +220,9 @@ def unavailable_columns(context: dict[str, Any]) -> set[str]:
 # Mirrors `expert_alignment.py`'s `validar_provenance_expert_alignment`: a
 # small, hermetic allow-list of playbook rule ids checked in-code (no file
 # read), and a producing-agent id constant. Kept in sync with
-# `.claude/agents/rules/invariants.md` and the 7 `llm/skills/*.md` base
-# playbooks (ids derived by stripping the `NN_` prefix and `.md` suffix,
+# `.claude/agents/rules/invariants.md` and the 7
+# `.claude/skills/historical/prompt/*.md` base playbooks (ids derived by
+# stripping the `NN_` prefix and `.md` suffix,
 # preserving `assemble_skill_bundle(profile="base")` order).
 BASE_AGENT_ID = "historical"
 

@@ -4,7 +4,7 @@ import json
 import sys
 from pathlib import Path
 
-PROJECT = Path(__file__).resolve().parents[2]
+PROJECT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT / "src"))
 
 from chec_local_interpreter.expert_alignment import (

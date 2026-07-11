@@ -51,3 +51,18 @@ def project_root() -> Path:
 
 def llm_root() -> Path:
     return project_root() / "llm"
+
+
+def prompt_assets_dir() -> Path:
+    """Package-relative home for shared prompt templates/schemas.
+
+    Survives install and does not depend on CWD/repo layout, unlike
+    ``llm_root()`` (repo-root-relative, retired incrementally per
+    ``sdd/retire-llm-directory``).
+    """
+    return Path(__file__).resolve().parent / "prompt_assets"
+
+
+def agent_prompt_dir(agent_slug: str) -> Path:
+    """Repo-root-relative home for a migrated agent's playbook prompts."""
+    return project_root() / ".claude" / "skills" / agent_slug / "prompt"

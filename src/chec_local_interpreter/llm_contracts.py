@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from chec_local_interpreter.config import PROMPT_VERSION, SCHEMA_VERSION, llm_root
+from chec_local_interpreter.config import PROMPT_VERSION, SCHEMA_VERSION, prompt_assets_dir
 
 SYSTEM_PROMPT_FILE = "uiti_vano_explanation.system.md"
 USER_PROMPT_FILE = "uiti_vano_explanation.user.md"
@@ -11,7 +11,7 @@ OUTPUT_SCHEMA_FILE = "uiti_vano_explanation.output_schema.json"
 
 
 def prompts_dir(base_dir: str | Path | None = None) -> Path:
-    return Path(base_dir) if base_dir is not None else llm_root() / "prompts"
+    return Path(base_dir) if base_dir is not None else prompt_assets_dir()
 
 
 def load_prompt_template(name: str, base_dir: str | Path | None = None) -> str:

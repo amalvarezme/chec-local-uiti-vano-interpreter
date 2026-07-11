@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from chec_local_interpreter.config import llm_root
+from chec_local_interpreter.config import agent_prompt_dir, llm_root
 
 REQUIRED_SKILLS = (
     "01_structured_context_builder.md",
@@ -50,14 +50,22 @@ def _required_skills(profile: str = "base") -> tuple[str, ...]:
 def skills_dir(base_dir: str | Path | None = None, *, profile: str = "base") -> Path:
     if base_dir is not None:
         return Path(base_dir)
+    # Migrated profiles (sdd/retire-llm-directory, per-profile incremental
+    # repoint, design D3): base/historical and inferencia/inference now
+    # resolve to their code-owned `.claude/skills/<agent>/prompt/` home.
+    # Un-migrated profiles keep resolving via `llm_root()` until their own
+    # slice lands (expert_alignment/pdf_report_comparison in Slice B,
+    # auto_simulator/simulador_automatico in Slice D).
+    if profile == "base":
+        return agent_prompt_dir("historical")
     if profile == "inferencia":
-        suffix = "skills_inference"
-    elif profile in {"expert_alignment", "pdf_report_comparison"}:
+        return agent_prompt_dir("inference")
+    if profile in {"expert_alignment", "pdf_report_comparison"}:
         suffix = "skills_expert_alignment"
     elif profile in {"auto_simulator", "simulador_automatico"}:
         suffix = "skills_auto_simulator"
     else:
-        suffix = "skills"
+        raise ValueError("profile debe ser 'base', 'inferencia', 'expert_alignment' o 'auto_simulator'.")
     return llm_root() / suffix
 
 

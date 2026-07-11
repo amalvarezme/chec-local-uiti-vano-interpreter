@@ -8,24 +8,25 @@ metadata:
   role: .claude/agents/historical.md
   rules: .claude/agents/rules/invariants.md
   ported_from:
-    - llm/skills/01_structured_context_builder.md
-    - llm/skills/02_critical_point_interpreter.md
-    - llm/skills/03_uiti_vano_behavior_explainer.md
-    - llm/skills/04_domain_grounding_guardrails.md
-    - llm/skills/05_llm_output_validator.md
-    - llm/skills/06_base_repair.md
-    - llm/skills/07_base_output_contract.md
+    - .claude/skills/historical/prompt/01_structured_context_builder.md
+    - .claude/skills/historical/prompt/02_critical_point_interpreter.md
+    - .claude/skills/historical/prompt/03_uiti_vano_behavior_explainer.md
+    - .claude/skills/historical/prompt/04_domain_grounding_guardrails.md
+    - .claude/skills/historical/prompt/05_llm_output_validator.md
+    - .claude/skills/historical/prompt/06_base_repair.md
+    - .claude/skills/historical/prompt/07_base_output_contract.md
 ---
 
 ## Overview
 
 This Skill is the single, current source of the historical/base agent's reasoning guidance. It
-**ports** (does not duplicate) the seven existing prompt playbooks listed in `ported_from` above
-into one Skill body with frontmatter, per `docs/agents-guide.md`'s three-meanings-of-"skills"
-table. The original playbook files stay in place, untouched, in `llm/skills/` — they are still
-consumed by the pre-existing notebook flow via `assemble_skill_bundle(profile="base")` until that
-flow is retired in a later slice. Going forward, author and revise the historical/base reasoning
-guidance here, not in the playbook files.
+**ports** (does not duplicate) the seven prompt playbooks listed in `ported_from` above into one
+Skill body with frontmatter, per `docs/agents-guide.md`'s three-meanings-of-"skills" table. The
+`prompt/` subdir IS the machine-fed source: `assemble_skill_bundle(profile="base")` loads those
+same files directly from `.claude/skills/historical/prompt/` (relocated from `llm/skills/` in
+`sdd/retire-llm-directory`); `SKILL.md` is this English condensation for human/agent context, not
+a separate copy. Going forward, author and revise the historical/base reasoning guidance in the
+`prompt/` playbooks, and keep this condensation in sync.
 
 This Skill governs how the `historical` agent role (`.claude/agents/historical.md`) authors its
 descriptive diagnosis. Every binding invariant (frozen boundaries, validator-gated output,
@@ -69,7 +70,6 @@ never selects, adds, removes, or reorders them.
   aggregates, and attribution summaries already present on each critical point.
 - Describe why each critical point is relevant to `UITI_VANO` behavior at the period level.
 - Relate the critical point's interpretation to domain variable groups when available.
-- Avoid definitive causal language.
 - Distinguish between "observed in the data" and "plausible contributing factor."
 - Cite evidence by date and `critical_point_id` whenever a finding depends on a specific critical
   point.
@@ -165,7 +165,6 @@ Repair mode is used only when a previous response failed validation.
 - Use only the repair context provided.
 - Use only dates and `critical_point_id`s present in `critical_points` or the context's
   start/end window.
-- Never assert definitive causality; use cautious language.
 - Never mention external document review, operational logs, regulatory review, what-if analysis,
   simulation, relevance masks, or final-report generation.
 - If optional columns are unavailable per the context metadata, include them in `data_gaps`.
@@ -235,7 +234,6 @@ Style:
 
 - Use tabular-evidence language: "sugiere", "es compatible con", "podría estar asociado con",
   "dentro de las variables disponibles".
-- Never assert definitive causality.
 - Separate observations, plausible interpretations, limitations, and next verification steps.
 - Develop the analysis with enough detail to avoid losing relevant findings.
 - Keep the writing clear and organized so the HTML report retains its executive style.
@@ -278,7 +276,6 @@ validator and `.claude/agents/rules/invariants.md` Rule 7 enforce):
 
 - Mantén lenguaje cauteloso: sugiere, es compatible con, podría estar asociado con, dentro de las
   variables disponibles.
-- No afirmes causalidad definitiva; nunca conviertas una coincidencia temporal en una causa.
 - No inventes observaciones para `NR_T`/`DDT` cuando no estén disponibles — repórtalo como brecha
   de datos.
 
@@ -289,8 +286,12 @@ validator and `.claude/agents/rules/invariants.md` Rule 7 enforce):
 - Architecture and envelope contract: `docs/agents-guide.md`
 - L1 deterministic Python: `src/chec_local_interpreter/context_builder.py`,
   `src/chec_local_interpreter/llm_contracts.py`, `src/chec_local_interpreter/llm_validation.py`
-- Ported-from playbooks (unchanged, still consumed by the notebook flow):
-  `llm/skills/01_structured_context_builder.md`, `llm/skills/02_critical_point_interpreter.md`,
-  `llm/skills/03_uiti_vano_behavior_explainer.md`, `llm/skills/04_domain_grounding_guardrails.md`,
-  `llm/skills/05_llm_output_validator.md`, `llm/skills/06_base_repair.md`,
-  `llm/skills/07_base_output_contract.md`
+- Ported-from playbooks (the machine-fed source, loaded by
+  `assemble_skill_bundle(profile="base")`):
+  `.claude/skills/historical/prompt/01_structured_context_builder.md`,
+  `.claude/skills/historical/prompt/02_critical_point_interpreter.md`,
+  `.claude/skills/historical/prompt/03_uiti_vano_behavior_explainer.md`,
+  `.claude/skills/historical/prompt/04_domain_grounding_guardrails.md`,
+  `.claude/skills/historical/prompt/05_llm_output_validator.md`,
+  `.claude/skills/historical/prompt/06_base_repair.md`,
+  `.claude/skills/historical/prompt/07_base_output_contract.md`

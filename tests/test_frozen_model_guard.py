@@ -137,10 +137,26 @@ def test_model_zip_sha256_matches_the_tracked_manifest():
 
 
 def _iter_governance_markdown_files():
+    """Yield agent-role / Claude Code Skill markdown files under the
+    governance roots.
+
+    Excludes each Skill's `prompt/` subdirectory: those files are relocated,
+    machine-fed LLM playbook sources (`sdd/retire-llm-directory`, e.g.
+    `.claude/skills/inference/prompt/*.md`), not the human-authored
+    `SKILL.md`/agent-role governance markdown this guard targets. Their
+    legitimate domain vocabulary (e.g. "grafo de entrenamiento", MGCECDL's
+    own training graph) would otherwise false-positive against
+    `FORBIDDEN_TRAINING_PHRASES`, and they were never in scope for this
+    guard before relocation (they lived under the un-scanned top-level
+    `llm/` directory).
+    """
     for root in GOVERNANCE_MARKDOWN_ROOTS:
         if not root.exists():
             continue
-        yield from sorted(root.rglob("*.md"))
+        for path in sorted(root.rglob("*.md")):
+            if "prompt" in path.relative_to(root).parts[:-1]:
+                continue
+            yield path
 
 
 def test_agent_role_and_skill_markdown_files_contain_no_training_language():
