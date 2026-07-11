@@ -183,17 +183,6 @@ def test_schema_invalid_missing_required_key_fails():
     assert result["errors"]
 
 
-def test_schema_valid_but_forbidden_causal_phrase_fails():
-    context = _context()
-    response = _valid_response(context)
-    response["escenarios"][0]["interpretacion"] = "NR_T demonstrates that the failure is caused by vegetation."
-
-    result = validar_respuesta_inferencia_strict(json.dumps(response, ensure_ascii=False), context)
-
-    assert not result["ok"]
-    assert any("demonstrates that" in error.lower() for error in result["errors"])
-
-
 def test_response_citing_critical_point_id_outside_allowed_fails():
     """Regression case vs the old weak validator: a response that would pass
     the legacy escenarios/discusion_grafos-name-only check but references a

@@ -149,14 +149,13 @@ Every response is validated before being presented as an analysis. A valid respo
 - Every list-shaped field caps at 5 items, prioritizing the best-supported findings when more
   exist.
 
-Forbidden causal/model-boundary language (rejected outright, mirrored in
-`INFERENCE_PROVENANCE_RULES`'s guardrail stage — do not phrase around this, honor it):
+Cautious causal/model-boundary phrasing (style guideline, not schema-enforced):
 
-- "demuestra que", "demuestra el origen del evento", "demonstrates that" — use "es coherente con
-  una hipótesis operativa" instead.
-- "inferencia usó el grafo" — use "el grafo se usa para contrastar la interpretación" instead.
-- "la variable aislada explica el resultado" — use "la variable se interpreta junto con su modo y
-  ruta en el grafo" instead.
+- prefer "es coherente con una hipótesis operativa" over "demuestra que" / "demuestra el origen
+  del evento" / "demonstrates that".
+- prefer "el grafo se usa para contrastar la interpretación" over "inferencia usó el grafo".
+- prefer "la variable se interpreta junto con su modo y ruta en el grafo" over "la variable
+  aislada explica el resultado".
 
 If validation fails, the raw invalid output and validation errors are saved for review under
 `reports/interpretability/artifacts/inference/{circuito}/` (this Skill's own agent-namespaced

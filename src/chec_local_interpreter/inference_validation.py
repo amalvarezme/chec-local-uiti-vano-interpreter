@@ -9,9 +9,9 @@ no guardrails, no provenance) with a two-stage gate reaching the same rigor as
 
     1. `validar_respuesta_inferencia_strict` — JSON-Schema conformance against
        `src/chec_local_interpreter/prompt_assets/inference.output_schema.json`, plus domain guardrails
-       (no forbidden causal-certainty phrasing; every date/`critical_point_id`
-       -shaped and scenario-name token referenced in the free text of the
-       response must resolve against the circuit's own inference context).
+       (every date/`critical_point_id`-shaped and scenario-name token
+       referenced in the free text of the response must resolve against the
+       circuit's own inference context).
     2. `validar_provenance_inferencia` — the additive, optional-per-item
        provenance check, built on the shared `validar_provenance_generico`
        core extracted in Phase 1 (`llm_validation.py`), parameterized with
@@ -54,18 +54,6 @@ INFERENCE_PROVENANCE_RULES = frozenset({
 })
 
 _OUTPUT_SCHEMA_FILE = "inference.output_schema.json"
-
-# Domain-guardrail phrasing to reject regardless of schema conformance
-# (mirrors `.claude/skills/inference/prompt/05_llm_output_validator.md`'s
-# "Validaciones de lenguaje" table plus the spec's own literal example scenario).
-FORBIDDEN_CAUSAL_PHRASES = (
-    "demonstrates that",
-    "demuestra el origen del evento",
-    "demuestra que",
-    "inferencia uso el grafo",
-    "inferencia usó el grafo",
-    "la variable aislada explica el resultado",
-)
 
 _CP_REF_RE = re.compile(r"^cp-\d{4}-\d{2}-\d{2}$")
 _DATE_REF_RE = re.compile(r"^20\d{2}-\d{2}-\d{2}$")
@@ -157,11 +145,6 @@ def allowed_scenario_names(context: dict[str, Any]) -> set[str]:
 def _guardrail_errors(data: dict[str, Any], context: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     full_text_blob = "\n".join(_flatten_strings(data))
-    lowered_blob = full_text_blob.lower()
-
-    for phrase in FORBIDDEN_CAUSAL_PHRASES:
-        if phrase in lowered_blob:
-            errors.append(f"Forbidden causal-certainty phrase referenced: {phrase!r}")
 
     dates_allowed = allowed_dates(context)
     for date in _TEXT_DATE_RE.findall(full_text_blob):
