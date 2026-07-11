@@ -112,6 +112,22 @@ def filter_events(
     return work
 
 
+def circuit_date_range(frame: pd.DataFrame, circuito: str) -> tuple[str | None, str | None]:
+    """Return the ISO `(min, max)` of `fecha_dia` for a single circuit's events.
+
+    Built on top of `filter_events`, so it inherits its date-parsing/dropna
+    behavior: rows with an unparseable `FECHA` are excluded before the range
+    is computed. Returns `(None, None)` when the circuit is not present in
+    `frame`, or when it is present but has zero events with a valid date.
+    """
+    filtered = filter_events(frame, selected_circuitos=[circuito])
+    if filtered.empty:
+        return None, None
+    minimum = filtered["fecha_dia"].min()
+    maximum = filtered["fecha_dia"].max()
+    return minimum.date().isoformat(), maximum.date().isoformat()
+
+
 def available_circuits(frame: pd.DataFrame) -> list[str]:
     column = resolve_column(frame, "CIRCUITO")
     if column is None:

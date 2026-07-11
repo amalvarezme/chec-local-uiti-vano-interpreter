@@ -5,7 +5,12 @@ import importlib.util
 import pandas as pd
 import pytest
 
-from chec_local_interpreter.data_loader import filter_events, load_dataset, resolve_columns
+from chec_local_interpreter.data_loader import (
+    circuit_date_range,
+    filter_events,
+    load_dataset,
+    resolve_columns,
+)
 
 
 def _frame() -> pd.DataFrame:
@@ -47,3 +52,47 @@ def test_filter_events_by_circuit_and_dates():
     assert result.shape[0] == 1
     assert result.iloc[0]["CIRCUITO"] == 102
     assert "fecha_dia" in result.columns
+
+
+def test_circuit_date_range_multiple_events_returns_min_max():
+    frame = pd.DataFrame(
+        {
+            "CIRCUITO": ["C1", "C1", "C1"],
+            "FECHA": ["2026-01-01", "2026-02-15", "2026-03-15"],
+            "UITI_VANO": [1.0, 2.0, 3.0],
+        }
+    )
+    assert circuit_date_range(frame, "C1") == ("2026-01-01", "2026-03-15")
+
+
+def test_circuit_date_range_circuit_not_present_returns_none_none():
+    frame = pd.DataFrame(
+        {
+            "CIRCUITO": ["C1", "C1"],
+            "FECHA": ["2026-01-01", "2026-01-02"],
+            "UITI_VANO": [1.0, 2.0],
+        }
+    )
+    assert circuit_date_range(frame, "does-not-exist") == (None, None)
+
+
+def test_circuit_date_range_zero_valid_date_events_returns_none_none():
+    frame = pd.DataFrame(
+        {
+            "CIRCUITO": ["C1", "C1"],
+            "FECHA": ["not-a-date", ""],
+            "UITI_VANO": [1.0, 2.0],
+        }
+    )
+    assert circuit_date_range(frame, "C1") == (None, None)
+
+
+def test_circuit_date_range_single_event_min_equals_max():
+    frame = pd.DataFrame(
+        {
+            "CIRCUITO": ["C1"],
+            "FECHA": ["2026-05-01"],
+            "UITI_VANO": [1.0],
+        }
+    )
+    assert circuit_date_range(frame, "C1") == ("2026-05-01", "2026-05-01")

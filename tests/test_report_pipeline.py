@@ -1,0 +1,409 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pandas as pd
+import pytest
+
+from chec_local_interpreter.report_pipeline import (
+    ReportPipelineError,
+    prepare,
+    prepare_expert_alignment,
+    render,
+)
+
+
+def _write_fixture_dataset(directory: Path) -> Path:
+    """A 10-day window for circuit C1 with one clear spike day, plus an
+    unrelated circuit C2 in a disjoint window (so C1-only filtering and
+    circuit-presence checks are both exercised)."""
+    dates = pd.date_range("2026-01-01", periods=10, freq="D")
+    rows = []
+    for index, date in enumerate(dates):
+        rows.append(
+            {
+                "CIRCUITO": "C1",
+                "FECHA": date.strftime("%Y-%m-%d"),
+                "UITI_VANO": 60.0 if index == 5 else 4.0,
+                "FID_VANO": f"V{index}",
+                "DESC_CAUSA": "Viento",
+            }
+        )
+    rows.append(
+        {"CIRCUITO": "C2", "FECHA": "2026-06-01", "UITI_VANO": 1.0, "FID_VANO": "V99", "DESC_CAUSA": "Otro"}
+    )
+    frame = pd.DataFrame(rows)
+    csv_path = directory / "dataset.csv"
+    frame.to_csv(csv_path, index=False)
+    return csv_path
+
+
+def _canned_ok(data: dict) -> dict:
+    return {"ok": True, "data": data}
+
+
+def _read_json(path: Path) -> dict:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+# ---------------------------------------------------------------------------
+# prepare()
+# ---------------------------------------------------------------------------
+
+
+def test_prepare_happy_path_no_dates_uses_full_circuit_range(tmp_path):
+    data_path = _write_fixture_dataset(tmp_path)
+
+    run_dir = prepare("C1", data_path=data_path, runs_root=tmp_path / "runs")
+
+    assert run_dir.is_dir()
+    assert (run_dir / "historical.bc.json").exists()
+    assert (run_dir / "inference.bc.json").exists()
+    assert (run_dir / "l1_state.json").exists()
+
+    state = _read_json(run_dir / "l1_state.json")
+    assert state["circuito"] == "C1"
+    assert state["fecha_inicio"] == "2026-01-01"
+    assert state["fecha_fin"] == "2026-01-10"
+    assert state["critical_points"], "expected at least one critical point from the spike day"
+
+    historical_context = _read_json(run_dir / "historical.bc.json")
+    # Graphify has no backend configured in the test environment; confirm the
+    # existing context_builder degradation path produced a string instead of
+    # raising (task 6.8 — orchestrator must not catch this earlier/later).
+    assert isinstance(historical_context["graph_knowledge"], str)
+
+    inference_context = _read_json(run_dir / "inference.bc.json")
+    assert inference_context["circuito_interes"] == "C1"
+    assert inference_context["fecha_inicio"] == "2026-01-01"
+    assert inference_context["fecha_fin"] == "2026-01-10"
+
+
+def test_prepare_explicit_dates_are_respected(tmp_path):
+    data_path = _write_fixture_dataset(tmp_path)
+
+    run_dir = prepare(
+        "C1", "2026-01-02", "2026-01-04", data_path=data_path, runs_root=tmp_path / "runs"
+    )
+
+    state = _read_json(run_dir / "l1_state.json")
+    assert state["fecha_inicio"] == "2026-01-02"
+    assert state["fecha_fin"] == "2026-01-04"
+
+
+def test_prepare_circuit_not_found_fails_fast_before_any_agent(tmp_path):
+    data_path = _write_fixture_dataset(tmp_path)
+    runs_root = tmp_path / "runs"
+
+    with pytest.raises(ReportPipelineError, match="not found"):
+        prepare("does-not-exist", data_path=data_path, runs_root=runs_root)
+
+    assert not runs_root.exists()
+
+
+def test_prepare_zero_events_in_window_fails_fast(tmp_path):
+    data_path = _write_fixture_dataset(tmp_path)
+    runs_root = tmp_path / "runs"
+
+    with pytest.raises(ReportPipelineError, match="No events"):
+        prepare("C1", "2030-01-01", "2030-02-01", data_path=data_path, runs_root=runs_root)
+
+    assert not runs_root.exists()
+
+
+# ---------------------------------------------------------------------------
+# prepare_expert_alignment()
+# ---------------------------------------------------------------------------
+
+
+def test_prepare_expert_alignment_builds_bc_json_from_canned_validated_outputs(tmp_path):
+    data_path = _write_fixture_dataset(tmp_path)
+    run_dir = prepare("C1", data_path=data_path, runs_root=tmp_path / "runs")
+
+    (run_dir / "historical.out.json").write_text(
+        json.dumps(_canned_ok({"hallazgos": ["Hallazgo historico."]})), encoding="utf-8"
+    )
+    (run_dir / "inference.out.json").write_text(
+        json.dumps(_canned_ok({"hallazgos": ["Hallazgo de inferencia."]})), encoding="utf-8"
+    )
+
+    result = prepare_expert_alignment(run_dir)
+
+    assert result == run_dir
+    assert (run_dir / "expert-alignment.bc.json").exists()
+    bc = _read_json(run_dir / "expert-alignment.bc.json")
+    assert bc["circuito"] == "C1"
+
+
+def test_prepare_expert_alignment_missing_historical_output_stops_before_expert_alignment_bc(tmp_path):
+    data_path = _write_fixture_dataset(tmp_path)
+    run_dir = prepare("C1", data_path=data_path, runs_root=tmp_path / "runs")
+    # inference.out.json also intentionally absent: historical is checked first.
+
+    with pytest.raises(ReportPipelineError, match="historical"):
+        prepare_expert_alignment(run_dir)
+
+    assert not (run_dir / "expert-alignment.bc.json").exists()
+
+
+def test_prepare_expert_alignment_schema_guardrail_invalid_after_max_retries_stops_before_render(tmp_path):
+    """Simulates retries-exhausted: the Skill never wrote historical.out.json
+    because `validate` kept returning exit 1 up to MAX_VALIDATION_RETRIES.
+    `prepare_expert_alignment` must fail identically to the missing-file case
+    above — it never has a validated envelope to build from."""
+    data_path = _write_fixture_dataset(tmp_path)
+    run_dir = prepare("C1", data_path=data_path, runs_root=tmp_path / "runs")
+    (run_dir / "historical.out.json").write_text(
+        json.dumps({"ok": False, "errors": ["schema: campo requerido faltante"]}), encoding="utf-8"
+    )
+    (run_dir / "inference.out.json").write_text(json.dumps(_canned_ok({"hallazgos": []})), encoding="utf-8")
+
+    with pytest.raises(ReportPipelineError, match="historical"):
+        prepare_expert_alignment(run_dir)
+
+    assert not (run_dir / "expert-alignment.bc.json").exists()
+
+
+def test_prepare_expert_alignment_provenance_invalid_after_schema_pass_hard_stops_identically(tmp_path):
+    """Provenance-only failure (schema/guardrails passed) must be treated
+    identically to a schema failure by this orchestrator layer — both are
+    just `ok: false` from the combined L1 `validate()` contract, so they
+    consume exactly one retry attempt each at the Skill/CLI layer and look
+    the same here."""
+    data_path = _write_fixture_dataset(tmp_path)
+    run_dir = prepare("C1", data_path=data_path, runs_root=tmp_path / "runs")
+    (run_dir / "historical.out.json").write_text(
+        json.dumps({"ok": False, "errors": ["provenance: data_ref fuera del universo permitido"]}),
+        encoding="utf-8",
+    )
+    (run_dir / "inference.out.json").write_text(json.dumps(_canned_ok({"hallazgos": []})), encoding="utf-8")
+
+    with pytest.raises(ReportPipelineError, match="historical"):
+        prepare_expert_alignment(run_dir)
+
+    assert not (run_dir / "expert-alignment.bc.json").exists()
+
+
+# ---------------------------------------------------------------------------
+# render()
+# ---------------------------------------------------------------------------
+
+
+def test_render_produces_html_file_from_canned_validated_envelopes(tmp_path):
+    data_path = _write_fixture_dataset(tmp_path)
+    run_dir = prepare("C1", data_path=data_path, runs_root=tmp_path / "runs")
+    (run_dir / "historical.out.json").write_text(json.dumps(_canned_ok({"hallazgos": ["H1"]})), encoding="utf-8")
+    (run_dir / "inference.out.json").write_text(json.dumps(_canned_ok({"hallazgos": ["I1"]})), encoding="utf-8")
+    prepare_expert_alignment(run_dir)
+    (run_dir / "expert-alignment.out.json").write_text(
+        json.dumps(_canned_ok({"sintesis_final": "Todo alineado."})), encoding="utf-8"
+    )
+
+    html_path = render(run_dir, output_dir=tmp_path / "html")
+
+    assert html_path.exists()
+    assert html_path.suffix == ".html"
+    assert html_path.read_text(encoding="utf-8").strip() != ""
+
+
+def test_render_missing_expert_alignment_output_raises_before_writing_html(tmp_path):
+    data_path = _write_fixture_dataset(tmp_path)
+    run_dir = prepare("C1", data_path=data_path, runs_root=tmp_path / "runs")
+    (run_dir / "historical.out.json").write_text(json.dumps(_canned_ok({})), encoding="utf-8")
+    (run_dir / "inference.out.json").write_text(json.dumps(_canned_ok({})), encoding="utf-8")
+    prepare_expert_alignment(run_dir)
+    output_dir = tmp_path / "html"
+
+    with pytest.raises(ReportPipelineError, match="expert-alignment"):
+        render(run_dir, output_dir=output_dir)
+
+    assert not output_dir.exists()
+
+
+# ---------------------------------------------------------------------------
+# Full run-dir handoff integration (task 6.7) — no live LLM call anywhere.
+# ---------------------------------------------------------------------------
+
+
+def test_full_run_dir_handoff_prepare_to_render(tmp_path):
+    data_path = _write_fixture_dataset(tmp_path)
+
+    run_dir = prepare("C1", data_path=data_path, runs_root=tmp_path / "runs")
+    (run_dir / "historical.out.json").write_text(json.dumps(_canned_ok({"hallazgos": ["H"]})), encoding="utf-8")
+    (run_dir / "inference.out.json").write_text(json.dumps(_canned_ok({"hallazgos": ["I"]})), encoding="utf-8")
+
+    run_dir_after_ea = prepare_expert_alignment(run_dir)
+    assert run_dir_after_ea == run_dir
+    (run_dir / "expert-alignment.out.json").write_text(
+        json.dumps(_canned_ok({"sintesis_final": "S"})), encoding="utf-8"
+    )
+
+    html_path = render(run_dir, output_dir=tmp_path / "html")
+
+    assert html_path.exists()
+
+
+# ---------------------------------------------------------------------------
+# prepare_expert_alignment() — real PDF-discussion wiring (fix for the
+# hardcoded-empty bug: the xlsx table BUILT by the out-of-scope extraction
+# notebook must still be read and matched against the circuit here).
+# ---------------------------------------------------------------------------
+
+
+def _write_pdf_discussions_xlsx(path: Path, rows: list[dict]) -> Path:
+    pd.DataFrame(rows).to_excel(path, index=False)
+    return path
+
+
+def _prepare_with_canned_agent_outputs(tmp_path: Path) -> Path:
+    data_path = _write_fixture_dataset(tmp_path)
+    run_dir = prepare("C1", data_path=data_path, runs_root=tmp_path / "runs")
+    (run_dir / "historical.out.json").write_text(
+        json.dumps(_canned_ok({"hallazgos": ["Hallazgo historico."]})), encoding="utf-8"
+    )
+    (run_dir / "inference.out.json").write_text(
+        json.dumps(_canned_ok({"hallazgos": ["Hallazgo de inferencia."]})), encoding="utf-8"
+    )
+    return run_dir
+
+
+def test_prepare_expert_alignment_wires_real_pdf_matches_for_matching_circuit(tmp_path):
+    run_dir = _prepare_with_canned_agent_outputs(tmp_path)
+    # The fixture dataset's spike/critical day falls inside 2026-01-01..2026-01-10;
+    # this row's interval overlaps that window for circuit C1.
+    xlsx_path = _write_pdf_discussions_xlsx(
+        tmp_path / "tabla_pdfs_intervalo_test.xlsx",
+        [
+            {
+                "Circuito": "C1",
+                "Fecha inicio": "2026-01-05",
+                "Fecha fin": "2026-01-07",
+                "Análisis": "Análisis experto sobre el pico de C1.",
+                "Evidencia": "Evidencia documentada en el informe experto.",
+            }
+        ],
+    )
+
+    result = prepare_expert_alignment(run_dir, pdf_discussions_path=xlsx_path)
+
+    assert result == run_dir
+    bc = _read_json(run_dir / "expert-alignment.bc.json")
+    assert bc["pdf_expert_matches"], "expected at least one temporal PDF match for circuit C1"
+    assert bc["pdf_expert_matches"][0]["Circuito"] == "C1"
+    assert bc["modelo_experto_disponible"] is True
+
+
+def test_prepare_expert_alignment_pools_fechas_informe_from_all_sources(tmp_path):
+    run_dir = _prepare_with_canned_agent_outputs(tmp_path)
+
+    result = prepare_expert_alignment(run_dir, pdf_discussions_path=tmp_path / "does-not-exist.xlsx")
+
+    assert result == run_dir
+    bc = _read_json(run_dir / "expert-alignment.bc.json")
+    assert bc["fechas_informe"], "fechas_informe must be pooled, not left empty"
+    sources = {record["source"] for record in bc["fechas_informe"]}
+    # At minimum the critical-point-derived date and the global report window
+    # must be present — confirms pooling from critical points + period bounds,
+    # not just a hardcoded empty list.
+    assert "critical_point" in sources
+    assert "context" in sources
+
+
+def test_prepare_expert_alignment_missing_pdf_file_degrades_gracefully(tmp_path):
+    run_dir = _prepare_with_canned_agent_outputs(tmp_path)
+
+    result = prepare_expert_alignment(run_dir, pdf_discussions_path=tmp_path / "does-not-exist.xlsx")
+
+    assert result == run_dir
+    bc = _read_json(run_dir / "expert-alignment.bc.json")
+    assert bc["pdf_expert_matches"] == []
+    assert bc["modelo_experto_disponible"] is False
+
+
+def test_prepare_expert_alignment_empty_pdf_table_degrades_gracefully(tmp_path):
+    run_dir = _prepare_with_canned_agent_outputs(tmp_path)
+    xlsx_path = _write_pdf_discussions_xlsx(
+        tmp_path / "tabla_pdfs_intervalo_empty.xlsx",
+        [
+            {
+                "Circuito": "",
+                "Fecha inicio": None,
+                "Fecha fin": None,
+                "Análisis": "",
+                "Evidencia": "",
+            }
+        ],
+    )
+
+    result = prepare_expert_alignment(run_dir, pdf_discussions_path=xlsx_path)
+
+    assert result == run_dir
+    bc = _read_json(run_dir / "expert-alignment.bc.json")
+    assert bc["pdf_expert_matches"] == []
+    assert bc["modelo_experto_disponible"] is False
+
+
+def test_prepare_expert_alignment_zero_rows_for_circuit_degrades_gracefully(tmp_path):
+    run_dir = _prepare_with_canned_agent_outputs(tmp_path)
+    xlsx_path = _write_pdf_discussions_xlsx(
+        tmp_path / "tabla_pdfs_intervalo_other_circuit.xlsx",
+        [
+            {
+                "Circuito": "OTHER-CIRCUIT",
+                "Fecha inicio": "2026-01-05",
+                "Fecha fin": "2026-01-07",
+                "Análisis": "Análisis de un circuito distinto.",
+                "Evidencia": "Evidencia no relacionada con C1.",
+            }
+        ],
+    )
+
+    result = prepare_expert_alignment(run_dir, pdf_discussions_path=xlsx_path)
+
+    assert result == run_dir
+    bc = _read_json(run_dir / "expert-alignment.bc.json")
+    assert bc["pdf_expert_matches"] == []
+    assert bc["modelo_experto_disponible"] is False
+
+
+def test_prepare_expert_alignment_default_path_resolves_via_glob(tmp_path, monkeypatch):
+    import chec_local_interpreter.report_pipeline as report_pipeline_module
+
+    run_dir = _prepare_with_canned_agent_outputs(tmp_path)
+    discussions_dir = tmp_path / "analysis-documents"
+    discussions_dir.mkdir()
+    # Two candidates matching the glob; the resolver must deterministically
+    # pick exactly one (most recent by sorted name) rather than crashing.
+    _write_pdf_discussions_xlsx(
+        discussions_dir / "tabla_pdfs_intervalo_2025-01-01_2025-06-30.xlsx",
+        [
+            {
+                "Circuito": "C1",
+                "Fecha inicio": "2025-01-05",
+                "Fecha fin": "2025-01-07",
+                "Análisis": "Tabla antigua.",
+                "Evidencia": "No debe usarse.",
+            }
+        ],
+    )
+    _write_pdf_discussions_xlsx(
+        discussions_dir / "tabla_pdfs_intervalo_2025-11-01_2026-04-30.xlsx",
+        [
+            {
+                "Circuito": "C1",
+                "Fecha inicio": "2026-01-05",
+                "Fecha fin": "2026-01-07",
+                "Análisis": "Tabla vigente.",
+                "Evidencia": "Debe usarse esta.",
+            }
+        ],
+    )
+    monkeypatch.setattr(report_pipeline_module, "DEFAULT_PDF_DISCUSSIONS_DIR", discussions_dir)
+
+    result = prepare_expert_alignment(run_dir)
+
+    assert result == run_dir
+    bc = _read_json(run_dir / "expert-alignment.bc.json")
+    assert bc["pdf_expert_matches"], "expected the glob-resolved xlsx to be picked up by default"
+    assert bc["pdf_expert_matches"][0]["Análisis"] == "Tabla vigente."
