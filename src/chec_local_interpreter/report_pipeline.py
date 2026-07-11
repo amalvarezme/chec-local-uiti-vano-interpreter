@@ -787,6 +787,14 @@ def prepare(
             f"No events found for circuit {circuito!r} in window {start!r}..{end!r}"
         )
 
+    # `_new_run_dir` is created HERE -- right after the last hard-fail check
+    # (zero events) and BEFORE the simulator runs (design decision 3, task
+    # 3.3). The simulator itself never hard-fails (it degrades, see
+    # `_run_inference_simulator`), so both circuit-not-found and zero-events
+    # still never create an orphan run_dir, while the simulator has a
+    # directory to persist figures into.
+    run_dir = _new_run_dir(circuito, runs_root=runs_root)
+
     daily_df = build_daily_series(events_df)
     feature_df = compute_daily_features(daily_df)
     thresholds = CriticalityThresholds()
@@ -811,6 +819,9 @@ def prepare(
     )
 
     fechas_interes = [point["fecha_dia"] for point in critical_points]
+    features, escenarios, modelo_label, rbf_sigma, render_assets = _run_inference_simulator(
+        circuito, start, end, fechas_interes, run_dir, data_path=source_path
+    )
     inference_context = construir_contexto_inferencia(
         circuito_interes=circuito,
         fecha_inicio=start,
@@ -820,16 +831,21 @@ def prepare(
         top_k_vars=_TOP_K_VARS,
         filtro_uiti_max=_FILTRO_UITI_MAX,
         ventana_climatica_horas=_VENTANA_CLIMATICA_HORAS,
-        features=[],
+        features=features,
         base=events_df,
-        escenarios=[],
-        modelo=_NO_SIMULATOR_MODEL_LABEL,
+        escenarios=escenarios,
+        modelo=modelo_label,
+        estimated_graph_rbf_sigma=rbf_sigma,
         top_vanos_percentile=_TOP_N_VANOS_PERCENTILE,
     )
 
-    run_dir = _new_run_dir(circuito, runs_root=runs_root)
     save_json_artifact(historical_context, run_dir / "historical.bc.json")
     save_json_artifact(inference_context, run_dir / "inference.bc.json")
+    if render_assets:
+        # Only written when the simulator actually produced something to
+        # persist -- `render()` (task 3.4) treats an absent sidecar as
+        # "no inference figures for this run" (R1/R3 gap), never a crash.
+        save_json_artifact(render_assets, run_dir / "inference_render_assets.json")
     save_json_artifact(
         {
             "circuito": circuito,

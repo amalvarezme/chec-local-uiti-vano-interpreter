@@ -6,12 +6,36 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+import chec_local_interpreter.report_pipeline as report_pipeline_module
 from chec_local_interpreter.report_pipeline import (
     ReportPipelineError,
     prepare,
     prepare_expert_alignment,
     render,
 )
+
+
+@pytest.fixture(autouse=True)
+def _no_real_mgcecdl_model_by_default(tmp_path, monkeypatch):
+    """Most tests in this file use a small synthetic fixture dataset (C1/C2)
+    that is NOT compatible with the real MGCECDL simulator's
+    `Variables_seleccion.xlsx` feature-column requirements (confirmed
+    empirically: `procesar_dataset_completo` raises `ValueError` for this
+    fixture's columns). Point `_load_mgcecdl_model_and_sigma` at an empty
+    model directory by default so `prepare()`'s simulator step degrades to
+    the spec'd "missing trained model" gap (R3, obs#219) instead of crashing
+    on an incompatible dataset -- the same "no simulator output" shape these
+    tests already asserted against the old stub.
+
+    Tests that need the REAL simulator (the integration tests in the
+    "real inference simulator" section below) explicitly restore the real
+    `DEFAULT_MODEL_DIR` via `monkeypatch.setattr(...)` after this fixture
+    runs -- `monkeypatch` preserves call order, so the later, more specific
+    patch wins for the duration of that test.
+    """
+    empty_model_dir = tmp_path / "no-mgcecdl-model"
+    empty_model_dir.mkdir()
+    monkeypatch.setattr(report_pipeline_module, "DEFAULT_MODEL_DIR", empty_model_dir)
 
 
 def _write_fixture_dataset(directory: Path) -> Path:
@@ -78,6 +102,54 @@ def test_prepare_happy_path_no_dates_uses_full_circuit_range(tmp_path):
     assert inference_context["circuito_interes"] == "C1"
     assert inference_context["fecha_inicio"] == "2026-01-01"
     assert inference_context["fecha_fin"] == "2026-01-10"
+
+
+def test_prepare_wires_real_simulator_stub_replaced_by_r3_gap_when_model_missing(tmp_path):
+    """Task 3.3: `prepare()` no longer hardcodes `features=[]`/`escenarios=[]`/
+    `_NO_SIMULATOR_MODEL_LABEL` -- it now calls `_run_inference_simulator`.
+    With the (default, autoused) empty model dir, this must reach the exact
+    same R3 gap shape the old stub always produced (obs#219): `features=[]`,
+    `escenarios=[]`, `modelo=_NO_SIMULATOR_MODEL_LABEL` -- and no render-assets
+    sidecar (nothing to persist when the simulator never ran)."""
+    data_path = _write_fixture_dataset(tmp_path)
+
+    run_dir = prepare("C1", data_path=data_path, runs_root=tmp_path / "runs")
+
+    inference_context = _read_json(run_dir / "inference.bc.json")
+    assert inference_context["features"] == []
+    assert inference_context["escenarios"] == []
+    assert inference_context["modelo"] == report_pipeline_module._NO_SIMULATOR_MODEL_LABEL
+    assert not (run_dir / "inference_render_assets.json").exists()
+
+
+def test_prepare_creates_run_dir_after_zero_events_check_before_simulator(tmp_path, monkeypatch):
+    """Task 3.3: `_new_run_dir(...)` must run AFTER the zero-events hard-fail
+    check but BEFORE the simulator call, so a simulator-side exception could
+    never leave callers without a `run_dir` reference, while hard failures
+    (circuit-not-found/zero-events) still never create one."""
+    data_path = _write_fixture_dataset(tmp_path)
+    runs_root = tmp_path / "runs"
+
+    calls: list[str] = []
+    original_new_run_dir = report_pipeline_module._new_run_dir
+    original_run_inference_simulator = report_pipeline_module._run_inference_simulator
+
+    def _tracking_new_run_dir(*args, **kwargs):
+        calls.append("_new_run_dir")
+        return original_new_run_dir(*args, **kwargs)
+
+    def _tracking_run_inference_simulator(*args, **kwargs):
+        calls.append("_run_inference_simulator")
+        return original_run_inference_simulator(*args, **kwargs)
+
+    monkeypatch.setattr(report_pipeline_module, "_new_run_dir", _tracking_new_run_dir)
+    monkeypatch.setattr(
+        report_pipeline_module, "_run_inference_simulator", _tracking_run_inference_simulator
+    )
+
+    prepare("C1", data_path=data_path, runs_root=runs_root)
+
+    assert calls == ["_new_run_dir", "_run_inference_simulator"]
 
 
 def test_prepare_explicit_dates_are_respected(tmp_path):
