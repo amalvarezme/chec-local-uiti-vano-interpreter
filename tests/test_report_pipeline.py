@@ -7,6 +7,8 @@ import pandas as pd
 import pytest
 
 import chec_local_interpreter.report_pipeline as report_pipeline_module
+from chec_local_interpreter.config import DEFAULT_MODEL_DIR as _REAL_DEFAULT_MODEL_DIR
+from chec_local_interpreter.inference_validation import validar_respuesta_inferencia_strict
 from chec_local_interpreter.report_pipeline import (
     ReportPipelineError,
     prepare,
@@ -660,3 +662,178 @@ def test_prepare_expert_alignment_default_path_resolves_via_glob(tmp_path, monke
     bc = _read_json(run_dir / "expert-alignment.bc.json")
     assert bc["pdf_expert_matches"], "expected the glob-resolved xlsx to be picked up by default"
     assert bc["pdf_expert_matches"][0]["Análisis"] == "Tabla vigente."
+
+
+# ---------------------------------------------------------------------------
+# Real inference simulator integration (tasks 4.1-4.3). Unlike the rest of
+# this file, these tests use the REAL committed model/Optuna/Variables
+# artifacts on a real circuit with sufficient events -- explicitly restoring
+# `DEFAULT_MODEL_DIR` (the autouse fixture above defaults it to empty).
+# ---------------------------------------------------------------------------
+
+# BVA23L12, 2026-03-01: same real circuit/window PR1's own tests already use
+# (tests/test_report_pipeline_inference_simulator.py) -- 20 real events, all
+# four scenario types survive.
+_REAL_SUFFICIENT_CIRCUIT = "BVA23L12"
+_REAL_SUFFICIENT_WINDOW = ("2026-03-01", "2026-03-01")
+
+
+def _enable_real_mgcecdl_model(monkeypatch) -> None:
+    monkeypatch.setattr(report_pipeline_module, "DEFAULT_MODEL_DIR", _REAL_DEFAULT_MODEL_DIR)
+
+
+def _canned_inference_ok(run_dir: Path) -> dict:
+    """Task 4.2: build a canned VALIDATED `inference.out.json` payload whose
+    `escenarios[].nombre` values are read FROM the real
+    `run_dir/inference.bc.json` (never hand-written), then run it through the
+    real `validar_respuesta_inferencia_strict` so
+    `inference_validation.py`'s `allowed_scenario_names`/`_guardrail_errors`
+    are actually exercised end to end rather than bypassed."""
+    inference_bc = _read_json(run_dir / "inference.bc.json")
+    escenario_nombres = [
+        escenario["nombre"]
+        for escenario in inference_bc.get("escenarios", [])
+        if isinstance(escenario, dict) and escenario.get("nombre")
+    ]
+    graph_paths_by_nombre = {
+        item.get("escenario"): item.get("path")
+        for item in inference_bc.get("graph_html_paths", [])
+        if isinstance(item, dict)
+    }
+
+    response = {
+        "contexto": {
+            "circuito": inference_bc["circuito_interes"],
+            "periodo": {"inicio": inference_bc["fecha_inicio"], "fin": inference_bc["fecha_fin"]},
+            "modelo": inference_bc["modelo"],
+        },
+        "entregables": {
+            "grafos_html": [
+                {
+                    "escenario": nombre,
+                    "path": graph_paths_by_nombre.get(nombre) or "grafo.html",
+                    "fuente": "reconstruccion_mgcecdl_rbf",
+                    "pesos": "normalizados_0_1_por_maximo",
+                }
+                for nombre in escenario_nombres
+            ]
+        },
+        "escenarios": [
+            {"nombre": nombre, "interpretacion": f"Interpretacion generada para pruebas: {nombre}."}
+            for nombre in escenario_nombres
+        ],
+        "discusion_grafos": (
+            [
+                {
+                    "seccion": "periodo_completo",
+                    "lectura": "Discusion de grafo generada para pruebas de integracion.",
+                }
+            ]
+            if escenario_nombres
+            else []
+        ),
+        "coherencia_grafo_modelo": ["Coherencia generada para pruebas de integracion."],
+        "hallazgos": (
+            [f"Hallazgo generado para pruebas: {nombre}." for nombre in escenario_nombres]
+            if escenario_nombres
+            else ["Sin hallazgos: no hay escenarios sobrevivientes en este contexto."]
+        ),
+        "limitaciones": ["Limitacion generada para pruebas de integracion."],
+        "inferencias_predictivas": [],
+        "hipotesis_modelo_predictivo": {"periodo_completo": [], "puntos_criticos": []},
+    }
+
+    validated = validar_respuesta_inferencia_strict(json.dumps(response, ensure_ascii=False), inference_bc)
+    assert validated["ok"], validated["errors"]
+    return {"ok": True, "data": validated["data"]}
+
+
+def test_prepare_wires_real_inference_simulator_with_sufficient_events(tmp_path, monkeypatch):
+    """Task 4.1: real prepare() with the real model+Optuna+Variables
+    artifacts and a circuit/window with sufficient events -- non-empty
+    features, >=1 escenario, and the PNGs/HTML/sidecar this change persists
+    under run_dir."""
+    _enable_real_mgcecdl_model(monkeypatch)
+
+    run_dir = prepare(
+        _REAL_SUFFICIENT_CIRCUIT, *_REAL_SUFFICIENT_WINDOW, runs_root=tmp_path / "runs"
+    )
+
+    inference_context = _read_json(run_dir / "inference.bc.json")
+    assert inference_context["features"], "expected real features from the real simulator"
+    assert len(inference_context["escenarios"]) >= 1
+    assert inference_context["modelo"] != report_pipeline_module._NO_SIMULATOR_MODEL_LABEL
+
+    sidecar_path = run_dir / "inference_render_assets.json"
+    assert sidecar_path.exists()
+    render_assets = _read_json(sidecar_path)
+    assert render_assets
+
+    figures_dir = run_dir / "inference_figures"
+    graphs_dir = run_dir / "inference_graphs"
+    assert list(figures_dir.glob("*.png")), "expected persisted fig_barras/fig_radar PNGs"
+    assert list(graphs_dir.glob("*.html")), "expected persisted grafo_interactivo HTML"
+
+
+def test_reporte_end_to_end_with_real_simulator_renders_non_empty_inference_section(
+    tmp_path, monkeypatch
+):
+    """Task 4.2: full prepare -> prepare_expert_alignment -> render with the
+    real simulator and a canned (schema+guardrail validated) inference
+    output -- the final HTML's inference section must be non-empty (actual
+    persisted figures embedded, not the old `None` short-circuit)."""
+    _enable_real_mgcecdl_model(monkeypatch)
+
+    run_dir = prepare(
+        _REAL_SUFFICIENT_CIRCUIT, *_REAL_SUFFICIENT_WINDOW, runs_root=tmp_path / "runs"
+    )
+    (run_dir / "historical.out.json").write_text(
+        json.dumps(_canned_ok({"hallazgos": ["Hallazgo historico."]})), encoding="utf-8"
+    )
+    (run_dir / "inference.out.json").write_text(
+        json.dumps(_canned_inference_ok(run_dir)), encoding="utf-8"
+    )
+
+    prepare_expert_alignment(run_dir)
+    (run_dir / "expert-alignment.out.json").write_text(
+        json.dumps(_canned_ok({"sintesis_final": "Todo alineado."})), encoding="utf-8"
+    )
+
+    html_path = render(run_dir, output_dir=tmp_path / "html")
+    html = html_path.read_text(encoding="utf-8")
+
+    assert html.strip() != ""
+    assert "Discusión general de inferencias del modelo" in html
+    assert "embedded-figure" in html, "expected a persisted PNG actually embedded in the report"
+
+
+def test_prepare_regenerates_graph_html_independently_across_consecutive_runs(
+    tmp_path, monkeypatch
+):
+    """Task 4.3: two consecutive prepare() runs for the same circuit/window
+    must each independently recompute and write their own HTML graph files
+    under their own run_dir -- no caching/reuse by circuit/date-window or any
+    other key (spec requirement)."""
+    _enable_real_mgcecdl_model(monkeypatch)
+    runs_root = tmp_path / "runs"
+
+    run_dir_1 = prepare(_REAL_SUFFICIENT_CIRCUIT, *_REAL_SUFFICIENT_WINDOW, runs_root=runs_root)
+    run_dir_2 = prepare(_REAL_SUFFICIENT_CIRCUIT, *_REAL_SUFFICIENT_WINDOW, runs_root=runs_root)
+
+    assert run_dir_1 != run_dir_2, "each prepare() call must get its own fresh run_dir"
+
+    graphs_1 = sorted((run_dir_1 / "inference_graphs").glob("*.html"))
+    graphs_2 = sorted((run_dir_2 / "inference_graphs").glob("*.html"))
+    assert graphs_1, "expected the first run to persist its own HTML graphs"
+    assert graphs_2, "expected the second run to persist its own HTML graphs"
+    assert len(graphs_1) == len(graphs_2)
+
+    # Independently-written files under distinct run_dirs, not a shared/
+    # reused path -- the two runs never touch each other's artifacts.
+    names_1 = {path.name for path in graphs_1}
+    names_2 = {path.name for path in graphs_2}
+    assert names_1 == names_2
+    for path_1, path_2 in zip(graphs_1, graphs_2):
+        assert path_1.resolve() != path_2.resolve()
+        assert path_1.read_bytes(), "first run's HTML must be a real, non-empty file"
+        assert path_2.read_bytes(), "second run's HTML must be a real, non-empty file"

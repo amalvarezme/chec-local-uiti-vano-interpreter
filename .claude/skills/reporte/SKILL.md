@@ -92,6 +92,29 @@ Given `circuito` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair)
    `run_dir/historical.bc.json`, `run_dir/inference.bc.json`, `run_dir/l1_state.json`. Raises
    `ReportPipelineError` (circuit not found, or zero events in the resolved window) before writing
    anything — report the error to the user and stop; do not invoke any agent.
+
+   As of this change, `prepare` also runs the real MGCECDL/SHAP scenario simulator (read-only: it
+   only *loads* the most recent trained classifier and Optuna study already on disk — it never
+   trains a model or launches an Optuna search). This is load-and-infer only, not the separate
+   "simulador automático mínimo/máximo" (still untouched, out of scope). Three outcomes, none of
+   them a `ReportPipelineError`:
+   - **Healthy**: model and Optuna study both load; up to four scenario contexts
+     (severity/frequency × período completo/fechas de interés) are computed, each surviving
+     scenario's `fig_barras`/`fig_radar` PNGs saved under `run_dir/inference_figures/` and its
+     `grafo_interactivo` HTML under `run_dir/inference_graphs/`, with a run_dir-relative path map
+     written to `run_dir/inference_render_assets.json`.
+   - **No trained model on disk (structural gap)**: `inference.bc.json` gets `features: []`,
+     `escenarios: []`, `modelo` stays the placeholder label — the simulator never runs at all, no
+     sidecar is written. The report still generates; the `inference` agent's own guardrails force
+     this gap into prose.
+   - **Model present, Optuna study missing**: falls back to `rbf_sigma=1.0` — this is NOT the gap
+     above; the simulator still runs fully and `features`/`escenarios` populate normally.
+   - **Per-scenario skip**: any one of the four scenario types with too few events for a valid SHAP
+     computation is skipped individually (`escenarios` simply omits it) — the other scenarios in the
+     same run are unaffected, and this alone never raises `ReportPipelineError`. If ALL four are
+     skipped, `escenarios: []` but `features` stays non-empty and `modelo` is the real loaded
+     model's class name (distinguishes this data-availability gap from the "no trained model" gap
+     above, which has `features: []` too).
 3. **Invoke `historical`** — load this Skill (`.claude/skills/historical/SKILL.md`), give it
    `run_dir/historical.bc.json`'s envelope via `agent_tools.historical build-context`/`validate`,
    and have it write its validated response to `run_dir/historical.out.json` as
