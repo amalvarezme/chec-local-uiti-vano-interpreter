@@ -19,6 +19,7 @@ from typing import Any
 import pytest
 
 from chec_local_interpreter.agent_tools import _atomic_io, batch as batch_module
+from chec_local_interpreter.agent_tools import inference as inference_module
 from chec_local_interpreter.agent_tools.expert_alignment import TOOL_VERSION
 
 EXPERT_ALIGNMENT_AGENT = batch_module.EXPERT_ALIGNMENT_AGENT
@@ -908,6 +909,19 @@ def test_historical_agent_end_to_end_build_context_validate_publish(tmp_path, mo
     assert published_path.parent.name == "historical"
     published_data = json.loads(published_path.read_text())
     assert published_data["headline"]
+
+
+def test_inference_agent_is_registered_in_agent_specs():
+    """Phase 4 (Slice A, PR3): the inference agent's `AgentSpec` must be
+    registered in `AGENT_SPECS`, wired to the real
+    `agent_tools.inference` module's `build_context`/`validate`/
+    `TOOL_VERSION` — same registration shape as `HISTORICAL_AGENT`."""
+    assert "inference" in batch_module.AGENT_SPECS
+    assert batch_module.AGENT_SPECS["inference"] is batch_module.INFERENCE_AGENT
+    assert batch_module.INFERENCE_AGENT.role == "inference"
+    assert batch_module.INFERENCE_AGENT.build_context is inference_module.build_context
+    assert batch_module.INFERENCE_AGENT.validate is inference_module.validate
+    assert batch_module.INFERENCE_AGENT.tool_version == inference_module.TOOL_VERSION
 
 
 def test_no_other_source_module_hardcodes_the_flat_published_path():

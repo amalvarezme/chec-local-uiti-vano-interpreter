@@ -63,6 +63,9 @@ from chec_local_interpreter.agent_tools.expert_alignment import validate as _exp
 from chec_local_interpreter.agent_tools.historical import TOOL_VERSION as _HISTORICAL_TOOL_VERSION
 from chec_local_interpreter.agent_tools.historical import build_context as _historical_build_context
 from chec_local_interpreter.agent_tools.historical import validate as _historical_validate
+from chec_local_interpreter.agent_tools.inference import TOOL_VERSION as _INFERENCE_TOOL_VERSION
+from chec_local_interpreter.agent_tools.inference import build_context as _inference_build_context
+from chec_local_interpreter.agent_tools.inference import validate as _inference_validate
 from chec_local_interpreter.circuit_identity import canonical_circuit_identity
 
 MAX_VALIDATION_RETRIES = 2
@@ -120,10 +123,18 @@ HISTORICAL_AGENT = AgentSpec(
     tool_version=_HISTORICAL_TOOL_VERSION,
 )
 
+INFERENCE_AGENT = AgentSpec(
+    role="inference",
+    build_context=_inference_build_context,
+    validate=_inference_validate,
+    tool_version=_INFERENCE_TOOL_VERSION,
+)
+
 # CLI `--agent` selector.
 AGENT_SPECS: dict[str, AgentSpec] = {
     EXPERT_ALIGNMENT_AGENT.role: EXPERT_ALIGNMENT_AGENT,
     HISTORICAL_AGENT.role: HISTORICAL_AGENT,
+    INFERENCE_AGENT.role: INFERENCE_AGENT,
 }
 
 

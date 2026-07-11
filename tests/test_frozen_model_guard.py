@@ -32,6 +32,7 @@ GOVERNANCE_MARKDOWN_ROOTS = (
     PROJECT_ROOT / ".claude" / "agents",
     PROJECT_ROOT / ".claude" / "skills" / "expert-alignment",
     PROJECT_ROOT / ".claude" / "skills" / "historical",
+    PROJECT_ROOT / ".claude" / "skills" / "inference",
 )
 # The governance docs this guard scans (`.claude/agents/**/*.md`,
 # `.claude/skills/expert-alignment/**/*.md`) are Spanish-language documents,
@@ -173,6 +174,16 @@ def test_historical_skill_directory_is_included_in_governance_roots():
     scanned_paths = {path.name for path in _iter_governance_markdown_files()}
     assert "SKILL.md" in scanned_paths
     assert (PROJECT_ROOT / ".claude" / "skills" / "historical" / "SKILL.md").exists()
+
+
+def test_inference_skill_directory_is_included_in_governance_roots():
+    """The inference agent's Skill directory (Slice A, Phase 4) must be
+    scanned by the frozen-model content guard, same as historical's/
+    expert-alignment's (mirrors historical's Phase 9.3 precedent)."""
+    assert PROJECT_ROOT / ".claude" / "skills" / "inference" in GOVERNANCE_MARKDOWN_ROOTS
+    scanned_paths = {path.name for path in _iter_governance_markdown_files()}
+    assert "SKILL.md" in scanned_paths
+    assert (PROJECT_ROOT / ".claude" / "skills" / "inference" / "SKILL.md").exists()
 
 
 def test_agent_tools_style_module_importing_interpretability_not_training_passes(tmp_path):
