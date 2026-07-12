@@ -901,3 +901,93 @@ def test_prepare_regenerates_graph_html_independently_across_consecutive_runs(
         assert path_1.resolve() != path_2.resolve()
         assert path_1.read_bytes(), "first run's HTML must be a real, non-empty file"
         assert path_2.read_bytes(), "second run's HTML must be a real, non-empty file"
+
+
+def test_prepare_survives_graph_output_dir_creation_failure_whole_run_completes(
+    tmp_path, monkeypatch
+):
+    """`graph_dir.mkdir(...)` failing (permission-denied/disk-full/read-only
+    mount) must degrade the WHOLE simulator call for this run -- no scenario
+    can persist a graph HTML without a writable directory -- rather than
+    crash `prepare()`. The report must still generate all three JSON
+    artifacts, with a clear, distinct warning, and no
+    `inference_render_assets.json` sidecar."""
+    _enable_real_mgcecdl_model(monkeypatch)
+
+    original_mkdir = Path.mkdir
+
+    def _mkdir_failing_for_graph_dir(self, *args, **kwargs):
+        if self.name == "inference_graphs":
+            raise OSError("simulated permission-denied creating graph output dir")
+        return original_mkdir(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", _mkdir_failing_for_graph_dir)
+
+    with pytest.warns(UserWarning, match="directorio de salida de grafos"):
+        run_dir = prepare(
+            _REAL_SUFFICIENT_CIRCUIT, *_REAL_SUFFICIENT_WINDOW, runs_root=tmp_path / "runs"
+        )
+
+    assert (run_dir / "historical.bc.json").exists()
+    assert (run_dir / "inference.bc.json").exists()
+    assert (run_dir / "l1_state.json").exists()
+
+    inference_context = _read_json(run_dir / "inference.bc.json")
+    assert inference_context["escenarios"] == []
+    assert inference_context["features"], (
+        "expected features to stay populated -- this is the whole-call "
+        "degrade shape, distinct from the R3 'no trained model' gap"
+    )
+    assert not (run_dir / "inference_render_assets.json").exists()
+
+
+def test_prepare_survives_graph_html_write_failure_for_one_scenario_keeps_others_and_completes(
+    tmp_path, monkeypatch
+):
+    """An `OSError`/`PermissionError` raised while writing ONE scenario's
+    interactive graph HTML (inside `graficar_barras_y_radar` ->
+    `mostrar_grafo_interactivo_muestras`) must degrade only THAT scenario --
+    it is omitted from `escenarios` with a distinct warning -- without
+    crashing `prepare()` and without affecting the other scenarios computed
+    in the same run."""
+    _enable_real_mgcecdl_model(monkeypatch)
+
+    import chec_impacto.interpretability.circuit_analysis as circuit_analysis_module
+
+    original_mostrar = circuit_analysis_module.mostrar_grafo_interactivo_muestras
+    _FAILING_GRAPH_NAME = "top_frecuencia_periodo.html"
+    failed_calls: list[str] = []
+
+    def _mostrar_failing_for_one_scenario(*args, **kwargs):
+        output_path = kwargs.get("output_path")
+        if output_path is not None and Path(output_path).name == _FAILING_GRAPH_NAME:
+            failed_calls.append(_FAILING_GRAPH_NAME)
+            raise OSError("simulated permission-denied writing graph HTML")
+        return original_mostrar(*args, **kwargs)
+
+    monkeypatch.setattr(
+        circuit_analysis_module,
+        "mostrar_grafo_interactivo_muestras",
+        _mostrar_failing_for_one_scenario,
+    )
+
+    with pytest.warns(UserWarning, match="no se pudo escribir el grafo HTML"):
+        run_dir = prepare(
+            _REAL_SUFFICIENT_CIRCUIT, *_REAL_SUFFICIENT_WINDOW, runs_root=tmp_path / "runs"
+        )
+
+    assert failed_calls == [_FAILING_GRAPH_NAME], "expected the forced failure to actually fire"
+
+    assert (run_dir / "historical.bc.json").exists()
+    assert (run_dir / "inference.bc.json").exists()
+    assert (run_dir / "l1_state.json").exists()
+
+    inference_context = _read_json(run_dir / "inference.bc.json")
+    nombres = {escenario["nombre"] for escenario in inference_context["escenarios"]}
+    frecuencia_periodo_nombres = [
+        nombre for nombre in nombres if "frecuencia" in nombre and "período completo" in nombre
+    ]
+    assert not frecuencia_periodo_nombres, "expected the failing scenario to be omitted entirely"
+    assert len(inference_context["escenarios"]) >= 3, (
+        "expected the other scenarios to be unaffected by one scenario's graph-HTML write failure"
+    )

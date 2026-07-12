@@ -458,7 +458,25 @@ def _compute_inference_scenarios(
         tabla_periodo_inf = agrupar_por_vano(base_inf)
 
         graph_dir = Path(graph_output_dir)
-        graph_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            graph_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            # A once-per-circuit failure (permission-denied, disk-full,
+            # read-only `run_dir` mount, ...) creating the graph-output
+            # directory. Every scenario below needs a writable `graph_dir` to
+            # pass into `graficar_barras_y_radar` (`graph_output_dir=graph_dir`),
+            # so this is a whole-call degrade, not a per-scenario one: match
+            # the `model is None` gap shape immediately above this block
+            # (`(features, [])`) rather than letting the exception propagate
+            # out of `prepare()` and abort the run before scenario 1 even
+            # starts.
+            warnings.warn(
+                "No se pudo crear el directorio de salida de grafos "
+                f"'{graph_dir}': {exc}. El simulador de inferencia continúa "
+                "sin escenarios ni grafos interactivos para esta ejecución.",
+                stacklevel=2,
+            )
+            return features, []
 
         def _ejecutar_escenario(
             nombre: str,
@@ -532,6 +550,26 @@ def _compute_inference_scenarios(
                         stacklevel=2,
                     )
                     return None
+                except OSError as exc:
+                    # An `OSError`/`PermissionError` raised while
+                    # `graficar_barras_y_radar` -> `mostrar_grafo_interactivo_muestras`
+                    # -> `construir_grafo_interactivo_muestras` writes the
+                    # interactive graph HTML (`output_path.parent.mkdir(...)` /
+                    # `output_path.write_text(...)`) happens BEFORE that call
+                    # returns, so neither `resultado` nor `contexto` is ever
+                    # built for THIS scenario -- the contexto is not separable
+                    # from the graph write in this call chain. Same
+                    # per-scenario skip shape as the `ValueError` case above
+                    # (this scenario is omitted, the others already computed
+                    # in this same call are unaffected), just a distinct
+                    # warning message so a disk-write failure is never
+                    # confused with an insufficient-signal skip.
+                    warnings.warn(
+                        f"Escenario de inferencia '{nombre}' omitido: no se pudo "
+                        f"escribir el grafo HTML interactivo: {exc}",
+                        stacklevel=2,
+                    )
+                    return None
 
                 if figures_output_dir is not None and render_assets_sink is not None:
                     # Persist PNGs BEFORE the `finally` block below closes the
@@ -539,9 +577,10 @@ def _compute_inference_scenarios(
                     # a blank image (task 3.2).
                     #
                     # This step has its own narrow error boundary, separate
-                    # from the computation `except ValueError` above: a
-                    # persistence-layer failure (`OSError`/`PermissionError`
-                    # from `mkdir`/`savefig`/the graph-HTML write, or a
+                    # from the computation `except ValueError`/`except OSError`
+                    # above: a persistence-layer failure (`OSError`/
+                    # `PermissionError` from `figures_output_dir.mkdir`/
+                    # `fig_barras.savefig`/`fig_radar.savefig`, or a
                     # `ValueError` `Figure.savefig` can raise for a
                     # backend/format issue) must never discard the already-
                     # successfully-computed `contexto`, and must never
@@ -551,6 +590,16 @@ def _compute_inference_scenarios(
                     # without a `render_assets_sink` entry (same shape
                     # `render()` already tolerates for a scenario missing
                     # from the sidecar).
+                    #
+                    # NOTE: this boundary does NOT cover the interactive
+                    # graph-HTML write (`mostrar_grafo_interactivo_muestras` /
+                    # `construir_grafo_interactivo_muestras`'s
+                    # `output_path.parent.mkdir(...)` / `.write_text(...)`) --
+                    # by the time this line runs, `graficar_barras_y_radar`
+                    # has already returned successfully, so that write already
+                    # happened earlier and is caught by the `except OSError`
+                    # above instead (which skips the whole scenario, since
+                    # `contexto` is not separable from that write).
                     try:
                         _persist_scenario_render_assets(
                             scenario_key=scenario_key,
