@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
+
 try:
     from jsonschema import Draft202012Validator
 except ImportError:  # pragma: no cover - exercised only in minimal environments
@@ -402,3 +404,203 @@ def save_invalid_output(response_text: str, errors: list[str], output_dir: str |
     raw_path.write_text(response_text, encoding="utf-8")
     errors_path.write_text(json.dumps({"errors": errors}, ensure_ascii=False, indent=2), encoding="utf-8")
     return raw_path, errors_path
+
+
+# --- Auto-simulator response validator ---------------------------------
+#
+# Ported verbatim from `_validate_auto_simulator_response`, defined inline in
+# the deprecated `notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`
+# ("10.2 Simulador automático mínimo/máximo" section). Reuses `parse_llm_json`
+# (already defined above in this module) rather than reimplementing JSON
+# extraction — the notebook cell already imported and called the same
+# function.
+
+
+def validate_auto_simulator_response(response_text: str) -> dict[str, Any]:
+    """Validate a candidate auto-simulator LLM response.
+
+    Checks that `response_text` parses as a JSON object containing the seven
+    required keys (`titulo`, `resumen`, `variables_mas_sensibles`,
+    `patrones_minimo_maximo`, `hallazgos_para_criticidad`, `limitaciones`,
+    `contexto_reutilizado`), and that every key besides `titulo` is a list
+    when present. Returns `{"ok": bool, "data": dict | None, "errors": [...]}`.
+    """
+    required_keys = {
+        "titulo",
+        "resumen",
+        "variables_mas_sensibles",
+        "patrones_minimo_maximo",
+        "hallazgos_para_criticidad",
+        "limitaciones",
+        "contexto_reutilizado",
+    }
+    try:
+        data = parse_llm_json(response_text or "")
+    except Exception as exc:  # noqa: BLE001 - mirrors the notebook's broad catch
+        return {"ok": False, "data": None, "errors": [f"JSON inválido: {exc}"]}
+    if not isinstance(data, dict):
+        return {"ok": False, "data": None, "errors": ["La respuesta debe ser un objeto JSON."]}
+    missing_keys = sorted(required_keys - set(data))
+    errors = [f"Faltan claves requeridas: {missing_keys}"] if missing_keys else []
+    for key in [
+        "resumen",
+        "variables_mas_sensibles",
+        "patrones_minimo_maximo",
+        "hallazgos_para_criticidad",
+        "limitaciones",
+        "contexto_reutilizado",
+    ]:
+        if key in data and not isinstance(data[key], list):
+            errors.append(f"{key} debe ser una lista.")
+    return {"ok": not errors, "data": data, "errors": errors}
+
+
+# --- PDF-discussion-extraction row validator ----------------------------
+#
+# `_MESES`/`_parse_fecha`/`_iso_fecha`/`_overlaps` and `COLUMNAS_FINALES` are
+# ported verbatim from `notebooks/core/01_pdf_discussion_table_from_pdfs.ipynb`
+# (deprecated), prefixed with `_` to match this module's existing private-
+# helper convention (`_context_dates`, `_critical_point_ids`, ...).
+# `validate_pdf_discussion_row` combines the notebook's `validate_llm_row`
+# with the `parsed["Circuito"] = circuito_pdf` forcing step the notebook
+# performs just before calling it, so the "never trust the LLM's own
+# `Circuito` value" invariant lives in one place.
+
+# Kept in sync with `expert_alignment.REQUIRED_PDF_DISCUSSION_COLUMNS` (same 5
+# columns). Not imported from there: `expert_alignment.py` already imports
+# `validar_provenance_generico` from this module, so importing
+# `REQUIRED_PDF_DISCUSSION_COLUMNS` back from `expert_alignment.py` here would
+# create a circular import between the two modules.
+COLUMNAS_FINALES = ["Circuito", "Fecha inicio", "Fecha fin", "Análisis", "Evidencia"]
+
+_MESES = {
+    "enero": "01",
+    "febrero": "02",
+    "marzo": "03",
+    "abril": "04",
+    "mayo": "05",
+    "junio": "06",
+    "julio": "07",
+    "agosto": "08",
+    "septiembre": "09",
+    "setiembre": "09",
+    "octubre": "10",
+    "noviembre": "11",
+    "diciembre": "12",
+}
+
+
+_ISO_FECHA_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _parse_fecha(value: str | None) -> pd.Timestamp:
+    if not value:
+        return pd.NaT
+    text = str(value).strip().lower()
+    match = re.fullmatch(r"(\d{1,2})\s+de\s+([a-záéíóúñ]+)\s+de\s+(\d{4})", text)
+    if match:
+        day, month_name, year = match.groups()
+        month = _MESES.get(month_name)
+        if month:
+            return pd.to_datetime(f"{year}-{month}-{int(day):02d}", errors="coerce")
+    match = re.fullmatch(r"([a-záéíóúñ]+)\s+de\s+(\d{4})", text)
+    if match:
+        month_name, year = match.groups()
+        month = _MESES.get(month_name)
+        if month:
+            return pd.to_datetime(f"{year}-{month}-01", errors="coerce")
+    # Explicit, unambiguous ISO check BEFORE the dayfirst=True fallback below:
+    # an already-ISO "YYYY-MM-DD" string must never go through dayfirst=True,
+    # which silently swaps day/month whenever both are <=12 (e.g.
+    # "2026-01-10" would otherwise become 2026-10-01).
+    if _ISO_FECHA_RE.match(text):
+        return pd.to_datetime(text, format="%Y-%m-%d", errors="coerce")
+    # Final fallback for genuinely ambiguous formats (e.g. slash-separated
+    # DD/MM/YYYY, which Spanish-locale reports do write day-first).
+    return pd.to_datetime(value, errors="coerce", dayfirst=True)
+
+
+def _iso_fecha(value: str | pd.Timestamp) -> str | None:
+    parsed = _parse_fecha(str(value)) if not isinstance(value, pd.Timestamp) else value
+    if pd.isna(parsed):
+        return None
+    return parsed.strftime("%Y-%m-%d")
+
+
+def _overlaps(start: str, end: str, user_start: str, user_end: str) -> bool:
+    start_ts = _parse_fecha(start)
+    end_ts = _parse_fecha(end)
+    user_start_ts = _parse_fecha(user_start)
+    user_end_ts = _parse_fecha(user_end)
+    if any(pd.isna(x) for x in [start_ts, end_ts, user_start_ts, user_end_ts]):
+        return False
+    return start_ts <= user_end_ts and end_ts >= user_start_ts
+
+
+def validate_pdf_discussion_row(
+    response_text: str,
+    *,
+    circuito_pdf: str,
+    fecha_inicio_usuario: str,
+    fecha_fin_usuario: str,
+) -> dict[str, Any]:
+    """Validate a candidate PDF-fragment classification response.
+
+    First, if `circuito_pdf` is `None`/empty/whitespace-only, the fragment is
+    rejected outright before parsing `response_text` at all — this reinstates
+    the original notebook driver loop's gate on `circuito_pdf`, which the
+    move of the `Circuito`-forcing step into this function otherwise dropped.
+
+    Otherwise, parses `response_text` as JSON (reusing `parse_llm_json`, same
+    as `validate_auto_simulator_response` above). A parsed object whose
+    `include` key is not `True` is a normal "exclude this fragment" outcome
+    (`ok: False`, `data: None`, the model's own `reason` as the single
+    error), not a malformed response. Otherwise, `Circuito` is force-set to
+    `circuito_pdf` (never trusting the LLM's own value — a
+    security/correctness invariant carried over unmodified from the
+    notebook), then the required non-empty `COLUMNAS_FINALES` columns (an
+    explicit JSON `null` counts as empty, not the literal string `"None"`),
+    date parseability, start<=end ordering, and overlap with
+    `fecha_inicio_usuario`/`fecha_fin_usuario` are checked. On success,
+    returns a `data` dict with exactly `COLUMNAS_FINALES` keys, with
+    `Fecha inicio`/`Fecha fin` normalized to ISO form.
+    """
+    if circuito_pdf is None or not str(circuito_pdf).strip():
+        return {"ok": False, "data": None, "errors": ["circuito_pdf no puede ser None ni vacío"]}
+
+    try:
+        parsed = parse_llm_json(response_text or "")
+    except Exception as exc:  # noqa: BLE001 - mirrors validate_auto_simulator_response's broad catch
+        return {"ok": False, "data": None, "errors": [f"JSON inválido: {exc}"]}
+    if not isinstance(parsed, dict):
+        return {"ok": False, "data": None, "errors": ["La respuesta debe ser un objeto JSON."]}
+
+    if parsed.get("include") is not True:
+        return {"ok": False, "data": None, "errors": [str(parsed.get("reason", "include=false"))]}
+
+    parsed["Circuito"] = circuito_pdf
+
+    errors: list[str] = []
+    for col in COLUMNAS_FINALES:
+        value = parsed.get(col)
+        if value is None or not str(value).strip():
+            errors.append(f"{col} vacio")
+
+    start = _iso_fecha(parsed.get("Fecha inicio"))
+    end = _iso_fecha(parsed.get("Fecha fin"))
+    if start is None:
+        errors.append("Fecha inicio invalida")
+    if end is None:
+        errors.append("Fecha fin invalida")
+    if start and end and _parse_fecha(start) > _parse_fecha(end):
+        errors.append("Fecha inicio posterior a Fecha fin")
+    if start and end and not _overlaps(start, end, fecha_inicio_usuario, fecha_fin_usuario):
+        errors.append("La discusion no se traslapa con el rango del usuario")
+
+    if errors:
+        return {"ok": False, "data": None, "errors": errors}
+
+    data = {col: str(parsed[col]).strip() for col in COLUMNAS_FINALES}
+    data["Fecha inicio"] = start
+    data["Fecha fin"] = end
+    return {"ok": True, "data": data, "errors": []}

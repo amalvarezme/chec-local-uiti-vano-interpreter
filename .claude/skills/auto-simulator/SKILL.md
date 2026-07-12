@@ -26,15 +26,39 @@ calls load those same files directly from `.claude/skills/auto-simulator/prompt/
 condensation for human/agent context, not a separate copy.
 
 **Light contract (`contract_tier: light`)**: unlike `historical`/`inference`/`expert-alignment`,
-this agent has **no `agent_tools` L2 CLI and no dedicated provenance validator**. The LLM call
-(`call_llm(...)`) and its validation (`_validate_auto_simulator_response(...)`, an inline
-required-keys/list-shape check) happen entirely inline in the notebook cell today, with no
-runtime `/reporte`/batch path invoking this agent. Building L2/provenance machinery now would be
-new functionality, not a relocation — out of scope for this change (see design D4). This Skill
-and its paired agent role file (`.claude/agents/auto-simulator.md`) document the existing inline
-flow only. It does still route through the shared `llm_skills` profile resolver
+this agent has **no dedicated provenance validator** — its `agent_tools` L2 CLI
+(`chec_local_interpreter.agent_tools.auto_simulator`) exists, but its `validate` verb is a
+required-keys/list-shape check only (`validate_auto_simulator_response`), and its `build-context`
+envelope has no `allowed`/citable-universe block. This tier label no longer means "no CLI": since
+this tier was first introduced, a coding agent (Claude Code) has invoked the L2 CLI directly (see
+Run sequence below), reading the built prompt and authoring the JSON response itself, no Python
+ever calling an LLM API. The original notebook cell (`call_llm(...)` + inline
+`_validate_auto_simulator_response(...)`, retrying up to `MAX_AUTO_SIMULATOR_LLM_ATTEMPTS` times)
+still exists unchanged as a manual/legacy fallback for headless runs with an API key configured.
+This Skill and its paired agent role file (`.claude/agents/auto-simulator.md`) document both
+paths. The agent still routes its playbook load through the shared `llm_skills` profile resolver
 (`skills_dir(profile="auto_simulator")`), which is why D3's per-profile resolver repoint applies
 here, unlike pdf-discussion-extraction's fully decoupled raw-path load.
+
+## Run sequence (how a coding agent should invoke this Skill)
+
+1. Run `build-context` with the already-assembled compact auto-simulator context on stdin:
+   `python -m chec_local_interpreter.agent_tools.auto_simulator build-context`.
+2. Read the returned `prompt` from the envelope (`{meta, context, prompt}` — no `allowed` block,
+   since this agent has no provenance validator).
+3. Author the JSON response yourself (the coding agent): the seven required keys listed in
+   Output contract below, using only the table and metadata in `context`.
+4. Run `validate` with `{"response_text": <your response>, "circuito": <meta.circuito from step 1's
+   envelope>}` on stdin: `python -m chec_local_interpreter.agent_tools.auto_simulator validate`.
+   Passing `circuito` back namespaces any failure artifact under that circuit's own subdirectory
+   (matching `historical`/`pdf_discussion`) instead of the shared `run` fallback; omitting it (or
+   sending an empty value) still works and falls back to `run`, so existing callers that only send
+   `response_text` are unaffected.
+5. If `ok: false`, fold the returned `errors` into your next attempt and retry from step 3. Stop
+   after at most `MAX_AUTO_SIMULATOR_LLM_ATTEMPTS` (5) attempts — the same cap the legacy
+   notebook path uses.
+6. Stop as soon as `validate` returns `ok: true` (exit code 0); never present an unvalidated
+   response as final output.
 
 ## When to Use
 
@@ -95,10 +119,12 @@ that validation or retry behavior.
 
 ## Related artifacts
 
-- Agent role (light contract, no CLI): `.claude/agents/auto-simulator.md`
+- Agent role (light contract, L2 CLI, no provenance validator): `.claude/agents/auto-simulator.md`
+- L2 tool-adapter CLI: `src/chec_local_interpreter/agent_tools/auto_simulator.py`
+- Response validator: `chec_local_interpreter.llm_validation.validate_auto_simulator_response`
 - Architecture and the three-meanings-of-"skills" table: `docs/agents-guide.md`
-- Notebook caller (inline `call_llm` + `_validate_auto_simulator_response`, section "10.2
-  Simulador automático mínimo/máximo"):
+- Notebook caller (legacy/manual fallback — inline `call_llm` +
+  `_validate_auto_simulator_response`, section "10.2 Simulador automático mínimo/máximo"):
   `notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`
 - Shared profile resolver: `chec_local_interpreter.llm_skills.skills_dir(profile="auto_simulator")`
 - Ported-from playbooks (the machine-fed source, loaded by

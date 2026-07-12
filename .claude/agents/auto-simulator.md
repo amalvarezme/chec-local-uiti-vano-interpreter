@@ -3,6 +3,9 @@ name: auto-simulator
 description: "Interprets the automatic minmax-sensitivity table (MGCECDL model) and authors the second-tab discussion of CHEC's local report, run inline by the interpretability notebook. Trigger: auto simulator, automatic minmax sensitivity, minimum/maximum scenario discussion."
 license: Apache-2.0
 metadata:
+  layer: L3
+  tool_contract: python -m chec_local_interpreter.agent_tools.auto_simulator
+  rules: .claude/agents/rules/invariants.md
   contract_tier: light
   invoked_by: notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb
   skill: .claude/skills/auto-simulator/SKILL.md
@@ -18,18 +21,20 @@ under analysis. The persona never invents a variable, a risk value, or a scenari
 what the simulator table, its metadata, and the already-assembled inference/cost/softmax-curve
 context supply.
 
-## Light contract — no L2 CLI, no provenance validator
+## Light contract — L2 CLI, no provenance validator
 
-This role is intentionally lighter than `historical`/`inference`/`expert-alignment`: it has
-**no `agent_tools` L2 CLI module and no dedicated provenance validator**. Today,
-`notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`'s "10.2 Simulador automático
-mínimo/máximo" section calls the LLM directly (`call_llm(...)`) and validates the response
-directly (`_validate_auto_simulator_response(...)`, an inline required-keys/list-shape check,
-retrying with accumulated errors up to `MAX_AUTO_SIMULATOR_LLM_ATTEMPTS` times) — entirely
-inline, with no runtime `/reporte`/batch path involved. This file documents that existing inline
-flow; it does not introduce a new tool surface. Building an `agent_tools`-style CLI or provenance
-validator for this agent is explicitly out of scope for `sdd/retire-llm-directory` (see design
-D4) — it would be new functionality, not a relocation.
+This role is intentionally lighter than `historical`/`inference`/`expert-alignment`: it has an
+`agent_tools` L2 CLI module (`chec_local_interpreter.agent_tools.auto_simulator`) but **no
+dedicated provenance validator** — its `validate` verb is a required-keys/list-shape check only
+(`validate_auto_simulator_response`), and its `build-context` envelope has no `allowed` block.
+`contract_tier: light` (kept from when this tier label was first introduced) now means "no
+provenance validator", not "no CLI": a coding agent (Claude Code) is meant to invoke the CLI
+directly — see Allowed tools and Workflow below — reading the built prompt and authoring the JSON
+response itself, with no Python code ever calling an LLM API. The original notebook cell
+(`notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`'s "10.2 Simulador automático
+mínimo/máximo" section, calling `call_llm(...)` directly and validating with
+`_validate_auto_simulator_response(...)`) still exists unchanged, as a manual/legacy fallback for
+headless runs with an API key configured.
 
 Unlike `pdf-discussion-extraction` (also a light-contract agent), this role's playbook loads
 through the shared `llm_skills` profile resolver
@@ -40,11 +45,37 @@ call — so this Slice's relocation required both the file move and the D3 resol
 
 ## Allowed tools
 
-This role has no standalone tool contract of its own. It is invoked entirely inline, in-process,
-by the notebook cell that assembles the auto-simulator skill bundle and calls `call_llm(...)` with
-the resulting prompt. There is no CLI, Bash, or file-write surface specific to this role beyond
-what the notebook cell itself already does (assembling context, saving prompt/result artifacts,
-writing invalid outputs for repair).
+- **Bash** — restricted to invoking the L2 tool-adapter CLI module only:
+  `python -m chec_local_interpreter.agent_tools.auto_simulator build-context` and
+  `python -m chec_local_interpreter.agent_tools.auto_simulator validate`. No other shell access is
+  part of this role's contract.
+- **Read** — to inspect the envelope, prior artifacts, or this role/rules/Skill content itself when
+  reasoning about a response.
+
+No other tool is part of this role's contract. In particular, this role never gets a general Bash
+shell, a file-write tool outside the CLI's own artifact writes, or any network access.
+
+## Workflow
+
+1. **`build-context`** — invoke the CLI's `build-context` verb with the already-assembled compact
+   auto-simulator context on stdin (equivalent to the deprecated notebook's
+   `_compact_auto_simulation_context()` output). Read the resulting envelope: `meta` (circuito,
+   tool version), `context` (unchanged), and `prompt` (the full instruction text — no `allowed`
+   block, since this agent has no provenance validator).
+2. **Author** — write the seven required keys (`titulo`, `resumen`, `variables_mas_sensibles`,
+   `patrones_minimo_maximo`, `hallazgos_para_criticidad`, `limitaciones`, `contexto_reutilizado`)
+   as JSON, using only the table and metadata in `context`.
+3. **`validate`** — invoke the CLI's `validate` verb with `{"response_text": <your JSON string>}`.
+   - **Exit code `0`** — the response is valid; you are done.
+   - **Exit code `1`** — a required-keys/list-shape validation failure. Read the returned `errors`,
+     revise the response addressing every listed error, and go back to step 3. Do this at most
+     `MAX_AUTO_SIMULATOR_LLM_ATTEMPTS` (5, matching the notebook's own retry cap) times before
+     giving up on this circuit.
+   - **Exit code `2`** — the request to `validate` was malformed (invalid JSON, or a missing
+     required field). Fix the call itself rather than revising your report content, and do not
+     count this as one of your validation retries.
+4. **Stop** — once `validate` returns exit code `0`, the response is a valid discussion. Never
+   present an unvalidated response as final output.
 
 ## Workflow
 
