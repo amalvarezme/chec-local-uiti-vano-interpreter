@@ -1,7 +1,7 @@
 """Golden-snapshot characterization test pinning the `expert_alignment` skill
 bundle (`sdd/retire-llm-directory`, Phase B).
 
-Mirrors `tests/test_llm_skills_characterization.py`'s convention: pin the
+Mirrors `tests/test_prompt_relocation_characterization.py`'s convention: pin the
 FULL bundle text (never a substring/`in` check) via a committed golden file
 under `tests/golden/retire_llm_directory/`, generated from the pre-move
 `llm/skills_expert_alignment/` tree. This test is the safety net for B.3's

@@ -15,12 +15,18 @@ no `llm/prompts/` prefix) inside `.claude/skills/historical/prompt/*.md` and
 of the same-named document, not to the deleted `llm/prompts/` variant. Only
 the literal old path is checked here.
 
-`docs/project-workflow-analysis.md` is a pre-existing, untracked scratch
+`docs/project-workflow-analysis.md` is a pre-existing, tracked scratch
 analysis document explicitly out of scope for this change (it predates and
 is unrelated to `sdd/retire-llm-directory`); it still contains one literal
 mention of the old `llm/prompts/arquitecturayflujo.md` path as a historical
 note about doc triplication. It is intentionally excluded from this guard's
 scan rather than edited.
+
+`docs/project-workflow-diagram.svg` is the pre-rendered companion image to
+the analysis doc above (same historical, out-of-scope commit); it contains
+baked-in `llm/skills*` label text from its Mermaid source but does not
+contain either of this guard's `OLD_PATHS` strings. It is excluded here
+defensively, for the same reason as its companion `.md` file.
 """
 
 from __future__ import annotations
@@ -35,10 +41,15 @@ OLD_PATHS = (
     "llm/prompts/arquitecturayflujo.md",
 )
 
-# Pre-existing, untracked, out-of-scope scratch doc (see module docstring), plus
-# this test file itself, which necessarily cites the old paths literally in
-# OLD_PATHS/the docstring above and would otherwise flag itself as an offender.
-EXCLUDED_FILES = {"docs/project-workflow-analysis.md", "tests/test_dead_doc_removal.py"}
+# Pre-existing, tracked, out-of-scope scratch doc and its pre-rendered
+# companion SVG (see module docstring), plus this test file itself, which
+# necessarily cites the old paths literally in OLD_PATHS/the docstring above
+# and would otherwise flag itself as an offender.
+EXCLUDED_FILES = {
+    "docs/project-workflow-analysis.md",
+    "docs/project-workflow-diagram.svg",
+    "tests/test_dead_doc_removal.py",
+}
 
 
 def test_dead_docs_no_longer_exist():
