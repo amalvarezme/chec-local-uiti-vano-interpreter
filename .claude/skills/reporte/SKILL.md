@@ -163,8 +163,16 @@ Given `circuito` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair)
    section actually renders. If the sidecar is absent (no trained model, or every scenario was
    skipped), `inference_results` stays `None` — the inference-figures section is empty, same as
    before this change, and this is never a crash or a `ReportPipelineError`.
-8. **Report the result** — tell the user the returned HTML `Path`. Do not claim the report is final
-   if any stage above raised and stopped the run early.
+8. **Publish to the site** — run `web_export.export_latest_interpretability_report(html_path)`, where
+   `html_path` is step 7's return value. This is the step that used to happen at the end of the
+   deprecated notebook (deleted once this Skill's coverage was proven equivalent) and has no other
+   caller in this codebase — skipping it means `/reporte` runs generate a report on disk but never
+   refresh `src/assets/site/results/latest_interpretability_report.html`, so the published GitHub
+   Pages site goes stale. Not gated by any prior stage's success/failure beyond step 7 itself having
+   produced an `html_path` — if step 7 raised, there is nothing to publish and this step does not run.
+9. **Report the result** — tell the user the returned HTML `Path` (and, once published, that it was
+   copied into the site assets). Do not claim the report is final if any stage above raised and
+   stopped the run early.
 
 ## Error handling summary
 
