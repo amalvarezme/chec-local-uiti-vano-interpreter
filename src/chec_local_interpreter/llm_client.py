@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+# Restored after PR A1 deleted this module: notebooks/core/01_pdf_discussion_table_from_pdfs.ipynb
+# still imports `call_llm` from here and is not deleted until PR A2b lands its agent-native
+# replacement. Delete this file together with that notebook in A2b, not before.
+
 import os
 import re
 from dataclasses import dataclass

@@ -11,6 +11,7 @@ metadata:
     - .claude/skills/historical/SKILL.md
     - .claude/skills/inference/SKILL.md
     - .claude/skills/expert-alignment/SKILL.md
+    - .claude/skills/auto-simulator/SKILL.md
 ---
 
 ## Overview
@@ -26,10 +27,10 @@ from one stage to the next. Read this Skill top to bottom as a checklist, not as
 guidance — the actual domain reasoning for each stage lives in that stage's own Skill
 (`historical`, `inference`, `expert-alignment`).
 
-Supersedes phases 1-8 of the interactive notebook
-(`notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`, deprecated in place — see that
-notebook's own top cell). Phases 9-11 of the notebook (saved artifacts, the LLM
-skills/contracts/validation section, and HTML export) are untouched by this Skill.
+Supersedes the interactive notebook `notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`
+in full, including its phase 9-11 automatic min/max ("second tab") discussion — now step 4b below,
+via the `auto-simulator` agent. That notebook was deleted once this Skill's coverage was proven
+equivalent (see git history for its prior content).
 
 ## When to Use
 
@@ -126,6 +127,18 @@ Given `circuito` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair)
    `run_dir/inference.out.json`. Steps 3 and 4 may run in either order (both must complete
    successfully before step 5) — the design places no ordering requirement between historical and
    inference, only that both precede expert-alignment.
+4b. **Invoke `auto-simulator`** — `prepare` (step 2) already ran the automatic min/max sensitivity
+   simulator as a side effect, using the same loaded MGCECDL model as the inference/SHAP simulator.
+   If `run_dir/auto-simulator.bc.json` exists, load `.claude/skills/auto-simulator/SKILL.md`, give it
+   that envelope via `agent_tools.auto_simulator build-context`/`validate`, and have it write its
+   validated response to `run_dir/auto-simulator.out.json` as `{"ok": true, "data": <response>}` once
+   `validate` returns exit code `0`. Unlike steps 3/4/6, a validation-retries-exhausted outcome here
+   does **not** stop the whole `/reporte` run — degrade to skip (proceed to step 5 without an
+   `auto-simulator.out.json`; `render`'s `automatic_simulation_analysis` kwarg simply stays `None`),
+   since this is a supplementary discussion section, not a required stage. If
+   `run_dir/auto-simulator.bc.json` is absent (R3 gap: no trained model, or zero events for this
+   circuit/window in the automatic simulator's re-derived mask), skip this step entirely — there is
+   nothing to build a prompt from.
 5. **`prepare_expert_alignment`** — run
    `report_pipeline.prepare_expert_alignment(run_dir)`. Reads the validated
    `historical.out.json`/`inference.out.json` from steps 3-4, pools report dates, matches the
@@ -136,10 +149,12 @@ Given `circuito` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair)
    `run_dir/expert-alignment.bc.json` and `agent_tools.expert_alignment build-context`/`validate`,
    writing `run_dir/expert-alignment.out.json`.
 7. **`render`** — run `report_pipeline.render(run_dir)`. Reads all three validated outputs and
-   calls `plotting.render_llm_analysis` (no `automatic_simulation_*` kwargs — the separate
-   "simulador automático mínimo/máximo" is still untouched, out of scope). Raises
-   `ReportPipelineError` if the expert-alignment output is missing/invalid; no HTML is written in
-   that case.
+   calls `plotting.render_llm_analysis`, now also merging in the 5 `automatic_simulation_*` kwargs
+   (table, agent analysis, cost context, softmax curves, vano-risk table) when
+   `run_dir/auto_simulation_assets.json` and/or `run_dir/auto-simulator.out.json` exist — every
+   kwarg stays `None` when the corresponding file is absent (no crash either way, same degrade
+   shape as the inference-simulator sidecar below). Raises `ReportPipelineError` if the
+   expert-alignment output is missing/invalid; no HTML is written in that case.
 
    `render` stays model-free: it never reloads the MGCECDL classifier or recomputes SHAP. If
    `prepare` persisted `run_dir/inference_render_assets.json` (the healthy-run case above), `render`
@@ -148,8 +163,16 @@ Given `circuito` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair)
    section actually renders. If the sidecar is absent (no trained model, or every scenario was
    skipped), `inference_results` stays `None` — the inference-figures section is empty, same as
    before this change, and this is never a crash or a `ReportPipelineError`.
-8. **Report the result** — tell the user the returned HTML `Path`. Do not claim the report is final
-   if any stage above raised and stopped the run early.
+8. **Publish to the site** — run `web_export.export_latest_interpretability_report(html_path)`, where
+   `html_path` is step 7's return value. This is the step that used to happen at the end of the
+   deprecated notebook (deleted once this Skill's coverage was proven equivalent) and has no other
+   caller in this codebase — skipping it means `/reporte` runs generate a report on disk but never
+   refresh `src/assets/site/results/latest_interpretability_report.html`, so the published GitHub
+   Pages site goes stale. Not gated by any prior stage's success/failure beyond step 7 itself having
+   produced an `html_path` — if step 7 raised, there is nothing to publish and this step does not run.
+9. **Report the result** — tell the user the returned HTML `Path` (and, once published, that it was
+   copied into the site assets). Do not claim the report is final if any stage above raised and
+   stopped the run early.
 
 ## Error handling summary
 
@@ -192,8 +215,8 @@ always continues, the report always generates:
     [`.claude/agents/expert-alignment.md`](../../agents/expert-alignment.md)
 - Binding invariants (shared with every agent role above): `.claude/agents/rules/invariants.md`
 - Architecture and envelope contract: `docs/agents-guide.md`
-- Deprecated (in-place, not deleted) notebook this Skill supersedes for phases 1-8:
-  `notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`
+- `notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb` — deleted; this Skill supersedes it
+  in full (see git history for its prior content).
 - Tests: `tests/test_report_pipeline.py` (argument-pair contract, simulator wiring/degrade paths, the
   real-simulator integration tests using the committed model/Optuna/Variables artifacts, and the
   end-to-end smoke test with canned validated outputs and no live LLM call);
