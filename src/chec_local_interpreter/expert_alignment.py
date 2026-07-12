@@ -9,14 +9,13 @@ import pandas as pd
 
 from chec_local_interpreter.circuit_identity import normalizar_circuito
 from chec_local_interpreter.llm_validation import validar_provenance_generico
+from chec_local_interpreter.pdf_discussion_pipeline import COLUMNAS_FINALES as REQUIRED_PDF_DISCUSSION_COLUMNS
 
-REQUIRED_PDF_DISCUSSION_COLUMNS = (
-    "Circuito",
-    "Fecha inicio",
-    "Fecha fin",
-    "Análisis",
-    "Evidencia",
-)
+# Single source of truth: `pdf_discussion_pipeline.COLUMNAS_FINALES` (design
+# D5). Was previously its own independent literal tuple of the same 5
+# columns -- flagged as a WARNING in PR A2a's verify report (three
+# independent copies of the same schema). See `llm_validation.py`'s matching
+# note for the full consolidation rationale and the no-circular-import proof.
 
 EXPERT_ALIGNMENT_REQUIRED_KEYS = (
     "contexto",
