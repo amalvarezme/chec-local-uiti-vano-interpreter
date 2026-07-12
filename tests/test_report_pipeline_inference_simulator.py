@@ -305,9 +305,10 @@ def test_compute_inference_scenarios_skips_one_scenario_on_value_error_without_l
 def test_run_inference_simulator_model_missing_returns_r3_shape_without_computing_scenarios(
     tmp_path, monkeypatch
 ):
-    monkeypatch.setattr(
-        report_pipeline_module, "_load_mgcecdl_model_and_sigma", lambda: (None, None)
-    )
+    """Task 1.3 (agent-native-pipeline-and-site-split): `model`/`rbf_sigma`
+    are now leading params threaded in by the caller (hoisted to `prepare()`,
+    design D2) rather than loaded internally -- pass `model=None` directly
+    instead of monkeypatching `_load_mgcecdl_model_and_sigma`."""
 
     def _must_not_be_called(*args, **kwargs):
         raise AssertionError(
@@ -323,7 +324,7 @@ def test_run_inference_simulator_model_missing_returns_r3_shape_without_computin
     run_dir.mkdir()
 
     features, escenarios, modelo_label, rbf_sigma, render_assets = _run_inference_simulator(
-        "ANY-CIRCUIT", "2026-01-01", "2026-01-01", [], run_dir
+        None, None, "ANY-CIRCUIT", "2026-01-01", "2026-01-01", [], run_dir
     )
 
     assert features == []
@@ -341,10 +342,10 @@ class _FakeMGCECDLModel:
 def test_run_inference_simulator_all_scenarios_insufficient_returns_r1_shape(
     tmp_path, monkeypatch
 ):
+    """Task 1.3: pass the fake model/sigma directly as leading params instead
+    of monkeypatching `_load_mgcecdl_model_and_sigma` (dropped internal load,
+    design D2)."""
     fake_model = _FakeMGCECDLModel()
-    monkeypatch.setattr(
-        report_pipeline_module, "_load_mgcecdl_model_and_sigma", lambda: (fake_model, 1.0)
-    )
     monkeypatch.setattr(
         report_pipeline_module,
         "_compute_inference_scenarios",
@@ -355,7 +356,7 @@ def test_run_inference_simulator_all_scenarios_insufficient_returns_r1_shape(
     run_dir.mkdir()
 
     features, escenarios, modelo_label, rbf_sigma, render_assets = _run_inference_simulator(
-        "ANY-CIRCUIT", "2026-01-01", "2026-01-01", [], run_dir
+        fake_model, 1.0, "ANY-CIRCUIT", "2026-01-01", "2026-01-01", [], run_dir
     )
 
     assert features == ["feature_a", "feature_b"], "features must be non-empty (R1 shape, obs#219)"
@@ -381,7 +382,7 @@ def test_run_inference_simulator_persists_figures_with_run_dir_relative_paths(tm
     run_dir.mkdir()
 
     features, escenarios, modelo_label, resolved_sigma, render_assets = _run_inference_simulator(
-        _SUFFICIENT_CIRCUIT, *_SUFFICIENT_WINDOW, ["2026-03-01"], run_dir
+        model, rbf_sigma, _SUFFICIENT_CIRCUIT, *_SUFFICIENT_WINDOW, ["2026-03-01"], run_dir
     )
 
     assert features

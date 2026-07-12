@@ -1040,3 +1040,213 @@ def test_prepare_survives_graph_html_write_failure_for_one_scenario_keeps_others
     assert len(inference_context["escenarios"]) >= 3, (
         "expected the other scenarios to be unaffected by one scenario's graph-HTML write failure"
     )
+
+
+# ---------------------------------------------------------------------------
+# `_run_automatic_simulator` (agent-native-pipeline-and-site-split PR A1,
+# tasks 1.2/1.3, design D2): standalone unit tests for the automatic min/max
+# sensitivity simulator orchestration. `model=None` degrade needs no real
+# data (returns before touching the dataset); the happy path needs the REAL
+# committed model + a real circuit/window, same precedent as the "real
+# inference simulator" section above.
+# ---------------------------------------------------------------------------
+
+
+def test_run_automatic_simulator_degrades_to_none_when_model_is_none(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+
+    result = report_pipeline_module._run_automatic_simulator(
+        "ANY-CIRCUIT", "2026-01-01", "2026-01-01", [], run_dir, None
+    )
+
+    assert result is None
+    assert not (run_dir / "auto-simulator.bc.json").exists()
+    assert not (run_dir / "auto_simulation_assets.json").exists()
+
+
+def test_run_automatic_simulator_zero_events_in_window_degrades_to_none(tmp_path, monkeypatch):
+    """Mirrors the inference simulator's own zero-events degrade: a real
+    model but a circuit/window with no matching rows returns `None` without
+    writing any artifact, rather than raising inside `simulate_automatic_
+    minmax_sensitivity` (which requires a non-empty mask)."""
+    _enable_real_mgcecdl_model(monkeypatch)
+    model, _rbf_sigma = report_pipeline_module._load_mgcecdl_model_and_sigma()
+    assert model is not None
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+
+    result = report_pipeline_module._run_automatic_simulator(
+        _REAL_SUFFICIENT_CIRCUIT, "2020-01-01", "2020-01-02", [], run_dir, model
+    )
+
+    assert result is None
+    assert not (run_dir / "auto-simulator.bc.json").exists()
+    assert not (run_dir / "auto_simulation_assets.json").exists()
+
+
+def test_run_automatic_simulator_happy_path_writes_bc_and_assets(tmp_path, monkeypatch):
+    _enable_real_mgcecdl_model(monkeypatch)
+    run_dir = prepare(
+        _REAL_SUFFICIENT_CIRCUIT, *_REAL_SUFFICIENT_WINDOW, runs_root=tmp_path / "runs"
+    )
+    inference_context = _read_json(run_dir / "inference.bc.json")
+    assert inference_context["escenarios"], (
+        "expected at least one real scenario with top_variables to drive a "
+        "non-trivial automatic-simulator happy path"
+    )
+
+    model, _rbf_sigma = report_pipeline_module._load_mgcecdl_model_and_sigma()
+    assert model is not None
+
+    result = report_pipeline_module._run_automatic_simulator(
+        _REAL_SUFFICIENT_CIRCUIT, *_REAL_SUFFICIENT_WINDOW, [], run_dir, model
+    )
+
+    assert result is not None
+    bc_path = run_dir / "auto-simulator.bc.json"
+    assets_path = run_dir / "auto_simulation_assets.json"
+    assert bc_path.exists()
+    assert assets_path.exists()
+
+    bc = _read_json(bc_path)
+    assert bc["contexto"]["circuito"] == _REAL_SUFFICIENT_CIRCUIT
+    assert bc["contexto"]["modelo"] == type(model).__name__
+    assert bc["tabla_simulador_automatico"], "expected at least one simulated variable row"
+    assert bc["variables_bajo_analisis"], "expected variables re-derived from inference.bc.json"
+    assert bc["contexto_inferencia_resumen"]["escenarios"]
+
+    assets = _read_json(assets_path)
+    assert assets["table"], "expected the sidecar's table records to be non-empty"
+    assert "cost_context" in assets
+    assert "softmax_curves" in assets
+    assert "vano_risk" in assets
+
+
+# ---------------------------------------------------------------------------
+# `prepare()` wiring of the automatic simulator (task 1.3): with the default
+# (autoused) empty model dir, `prepare()` must degrade exactly like it
+# already does for the inference simulator (no artifacts, no crash). With
+# the real model, it must produce the auto-simulator artifacts as a side
+# effect of a single `prepare()` call.
+# ---------------------------------------------------------------------------
+
+
+def test_prepare_does_not_write_auto_simulator_artifacts_when_model_missing(tmp_path):
+    data_path = _write_fixture_dataset(tmp_path)
+
+    run_dir = prepare("C1", data_path=data_path, runs_root=tmp_path / "runs")
+
+    assert not (run_dir / "auto-simulator.bc.json").exists()
+    assert not (run_dir / "auto_simulation_assets.json").exists()
+
+
+def test_prepare_writes_auto_simulator_artifacts_with_real_model(tmp_path, monkeypatch):
+    _enable_real_mgcecdl_model(monkeypatch)
+
+    run_dir = prepare(
+        _REAL_SUFFICIENT_CIRCUIT, *_REAL_SUFFICIENT_WINDOW, runs_root=tmp_path / "runs"
+    )
+
+    assert (run_dir / "auto-simulator.bc.json").exists()
+    assert (run_dir / "auto_simulation_assets.json").exists()
+
+
+# ---------------------------------------------------------------------------
+# `render()` / `_build_auto_simulation_kwargs` (task 1.4): absent auto-
+# simulator artifacts keep every `automatic_simulation_*` kwarg `None`
+# (no crash); present artifacts populate all 5 kwargs from the sidecar +
+# validated agent-output envelope.
+# ---------------------------------------------------------------------------
+
+
+def test_render_auto_simulation_kwargs_absent_stays_none_no_crash(tmp_path, monkeypatch):
+    data_path = _write_fixture_dataset(tmp_path)
+    run_dir = prepare("C1", data_path=data_path, runs_root=tmp_path / "runs")
+    assert not (run_dir / "auto_simulation_assets.json").exists()
+    (run_dir / "historical.out.json").write_text(json.dumps(_canned_ok({"hallazgos": ["H1"]})), encoding="utf-8")
+    (run_dir / "inference.out.json").write_text(json.dumps(_canned_ok({"hallazgos": ["I1"]})), encoding="utf-8")
+    prepare_expert_alignment(run_dir)
+    (run_dir / "expert-alignment.out.json").write_text(
+        json.dumps(_canned_ok({"sintesis_final": "Todo alineado."})), encoding="utf-8"
+    )
+
+    captured: dict = {}
+
+    def _spy_render_llm_analysis(*args, **kwargs):
+        for key in (
+            "automatic_simulation_table",
+            "automatic_simulation_analysis",
+            "automatic_simulation_cost_context",
+            "automatic_simulation_softmax_curves",
+            "automatic_simulation_vano_risk_df",
+        ):
+            captured[key] = kwargs.get(key)
+        html_path = tmp_path / "html" / "fake.html"
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        html_path.write_text("<html></html>", encoding="utf-8")
+        return html_path
+
+    monkeypatch.setattr(report_pipeline_module, "render_llm_analysis", _spy_render_llm_analysis)
+
+    render(run_dir, output_dir=tmp_path / "html")
+
+    assert captured["automatic_simulation_table"] is None
+    assert captured["automatic_simulation_analysis"] is None
+    assert captured["automatic_simulation_cost_context"] is None
+    assert captured["automatic_simulation_softmax_curves"] is None
+    assert captured["automatic_simulation_vano_risk_df"] is None
+
+
+def test_render_auto_simulation_kwargs_present_populates_all_five(tmp_path, monkeypatch):
+    data_path = _write_fixture_dataset(tmp_path)
+    run_dir = prepare("C1", data_path=data_path, runs_root=tmp_path / "runs")
+    (run_dir / "historical.out.json").write_text(json.dumps(_canned_ok({"hallazgos": ["H1"]})), encoding="utf-8")
+    (run_dir / "inference.out.json").write_text(json.dumps(_canned_ok({"hallazgos": ["I1"]})), encoding="utf-8")
+    prepare_expert_alignment(run_dir)
+    (run_dir / "expert-alignment.out.json").write_text(
+        json.dumps(_canned_ok({"sintesis_final": "Todo alineado."})), encoding="utf-8"
+    )
+
+    (run_dir / "auto_simulation_assets.json").write_text(
+        json.dumps(
+            {
+                "table": [{"variable": "CNT_TRF", "magnitud_max_cambio_abs": 0.1}],
+                "vano_risk": [{"FID_VANO": "V0", "delta_riesgo_ordinal": 0.2}],
+                "cost_context": {"disponible": True, "coincidencias": []},
+                "softmax_curves": {"variables": [], "metadata": {"warnings": []}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "auto-simulator.out.json").write_text(
+        json.dumps(_canned_ok({"titulo": "Discusión automática", "resumen": ["R1"]})), encoding="utf-8"
+    )
+
+    captured: dict = {}
+
+    def _spy_render_llm_analysis(*args, **kwargs):
+        for key in (
+            "automatic_simulation_table",
+            "automatic_simulation_analysis",
+            "automatic_simulation_cost_context",
+            "automatic_simulation_softmax_curves",
+            "automatic_simulation_vano_risk_df",
+        ):
+            captured[key] = kwargs.get(key)
+        html_path = tmp_path / "html" / "fake.html"
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        html_path.write_text("<html></html>", encoding="utf-8")
+        return html_path
+
+    monkeypatch.setattr(report_pipeline_module, "render_llm_analysis", _spy_render_llm_analysis)
+
+    render(run_dir, output_dir=tmp_path / "html")
+
+    assert captured["automatic_simulation_table"] is not None
+    assert list(captured["automatic_simulation_table"]["variable"]) == ["CNT_TRF"]
+    assert captured["automatic_simulation_analysis"] == {"titulo": "Discusión automática", "resumen": ["R1"]}
+    assert captured["automatic_simulation_cost_context"] == {"disponible": True, "coincidencias": []}
+    assert captured["automatic_simulation_softmax_curves"] == {"variables": [], "metadata": {"warnings": []}}
+    assert captured["automatic_simulation_vano_risk_df"] is not None
+    assert list(captured["automatic_simulation_vano_risk_df"]["FID_VANO"]) == ["V0"]

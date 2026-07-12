@@ -11,6 +11,7 @@ metadata:
     - .claude/skills/historical/SKILL.md
     - .claude/skills/inference/SKILL.md
     - .claude/skills/expert-alignment/SKILL.md
+    - .claude/skills/auto-simulator/SKILL.md
 ---
 
 ## Overview
@@ -126,6 +127,18 @@ Given `circuito` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair)
    `run_dir/inference.out.json`. Steps 3 and 4 may run in either order (both must complete
    successfully before step 5) — the design places no ordering requirement between historical and
    inference, only that both precede expert-alignment.
+4b. **Invoke `auto-simulator`** — `prepare` (step 2) already ran the automatic min/max sensitivity
+   simulator as a side effect, using the same loaded MGCECDL model as the inference/SHAP simulator.
+   If `run_dir/auto-simulator.bc.json` exists, load `.claude/skills/auto-simulator/SKILL.md`, give it
+   that envelope via `agent_tools.auto_simulator build-context`/`validate`, and have it write its
+   validated response to `run_dir/auto-simulator.out.json` as `{"ok": true, "data": <response>}` once
+   `validate` returns exit code `0`. Unlike steps 3/4/6, a validation-retries-exhausted outcome here
+   does **not** stop the whole `/reporte` run — degrade to skip (proceed to step 5 without an
+   `auto-simulator.out.json`; `render`'s `automatic_simulation_analysis` kwarg simply stays `None`),
+   since this is a supplementary discussion section, not a required stage. If
+   `run_dir/auto-simulator.bc.json` is absent (R3 gap: no trained model, or zero events for this
+   circuit/window in the automatic simulator's re-derived mask), skip this step entirely — there is
+   nothing to build a prompt from.
 5. **`prepare_expert_alignment`** — run
    `report_pipeline.prepare_expert_alignment(run_dir)`. Reads the validated
    `historical.out.json`/`inference.out.json` from steps 3-4, pools report dates, matches the
@@ -136,10 +149,12 @@ Given `circuito` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair)
    `run_dir/expert-alignment.bc.json` and `agent_tools.expert_alignment build-context`/`validate`,
    writing `run_dir/expert-alignment.out.json`.
 7. **`render`** — run `report_pipeline.render(run_dir)`. Reads all three validated outputs and
-   calls `plotting.render_llm_analysis` (no `automatic_simulation_*` kwargs — the separate
-   "simulador automático mínimo/máximo" is still untouched, out of scope). Raises
-   `ReportPipelineError` if the expert-alignment output is missing/invalid; no HTML is written in
-   that case.
+   calls `plotting.render_llm_analysis`, now also merging in the 5 `automatic_simulation_*` kwargs
+   (table, agent analysis, cost context, softmax curves, vano-risk table) when
+   `run_dir/auto_simulation_assets.json` and/or `run_dir/auto-simulator.out.json` exist — every
+   kwarg stays `None` when the corresponding file is absent (no crash either way, same degrade
+   shape as the inference-simulator sidecar below). Raises `ReportPipelineError` if the
+   expert-alignment output is missing/invalid; no HTML is written in that case.
 
    `render` stays model-free: it never reloads the MGCECDL classifier or recomputes SHAP. If
    `prepare` persisted `run_dir/inference_render_assets.json` (the healthy-run case above), `render`

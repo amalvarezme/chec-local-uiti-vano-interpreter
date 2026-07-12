@@ -13,10 +13,14 @@ Stages:
         via `data_loader.circuit_date_range` when either bound is missing,
         runs critical-point detection, and writes the two raw context
         payloads (`historical.bc.json`, `inference.bc.json`) plus an
-        `l1_state.json` bookkeeping file under a fresh run_dir. Fails fast
-        with `ReportPipelineError` if the circuit does not exist or the
-        resolved window has zero events — no context is built and no
-        run_dir is created in either case.
+        `l1_state.json` bookkeeping file under a fresh run_dir. Also loads
+        the MGCECDL model once and runs the inference/SHAP simulator and the
+        automatic min/max sensitivity simulator (`auto-simulator.bc.json` +
+        `auto_simulation_assets.json`), both degrading to a no-op when no
+        model artifact is available. Fails fast with `ReportPipelineError`
+        if the circuit does not exist or the resolved window has zero
+        events — no context is built and no run_dir is created in either
+        case.
 
     prepare_expert_alignment(run_dir, *, pdf_discussions_path=None)
         Reads the historical and inference agents' VALIDATED outputs
@@ -39,11 +43,13 @@ Stages:
     render(run_dir, *, output_dir=None)
         Reads all three validated outputs (historical, inference,
         expert-alignment) from the run_dir and calls
-        `plotting.render_llm_analysis` with no `automatic_simulation_*`
-        kwargs (no simulator in this change), returning the HTML `Path`.
-        Fails fast with `ReportPipelineError` if the expert-alignment
-        output is missing/invalid — `render_llm_analysis` is never called
-        in that case.
+        `plotting.render_llm_analysis`, merging in the 5
+        `automatic_simulation_*` kwargs from the optional auto-simulator
+        sidecar/agent-output files when present (all `None` otherwise, same
+        degrade shape as the inference-simulator sidecar), returning the
+        HTML `Path`. Fails fast with `ReportPipelineError` if the
+        expert-alignment output is missing/invalid — `render_llm_analysis`
+        is never called in that case.
 
 `runs_root` (on `prepare`), `pdf_discussions_path` (on
 `prepare_expert_alignment`), and `output_dir` (on `render`) are additive,
@@ -107,6 +113,7 @@ from chec_local_interpreter.config import (
     project_root,
 )
 from chec_local_interpreter.context_builder import build_context_package, save_json_artifact
+from chec_local_interpreter.costs import build_auto_simulation_cost_context, load_cost_items
 from chec_local_interpreter.critical_points import (
     build_daily_series,
     compute_daily_features,
@@ -128,6 +135,11 @@ from chec_local_interpreter.expert_alignment import (
     seleccionar_top_coincidencias_temporales,
 )
 from chec_local_interpreter.plotting import render_llm_analysis
+from chec_local_interpreter.simulator import (
+    simulate_automatic_minmax_sensitivity,
+    simulate_suggested_vano_risk,
+    simulate_top_softmax_curves,
+)
 
 # Mirrors the notebook's own defaults (`TOP_N_VANOS`/`TOP_K_VARS`/
 # `FILTRO_UITI_MAX`/`VENTANA_CLIMATICA_HORAS` in
@@ -166,6 +178,11 @@ _PDF_DISCUSSIONS_GLOB = "tabla_pdfs_intervalo_*.xlsx"
 # (10, 30) => 10 (cell ~55 of the superseded
 # `02_local_uiti_vano_interpretability_v3.ipynb`).
 _TOP_K_PDF_DATE_MATCHES = 10
+
+# Same `COSTOS ITEMS CONTRATOS.xlsx` file the deprecated notebook read via
+# `COST_ITEMS_EXCEL_PATH` (cell ~59), resolved absolute against `project_root()`
+# rather than `costs.DEFAULT_COST_ITEMS_PATH`'s cwd-relative default.
+DEFAULT_COST_ITEMS_PATH = project_root() / "data" / "COSTOS ITEMS CONTRATOS.xlsx"
 
 
 class ReportPipelineError(ValueError):
@@ -736,6 +753,8 @@ def _compute_inference_scenarios(
 
 
 def _run_inference_simulator(
+    model: Any,
+    rbf_sigma: float | None,
     circuito: str,
     fecha_inicio: str,
     fecha_fin: str,
@@ -745,9 +764,10 @@ def _run_inference_simulator(
     data_path: str | Path | None = None,
 ) -> tuple[list[str], list[dict[str, Any]], str, float | None, dict[str, Any]]:
     """Orchestrate the read-only MGCECDL/SHAP simulator for one `prepare()`
-    run: load the model/Optuna sigma (task 2.1), compute the four scenario
-    contexts (task 2.3), and persist each surviving scenario's figures under
-    `run_dir` (task 3.2).
+    run: compute the four scenario contexts (task 2.3) from the already-
+    loaded `model`/`rbf_sigma` (hoisted to `prepare()` -- design D2 -- so the
+    model is loaded once per run and shared with `_run_automatic_simulator`),
+    and persist each surviving scenario's figures under `run_dir` (task 3.2).
 
     Returns `(features, escenarios, modelo_label, rbf_sigma, render_assets)`.
 
@@ -768,7 +788,6 @@ def _run_inference_simulator(
     early-return path is the real production R3 shape (features=[]).
     """
     run_dir = Path(run_dir)
-    model, rbf_sigma = _load_mgcecdl_model_and_sigma()
     if model is None:
         return [], [], _NO_SIMULATOR_MODEL_LABEL, None, {}
 
@@ -794,6 +813,272 @@ def _run_inference_simulator(
                 asset[field] = str(Path(value).relative_to(run_dir))
 
     return features, escenarios, modelo_label, rbf_sigma, render_assets
+
+
+def _variables_desde_inferencia(inference_context: dict[str, Any] | None) -> list[str]:
+    """Collect unique variable names referenced by every scenario's
+    `top_variables` in an `inference.bc.json`-shaped context.
+
+    Ports the deprecated notebook's `_variables_desde_inferencia` (cell 59),
+    with one correction: the notebook read `item["variable"]`, but the real
+    `top_variables` records this codebase actually produces
+    (`chec_impacto.interpretability.circuit_analysis._series_to_score_records`,
+    used by `construir_contexto_escenario_inferencia`) key each entry as
+    `"nombre"`, not `"variable"` -- reading the notebook's stale key name
+    here would silently yield zero variables against real data. `"variable"`
+    is still checked as a fallback for forward/backward compatibility with
+    any other producer of this shape.
+    """
+    variables: list[str] = []
+    escenarios = inference_context.get("escenarios") if isinstance(inference_context, dict) else None
+    for escenario in escenarios or []:
+        if not isinstance(escenario, dict):
+            continue
+        for item in escenario.get("top_variables") or []:
+            if isinstance(item, dict):
+                variable = item.get("nombre") or item.get("variable")
+            else:
+                variable = item
+            text = str(variable or "").strip()
+            if text and text not in variables:
+                variables.append(text)
+    return variables
+
+
+def _run_automatic_simulator(
+    circuito: str,
+    fecha_inicio: str,
+    fecha_fin: str,
+    fechas_interes: list[str],
+    run_dir: str | Path,
+    model: Any,
+    *,
+    data_path: str | Path | None = None,
+) -> dict[str, Any] | None:
+    """Run the automatic min/max sensitivity simulator (design D2) and
+    persist its compact agent context (`auto-simulator.bc.json`) plus a
+    render-only sidecar (`auto_simulation_assets.json`) under `run_dir`.
+
+    `fechas_interes` is accepted for signature parity with
+    `_run_inference_simulator`/future extension -- the ported notebook cell
+    (59) never filtered the automatic simulator to dates of interest (only
+    the full-period mask), so it is currently unused here.
+
+    Independently re-derives the scaled MGCECDL inputs via the same
+    deterministic calls `_compute_inference_scenarios` uses (design D2:
+    "consistency over DRY" -- sharing the scaled matrix would require
+    refactoring that fragile function) rather than reusing anything computed
+    by `_run_inference_simulator`. The candidate variable list is instead
+    read back from the already-persisted `run_dir/inference.bc.json`
+    (written by `prepare()` just before this call), since expert-alignment's
+    `variables_a_priorizar` -- the notebook's other variable source -- does
+    not exist yet at `prepare()` time (D1: expert-alignment runs later, once
+    the historical/inference agents have validated their outputs).
+
+    Returns the compact `auto-simulator.bc.json` context dict, or `None`
+    (writing no artifacts) when `model is None` (R3 gap, mirrors
+    `_run_inference_simulator`) or the circuit/window has zero matching
+    events.
+    """
+    if model is None:
+        return None
+
+    run_dir = Path(run_dir)
+    source_path = Path(data_path) if data_path is not None else DEFAULT_DATA_PATH
+
+    with redirect_stdout(io.StringIO()):
+        datos = procesar_dataset_completo(
+            path_clima=source_path,
+            path_variables_seleccion=DEFAULT_VARIABLES_SELECCION_PATH,
+            use_sampling=False,
+            min_samples_per_codigo=5,
+            target="UITI_VANO",
+            filtro_uiti_max=_FILTRO_UITI_MAX,
+            ventana_climatica_horas=_VENTANA_CLIMATICA_HORAS,
+        )
+
+    features = list(datos["features"])
+    X_full_raw = np.asarray(datos["X"], dtype=np.float32)
+    Xdf_full = datos["Xdata"].copy().reset_index(drop=True)
+    base_full = datos["df_original_copy"].copy().reset_index(drop=True)
+    label_encoders = datos.get("label_encoders", {})
+    max_values_imputed = datos.get("max_values_imputed", {})
+
+    fechas_col = pd.to_datetime(base_full["FECHA"], errors="coerce")
+    fechas_dia = fechas_col.dt.floor("D")
+    mascara = (
+        base_full["CIRCUITO"].astype(str).str.strip().eq(circuito)
+        & fechas_dia.ge(pd.Timestamp(fecha_inicio))
+        & fechas_dia.le(pd.Timestamp(fecha_fin))
+    )
+    if not mascara.any():
+        return None
+    mask_np = mascara.to_numpy()
+
+    with redirect_stdout(io.StringIO()):
+        splits = escalar_features_minmax_mgcecdl(
+            preparar_splits_estratificados(
+                X_full_raw,
+                datos["y"],
+                modo="clasificacion",
+                random_state=SHAP_RANDOM_STATE,
+            )
+        )
+    feature_scaler = splits["feature_scaler"]
+    # Same known limitation/warning as `_compute_inference_scenarios`: this
+    # MinMax scaler is re-fit here from a fresh stratified split of the
+    # CURRENT full CSV, not loaded from a training-time artifact.
+    warnings.warn(
+        "El escalador MinMax de features se recalcula a partir del dataset "
+        "actual en tiempo de reporte (simulador automático), no se carga "
+        "desde la distribución de entrenamiento original del modelo.",
+        stacklevel=2,
+    )
+    X_full = feature_scaler.transform(X_full_raw).astype(np.float32)
+
+    device = resolve_training_device("auto")
+
+    inference_bc_path = run_dir / "inference.bc.json"
+    inference_bc = _read_json(inference_bc_path) if inference_bc_path.exists() else {}
+    variables_bajo_analisis = _variables_desde_inferencia(inference_bc)
+    variables_simulables = [
+        variable
+        for variable in variables_bajo_analisis
+        if variable in features and variable in Xdf_full.columns
+    ]
+
+    metadata: dict[str, Any]
+    if not variables_simulables:
+        metadata = {
+            "warnings": [
+                "No hay variables bajo análisis con valores originales disponibles "
+                "para el simulador automático."
+            ]
+        }
+        simulation_table = pd.DataFrame()
+    else:
+        simulation_table, metadata = simulate_automatic_minmax_sensitivity(
+            model=model,
+            X_scaled=X_full,
+            X_raw_model=X_full_raw,
+            original_feature_df=Xdf_full,
+            feature_names=features,
+            variables=variables_simulables,
+            feature_scaler=feature_scaler,
+            predict_fn=predict_classification,
+            device=device,
+            mask=mask_np,
+            label_encoders=label_encoders,
+            max_values_imputed=max_values_imputed,
+            batch_size=_SHAP_BATCH_SIZE,
+        )
+
+    softmax_curves: dict[str, Any] = {"variables": [], "metadata": {"warnings": []}}
+    vano_risk_df = pd.DataFrame()
+    if not simulation_table.empty:
+        softmax_curves = simulate_top_softmax_curves(
+            model=model,
+            X_scaled=X_full,
+            X_raw_model=X_full_raw,
+            original_feature_df=Xdf_full,
+            feature_names=features,
+            variables=variables_simulables,
+            feature_scaler=feature_scaler,
+            predict_fn=predict_classification,
+            device=device,
+            mask=mask_np,
+            automatic_simulation_table=simulation_table,
+            label_encoders=label_encoders,
+            max_values_imputed=max_values_imputed,
+            batch_size=_SHAP_BATCH_SIZE,
+            max_variables=4,
+            max_values=18,
+        )
+        vano_risk_df, vano_risk_metadata = simulate_suggested_vano_risk(
+            model=model,
+            X_scaled=X_full,
+            X_raw_model=X_full_raw,
+            feature_names=features,
+            feature_scaler=feature_scaler,
+            predict_fn=predict_classification,
+            device=device,
+            mask=mask_np,
+            vano_ids=base_full["FID_VANO"],
+            softmax_curves=softmax_curves,
+            label_encoders=label_encoders,
+            max_values_imputed=max_values_imputed,
+            batch_size=_SHAP_BATCH_SIZE,
+        )
+        metadata["riesgo_por_vano"] = vano_risk_metadata
+
+    try:
+        cost_items_df = load_cost_items(DEFAULT_COST_ITEMS_PATH)
+        cost_context = build_auto_simulation_cost_context(simulation_table, cost_items_df)
+    except (FileNotFoundError, ValueError) as exc:
+        # Mirrors the notebook's own `try/except` around cost-context
+        # assembly (cell 59): a missing/malformed cost-items workbook
+        # degrades to "no cost context" rather than aborting the whole
+        # simulator stage -- the rest of the compact context is still useful
+        # to the agent without it.
+        cost_context = {
+            "disponible": False,
+            "advertencias": [f"No se pudo construir el contexto de costos del simulador automático: {exc}"],
+            "coincidencias": [],
+        }
+
+    compact_context = {
+        "contexto": {
+            "circuito": circuito,
+            "periodo": {"inicio": fecha_inicio, "fin": fecha_fin},
+            "modelo": type(model).__name__,
+        },
+        "metadata": metadata,
+        # Empty at this stage: `variables_a_priorizar` (expert-alignment's
+        # output) does not exist yet when `prepare()` calls this function --
+        # see the docstring above (D1).
+        "variables_priorizadas": [],
+        "variables_bajo_analisis": variables_bajo_analisis[:30],
+        "tabla_simulador_automatico": simulation_table.head(20).to_dict(orient="records"),
+        "costos_items_contratos": cost_context,
+        "curvas_softmax_top_variables": softmax_curves,
+        "contexto_inferencia_resumen": {
+            "escenarios": [
+                {
+                    "nombre": escenario.get("nombre"),
+                    "top_variables": (escenario.get("top_variables") or [])[:4],
+                    "modos": (escenario.get("modos") or [])[:3],
+                }
+                for escenario in (inference_bc.get("escenarios") or [])[:4]
+                if isinstance(escenario, dict)
+            ],
+        },
+    }
+
+    try:
+        save_json_artifact(compact_context, run_dir / "auto-simulator.bc.json")
+        save_json_artifact(
+            {
+                "table": simulation_table.to_dict(orient="records"),
+                "vano_risk": vano_risk_df.to_dict(orient="records") if not vano_risk_df.empty else [],
+                "cost_context": cost_context,
+                "softmax_curves": softmax_curves,
+            },
+            run_dir / "auto_simulation_assets.json",
+        )
+    except OSError as exc:
+        # Same degrade shape as `prepare()`'s own `inference_render_assets.json`
+        # write: a disk-full/permission-revoked failure here must not crash
+        # an otherwise fully successful run -- `_build_auto_simulation_kwargs`
+        # already tolerates absent sidecar/bc files (R3-shaped "no automatic
+        # simulation for this run"), same as `_build_inference_results` does.
+        warnings.warn(
+            "No se pudieron escribir los artefactos del simulador automático "
+            f"para '{circuito}': {exc}. La ejecución continúa sin discusión "
+            "automática de sensibilidad para este run.",
+            stacklevel=2,
+        )
+
+    return compact_context
 
 
 def _load_validated_agent_output(run_dir: Path, agent_name: str) -> dict[str, Any]:
@@ -898,8 +1183,12 @@ def prepare(
     )
 
     fechas_interes = [point["fecha_dia"] for point in critical_points]
+    # Loaded ONCE here and threaded into both simulators (design D2): the
+    # inference/SHAP simulator and the automatic min/max simulator each used
+    # to load their own copy of the same MGCECDL model.
+    model, rbf_sigma = _load_mgcecdl_model_and_sigma()
     features, escenarios, modelo_label, rbf_sigma, render_assets = _run_inference_simulator(
-        circuito, start, end, fechas_interes, run_dir, data_path=source_path
+        model, rbf_sigma, circuito, start, end, fechas_interes, run_dir, data_path=source_path
     )
     inference_context = construir_contexto_inferencia(
         circuito_interes=circuito,
@@ -942,6 +1231,14 @@ def prepare(
                 "inferencia renderizadas.",
                 stacklevel=2,
             )
+
+    # Runs AFTER `inference.bc.json` is persisted above: `_run_automatic_
+    # simulator` reads it back to derive its candidate variable list (see
+    # its own docstring for why -- D1/D2). Degrades to a no-op (returns
+    # `None`, writes nothing) when `model is None`, mirroring the inference
+    # simulator's own R3 gap.
+    _run_automatic_simulator(circuito, start, end, fechas_interes, run_dir, model, data_path=source_path)
+
     save_json_artifact(
         {
             "circuito": circuito,
@@ -1067,6 +1364,46 @@ def _build_inference_results(run_dir: Path) -> dict[str, Any] | None:
     return inference_results
 
 
+def _build_auto_simulation_kwargs(run_dir: Path) -> dict[str, Any]:
+    """Read the optional auto-simulator artifacts under `run_dir` and build
+    the 5 `automatic_simulation_*` kwargs `render_llm_analysis` accepts
+    (design D3).
+
+    Mirrors `_build_inference_results`'s degrade contract exactly: an absent
+    `auto_simulation_assets.json` sidecar or `auto-simulator.out.json`
+    (agent analysis, invalid/`ok: false`/missing envelope) simply leaves the
+    corresponding kwarg `None` -- never a crash, whether the automatic
+    simulator never ran (R3: no model) or its agent step was skipped.
+    """
+    kwargs: dict[str, Any] = {
+        "automatic_simulation_table": None,
+        "automatic_simulation_analysis": None,
+        "automatic_simulation_cost_context": None,
+        "automatic_simulation_softmax_curves": None,
+        "automatic_simulation_vano_risk_df": None,
+    }
+
+    assets_path = run_dir / "auto_simulation_assets.json"
+    if assets_path.exists():
+        assets = _read_json(assets_path)
+        table_records = assets.get("table")
+        vano_risk_records = assets.get("vano_risk")
+        kwargs["automatic_simulation_table"] = pd.DataFrame(table_records) if table_records else None
+        kwargs["automatic_simulation_vano_risk_df"] = (
+            pd.DataFrame(vano_risk_records) if vano_risk_records else None
+        )
+        kwargs["automatic_simulation_cost_context"] = assets.get("cost_context")
+        kwargs["automatic_simulation_softmax_curves"] = assets.get("softmax_curves")
+
+    out_path = run_dir / "auto-simulator.out.json"
+    if out_path.exists():
+        payload = _read_json(out_path)
+        if isinstance(payload, dict) and payload.get("ok") is True and "data" in payload:
+            kwargs["automatic_simulation_analysis"] = payload["data"]
+
+    return kwargs
+
+
 def render(run_dir: str | Path, *, output_dir: str | Path | None = None) -> Path:
     """Read all three validated outputs from `run_dir` and render the final
     HTML report via `plotting.render_llm_analysis`.
@@ -1100,6 +1437,7 @@ def render(run_dir: str | Path, *, output_dir: str | Path | None = None) -> Path
         "inference_analysis": inference_data,
         "expert_alignment_analysis": expert_alignment_data,
         "expert_alignment_matches": None,
+        **_build_auto_simulation_kwargs(run_dir),
     }
     if output_dir is not None:
         kwargs["output_dir"] = output_dir
