@@ -6,12 +6,38 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+import chec_local_interpreter.report_pipeline as report_pipeline_module
+from chec_local_interpreter.config import DEFAULT_MODEL_DIR as _REAL_DEFAULT_MODEL_DIR
+from chec_local_interpreter.inference_validation import validar_respuesta_inferencia_strict
 from chec_local_interpreter.report_pipeline import (
     ReportPipelineError,
     prepare,
     prepare_expert_alignment,
     render,
 )
+
+
+@pytest.fixture(autouse=True)
+def _no_real_mgcecdl_model_by_default(tmp_path, monkeypatch):
+    """Most tests in this file use a small synthetic fixture dataset (C1/C2)
+    that is NOT compatible with the real MGCECDL simulator's
+    `Variables_seleccion.xlsx` feature-column requirements (confirmed
+    empirically: `procesar_dataset_completo` raises `ValueError` for this
+    fixture's columns). Point `_load_mgcecdl_model_and_sigma` at an empty
+    model directory by default so `prepare()`'s simulator step degrades to
+    the spec'd "missing trained model" gap (R3, obs#219) instead of crashing
+    on an incompatible dataset -- the same "no simulator output" shape these
+    tests already asserted against the old stub.
+
+    Tests that need the REAL simulator (the integration tests in the
+    "real inference simulator" section below) explicitly restore the real
+    `DEFAULT_MODEL_DIR` via `monkeypatch.setattr(...)` after this fixture
+    runs -- `monkeypatch` preserves call order, so the later, more specific
+    patch wins for the duration of that test.
+    """
+    empty_model_dir = tmp_path / "no-mgcecdl-model"
+    empty_model_dir.mkdir()
+    monkeypatch.setattr(report_pipeline_module, "DEFAULT_MODEL_DIR", empty_model_dir)
 
 
 def _write_fixture_dataset(directory: Path) -> Path:
@@ -78,6 +104,54 @@ def test_prepare_happy_path_no_dates_uses_full_circuit_range(tmp_path):
     assert inference_context["circuito_interes"] == "C1"
     assert inference_context["fecha_inicio"] == "2026-01-01"
     assert inference_context["fecha_fin"] == "2026-01-10"
+
+
+def test_prepare_wires_real_simulator_stub_replaced_by_r3_gap_when_model_missing(tmp_path):
+    """Task 3.3: `prepare()` no longer hardcodes `features=[]`/`escenarios=[]`/
+    `_NO_SIMULATOR_MODEL_LABEL` -- it now calls `_run_inference_simulator`.
+    With the (default, autoused) empty model dir, this must reach the exact
+    same R3 gap shape the old stub always produced (obs#219): `features=[]`,
+    `escenarios=[]`, `modelo=_NO_SIMULATOR_MODEL_LABEL` -- and no render-assets
+    sidecar (nothing to persist when the simulator never ran)."""
+    data_path = _write_fixture_dataset(tmp_path)
+
+    run_dir = prepare("C1", data_path=data_path, runs_root=tmp_path / "runs")
+
+    inference_context = _read_json(run_dir / "inference.bc.json")
+    assert inference_context["features"] == []
+    assert inference_context["escenarios"] == []
+    assert inference_context["modelo"] == report_pipeline_module._NO_SIMULATOR_MODEL_LABEL
+    assert not (run_dir / "inference_render_assets.json").exists()
+
+
+def test_prepare_creates_run_dir_after_zero_events_check_before_simulator(tmp_path, monkeypatch):
+    """Task 3.3: `_new_run_dir(...)` must run AFTER the zero-events hard-fail
+    check but BEFORE the simulator call, so a simulator-side exception could
+    never leave callers without a `run_dir` reference, while hard failures
+    (circuit-not-found/zero-events) still never create one."""
+    data_path = _write_fixture_dataset(tmp_path)
+    runs_root = tmp_path / "runs"
+
+    calls: list[str] = []
+    original_new_run_dir = report_pipeline_module._new_run_dir
+    original_run_inference_simulator = report_pipeline_module._run_inference_simulator
+
+    def _tracking_new_run_dir(*args, **kwargs):
+        calls.append("_new_run_dir")
+        return original_new_run_dir(*args, **kwargs)
+
+    def _tracking_run_inference_simulator(*args, **kwargs):
+        calls.append("_run_inference_simulator")
+        return original_run_inference_simulator(*args, **kwargs)
+
+    monkeypatch.setattr(report_pipeline_module, "_new_run_dir", _tracking_new_run_dir)
+    monkeypatch.setattr(
+        report_pipeline_module, "_run_inference_simulator", _tracking_run_inference_simulator
+    )
+
+    prepare("C1", data_path=data_path, runs_root=runs_root)
+
+    assert calls == ["_new_run_dir", "_run_inference_simulator"]
 
 
 def test_prepare_explicit_dates_are_respected(tmp_path):
@@ -232,6 +306,97 @@ def test_render_produces_html_file_from_canned_validated_envelopes(tmp_path):
     assert html_path.exists()
     assert html_path.suffix == ".html"
     assert html_path.read_text(encoding="utf-8").strip() != ""
+
+
+def test_render_sidecar_absent_inference_results_stays_none_no_crash(tmp_path, monkeypatch):
+    """Task 3.4: with the (default, autoused) empty model dir, prepare() never
+    writes `inference_render_assets.json` -- `render()` must pass
+    `inference_results=None` (same as before wiring) rather than crashing."""
+    data_path = _write_fixture_dataset(tmp_path)
+    run_dir = prepare("C1", data_path=data_path, runs_root=tmp_path / "runs")
+    assert not (run_dir / "inference_render_assets.json").exists()
+    (run_dir / "historical.out.json").write_text(json.dumps(_canned_ok({"hallazgos": ["H1"]})), encoding="utf-8")
+    (run_dir / "inference.out.json").write_text(json.dumps(_canned_ok({"hallazgos": ["I1"]})), encoding="utf-8")
+    prepare_expert_alignment(run_dir)
+    (run_dir / "expert-alignment.out.json").write_text(
+        json.dumps(_canned_ok({"sintesis_final": "Todo alineado."})), encoding="utf-8"
+    )
+
+    captured: dict = {}
+
+    def _spy_render_llm_analysis(*args, **kwargs):
+        captured["inference_results"] = kwargs.get("inference_results")
+        html_path = tmp_path / "html" / "fake.html"
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        html_path.write_text("<html></html>", encoding="utf-8")
+        return html_path
+
+    monkeypatch.setattr(report_pipeline_module, "render_llm_analysis", _spy_render_llm_analysis)
+
+    render(run_dir, output_dir=tmp_path / "html")
+
+    assert captured["inference_results"] is None
+
+
+def test_render_sidecar_present_builds_non_none_inference_results(tmp_path, monkeypatch):
+    """Task 3.4: when `inference_render_assets.json` exists, `render()` must
+    resolve each path against `run_dir` and rebuild `inference_results`
+    (keyed by scenario key, each `{fig_barras, fig_radar, grafo_interactivo,
+    contexto}`) instead of passing `None`."""
+    data_path = _write_fixture_dataset(tmp_path)
+    run_dir = prepare("C1", data_path=data_path, runs_root=tmp_path / "runs")
+    (run_dir / "historical.out.json").write_text(json.dumps(_canned_ok({"hallazgos": ["H1"]})), encoding="utf-8")
+    (run_dir / "inference.out.json").write_text(json.dumps(_canned_ok({"hallazgos": ["I1"]})), encoding="utf-8")
+    prepare_expert_alignment(run_dir)
+    (run_dir / "expert-alignment.out.json").write_text(
+        json.dumps(_canned_ok({"sintesis_final": "Todo alineado."})), encoding="utf-8"
+    )
+
+    # Simulate what a healthy `_run_inference_simulator` run would have
+    # written: a matching scenario contexto in inference.bc.json plus the
+    # sidecar + the (fake) persisted PNG/HTML files it references.
+    scenario_nombre = "Top P97 por UITI_VANO — período completo"
+    inference_bc = _read_json(run_dir / "inference.bc.json")
+    inference_bc["escenarios"] = [{"nombre": scenario_nombre, "criterio": "x"}]
+    (run_dir / "inference.bc.json").write_text(json.dumps(inference_bc), encoding="utf-8")
+
+    (run_dir / "inference_figures").mkdir()
+    (run_dir / "inference_figures" / "top_uiti_periodo_barras.png").write_bytes(b"fakepng")
+    (run_dir / "inference_figures" / "top_uiti_periodo_radar.png").write_bytes(b"fakepng")
+    (run_dir / "inference_graphs").mkdir()
+    (run_dir / "inference_graphs" / "top_uiti_periodo.html").write_text("<html></html>", encoding="utf-8")
+
+    render_assets = {
+        "top_uiti_periodo": {
+            "nombre": scenario_nombre,
+            "fig_barras_png": "inference_figures/top_uiti_periodo_barras.png",
+            "fig_radar_png": "inference_figures/top_uiti_periodo_radar.png",
+            "grafo_interactivo_html": "inference_graphs/top_uiti_periodo.html",
+        }
+    }
+    (run_dir / "inference_render_assets.json").write_text(json.dumps(render_assets), encoding="utf-8")
+
+    captured: dict = {}
+
+    def _spy_render_llm_analysis(*args, **kwargs):
+        captured["inference_results"] = kwargs.get("inference_results")
+        html_path = tmp_path / "html" / "fake.html"
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        html_path.write_text("<html></html>", encoding="utf-8")
+        return html_path
+
+    monkeypatch.setattr(report_pipeline_module, "render_llm_analysis", _spy_render_llm_analysis)
+
+    render(run_dir, output_dir=tmp_path / "html")
+
+    inference_results = captured["inference_results"]
+    assert inference_results is not None
+    assert set(inference_results.keys()) == {"top_uiti_periodo"}
+    entry = inference_results["top_uiti_periodo"]
+    assert entry["fig_barras"] == str(run_dir / "inference_figures" / "top_uiti_periodo_barras.png")
+    assert entry["fig_radar"] == str(run_dir / "inference_figures" / "top_uiti_periodo_radar.png")
+    assert entry["grafo_interactivo"] == str(run_dir / "inference_graphs" / "top_uiti_periodo.html")
+    assert entry["contexto"]["nombre"] == scenario_nombre
 
 
 def test_render_missing_expert_alignment_output_raises_before_writing_html(tmp_path):
@@ -497,3 +662,381 @@ def test_prepare_expert_alignment_default_path_resolves_via_glob(tmp_path, monke
     bc = _read_json(run_dir / "expert-alignment.bc.json")
     assert bc["pdf_expert_matches"], "expected the glob-resolved xlsx to be picked up by default"
     assert bc["pdf_expert_matches"][0]["Análisis"] == "Tabla vigente."
+
+
+# ---------------------------------------------------------------------------
+# Real inference simulator integration (tasks 4.1-4.3). Unlike the rest of
+# this file, these tests use the REAL committed model/Optuna/Variables
+# artifacts on a real circuit with sufficient events -- explicitly restoring
+# `DEFAULT_MODEL_DIR` (the autouse fixture above defaults it to empty).
+# ---------------------------------------------------------------------------
+
+# BVA23L12, 2026-03-01: same real circuit/window PR1's own tests already use
+# (tests/test_report_pipeline_inference_simulator.py) -- 20 real events, all
+# four scenario types survive.
+_REAL_SUFFICIENT_CIRCUIT = "BVA23L12"
+_REAL_SUFFICIENT_WINDOW = ("2026-03-01", "2026-03-01")
+
+
+def _enable_real_mgcecdl_model(monkeypatch) -> None:
+    monkeypatch.setattr(report_pipeline_module, "DEFAULT_MODEL_DIR", _REAL_DEFAULT_MODEL_DIR)
+
+
+def _canned_inference_ok(run_dir: Path) -> dict:
+    """Task 4.2: build a canned VALIDATED `inference.out.json` payload whose
+    `escenarios[].nombre` values are read FROM the real
+    `run_dir/inference.bc.json` (never hand-written), then run it through the
+    real `validar_respuesta_inferencia_strict` so
+    `inference_validation.py`'s `allowed_scenario_names`/`_guardrail_errors`
+    are actually exercised end to end rather than bypassed."""
+    inference_bc = _read_json(run_dir / "inference.bc.json")
+    escenario_nombres = [
+        escenario["nombre"]
+        for escenario in inference_bc.get("escenarios", [])
+        if isinstance(escenario, dict) and escenario.get("nombre")
+    ]
+    graph_paths_by_nombre = {
+        item.get("escenario"): item.get("path")
+        for item in inference_bc.get("graph_html_paths", [])
+        if isinstance(item, dict)
+    }
+
+    response = {
+        "contexto": {
+            "circuito": inference_bc["circuito_interes"],
+            "periodo": {"inicio": inference_bc["fecha_inicio"], "fin": inference_bc["fecha_fin"]},
+            "modelo": inference_bc["modelo"],
+        },
+        "entregables": {
+            "grafos_html": [
+                {
+                    "escenario": nombre,
+                    "path": graph_paths_by_nombre.get(nombre) or "grafo.html",
+                    "fuente": "reconstruccion_mgcecdl_rbf",
+                    "pesos": "normalizados_0_1_por_maximo",
+                }
+                for nombre in escenario_nombres
+            ]
+        },
+        "escenarios": [
+            {"nombre": nombre, "interpretacion": f"Interpretacion generada para pruebas: {nombre}."}
+            for nombre in escenario_nombres
+        ],
+        "discusion_grafos": (
+            [
+                {
+                    "seccion": "periodo_completo",
+                    "lectura": "Discusion de grafo generada para pruebas de integracion.",
+                }
+            ]
+            if escenario_nombres
+            else []
+        ),
+        "coherencia_grafo_modelo": ["Coherencia generada para pruebas de integracion."],
+        "hallazgos": (
+            [f"Hallazgo generado para pruebas: {nombre}." for nombre in escenario_nombres]
+            if escenario_nombres
+            else ["Sin hallazgos: no hay escenarios sobrevivientes en este contexto."]
+        ),
+        "limitaciones": ["Limitacion generada para pruebas de integracion."],
+        "inferencias_predictivas": [],
+        "hipotesis_modelo_predictivo": {"periodo_completo": [], "puntos_criticos": []},
+    }
+
+    validated = validar_respuesta_inferencia_strict(json.dumps(response, ensure_ascii=False), inference_bc)
+    assert validated["ok"], validated["errors"]
+    return {"ok": True, "data": validated["data"]}
+
+
+def test_prepare_wires_real_inference_simulator_with_sufficient_events(tmp_path, monkeypatch):
+    """Task 4.1: real prepare() with the real model+Optuna+Variables
+    artifacts and a circuit/window with sufficient events -- non-empty
+    features, >=1 escenario, and the PNGs/HTML/sidecar this change persists
+    under run_dir."""
+    _enable_real_mgcecdl_model(monkeypatch)
+
+    run_dir = prepare(
+        _REAL_SUFFICIENT_CIRCUIT, *_REAL_SUFFICIENT_WINDOW, runs_root=tmp_path / "runs"
+    )
+
+    inference_context = _read_json(run_dir / "inference.bc.json")
+    assert inference_context["features"], "expected real features from the real simulator"
+    assert len(inference_context["escenarios"]) >= 1
+    assert inference_context["modelo"] != report_pipeline_module._NO_SIMULATOR_MODEL_LABEL
+
+    sidecar_path = run_dir / "inference_render_assets.json"
+    assert sidecar_path.exists()
+    render_assets = _read_json(sidecar_path)
+    assert render_assets
+
+    figures_dir = run_dir / "inference_figures"
+    graphs_dir = run_dir / "inference_graphs"
+    assert list(figures_dir.glob("*.png")), "expected persisted fig_barras/fig_radar PNGs"
+    assert list(graphs_dir.glob("*.html")), "expected persisted grafo_interactivo HTML"
+
+
+def test_prepare_survives_persistence_failure_for_one_scenario_keeps_others_and_completes(
+    tmp_path, monkeypatch
+):
+    """Persistence-layer failure (`OSError`) while saving one scenario's
+    render assets (PNG/HTML) must NOT discard that scenario's already-
+    computed `contexto`, must NOT crash `prepare()`, and must be reported
+    with wording distinct from the "omitido por ValueError"/insufficient-
+    signal warning -- the run always continues and the report always
+    generates (per the reporte Skill's documented degrade contract)."""
+    _enable_real_mgcecdl_model(monkeypatch)
+
+    original_persist = report_pipeline_module._persist_scenario_render_assets
+    _FAILING_SCENARIO_KEY = "top_frecuencia_periodo"
+    failed_calls: list[str] = []
+
+    def _persist_failing_for_one_scenario(*, scenario_key, **kwargs):
+        if scenario_key == _FAILING_SCENARIO_KEY:
+            failed_calls.append(scenario_key)
+            raise OSError("simulated disk-full failure while saving render assets")
+        return original_persist(scenario_key=scenario_key, **kwargs)
+
+    monkeypatch.setattr(
+        report_pipeline_module,
+        "_persist_scenario_render_assets",
+        _persist_failing_for_one_scenario,
+    )
+
+    with pytest.warns(UserWarning, match="persistir los activos de render"):
+        run_dir = prepare(
+            _REAL_SUFFICIENT_CIRCUIT, *_REAL_SUFFICIENT_WINDOW, runs_root=tmp_path / "runs"
+        )
+
+    assert failed_calls == [_FAILING_SCENARIO_KEY], "expected the forced failure to actually fire"
+
+    # (b) prepare() completed and produced the three JSON artifacts -- no
+    # crash, no orphan run_dir missing them.
+    assert (run_dir / "historical.bc.json").exists()
+    assert (run_dir / "inference.bc.json").exists()
+    assert (run_dir / "l1_state.json").exists()
+
+    # (a) the scenario whose PERSISTENCE failed is still present in
+    # `escenarios` with real interpretation/context data -- its SHAP
+    # computation succeeded, only the render-asset save failed.
+    inference_context = _read_json(run_dir / "inference.bc.json")
+    nombres = {escenario["nombre"] for escenario in inference_context["escenarios"]}
+    frecuencia_periodo_nombres = [
+        nombre for nombre in nombres if "frecuencia" in nombre and "período completo" in nombre
+    ]
+    assert frecuencia_periodo_nombres, "expected the scenario to survive despite the persistence failure"
+    assert len(inference_context["escenarios"]) >= 3, (
+        "expected the other scenarios' render assets to be unaffected by one scenario's "
+        "persistence failure"
+    )
+
+    # (d) the failed scenario has no render_assets entry (its sidecar entry
+    # is simply absent, the same shape `render()` already tolerates), while
+    # the other scenarios' render assets are unaffected.
+    sidecar_path = run_dir / "inference_render_assets.json"
+    assert sidecar_path.exists()
+    render_assets = _read_json(sidecar_path)
+    assert _FAILING_SCENARIO_KEY not in render_assets
+    assert len(render_assets) == len(inference_context["escenarios"]) - 1
+
+
+def test_reporte_end_to_end_with_real_simulator_renders_non_empty_inference_section(
+    tmp_path, monkeypatch
+):
+    """Task 4.2: full prepare -> prepare_expert_alignment -> render with the
+    real simulator and a canned (schema+guardrail validated) inference
+    output -- the final HTML's inference section must be non-empty (actual
+    persisted figures embedded, not the old `None` short-circuit)."""
+    _enable_real_mgcecdl_model(monkeypatch)
+
+    run_dir = prepare(
+        _REAL_SUFFICIENT_CIRCUIT, *_REAL_SUFFICIENT_WINDOW, runs_root=tmp_path / "runs"
+    )
+    (run_dir / "historical.out.json").write_text(
+        json.dumps(_canned_ok({"hallazgos": ["Hallazgo historico."]})), encoding="utf-8"
+    )
+    (run_dir / "inference.out.json").write_text(
+        json.dumps(_canned_inference_ok(run_dir)), encoding="utf-8"
+    )
+
+    prepare_expert_alignment(run_dir)
+    (run_dir / "expert-alignment.out.json").write_text(
+        json.dumps(_canned_ok({"sintesis_final": "Todo alineado."})), encoding="utf-8"
+    )
+
+    html_path = render(run_dir, output_dir=tmp_path / "html")
+    html = html_path.read_text(encoding="utf-8")
+
+    assert html.strip() != ""
+    assert "Discusión general de inferencias del modelo" in html
+    assert "embedded-figure" in html, "expected a persisted PNG actually embedded in the report"
+
+
+def test_prepare_regenerates_graph_html_independently_across_consecutive_runs(
+    tmp_path, monkeypatch
+):
+    """Task 4.3: two consecutive prepare() runs for the same circuit/window
+    must each independently recompute and write their own HTML graph files
+    under their own run_dir -- no caching/reuse by circuit/date-window or any
+    other key (spec requirement)."""
+    _enable_real_mgcecdl_model(monkeypatch)
+    runs_root = tmp_path / "runs"
+
+    run_dir_1 = prepare(_REAL_SUFFICIENT_CIRCUIT, *_REAL_SUFFICIENT_WINDOW, runs_root=runs_root)
+    run_dir_2 = prepare(_REAL_SUFFICIENT_CIRCUIT, *_REAL_SUFFICIENT_WINDOW, runs_root=runs_root)
+
+    assert run_dir_1 != run_dir_2, "each prepare() call must get its own fresh run_dir"
+
+    graphs_1 = sorted((run_dir_1 / "inference_graphs").glob("*.html"))
+    graphs_2 = sorted((run_dir_2 / "inference_graphs").glob("*.html"))
+    assert graphs_1, "expected the first run to persist its own HTML graphs"
+    assert graphs_2, "expected the second run to persist its own HTML graphs"
+    assert len(graphs_1) == len(graphs_2)
+
+    # Independently-written files under distinct run_dirs, not a shared/
+    # reused path -- the two runs never touch each other's artifacts.
+    names_1 = {path.name for path in graphs_1}
+    names_2 = {path.name for path in graphs_2}
+    assert names_1 == names_2
+    for path_1, path_2 in zip(graphs_1, graphs_2):
+        assert path_1.resolve() != path_2.resolve()
+        assert path_1.read_bytes(), "first run's HTML must be a real, non-empty file"
+        assert path_2.read_bytes(), "second run's HTML must be a real, non-empty file"
+
+
+def test_prepare_survives_graph_output_dir_creation_failure_whole_run_completes(
+    tmp_path, monkeypatch
+):
+    """`graph_dir.mkdir(...)` failing (permission-denied/disk-full/read-only
+    mount) must degrade the WHOLE simulator call for this run -- no scenario
+    can persist a graph HTML without a writable directory -- rather than
+    crash `prepare()`. The report must still generate all three JSON
+    artifacts, with a clear, distinct warning, and no
+    `inference_render_assets.json` sidecar."""
+    _enable_real_mgcecdl_model(monkeypatch)
+
+    original_mkdir = Path.mkdir
+
+    def _mkdir_failing_for_graph_dir(self, *args, **kwargs):
+        if self.name == "inference_graphs":
+            raise OSError("simulated permission-denied creating graph output dir")
+        return original_mkdir(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", _mkdir_failing_for_graph_dir)
+
+    with pytest.warns(UserWarning, match="directorio de salida de grafos"):
+        run_dir = prepare(
+            _REAL_SUFFICIENT_CIRCUIT, *_REAL_SUFFICIENT_WINDOW, runs_root=tmp_path / "runs"
+        )
+
+    assert (run_dir / "historical.bc.json").exists()
+    assert (run_dir / "inference.bc.json").exists()
+    assert (run_dir / "l1_state.json").exists()
+
+    inference_context = _read_json(run_dir / "inference.bc.json")
+    assert inference_context["escenarios"] == []
+    assert inference_context["features"], (
+        "expected features to stay populated -- this is the whole-call "
+        "degrade shape, distinct from the R3 'no trained model' gap"
+    )
+    assert not (run_dir / "inference_render_assets.json").exists()
+
+
+def test_prepare_survives_render_assets_sidecar_write_failure_keeps_run_completes(
+    tmp_path, monkeypatch
+):
+    """An `OSError` raised specifically while writing the top-level
+    `inference_render_assets.json` sidecar (Round 3 gap: this
+    `save_json_artifact` call, unlike the ones just above/below it, was
+    unguarded) must NOT crash `prepare()` -- `_run_inference_simulator`
+    already succeeded by this point (features/escenarios computed, PNGs/HTML
+    already on disk), so a transient fault at just this line must degrade to
+    "no sidecar for this run" (the same shape `_build_inference_results`
+    already tolerates for an absent sidecar), not abort an otherwise fully
+    successful run."""
+    _enable_real_mgcecdl_model(monkeypatch)
+
+    original_save_json_artifact = report_pipeline_module.save_json_artifact
+
+    def _save_json_artifact_failing_for_sidecar(payload, path):
+        if Path(path).name == "inference_render_assets.json":
+            raise OSError("simulated disk-full failure writing render-assets sidecar")
+        return original_save_json_artifact(payload, path)
+
+    monkeypatch.setattr(
+        report_pipeline_module, "save_json_artifact", _save_json_artifact_failing_for_sidecar
+    )
+
+    with pytest.warns(UserWarning, match="sidecar de activos de render"):
+        run_dir = prepare(
+            _REAL_SUFFICIENT_CIRCUIT, *_REAL_SUFFICIENT_WINDOW, runs_root=tmp_path / "runs"
+        )
+
+    # (a) prepare() completed without crashing.
+    # (b) historical.bc.json/inference.bc.json/l1_state.json are all still
+    # written -- none of them is skipped just because the sidecar write
+    # failed.
+    assert (run_dir / "historical.bc.json").exists()
+    assert (run_dir / "inference.bc.json").exists()
+    assert (run_dir / "l1_state.json").exists()
+
+    # (c) inference.bc.json's escenarios/features are unaffected -- they were
+    # already computed by `_run_inference_simulator` before this write, which
+    # only persists a sidecar derived from that already-successful result.
+    inference_context = _read_json(run_dir / "inference.bc.json")
+    assert inference_context["features"], "expected features to stay populated"
+    assert len(inference_context["escenarios"]) >= 1, "expected escenarios to stay populated"
+
+    # (d) no inference_render_assets.json file exists.
+    assert not (run_dir / "inference_render_assets.json").exists()
+
+
+def test_prepare_survives_graph_html_write_failure_for_one_scenario_keeps_others_and_completes(
+    tmp_path, monkeypatch
+):
+    """An `OSError`/`PermissionError` raised while writing ONE scenario's
+    interactive graph HTML (inside `graficar_barras_y_radar` ->
+    `mostrar_grafo_interactivo_muestras`) must degrade only THAT scenario --
+    it is omitted from `escenarios` with a distinct warning -- without
+    crashing `prepare()` and without affecting the other scenarios computed
+    in the same run."""
+    _enable_real_mgcecdl_model(monkeypatch)
+
+    import chec_impacto.interpretability.circuit_analysis as circuit_analysis_module
+
+    original_mostrar = circuit_analysis_module.mostrar_grafo_interactivo_muestras
+    _FAILING_GRAPH_NAME = "top_frecuencia_periodo.html"
+    failed_calls: list[str] = []
+
+    def _mostrar_failing_for_one_scenario(*args, **kwargs):
+        output_path = kwargs.get("output_path")
+        if output_path is not None and Path(output_path).name == _FAILING_GRAPH_NAME:
+            failed_calls.append(_FAILING_GRAPH_NAME)
+            raise OSError("simulated permission-denied writing graph HTML")
+        return original_mostrar(*args, **kwargs)
+
+    monkeypatch.setattr(
+        circuit_analysis_module,
+        "mostrar_grafo_interactivo_muestras",
+        _mostrar_failing_for_one_scenario,
+    )
+
+    with pytest.warns(UserWarning, match="no se pudo escribir el grafo HTML"):
+        run_dir = prepare(
+            _REAL_SUFFICIENT_CIRCUIT, *_REAL_SUFFICIENT_WINDOW, runs_root=tmp_path / "runs"
+        )
+
+    assert failed_calls == [_FAILING_GRAPH_NAME], "expected the forced failure to actually fire"
+
+    assert (run_dir / "historical.bc.json").exists()
+    assert (run_dir / "inference.bc.json").exists()
+    assert (run_dir / "l1_state.json").exists()
+
+    inference_context = _read_json(run_dir / "inference.bc.json")
+    nombres = {escenario["nombre"] for escenario in inference_context["escenarios"]}
+    frecuencia_periodo_nombres = [
+        nombre for nombre in nombres if "frecuencia" in nombre and "período completo" in nombre
+    ]
+    assert not frecuencia_periodo_nombres, "expected the failing scenario to be omitted entirely"
+    assert len(inference_context["escenarios"]) >= 3, (
+        "expected the other scenarios to be unaffected by one scenario's graph-HTML write failure"
+    )

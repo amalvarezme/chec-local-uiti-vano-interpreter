@@ -1,8 +1,96 @@
 from __future__ import annotations
 
+import base64
+
 import pandas as pd
 
 from chec_local_interpreter.plotting import render_expert_alignment_tab, render_llm_analysis
+
+
+# ---------------------------------------------------------------------------
+# Task 3.5 -- `_figure_html` accepts a persisted PNG path (str/Path), not
+# only an open matplotlib figure object, since `_run_inference_simulator`
+# (task 3.2) now saves figures to disk and `render()` (task 3.4) only ever
+# passes back paths, never live figure objects.
+# ---------------------------------------------------------------------------
+
+
+def _minimal_raw_and_daily_df():
+    raw_df = pd.DataFrame(
+        {
+            "CIRCUITO": ["C1", "C1"],
+            "FECHA": ["2026-01-01", "2026-01-02"],
+            "UITI_VANO": [10.0, 20.0],
+            "FID_VANO": ["V1", "V2"],
+        }
+    )
+    daily_df = pd.DataFrame(
+        {
+            "fecha_dia": pd.to_datetime(["2026-01-01", "2026-01-02"]),
+            "UITI_VANO": [10.0, 20.0],
+            "event_count": [1, 1],
+        }
+    )
+    return raw_df, daily_df
+
+
+def test_figure_html_embeds_persisted_png_path_as_base64_img(tmp_path):
+    png_path = tmp_path / "fig_barras.png"
+    png_bytes = b"\x89PNG\r\n\x1a\n" + b"not-a-real-png-but-bytes-are-enough"
+    png_path.write_bytes(png_bytes)
+
+    raw_df, daily_df = _minimal_raw_and_daily_df()
+    inference_results = {
+        "top_uiti_periodo": {
+            "fig_barras": str(png_path),
+            "fig_radar": None,
+            "grafo_interactivo": None,
+            "contexto": {"nombre": "Top P97 por UITI_VANO — período completo"},
+        },
+    }
+
+    html_path = render_llm_analysis(
+        validation_data={},
+        raw_df=raw_df,
+        daily_df=daily_df,
+        critical_points=[],
+        selected_circuitos=["TODOS"],
+        inference_results=inference_results,
+        inference_analysis={},
+        output_dir=tmp_path / "html",
+    )
+    html = html_path.read_text(encoding="utf-8")
+
+    encoded = base64.b64encode(png_bytes).decode("ascii")
+    assert encoded in html
+    assert "<img" in html
+
+
+def test_figure_html_nonexistent_png_path_falls_back_without_crash(tmp_path):
+    raw_df, daily_df = _minimal_raw_and_daily_df()
+    inference_results = {
+        "top_uiti_periodo": {
+            "fig_barras": str(tmp_path / "does-not-exist.png"),
+            "fig_radar": None,
+            "grafo_interactivo": None,
+            "contexto": {"nombre": "Top P97 por UITI_VANO — período completo"},
+        },
+    }
+
+    html_path = render_llm_analysis(
+        validation_data={},
+        raw_df=raw_df,
+        daily_df=daily_df,
+        critical_points=[],
+        selected_circuitos=["TODOS"],
+        inference_results=inference_results,
+        inference_analysis={},
+        output_dir=tmp_path / "html",
+    )
+    html = html_path.read_text(encoding="utf-8")
+
+    assert "No se pudo renderizar" in html
+    assert "<img" not in html
 
 
 def test_inference_layout_consolidates_general_discussion(tmp_path):

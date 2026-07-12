@@ -276,6 +276,37 @@ def _load_mgcecdl_model_and_sigma() -> tuple[Any, float | None]:
     return model, rbf_sigma
 
 
+def _persist_scenario_render_assets(
+    *,
+    scenario_key: str,
+    nombre: str,
+    resultado: dict[str, Any],
+    figures_output_dir: Path,
+    render_assets_sink: dict[str, Any],
+) -> None:
+    """Save one surviving scenario's `fig_barras`/`fig_radar` as PNGs under
+    `figures_output_dir` (BEFORE the caller closes them) and record every
+    render asset path (figures + the already-persisted `grafo_interactivo`
+    HTML) into `render_assets_sink[scenario_key]`.
+
+    Paths are stored ABSOLUTE here -- `_run_inference_simulator` (task 3.2)
+    rewrites them relative to `run_dir` afterward, once it knows `run_dir`.
+    """
+    figures_output_dir.mkdir(parents=True, exist_ok=True)
+    fig_barras_path = figures_output_dir / f"{scenario_key}_barras.png"
+    fig_radar_path = figures_output_dir / f"{scenario_key}_radar.png"
+    resultado["fig_barras"].savefig(fig_barras_path)
+    resultado["fig_radar"].savefig(fig_radar_path)
+
+    grafo_path = resultado.get("grafo_interactivo")
+    render_assets_sink[scenario_key] = {
+        "nombre": nombre,
+        "fig_barras_png": str(fig_barras_path),
+        "fig_radar_png": str(fig_radar_path),
+        "grafo_interactivo_html": str(grafo_path) if grafo_path is not None else None,
+    }
+
+
 def _compute_inference_scenarios(
     circuito: str,
     fecha_inicio: str,
@@ -291,6 +322,8 @@ def _compute_inference_scenarios(
     top_k_vars: int = _TOP_K_VARS,
     filtro_uiti_max: float | None = _FILTRO_UITI_MAX,
     ventana_climatica_horas: int = _VENTANA_CLIMATICA_HORAS,
+    figures_output_dir: str | Path | None = None,
+    render_assets_sink: dict[str, Any] | None = None,
 ) -> tuple[list[str], list[dict[str, Any]]]:
     """Compute `features` (always, once per circuit/window) and up to four
     scenario context dicts (severity/frequency x período completo/fechas de
@@ -302,6 +335,16 @@ def _compute_inference_scenarios(
     the circuit/window has zero events at all, `features` is still returned
     (computed over the full dataset) but `escenarios` is `[]` without ever
     constructing the SHAP explainer.
+
+    `figures_output_dir`/`render_assets_sink` are additive, optional keyword-
+    only parameters (task 3.2): when both are given, each surviving
+    scenario's `fig_barras`/`fig_radar` PNGs are saved under
+    `figures_output_dir` (ABSOLUTE paths) and recorded into
+    `render_assets_sink`, keyed by scenario key
+    (`top_uiti_periodo`/`top_frecuencia_periodo`/`top_uiti_puntos_criticos`/
+    `top_frecuencia_puntos_criticos`). When omitted (the default), behavior
+    is byte-for-byte unchanged from Phase 2 (PR1) -- existing callers/tests
+    are unaffected.
     """
     source_path = Path(data_path) if data_path is not None else DEFAULT_DATA_PATH
     variables_path = (
@@ -415,7 +458,25 @@ def _compute_inference_scenarios(
         tabla_periodo_inf = agrupar_por_vano(base_inf)
 
         graph_dir = Path(graph_output_dir)
-        graph_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            graph_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            # A once-per-circuit failure (permission-denied, disk-full,
+            # read-only `run_dir` mount, ...) creating the graph-output
+            # directory. Every scenario below needs a writable `graph_dir` to
+            # pass into `graficar_barras_y_radar` (`graph_output_dir=graph_dir`),
+            # so this is a whole-call degrade, not a per-scenario one: match
+            # the `model is None` gap shape immediately above this block
+            # (`(features, [])`) rather than letting the exception propagate
+            # out of `prepare()` and abort the run before scenario 1 even
+            # starts.
+            warnings.warn(
+                "No se pudo crear el directorio de salida de grafos "
+                f"'{graph_dir}': {exc}. El simulador de inferencia continúa "
+                "sin escenarios ni grafos interactivos para esta ejecución.",
+                stacklevel=2,
+            )
+            return features, []
 
         def _ejecutar_escenario(
             nombre: str,
@@ -423,6 +484,7 @@ def _compute_inference_scenarios(
             tabla_top: pd.DataFrame,
             eventos: pd.DataFrame,
             graph_output_name: str,
+            scenario_key: str,
             fechas: list[str] | None = None,
         ) -> dict[str, Any] | None:
             # Snapshot open figure numbers BEFORE calling
@@ -434,52 +496,125 @@ def _compute_inference_scenarios(
             # otherwise never be closed.
             fignums_before = set(plt.get_fignums())
             try:
-                resultado = graficar_barras_y_radar(
-                    eventos,
-                    nombre,
-                    circuito=circuito,
-                    features=features,
-                    modos=modos,
-                    shap_extractor=shap_extractor,
-                    top_k=top_k_vars,
-                    graph_source="estimated",
-                    estimated_graph_model=model,
-                    X_model=X_inf,
-                    estimated_graph_rbf_sigma=rbf_sigma,
-                    estimated_graph_device=device,
-                    estimated_graph_batch_size=_SHAP_BATCH_SIZE,
-                    graph_output_dir=graph_dir,
-                    graph_output_name=graph_output_name,
-                )
-                return construir_contexto_escenario_inferencia(
-                    nombre=nombre,
-                    criterio=criterio,
-                    resultado=resultado,
-                    tabla_top=tabla_top,
-                    modos=modos,
-                    top_k=top_k_vars,
-                    fechas_interes=fechas,
-                    ventana_climatica_horas=ventana_climatica_horas,
-                )
-            except ValueError as exc:
-                # A `ValueError` raised anywhere inside
-                # `graficar_barras_y_radar`/`construir_contexto_escenario_inferencia`
-                # for THIS scenario (e.g.
-                # `construir_grafo_interactivo_muestras`'s "no hay variables
-                # con puntaje positivo para construir el grafo") is a
-                # legitimate per-scenario gap, not a reason to abort the
-                # other scenarios already computed in this same call (R1 gap
-                # shape, obs#219: "a scenario with insufficient signal is
-                # skipped individually; the other scenarios still
-                # complete"). The message is surfaced via `warnings.warn`
-                # (not silently discarded) so a genuine bug is still visible
-                # in logs instead of being indistinguishable from a clean
-                # skip.
-                warnings.warn(
-                    f"Escenario de inferencia '{nombre}' omitido por ValueError: {exc}",
-                    stacklevel=2,
-                )
-                return None
+                try:
+                    resultado = graficar_barras_y_radar(
+                        eventos,
+                        nombre,
+                        circuito=circuito,
+                        features=features,
+                        modos=modos,
+                        shap_extractor=shap_extractor,
+                        top_k=top_k_vars,
+                        graph_source="estimated",
+                        estimated_graph_model=model,
+                        X_model=X_inf,
+                        estimated_graph_rbf_sigma=rbf_sigma,
+                        estimated_graph_device=device,
+                        estimated_graph_batch_size=_SHAP_BATCH_SIZE,
+                        graph_output_dir=graph_dir,
+                        graph_output_name=graph_output_name,
+                    )
+                    contexto = construir_contexto_escenario_inferencia(
+                        nombre=nombre,
+                        criterio=criterio,
+                        resultado=resultado,
+                        tabla_top=tabla_top,
+                        modos=modos,
+                        top_k=top_k_vars,
+                        fechas_interes=fechas,
+                        ventana_climatica_horas=ventana_climatica_horas,
+                    )
+                except ValueError as exc:
+                    # A `ValueError` raised anywhere inside
+                    # `graficar_barras_y_radar`/`construir_contexto_escenario_inferencia`
+                    # for THIS scenario (e.g.
+                    # `construir_grafo_interactivo_muestras`'s "no hay variables
+                    # con puntaje positivo para construir el grafo") is a
+                    # legitimate per-scenario gap, not a reason to abort the
+                    # other scenarios already computed in this same call (R1 gap
+                    # shape, obs#219: "a scenario with insufficient signal is
+                    # skipped individually; the other scenarios still
+                    # complete"). The message is surfaced via `warnings.warn`
+                    # (not silently discarded) so a genuine bug is still visible
+                    # in logs instead of being indistinguishable from a clean
+                    # skip.
+                    #
+                    # This `except` is scoped ONLY to the computation calls
+                    # above -- it must never also catch a `ValueError` raised
+                    # by the render-asset persistence step below, or a
+                    # file-write problem would be misreported as an
+                    # insufficient-signal gap and the already-computed
+                    # `contexto` would be discarded even though it is valid.
+                    warnings.warn(
+                        f"Escenario de inferencia '{nombre}' omitido por ValueError: {exc}",
+                        stacklevel=2,
+                    )
+                    return None
+                except OSError as exc:
+                    # An `OSError`/`PermissionError` raised while
+                    # `graficar_barras_y_radar` -> `mostrar_grafo_interactivo_muestras`
+                    # -> `construir_grafo_interactivo_muestras` writes the
+                    # interactive graph HTML (`output_path.parent.mkdir(...)` /
+                    # `output_path.write_text(...)`) happens BEFORE that call
+                    # returns, so neither `resultado` nor `contexto` is ever
+                    # built for THIS scenario -- the contexto is not separable
+                    # from the graph write in this call chain. Same
+                    # per-scenario skip shape as the `ValueError` case above
+                    # (this scenario is omitted, the others already computed
+                    # in this same call are unaffected), just a distinct
+                    # warning message so a disk-write failure is never
+                    # confused with an insufficient-signal skip.
+                    warnings.warn(
+                        f"Escenario de inferencia '{nombre}' omitido: no se pudo "
+                        f"escribir el grafo HTML interactivo: {exc}",
+                        stacklevel=2,
+                    )
+                    return None
+
+                if figures_output_dir is not None and render_assets_sink is not None:
+                    # Persist PNGs BEFORE the `finally` block below closes the
+                    # figures -- once closed, `fig.savefig(...)` would render
+                    # a blank image (task 3.2).
+                    #
+                    # This step has its own narrow error boundary, separate
+                    # from the computation `except ValueError`/`except OSError`
+                    # above: a persistence-layer failure (`OSError`/
+                    # `PermissionError` from `figures_output_dir.mkdir`/
+                    # `fig_barras.savefig`/`fig_radar.savefig`, or a
+                    # `ValueError` `Figure.savefig` can raise for a
+                    # backend/format issue) must never discard the already-
+                    # successfully-computed `contexto`, and must never
+                    # propagate out of `prepare()` -- per the documented
+                    # degrade contract, the run always continues and the
+                    # report always generates. The scenario simply ends up
+                    # without a `render_assets_sink` entry (same shape
+                    # `render()` already tolerates for a scenario missing
+                    # from the sidecar).
+                    #
+                    # NOTE: this boundary does NOT cover the interactive
+                    # graph-HTML write (`mostrar_grafo_interactivo_muestras` /
+                    # `construir_grafo_interactivo_muestras`'s
+                    # `output_path.parent.mkdir(...)` / `.write_text(...)`) --
+                    # by the time this line runs, `graficar_barras_y_radar`
+                    # has already returned successfully, so that write already
+                    # happened earlier and is caught by the `except OSError`
+                    # above instead (which skips the whole scenario, since
+                    # `contexto` is not separable from that write).
+                    try:
+                        _persist_scenario_render_assets(
+                            scenario_key=scenario_key,
+                            nombre=nombre,
+                            resultado=resultado,
+                            figures_output_dir=Path(figures_output_dir),
+                            render_assets_sink=render_assets_sink,
+                        )
+                    except (OSError, ValueError) as exc:
+                        warnings.warn(
+                            "No se pudieron persistir los activos de render "
+                            f"para el escenario '{nombre}': {exc}",
+                            stacklevel=2,
+                        )
+                return contexto
             finally:
                 # `graficar_barras_y_radar` returns open matplotlib Figure
                 # objects (`fig_barras`/`fig_radar`) purely as a side effect of
@@ -517,6 +652,7 @@ def _compute_inference_scenarios(
                 tabla_top_uiti,
                 base_top_uiti,
                 "top_uiti_periodo.html",
+                "top_uiti_periodo",
             )
             if resultado_escenario is not None:
                 escenarios.append(resultado_escenario)
@@ -537,6 +673,7 @@ def _compute_inference_scenarios(
                 tabla_top_frecuencia,
                 base_top_frecuencia,
                 "top_frecuencia_periodo.html",
+                "top_frecuencia_periodo",
             )
             if resultado_escenario is not None:
                 escenarios.append(resultado_escenario)
@@ -560,6 +697,7 @@ def _compute_inference_scenarios(
                     tabla_top_fechas_uiti,
                     base_top_fechas_uiti,
                     "top_uiti_fechas.html",
+                    "top_uiti_puntos_criticos",
                     fechas=fechas_interes,
                 )
                 if resultado_escenario is not None:
@@ -586,6 +724,7 @@ def _compute_inference_scenarios(
                     tabla_top_fechas_frecuencia,
                     base_top_fechas_frecuencia,
                     "top_frecuencia_fechas.html",
+                    "top_frecuencia_puntos_criticos",
                     fechas=fechas_interes,
                 )
                 if resultado_escenario is not None:
@@ -594,6 +733,67 @@ def _compute_inference_scenarios(
         return features, escenarios
     finally:
         np.random.set_state(rng_state)
+
+
+def _run_inference_simulator(
+    circuito: str,
+    fecha_inicio: str,
+    fecha_fin: str,
+    fechas_interes: list[str],
+    run_dir: str | Path,
+    *,
+    data_path: str | Path | None = None,
+) -> tuple[list[str], list[dict[str, Any]], str, float | None, dict[str, Any]]:
+    """Orchestrate the read-only MGCECDL/SHAP simulator for one `prepare()`
+    run: load the model/Optuna sigma (task 2.1), compute the four scenario
+    contexts (task 2.3), and persist each surviving scenario's figures under
+    `run_dir` (task 3.2).
+
+    Returns `(features, escenarios, modelo_label, rbf_sigma, render_assets)`.
+
+    `render_assets` maps scenario key
+    (`top_uiti_periodo`/`top_frecuencia_periodo`/`top_uiti_puntos_criticos`/
+    `top_frecuencia_puntos_criticos`) to
+    `{"nombre", "fig_barras_png", "fig_radar_png", "grafo_interactivo_html"}`,
+    every path **relative to `run_dir`** (never absolute) so the sidecar
+    stays portable if `run_dir` is copied/moved.
+
+    R3 gap (obs#219, structural -- no model artifact on disk): the simulator
+    "never runs" -- this function returns immediately WITHOUT calling
+    `_compute_inference_scenarios` at all, so `features` stays `[]` too. This
+    is intentionally different from `_compute_inference_scenarios`'s own
+    `model=None` branch (task 2.3), which still computes `features` as a
+    narrower defense-in-depth degrade for callers that invoke it directly
+    with `model=None` -- the two are not the same case, and only THIS
+    early-return path is the real production R3 shape (features=[]).
+    """
+    run_dir = Path(run_dir)
+    model, rbf_sigma = _load_mgcecdl_model_and_sigma()
+    if model is None:
+        return [], [], _NO_SIMULATOR_MODEL_LABEL, None, {}
+
+    modelo_label = type(model).__name__
+    render_assets: dict[str, Any] = {}
+    features, escenarios = _compute_inference_scenarios(
+        circuito,
+        fecha_inicio,
+        fecha_fin,
+        fechas_interes,
+        model,
+        rbf_sigma,
+        graph_output_dir=run_dir / "inference_graphs",
+        data_path=data_path,
+        figures_output_dir=run_dir / "inference_figures",
+        render_assets_sink=render_assets,
+    )
+
+    for asset in render_assets.values():
+        for field in ("fig_barras_png", "fig_radar_png", "grafo_interactivo_html"):
+            value = asset.get(field)
+            if value is not None:
+                asset[field] = str(Path(value).relative_to(run_dir))
+
+    return features, escenarios, modelo_label, rbf_sigma, render_assets
 
 
 def _load_validated_agent_output(run_dir: Path, agent_name: str) -> dict[str, Any]:
@@ -666,6 +866,14 @@ def prepare(
             f"No events found for circuit {circuito!r} in window {start!r}..{end!r}"
         )
 
+    # `_new_run_dir` is created HERE -- right after the last hard-fail check
+    # (zero events) and BEFORE the simulator runs (design decision 3, task
+    # 3.3). The simulator itself never hard-fails (it degrades, see
+    # `_run_inference_simulator`), so both circuit-not-found and zero-events
+    # still never create an orphan run_dir, while the simulator has a
+    # directory to persist figures into.
+    run_dir = _new_run_dir(circuito, runs_root=runs_root)
+
     daily_df = build_daily_series(events_df)
     feature_df = compute_daily_features(daily_df)
     thresholds = CriticalityThresholds()
@@ -690,6 +898,9 @@ def prepare(
     )
 
     fechas_interes = [point["fecha_dia"] for point in critical_points]
+    features, escenarios, modelo_label, rbf_sigma, render_assets = _run_inference_simulator(
+        circuito, start, end, fechas_interes, run_dir, data_path=source_path
+    )
     inference_context = construir_contexto_inferencia(
         circuito_interes=circuito,
         fecha_inicio=start,
@@ -699,16 +910,38 @@ def prepare(
         top_k_vars=_TOP_K_VARS,
         filtro_uiti_max=_FILTRO_UITI_MAX,
         ventana_climatica_horas=_VENTANA_CLIMATICA_HORAS,
-        features=[],
+        features=features,
         base=events_df,
-        escenarios=[],
-        modelo=_NO_SIMULATOR_MODEL_LABEL,
+        escenarios=escenarios,
+        modelo=modelo_label,
+        estimated_graph_rbf_sigma=rbf_sigma,
         top_vanos_percentile=_TOP_N_VANOS_PERCENTILE,
     )
 
-    run_dir = _new_run_dir(circuito, runs_root=runs_root)
     save_json_artifact(historical_context, run_dir / "historical.bc.json")
     save_json_artifact(inference_context, run_dir / "inference.bc.json")
+    if render_assets:
+        # Only written when the simulator actually produced something to
+        # persist -- `render()` (task 3.4) treats an absent sidecar as
+        # "no inference figures for this run" (R1/R3 gap), never a crash.
+        try:
+            save_json_artifact(render_assets, run_dir / "inference_render_assets.json")
+        except OSError as exc:
+            # A disk-full/permission-revoked failure writing this sidecar
+            # happens AFTER `_run_inference_simulator` already succeeded
+            # (features/escenarios computed, PNGs/HTML already on disk) and
+            # AFTER `historical.bc.json`/`inference.bc.json` are already
+            # written above -- letting it propagate would crash an otherwise
+            # fully successful run. `_build_inference_results` already
+            # tolerates an absent sidecar (returns `None`, no crash), so this
+            # degrades to "no inference figures for this run" instead of
+            # aborting `prepare()`.
+            warnings.warn(
+                "No se pudo escribir el sidecar de activos de render para "
+                f"'{circuito}': {exc}. La ejecución continúa sin figuras de "
+                "inferencia renderizadas.",
+                stacklevel=2,
+            )
     save_json_artifact(
         {
             "circuito": circuito,
@@ -794,13 +1027,56 @@ def prepare_expert_alignment(
     return run_dir
 
 
+def _build_inference_results(run_dir: Path) -> dict[str, Any] | None:
+    """Read `run_dir/inference_render_assets.json` (task 3.2's sidecar) if
+    present and rebuild the `inference_results` mapping `render_llm_analysis`
+    expects: scenario key -> `{fig_barras, fig_radar, grafo_interactivo,
+    contexto}`, every figure/graph path resolved to absolute against
+    `run_dir`.
+
+    Returns `None` (no crash) when the sidecar is absent -- the simulator
+    either never ran (R3) or every scenario was skipped (R1), so there is
+    nothing to render.
+    """
+    sidecar_path = run_dir / "inference_render_assets.json"
+    if not sidecar_path.exists():
+        return None
+
+    render_assets = _read_json(sidecar_path)
+    inference_bc = _read_json(run_dir / "inference.bc.json")
+    escenarios_by_nombre = {
+        escenario.get("nombre"): escenario
+        for escenario in inference_bc.get("escenarios", [])
+        if isinstance(escenario, dict)
+    }
+
+    def _resolve(value: str | None) -> str | None:
+        return str(run_dir / value) if value is not None else None
+
+    inference_results: dict[str, Any] = {}
+    for scenario_key, asset in render_assets.items():
+        if not isinstance(asset, dict):
+            continue
+        nombre = asset.get("nombre")
+        inference_results[scenario_key] = {
+            "fig_barras": _resolve(asset.get("fig_barras_png")),
+            "fig_radar": _resolve(asset.get("fig_radar_png")),
+            "grafo_interactivo": _resolve(asset.get("grafo_interactivo_html")),
+            "contexto": escenarios_by_nombre.get(nombre, {}),
+        }
+    return inference_results
+
+
 def render(run_dir: str | Path, *, output_dir: str | Path | None = None) -> Path:
     """Read all three validated outputs from `run_dir` and render the final
-    HTML report via `plotting.render_llm_analysis` (no simulator kwargs).
+    HTML report via `plotting.render_llm_analysis`.
 
     Reconstructs `raw_df`/`daily_df` deterministically from `l1_state.json`
     (data_path + circuito + resolved date window) rather than serializing
-    DataFrames to disk, so the run_dir stays plain-JSON.
+    DataFrames to disk, so the run_dir stays plain-JSON. `render()` itself
+    stays model-free: `inference_results` (task 3.4) is rebuilt purely from
+    persisted paths in `inference_render_assets.json`, never by reloading the
+    MGCECDL model or recomputing SHAP.
     """
     run_dir = Path(run_dir)
     state = _read_json(run_dir / "l1_state.json")
@@ -820,7 +1096,7 @@ def render(run_dir: str | Path, *, output_dir: str | Path | None = None) -> Path
     kwargs: dict[str, Any] = {
         "start_date": state["fecha_inicio"],
         "end_date": state["fecha_fin"],
-        "inference_results": None,
+        "inference_results": _build_inference_results(run_dir),
         "inference_analysis": inference_data,
         "expert_alignment_analysis": expert_alignment_data,
         "expert_alignment_matches": None,

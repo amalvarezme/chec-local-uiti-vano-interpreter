@@ -2457,6 +2457,25 @@ def render_llm_analysis(
     def _figure_html(fig, title=None, show_title=False):
         if not fig:
             return ""
+        if isinstance(fig, (str, Path)):
+            # `_run_inference_simulator` (task 3.2) persists figures as PNG
+            # files under run_dir rather than passing live matplotlib Figure
+            # objects across the prepare()/render() process boundary --
+            # `render()` (task 3.4) only ever has a path here. Base64-embed
+            # it the same way a live figure would be embedded below; a
+            # missing/unreadable file falls through to the same fallback
+            # message as any other rendering failure, never a crash.
+            try:
+                import base64
+
+                png_path = Path(fig)
+                if not png_path.exists():
+                    raise FileNotFoundError(f"Figura no encontrada: {png_path}")
+                encoded = base64.b64encode(png_path.read_bytes()).decode("ascii")
+                alt = _escape(title or "Grafica")
+                return f"<img class='embedded-figure' src='data:image/png;base64,{encoded}' alt='{alt}'>"
+            except Exception as exc:
+                return f"<p class='muted'>No se pudo renderizar la figura: {_escape(exc)}</p>"
         if hasattr(fig, "to_html"):
             try:
                 import plotly.graph_objects as go
