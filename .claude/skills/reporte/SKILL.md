@@ -27,10 +27,10 @@ from one stage to the next. Read this Skill top to bottom as a checklist, not as
 guidance — the actual domain reasoning for each stage lives in that stage's own Skill
 (`historical`, `inference`, `expert-alignment`).
 
-Supersedes phases 1-8 of the interactive notebook
-(`notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`, deprecated in place — see that
-notebook's own top cell). Phases 9-11 of the notebook (saved artifacts, the LLM
-skills/contracts/validation section, and HTML export) are untouched by this Skill.
+Supersedes the interactive notebook `notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`
+in full, including its phase 9-11 automatic min/max ("second tab") discussion — now step 4b below,
+via the `auto-simulator` agent. That notebook was deleted once this Skill's coverage was proven
+equivalent (see git history for its prior content).
 
 ## When to Use
 
@@ -207,8 +207,8 @@ always continues, the report always generates:
     [`.claude/agents/expert-alignment.md`](../../agents/expert-alignment.md)
 - Binding invariants (shared with every agent role above): `.claude/agents/rules/invariants.md`
 - Architecture and envelope contract: `docs/agents-guide.md`
-- Deprecated (in-place, not deleted) notebook this Skill supersedes for phases 1-8:
-  `notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`
+- `notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb` — deleted; this Skill supersedes it
+  in full (see git history for its prior content).
 - Tests: `tests/test_report_pipeline.py` (argument-pair contract, simulator wiring/degrade paths, the
   real-simulator integration tests using the committed model/Optuna/Variables artifacts, and the
   end-to-end smoke test with canned validated outputs and no live LLM call);
