@@ -1,0 +1,411 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                   xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                   id="Definitions_chec_pipeline"
+                   targetNamespace="http://chec.local/uiti-vano/bpmn">
+  <bpmn:collaboration id="Collaboration_1">
+    <bpmn:participant id="Participant_chec" name="CHEC — Local UITI_VANO Interpreter Pipeline" processRef="Process_chec_pipeline" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_chec_pipeline" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_1">
+    <bpmn:lane id="lane1" name="Data ingestion">
+      <bpmn:flowNodeRef>start</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>gw_split</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>t_pdf</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>t_climate</bpmn:flowNodeRef>
+    </bpmn:lane>
+    <bpmn:lane id="lane2" name="ML modeling — M-GCECDL">
+      <bpmn:flowNodeRef>t_graph</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>t_optuna</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>t_train</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>gw_model</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>t_perf</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>t_shap</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>t_docrep</bpmn:flowNodeRef>
+    </bpmn:lane>
+    <bpmn:lane id="lane3" name="Local interpretation — LLM agents">
+      <bpmn:flowNodeRef>t_crit</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>t_ctx</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>t_agents</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>gw1</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>t_retry</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>end_stop</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>t_render</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>t_sim</bpmn:flowNodeRef>
+    </bpmn:lane>
+    <bpmn:lane id="lane4" name="Publication">
+      <bpmn:flowNodeRef>t_export</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>t_ci</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>end</bpmn:flowNodeRef>
+    </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="start" name="Start">
+      <bpmn:outgoing>Flow_1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:parallelGateway id="gw_split">
+      <bpmn:incoming>Flow_1</bpmn:incoming>
+      <bpmn:outgoing>Flow_2</bpmn:outgoing>
+      <bpmn:outgoing>Flow_3</bpmn:outgoing>
+      <bpmn:outgoing>Flow_4</bpmn:outgoing>
+      <bpmn:outgoing>Flow_5</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:task id="t_pdf" name="Extraer tabla de discusión de PDFs expertos (pdf-discussion-extraction)">
+      <bpmn:incoming>Flow_2</bpmn:incoming>
+      <bpmn:outgoing>Flow_16</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="t_climate" name="Enriquecimiento climático (Open-Meteo API)">
+      <bpmn:incoming>Flow_3</bpmn:incoming>
+      <bpmn:outgoing>Flow_6</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="t_graph" name="Construcción de grafo experto (adjacency)">
+      <bpmn:incoming>Flow_4</bpmn:incoming>
+      <bpmn:outgoing>Flow_8</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="t_optuna" name="Búsqueda de hiperparámetros (Optuna)">
+      <bpmn:incoming>Flow_6</bpmn:incoming>
+      <bpmn:outgoing>Flow_7</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="t_train" name="Entrenamiento M-GCECDL (Colab GPU)">
+      <bpmn:incoming>Flow_7</bpmn:incoming>
+      <bpmn:incoming>Flow_8</bpmn:incoming>
+      <bpmn:outgoing>Flow_9</bpmn:outgoing>
+      <bpmn:outgoing>Flow_14</bpmn:outgoing>
+      <bpmn:outgoing>Flow_23</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:parallelGateway id="gw_model">
+      <bpmn:incoming>Flow_9</bpmn:incoming>
+      <bpmn:outgoing>Flow_10</bpmn:outgoing>
+      <bpmn:outgoing>Flow_11</bpmn:outgoing>
+      <bpmn:outgoing>Flow_12</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:task id="t_perf" name="Evaluación de desempeño">
+      <bpmn:incoming>Flow_10</bpmn:incoming>
+      <bpmn:outgoing>Flow_25</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="t_shap" name="Análisis SHAP por circuito">
+      <bpmn:incoming>Flow_11</bpmn:incoming>
+      <bpmn:outgoing>Flow_17</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="t_docrep" name="Replicación de documento">
+      <bpmn:incoming>Flow_12</bpmn:incoming>
+    </bpmn:task>
+    <bpmn:task id="t_crit" name="Detección de puntos críticos">
+      <bpmn:incoming>Flow_5</bpmn:incoming>
+      <bpmn:outgoing>Flow_13</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="t_ctx" name="Construcción de contexto estructurado">
+      <bpmn:incoming>Flow_13</bpmn:incoming>
+      <bpmn:incoming>Flow_14</bpmn:incoming>
+      <bpmn:outgoing>Flow_15</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="t_agents" name="Agentes LLM (historical / inference / expert-alignment)">
+      <bpmn:incoming>Flow_15</bpmn:incoming>
+      <bpmn:incoming>Flow_16</bpmn:incoming>
+      <bpmn:incoming>Flow_17</bpmn:incoming>
+      <bpmn:incoming>Flow_20</bpmn:incoming>
+      <bpmn:outgoing>Flow_18</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="gw1">
+      <bpmn:incoming>Flow_18</bpmn:incoming>
+      <bpmn:outgoing>Flow_19</bpmn:outgoing>
+      <bpmn:outgoing>Flow_21</bpmn:outgoing>
+      <bpmn:outgoing>Flow_22</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="t_retry" name="Revisar respuesta (máx. 2 reintentos)">
+      <bpmn:incoming>Flow_19</bpmn:incoming>
+      <bpmn:outgoing>Flow_20</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="end_stop" name="Detener ejecución del circuito">
+      <bpmn:incoming>Flow_21</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:task id="t_render" name="Renderizar reporte HTML (plotting.py)">
+      <bpmn:incoming>Flow_22</bpmn:incoming>
+      <bpmn:outgoing>Flow_24</bpmn:outgoing>
+      <bpmn:outgoing>Flow_26</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="t_sim" name="Simulación min/máx + what-if">
+      <bpmn:incoming>Flow_23</bpmn:incoming>
+      <bpmn:incoming>Flow_24</bpmn:incoming>
+      <bpmn:outgoing>Flow_27</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="t_export" name="Exportación web (web_export.py)">
+      <bpmn:incoming>Flow_25</bpmn:incoming>
+      <bpmn:incoming>Flow_26</bpmn:incoming>
+      <bpmn:incoming>Flow_27</bpmn:incoming>
+      <bpmn:outgoing>Flow_28</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="t_ci" name="GitHub Actions (deploy-pages.yml)">
+      <bpmn:incoming>Flow_28</bpmn:incoming>
+      <bpmn:outgoing>Flow_29</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="end" name="GitHub Pages publicado">
+      <bpmn:incoming>Flow_29</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="start" targetRef="gw_split" />
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="gw_split" targetRef="t_pdf" />
+    <bpmn:sequenceFlow id="Flow_3" sourceRef="gw_split" targetRef="t_climate" />
+    <bpmn:sequenceFlow id="Flow_4" sourceRef="gw_split" targetRef="t_graph" />
+    <bpmn:sequenceFlow id="Flow_5" sourceRef="gw_split" targetRef="t_crit" />
+    <bpmn:sequenceFlow id="Flow_6" sourceRef="t_climate" targetRef="t_optuna" />
+    <bpmn:sequenceFlow id="Flow_7" sourceRef="t_optuna" targetRef="t_train" />
+    <bpmn:sequenceFlow id="Flow_8" sourceRef="t_graph" targetRef="t_train" />
+    <bpmn:sequenceFlow id="Flow_9" sourceRef="t_train" targetRef="gw_model" />
+    <bpmn:sequenceFlow id="Flow_10" sourceRef="gw_model" targetRef="t_perf" />
+    <bpmn:sequenceFlow id="Flow_11" sourceRef="gw_model" targetRef="t_shap" />
+    <bpmn:sequenceFlow id="Flow_12" sourceRef="gw_model" targetRef="t_docrep" />
+    <bpmn:sequenceFlow id="Flow_13" sourceRef="t_crit" targetRef="t_ctx" />
+    <bpmn:sequenceFlow id="Flow_14" sourceRef="t_train" targetRef="t_ctx" />
+    <bpmn:sequenceFlow id="Flow_15" sourceRef="t_ctx" targetRef="t_agents" />
+    <bpmn:sequenceFlow id="Flow_16" sourceRef="t_pdf" targetRef="t_agents" />
+    <bpmn:sequenceFlow id="Flow_17" sourceRef="t_shap" targetRef="t_agents" />
+    <bpmn:sequenceFlow id="Flow_18" sourceRef="t_agents" targetRef="gw1" />
+    <bpmn:sequenceFlow id="Flow_19" name="no, con reintentos" sourceRef="gw1" targetRef="t_retry" />
+    <bpmn:sequenceFlow id="Flow_20" sourceRef="t_retry" targetRef="t_agents" />
+    <bpmn:sequenceFlow id="Flow_21" name="no, reintentos agotados" sourceRef="gw1" targetRef="end_stop" />
+    <bpmn:sequenceFlow id="Flow_22" name="sí, válido" sourceRef="gw1" targetRef="t_render" />
+    <bpmn:sequenceFlow id="Flow_23" sourceRef="t_train" targetRef="t_sim" />
+    <bpmn:sequenceFlow id="Flow_24" sourceRef="t_render" targetRef="t_sim" />
+    <bpmn:sequenceFlow id="Flow_25" sourceRef="t_perf" targetRef="t_export" />
+    <bpmn:sequenceFlow id="Flow_26" sourceRef="t_render" targetRef="t_export" />
+    <bpmn:sequenceFlow id="Flow_27" sourceRef="t_sim" targetRef="t_export" />
+    <bpmn:sequenceFlow id="Flow_28" sourceRef="t_export" targetRef="t_ci" />
+    <bpmn:sequenceFlow id="Flow_29" sourceRef="t_ci" targetRef="end" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Collaboration_1">
+      <bpmndi:BPMNShape id="Participant_chec_di" bpmnElement="Participant_chec" isHorizontal="true">
+        <dc:Bounds x="0" y="20.0" width="2100" height="1060.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lane1_di" bpmnElement="lane1" isHorizontal="true">
+        <dc:Bounds x="40" y="50.0" width="2060" height="220.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lane2_di" bpmnElement="lane2" isHorizontal="true">
+        <dc:Bounds x="40" y="270.0" width="2060" height="260.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lane3_di" bpmnElement="lane3" isHorizontal="true">
+        <dc:Bounds x="40" y="530.0" width="2060" height="320.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lane4_di" bpmnElement="lane4" isHorizontal="true">
+        <dc:Bounds x="40" y="850.0" width="2060" height="220.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <dc:Bounds x="252.0" y="142.0" width="36.0" height="36.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_split_di" bpmnElement="gw_split">
+        <dc:Bounds x="398.0" y="138.0" width="44.0" height="44.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_pdf_di" bpmnElement="t_pdf">
+        <dc:Bounds x="470.0" y="128.0" width="160.0" height="64.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_climate_di" bpmnElement="t_climate">
+        <dc:Bounds x="690.0" y="128.0" width="160.0" height="64.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_graph_di" bpmnElement="t_graph">
+        <dc:Bounds x="470.0" y="288.0" width="160.0" height="64.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_optuna_di" bpmnElement="t_optuna">
+        <dc:Bounds x="690.0" y="448.0" width="160.0" height="64.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_train_di" bpmnElement="t_train">
+        <dc:Bounds x="930.0" y="368.0" width="160.0" height="64.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_model_di" bpmnElement="gw_model">
+        <dc:Bounds x="1168.0" y="378.0" width="44.0" height="44.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_perf_di" bpmnElement="t_perf">
+        <dc:Bounds x="1260.0" y="288.0" width="160.0" height="64.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_shap_di" bpmnElement="t_shap">
+        <dc:Bounds x="1260.0" y="368.0" width="160.0" height="64.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_docrep_di" bpmnElement="t_docrep">
+        <dc:Bounds x="1260.0" y="448.0" width="160.0" height="64.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_crit_di" bpmnElement="t_crit">
+        <dc:Bounds x="470.0" y="658.0" width="160.0" height="64.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_ctx_di" bpmnElement="t_ctx">
+        <dc:Bounds x="690.0" y="658.0" width="160.0" height="64.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_agents_di" bpmnElement="t_agents">
+        <dc:Bounds x="930.0" y="658.0" width="160.0" height="64.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw1_di" bpmnElement="gw1">
+        <dc:Bounds x="1168.0" y="668.0" width="44.0" height="44.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_retry_di" bpmnElement="t_retry">
+        <dc:Bounds x="930.0" y="508.0" width="160.0" height="64.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_stop_di" bpmnElement="end_stop">
+        <dc:Bounds x="1172.0" y="822.0" width="36.0" height="36.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_render_di" bpmnElement="t_render">
+        <dc:Bounds x="1260.0" y="658.0" width="160.0" height="64.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_sim_di" bpmnElement="t_sim">
+        <dc:Bounds x="1460.0" y="658.0" width="160.0" height="64.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_export_di" bpmnElement="t_export">
+        <dc:Bounds x="1460.0" y="928.0" width="160.0" height="64.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_ci_di" bpmnElement="t_ci">
+        <dc:Bounds x="1670.0" y="928.0" width="160.0" height="64.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_di" bpmnElement="end">
+        <dc:Bounds x="1912.0" y="942.0" width="36.0" height="36.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1">
+        <di:waypoint x="288.0" y="160.0" />
+        <di:waypoint x="398.0" y="160.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_2_di" bpmnElement="Flow_2">
+        <di:waypoint x="442.0" y="160.0" />
+        <di:waypoint x="470.0" y="160.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_3_di" bpmnElement="Flow_3">
+        <di:waypoint x="442.0" y="160.0" />
+        <di:waypoint x="690.0" y="160.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_4_di" bpmnElement="Flow_4">
+        <di:waypoint x="442.0" y="160.0" />
+        <di:waypoint x="457.4" y="160.0" />
+        <di:waypoint x="457.4" y="320.0" />
+        <di:waypoint x="470.0" y="320.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_5_di" bpmnElement="Flow_5">
+        <di:waypoint x="442.0" y="160.0" />
+        <di:waypoint x="457.4" y="160.0" />
+        <di:waypoint x="457.4" y="690.0" />
+        <di:waypoint x="470.0" y="690.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_6_di" bpmnElement="Flow_6">
+        <di:waypoint x="850.0" y="160.0" />
+        <di:waypoint x="762.0" y="160.0" />
+        <di:waypoint x="762.0" y="480.0" />
+        <di:waypoint x="690.0" y="480.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_7_di" bpmnElement="Flow_7">
+        <di:waypoint x="850.0" y="480.0" />
+        <di:waypoint x="894.0" y="480.0" />
+        <di:waypoint x="894.0" y="400.0" />
+        <di:waypoint x="930.0" y="400.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_8_di" bpmnElement="Flow_8">
+        <di:waypoint x="630.0" y="320.0" />
+        <di:waypoint x="795.0" y="320.0" />
+        <di:waypoint x="795.0" y="400.0" />
+        <di:waypoint x="930.0" y="400.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_9_di" bpmnElement="Flow_9">
+        <di:waypoint x="1090.0" y="400.0" />
+        <di:waypoint x="1168.0" y="400.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_10_di" bpmnElement="Flow_10">
+        <di:waypoint x="1212.0" y="400.0" />
+        <di:waypoint x="1238.4" y="400.0" />
+        <di:waypoint x="1238.4" y="320.0" />
+        <di:waypoint x="1260.0" y="320.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_11_di" bpmnElement="Flow_11">
+        <di:waypoint x="1212.0" y="400.0" />
+        <di:waypoint x="1260.0" y="400.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_12_di" bpmnElement="Flow_12">
+        <di:waypoint x="1212.0" y="400.0" />
+        <di:waypoint x="1238.4" y="400.0" />
+        <di:waypoint x="1238.4" y="480.0" />
+        <di:waypoint x="1260.0" y="480.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_13_di" bpmnElement="Flow_13">
+        <di:waypoint x="630.0" y="690.0" />
+        <di:waypoint x="690.0" y="690.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_14_di" bpmnElement="Flow_14">
+        <di:waypoint x="930.0" y="400.0" />
+        <di:waypoint x="886.0" y="400.0" />
+        <di:waypoint x="886.0" y="690.0" />
+        <di:waypoint x="850.0" y="690.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_15_di" bpmnElement="Flow_15">
+        <di:waypoint x="850.0" y="690.0" />
+        <di:waypoint x="930.0" y="690.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_16_di" bpmnElement="Flow_16">
+        <di:waypoint x="630.0" y="160.0" />
+        <di:waypoint x="795.0" y="160.0" />
+        <di:waypoint x="795.0" y="690.0" />
+        <di:waypoint x="930.0" y="690.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_17_di" bpmnElement="Flow_17">
+        <di:waypoint x="1260.0" y="400.0" />
+        <di:waypoint x="1166.5" y="400.0" />
+        <di:waypoint x="1166.5" y="690.0" />
+        <di:waypoint x="1090.0" y="690.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_18_di" bpmnElement="Flow_18">
+        <di:waypoint x="1090.0" y="690.0" />
+        <di:waypoint x="1168.0" y="690.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_19_di" bpmnElement="Flow_19">
+        <di:waypoint x="1168.0" y="690.0" />
+        <di:waypoint x="1125.1" y="690.0" />
+        <di:waypoint x="1125.1" y="540.0" />
+        <di:waypoint x="1090.0" y="540.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_20_di" bpmnElement="Flow_20">
+        <di:waypoint x="1090.0" y="540.0" />
+        <di:waypoint x="1002.0" y="540.0" />
+        <di:waypoint x="1002.0" y="690.0" />
+        <di:waypoint x="930.0" y="690.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_21_di" bpmnElement="Flow_21">
+        <di:waypoint x="1212.0" y="690.0" />
+        <di:waypoint x="1190.0" y="690.0" />
+        <di:waypoint x="1190.0" y="840.0" />
+        <di:waypoint x="1172.0" y="840.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_22_di" bpmnElement="Flow_22">
+        <di:waypoint x="1212.0" y="690.0" />
+        <di:waypoint x="1260.0" y="690.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_23_di" bpmnElement="Flow_23">
+        <di:waypoint x="1090.0" y="400.0" />
+        <di:waypoint x="1293.5" y="400.0" />
+        <di:waypoint x="1293.5" y="690.0" />
+        <di:waypoint x="1460.0" y="690.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_24_di" bpmnElement="Flow_24">
+        <di:waypoint x="1420.0" y="690.0" />
+        <di:waypoint x="1460.0" y="690.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_25_di" bpmnElement="Flow_25">
+        <di:waypoint x="1420.0" y="320.0" />
+        <di:waypoint x="1442.0" y="320.0" />
+        <di:waypoint x="1442.0" y="960.0" />
+        <di:waypoint x="1460.0" y="960.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_26_di" bpmnElement="Flow_26">
+        <di:waypoint x="1420.0" y="690.0" />
+        <di:waypoint x="1442.0" y="690.0" />
+        <di:waypoint x="1442.0" y="960.0" />
+        <di:waypoint x="1460.0" y="960.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_27_di" bpmnElement="Flow_27">
+        <di:waypoint x="1620.0" y="690.0" />
+        <di:waypoint x="1532.0" y="690.0" />
+        <di:waypoint x="1532.0" y="960.0" />
+        <di:waypoint x="1460.0" y="960.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_28_di" bpmnElement="Flow_28">
+        <di:waypoint x="1620.0" y="960.0" />
+        <di:waypoint x="1670.0" y="960.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_29_di" bpmnElement="Flow_29">
+        <di:waypoint x="1830.0" y="960.0" />
+        <di:waypoint x="1912.0" y="960.0" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

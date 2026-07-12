@@ -219,6 +219,17 @@ flowchart TD
 
 Versión renderizada para lectores sin soporte Mermaid: [`docs/project-workflow.svg`](docs/project-workflow.svg).
 
+### Diagrama BPMN
+
+Vista de proceso de negocio (BPMN 2.0) del mismo flujo, con carriles por responsable
+(ingesta de datos, modelado M-GCECDL, agentes LLM, publicación). Es una vista de nivel
+de fase — para el detalle técnico módulo por módulo, usar el diagrama Mermaid anterior.
+
+![Diagrama BPMN del flujo del proyecto](docs/project-workflow-bpmn.svg)
+
+Fuente BPMN 2.0 XML (abrible en [bpmn.io](https://bpmn.io) o Camunda Modeler):
+[`docs/project-workflow.bpmn`](docs/project-workflow.bpmn).
+
 ## Outputs
 
 Structured outputs from the local interpreter are saved under
