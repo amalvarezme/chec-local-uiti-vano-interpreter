@@ -29,9 +29,10 @@ Stages:
         true`), pools report dates from them plus the circuit's critical
         points, matches the already-extracted PDF-discussion xlsx table
         (`reports/analysis-documents/tabla_pdfs_intervalo_*.xlsx` — built by
-        the separate, out-of-scope `01_pdf_discussion_table_from_pdfs.ipynb`
-        notebook) against the circuit, and builds
-        `expert-alignment.bc.json`. Fails fast with `ReportPipelineError` if
+        the separate, out-of-scope agent-native PDF-discussion batch runbook,
+        `chec_local_interpreter.pdf_discussion_pipeline` plus
+        `agent_tools.pdf_discussion`, design D5) against the circuit, and
+        builds `expert-alignment.bc.json`. Fails fast with `ReportPipelineError` if
         either agent's validated output is missing or marked `ok: false`
         (schema/guardrail and provenance failures are indistinguishable at
         this layer — both are simply `ok: false` from the combined L1
@@ -168,9 +169,11 @@ _NO_SIMULATOR_MODEL_LABEL = "sin_simulador_automatico"
 DEFAULT_RUNS_ROOT = project_root() / "reports" / "interpretability" / "runs"
 
 # Directory conventionally populated by the (out-of-scope in this change)
-# PDF-discussion *extraction* notebook (`01_pdf_discussion_table_from_pdfs.ipynb`),
-# which writes `tabla_pdfs_intervalo_*.xlsx` there. This orchestrator only
-# READS that already-built table — it never touches PDFs itself.
+# PDF-discussion *extraction* batch runbook
+# (`chec_local_interpreter.pdf_discussion_pipeline` + `agent_tools.pdf_discussion`,
+# design D5), which writes `tabla_pdfs_intervalo_*.xlsx` there. This
+# orchestrator only READS that already-built table — it never touches PDFs
+# itself.
 DEFAULT_PDF_DISCUSSIONS_DIR = project_root() / "reports" / "analysis-documents"
 _PDF_DISCUSSIONS_GLOB = "tabla_pdfs_intervalo_*.xlsx"
 
@@ -1262,11 +1265,12 @@ def prepare_expert_alignment(
     agents' validated outputs already written under `run_dir`, plus the
     already-extracted PDF-discussion xlsx table matched against the circuit.
 
-    The PDF-discussion *extraction* notebook
-    (`01_pdf_discussion_table_from_pdfs.ipynb`, which BUILDS
-    `reports/analysis-documents/tabla_pdfs_intervalo_*.xlsx`) is out of scope
-    for this change. This function only READS that already-built table and
-    matches it against the circuit, exactly like the original notebook flow
+    The PDF-discussion *extraction* batch runbook
+    (`chec_local_interpreter.pdf_discussion_pipeline` + `agent_tools.pdf_discussion`,
+    design D5, which BUILDS `reports/analysis-documents/tabla_pdfs_intervalo_*.xlsx`)
+    is out of scope for this change. This function only READS that
+    already-built table and matches it against the circuit, exactly like the
+    original (now-superseded) notebook flow
     (`notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`, cell ~55):
     `cargar_discussiones_pdf_excel` -> `extraer_fechas_informe` ->
     `filtrar_discussiones_por_circuito` -> `seleccionar_top_coincidencias_temporales`.
