@@ -941,6 +941,55 @@ def test_prepare_survives_graph_output_dir_creation_failure_whole_run_completes(
     assert not (run_dir / "inference_render_assets.json").exists()
 
 
+def test_prepare_survives_render_assets_sidecar_write_failure_keeps_run_completes(
+    tmp_path, monkeypatch
+):
+    """An `OSError` raised specifically while writing the top-level
+    `inference_render_assets.json` sidecar (Round 3 gap: this
+    `save_json_artifact` call, unlike the ones just above/below it, was
+    unguarded) must NOT crash `prepare()` -- `_run_inference_simulator`
+    already succeeded by this point (features/escenarios computed, PNGs/HTML
+    already on disk), so a transient fault at just this line must degrade to
+    "no sidecar for this run" (the same shape `_build_inference_results`
+    already tolerates for an absent sidecar), not abort an otherwise fully
+    successful run."""
+    _enable_real_mgcecdl_model(monkeypatch)
+
+    original_save_json_artifact = report_pipeline_module.save_json_artifact
+
+    def _save_json_artifact_failing_for_sidecar(payload, path):
+        if Path(path).name == "inference_render_assets.json":
+            raise OSError("simulated disk-full failure writing render-assets sidecar")
+        return original_save_json_artifact(payload, path)
+
+    monkeypatch.setattr(
+        report_pipeline_module, "save_json_artifact", _save_json_artifact_failing_for_sidecar
+    )
+
+    with pytest.warns(UserWarning, match="sidecar de activos de render"):
+        run_dir = prepare(
+            _REAL_SUFFICIENT_CIRCUIT, *_REAL_SUFFICIENT_WINDOW, runs_root=tmp_path / "runs"
+        )
+
+    # (a) prepare() completed without crashing.
+    # (b) historical.bc.json/inference.bc.json/l1_state.json are all still
+    # written -- none of them is skipped just because the sidecar write
+    # failed.
+    assert (run_dir / "historical.bc.json").exists()
+    assert (run_dir / "inference.bc.json").exists()
+    assert (run_dir / "l1_state.json").exists()
+
+    # (c) inference.bc.json's escenarios/features are unaffected -- they were
+    # already computed by `_run_inference_simulator` before this write, which
+    # only persists a sidecar derived from that already-successful result.
+    inference_context = _read_json(run_dir / "inference.bc.json")
+    assert inference_context["features"], "expected features to stay populated"
+    assert len(inference_context["escenarios"]) >= 1, "expected escenarios to stay populated"
+
+    # (d) no inference_render_assets.json file exists.
+    assert not (run_dir / "inference_render_assets.json").exists()
+
+
 def test_prepare_survives_graph_html_write_failure_for_one_scenario_keeps_others_and_completes(
     tmp_path, monkeypatch
 ):

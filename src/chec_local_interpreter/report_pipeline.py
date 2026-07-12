@@ -924,7 +924,24 @@ def prepare(
         # Only written when the simulator actually produced something to
         # persist -- `render()` (task 3.4) treats an absent sidecar as
         # "no inference figures for this run" (R1/R3 gap), never a crash.
-        save_json_artifact(render_assets, run_dir / "inference_render_assets.json")
+        try:
+            save_json_artifact(render_assets, run_dir / "inference_render_assets.json")
+        except OSError as exc:
+            # A disk-full/permission-revoked failure writing this sidecar
+            # happens AFTER `_run_inference_simulator` already succeeded
+            # (features/escenarios computed, PNGs/HTML already on disk) and
+            # AFTER `historical.bc.json`/`inference.bc.json` are already
+            # written above -- letting it propagate would crash an otherwise
+            # fully successful run. `_build_inference_results` already
+            # tolerates an absent sidecar (returns `None`, no crash), so this
+            # degrades to "no inference figures for this run" instead of
+            # aborting `prepare()`.
+            warnings.warn(
+                "No se pudo escribir el sidecar de activos de render para "
+                f"'{circuito}': {exc}. La ejecución continúa sin figuras de "
+                "inferencia renderizadas.",
+                stacklevel=2,
+            )
     save_json_artifact(
         {
             "circuito": circuito,
