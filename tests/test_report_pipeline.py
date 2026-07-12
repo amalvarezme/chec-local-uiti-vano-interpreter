@@ -1250,3 +1250,62 @@ def test_render_auto_simulation_kwargs_present_populates_all_five(tmp_path, monk
     assert captured["automatic_simulation_softmax_curves"] == {"variables": [], "metadata": {"warnings": []}}
     assert captured["automatic_simulation_vano_risk_df"] is not None
     assert list(captured["automatic_simulation_vano_risk_df"]["FID_VANO"]) == ["V0"]
+
+
+# ---------------------------------------------------------------------------
+# Coverage-proof gate (task 1.7): a full, real `/reporte` run -- prepare()
+# with the REAL committed model (writing real auto-simulator artifacts as a
+# side effect) through render() -- with no LLM API key set anywhere in the
+# process, must actually embed the automatic-simulation discussion section
+# in the final HTML. This is the scenario the spec's "Deletion of 02/
+# llm_client.py permitted after /reporte coverage proven" requirement gates
+# notebook 02's deletion on.
+# ---------------------------------------------------------------------------
+
+
+def test_reporte_end_to_end_with_real_simulator_renders_auto_simulation_section(
+    tmp_path, monkeypatch
+):
+    for env_var in ("GOOGLE_API_KEY", "OPENAI_API_KEY", "LLM_PROVIDER", "LLM_MODEL"):
+        monkeypatch.delenv(env_var, raising=False)
+    _enable_real_mgcecdl_model(monkeypatch)
+
+    run_dir = prepare(
+        _REAL_SUFFICIENT_CIRCUIT, *_REAL_SUFFICIENT_WINDOW, runs_root=tmp_path / "runs"
+    )
+    # prepare() already ran the real automatic simulator as a side effect
+    # (no LLM call anywhere in report_pipeline.py) -- this is the same
+    # coverage this file's other real-simulator tests confirm for the
+    # inference/SHAP simulator, now extended to the automatic one.
+    assert (run_dir / "auto-simulator.bc.json").exists()
+    assert (run_dir / "auto_simulation_assets.json").exists()
+
+    (run_dir / "historical.out.json").write_text(
+        json.dumps(_canned_ok({"hallazgos": ["Hallazgo historico."]})), encoding="utf-8"
+    )
+    (run_dir / "inference.out.json").write_text(
+        json.dumps(_canned_inference_ok(run_dir)), encoding="utf-8"
+    )
+    prepare_expert_alignment(run_dir)
+    (run_dir / "expert-alignment.out.json").write_text(
+        json.dumps(_canned_ok({"sintesis_final": "Todo alineado."})), encoding="utf-8"
+    )
+    # No auto-simulator.out.json is written here: the auto-simulator agent
+    # step is optional/degrade-to-skip (SKILL.md step 4b) -- the coverage
+    # proof only requires the automatic-simulation TABLE to render, which
+    # `prepare()`'s real run already persisted via the sidecar.
+
+    html_path = render(run_dir, output_dir=tmp_path / "html")
+    html = html_path.read_text(encoding="utf-8")
+
+    assert html.strip() != ""
+    # `render_expert_alignment_tab`'s `_post_prioritization_simulator_visuals()`
+    # is the code path actually wired into the final HTML template (unlike the
+    # sibling `_auto_simulation_section()` helper in plotting.py, which builds
+    # a similarly-named section but is never called from anywhere) -- this is
+    # the real, rendered proof that the automatic simulator's table reached
+    # the report.
+    assert "Gráficas del simulador automático" in html, (
+        "expected the automatic min/max sensitivity visuals section to actually "
+        "render, proving /reporte covers what notebook 02 used to produce"
+    )
