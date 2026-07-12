@@ -8,8 +8,8 @@ from pathlib import Path
 from urllib.parse import unquote
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_RESULTS_DIR = _REPO_ROOT / "src" / "assets" / "site" / "results"
-_DATA_DIR = _REPO_ROOT / "src" / "data"
+_RESULTS_DIR = _REPO_ROOT / "site" / "assets" / "site" / "results"
+_DATA_DIR = _REPO_ROOT / "site" / "data"
 
 
 def _inline_lib_script(html: str, lib_root: Path) -> str:
