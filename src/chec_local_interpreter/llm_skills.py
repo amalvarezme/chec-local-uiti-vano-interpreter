@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from chec_local_interpreter.config import agent_prompt_dir, llm_root
+from chec_local_interpreter.config import agent_prompt_dir
 
 REQUIRED_SKILLS = (
     "01_structured_context_builder.md",
@@ -51,11 +51,12 @@ def skills_dir(base_dir: str | Path | None = None, *, profile: str = "base") -> 
     if base_dir is not None:
         return Path(base_dir)
     # Migrated profiles (sdd/retire-llm-directory, per-profile incremental
-    # repoint, design D3): base/historical, inferencia/inference, and
-    # expert_alignment/pdf_report_comparison now resolve to their code-owned
-    # `.claude/skills/<agent>/prompt/` home. Un-migrated profiles keep
-    # resolving via `llm_root()` until their own slice lands
-    # (auto_simulator/simulador_automatico in Slice D).
+    # repoint, design D3): base/historical, inferencia/inference,
+    # expert_alignment/pdf_report_comparison, and now
+    # auto_simulator/simulador_automatico (Slice D) all resolve to their
+    # code-owned `.claude/skills/<agent>/prompt/` home. No profile still
+    # resolves via `llm_root()` after this slice; `llm_root()` itself is
+    # retired in Slice E once the residual `llm/` tree is deleted.
     if profile == "base":
         return agent_prompt_dir("historical")
     if profile == "inferencia":
@@ -63,10 +64,8 @@ def skills_dir(base_dir: str | Path | None = None, *, profile: str = "base") -> 
     if profile in {"expert_alignment", "pdf_report_comparison"}:
         return agent_prompt_dir("expert-alignment")
     if profile in {"auto_simulator", "simulador_automatico"}:
-        suffix = "skills_auto_simulator"
-    else:
-        raise ValueError("profile debe ser 'base', 'inferencia', 'expert_alignment' o 'auto_simulator'.")
-    return llm_root() / suffix
+        return agent_prompt_dir("auto-simulator")
+    raise ValueError("profile debe ser 'base', 'inferencia', 'expert_alignment' o 'auto_simulator'.")
 
 
 def list_available_skills(base_dir: str | Path | None = None, *, profile: str = "base") -> list[str]:
