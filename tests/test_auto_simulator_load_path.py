@@ -4,7 +4,7 @@
 Unlike `pdf-discussion-extraction` (Phase C), the auto-simulator profile flows
 through the shared `llm_skills` resolver (`skills_dir()` / `verify_required_skills()`
 / `assemble_skill_bundle()`), not a raw `Path.read_text()` call. This test pins
-the two behaviors spec/design require:
+the behavior spec/design require:
 
 1. (RED before D.2/D.3) `skills_dir(profile="auto_simulator")` resolves to the
    code-owned `.claude/skills/auto-simulator/prompt/` home, per D3's per-profile
@@ -13,10 +13,18 @@ the two behaviors spec/design require:
    `llm_root()/skills_auto_simulator`.
 2. A missing/incomplete playbook directory makes `assemble_skill_bundle()` raise
    `FileNotFoundError` immediately, before any LLM call could happen — mirrored
-   here via an empty `base_dir` override, and cross-checked against the
-   notebook's actual guard ordering (`verify_required_skills(...)` ->
-   `raise FileNotFoundError(...)` -> `call_llm(...)`), so the fail-loudly
-   contract is proven both for the reusable resolver and for the real call site.
+   here via an empty `base_dir` override.
+
+The notebook-content characterization tests this file previously carried
+(`test_notebook_guards_missing_skills_before_llm_call`,
+`test_notebook_has_no_hardcoded_old_auto_simulator_path`) asserted against
+`notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`'s raw text.
+That notebook was deleted by `agent-native-pipeline-and-site-split` PR A1
+once `/reporte` was proven to cover everything it did (the automatic
+min/max simulator is now wired into `report_pipeline.py` -- see
+`test_report_pipeline.py`'s `_run_automatic_simulator`/`prepare()` tests) --
+those two tests are removed here rather than left asserting against a file
+that no longer exists.
 """
 
 from __future__ import annotations
@@ -31,12 +39,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RELOCATED_AUTO_SIMULATOR_DIR = (
     PROJECT_ROOT / ".claude" / "skills" / "auto-simulator" / "prompt"
 )
-NOTEBOOK_PATH = (
-    PROJECT_ROOT
-    / "notebooks"
-    / "core"
-    / "02_local_uiti_vano_interpretability_v3.ipynb"
-)
 
 
 def test_auto_simulator_skills_dir_resolves_to_relocated_path():
@@ -50,17 +52,3 @@ def test_missing_auto_simulator_playbook_raises_loudly(tmp_path):
     # prompt text for call_llm to consume.
     with pytest.raises(FileNotFoundError):
         assemble_skill_bundle(base_dir=tmp_path, profile="auto_simulator")
-
-
-def test_notebook_guards_missing_skills_before_llm_call():
-    text = NOTEBOOK_PATH.read_text(encoding="utf-8")
-    guard_idx = text.index('verify_required_skills(profile=\\"auto_simulator\\")')
-    raise_idx = text.index('raise FileNotFoundError(f\\"Missing required auto-simulator')
-    call_idx = text.index('auto_simulator_llm_result = call_llm(')
-    assert guard_idx < raise_idx < call_idx
-
-
-def test_notebook_has_no_hardcoded_old_auto_simulator_path():
-    text = NOTEBOOK_PATH.read_text(encoding="utf-8")
-    assert "skills_auto_simulator/" not in text
-    assert "llm\\\" / \\\"skills_auto_simulator" not in text
