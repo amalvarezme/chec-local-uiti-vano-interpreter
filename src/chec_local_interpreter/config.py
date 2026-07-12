@@ -64,16 +64,13 @@ def project_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def llm_root() -> Path:
-    return project_root() / "llm"
-
-
 def prompt_assets_dir() -> Path:
     """Package-relative home for shared prompt templates/schemas.
 
-    Survives install and does not depend on CWD/repo layout, unlike
-    ``llm_root()`` (repo-root-relative, retired incrementally per
-    ``sdd/retire-llm-directory``).
+    Survives install and does not depend on CWD/repo layout. Replaces the
+    retired, repo-root-relative ``llm_root()`` resolver (removed in
+    ``sdd/retire-llm-directory`` Slice E, once the residual ``llm/`` tree was
+    deleted).
     """
     return Path(__file__).resolve().parent / "prompt_assets"
 

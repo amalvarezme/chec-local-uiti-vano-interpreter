@@ -1,27 +1,34 @@
 # Agents Guide
 
 This is the map for the CHEC-native agent framework. Read this file first if you are new to
-`.claude/agents/`, `.claude/skills/`, or `llm/skills_expert_alignment/` — it exists specifically
-to stop you from conflating three things that are easy to confuse because they're all informally
-called "skills" in conversation.
+`.claude/agents/`, `.claude/skills/`, or the per-agent `.claude/skills/<agent>/prompt/` playbook
+subdirectories — it exists specifically to stop you from conflating three things that are easy to
+confuse because they're all informally called "skills" in conversation.
 
 ## The three meanings of "skills" (read this before anything else)
 
 | Term | Artifact | Has frontmatter? | Consumed by |
 |---|---|---|---|
-| Prompt **playbook** | `llm/skills_expert_alignment/*.md` (existing, pre-dates this framework) | No | `assemble_skill_bundle()` in `chec_local_interpreter.llm_skills`, used by the pre-existing notebook flow |
+| Prompt **playbook** | `.claude/skills/<agent>/prompt/*.md` (relocated from the retired top-level `llm` directory, see `sdd/retire-llm-directory`) | No | `assemble_skill_bundle()` in `chec_local_interpreter.llm_skills`, used by the pre-existing notebook flow |
 | Claude Code **Skill** | `.claude/skills/expert-alignment/SKILL.md` (new) | Yes | Claude Code's `Skill` tool |
 | Agent **role** | `.claude/agents/expert-alignment.md` (new) | Yes | The Claude Code agent runtime (this is what you invoke as a headless/interactive agent) |
 
-Given any file path in this repo, classify it with this rule: does it live under `llm/skills*/`?
-It's a **playbook** (prompt content, no frontmatter, only consumed by the notebook-era
-`assemble_skill_bundle` helper). Does it live under `.claude/skills/`? It's a **Skill** (has
+Shared prompt templates and output-schema JSON that are not agent-specific playbooks (the
+historical/base agent's system/user templates and the output schemas consumed by
+`llm_contracts.py`/`inference_validation.py`) live in
+`src/chec_local_interpreter/prompt_assets/` — a package-relative, code-owned home resolved off
+`__file__`, not a fourth "meaning of skills."
+
+Given any file path in this repo, classify it with this rule: does it live under
+`.claude/skills/<agent>/prompt/`? It's a **playbook** (prompt content, no frontmatter, only
+consumed by the notebook-era `assemble_skill_bundle` helper). Is it `.claude/skills/<agent>/SKILL.md`
+itself (directly under `.claude/skills/<agent>/`, not inside `prompt/`)? It's a **Skill** (has
 frontmatter, loaded by the `Skill` tool). Does it live under `.claude/agents/`? It's a **role**
 (has frontmatter, defines an agent you can run). If you can't answer from the path alone, you
 haven't been given enough information to classify it — ask, don't guess.
 
 Why this distinction exists: the expert-alignment pilot **ports** the three
-`llm/skills_expert_alignment/*.md` playbook files into one Claude Code Skill body (see
+`.claude/skills/expert-alignment/prompt/*.md` playbook files into one Claude Code Skill body (see
 [`.claude/skills/expert-alignment/SKILL.md`](../.claude/skills/expert-alignment/SKILL.md)) —
 it does **not** delete the playbooks (the notebook flow still consumes them) and it does **not**
 duplicate their content by hand — the Skill is authored by porting, once, from the playbooks.
@@ -261,7 +268,7 @@ governed by this framework (that frozen function itself is untouched and still c
 - Role definition: [`.claude/agents/expert-alignment.md`](../.claude/agents/expert-alignment.md)
 - Rules (binding invariants): [`.claude/agents/rules/invariants.md`](../.claude/agents/rules/invariants.md)
 - Claude Code Skill: [`.claude/skills/expert-alignment/SKILL.md`](../.claude/skills/expert-alignment/SKILL.md)
-  — ports `llm/skills_expert_alignment/01_pdf_report_comparison.md`,
+  — ports `.claude/skills/expert-alignment/prompt/01_pdf_report_comparison.md`,
   `02_predictive_variable_prioritization.md`, and `03_graph_context_for_alignment.md`.
 - L1 deterministic Python: `src/chec_local_interpreter/expert_alignment.py`
 - L2 CLI: `src/chec_local_interpreter/agent_tools/expert_alignment.py`
@@ -271,9 +278,10 @@ governed by this framework (that frozen function itself is untouched and still c
 - Role definition: [`.claude/agents/historical.md`](../.claude/agents/historical.md)
 - Rules (binding invariants, shared with expert-alignment): [`.claude/agents/rules/invariants.md`](../.claude/agents/rules/invariants.md)
 - Claude Code Skill: [`.claude/skills/historical/SKILL.md`](../.claude/skills/historical/SKILL.md)
-  — ports `llm/skills/01_structured_context_builder.md`, `02_critical_point_interpreter.md`,
-  `03_uiti_vano_behavior_explainer.md`, `04_domain_grounding_guardrails.md`,
-  `05_llm_output_validator.md`, `06_base_repair.md`, and `07_base_output_contract.md`.
+  — ports `.claude/skills/historical/prompt/01_structured_context_builder.md`,
+  `02_critical_point_interpreter.md`, `03_uiti_vano_behavior_explainer.md`,
+  `04_domain_grounding_guardrails.md`, `05_llm_output_validator.md`, `06_base_repair.md`, and
+  `07_base_output_contract.md`.
 - L1 deterministic Python: `src/chec_local_interpreter/context_builder.py`,
   `src/chec_local_interpreter/llm_contracts.py`, `src/chec_local_interpreter/llm_validation.py`
   (`validar_provenance_base` and the public `allowed_dates`/`allowed_critical_point_ids`/
@@ -285,14 +293,14 @@ governed by this framework (that frozen function itself is untouched and still c
 - Role definition: [`.claude/agents/inference.md`](../.claude/agents/inference.md)
 - Rules (binding invariants, shared with expert-alignment/historical): [`.claude/agents/rules/invariants.md`](../.claude/agents/rules/invariants.md)
 - Claude Code Skill: [`.claude/skills/inference/SKILL.md`](../.claude/skills/inference/SKILL.md)
-  — ports `llm/skills_inference/01_structured_context_builder.md`,
+  — ports `.claude/skills/inference/prompt/01_structured_context_builder.md`,
   `02_circuit_scenario_interpreter.md`, `03_uiti_vano_behavior_explainer.md`,
   `04_graph_connectivity_guardrails.md`, `05_llm_output_validator.md`, and
   `06_inference_output_contract.md`.
 - L1 deterministic Python: `src/chec_local_interpreter/inference_validation.py`
   (`validar_respuesta_inferencia_strict`, `validar_provenance_inferencia`, and the public
   `allowed_dates`/`allowed_critical_point_ids`/`allowed_variables`/`allowed_scenario_names`
-  accessors), `llm/prompts/inference.output_schema.json`
+  accessors), `src/chec_local_interpreter/prompt_assets/inference.output_schema.json`
 - L2 CLI: `src/chec_local_interpreter/agent_tools/inference.py`
 - Frozen boundary: the L1/L2 layers above never import the frozen
   `chec_impacto.interpretability.circuit_analysis` module's model-implementation subpackage or its
@@ -306,8 +314,8 @@ governed by this framework (that frozen function itself is untouched and still c
 - Shared L2 CLI stdin/dispatch contract: `src/chec_local_interpreter/agent_tools/cli_support.py`
 - L4 batch runner (`AgentSpec`-generalized): `src/chec_local_interpreter/agent_tools/batch.py`
 - Frozen-model guard (tests): `tests/test_frozen_model_guard.py`
-- Offline eval gate (no API call): `llm/evals/run_llm_eval.py` — run it directly with
-  `python llm/evals/run_llm_eval.py`; it validates synthetic expert-alignment AND historical
+- Offline eval gate (no API call): `evals/run_llm_eval.py` — run it directly with
+  `python evals/run_llm_eval.py`; it validates synthetic expert-alignment AND historical
   responses (including a resolving-provenance case for each) through both the schema validator and
   their respective provenance validators, alongside the pre-existing base-agent eval case in the
   same file.

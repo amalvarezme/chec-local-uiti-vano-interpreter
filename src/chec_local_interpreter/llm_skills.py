@@ -50,13 +50,12 @@ def _required_skills(profile: str = "base") -> tuple[str, ...]:
 def skills_dir(base_dir: str | Path | None = None, *, profile: str = "base") -> Path:
     if base_dir is not None:
         return Path(base_dir)
-    # Migrated profiles (sdd/retire-llm-directory, per-profile incremental
+    # All profiles (sdd/retire-llm-directory, per-profile incremental
     # repoint, design D3): base/historical, inferencia/inference,
-    # expert_alignment/pdf_report_comparison, and now
-    # auto_simulator/simulador_automatico (Slice D) all resolve to their
-    # code-owned `.claude/skills/<agent>/prompt/` home. No profile still
-    # resolves via `llm_root()` after this slice; `llm_root()` itself is
-    # retired in Slice E once the residual `llm/` tree is deleted.
+    # expert_alignment/pdf_report_comparison, and
+    # auto_simulator/simulador_automatico resolve to their code-owned
+    # `.claude/skills/<agent>/prompt/` home. The repo-root `llm/` tree and its
+    # resolver were removed from `config.py` in Slice E.
     if profile == "base":
         return agent_prompt_dir("historical")
     if profile == "inferencia":
