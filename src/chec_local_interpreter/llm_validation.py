@@ -15,6 +15,7 @@ except ImportError:  # pragma: no cover - exercised only in minimal environments
     Draft202012Validator = None
 
 from chec_local_interpreter.llm_contracts import load_output_schema
+from chec_local_interpreter.pdf_discussion_pipeline import COLUMNAS_FINALES as _PDF_DISCUSSION_COLUMNAS_FINALES
 
 @dataclass
 class ValidationResult:
@@ -466,12 +467,19 @@ def validate_auto_simulator_response(response_text: str) -> dict[str, Any]:
 # performs just before calling it, so the "never trust the LLM's own
 # `Circuito` value" invariant lives in one place.
 
-# Kept in sync with `expert_alignment.REQUIRED_PDF_DISCUSSION_COLUMNS` (same 5
-# columns). Not imported from there: `expert_alignment.py` already imports
-# `validar_provenance_generico` from this module, so importing
-# `REQUIRED_PDF_DISCUSSION_COLUMNS` back from `expert_alignment.py` here would
-# create a circular import between the two modules.
-COLUMNAS_FINALES = ["Circuito", "Fecha inicio", "Fecha fin", "Análisis", "Evidencia"]
+# Single source of truth: `pdf_discussion_pipeline.COLUMNAS_FINALES` (design
+# D5's new canonical home for the deterministic PDF-discussion pipeline). PR
+# A2a temporarily defined its own copy here alongside `expert_alignment`'s
+# `REQUIRED_PDF_DISCUSSION_COLUMNS` (three independent literal copies of the
+# same 5 columns -- flagged as a WARNING in that PR's verify report). Both
+# `llm_validation.py` and `expert_alignment.py` now import the same list
+# object from `pdf_discussion_pipeline.py` instead of redefining it, so a
+# future schema edit can never silently desynchronize the xlsx producer
+# (`assemble_discussion_xlsx`) from its consumers (this module's
+# `validate_pdf_discussion_row`, `expert_alignment.py`'s xlsx reader). No
+# circular import risk: `pdf_discussion_pipeline.py` has no import path back
+# to either `llm_validation.py` or `expert_alignment.py`.
+COLUMNAS_FINALES = _PDF_DISCUSSION_COLUMNAS_FINALES
 
 _MESES = {
     "enero": "01",

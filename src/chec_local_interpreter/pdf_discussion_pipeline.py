@@ -32,16 +32,12 @@ import pdfplumber
 
 from chec_local_interpreter.context_builder import save_json_artifact
 
-# NOTE (deviation from the tasks-artifact's "import from llm_validation.py"
-# assumption): `COLUMNAS_FINALES` does not currently exist in
-# `llm_validation.py` -- it only exists in the deprecated notebook, and
-# `llm_validation.validate_pdf_discussion_row` (which PR A2b's revised
-# `agent_tools/pdf_discussion.py` already imports) has not been implemented
-# yet either. `llm_validation.py` is out of A2a's task scope (tasks 2.1-2.10
-# only cover this file), so this module -- the new single home for the
-# deterministic PDF-discussion pipeline -- defines `COLUMNAS_FINALES` here.
-# PR A2b, which adds `validate_pdf_discussion_row` to `llm_validation.py`,
-# should import it FROM here rather than redefining it, keeping one owner.
+# Single source of truth for the PDF-discussion 5-column schema (design D5).
+# `llm_validation.COLUMNAS_FINALES` (used by `validate_pdf_discussion_row`)
+# and `expert_alignment.REQUIRED_PDF_DISCUSSION_COLUMNS` (the xlsx reader)
+# both import this exact list object rather than redefining it -- consolidated
+# in PR A2b after A2a's verify report flagged three independent literal
+# copies as a drift risk (WARNING 1).
 COLUMNAS_FINALES = ["Circuito", "Fecha inicio", "Fecha fin", "Análisis", "Evidencia"]
 
 MESES = {
