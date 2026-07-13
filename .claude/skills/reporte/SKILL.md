@@ -116,6 +116,16 @@ Given `circuito` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair)
      skipped, `escenarios: []` but `features` stays non-empty and `modelo` is the real loaded
      model's class name (distinguishes this data-availability gap from the "no trained model" gap
      above, which has `features: []` too).
+**Steps 3, 4, and 4b are independent of one another** — `historical`, `inference`, and
+`auto-simulator` each read their own `*.bc.json` envelope and write their own distinct
+`*.out.json` file, sharing no mutable state. They MAY be issued as parallel/independent calls in
+one turn where the invoking runtime supports it (e.g. Claude Code dispatching independent
+tool/Skill calls together); on a runtime where concurrency is unconfirmed (e.g. OpenCode), running
+them sequentially in any order is an equally correct, explicitly sanctioned degrade path — this
+runbook never requires true concurrency, only that all of steps 3 and 4 complete successfully
+before step 5. Only `expert-alignment` (steps 5-6) has an ordering dependency: it requires BOTH
+`historical` and `inference` to have already completed.
+
 3. **Invoke `historical`** — load this Skill (`.claude/skills/historical/SKILL.md`), give it
    `run_dir/historical.bc.json`'s envelope via `agent_tools.historical build-context`/`validate`,
    and have it write its validated response to `run_dir/historical.out.json` as
@@ -124,10 +134,12 @@ Given `circuito` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair)
    `inference` or beyond, and report the last validation errors to the user.
 4. **Invoke `inference`** — same pattern as step 3, using `run_dir/inference.bc.json` and this
    Skill's own `agent_tools.inference build-context`/`validate` verbs, writing
-   `run_dir/inference.out.json`. Steps 3 and 4 may run in either order (both must complete
-   successfully before step 5) — the design places no ordering requirement between historical and
-   inference, only that both precede expert-alignment.
-4b. **Invoke `auto-simulator`** — `prepare` (step 2) already ran the automatic min/max sensitivity
+   `run_dir/inference.out.json`. Independent of step 3 (see above) — steps 3 and 4 may run in
+   either order, or in parallel where the runtime supports it (both must complete successfully
+   before step 5) — the design places no ordering requirement between historical and inference,
+   only that both precede expert-alignment.
+4b. **Invoke `auto-simulator`** — also independent of steps 3/4 (see above). `prepare` (step 2)
+   already ran the automatic min/max sensitivity
    simulator as a side effect, using the same loaded MGCECDL model as the inference/SHAP simulator.
    If `run_dir/auto-simulator.bc.json` exists, load `.claude/skills/auto-simulator/SKILL.md`, give it
    that envelope via `agent_tools.auto_simulator build-context`/`validate`, and have it write its
