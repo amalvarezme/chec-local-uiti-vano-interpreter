@@ -63,307 +63,6 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
-def plot_interactive_circuit_events(raw_df, start_date=None, end_date=None):
-    """
-    Plots an interactive bar chart of events per circuit with quartile backgrounds.
-
-    Parameters:
-    - raw_df (pd.DataFrame): The main dataset containing 'CIRCUITO' and optionally 'FECHA' columns.
-    - start_date (str, optional): The start date to filter the data (e.g., '2023-01-01').
-    - end_date (str, optional): The end date to filter the data.
-
-    Returns:
-    - fig: A plotly Figure object.
-    """
-    df = raw_df.copy()
-
-    # Check if we need to filter by date and ensure FECHA is parsed safely
-    if start_date is not None or end_date is not None:
-        if 'FECHA' in df.columns:
-            # Parse FECHA as per project rules
-            if not pd.api.types.is_datetime64_any_dtype(df['FECHA']):
-                df['FECHA'] = pd.to_datetime(df['FECHA'], errors='coerce')
-
-            if start_date is not None:
-                df = df[df['FECHA'] >= pd.to_datetime(start_date)]
-            if end_date is not None:
-                df = df[df['FECHA'] <= pd.to_datetime(end_date)]
-        else:
-            print("Warning: 'FECHA' column not found in dataframe. Showing all data without date filtering.")
-
-    # 1. Calculate events per circuit as distinct FECHA values, not raw rows.
-    circuit_counts = count_unique_event_dates(df, "CIRCUITO").sort_values(ascending=False)
-
-    # Handle empty dataframe edge case (e.g. if dates are too narrow)
-    if circuit_counts.empty:
-        print("No data available for the given date range.")
-        return go.Figure()
-
-    # 2. Compute the quartile boundaries
-    q1 = circuit_counts.quantile(0.25)
-    q2 = circuit_counts.quantile(0.50)  # Median
-    q3 = circuit_counts.quantile(0.75)
-    min_val = circuit_counts.min()
-    max_val = circuit_counts.max()
-
-    # 3. Create the plot
-    fig = go.Figure()
-
-    # High-aesthetic canvas styles (slate-themed colors)
-    colors = ['#f1f5f9', '#eff6ff', '#ecfdf5', '#fff1f2']  # Slate, Blue, Emerald, Rose
-
-    # Plot the bars for all circuits
-    fig.add_trace(go.Bar(
-        x=circuit_counts.index,
-        y=circuit_counts.values,
-        marker_color='rgba(37, 99, 235, 0.6)',  # Blue with some transparency
-        name='Eventos',
-        showlegend=False
-    ))
-
-    # 4. Add horizontal background quartile spans using shapes
-    fig.add_hrect(y0=0, y1=q1, fillcolor=colors[0], opacity=1, layer="below", line_width=0)
-    fig.add_hrect(y0=q1, y1=q2, fillcolor=colors[1], opacity=1, layer="below", line_width=0)
-    fig.add_hrect(y0=q2, y1=q3, fillcolor=colors[2], opacity=1, layer="below", line_width=0)
-    fig.add_hrect(y0=q3, y1=max_val * 1.05, fillcolor=colors[3], opacity=1, layer="below", line_width=0)
-
-    # Dummy traces to replicate the matplotlib quartile background legend
-    legend_labels = [
-        f'Q1 (0-25%): 0 - {q1:.1f} eventos',
-        f'Q2 (25-50%): {q1:.1f} - {q2:.1f} eventos',
-        f'Q3 (50-75%): {q2:.1f} - {q3:.1f} eventos',
-        f'Q4 (75-100%): {q3:.1f} - {max_val} eventos'
-    ]
-
-    for i in range(4):
-        fig.add_trace(go.Scatter(
-            x=[None], y=[None],
-            mode='markers',
-            marker=dict(size=12, color=colors[i], symbol='square', line=dict(color='#cbd5e1', width=1)),
-            name=legend_labels[i]
-        ))
-
-    # 5. Draw dashed boundary lines for quartile cuts
-    fig.add_hline(y=q1, line_dash="dash", line_color="#2563eb", line_width=1.5,
-                  annotation_text=f'<b>Q1 ({q1:.1f})</b>', annotation_position="top left", annotation_font_color="#1d4ed8")
-    fig.add_hline(y=q2, line_dash="dash", line_color="#059669", line_width=1.5,
-                  annotation_text=f'<b>Q2/Med ({q2:.1f})</b>', annotation_position="top left", annotation_font_color="#047857")
-    fig.add_hline(y=q3, line_dash="dash", line_color="#e11d48", line_width=1.5,
-                  annotation_text=f'<b>Q3 ({q3:.1f})</b>', annotation_position="top left", annotation_font_color="#be123c")
-
-    # Dynamic Title indicating date range
-    title_text = 'Eventos por Circuito Ordenados por Frecuencia con Cuartiles en Fondo'
-    if start_date and end_date:
-        title_text += f'<br><sup>Periodo: {start_date} a {end_date}</sup>'
-    elif start_date:
-        title_text += f'<br><sup>Periodo: Desde {start_date}</sup>'
-    elif end_date:
-        title_text += f'<br><sup>Periodo: Hasta {end_date}</sup>'
-    else:
-        title_text += f'<br><sup>Periodo: {pd.to_datetime(raw_df["FECHA"]).min()} a {pd.to_datetime(raw_df["FECHA"]).max()}</sup>'
-
-    # 6. Formatting
-    max_circuits = 300
-    xaxis_range = [-0.5, min(len(circuit_counts) - 0.5, max_circuits - 0.5)]
-
-    fig.update_layout(
-        title=dict(
-            text=title_text,
-            font=dict(size=18, family="Arial, sans-serif")
-        ),
-        xaxis_title='Circuitos (Ordenados por frecuencia)',
-        yaxis_title='Número de Eventos',
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='#ffffff',
-        xaxis=dict(
-            tickangle=-90,
-            range=xaxis_range,
-            showgrid=False
-        ),
-        yaxis=dict(
-            range=[0, max_val * 1.05],
-            showgrid=True,
-            gridcolor='#e2e8f0',
-            gridwidth=1,
-            griddash='dot'
-        ),
-        legend=dict(
-            title='Rango de Cuartiles (Fondo)',
-            bgcolor='rgba(255, 255, 255, 0.8)',
-            bordercolor='#e2e8f0',
-            borderwidth=1,
-            yanchor="top",
-            y=0.99,
-            xanchor="right",
-            x=0.99
-        ),
-        height=650,
-        margin=dict(l=60, r=50, t=90, b=150),
-        hovermode="x unified"
-    )
-
-    return fig
-
-from pandas.core.arrays import string_arrow
-import numpy as np
-import pandas as pd
-import plotly.graph_objects as go
-
-def plot_interactive_uiti_vano_sums(raw_df, start_date=None, end_date=None):
-    """
-    Plots an interactive bar chart of the sum of UITI_VANO per circuit with quartile backgrounds.
-
-    Parameters:
-    - raw_df (pd.DataFrame): The main dataset containing 'CIRCUITO', 'UITI_VANO', and optionally 'FECHA'.
-    - start_date (str, optional): The start date to filter the data (e.g., '2023-01-01').
-    - end_date (str, optional): The end date to filter the data.
-
-    Returns:
-    - fig: A plotly Figure object.
-    """
-    df = raw_df.copy()
-
-    # 1. Ensure UITI_VANO is numeric and handle missing values
-    df['UITI_VANO'] = pd.to_numeric(df['UITI_VANO'], errors='coerce').fillna(0.0)
-
-    # 2. Check if we need to filter by date and ensure FECHA is parsed safely
-    if start_date is not None or end_date is not None:
-        if 'FECHA' in df.columns:
-            # Parse FECHA as per project rules
-            if not pd.api.types.is_datetime64_any_dtype(df['FECHA']):
-                df['FECHA'] = pd.to_datetime(df['FECHA'], errors='coerce')
-
-            if start_date is not None:
-                df = df[df['FECHA'] >= pd.to_datetime(start_date)]
-            if end_date is not None:
-                df = df[df['FECHA'] <= pd.to_datetime(end_date)]
-        else:
-            print("Warning: 'FECHA' column not found in dataframe. Showing all data without date filtering.")
-
-    # Deduplicar por FECHA y FID_VANO si existen para evitar sobreconteo por múltiples equipos
-    # if 'FECHA' in df.columns and 'FID_VANO' in df.columns:
-    #     if not pd.api.types.is_datetime64_any_dtype(df['FECHA']):
-    #         df['FECHA'] = pd.to_datetime(df['FECHA'], errors='coerce')
-    #     df = df.drop_duplicates(subset=['FECHA', 'FID_VANO'])
-
-    # 3. Group by circuit and calculate total UITI_VANO (sorted descending)
-    circuit_sums = df.groupby('CIRCUITO')['UITI_VANO'].sum().sort_values(ascending=False)
-
-    # Handle empty dataframe edge case
-    if circuit_sums.empty:
-        print("No data available for the given date range.")
-        return go.Figure()
-
-    # 4. Compute quartile boundaries for the sums
-    q1 = circuit_sums.quantile(0.25)
-    q2 = circuit_sums.quantile(0.50)  # Median
-    q3 = circuit_sums.quantile(0.75)
-    min_val = circuit_sums.min()
-    max_val = circuit_sums.max()
-
-    # 5. Create the plot
-    fig = go.Figure()
-
-    # High-aesthetic canvas styles (slate-themed colors)
-    colors = ['#f1f5f9', '#eff6ff', '#ecfdf5', '#fff1f2']  # Slate, Blue, Emerald, Rose
-
-    # Plot the bars for all circuits
-    fig.add_trace(go.Bar(
-        x=circuit_sums.index,
-        y=circuit_sums.values,
-        marker_color='rgba(37, 99, 235, 0.6)',  # Blue with some transparency
-        name='Suma UITI_VANO',
-        showlegend=False,
-        hovertemplate='%{x}<br>Suma: %{y:,.0f}<extra></extra>' # Add thousands separator to hover
-    ))
-
-    # 6. Add horizontal background quartile spans using shapes
-    fig.add_hrect(y0=0, y1=q1, fillcolor=colors[0], opacity=1, layer="below", line_width=0)
-    fig.add_hrect(y0=q1, y1=q2, fillcolor=colors[1], opacity=1, layer="below", line_width=0)
-    fig.add_hrect(y0=q2, y1=q3, fillcolor=colors[2], opacity=1, layer="below", line_width=0)
-    fig.add_hrect(y0=q3, y1=max_val * 1.05, fillcolor=colors[3], opacity=1, layer="below", line_width=0)
-
-    # Dummy traces to replicate the matplotlib quartile background legend
-    legend_labels = [
-        f'Q1 (0-25%): 0 - {q1:,.0f}',
-        f'Q2 (25-50%): {q1:,.0f} - {q2:,.0f}',
-        f'Q3 (50-75%): {q2:,.0f} - {q3:,.0f}',
-        f'Q4 (75-100%): {q3:,.0f} - {max_val:,.0f}'
-    ]
-
-    for i in range(4):
-        fig.add_trace(go.Scatter(
-            x=[None], y=[None],
-            mode='markers',
-            marker=dict(size=12, color=colors[i], symbol='square', line=dict(color='#cbd5e1', width=1)),
-            name=legend_labels[i]
-        ))
-
-    # 7. Draw dashed boundary lines for quartile cuts
-    fig.add_hline(y=q1, line_dash="dash", line_color="#2563eb", line_width=1.5,
-                  annotation_text=f'<b>Q1 ({q1:,.0f})</b>', annotation_position="top left", annotation_font_color="#1d4ed8")
-    fig.add_hline(y=q2, line_dash="dash", line_color="#059669", line_width=1.5,
-                  annotation_text=f'<b>Q2/Med ({q2:,.0f})</b>', annotation_position="top left", annotation_font_color="#047857")
-    fig.add_hline(y=q3, line_dash="dash", line_color="#e11d48", line_width=1.5,
-                  annotation_text=f'<b>Q3 ({q3:,.0f})</b>', annotation_position="top left", annotation_font_color="#be123c")
-
-    # Dynamic Title indicating date range
-    title_text = 'Suma de UITI_VANO por Circuito Ordenado por Frecuencia con Cuartiles en Fondo'
-    if start_date and end_date:
-        title_text += f'<br><sup>Periodo: {start_date} a {end_date}</sup>'
-    elif start_date:
-        title_text += f'<br><sup>Periodo: Desde {start_date}</sup>'
-    elif end_date:
-        title_text += f'<br><sup>Periodo: Hasta {end_date}</sup>'
-    else:
-        title_text += f'<br><sup>Periodo: {pd.to_datetime(raw_df["FECHA"]).min()} a {pd.to_datetime(raw_df["FECHA"]).max()}</sup>'
-
-    # 8. Formatting
-    max_circuits = 350
-    xaxis_range = [-0.5, min(len(circuit_sums) - 0.5, max_circuits - 0.5)]
-
-    fig.update_layout(
-        title=dict(
-            text=title_text,
-            font=dict(size=18, family="Arial, sans-serif")
-        ),
-        xaxis_title='Circuitos (Ordenados por suma de UITI_VANO)',
-        yaxis_title='Suma de UITI_VANO',
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='#ffffff',
-        xaxis=dict(
-            tickangle=-90,
-            range=xaxis_range,
-            showgrid=False
-        ),
-        yaxis=dict(
-            range=[0, max_val * 1.05],
-            showgrid=True,
-            gridcolor='#e2e8f0',
-            gridwidth=1,
-            griddash='dot',
-            tickformat=",.0f"  # Format Y-axis values with commas as thousand separators
-        ),
-        legend=dict(
-            title='Rango de Cuartiles (Fondo)',
-            bgcolor='rgba(255, 255, 255, 0.8)',
-            bordercolor='#e2e8f0',
-            borderwidth=1,
-            yanchor="top",
-            y=0.99,
-            xanchor="right",
-            x=0.99
-        ),
-        height=650,
-        margin=dict(l=60, r=50, t=90, b=150),
-        hovermode="x unified"
-    )
-
-    return fig
-
-import numpy as np
-import pandas as pd
-import plotly.graph_objects as go
 
 def run_kmeans(data, n_clusters=5, max_iters=100, random_state=42):
     """Custom NumPy K-Means implementation."""
@@ -495,7 +194,7 @@ def plot_interactive_circuit_clustering(raw_df, start_date=None, end_date=None, 
                 name=legend_name,
                 legendgroup=legend_group_name,
                 showlegend=True if highlighted_data.empty else True, # Main legend toggle
-                hovertemplate='<b>%{text}</b><br>Eventos: %{x:,.0f}<br>Suma UITI_VANO: %{y:,.0f}<extra></extra>'
+                hovertemplate='<b>%{text}</b><br>Eventos: %{x:,.0f}<br>Suma UITI_VANO: %{y:,.2f}<extra></extra>'
             ))
 
         # 4b. Plot highlighted points (Crosses 'X') retaining cluster color
@@ -517,7 +216,7 @@ def plot_interactive_circuit_clustering(raw_df, start_date=None, end_date=None, 
                 name=legend_name,
                 legendgroup=legend_group_name,
                 showlegend=False if not normal_data.empty else True, # Hide legend duplicate if normal points exist
-                hovertemplate='<b>%{text}</b><br>Eventos: %{x:,.0f}<br>Suma UITI_VANO: %{y:,.0f}<br><i>DESTACADO</i><extra></extra>'
+                hovertemplate='<b>%{text}</b><br>Eventos: %{x:,.0f}<br>Suma UITI_VANO: %{y:,.2f}<br><i>DESTACADO</i><extra></extra>'
             ))
 
     # Expand axes limits by 10%
@@ -790,6 +489,7 @@ def plot_circuit_map_folium(
 ):
     """Build the same layered GEO HTML map used in notebook 03, enriched with V3 metrics."""
     os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "chec_local_matplotlib"))
+    import json as _json
     import folium
     import geopandas as gpd
     import matplotlib.colors as mcolors
@@ -969,8 +669,10 @@ def plot_circuit_map_folium(
         ],
     )
     _add_folium_equipment_legend(fmap)
-    fmap.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
+    leaflet_bounds = [[bounds[1], bounds[0]], [bounds[3], bounds[2]]]
+    fmap.fit_bounds(leaflet_bounds)
     map_name = fmap.get_name()
+    bounds_json = _json.dumps(leaflet_bounds)
     render_fix = f"""
     <style>
       html, body, .folium-map {{
@@ -982,13 +684,26 @@ def plot_circuit_map_folium(
       }}
     </style>
     <script>
-      window.addEventListener("load", function () {{
-        setTimeout(function () {{
+      (function () {{
+        var refitToCircuit = function () {{
           if (window.{map_name}) {{
             window.{map_name}.invalidateSize(true);
+            window.{map_name}.fitBounds({bounds_json});
           }}
-        }}, 150);
-      }});
+        }};
+        window.addEventListener("load", function () {{
+          setTimeout(refitToCircuit, 150);
+        }});
+        // This map is embedded via <iframe srcdoc="...">, and when that
+        // iframe sits inside a `display:none` report tab, the container is
+        // 0x0 at load time -- Leaflet's initial fitBounds() above computes
+        // a bogus pan/zoom against that 0x0 size, so the map never actually
+        // centers on the circuit until it is re-measured. The parent report
+        // page dispatches a "resize" event on this window once the tab
+        // holding this iframe actually becomes visible; re-run the same fit
+        // then so the map re-centers on the studied circuit's zone.
+        window.addEventListener("resize", refitToCircuit);
+      }})();
     </script>
     """
     fmap.get_root().html.add_child(folium.Element(render_fix))
@@ -1413,272 +1128,6 @@ def render_expert_alignment_tab(
         lis = "".join(f"<li>{_escape(item)}</li>" for item in clean_items)
         return f"<ul class='report-list'>{lis}</ul>"
 
-    def _risk_category_rank(label) -> int:
-        normalized = _clean_text(label).lower()
-        if "alto" in normalized and "medio" not in normalized:
-            return 3
-        if "medio-alto" in normalized or ("medio" in normalized and "alto" in normalized):
-            return 2
-        if "medio-bajo" in normalized or ("medio" in normalized and "bajo" in normalized):
-            return 1
-        if "medio" in normalized:
-            return 1
-        if "bajo" in normalized:
-            return 0
-        return -1
-
-    def _risk_class_level(label, score=None) -> int | None:
-        rank = _risk_category_rank(label)
-        if rank >= 0:
-            return rank + 1
-        parsed = pd.to_numeric(pd.Series([score]), errors="coerce").iloc[0]
-        try:
-            if pd.isna(parsed):
-                return None
-        except Exception:
-            return None
-        return int(max(1, min(4, round(float(parsed)) + 1)))
-
-    def _risk_class_label(level: int | None, label=None) -> str:
-        text = _clean_text(label)
-        if text:
-            return text
-        labels = {
-            1: "Q1 - Riesgo bajo",
-            2: "Q2 - Riesgo medio-bajo",
-            3: "Q3 - Riesgo medio-alto",
-            4: "Q4 - Riesgo alto",
-        }
-        return labels.get(level or 0, "Riesgo no disponible")
-
-    def _risk_transition_text(base_label, scenario_label) -> str:
-        base = _clean_text(base_label)
-        scenario = _clean_text(scenario_label)
-        if not base or not scenario:
-            return "categoría no disponible"
-        if base == scenario:
-            return "sin cambio de categoría"
-        return f"{base} -> {scenario}"
-
-    def _auto_simulation_chart_html(table) -> str:
-        required = {"variable", "riesgo_base", "riesgo_valor_minimo", "riesgo_valor_maximo"}
-        if table is None or not hasattr(table, "columns") or not required.issubset(set(table.columns)):
-            return (
-                "<p class='muted'>No hay columnas suficientes para graficar las clases de riesgo "
-                "del simulador automático.</p>"
-            )
-
-        work = table.copy()
-        for col in ["riesgo_base", "riesgo_valor_minimo", "riesgo_valor_maximo"]:
-            work[col] = pd.to_numeric(work[col], errors="coerce")
-        work["variable"] = work["variable"].fillna("").astype(str).str.strip()
-        work = work[work["variable"] != ""].copy()
-        if work.empty:
-            return "<p class='muted'>No hay variables válidas para graficar el simulador automático.</p>"
-
-        if "riesgo_base_etiqueta" not in work.columns:
-            work["riesgo_base_etiqueta"] = ""
-        if "riesgo_valor_minimo_etiqueta" not in work.columns:
-            work["riesgo_valor_minimo_etiqueta"] = ""
-        if "riesgo_valor_maximo_etiqueta" not in work.columns:
-            work["riesgo_valor_maximo_etiqueta"] = ""
-
-        work["nivel_base"] = work.apply(
-            lambda row: _risk_class_level(row.get("riesgo_base_etiqueta"), row.get("riesgo_base")),
-            axis=1,
-        )
-        work["nivel_minimo"] = work.apply(
-            lambda row: _risk_class_level(row.get("riesgo_valor_minimo_etiqueta"), row.get("riesgo_valor_minimo")),
-            axis=1,
-        )
-        work["nivel_maximo"] = work.apply(
-            lambda row: _risk_class_level(row.get("riesgo_valor_maximo_etiqueta"), row.get("riesgo_valor_maximo")),
-            axis=1,
-        )
-        work = work.dropna(subset=["nivel_base", "nivel_minimo", "nivel_maximo"]).copy()
-        if work.empty:
-            return "<p class='muted'>No hay clases de riesgo válidas para graficar el simulador automático.</p>"
-        for col in ["nivel_base", "nivel_minimo", "nivel_maximo"]:
-            work[col] = work[col].astype(int).clip(1, 4)
-        work["clase_base"] = work.apply(
-            lambda row: _risk_class_label(row.get("nivel_base"), row.get("riesgo_base_etiqueta")),
-            axis=1,
-        )
-        work["clase_minimo"] = work.apply(
-            lambda row: _risk_class_label(row.get("nivel_minimo"), row.get("riesgo_valor_minimo_etiqueta")),
-            axis=1,
-        )
-        work["clase_maximo"] = work.apply(
-            lambda row: _risk_class_label(row.get("nivel_maximo"), row.get("riesgo_valor_maximo_etiqueta")),
-            axis=1,
-        )
-        work["cambia_categoria_minimo"] = work["nivel_minimo"] != work["nivel_base"]
-        work["cambia_categoria_maximo"] = work["nivel_maximo"] != work["nivel_base"]
-        work["transicion_minimo"] = work.apply(
-            lambda row: _risk_transition_text(row.get("clase_base"), row.get("clase_minimo"))
-            if row.get("cambia_categoria_minimo")
-            else "sin cambio de categoría",
-            axis=1,
-        )
-        work["transicion_maximo"] = work.apply(
-            lambda row: _risk_transition_text(row.get("clase_base"), row.get("clase_maximo"))
-            if row.get("cambia_categoria_maximo")
-            else "sin cambio de categoría",
-            axis=1,
-        )
-        work["cambia_categoria"] = work["cambia_categoria_minimo"] | work["cambia_categoria_maximo"]
-        work["salto_categoria_minimo"] = (work["nivel_minimo"] - work["nivel_base"]).abs()
-        work["salto_categoria_maximo"] = (work["nivel_maximo"] - work["nivel_base"]).abs()
-        work["max_salto_categoria"] = work[["salto_categoria_minimo", "salto_categoria_maximo"]].max(axis=1)
-        for col in ["cambio_absoluto_minimo", "cambio_absoluto_maximo", "magnitud_max_cambio_abs"]:
-            if col not in work.columns:
-                work[col] = 0.0
-            work[col] = pd.to_numeric(work[col], errors="coerce").fillna(0.0)
-        work["max_cambio_abs"] = work[["cambio_absoluto_minimo", "cambio_absoluto_maximo", "magnitud_max_cambio_abs"]].abs().max(axis=1)
-        work = work.sort_values(["max_salto_categoria", "max_cambio_abs"], ascending=[False, False], kind="stable").copy()
-        chart_work = work.iloc[::-1].copy()
-        transition_rows = work[work["cambia_categoria"]].iloc[::-1].head(5)
-        if transition_rows.empty:
-            transition_summary = (
-                "<p class='muted'>No se observan cambios de categoría de riesgo en las variables graficadas; "
-                "la gráfica confirma la estabilidad de clase en los escenarios base, mínimo y máximo.</p>"
-            )
-        else:
-            transition_items = []
-            for row in transition_rows.itertuples(index=False):
-                changes = []
-                if row.cambia_categoria_minimo:
-                    changes.append(f"mínimo: {row.transicion_minimo}")
-                if row.cambia_categoria_maximo:
-                    changes.append(f"máximo: {row.transicion_maximo}")
-                transition_items.append(f"<li><strong>{_escape(row.variable)}</strong>: {_escape('; '.join(changes))}</li>")
-            transition_summary = (
-                "<div class='insight-card'>"
-                "<strong>Transiciones de categoría detectadas</strong>"
-                f"<ul class='report-list'>{''.join(transition_items)}</ul>"
-                "</div>"
-            )
-        class_legend = (
-            "<div class='insight-card'>"
-            "<strong>Escala ordinal usada en la gráfica</strong>"
-            "<ul class='report-list'>"
-            "<li>Q1 - Riesgo bajo</li>"
-            "<li>Q2 - Riesgo medio-bajo</li>"
-            "<li>Q3 - Riesgo medio-alto</li>"
-            "<li>Q4 - Riesgo alto</li>"
-            "</ul>"
-            "</div>"
-        )
-        scenario_legend = (
-            "<p class='muted'><strong>Escenarios graficados:</strong> Base, valor mínimo y valor máximo "
-            "de cada variable priorizada.</p>"
-        )
-
-        def _scenario_hover(row, *, scenario: str, risk_value: str, class_value: str, transition: str = "") -> str:
-            text = (
-                f"Variable: {_clean_text(row.variable)}<br>"
-                f"Escenario: {scenario}<br>"
-                f"Clase de riesgo: {_clean_text(getattr(row, class_value))}<br>"
-                f"Nivel ordinal: {getattr(row, risk_value)} de 4"
-            )
-            score_col = {
-                "Base": "riesgo_base",
-                "Mínimo": "riesgo_valor_minimo",
-                "Máximo": "riesgo_valor_maximo",
-            }.get(scenario)
-            if score_col:
-                text += f"<br>Score continuo del modelo: {float(getattr(row, score_col)):.4f}"
-            if transition:
-                text += f"<br>Transición: {_clean_text(getattr(row, transition))}"
-            return text
-
-        base_hover = [
-            _scenario_hover(row, scenario="Base", risk_value="nivel_base", class_value="clase_base")
-            for row in chart_work.itertuples(index=False)
-        ]
-        min_hover = [
-            _scenario_hover(row, scenario="Mínimo", risk_value="nivel_minimo", class_value="clase_minimo", transition="transicion_minimo")
-            for row in chart_work.itertuples(index=False)
-        ]
-        max_hover = [
-            _scenario_hover(row, scenario="Máximo", risk_value="nivel_maximo", class_value="clase_maximo", transition="transicion_maximo")
-            for row in chart_work.itertuples(index=False)
-        ]
-        min_colors = ["#d97706" if flag else "#60a5fa" for flag in chart_work["cambia_categoria_minimo"]]
-        max_colors = ["#b91c1c" if flag else "#2563eb" for flag in chart_work["cambia_categoria_maximo"]]
-
-        try:
-            fig = go.Figure()
-            fig.add_trace(
-                go.Bar(
-                    y=chart_work["variable"],
-                    x=chart_work["nivel_base"],
-                    name="Base",
-                    orientation="h",
-                    marker=dict(color="#64748b"),
-                    customdata=base_hover,
-                    hovertemplate="%{customdata}<extra></extra>",
-                )
-            )
-            fig.add_trace(
-                go.Bar(
-                    y=chart_work["variable"],
-                    x=chart_work["nivel_minimo"],
-                    name="Valor mínimo",
-                    orientation="h",
-                    marker=dict(color=min_colors),
-                    customdata=min_hover,
-                    hovertemplate="%{customdata}<extra></extra>",
-                )
-            )
-            fig.add_trace(
-                go.Bar(
-                    y=chart_work["variable"],
-                    x=chart_work["nivel_maximo"],
-                    name="Valor máximo",
-                    orientation="h",
-                    marker=dict(color=max_colors),
-                    customdata=max_hover,
-                    hovertemplate="%{customdata}<extra></extra>",
-                )
-            )
-            fig.update_layout(
-                title=dict(
-                    text="Clase de riesgo por variable priorizada: base, mínimo y máximo",
-                    font=dict(size=15),
-                ),
-                xaxis_title="Clase de riesgo",
-                yaxis_title="Variable",
-                barmode="group",
-                height=max(460, 54 * len(chart_work) + 170),
-                margin=dict(l=120, r=40, t=70, b=70),
-                plot_bgcolor="#f8fafc",
-                paper_bgcolor="#ffffff",
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                xaxis=dict(
-                    range=[0.5, 4.5],
-                    tickmode="array",
-                    tickvals=[1, 2, 3, 4],
-                    ticktext=[
-                        "Q1<br>Riesgo bajo",
-                        "Q2<br>Riesgo medio-bajo",
-                        "Q3<br>Riesgo medio-alto",
-                        "Q4<br>Riesgo alto",
-                    ],
-                    gridcolor="#e2e8f0",
-                    dtick=1,
-                ),
-            )
-            chart = fig.to_html(full_html=False, include_plotlyjs=False)
-            legend = (
-                "<p class='muted'>Cada barra representa la clase ordinal de riesgo del escenario: "
-                "Q1 bajo, Q2 medio-bajo, Q3 medio-alto y Q4 alto. Los colores naranja/rojo resaltan "
-                "escenarios mínimo o máximo donde la variable cambia de clase frente al riesgo base.</p>"
-            )
-            return f"<div class='chart-panel'>{transition_summary}{class_legend}{scenario_legend}{chart}{legend}</div>"
-        except Exception as exc:
-            return f"<p class='muted'>No se pudo generar la gráfica del simulador automático: {_escape(exc)}</p>"
-
     def _auto_simulation_cost_section() -> str:
         context = automatic_simulation_cost_context if isinstance(automatic_simulation_cost_context, dict) else {}
         if not context:
@@ -1820,7 +1269,7 @@ def render_expert_alignment_tab(
                             line=dict(color=class_colors.get(clean_label), width=2),
                             hovertemplate=(
                                 f"Variable: {variable}<br>Valor original: %{{x}}<br>"
-                                f"Clase: {clean_label}<br>Probabilidad promedio: %{{y:.3f}}<extra></extra>"
+                                f"Clase: {clean_label}<br>Probabilidad promedio: %{{y:.2f}}<extra></extra>"
                             ),
                         ),
                         row=subplot_row,
@@ -1839,7 +1288,7 @@ def render_expert_alignment_tab(
                             marker=dict(symbol="star", size=12, color="#111827", line=dict(width=1, color="#ffffff")),
                             hovertemplate=(
                                 f"Valor sugerido<br>Clase dominante: {_clean_text(best_label)}<br>"
-                                "Valor original: %{x}<br>Probabilidad dominante: %{y:.3f}<extra></extra>"
+                                "Valor original: %{x}<br>Probabilidad dominante: %{y:.2f}<extra></extra>"
                             ),
                         ),
                         row=subplot_row,
@@ -2163,98 +1612,6 @@ def render_expert_alignment_tab(
             "</div>"
         )
 
-    def _auto_simulation_section():
-        table = automatic_simulation_table
-        analysis_data = automatic_simulation_analysis or {}
-        has_table = table is not None and hasattr(table, "empty") and not table.empty
-        has_analysis = isinstance(analysis_data, dict) and bool(analysis_data)
-        if not has_table and not has_analysis:
-            return ""
-
-        parts = [
-            "<div class='content-box'>",
-            "<h3 style='margin-top:0;'>Análisis automático de sensibilidad por escenarios mínimo/máximo</h3>",
-        ]
-        if has_table:
-            display_columns = [
-                ("variable", "Variable"),
-                ("valor_original_base", "Valor base"),
-                ("valor_minimo_usado", "Mínimo usado"),
-                ("valor_maximo_usado", "Máximo usado"),
-                ("riesgo_base", "Riesgo base"),
-                ("riesgo_valor_minimo", "Riesgo mínimo"),
-                ("riesgo_valor_maximo", "Riesgo máximo"),
-                ("cambio_absoluto_minimo", "Cambio mín."),
-                ("cambio_absoluto_maximo", "Cambio máx."),
-                ("direccion_cambio_minimo", "Dirección mín."),
-                ("direccion_cambio_maximo", "Dirección máx."),
-                ("observacion", "Observación"),
-            ]
-            available_columns = [(col, label) for col, label in display_columns if col in table.columns]
-
-            def _format_cell(value):
-                try:
-                    if pd.isna(value):
-                        return ""
-                except Exception:
-                    pass
-                if isinstance(value, float):
-                    return f"{value:.4f}"
-                return _escape(value)
-
-            rows = []
-            for _, row in table.head(20).iterrows():
-                rows.append(
-                    "<tr>"
-                    + "".join(f"<td>{_format_cell(row.get(col))}</td>" for col, _ in available_columns)
-                    + "</tr>"
-                )
-            head = "".join(f"<th>{_escape(label)}</th>" for _, label in available_columns)
-            parts.append(
-                "<div class='table-scroll'><table class='compact-table'>"
-                f"<thead><tr>{head}</tr></thead>"
-                f"<tbody>{''.join(rows)}</tbody></table></div>"
-            )
-            if len(table) > 20:
-                parts.append(f"<p class='muted'>Se muestran 20 de {len(table)} variables simuladas.</p>")
-            parts.append(_auto_simulation_cost_section())
-            parts.append(_auto_simulation_low_risk_cost_estimate())
-        else:
-            parts.append("<p class='muted'>La tabla del simulador automático no está disponible para esta ejecución.</p>")
-            parts.append(_auto_simulation_cost_section())
-            parts.append(_auto_simulation_low_risk_cost_estimate())
-
-        if has_analysis:
-            for key, title in [
-                ("resumen", "Resumen del agente"),
-                ("variables_mas_sensibles", "Variables más sensibles"),
-                ("patrones_minimo_maximo", "Patrones mínimo/máximo"),
-                ("hallazgos_para_criticidad", "Hallazgos útiles para criticidad"),
-                ("limitaciones", "Limitaciones"),
-                ("contexto_reutilizado", "Contexto reutilizado"),
-            ]:
-                items = analysis_data.get(key)
-                if not items:
-                    continue
-                if key == "variables_mas_sensibles" and isinstance(items, list):
-                    rendered = []
-                    for item in items[:5]:
-                        if isinstance(item, dict):
-                            variable = item.get("variable", "")
-                            lectura = item.get("lectura", "")
-                            cambio = item.get("mayor_cambio_abs", "")
-                            rendered.append(
-                                f"{_escape(variable)}: {_escape(lectura)}"
-                                + (f" (mayor cambio abs.: {_escape(cambio)})" if cambio not in (None, "") else "")
-                            )
-                        elif str(item).strip():
-                            rendered.append(str(item).strip())
-                    parts.append(f"<h4>{_escape(title)}</h4>{_list_to_items(rendered, max_items=5)}")
-                else:
-                    parts.append(f"<h4>{_escape(title)}</h4>{_list_to_items(items, max_items=5)}")
-        parts.append("</div>")
-        return "".join(parts)
-
     if not analysis:
         return (
             "<div class='summary-box'>"
@@ -2349,6 +1706,9 @@ def render_llm_analysis(
     output_dir: str | Path = PROJECT_ROOT / "reports" / "interpretability" / "html",
     llm_model: str = "Desconocido",
     llm_provider: str = "Desconocido",
+    tokens_input: int | None = None,
+    tokens_output: int | None = None,
+    all_circuits_df: pd.DataFrame | None = None,
     inference_results: dict | None = None,
     inference_analysis: dict | None = None,
     expert_alignment_analysis: dict | None = None,
@@ -2370,9 +1730,17 @@ def render_llm_analysis(
     validation_data = validation_data or {}
 
     # Generate Plotly figures
-    fig_events = plot_interactive_circuit_events(raw_df, start_date, end_date)
-    fig_sums = plot_interactive_uiti_vano_sums(raw_df, start_date, end_date)
-    fig_clusters = plot_interactive_circuit_clustering(raw_df, start_date, end_date, highlighted_circuits=selected_circuitos)
+    # Clustering compares this circuit against the whole fleet, so it needs the
+    # multi-circuit dataframe (`all_circuits_df`), not `raw_df` (already
+    # filtered to the selected circuit(s) by the caller). Falls back to
+    # `raw_df` when the caller doesn't have the full dataset handy, which
+    # simply reproduces the single-circuit-only view instead of failing.
+    fig_clusters = plot_interactive_circuit_clustering(
+        all_circuits_df if all_circuits_df is not None else raw_df,
+        start_date,
+        end_date,
+        highlighted_circuits=selected_circuitos,
+    )
     fig_critical = plot_interactive_critical_points(daily_df, critical_points, selected_circuitos, start_date, end_date)
 
     primary_circuit = selected_circuitos[0] if selected_circuitos else "TODOS"
@@ -2402,8 +1770,6 @@ def render_llm_analysis(
             html_map_uiti = f"<p class='muted'>No se pudo renderizar el mapa GEO por UITI_VANO: {exc}</p>"
 
     # Convert figures to HTML snippets
-    html_events = fig_events.to_html(full_html=False, include_plotlyjs='cdn') if fig_events else ""
-    html_sums = fig_sums.to_html(full_html=False, include_plotlyjs='cdn') if fig_sums else ""
     html_clusters = fig_clusters.to_html(full_html=False, include_plotlyjs='cdn') if fig_clusters else ""
     html_critical = fig_critical.to_html(full_html=False, include_plotlyjs='cdn') if fig_critical else ""
 
@@ -3122,8 +2488,17 @@ def render_llm_analysis(
     title_str = f"Reporte Criticidad - Circuito: {primary_circuit}"
 
     # Adjust subtitle if no LLM data is present
+    model_display = f"{llm_provider} ({llm_model})" if llm_model and llm_model != "Desconocido" else llm_provider
     if validation_data:
-        subtitle_info = f"Período de análisis: {period_str} | Modelo LLM: {llm_model}"
+        subtitle_info = f"Período de análisis: {period_str} | Modelo LLM: {model_display}"
+        if tokens_input is not None or tokens_output is not None:
+            tokens_in_str = f"~{tokens_input:,}" if tokens_input is not None else "N/D"
+            tokens_out_str = f"~{tokens_output:,}" if tokens_output is not None else "N/D"
+            subtitle_info += (
+                "<br><span style='font-size: 0.85em; color: #94a3b8;'>"
+                f"Tokens aproximados usados en la generación del informe: entrada {tokens_in_str} | salida {tokens_out_str}"
+                "</span>"
+            )
     else:
         subtitle_info = f"Período de análisis: {period_str} | (Solo visualización, sin análisis LLM)"
 
@@ -3332,7 +2707,33 @@ def render_llm_analysis(
                         item.setAttribute('aria-selected', item === button ? 'true' : 'false');
                     }});
                     document.querySelectorAll('.tab-panel').forEach(function(panel) {{
-                        panel.classList.toggle('active', panel.id === targetId);
+                        var isActive = panel.id === targetId;
+                        panel.classList.toggle('active', isActive);
+                        // Plotly figures rendered while their tab was still
+                        // `display:none` measure a 0px-wide container and get
+                        // stuck at a small fallback size (Plotly never
+                        // auto-resizes without a visibility/resize signal).
+                        // Force a resize now that the panel is actually
+                        // visible so charts expand to the panel's real width.
+                        if (isActive && window.Plotly) {{
+                            panel.querySelectorAll('.plotly-graph-div').forEach(function(graphDiv) {{
+                                try {{ window.Plotly.Plots.resize(graphDiv); }} catch (e) {{}}
+                            }});
+                        }}
+                        // Same 0px-container problem for the embedded Leaflet
+                        // (folium) maps: their <iframe> was `display:none`
+                        // at load time, so their fitBounds() centered on
+                        // nothing. Tell each iframe's own window to re-fit
+                        // now that its tab is actually visible.
+                        if (isActive) {{
+                            panel.querySelectorAll('iframe.embedded-map-frame').forEach(function(frame) {{
+                                try {{
+                                    if (frame.contentWindow) {{
+                                        frame.contentWindow.dispatchEvent(new Event('resize'));
+                                    }}
+                                }} catch (e) {{}}
+                            }});
+                        }}
                     }});
                 }});
             }});

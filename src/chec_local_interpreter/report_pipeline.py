@@ -63,6 +63,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import warnings
 from contextlib import redirect_stdout
 from datetime import datetime, timezone
@@ -1408,7 +1409,68 @@ def _build_auto_simulation_kwargs(run_dir: Path) -> dict[str, Any]:
     return kwargs
 
 
-def render(run_dir: str | Path, *, output_dir: str | Path | None = None) -> Path:
+def _detect_llm_runtime() -> tuple[str, str]:
+    """Best-effort detection of the orchestrating agent host and its model.
+
+    The report is authored by whichever interactive agent runtime is driving
+    this run (Claude Code or OpenCode) -- there is no LLM API call inside
+    this module to introspect (see module docstring). The host is
+    identifiable from environment variables the CLI sets on its subprocesses;
+    the specific orchestrator *model* id is not exposed via any environment
+    variable, so it can only come from an explicit override -- the invoking
+    agent knows its own identity and is expected to pass `CHEC_LLM_MODEL` (or
+    `render(..., llm_model=...)` directly).
+
+    Returns `(provider, model)`, each `"Desconocido"` when undetected.
+    """
+    provider_override = os.environ.get("CHEC_LLM_PROVIDER", "").strip()
+    model_override = os.environ.get("CHEC_LLM_MODEL", "").strip() or "Desconocido"
+
+    if provider_override:
+        return provider_override, model_override
+    if os.environ.get("CLAUDECODE") == "1" or "CLAUDE_CODE_ENTRYPOINT" in os.environ:
+        return "Claude Code", model_override
+    if any(key.startswith("OPENCODE") for key in os.environ):
+        return "OpenCode", model_override
+    return "Desconocido", model_override
+
+
+def _estimate_token_usage(run_dir: Path) -> tuple[int, int]:
+    """Rough input/output token estimate for this run's agent-authored stages.
+
+    Approximates tokens as `characters // 4` (a common rule-of-thumb for
+    English/Spanish text) applied to each agent's deterministic context
+    payload (`*.bc.json`, a proxy for its input) and its validated response
+    (`*.out.json`'s `data`, a proxy for its output). This intentionally
+    excludes the static prompt/playbook text each agent's own `build-context`
+    CLI verb assembles around that context, so the estimate is a
+    conservative undercount -- hence "aproximados" wherever it is displayed.
+    """
+    chars_in = 0
+    chars_out = 0
+    for stage in ("historical", "inference", "auto-simulator", "expert-alignment"):
+        bc_path = run_dir / f"{stage}.bc.json"
+        if bc_path.exists():
+            chars_in += len(bc_path.read_text(encoding="utf-8"))
+
+        out_path = run_dir / f"{stage}.out.json"
+        if out_path.exists():
+            payload = _read_json(out_path)
+            if isinstance(payload, dict) and payload.get("ok") is True:
+                chars_out += len(json.dumps(payload.get("data"), ensure_ascii=False))
+
+    return chars_in // 4, chars_out // 4
+
+
+def render(
+    run_dir: str | Path,
+    *,
+    output_dir: str | Path | None = None,
+    llm_provider: str | None = None,
+    llm_model: str | None = None,
+    tokens_input: int | None = None,
+    tokens_output: int | None = None,
+) -> Path:
     """Read all three validated outputs from `run_dir` and render the final
     HTML report via `plotting.render_llm_analysis`.
 
@@ -1418,6 +1480,15 @@ def render(run_dir: str | Path, *, output_dir: str | Path | None = None) -> Path
     stays model-free: `inference_results` (task 3.4) is rebuilt purely from
     persisted paths in `inference_render_assets.json`, never by reloading the
     MGCECDL model or recomputing SHAP.
+
+    `llm_provider`/`llm_model` identify, in the report header, which agent
+    host and which orchestrator model produced this run. `llm_provider`
+    defaults to autodetection (`_detect_llm_runtime`, Claude Code vs
+    OpenCode via environment variables); `llm_model` has no reliable
+    environment signal and defaults to `"Desconocido"` unless the caller
+    passes it explicitly or sets `CHEC_LLM_MODEL`. `tokens_input`/
+    `tokens_output` default to `_estimate_token_usage`'s deterministic,
+    file-size-based approximation when omitted.
     """
     run_dir = Path(run_dir)
     state = _read_json(run_dir / "l1_state.json")
@@ -1434,6 +1505,12 @@ def render(run_dir: str | Path, *, output_dir: str | Path | None = None) -> Path
     )
     daily_df = build_daily_series(events_df)
 
+    detected_provider, detected_model = _detect_llm_runtime()
+    if tokens_input is None or tokens_output is None:
+        estimated_input, estimated_output = _estimate_token_usage(run_dir)
+        tokens_input = estimated_input if tokens_input is None else tokens_input
+        tokens_output = estimated_output if tokens_output is None else tokens_output
+
     kwargs: dict[str, Any] = {
         "start_date": state["fecha_inicio"],
         "end_date": state["fecha_fin"],
@@ -1441,6 +1518,11 @@ def render(run_dir: str | Path, *, output_dir: str | Path | None = None) -> Path
         "inference_analysis": inference_data,
         "expert_alignment_analysis": expert_alignment_data,
         "expert_alignment_matches": None,
+        "all_circuits_df": frame,
+        "llm_provider": llm_provider or detected_provider,
+        "llm_model": llm_model or detected_model,
+        "tokens_input": tokens_input,
+        "tokens_output": tokens_output,
         **_build_auto_simulation_kwargs(run_dir),
     }
     if output_dir is not None:

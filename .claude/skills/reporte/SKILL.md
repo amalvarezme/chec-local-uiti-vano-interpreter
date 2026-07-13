@@ -148,21 +148,43 @@ Given `circuito` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair)
 6. **Invoke `expert-alignment`** — same validate-gated pattern, using
    `run_dir/expert-alignment.bc.json` and `agent_tools.expert_alignment build-context`/`validate`,
    writing `run_dir/expert-alignment.out.json`.
-7. **`render`** — run `report_pipeline.render(run_dir)`. Reads all three validated outputs and
-   calls `plotting.render_llm_analysis`, now also merging in the 5 `automatic_simulation_*` kwargs
-   (table, agent analysis, cost context, softmax curves, vano-risk table) when
-   `run_dir/auto_simulation_assets.json` and/or `run_dir/auto-simulator.out.json` exist — every
-   kwarg stays `None` when the corresponding file is absent (no crash either way, same degrade
-   shape as the inference-simulator sidecar below). Raises `ReportPipelineError` if the
-   expert-alignment output is missing/invalid; no HTML is written in that case.
+7. **`render`** — run `report_pipeline.render(run_dir, llm_model="<your own model id>")`. **Always
+   pass `llm_model` explicitly** — set it to whichever model is orchestrating *this* run (e.g.
+   `"claude-sonnet-5"`, `"claude-opus-4-8"`, or the equivalent OpenCode orchestrator model id). This
+   is the one piece of runtime identity Python cannot introspect: `_detect_llm_runtime()` can tell
+   "Claude Code" from "OpenCode" via environment variables (`CLAUDECODE`/`CLAUDE_CODE_ENTRYPOINT` vs
+   any `OPENCODE*` variable, with `CHEC_LLM_PROVIDER` as a manual override), but the specific model
+   id has no such signal — it stays `"Desconocido"` unless the invoking agent states it, either via
+   the `llm_model=` kwarg or the `CHEC_LLM_MODEL` env var. Getting this wrong (or skipping it)
+   silently degrades the report header, it never raises. The report header then shows
+   `"<Provider> (<model>)"`, e.g. `"Claude Code (claude-sonnet-5)"`, plus an approximate
+   input/output token line derived from `run_dir`'s `*.bc.json`/`*.out.json` file sizes
+   (`_estimate_token_usage`, `characters // 4`) — pass `tokens_input`/`tokens_output` yourself only
+   if you have a better count on hand; the default estimate is fine otherwise.
 
-   `render` stays model-free: it never reloads the MGCECDL classifier or recomputes SHAP. If
-   `prepare` persisted `run_dir/inference_render_assets.json` (the healthy-run case above), `render`
-   resolves every figure/graph path in it against `run_dir` and passes a populated
-   `inference_results` mapping into `plotting.render_llm_analysis`, so the bars/radar/estimated-graph
-   section actually renders. If the sidecar is absent (no trained model, or every scenario was
-   skipped), `inference_results` stays `None` — the inference-figures section is empty, same as
-   before this change, and this is never a crash or a `ReportPipelineError`.
+   Reads all three validated outputs and calls `plotting.render_llm_analysis`, now also merging in
+   the 5 `automatic_simulation_*` kwargs (table, agent analysis, cost context, softmax curves,
+   vano-risk table) when `run_dir/auto_simulation_assets.json` and/or
+   `run_dir/auto-simulator.out.json` exist — every kwarg stays `None` when the corresponding file is
+   absent (no crash either way, same degrade shape as the inference-simulator sidecar below).
+   Raises `ReportPipelineError` if the expert-alignment output is missing/invalid; no HTML is
+   written in that case.
+
+   `render` stays model-free in the ML-inference sense: it never reloads the MGCECDL classifier or
+   recomputes SHAP (the `llm_model` kwarg above is unrelated — it just labels which *agent* produced
+   the report, not a model `render` itself calls). If `prepare` persisted
+   `run_dir/inference_render_assets.json` (the healthy-run case above), `render` resolves every
+   figure/graph path in it against `run_dir` and passes a populated `inference_results` mapping into
+   `plotting.render_llm_analysis`, so the bars/radar/estimated-graph section actually renders. If the
+   sidecar is absent (no trained model, or every scenario was skipped), `inference_results` stays
+   `None` — the inference-figures section is empty, same as before this change, and this is never a
+   crash or a `ReportPipelineError`.
+
+   `render` also now passes the *full*, unfiltered multi-circuit dataset (loaded fresh from
+   `state["data_path"]`, before the single-circuit `filter_events` call) into
+   `plotting.render_llm_analysis` as `all_circuits_df`, so the circuit-clustering chart benchmarks
+   the studied circuit against the whole fleet (colored by risk cluster, studied circuit highlighted
+   with an "X") instead of only ever showing one point.
 8. **Report the result** — tell the user the returned HTML `Path`. `/reporte` is local-only by
    design: it never touches `site/assets/site/results/`, so a run never changes what the published
    GitHub Pages site shows. Publishing a specific report there is a deliberate, separate action —
