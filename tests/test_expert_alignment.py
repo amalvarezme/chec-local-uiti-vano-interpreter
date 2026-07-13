@@ -437,6 +437,24 @@ class TestSeleccionarReportePrevioMasReciente:
 
         assert result is None
 
+    def test_malformed_prior_expert_alignment_output_is_skipped_not_raised(self, tmp_path):
+        """Judgment Day Round 1 CRITICAL fix: a sibling prior run whose own
+        `expert-alignment.out.json` is malformed/non-JSON (truncated write,
+        crash, disk-full, concurrent-write race) must be treated as a
+        non-qualifying candidate and skipped -- never raise `json.JSONDecodeError`
+        out of the CURRENT run's discovery, which would crash the CURRENT
+        run's report generation too."""
+        circuit_dir = tmp_path / "runs" / "C1"
+        malformed = circuit_dir / "20260101T000000000000"
+        malformed.mkdir(parents=True)
+        (malformed / "expert-alignment.out.json").write_text("{not valid json", encoding="utf-8")
+        current_run_dir = circuit_dir / "20260102T000000000000"
+        current_run_dir.mkdir(parents=True)
+
+        result = seleccionar_reporte_previo_mas_reciente(current_run_dir)
+
+        assert result is None
+
 
 # ---------------------------------------------------------------------------
 # Phase 2 (PR 1): prior-report normalization

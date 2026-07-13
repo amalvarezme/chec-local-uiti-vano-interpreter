@@ -331,7 +331,14 @@ def seleccionar_reporte_previo_mas_reciente(run_dir: Path) -> Path | None:
             continue
         try:
             load_validated_agent_output(candidate, "expert-alignment")
-        except ReportPipelineError:
+        except (ReportPipelineError, json.JSONDecodeError, UnicodeDecodeError, OSError):
+            # A malformed/unreadable candidate (truncated write, crash,
+            # disk-full, concurrent-write race) is a realistic operational
+            # failure -- treat it as a non-qualifying candidate, never let it
+            # crash the CURRENT run's discovery (Judgment Day Round 1
+            # CRITICAL fix). `json.JSONDecodeError` is a `ValueError`
+            # subclass, NOT a `ReportPipelineError` subclass, so it needs its
+            # own catch here.
             continue
         qualifying.append(candidate)
 
