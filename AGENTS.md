@@ -2,22 +2,43 @@
 
 ## Project Purpose
 
-This repo is a local, notebook-first interpreter for `UITI_VANO`. It loads one wide
-structured dataset, filters by circuits and dates, detects relevant points in the
-`UITI_VANO` daily series, builds a structured context package, and optionally asks an
-LLM to explain the behavior in Spanish.
+This repo is a local interpreter for `UITI_VANO`. It loads one wide structured dataset,
+filters by circuits and dates, detects relevant points in the `UITI_VANO` daily series,
+builds a structured context package, and has five coding-agent-native LLM roles explain the
+behavior in Spanish and compare it against expert PDF reports — all with **zero external LLM
+API key**: the agent invoking this repo (Claude Code or OpenCode) does the reasoning itself,
+never a Python call to Gemini/OpenAI.
 
 ## Scope
 
-- Implement only steps 1 to 3 of the CHEC architecture flow.
+- Circuit/vano selection, deterministic critical-point detection, and semantic diagnosis
+  (`historical`), MGCECDL/SHAP predictive interpretation (`inference`), expert-PDF alignment
+  (`expert-alignment`), automatic min/max sensitivity discussion (`auto-simulator`), and
+  PDF-discussion-table extraction (`pdf-discussion-extraction`) are all in scope and
+  implemented — see `docs/agents-guide.md` for the full architecture.
+- `/reporte <circuito>` (`.claude/skills/reporte/SKILL.md`) is the primary entry point: it
+  orchestrates `historical` + `inference` + `auto-simulator` + `expert-alignment` into one
+  local HTML report. It never publishes to the site automatically — that's a deliberate,
+  separate action (`web_export.export_latest_interpretability_report`), not a `/reporte` side
+  effect.
 - Use structured tabular data, variable descriptions, variable modes, and relationship rules.
 - Keep the workflow local and lightweight.
 
-## Prohibited Additions
+## Agent-native architecture
 
-Do not add Databricks, Dash, FastAPI, RAG, vector stores, feature importance masks,
-or what-if simulation.
-Predictive model inference and forecasting language are strictly prohibited in base explanations, EXCEPT when generating outputs validated by `validar_respuesta_inferencia`, where predictive analysis of the second LLM and final evidence report generation is fully permitted and encouraged.
+Each of the 5 LLM roles follows the same pattern: a deterministic two-verb CLI
+(`python -m chec_local_interpreter.agent_tools.<role> build-context` / `validate`) builds the
+context/prompt and validates the response's shape — the invoking coding agent itself authors
+the JSON response, never a Python `call_llm()`. Role definitions:
+- Claude Code: `.claude/agents/<role>.md` (role/tool contract) + `.claude/skills/<role>/SKILL.md`
+  (persona, invariants, run sequence).
+- OpenCode: `.opencode/agent/<role>.md` (mirrors the same role; OpenCode reads
+  `.claude/skills/` directly, so only the agent role file needs a separate copy).
+
+Do not add Databricks, Dash, FastAPI, RAG, or vector stores. Predictive model inference and
+forecasting language are prohibited in `historical`'s base explanations, EXCEPT within outputs
+validated by `validar_respuesta_inferencia`, where predictive analysis and final evidence
+report generation are fully permitted and encouraged.
 
 ## Coding Style
 
