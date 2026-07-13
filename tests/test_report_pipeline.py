@@ -560,6 +560,121 @@ def test_prepare_expert_alignment_zero_rows_for_circuit_degrades_gracefully(tmp_
 
 
 # ---------------------------------------------------------------------------
+# prepare_expert_alignment() -- prior-report reuse wiring (sdd/reporte-graph-
+# reuse, PR 2, tasks 4.9/4.10). Discovery (`seleccionar_reporte_previo_mas_reciente`)
+# + normalization (`normalizar_reporte_previo_como_matches`) are called after
+# `pdf_expert_matches` is built and before `construir_contexto_expert_alignment`.
+# ---------------------------------------------------------------------------
+
+
+def test_prepare_expert_alignment_wires_prior_report_when_qualifying_prior_run_exists(tmp_path):
+    runs_root = tmp_path / "runs"
+
+    # Prior run: fully completed (has its OWN valid expert-alignment.out.json).
+    data_path = _write_fixture_dataset(tmp_path)
+    prior_run_dir = prepare("C1", data_path=data_path, runs_root=runs_root)
+    (prior_run_dir / "historical.out.json").write_text(
+        json.dumps(_canned_ok({"hallazgos": ["Hallazgo historico previo."]})), encoding="utf-8"
+    )
+    (prior_run_dir / "inference.out.json").write_text(
+        json.dumps(_canned_ok({"hallazgos": ["Hallazgo de inferencia previo."]})), encoding="utf-8"
+    )
+    prepare_expert_alignment(prior_run_dir)
+    (prior_run_dir / "expert-alignment.out.json").write_text(
+        json.dumps(
+            _canned_ok(
+                {
+                    "contexto": {
+                        "circuito": "C1",
+                        "periodo": {"inicio": "2026-01-01", "fin": "2026-01-10"},
+                        "n_filas_expertas_comparadas": 0,
+                    },
+                    "coincidencias": [
+                        {
+                            "tema": "UITI_VANO elevado en el periodo previo",
+                            "fuentes": ["Agente Descriptor", "Agente predictivo"],
+                            "explicacion": "Consistencia observada en la ejecución previa.",
+                        }
+                    ],
+                    "diferencias": [],
+                    "hallazgos_expertos_no_cubiertos": [],
+                    "hallazgos_modelo_no_respaldados_por_pdf": [],
+                    "variables_a_priorizar": [],
+                    "sintesis_final": "La comparación previa fue consistente.",
+                }
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    # Current run: same circuit, new run_dir under the same runs_root, so the
+    # prior run above is a qualifying sibling for discovery.
+    current_run_dir = prepare("C1", data_path=data_path, runs_root=runs_root)
+    (current_run_dir / "historical.out.json").write_text(
+        json.dumps(_canned_ok({"hallazgos": ["Hallazgo historico actual."]})), encoding="utf-8"
+    )
+    (current_run_dir / "inference.out.json").write_text(
+        json.dumps(_canned_ok({"hallazgos": ["Hallazgo de inferencia actual."]})), encoding="utf-8"
+    )
+
+    prepare_expert_alignment(current_run_dir)
+
+    bc = _read_json(current_run_dir / "expert-alignment.bc.json")
+    prior_rows = [row for row in bc["pdf_expert_matches"] if row.get("source_kind") == "prior_report"]
+    assert prior_rows, "expected at least one prior-report row wired into pdf_expert_matches"
+    assert prior_rows[0]["confidence"] == "baja"
+    assert bc.get("reporte_previo_disponible") is True
+
+
+_GOLDEN_DIR = Path(__file__).parent / "golden" / "reporte_graph_reuse"
+
+
+def test_prepare_expert_alignment_pdf_only_output_matches_pre_wiring_golden_byte_for_byte(tmp_path):
+    """Task 4.11/4.12: the strongest form of the byte-identical no-op guard --
+    `expert-alignment.bc.json` for a PDF-only fixture (real PDF matches, no
+    prior run) must match, BYTE FOR BYTE, a golden file captured from the
+    actual pre-wiring code (`git show 2b59bb5:...` -- the last commit before
+    this PR's Phase 3/4 changes), verified via a `git worktree` diff during
+    development. If this test ever fails, the bug is in the new no-op path
+    (Phase 3/4 wiring), NOT in this golden fixture -- do not update the
+    golden to match a changed no-op output; fix the regression instead."""
+    run_dir = _prepare_with_canned_agent_outputs(tmp_path)
+    xlsx_path = _write_pdf_discussions_xlsx(
+        tmp_path / "tabla_pdfs_intervalo_test.xlsx",
+        [
+            {
+                "Circuito": "C1",
+                "Fecha inicio": "2026-01-05",
+                "Fecha fin": "2026-01-07",
+                "Análisis": "Análisis experto sobre el pico de C1.",
+                "Evidencia": "Evidencia documentada en el informe experto.",
+            }
+        ],
+    )
+
+    prepare_expert_alignment(run_dir, pdf_discussions_path=xlsx_path)
+
+    actual = (run_dir / "expert-alignment.bc.json").read_text(encoding="utf-8")
+    golden = (_GOLDEN_DIR / "expert_alignment_pdf_only_bc.json").read_text(encoding="utf-8")
+    assert actual == golden
+
+
+def test_prepare_expert_alignment_no_qualifying_prior_run_is_a_pure_no_op(tmp_path):
+    """Task 4.11/4.12: with no sibling prior run for the circuit (the common
+    case -- first run ever, or every prior run incomplete), wiring
+    discovery+normalization into `prepare_expert_alignment` must leave the
+    context byte-identical to the pre-wiring shape: no `reporte_previo_disponible`
+    key, and no `source_kind: "prior_report"` rows in `pdf_expert_matches`."""
+    run_dir = _prepare_with_canned_agent_outputs(tmp_path)
+
+    prepare_expert_alignment(run_dir)
+
+    bc = _read_json(run_dir / "expert-alignment.bc.json")
+    assert "reporte_previo_disponible" not in bc
+    assert all(row.get("source_kind") != "prior_report" for row in bc["pdf_expert_matches"])
+
+
+# ---------------------------------------------------------------------------
 # Final Slice B / whole-change gate (task 8.2): end-to-end `/reporte` smoke
 # check as close to real as the harness allows without a live LLM call --
 # `prepare` -> canned validated agent outputs -> `prepare_expert_alignment`

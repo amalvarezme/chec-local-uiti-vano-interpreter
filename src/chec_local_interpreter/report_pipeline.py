@@ -135,6 +135,8 @@ from chec_local_interpreter.expert_alignment import (
     construir_contexto_expert_alignment,
     extraer_fechas_informe,
     filtrar_discussiones_por_circuito,
+    normalizar_reporte_previo_como_matches,
+    seleccionar_reporte_previo_mas_reciente,
     seleccionar_top_coincidencias_temporales,
 )
 from chec_local_interpreter.plotting import render_llm_analysis
@@ -1290,6 +1292,22 @@ def prepare_expert_alignment(
                 circuito_interes=state["circuito"],
                 top_k=_TOP_K_PDF_DATE_MATCHES,
             )
+
+    # Prior-report reuse (sdd/reporte-graph-reuse, use case b): reuse the
+    # newest qualifying prior run's OWN validated expert-alignment synthesis
+    # as a second, lower-trust evidence source. Graceful no-op when there is
+    # no qualifying prior run (`None`) or it has no usable evidence (`[]`) --
+    # `pdf_expert_matches` is left byte-identical to today in that case (spec
+    # "Graceful No-Op When No Qualifying Prior Run").
+    prior_run_dir = seleccionar_reporte_previo_mas_reciente(run_dir)
+    if prior_run_dir is not None:
+        prior_report_matches = normalizar_reporte_previo_como_matches(
+            prior_run_dir,
+            state["circuito"],
+            fechas_informe,
+        )
+        if prior_report_matches:
+            pdf_expert_matches = pdf_expert_matches + prior_report_matches
 
     context = construir_contexto_expert_alignment(
         circuito=state["circuito"],
