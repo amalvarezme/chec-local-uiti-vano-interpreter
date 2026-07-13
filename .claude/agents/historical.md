@@ -2,6 +2,7 @@
 name: historical
 description: "Produces the descriptive historical/base diagnosis of UITI_VANO behavior for one or more CHEC circuits and period, citing only already-selected structured context, with optional per-finding provenance. Trigger: historical analysis, base descriptive diagnosis, UITI_VANO behavior explanation, circuit characterization."
 license: Apache-2.0
+tools: Read, Bash
 metadata:
   layer: L3
   tool_contract: python -m chec_local_interpreter.agent_tools.historical

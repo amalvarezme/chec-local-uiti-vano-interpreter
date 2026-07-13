@@ -2,6 +2,7 @@
 name: pdf-discussion-extraction
 description: "Decides which candidate sections of one PDF become rows in CHEC's expert-report discussion table, in a single batched agent turn per PDF. Trigger: PDF discussion extraction, expert report row extraction, technical-report section classification, batch PDF discussion runbook."
 license: Apache-2.0
+tools: Read, Bash
 metadata:
   layer: L3
   tool_contract: python -m chec_local_interpreter.agent_tools.pdf_discussion

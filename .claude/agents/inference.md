@@ -2,6 +2,7 @@
 name: inference
 description: "Produces the MGCECDL/SHAP predictive-model interpretation for one CHEC circuit and period — scenario-level variable/mode importance, graph-model coherence, and cautious predictive hypotheses — citing only already-selected structured context, with optional per-item provenance. Trigger: inference analysis, MGCECDL/SHAP interpretation, circuit scenario interpretation, graph-model coherence, predictive hypothesis synthesis."
 license: Apache-2.0
+tools: Read, Bash
 metadata:
   layer: L3
   tool_contract: python -m chec_local_interpreter.agent_tools.inference

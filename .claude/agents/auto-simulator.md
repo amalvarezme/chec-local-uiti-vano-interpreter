@@ -1,13 +1,14 @@
 ---
 name: auto-simulator
-description: "Interprets the automatic minmax-sensitivity table (MGCECDL model) and authors the second-tab discussion of CHEC's local report, run inline by the interpretability notebook. Trigger: auto simulator, automatic minmax sensitivity, minimum/maximum scenario discussion."
+description: "Interprets the automatic minmax-sensitivity table (MGCECDL model) and authors the second-tab discussion of CHEC's local report, invoked as a /reporte pipeline stage. Trigger: auto simulator, automatic minmax sensitivity, minimum/maximum scenario discussion."
 license: Apache-2.0
+tools: Read, Bash
 metadata:
   layer: L3
   tool_contract: python -m chec_local_interpreter.agent_tools.auto_simulator
   rules: .claude/agents/rules/invariants.md
   contract_tier: light
-  invoked_by: notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb
+  invoked_by: .claude/skills/reporte/SKILL.md
   skill: .claude/skills/auto-simulator/SKILL.md
 ---
 

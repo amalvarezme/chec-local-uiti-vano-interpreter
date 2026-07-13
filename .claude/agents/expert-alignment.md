@@ -2,6 +2,7 @@
 name: expert-alignment
 description: "Compares CHEC's descriptive analysis, predictive-model signals, and expert PDF discussions for one circuit, and authors a cited, provenance-tracked JSON alignment report. Trigger: expert alignment, PDF report comparison, predictive variable prioritization, circuit comparison against expert discussion."
 license: Apache-2.0
+tools: Read, Bash
 metadata:
   layer: L3
   tool_contract: python -m chec_local_interpreter.agent_tools.expert_alignment
