@@ -1581,31 +1581,83 @@ def _detect_llm_runtime() -> tuple[str, str]:
     return "Desconocido", model_override
 
 
-def _estimate_token_usage(run_dir: Path) -> tuple[int, int]:
-    """Rough input/output token estimate for this run's agent-authored stages.
+def _resolve_token_usage(run_dir: Path) -> tuple[int, int, str]:
+    """Resolve `(tokens_input, tokens_output, token_source)` for this run's
+    agent-authored stages (design item 4), preferring REAL per-stage counts
+    from an optional `run_dir/token_usage.json` sidecar over the char/4
+    estimate (replaces the estimate-only `_estimate_token_usage`).
 
-    Approximates tokens as `characters // 4` (a common rule-of-thumb for
-    English/Spanish text) applied to each agent's deterministic context
-    payload (`*.bc.json`, a proxy for its input) and its validated response
-    (`*.out.json`'s `data`, a proxy for its output). This intentionally
-    excludes the static prompt/playbook text each agent's own `build-context`
-    CLI verb assembles around that context, so the estimate is a
-    conservative undercount -- hence "aproximados" wherever it is displayed.
+    `token_usage.json` (optional -- written by the invoking agent after each
+    Skill call whose runtime exposes usage, see `.claude/skills/reporte/
+    SKILL.md` steps 3/4/4b/6) maps stage name
+    (`"historical"`/`"inference"`/`"auto-simulator"`/`"expert-alignment"`) to
+    `{"input": int, "output": int}`. Only stages that actually ran (i.e. have
+    a `{stage}.bc.json` and/or a successfully-validated `{stage}.out.json`
+    under `run_dir`) are considered; a stage absent from BOTH files
+    contributes nothing to either total, same as the old estimate-only
+    behavior.
+
+    For any considered stage missing from the sidecar (or missing an
+    `"input"`/`"output"` key), falls back to the char/4 estimate for THAT
+    stage only -- applied as `characters // 4` (a common rule-of-thumb for
+    English/Spanish text) over `*.bc.json` (input proxy) and `*.out.json`'s
+    `data` (output proxy), same conservative undercount as before (excludes
+    static prompt/playbook text).
+
+    `token_source`:
+    - `"measured"`: every considered stage's counts came from the sidecar.
+    - `"mixed"`: the sidecar covers some, but not all, considered stages.
+    - `"estimated"`: no sidecar (or it covers none of the considered
+      stages) -- every count is the char/4 estimate. Also returned (as
+      `(0, 0, "estimated")`) when no stage produced any file at all.
     """
-    chars_in = 0
-    chars_out = 0
+    sidecar_path = run_dir / "token_usage.json"
+    sidecar = _read_json(sidecar_path) if sidecar_path.exists() else {}
+    if not isinstance(sidecar, dict):
+        sidecar = {}
+
+    tokens_input = 0
+    tokens_output = 0
+    estimated_chars_in = 0
+    estimated_chars_out = 0
+    considered_count = 0
+    measured_count = 0
+
     for stage in ("historical", "inference", "auto-simulator", "expert-alignment"):
         bc_path = run_dir / f"{stage}.bc.json"
-        if bc_path.exists():
-            chars_in += len(bc_path.read_text(encoding="utf-8"))
+        chars_in = len(bc_path.read_text(encoding="utf-8")) if bc_path.exists() else None
 
+        chars_out = None
         out_path = run_dir / f"{stage}.out.json"
         if out_path.exists():
             payload = _read_json(out_path)
             if isinstance(payload, dict) and payload.get("ok") is True:
-                chars_out += len(json.dumps(payload.get("data"), ensure_ascii=False))
+                chars_out = len(json.dumps(payload.get("data"), ensure_ascii=False))
 
-    return chars_in // 4, chars_out // 4
+        if chars_in is None and chars_out is None:
+            continue
+        considered_count += 1
+
+        stage_usage = sidecar.get(stage)
+        if isinstance(stage_usage, dict) and "input" in stage_usage and "output" in stage_usage:
+            tokens_input += int(stage_usage["input"])
+            tokens_output += int(stage_usage["output"])
+            measured_count += 1
+        else:
+            estimated_chars_in += chars_in or 0
+            estimated_chars_out += chars_out or 0
+
+    tokens_input += estimated_chars_in // 4
+    tokens_output += estimated_chars_out // 4
+
+    if considered_count == 0 or measured_count == 0:
+        token_source = "estimated"
+    elif measured_count == considered_count:
+        token_source = "measured"
+    else:
+        token_source = "mixed"
+
+    return tokens_input, tokens_output, token_source
 
 
 def render(
@@ -1633,8 +1685,12 @@ def render(
     OpenCode via environment variables); `llm_model` has no reliable
     environment signal and defaults to `"Desconocido"` unless the caller
     passes it explicitly or sets `CHEC_LLM_MODEL`. `tokens_input`/
-    `tokens_output` default to `_estimate_token_usage`'s deterministic,
-    file-size-based approximation when omitted.
+    `tokens_output` precedence (design item 4): explicit kwargs (both given)
+    > real per-stage counts from `run_dir/token_usage.json` (when present)
+    > `_resolve_token_usage`'s deterministic, file-size-based char/4
+    estimate. The resolved source is labeled `measured`/`mixed`/`estimated`
+    in the report header via the `token_source` kwarg passed to
+    `render_llm_analysis`.
     """
     run_dir = Path(run_dir)
     state = _read_json(run_dir / "l1_state.json")
@@ -1653,9 +1709,14 @@ def render(
 
     detected_provider, detected_model = _detect_llm_runtime()
     if tokens_input is None or tokens_output is None:
-        estimated_input, estimated_output = _estimate_token_usage(run_dir)
-        tokens_input = estimated_input if tokens_input is None else tokens_input
-        tokens_output = estimated_output if tokens_output is None else tokens_output
+        # Explicit kwargs (both given) skip resolution entirely -- see
+        # branch below. Otherwise, resolve from `run_dir` (sidecar-real >
+        # char/4 estimate) and only fill in whichever kwarg was omitted.
+        resolved_input, resolved_output, token_source = _resolve_token_usage(run_dir)
+        tokens_input = resolved_input if tokens_input is None else tokens_input
+        tokens_output = resolved_output if tokens_output is None else tokens_output
+    else:
+        token_source = "measured"
 
     kwargs: dict[str, Any] = {
         "start_date": state["fecha_inicio"],
@@ -1669,6 +1730,7 @@ def render(
         "llm_model": llm_model or detected_model,
         "tokens_input": tokens_input,
         "tokens_output": tokens_output,
+        "token_source": token_source,
         **_build_auto_simulation_kwargs(run_dir),
     }
     if output_dir is not None:

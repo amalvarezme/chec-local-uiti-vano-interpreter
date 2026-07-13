@@ -1708,6 +1708,7 @@ def render_llm_analysis(
     llm_provider: str = "Desconocido",
     tokens_input: int | None = None,
     tokens_output: int | None = None,
+    token_source: str = "estimated",
     all_circuits_df: pd.DataFrame | None = None,
     inference_results: dict | None = None,
     inference_analysis: dict | None = None,
@@ -2492,11 +2493,24 @@ def render_llm_analysis(
     if validation_data:
         subtitle_info = f"Período de análisis: {period_str} | Modelo LLM: {model_display}"
         if tokens_input is not None or tokens_output is not None:
-            tokens_in_str = f"~{tokens_input:,}" if tokens_input is not None else "N/D"
-            tokens_out_str = f"~{tokens_output:,}" if tokens_output is not None else "N/D"
+            # `token_source` (design `reporte-perf-optimization` item 4)
+            # labels whether these counts are real (measured), partially
+            # real (mixed), or the char/4 approximation (estimated) -- see
+            # `report_pipeline._resolve_token_usage`. Exact ("measured")
+            # counts drop the "~" prefix; anything with an estimated
+            # component keeps it, since it is still an approximation.
+            token_source_labels = {
+                "measured": "medidos",
+                "mixed": "medidos/estimados",
+                "estimated": "aproximados",
+            }
+            token_label = token_source_labels.get(token_source, "aproximados")
+            prefix = "" if token_source == "measured" else "~"
+            tokens_in_str = f"{prefix}{tokens_input:,}" if tokens_input is not None else "N/D"
+            tokens_out_str = f"{prefix}{tokens_output:,}" if tokens_output is not None else "N/D"
             subtitle_info += (
                 "<br><span style='font-size: 0.85em; color: #94a3b8;'>"
-                f"Tokens aproximados usados en la generación del informe: entrada {tokens_in_str} | salida {tokens_out_str}"
+                f"Tokens {token_label} usados en la generación del informe: entrada {tokens_in_str} | salida {tokens_out_str}"
                 "</span>"
             )
     else:
