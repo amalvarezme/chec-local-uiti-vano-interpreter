@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -1150,6 +1151,69 @@ def test_prepare_writes_auto_simulator_artifacts_with_real_model(tmp_path, monke
 
     assert (run_dir / "auto-simulator.bc.json").exists()
     assert (run_dir / "auto_simulation_assets.json").exists()
+
+
+# ---------------------------------------------------------------------------
+# Shared dataset/scaler inputs (SDD `reporte-perf-optimization`, item 3):
+# `_compute_inference_scenarios` (via `_run_inference_simulator`) and
+# `_run_automatic_simulator` must consume the IDENTICAL `procesar_dataset_
+# completo` result and fitted MinMax `feature_scaler` within one `prepare()`
+# call, computed exactly once -- not recomputed independently by each
+# consumer and merely hoped to match.
+# ---------------------------------------------------------------------------
+
+
+def test_prepare_computes_dataset_and_scaler_exactly_once_for_both_simulators(tmp_path, monkeypatch):
+    """Spy test (idiomatic per `test_prepare_creates_run_dir_after_zero_events_
+    check_before_simulator` above, which already spies `_run_inference_
+    simulator`): `procesar_dataset_completo` and `escalar_features_minmax_
+    mgcecdl` must each be invoked exactly ONCE per `prepare()` call, proving
+    both the inference/SHAP simulator and the automatic min/max simulator
+    share the identical dataset dict and fitted scaler object by
+    construction -- `escalar_features_minmax_mgcecdl` returning once and
+    being reused by both consumers is what GUARANTEES the `feature_scaler`
+    handed to each is object-identical (`is`), not merely value-equal."""
+    _enable_real_mgcecdl_model(monkeypatch)
+
+    dataset_calls: list[Any] = []
+    scaler_calls: list[Any] = []
+    original_procesar = report_pipeline_module.procesar_dataset_completo
+    original_escalar = report_pipeline_module.escalar_features_minmax_mgcecdl
+
+    def _tracking_procesar(*args, **kwargs):
+        result = original_procesar(*args, **kwargs)
+        dataset_calls.append(result)
+        return result
+
+    def _tracking_escalar(*args, **kwargs):
+        result = original_escalar(*args, **kwargs)
+        scaler_calls.append(result)
+        return result
+
+    monkeypatch.setattr(report_pipeline_module, "procesar_dataset_completo", _tracking_procesar)
+    monkeypatch.setattr(report_pipeline_module, "escalar_features_minmax_mgcecdl", _tracking_escalar)
+
+    run_dir = prepare(
+        _REAL_SUFFICIENT_CIRCUIT, *_REAL_SUFFICIENT_WINDOW, runs_root=tmp_path / "runs"
+    )
+
+    assert len(dataset_calls) == 1, (
+        f"expected procesar_dataset_completo called exactly once per prepare(), got {len(dataset_calls)}"
+    )
+    assert len(scaler_calls) == 1, (
+        f"expected escalar_features_minmax_mgcecdl called exactly once per prepare(), got {len(scaler_calls)}"
+    )
+
+    # Value-preservation: outputs still populated exactly as the pre-refactor
+    # per-consumer-recompute path produced them.
+    inference_context = _read_json(run_dir / "inference.bc.json")
+    assert inference_context["features"]
+    assert inference_context["escenarios"]
+
+    auto_bc_path = run_dir / "auto-simulator.bc.json"
+    assert auto_bc_path.exists()
+    auto_bc = _read_json(auto_bc_path)
+    assert auto_bc["tabla_simulador_automatico"]
 
 
 # ---------------------------------------------------------------------------
