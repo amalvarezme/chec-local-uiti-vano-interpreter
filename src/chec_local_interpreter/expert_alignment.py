@@ -645,12 +645,30 @@ def _resolve_predictive_variable_name(variable: Any, context: dict[str, Any]) ->
 
 
 def _compact_pdf_matches(matches: list[dict[str, Any]], *, limit: int = 10) -> list[dict[str, Any]]:
+    # Re-sort the COMBINED (PDF + prior-report) list by `temporal_score`
+    # descending before truncating (Judgment Day Round 1 CRITICAL fix):
+    # PDF rows and prior-report rows are built by two independently-capped
+    # calls and simply concatenated (PDF rows first), so a positional
+    # `matches[:limit]` silently dropped ALL prior-report evidence whenever
+    # PDF matches alone already numbered `limit`, regardless of score. `sorted`
+    # is stable, so a PDF-only list already in descending `temporal_score`
+    # order (as produced by `seleccionar_top_coincidencias_temporales`) keeps
+    # its exact relative order -- required for the byte-identical golden test.
+    dict_matches = [item for item in matches if isinstance(item, dict)]
+    ordered = sorted(
+        dict_matches,
+        key=lambda item: float(item.get("temporal_score") or 0.0),
+        reverse=True,
+    )
     compact: list[dict[str, Any]] = []
-    for item in matches[:limit]:
-        if not isinstance(item, dict):
-            continue
+    for item in ordered[:limit]:
         circuito = str(item.get("Circuito") or "").strip()
         archivo_pdf = f"{circuito}.pdf" if circuito else None
+        if item.get("source_kind") == "prior_report":
+            # Never read from a PDF -- a fabricated "{circuito}.pdf" string
+            # here would be factually wrong provenance (Judgment Day Round 1
+            # WARNING(real) fix).
+            archivo_pdf = None
         entry = {
             "pdf_row_index": item.get("pdf_row_index"),
             "Circuito": item.get("Circuito"),
@@ -1330,6 +1348,53 @@ def _validate_provenance_data_ref(
     return None
 
 
+def _validate_pdf_row_index_rule_consistency(data: dict[str, Any]) -> list[str]:
+    """Structural guard tying a cited `pdf_row_index`'s offset range to the
+    accompanying `provenance.rule` (Judgment Day Round 1 WARNING(real) fix).
+
+    An offset-range index (>= `PRIOR_REPORT_PDF_ROW_INDEX_OFFSET`, i.e. a
+    prior-report continuity row) must only ever be cited together with rule
+    `"04_prior_report_continuity"`, and conversely a real-PDF-range index
+    must never be cited with that rule. Without this check, a validated
+    response could cite an offset-range index under a real-PDF rule id (or
+    vice versa) and still pass `validar_provenance_expert_alignment`'s
+    index-membership check, which only verifies the index is known -- not
+    that its rule matches its provenance kind. Read-only: never mutates `data`.
+    """
+    errors: list[str] = []
+    for section_name in _PROVENANCE_SECTIONS:
+        section = data.get(section_name, [])
+        if not isinstance(section, list):
+            continue
+        for item in section:
+            if not isinstance(item, dict):
+                continue
+            provenance = item.get("provenance")
+            if not isinstance(provenance, dict):
+                continue
+            rule = provenance.get("rule")
+            data_ref = provenance.get("data_ref")
+            if not isinstance(data_ref, list):
+                continue
+            for ref in data_ref:
+                match = _PDF_ROW_INDEX_REF_RE.match(str(ref).strip())
+                if not match:
+                    continue
+                is_prior_report_index = int(match.group(1)) >= PRIOR_REPORT_PDF_ROW_INDEX_OFFSET
+                if is_prior_report_index and rule != "04_prior_report_continuity":
+                    errors.append(
+                        f"{section_name}: provenance.data_ref cites a prior-report "
+                        f"pdf_row_index ({ref!r}) but provenance.rule is not "
+                        f"'04_prior_report_continuity': {rule!r}"
+                    )
+                elif not is_prior_report_index and rule == "04_prior_report_continuity":
+                    errors.append(
+                        f"{section_name}: provenance.data_ref cites a real-PDF "
+                        f"pdf_row_index ({ref!r}) under rule '04_prior_report_continuity'"
+                    )
+    return errors
+
+
 def validar_provenance_expert_alignment(data: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
     """Additively validate per-claim `provenance` objects, when present.
 
@@ -1353,7 +1418,7 @@ def validar_provenance_expert_alignment(data: dict[str, Any], context: dict[str,
             allowed_indexes_set=allowed_indexes_set,
         )
 
-    return validar_provenance_generico(
+    result = validar_provenance_generico(
         data,
         sections=_PROVENANCE_SECTIONS,
         agent_id=EXPERT_ALIGNMENT_AGENT_ID,
@@ -1366,3 +1431,8 @@ def validar_provenance_expert_alignment(data: dict[str, Any], context: dict[str,
         error_bad_rule=lambda rule: f"provenance.rule no está en la lista de reglas permitidas: {rule!r}",
         error_empty_data_ref=lambda: "provenance.data_ref debe ser una lista no vacía.",
     )
+    consistency_errors = _validate_pdf_row_index_rule_consistency(data)
+    if consistency_errors:
+        result["errors"] = [*result["errors"], *consistency_errors]
+        result["ok"] = False
+    return result

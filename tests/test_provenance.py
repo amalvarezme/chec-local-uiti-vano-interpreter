@@ -6,6 +6,7 @@ from chec_local_interpreter.expert_alignment import (
     EXPERT_ALIGNMENT_AGENT_ID,
     EXPERT_ALIGNMENT_PROVENANCE_RULES,
     EXPERT_ALIGNMENT_REQUIRED_KEYS,
+    PRIOR_REPORT_PDF_ROW_INDEX_OFFSET,
     validar_provenance_expert_alignment,
     validar_respuesta_expert_alignment,
 )
@@ -240,6 +241,78 @@ def test_validar_provenance_parity_preserved_when_no_predictive_variables_and_no
     data = _data_with_provenance()
     data["coincidencias"][0]["provenance"]["data_ref"] = ["2026-01-10", "pdf_row_index:3"]
     del data["variables_a_priorizar"][0]["provenance"]
+
+    result = validar_provenance_expert_alignment(data, context)
+
+    assert result["ok"], result["errors"]
+
+
+def _context_with_prior_report_index() -> dict:
+    context = _context()
+    context["pdf_expert_matches"].append(
+        {
+            "Circuito": "DON23L13",
+            "Fecha inicio": "2026-01-01",
+            "Fecha fin": "2026-01-10",
+            "Análisis": "Síntesis previa",
+            "Evidencia": "Evidencia previa",
+            "pdf_row_index": PRIOR_REPORT_PDF_ROW_INDEX_OFFSET,
+            "source_kind": "prior_report",
+            "confidence": "baja",
+        }
+    )
+    return context
+
+
+def test_validar_provenance_rejects_offset_pdf_row_index_under_real_pdf_rule():
+    """Judgment Day Round 1 WARNING(real) fix: an offset-range pdf_row_index
+    (prior-report continuity row) must never be citable under a real-PDF
+    rule id -- only under `04_prior_report_continuity`."""
+    context = _context_with_prior_report_index()
+    data = _data_with_provenance()
+    data["coincidencias"][0]["provenance"]["rule"] = "01_pdf_report_comparison"
+    data["coincidencias"][0]["provenance"]["data_ref"] = [
+        f"pdf_row_index:{PRIOR_REPORT_PDF_ROW_INDEX_OFFSET}"
+    ]
+
+    result = validar_provenance_expert_alignment(data, context)
+
+    assert not result["ok"]
+    assert any("04_prior_report_continuity" in error for error in result["errors"])
+
+
+def test_validar_provenance_rejects_real_pdf_row_index_under_prior_report_rule():
+    """Judgment Day Round 1 WARNING(real) fix: a real-PDF-range pdf_row_index
+    must never be citable under rule `04_prior_report_continuity`."""
+    context = _context()
+    data = _data_with_provenance()
+    data["coincidencias"][0]["provenance"]["rule"] = "04_prior_report_continuity"
+    data["coincidencias"][0]["provenance"]["data_ref"] = ["pdf_row_index:3"]
+
+    result = validar_provenance_expert_alignment(data, context)
+
+    assert not result["ok"]
+    assert any("04_prior_report_continuity" in error for error in result["errors"])
+
+
+def test_validar_provenance_accepts_correct_offset_index_and_rule_04_pairing():
+    context = _context_with_prior_report_index()
+    data = _data_with_provenance()
+    data["coincidencias"][0]["provenance"]["rule"] = "04_prior_report_continuity"
+    data["coincidencias"][0]["provenance"]["data_ref"] = [
+        f"pdf_row_index:{PRIOR_REPORT_PDF_ROW_INDEX_OFFSET}"
+    ]
+
+    result = validar_provenance_expert_alignment(data, context)
+
+    assert result["ok"], result["errors"]
+
+
+def test_validar_provenance_accepts_correct_real_index_and_real_pdf_rule_pairing():
+    context = _context()
+    data = _data_with_provenance()
+    data["coincidencias"][0]["provenance"]["rule"] = "01_pdf_report_comparison"
+    data["coincidencias"][0]["provenance"]["data_ref"] = ["pdf_row_index:3"]
 
     result = validar_provenance_expert_alignment(data, context)
 

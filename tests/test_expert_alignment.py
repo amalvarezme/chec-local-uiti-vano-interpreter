@@ -743,6 +743,56 @@ class TestCompactPdfMatchesCarriesProvenance:
         assert "source_kind" not in compact[0]
         assert "confidence" not in compact[0]
 
+    def test_prior_report_records_have_archivo_pdf_none(self):
+        """Judgment Day Round 1 WARNING(real) fix: a prior-report row was
+        never read from a PDF, so `archivo_pdf` must not fabricate a
+        `"{circuito}.pdf"` string for it."""
+        compact = _compact_pdf_matches([_PRIOR_REPORT_MATCH])
+        assert compact[0]["archivo_pdf"] is None
+
+    def test_pdf_only_records_archivo_pdf_is_unchanged(self):
+        """Regression guard: real PDF rows keep their `archivo_pdf` value."""
+        compact = _compact_pdf_matches([_PDF_ONLY_MATCH])
+        assert compact[0]["archivo_pdf"] == "DON23L13.pdf"
+
+
+class TestCompactPdfMatchesScoreBasedTruncation:
+    def test_strong_prior_report_match_survives_truncation_over_weaker_pdf_matches(self):
+        """Judgment Day Round 1 CRITICAL fix: truncation to `limit` must be
+        score-based (by `temporal_score` descending) across the COMBINED
+        PDF + prior-report list, not a naive first-N-by-list-position --
+        otherwise prior-report rows are silently dropped whenever real PDF
+        matches alone already fill `limit`."""
+        pdf_matches = [
+            {**_PDF_ONLY_MATCH, "pdf_row_index": i, "temporal_score": 10.0 - i}
+            for i in range(10)
+        ]
+        # Ranks between pdf rows scored 6.0 (index 4) and 5.0 (index 5), so
+        # it must survive truncation while the weakest pdf row (index 9,
+        # score 1.0) gets dropped.
+        strong_prior_report_match = {**_PRIOR_REPORT_MATCH, "temporal_score": 5.5}
+        combined = pdf_matches + [strong_prior_report_match]
+
+        compact = _compact_pdf_matches(combined, limit=10)
+
+        assert len(compact) == 10
+        assert any(row.get("source_kind") == "prior_report" for row in compact)
+        assert not any(row.get("pdf_row_index") == 9 for row in compact)
+
+    def test_pdf_only_list_already_sorted_by_score_is_unaffected(self):
+        """A PDF-only list already in descending `temporal_score` order (as
+        produced by `seleccionar_top_coincidencias_temporales`) must
+        sort-then-truncate to an identical order -- the byte-identical
+        golden-test assumption."""
+        pdf_matches = [
+            {**_PDF_ONLY_MATCH, "pdf_row_index": i, "temporal_score": 10.0 - i}
+            for i in range(5)
+        ]
+
+        compact = _compact_pdf_matches(pdf_matches, limit=10)
+
+        assert [row["pdf_row_index"] for row in compact] == [0, 1, 2, 3, 4]
+
 
 class TestConstruirContextoAvailabilitySplit:
     def test_modelo_experto_disponible_excludes_prior_report_records(self):
