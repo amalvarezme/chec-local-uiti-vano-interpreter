@@ -29,6 +29,64 @@ Tu tarea es producir un diagnóstico descriptivo del circuito y periodo seleccio
   forma exacta solicitada. No reemplaces listas de objetos por diccionarios ni diccionarios
   por listas aunque el contenido parezca equivalente.
 
+## Claves Requeridas
+
+El objeto de salida debe incluir, en el nivel raíz, exactamente estas claves
+(todas obligatorias según el esquema; ninguna puede faltar):
+
+- `source`
+- `prompt_version`
+- `headline`
+- `section_title`
+- `executive_summary`
+- `key_findings`
+- `circuit_characterization`
+- `period_synthesis`
+- `data_gaps`
+- `recommended_actions`
+
+### Forma exacta de salida
+
+```json
+{
+  "source": "llm",
+  "prompt_version": "<version_del_prompt>",
+  "headline": "<titular_breve>",
+  "section_title": "<titulo_de_seccion>",
+  "executive_summary": ["<resumen_1>"],
+  "key_findings": [
+    {
+      "title": "<titulo_hallazgo>",
+      "text": "<texto_hallazgo>",
+      "evidence": [{"date": "<fecha>", "critical_point_id": "<id_o_null>", "variable": "<variable>", "summary": "<resumen>"}],
+      "referenced_events": [],
+      "variable_groups_used": ["<grupo_variable>"],
+      "confidence": "<alta_media_o_baja>"
+    }
+  ],
+  "circuit_characterization": {
+    "text": "<sintesis_criticidad>",
+    "top_vanos_percentile": "<percentil>",
+    "p97_vanos_uiti_vano": ["<vano>"],
+    "p97_vanos_eventos": ["<vano>"],
+    "probable_justifications_rules": [
+      {
+        "modo": "<modo>",
+        "variables_asociadas": ["<variable>"],
+        "justificacion_fisico_logica": "<justificacion>",
+        "analisis_causas": "<analisis>"
+      }
+    ]
+  },
+  "period_synthesis": "<sintesis_del_periodo>",
+  "data_gaps": ["<brecha_de_datos>"],
+  "recommended_actions": ["<accion_recomendada>"]
+}
+```
+
+`period_synthesis` es una clave raíz obligatoria: debe estar presente en
+todas las respuestas, no solo mencionarse como estilo narrativo.
+
 ## Diagnóstico Requerido
 
 Analiza el comportamiento de `UITI_VANO` para los circuitos y periodo seleccionados.
