@@ -101,6 +101,7 @@ from chec_impacto.training import (
     predict_classification,
     resolve_training_device,
 )
+from chec_local_interpreter.agent_output import ReportPipelineError, load_validated_agent_output
 from chec_local_interpreter.attribution import enrich_critical_points
 from chec_local_interpreter.circuit_identity import canonical_circuit_identity
 from chec_local_interpreter.config import (
@@ -187,14 +188,6 @@ _TOP_K_PDF_DATE_MATCHES = 10
 # `COST_ITEMS_EXCEL_PATH` (cell ~59), resolved absolute against `project_root()`
 # rather than `costs.DEFAULT_COST_ITEMS_PATH`'s cwd-relative default.
 DEFAULT_COST_ITEMS_PATH = project_root() / "data" / "COSTOS ITEMS CONTRATOS.xlsx"
-
-
-class ReportPipelineError(ValueError):
-    """Raised when the report pipeline cannot proceed for a given circuit or run_dir.
-
-    Subclasses `ValueError` so existing `except ValueError` handling upstream
-    keeps working, while giving callers/tests a specific type to catch.
-    """
 
 
 def _read_json(path: Path) -> Any:
@@ -1085,28 +1078,12 @@ def _run_automatic_simulator(
     return compact_context
 
 
-def _load_validated_agent_output(run_dir: Path, agent_name: str) -> dict[str, Any]:
-    """Read `{agent_name}.out.json` and require the combined L1 `validate()`
-    success shape `{"ok": true, "data": {...}}`.
-
-    Raises `ReportPipelineError` if the file is absent (the Skill never
-    produced a validated output — e.g. retries exhausted) or present but not
-    a successful envelope (`ok` missing/false, or malformed JSON shape).
-    """
-    path = run_dir / f"{agent_name}.out.json"
-    if not path.exists():
-        raise ReportPipelineError(
-            f"Missing validated output for agent '{agent_name}' at {path} "
-            "(the Skill has not produced a passing validate() result yet, "
-            "or validation retries were exhausted without success)."
-        )
-    payload = _read_json(path)
-    if not isinstance(payload, dict) or payload.get("ok") is not True or "data" not in payload:
-        raise ReportPipelineError(
-            f"Validated output for agent '{agent_name}' at {path} is not a "
-            "successful envelope (expected {'ok': true, 'data': ...})."
-        )
-    return payload["data"]
+# Kept as a module-private alias (rather than rewriting every call site)
+# so this file's internal call sites stay untouched -- the implementation
+# now lives in `agent_output.py` (task 1.3: shared, dependency-free module
+# so `expert_alignment.py` can reuse it without a circular import, since
+# this module already imports names FROM `expert_alignment.py` above).
+_load_validated_agent_output = load_validated_agent_output
 
 
 def prepare(
