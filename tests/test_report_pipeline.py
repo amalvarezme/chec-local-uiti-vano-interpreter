@@ -1453,6 +1453,65 @@ def test_resolve_token_usage_no_stage_files_returns_zero_estimated(tmp_path):
     assert (tokens_input, tokens_output, token_source) == (0, 0, "estimated")
 
 
+# ---------------------------------------------------------------------------
+# Judgment Day round 1 fix: `_resolve_token_usage` must degrade gracefully
+# (never raise) for ANY malformed `run_dir/token_usage.json` sidecar --
+# top-level invalid JSON, a considered stage's entry with non-numeric
+# "input"/"output" values, or a considered stage's entry that isn't a dict at
+# all. Each malformed case must degrade to the char/4 estimate for that/those
+# stage(s) only, exactly as if the sidecar were absent for that stage.
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_token_usage_malformed_top_level_json_degrades_to_estimate(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    _write_stage_files(run_dir, "historical", bc_text="x" * 400, out_data={"a": "y" * 200})
+    (run_dir / "token_usage.json").write_text("{not valid json", encoding="utf-8")
+
+    tokens_input, tokens_output, token_source = report_pipeline_module._resolve_token_usage(run_dir)
+
+    expected_chars_in = 400
+    expected_chars_out = len(json.dumps({"a": "y" * 200}))
+    assert tokens_input == expected_chars_in // 4
+    assert tokens_output == expected_chars_out // 4
+    assert token_source == "estimated"
+
+
+def test_resolve_token_usage_non_numeric_stage_values_degrade_that_stage_only(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    _write_stage_files(run_dir, "historical", bc_text="x" * 400, out_data={"a": "y" * 200})
+    (run_dir / "token_usage.json").write_text(
+        json.dumps({"historical": {"input": "lots", "output": 5}}), encoding="utf-8"
+    )
+
+    tokens_input, tokens_output, token_source = report_pipeline_module._resolve_token_usage(run_dir)
+
+    expected_chars_in = 400
+    expected_chars_out = len(json.dumps({"a": "y" * 200}))
+    assert tokens_input == expected_chars_in // 4
+    assert tokens_output == expected_chars_out // 4
+    assert token_source == "estimated"
+
+
+def test_resolve_token_usage_non_dict_stage_entry_degrades_that_stage_only(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    _write_stage_files(run_dir, "historical", bc_text="x" * 400, out_data={"a": "y" * 200})
+    (run_dir / "token_usage.json").write_text(
+        json.dumps({"historical": "not-a-dict"}), encoding="utf-8"
+    )
+
+    tokens_input, tokens_output, token_source = report_pipeline_module._resolve_token_usage(run_dir)
+
+    expected_chars_in = 400
+    expected_chars_out = len(json.dumps({"a": "y" * 200}))
+    assert tokens_input == expected_chars_in // 4
+    assert tokens_output == expected_chars_out // 4
+    assert token_source == "estimated"
+
+
 def _prepare_render_ready_run_dir(tmp_path: Path) -> Path:
     data_path = _write_fixture_dataset(tmp_path)
     run_dir = prepare("C1", data_path=data_path, runs_root=tmp_path / "runs")
@@ -1541,3 +1600,32 @@ def test_render_falls_back_to_estimated_when_no_sidecar_no_kwargs(tmp_path, monk
     assert isinstance(captured["tokens_input"], int)
     assert isinstance(captured["tokens_output"], int)
     assert captured["token_source"] == "estimated"
+
+
+def test_render_partial_kwargs_explicit_side_never_mislabeled_estimated(tmp_path, monkeypatch):
+    """Judgment Day round 1 fix: supplying exactly one of `tokens_input`/
+    `tokens_output` explicitly is itself a precise/authoritative count for
+    that side -- it must never end up mislabeled "estimated" in the combined
+    `token_source`, even though the other (omitted) side falls back to
+    `_resolve_token_usage`'s char/4 estimate (no sidecar present here)."""
+    run_dir = _prepare_render_ready_run_dir(tmp_path)
+    assert not (run_dir / "token_usage.json").exists()
+
+    captured: dict = {}
+
+    def _spy_render_llm_analysis(*args, **kwargs):
+        captured.update(kwargs)
+        html_path = tmp_path / "html" / "fake.html"
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        html_path.write_text("<html></html>", encoding="utf-8")
+        return html_path
+
+    monkeypatch.setattr(report_pipeline_module, "render_llm_analysis", _spy_render_llm_analysis)
+
+    render(run_dir, output_dir=tmp_path / "html", tokens_input=500, tokens_output=None)
+
+    assert captured["tokens_input"] == 500
+    assert isinstance(captured["tokens_output"], int)
+    assert captured["token_source"] != "estimated", (
+        "an explicitly-provided precise tokens_input must never be mislabeled as estimated"
+    )

@@ -40,9 +40,6 @@ def test_skill_declares_historical_inference_auto_simulator_independent():
         "and parallel-eligible where the runtime supports it"
     )
 
-    for name in ("historical", "inference", "auto-simulator", "auto_simulator"):
-        pass  # presence checked precisely below
-
     assert "historical" in body and "inference" in body and "auto-simulator" in body
 
 
