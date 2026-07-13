@@ -75,6 +75,7 @@ def test_provenance_rule_allow_list_is_hermetic_and_matches_known_playbooks():
         "01_pdf_report_comparison",
         "02_predictive_variable_prioritization",
         "03_graph_context_for_alignment",
+        "04_prior_report_continuity",
     }
     assert EXPERT_ALIGNMENT_AGENT_ID == "expert-alignment"
 

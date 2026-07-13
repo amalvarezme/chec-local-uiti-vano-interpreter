@@ -42,13 +42,15 @@ EXPERT_ALIGNMENT_PROVENANCE_RULES = frozenset({
     "01_pdf_report_comparison",
     "02_predictive_variable_prioritization",
     "03_graph_context_for_alignment",
+    "04_prior_report_continuity",
 })
 
 # Prior-report normalization (`normalizar_reporte_previo_como_matches`):
 # offset applied to every normalized record's `pdf_row_index` so it can
 # never collide with a real PDF DataFrame's positional index (which is
-# always small -- one xlsx table per circuit). Not yet wired into any
-# pipeline consumer in this PR (PR 1); see design "Normalization (new)".
+# always small -- one xlsx table per circuit). Wired into `prepare_expert_alignment`
+# (`report_pipeline.py`, PR 2 of sdd/reporte-graph-reuse); see design
+# "Normalization (new)" and "Graceful no-op integration point".
 PRIOR_REPORT_PDF_ROW_INDEX_OFFSET = 10000
 
 _PROVENANCE_SECTIONS = ("coincidencias", "diferencias", "variables_a_priorizar")
@@ -301,8 +303,9 @@ def seleccionar_reporte_previo_mas_reciente(run_dir: Path) -> Path | None:
     run, reusable as lower-trust continuity evidence (design decision 1:
     "Which prior artifact feeds the evidence").
 
-    Standalone/pure and NOT wired into any pipeline consumer yet (that
-    wiring is a later PR's scope).
+    Pure/side-effect-free (aside from reading candidate directories). Wired
+    into `prepare_expert_alignment` (`report_pipeline.py`), called right
+    after `pdf_expert_matches` is built.
 
     Self-excludes `run_dir` by resolved-path comparison: `prepare()` already
     creates the CURRENT run's directory before this would ever run, so the
@@ -348,9 +351,11 @@ def normalizar_reporte_previo_como_matches(
     records shaped exactly like `pdf_expert_matches` rows (design decision 1
     + "Normalization (new)"), so all generic downstream validator machinery
     (`_allowed_dates`, `_allowed_evidences`, `_allowed_pdf_row_indexes`,
-    provenance validator) can consume them unchanged once wired.
+    provenance validator) consume them unchanged.
 
-    Standalone/pure and NOT wired into any pipeline consumer yet.
+    Pure/side-effect-free (aside from reading `prior_run_dir`). Wired into
+    `prepare_expert_alignment` (`report_pipeline.py`), called with the
+    directory `seleccionar_reporte_previo_mas_reciente` returns.
 
     Builds candidate rows from the prior run's `sintesis_final` plus its
     `coincidencias`/`diferencias` entries, dated by the prior run's OWN
@@ -359,9 +364,14 @@ def normalizar_reporte_previo_como_matches(
     report's `fechas_informe` window (max matcher reuse, zero new matching
     logic). Each returned record's `pdf_row_index` is offset by
     `PRIOR_REPORT_PDF_ROW_INDEX_OFFSET` so it never collides with a real PDF
-    DataFrame's positional index. Returns `[]` when the prior run has no
-    usable evidence (empty `sintesis_final`/`coincidencias`/`diferencias`) or
-    none of it temporally matches `fechas_informe`.
+    DataFrame's positional index. Every record also carries `source_kind:
+    "prior_report"` and `confidence: "baja"` (design decision 3: lower-
+    confidence marking), and its `temporal_score` is scaled by a 0.5x penalty
+    relative to the unpenalized matcher output, so PDF-sourced evidence ranks
+    above prior-report evidence when both are present. Returns `[]` when the
+    prior run has no usable evidence (empty
+    `sintesis_final`/`coincidencias`/`diferencias`) or none of it temporally
+    matches `fechas_informe`.
     """
     data = load_validated_agent_output(prior_run_dir, "expert-alignment")
 
@@ -415,6 +425,9 @@ def normalizar_reporte_previo_como_matches(
     for match in matches:
         if match.get("pdf_row_index") is not None:
             match["pdf_row_index"] = int(match["pdf_row_index"]) + PRIOR_REPORT_PDF_ROW_INDEX_OFFSET
+        match["source_kind"] = "prior_report"
+        match["confidence"] = "baja"
+        match["temporal_score"] = round(float(match["temporal_score"]) * 0.5, 6)
     return matches
 
 

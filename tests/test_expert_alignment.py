@@ -33,11 +33,13 @@ def test_expert_alignment_skill_profile_loads():
         "01_pdf_report_comparison.md",
         "02_predictive_variable_prioritization.md",
         "03_graph_context_for_alignment.md",
+        "04_prior_report_continuity.md",
     ]
     skill_bundle = assemble_skill_bundle(profile="expert_alignment")
     assert "Comparación de Reportes PDF" in skill_bundle
     assert "Priorización de Variables" in skill_bundle
     assert "Contexto de Grafos" in skill_bundle
+    assert "Continuidad con el Reporte Previo del Circuito" in skill_bundle
 
 
 def test_extraer_fechas_informe_collects_multiple_sources():
