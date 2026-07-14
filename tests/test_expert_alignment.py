@@ -1,19 +1,30 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pandas as pd
 
 from chec_local_interpreter.expert_alignment import (
+    PRIOR_REPORT_PDF_ROW_INDEX_OFFSET,
+    _allowed_pdf_row_indexes,
     construir_contexto_expert_alignment,
     construir_prompt_expert_alignment,
     extraer_fechas_informe,
     filtrar_discussiones_por_circuito,
+    normalizar_reporte_previo_como_matches,
+    seleccionar_reporte_previo_mas_reciente,
     seleccionar_top_coincidencias_temporales,
     validar_respuesta_expert_alignment,
 )
 from chec_local_interpreter.llm_skills import assemble_skill_bundle, list_available_skills, verify_required_skills
 from chec_local_interpreter.plotting import render_expert_alignment_tab
+
+
+def _write_expert_alignment_out(run_dir: Path, *, ok: bool = True, data: dict | None = None) -> None:
+    run_dir.mkdir(parents=True, exist_ok=True)
+    payload = {"ok": ok, "data": data if data is not None else {}}
+    (run_dir / "expert-alignment.out.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
 
 def test_expert_alignment_skill_profile_loads():
@@ -325,3 +336,278 @@ def test_expert_alignment_rejects_expert_findings_without_pdf_matches():
     assert not result["ok"]
     assert any("fuentes visibles" in error for error in result["errors"])
     assert any("hallazgos_expertos_no_cubiertos" in error for error in result["errors"])
+
+
+# ---------------------------------------------------------------------------
+# Phase 1 (PR 1): prior-run discovery and selection
+#
+# `seleccionar_reporte_previo_mas_reciente` and `normalizar_reporte_previo_como_matches`
+# are standalone/pure and NOT wired into any pipeline consumer yet (that
+# wiring is PR 2 scope, tasks 3.1-5.2) -- these tests exercise the two new
+# functions directly.
+# ---------------------------------------------------------------------------
+
+
+class TestSeleccionarReportePrevioMasReciente:
+    def test_multiple_qualifying_prior_runs_returns_newest(self, tmp_path):
+        circuit_dir = tmp_path / "runs" / "C1"
+        older = circuit_dir / "20260101T000000000000"
+        middle = circuit_dir / "20260102T000000000000"
+        newest = circuit_dir / "20260103T000000000000"
+        for run_dir in (older, middle, newest):
+            _write_expert_alignment_out(run_dir)
+        current_run_dir = circuit_dir / "20260104T000000000000"
+        current_run_dir.mkdir(parents=True)
+
+        result = seleccionar_reporte_previo_mas_reciente(current_run_dir)
+
+        assert result == newest
+
+    def test_prior_run_missing_its_own_expert_alignment_output_is_skipped(self, tmp_path):
+        circuit_dir = tmp_path / "runs" / "C1"
+        incomplete = circuit_dir / "20260101T000000000000"
+        incomplete.mkdir(parents=True)
+        (incomplete / "historical.out.json").write_text(
+            json.dumps({"ok": True, "data": {}}), encoding="utf-8"
+        )
+        (incomplete / "inference.out.json").write_text(
+            json.dumps({"ok": True, "data": {}}), encoding="utf-8"
+        )
+        # No expert-alignment.out.json written for `incomplete` -- it is the
+        # ONLY prior candidate, so the function must return None even though
+        # historical+inference evidence exists.
+        current_run_dir = circuit_dir / "20260102T000000000000"
+        current_run_dir.mkdir(parents=True)
+
+        result = seleccionar_reporte_previo_mas_reciente(current_run_dir)
+
+        assert result is None
+
+    def test_prior_run_missing_expert_alignment_output_is_skipped_in_favor_of_qualifying_sibling(
+        self, tmp_path
+    ):
+        circuit_dir = tmp_path / "runs" / "C1"
+        qualifying = circuit_dir / "20260101T000000000000"
+        _write_expert_alignment_out(qualifying)
+        incomplete = circuit_dir / "20260102T000000000000"
+        incomplete.mkdir(parents=True)
+        current_run_dir = circuit_dir / "20260103T000000000000"
+        current_run_dir.mkdir(parents=True)
+
+        result = seleccionar_reporte_previo_mas_reciente(current_run_dir)
+
+        assert result == qualifying
+
+    def test_zero_qualifying_prior_runs_returns_none(self, tmp_path):
+        circuit_dir = tmp_path / "runs" / "C1"
+        current_run_dir = circuit_dir / "20260101T000000000000"
+        current_run_dir.mkdir(parents=True)
+
+        result = seleccionar_reporte_previo_mas_reciente(current_run_dir)
+
+        assert result is None
+
+    def test_current_run_dir_is_self_excluded_even_if_it_has_a_valid_output(self, tmp_path):
+        circuit_dir = tmp_path / "runs" / "C1"
+        current_run_dir = circuit_dir / "20260101T000000000000"
+        # Simulate mid-run reentry: the CURRENT run already wrote its own
+        # valid expert-alignment.out.json before selection runs again.
+        _write_expert_alignment_out(current_run_dir)
+
+        result = seleccionar_reporte_previo_mas_reciente(current_run_dir)
+
+        assert result is None
+
+    def test_self_exclusion_uses_resolved_path_comparison(self, tmp_path):
+        circuit_dir = tmp_path / "runs" / "C1"
+        current_run_dir = circuit_dir / "20260101T000000000000"
+        _write_expert_alignment_out(current_run_dir)
+
+        # A non-normalized (but equivalent) path to the same directory must
+        # still be excluded.
+        noisy_path = circuit_dir / "." / "20260101T000000000000"
+
+        result = seleccionar_reporte_previo_mas_reciente(noisy_path)
+
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 (PR 1): prior-report normalization
+# ---------------------------------------------------------------------------
+
+
+def _write_prior_expert_alignment_data(
+    run_dir: Path,
+    *,
+    periodo_inicio: str = "2026-01-01",
+    periodo_fin: str = "2026-01-10",
+    coincidencias: list | None = None,
+    diferencias: list | None = None,
+    sintesis_final: str = "La comparación previa fue consistente y requiere validación.",
+) -> None:
+    data = {
+        "contexto": {
+            "circuito": "C1",
+            "periodo": {"inicio": periodo_inicio, "fin": periodo_fin},
+            "n_filas_expertas_comparadas": 1,
+        },
+        "coincidencias": coincidencias if coincidencias is not None else [
+            {
+                "tema": "UITI_VANO elevado en el periodo previo",
+                "fuentes": ["Agente Descriptor", "Agente predictivo"],
+                "explicacion": "Ambas fuentes coincidieron en el periodo previo.",
+            }
+        ],
+        "diferencias": diferencias if diferencias is not None else [],
+        "hallazgos_expertos_no_cubiertos": [],
+        "hallazgos_modelo_no_respaldados_por_pdf": [],
+        "variables_a_priorizar": [],
+        "sintesis_final": sintesis_final,
+    }
+    _write_expert_alignment_out(run_dir, data=data)
+
+
+_REQUIRED_PDF_EXPERT_MATCH_KEYS = (
+    "Circuito",
+    "Fecha inicio",
+    "Fecha fin",
+    "Análisis",
+    "Evidencia",
+    "matched_source",
+    "matched_fecha_inicio",
+    "matched_fecha_fin",
+    "matched_descripcion",
+    "temporal_score",
+    "overlap_days",
+    "distance_days",
+    "pdf_row_index",
+)
+
+
+class TestNormalizarReportePrevioComoMatches:
+    def test_returned_records_contain_every_pdf_expert_matches_required_key(self, tmp_path):
+        prior_run_dir = tmp_path / "runs" / "C1" / "20260101T000000000000"
+        _write_prior_expert_alignment_data(prior_run_dir)
+        fechas_informe = [
+            {
+                "source": "critical_point",
+                "fecha_inicio": "2026-01-05",
+                "fecha_fin": "2026-01-05",
+                "descripcion": "cp",
+                "peso": 3.0,
+            }
+        ]
+
+        records = normalizar_reporte_previo_como_matches(
+            prior_run_dir, "C1", fechas_informe, top_k=3
+        )
+
+        assert records
+        for record in records:
+            for key in _REQUIRED_PDF_EXPERT_MATCH_KEYS:
+                assert key in record, f"missing key {key!r} in {record!r}"
+            assert record["Circuito"] == "C1"
+
+    def test_rows_are_built_from_sintesis_final_and_top_coincidencias_diferencias(self, tmp_path):
+        prior_run_dir = tmp_path / "runs" / "C1" / "20260101T000000000000"
+        _write_prior_expert_alignment_data(
+            prior_run_dir,
+            coincidencias=[
+                {"tema": "Coincidencia 1", "explicacion": "Explicación 1"},
+            ],
+            diferencias=[
+                {"tema": "Diferencia 1", "explicacion": "Explicación 2"},
+            ],
+            sintesis_final="Síntesis del reporte previo.",
+        )
+        fechas_informe = [
+            {
+                "source": "critical_point",
+                "fecha_inicio": "2026-01-05",
+                "fecha_fin": "2026-01-05",
+                "descripcion": "cp",
+                "peso": 3.0,
+            }
+        ]
+
+        records = normalizar_reporte_previo_como_matches(
+            prior_run_dir, "C1", fechas_informe, top_k=3
+        )
+
+        analisis_values = {record["Análisis"] for record in records}
+        # sintesis_final + both coincidencias/diferencias items should all be
+        # representable as candidate rows (top_k=3 keeps all 3 here).
+        assert len(records) == 3
+        assert "Coincidencia 1" in analisis_values
+        assert "Diferencia 1" in analisis_values
+
+    def test_dates_are_sourced_from_prior_contexto_periodo(self, tmp_path):
+        prior_run_dir = tmp_path / "runs" / "C1" / "20260101T000000000000"
+        _write_prior_expert_alignment_data(
+            prior_run_dir, periodo_inicio="2025-12-01", periodo_fin="2025-12-15"
+        )
+        fechas_informe = [
+            {
+                "source": "critical_point",
+                "fecha_inicio": "2025-12-10",
+                "fecha_fin": "2025-12-10",
+                "descripcion": "cp",
+                "peso": 3.0,
+            }
+        ]
+
+        records = normalizar_reporte_previo_como_matches(
+            prior_run_dir, "C1", fechas_informe, top_k=3
+        )
+
+        assert records
+        for record in records:
+            assert record["Fecha inicio"] == "2025-12-01"
+            assert record["Fecha fin"] == "2025-12-15"
+
+    def test_no_qualifying_evidence_returns_empty_list(self, tmp_path):
+        prior_run_dir = tmp_path / "runs" / "C1" / "20260101T000000000000"
+        _write_prior_expert_alignment_data(
+            prior_run_dir, coincidencias=[], diferencias=[], sintesis_final=""
+        )
+        fechas_informe = [
+            {
+                "source": "critical_point",
+                "fecha_inicio": "2026-01-05",
+                "fecha_fin": "2026-01-05",
+                "descripcion": "cp",
+                "peso": 3.0,
+            }
+        ]
+
+        records = normalizar_reporte_previo_como_matches(
+            prior_run_dir, "C1", fechas_informe, top_k=3
+        )
+
+        assert records == []
+
+    def test_pdf_row_index_is_offset_and_recognized_by_allowed_pdf_row_indexes(self, tmp_path):
+        prior_run_dir = tmp_path / "runs" / "C1" / "20260101T000000000000"
+        _write_prior_expert_alignment_data(prior_run_dir)
+        fechas_informe = [
+            {
+                "source": "critical_point",
+                "fecha_inicio": "2026-01-05",
+                "fecha_fin": "2026-01-05",
+                "descripcion": "cp",
+                "peso": 3.0,
+            }
+        ]
+
+        records = normalizar_reporte_previo_como_matches(
+            prior_run_dir, "C1", fechas_informe, top_k=3
+        )
+
+        assert records
+        for record in records:
+            assert record["pdf_row_index"] >= PRIOR_REPORT_PDF_ROW_INDEX_OFFSET
+
+        fake_context = {"pdf_expert_matches": records}
+        allowed = _allowed_pdf_row_indexes(fake_context)
+        assert str(records[0]["pdf_row_index"]) in allowed

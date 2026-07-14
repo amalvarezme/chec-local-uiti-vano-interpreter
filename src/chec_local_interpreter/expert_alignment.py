@@ -7,6 +7,7 @@ from typing import Any
 
 import pandas as pd
 
+from chec_local_interpreter.agent_output import ReportPipelineError, load_validated_agent_output
 from chec_local_interpreter.circuit_identity import normalizar_circuito
 from chec_local_interpreter.llm_validation import validar_provenance_generico
 from chec_local_interpreter.pdf_discussion_pipeline import COLUMNAS_FINALES as REQUIRED_PDF_DISCUSSION_COLUMNS
@@ -42,6 +43,13 @@ EXPERT_ALIGNMENT_PROVENANCE_RULES = frozenset({
     "02_predictive_variable_prioritization",
     "03_graph_context_for_alignment",
 })
+
+# Prior-report normalization (`normalizar_reporte_previo_como_matches`):
+# offset applied to every normalized record's `pdf_row_index` so it can
+# never collide with a real PDF DataFrame's positional index (which is
+# always small -- one xlsx table per circuit). Not yet wired into any
+# pipeline consumer in this PR (PR 1); see design "Normalization (new)".
+PRIOR_REPORT_PDF_ROW_INDEX_OFFSET = 10000
 
 _PROVENANCE_SECTIONS = ("coincidencias", "diferencias", "variables_a_priorizar")
 
@@ -285,6 +293,129 @@ def seleccionar_top_coincidencias_temporales(
             candidates.append(best)
 
     return sorted(candidates, key=lambda item: item["temporal_score"], reverse=True)[:top_k]
+
+
+def seleccionar_reporte_previo_mas_reciente(run_dir: Path) -> Path | None:
+    """Find the newest sibling run directory (same circuit) that has its
+    OWN valid `expert-alignment.out.json` -- i.e. a fully completed prior
+    run, reusable as lower-trust continuity evidence (design decision 1:
+    "Which prior artifact feeds the evidence").
+
+    Standalone/pure and NOT wired into any pipeline consumer yet (that
+    wiring is a later PR's scope).
+
+    Self-excludes `run_dir` by resolved-path comparison: `prepare()` already
+    creates the CURRENT run's directory before this would ever run, so the
+    current run would otherwise appear as a qualifying sibling of itself.
+    A prior run with valid `historical.out.json`/`inference.out.json` but no
+    `expert-alignment.out.json` of its own is a partial/failed run (retries
+    exhausted) and is skipped, even though historical/inference evidence
+    exists for it. Sibling directory names are fixed-width
+    `strftime("%Y%m%dT%H%M%S%f")` timestamps (see `_new_run_dir`), so plain
+    lexicographic ordering is equivalent to chronological ordering. Returns
+    `None` when there is no qualifying prior run -- never raises.
+    """
+    current = Path(run_dir).resolve()
+    circuit_dir = current.parent
+    if not circuit_dir.is_dir():
+        return None
+
+    qualifying: list[Path] = []
+    for candidate in circuit_dir.iterdir():
+        if not candidate.is_dir():
+            continue
+        if candidate.resolve() == current:
+            continue
+        try:
+            load_validated_agent_output(candidate, "expert-alignment")
+        except ReportPipelineError:
+            continue
+        qualifying.append(candidate)
+
+    if not qualifying:
+        return None
+    return max(qualifying, key=lambda path: path.name)
+
+
+def normalizar_reporte_previo_como_matches(
+    prior_run_dir: Path,
+    circuito: str,
+    fechas_informe: list[dict[str, Any]],
+    *,
+    top_k: int = 3,
+) -> list[dict[str, Any]]:
+    """Normalize a prior run's own `expert-alignment.out.json` synthesis into
+    records shaped exactly like `pdf_expert_matches` rows (design decision 1
+    + "Normalization (new)"), so all generic downstream validator machinery
+    (`_allowed_dates`, `_allowed_evidences`, `_allowed_pdf_row_indexes`,
+    provenance validator) can consume them unchanged once wired.
+
+    Standalone/pure and NOT wired into any pipeline consumer yet.
+
+    Builds candidate rows from the prior run's `sintesis_final` plus its
+    `coincidencias`/`diferencias` entries, dated by the prior run's OWN
+    `contexto.periodo`, and re-runs them through the existing
+    `seleccionar_top_coincidencias_temporales` matcher against the CURRENT
+    report's `fechas_informe` window (max matcher reuse, zero new matching
+    logic). Each returned record's `pdf_row_index` is offset by
+    `PRIOR_REPORT_PDF_ROW_INDEX_OFFSET` so it never collides with a real PDF
+    DataFrame's positional index. Returns `[]` when the prior run has no
+    usable evidence (empty `sintesis_final`/`coincidencias`/`diferencias`) or
+    none of it temporally matches `fechas_informe`.
+    """
+    data = load_validated_agent_output(prior_run_dir, "expert-alignment")
+
+    contexto = data.get("contexto")
+    contexto = contexto if isinstance(contexto, dict) else {}
+    periodo = contexto.get("periodo")
+    periodo = periodo if isinstance(periodo, dict) else {}
+    periodo_inicio = periodo.get("inicio")
+    periodo_fin = periodo.get("fin")
+
+    rows: list[dict[str, Any]] = []
+
+    sintesis_final = data.get("sintesis_final")
+    if isinstance(sintesis_final, str) and sintesis_final.strip():
+        rows.append({
+            "Circuito": circuito,
+            "Fecha inicio": periodo_inicio,
+            "Fecha fin": periodo_fin,
+            "Análisis": "Síntesis final del reporte previo",
+            "Evidencia": _truncate_text(sintesis_final),
+        })
+
+    for section in ("coincidencias", "diferencias"):
+        items = data.get(section)
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            tema = str(item.get("tema") or "").strip()
+            if not tema:
+                continue
+            rows.append({
+                "Circuito": circuito,
+                "Fecha inicio": periodo_inicio,
+                "Fecha fin": periodo_fin,
+                "Análisis": tema,
+                "Evidencia": _truncate_text(item.get("explicacion")),
+            })
+
+    if not rows:
+        return []
+
+    candidate_df = pd.DataFrame(rows)
+    matches = seleccionar_top_coincidencias_temporales(
+        fechas_informe=fechas_informe,
+        pdf_df=candidate_df,
+        circuito_interes=circuito,
+        top_k=top_k,
+    )
+    for match in matches:
+        if match.get("pdf_row_index") is not None:
+            match["pdf_row_index"] = int(match["pdf_row_index"]) + PRIOR_REPORT_PDF_ROW_INDEX_OFFSET
+    return matches
 
 
 def _truncate_text(value: Any, limit: int = 700) -> str:
