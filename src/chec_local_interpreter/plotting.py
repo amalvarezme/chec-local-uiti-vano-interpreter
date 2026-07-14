@@ -2319,11 +2319,11 @@ def render_llm_analysis(
             ))
         if top_uiti:
             barras_periodo.append(_chart_panel(
-                "Gravedad",
+                "UITI",
                 _figure_html(top_uiti.get("fig_barras")),
             ))
             radares_periodo.append(_chart_panel(
-                "Radar - Gravedad",
+                "Radar - UITI",
                 _figure_html(top_uiti.get("fig_radar")),
             ))
         grafos_periodo = []
@@ -2334,7 +2334,7 @@ def render_llm_analysis(
             ))
         if top_uiti:
             grafos_periodo.append(_graph_panel(
-                "Grafo estimado - Gravedad",
+                "Grafo estimado - UITI",
                 top_uiti.get("grafo_interactivo"),
             ))
 
@@ -2385,7 +2385,7 @@ def render_llm_analysis(
             characterization_parts.append(f"<div class='chart-grid two-col'>{''.join(barras_periodo)}</div>")
         if radares_periodo:
             characterization_parts.append("<h3>Radares por escenario</h3>")
-            characterization_parts.append(f"<div class='chart-grid'>{''.join(radares_periodo)}</div>")
+            characterization_parts.append(f"<div class='chart-grid two-col'>{''.join(radares_periodo)}</div>")
         if grafos_periodo:
             if graph_discussion_periodo:
                 characterization_parts.append(
@@ -2396,7 +2396,7 @@ def render_llm_analysis(
                     "</div>"
                 )
             characterization_parts.append("<h3>Grafos interactivos por escenario</h3>")
-            characterization_parts.append(f"<div class='chart-grid'>{''.join(grafos_periodo)}</div>")
+            characterization_parts.append(f"<div class='chart-grid two-col'>{''.join(grafos_periodo)}</div>")
 
         critical_parts = []
         critical_sections = []
@@ -2446,11 +2446,11 @@ def render_llm_analysis(
             ))
         if puntos_criticos_uiti:
             barras_criticos.append(_chart_panel(
-                "Gravedad",
+                "UITI",
                 _figure_html(puntos_criticos_uiti.get("fig_barras")),
             ))
             radares_criticos.append(_chart_panel(
-                "Radar - Gravedad",
+                "Radar - UITI",
                 _figure_html(puntos_criticos_uiti.get("fig_radar")),
             ))
         grafos_criticos = []
@@ -2461,7 +2461,7 @@ def render_llm_analysis(
             ))
         if puntos_criticos_uiti:
             grafos_criticos.append(_graph_panel(
-                "Grafo estimado - Gravedad",
+                "Grafo estimado - UITI",
                 puntos_criticos_uiti.get("grafo_interactivo"),
             ))
         if barras_criticos or radares_criticos or grafos_criticos:
@@ -2471,7 +2471,7 @@ def render_llm_analysis(
             critical_parts.append(f"<div class='chart-grid two-col'>{''.join(barras_criticos)}</div>")
         if radares_criticos:
             critical_parts.append("<h3>Radares por escenario</h3>")
-            critical_parts.append(f"<div class='chart-grid'>{''.join(radares_criticos)}</div>")
+            critical_parts.append(f"<div class='chart-grid two-col'>{''.join(radares_criticos)}</div>")
         if grafos_criticos:
             if graph_discussion_criticos:
                 critical_parts.append(
@@ -2482,7 +2482,7 @@ def render_llm_analysis(
                     "</div>"
                 )
             critical_parts.append("<h3>Grafos interactivos por escenario</h3>")
-            critical_parts.append(f"<div class='chart-grid'>{''.join(grafos_criticos)}</div>")
+            critical_parts.append(f"<div class='chart-grid two-col'>{''.join(grafos_criticos)}</div>")
         return "\n".join(characterization_parts), "\n".join(critical_parts)
 
     period_str = f"{start_date or 'Inicio'} a {end_date or 'Fin'}"
@@ -2523,7 +2523,7 @@ def render_llm_analysis(
         map_panels.append(_chart_panel("Mapa espacial GEO - Número de eventos", _iframe_srcdoc(html_map_events)))
     if html_map_uiti:
         map_panels.append(_chart_panel("Mapa espacial GEO - UITI_VANO", _iframe_srcdoc(html_map_uiti)))
-    html_maps_section = f"<div class='chart-grid'>{''.join(map_panels)}</div>" if map_panels else ""
+    html_maps_section = f"<div class='chart-grid two-col'>{''.join(map_panels)}</div>" if map_panels else ""
 
     html_inference_characterization, html_inference_critical = _render_inference_layout(inference_results, inference_analysis)
     characterization_visuals_html = f"{html_maps_section}{html_inference_characterization}"
