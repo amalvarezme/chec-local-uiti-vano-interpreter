@@ -259,6 +259,11 @@ source, per `.claude/agents/rules/invariants.md` Rule 6:
 - `data_ref` entries resolve against the citable universe advertised in the envelope's `allowed`
   block: an ISO date, a `cp-YYYY-MM-DD` critical-point id, or a domain variable name — anything
   else, or a reference outside that universe, fails validation.
+- **Never invent a date-range id** (e.g. `"period-2026-01-04-2026-01-06"`) to cite a period-level
+  finding — that format does not exist in the citable universe and always fails validation. When a
+  `key_finding` spans several dates, cite the single most representative date (or `cp-YYYY-MM-DD`
+  id) from `allowed.dates`/`allowed.critical_point_ids` instead — for example, prefer
+  `"data_ref": ["2026-01-04"]` over a synthesized range covering `2026-01-04` through `2026-01-06`.
 - `agent` must always be the literal string `"historical"`.
 - `rule` must be one of the seven playbook ids ported into this Skill (`ported_from` above,
   stripped of their `NN_` prefix and `.md` suffix, in the same order
