@@ -31,9 +31,6 @@ openmeteo-requests
 requests-cache
 retry-requests
 
-# === LLM / AI ===
-openai
-
 # === Validation & config ===
 python-dotenv
 pydantic
@@ -60,4 +57,8 @@ folium
 mapclassify
 
 # === Knowledge Graph Skill ===
-graphifyy
+# `graphify` (src/chec_local_interpreter/graph_extractor.py:build_graphify_context) shells out to
+# an external `graphify` CLI binary (a Claude Code skill's own bundled tool, not a PyPI package)
+# via subprocess.run(["graphify", ...]). It is optional at runtime: the function degrades
+# gracefully to a native PyVis fallback graph when the binary is absent or fails, so it is
+# intentionally not pip-installed here.

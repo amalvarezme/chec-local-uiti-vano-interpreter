@@ -28,14 +28,33 @@
     <bpmn:lane id="lane3" name="Local interpretation — LLM agents">
       <bpmn:flowNodeRef>t_crit</bpmn:flowNodeRef>
       <bpmn:flowNodeRef>t_ctx</bpmn:flowNodeRef>
-      <bpmn:flowNodeRef>t_agents</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>t_checkpoint</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>gw_check</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>end_invalid</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>t_prepare</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>gw_fork</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>t_historical</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>t_inference</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>t_autosim</bpmn:flowNodeRef>
       <bpmn:flowNodeRef>gw1</bpmn:flowNodeRef>
       <bpmn:flowNodeRef>t_retry</bpmn:flowNodeRef>
-      <bpmn:flowNodeRef>end_stop</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>end_stop1</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>gw_autosim</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>t_retry_auto</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>t_skip_auto</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>gw_autosim_merge</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>gw_join</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>t_expert_prep</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>t_expert_agent</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>gw2</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>t_retry2</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>end_stop2</bpmn:flowNodeRef>
       <bpmn:flowNodeRef>t_render</bpmn:flowNodeRef>
-      <bpmn:flowNodeRef>t_sim</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>end_report</bpmn:flowNodeRef>
+      <bpmn:flowNodeRef>t_whatif</bpmn:flowNodeRef>
     </bpmn:lane>
     <bpmn:lane id="lane4" name="Publication">
+      <bpmn:flowNodeRef>t_publish</bpmn:flowNodeRef>
       <bpmn:flowNodeRef>t_export</bpmn:flowNodeRef>
       <bpmn:flowNodeRef>t_ci</bpmn:flowNodeRef>
       <bpmn:flowNodeRef>end</bpmn:flowNodeRef>
@@ -51,19 +70,19 @@
       <bpmn:outgoing>Flow_4</bpmn:outgoing>
       <bpmn:outgoing>Flow_5</bpmn:outgoing>
     </bpmn:parallelGateway>
-    <bpmn:task id="t_pdf" name="Extraer tabla de discusión de PDFs expertos (pdf-discussion-extraction)">
+    <bpmn:task id="t_pdf" name="Extraer tabla de discusion de PDFs expertos (pdf-discussion-extraction, runbook por lotes)">
       <bpmn:incoming>Flow_2</bpmn:incoming>
       <bpmn:outgoing>Flow_16</bpmn:outgoing>
     </bpmn:task>
-    <bpmn:task id="t_climate" name="Enriquecimiento climático (Open-Meteo API)">
+    <bpmn:task id="t_climate" name="Enriquecimiento climatico (Open-Meteo API)">
       <bpmn:incoming>Flow_3</bpmn:incoming>
       <bpmn:outgoing>Flow_6</bpmn:outgoing>
     </bpmn:task>
-    <bpmn:task id="t_graph" name="Construcción de grafo experto (adjacency)">
+    <bpmn:task id="t_graph" name="Construccion de grafo experto (adjacency)">
       <bpmn:incoming>Flow_4</bpmn:incoming>
       <bpmn:outgoing>Flow_8</bpmn:outgoing>
     </bpmn:task>
-    <bpmn:task id="t_optuna" name="Búsqueda de hiperparámetros (Optuna)">
+    <bpmn:task id="t_optuna" name="Busqueda de hiperparametros (Optuna)">
       <bpmn:incoming>Flow_6</bpmn:incoming>
       <bpmn:outgoing>Flow_7</bpmn:outgoing>
     </bpmn:task>
@@ -72,7 +91,8 @@
       <bpmn:incoming>Flow_8</bpmn:incoming>
       <bpmn:outgoing>Flow_9</bpmn:outgoing>
       <bpmn:outgoing>Flow_14</bpmn:outgoing>
-      <bpmn:outgoing>Flow_23</bpmn:outgoing>
+      <bpmn:outgoing>Flow_p1</bpmn:outgoing>
+      <bpmn:outgoing>Flow_wf1</bpmn:outgoing>
     </bpmn:task>
     <bpmn:parallelGateway id="gw_model">
       <bpmn:incoming>Flow_9</bpmn:incoming>
@@ -80,60 +100,141 @@
       <bpmn:outgoing>Flow_11</bpmn:outgoing>
       <bpmn:outgoing>Flow_12</bpmn:outgoing>
     </bpmn:parallelGateway>
-    <bpmn:task id="t_perf" name="Evaluación de desempeño">
+    <bpmn:task id="t_perf" name="Evaluacion de desempeno">
       <bpmn:incoming>Flow_10</bpmn:incoming>
       <bpmn:outgoing>Flow_25</bpmn:outgoing>
     </bpmn:task>
-    <bpmn:task id="t_shap" name="Análisis SHAP por circuito">
+    <bpmn:task id="t_shap" name="Analisis SHAP por circuito">
       <bpmn:incoming>Flow_11</bpmn:incoming>
       <bpmn:outgoing>Flow_17</bpmn:outgoing>
     </bpmn:task>
-    <bpmn:task id="t_docrep" name="Replicación de documento">
+    <bpmn:task id="t_docrep" name="Replicacion de documento">
       <bpmn:incoming>Flow_12</bpmn:incoming>
     </bpmn:task>
-    <bpmn:task id="t_crit" name="Detección de puntos críticos">
+    <bpmn:task id="t_crit" name="Deteccion de puntos criticos">
       <bpmn:incoming>Flow_5</bpmn:incoming>
       <bpmn:outgoing>Flow_13</bpmn:outgoing>
     </bpmn:task>
-    <bpmn:task id="t_ctx" name="Construcción de contexto estructurado">
+    <bpmn:task id="t_ctx" name="Construccion de contexto estructurado">
       <bpmn:incoming>Flow_13</bpmn:incoming>
       <bpmn:incoming>Flow_14</bpmn:incoming>
       <bpmn:outgoing>Flow_15</bpmn:outgoing>
     </bpmn:task>
-    <bpmn:task id="t_agents" name="Agentes LLM (historical / inference / expert-alignment)">
+    <bpmn:userTask id="t_checkpoint" name="Checkpoint unico: confirmar circuito + ventana de fechas">
       <bpmn:incoming>Flow_15</bpmn:incoming>
+      <bpmn:outgoing>Flow_ck1</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="gw_check">
+      <bpmn:incoming>Flow_ck1</bpmn:incoming>
+      <bpmn:outgoing>Flow_ck2</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ck3</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="end_invalid" name="Alertar y detener (sin run_dir)">
+      <bpmn:incoming>Flow_ck2</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:task id="t_prepare" name="prepare(): puntos criticos + contexto + simulador MGCECDL/SHAP + simulador automatico minimo/maximo">
+      <bpmn:incoming>Flow_ck3</bpmn:incoming>
+      <bpmn:incoming>Flow_p1</bpmn:incoming>
+      <bpmn:outgoing>Flow_p2</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:parallelGateway id="gw_fork">
+      <bpmn:incoming>Flow_p2</bpmn:incoming>
+      <bpmn:outgoing>Flow_f1</bpmn:outgoing>
+      <bpmn:outgoing>Flow_f2</bpmn:outgoing>
+      <bpmn:outgoing>Flow_f3</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:task id="t_historical" name="Agente historical (paralelo)">
+      <bpmn:incoming>Flow_f1</bpmn:incoming>
+      <bpmn:outgoing>Flow_g1a</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="t_inference" name="Agente inference (paralelo)">
+      <bpmn:incoming>Flow_f2</bpmn:incoming>
+      <bpmn:outgoing>Flow_g1b</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="t_autosim" name="Agente auto-simulator (paralelo, degrade-on-fail)">
+      <bpmn:incoming>Flow_f3</bpmn:incoming>
+      <bpmn:outgoing>Flow_a1</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="gw1" name="Schema + provenance validos? (historical + inference)">
+      <bpmn:incoming>Flow_g1a</bpmn:incoming>
+      <bpmn:incoming>Flow_g1b</bpmn:incoming>
+      <bpmn:incoming>Flow_r2</bpmn:incoming>
+      <bpmn:outgoing>Flow_r1</bpmn:outgoing>
+      <bpmn:outgoing>Flow_s1</bpmn:outgoing>
+      <bpmn:outgoing>Flow_j1</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="t_retry" name="Revisar respuesta (max. 2 reintentos)">
+      <bpmn:incoming>Flow_r1</bpmn:incoming>
+      <bpmn:outgoing>Flow_r2</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="end_stop1" name="Detener ejecucion del circuito">
+      <bpmn:incoming>Flow_s1</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:exclusiveGateway id="gw_autosim" name="validate() ok? (auto-simulator)">
+      <bpmn:incoming>Flow_a1</bpmn:incoming>
+      <bpmn:incoming>Flow_ar2</bpmn:incoming>
+      <bpmn:outgoing>Flow_ar1</bpmn:outgoing>
+      <bpmn:outgoing>Flow_as1</bpmn:outgoing>
+      <bpmn:outgoing>Flow_aj1</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="t_retry_auto" name="Revisar respuesta auto-simulator (max. 2 reintentos)">
+      <bpmn:incoming>Flow_ar1</bpmn:incoming>
+      <bpmn:outgoing>Flow_ar2</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="t_skip_auto" name="Omitir auto-simulator (degradacion, no detiene la ejecucion)">
+      <bpmn:incoming>Flow_as1</bpmn:incoming>
+      <bpmn:outgoing>Flow_aj2</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="gw_autosim_merge">
+      <bpmn:incoming>Flow_aj1</bpmn:incoming>
+      <bpmn:incoming>Flow_aj2</bpmn:incoming>
+      <bpmn:outgoing>Flow_aj3</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:parallelGateway id="gw_join">
+      <bpmn:incoming>Flow_j1</bpmn:incoming>
+      <bpmn:incoming>Flow_aj3</bpmn:incoming>
+      <bpmn:outgoing>Flow_j2</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:task id="t_expert_prep" name="prepare_expert_alignment()">
       <bpmn:incoming>Flow_16</bpmn:incoming>
       <bpmn:incoming>Flow_17</bpmn:incoming>
-      <bpmn:incoming>Flow_20</bpmn:incoming>
-      <bpmn:outgoing>Flow_18</bpmn:outgoing>
+      <bpmn:incoming>Flow_j2</bpmn:incoming>
+      <bpmn:outgoing>Flow_e1</bpmn:outgoing>
     </bpmn:task>
-    <bpmn:exclusiveGateway id="gw1">
-      <bpmn:incoming>Flow_18</bpmn:incoming>
-      <bpmn:outgoing>Flow_19</bpmn:outgoing>
-      <bpmn:outgoing>Flow_21</bpmn:outgoing>
-      <bpmn:outgoing>Flow_22</bpmn:outgoing>
+    <bpmn:task id="t_expert_agent" name="Agente expert-alignment">
+      <bpmn:incoming>Flow_e1</bpmn:incoming>
+      <bpmn:outgoing>Flow_e2</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="gw2" name="Schema + provenance validos?">
+      <bpmn:incoming>Flow_e2</bpmn:incoming>
+      <bpmn:incoming>Flow_er2</bpmn:incoming>
+      <bpmn:outgoing>Flow_er1</bpmn:outgoing>
+      <bpmn:outgoing>Flow_es1</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ev1</bpmn:outgoing>
     </bpmn:exclusiveGateway>
-    <bpmn:task id="t_retry" name="Revisar respuesta (máx. 2 reintentos)">
-      <bpmn:incoming>Flow_19</bpmn:incoming>
-      <bpmn:outgoing>Flow_20</bpmn:outgoing>
+    <bpmn:task id="t_retry2" name="Revisar respuesta (max. 2 reintentos)">
+      <bpmn:incoming>Flow_er1</bpmn:incoming>
+      <bpmn:outgoing>Flow_er2</bpmn:outgoing>
     </bpmn:task>
-    <bpmn:endEvent id="end_stop" name="Detener ejecución del circuito">
-      <bpmn:incoming>Flow_21</bpmn:incoming>
+    <bpmn:endEvent id="end_stop2" name="Detener ejecucion del circuito">
+      <bpmn:incoming>Flow_es1</bpmn:incoming>
     </bpmn:endEvent>
-    <bpmn:task id="t_render" name="Renderizar reporte HTML (plotting.py)">
-      <bpmn:incoming>Flow_22</bpmn:incoming>
-      <bpmn:outgoing>Flow_24</bpmn:outgoing>
-      <bpmn:outgoing>Flow_26</bpmn:outgoing>
+    <bpmn:task id="t_render" name="render(): fusiona historical + inference + auto-simulator (si disponible) + expert-alignment en un unico HTML">
+      <bpmn:incoming>Flow_ev1</bpmn:incoming>
+      <bpmn:outgoing>Flow_rr1</bpmn:outgoing>
     </bpmn:task>
-    <bpmn:task id="t_sim" name="Simulación min/máx + what-if">
-      <bpmn:incoming>Flow_23</bpmn:incoming>
-      <bpmn:incoming>Flow_24</bpmn:incoming>
-      <bpmn:outgoing>Flow_27</bpmn:outgoing>
+    <bpmn:endEvent id="end_report" name="Reporte HTML generado (run_dir, local)">
+      <bpmn:incoming>Flow_rr1</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:task id="t_whatif" name="Simulador what-if interactivo (core/04_simulador.ipynb, sin LLM)">
+      <bpmn:incoming>Flow_wf1</bpmn:incoming>
     </bpmn:task>
-    <bpmn:task id="t_export" name="Exportación web (web_export.py)">
+    <bpmn:task id="t_publish" name="Publicacion manual del reporte (web_export.export_latest_interpretability_report) - accion deliberada, no automatica">
+      <bpmn:outgoing>Flow_pub2</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="t_export" name="Exportacion web (web_export.py)">
+      <bpmn:incoming>Flow_pub2</bpmn:incoming>
       <bpmn:incoming>Flow_25</bpmn:incoming>
-      <bpmn:incoming>Flow_26</bpmn:incoming>
-      <bpmn:incoming>Flow_27</bpmn:incoming>
       <bpmn:outgoing>Flow_28</bpmn:outgoing>
     </bpmn:task>
     <bpmn:task id="t_ci" name="GitHub Actions (deploy-pages.yml)">
@@ -157,38 +258,61 @@
     <bpmn:sequenceFlow id="Flow_12" sourceRef="gw_model" targetRef="t_docrep" />
     <bpmn:sequenceFlow id="Flow_13" sourceRef="t_crit" targetRef="t_ctx" />
     <bpmn:sequenceFlow id="Flow_14" sourceRef="t_train" targetRef="t_ctx" />
-    <bpmn:sequenceFlow id="Flow_15" sourceRef="t_ctx" targetRef="t_agents" />
-    <bpmn:sequenceFlow id="Flow_16" sourceRef="t_pdf" targetRef="t_agents" />
-    <bpmn:sequenceFlow id="Flow_17" sourceRef="t_shap" targetRef="t_agents" />
-    <bpmn:sequenceFlow id="Flow_18" sourceRef="t_agents" targetRef="gw1" />
-    <bpmn:sequenceFlow id="Flow_19" name="no, con reintentos" sourceRef="gw1" targetRef="t_retry" />
-    <bpmn:sequenceFlow id="Flow_20" sourceRef="t_retry" targetRef="t_agents" />
-    <bpmn:sequenceFlow id="Flow_21" name="no, reintentos agotados" sourceRef="gw1" targetRef="end_stop" />
-    <bpmn:sequenceFlow id="Flow_22" name="sí, válido" sourceRef="gw1" targetRef="t_render" />
-    <bpmn:sequenceFlow id="Flow_23" sourceRef="t_train" targetRef="t_sim" />
-    <bpmn:sequenceFlow id="Flow_24" sourceRef="t_render" targetRef="t_sim" />
+    <bpmn:sequenceFlow id="Flow_15" sourceRef="t_ctx" targetRef="t_checkpoint" />
+    <bpmn:sequenceFlow id="Flow_16" sourceRef="t_pdf" targetRef="t_expert_prep" />
+    <bpmn:sequenceFlow id="Flow_17" sourceRef="t_shap" targetRef="t_expert_prep" />
+    <bpmn:sequenceFlow id="Flow_ck1" sourceRef="t_checkpoint" targetRef="gw_check" />
+    <bpmn:sequenceFlow id="Flow_ck2" name="circuito no encontrado / cero eventos" sourceRef="gw_check" targetRef="end_invalid" />
+    <bpmn:sequenceFlow id="Flow_ck3" name="confirmado (checkpoint unico)" sourceRef="gw_check" targetRef="t_prepare" />
+    <bpmn:sequenceFlow id="Flow_p1" sourceRef="t_train" targetRef="t_prepare" />
+    <bpmn:sequenceFlow id="Flow_p2" sourceRef="t_prepare" targetRef="gw_fork" />
+    <bpmn:sequenceFlow id="Flow_f1" sourceRef="gw_fork" targetRef="t_historical" />
+    <bpmn:sequenceFlow id="Flow_f2" sourceRef="gw_fork" targetRef="t_inference" />
+    <bpmn:sequenceFlow id="Flow_f3" sourceRef="gw_fork" targetRef="t_autosim" />
+    <bpmn:sequenceFlow id="Flow_g1a" sourceRef="t_historical" targetRef="gw1" />
+    <bpmn:sequenceFlow id="Flow_g1b" sourceRef="t_inference" targetRef="gw1" />
+    <bpmn:sequenceFlow id="Flow_r1" name="no, con reintentos" sourceRef="gw1" targetRef="t_retry" />
+    <bpmn:sequenceFlow id="Flow_r2" sourceRef="t_retry" targetRef="gw1" />
+    <bpmn:sequenceFlow id="Flow_s1" name="no, reintentos agotados" sourceRef="gw1" targetRef="end_stop1" />
+    <bpmn:sequenceFlow id="Flow_j1" name="si, valido" sourceRef="gw1" targetRef="gw_join" />
+    <bpmn:sequenceFlow id="Flow_a1" sourceRef="t_autosim" targetRef="gw_autosim" />
+    <bpmn:sequenceFlow id="Flow_ar1" name="no, con reintentos" sourceRef="gw_autosim" targetRef="t_retry_auto" />
+    <bpmn:sequenceFlow id="Flow_ar2" sourceRef="t_retry_auto" targetRef="gw_autosim" />
+    <bpmn:sequenceFlow id="Flow_as1" name="no, reintentos agotados" sourceRef="gw_autosim" targetRef="t_skip_auto" />
+    <bpmn:sequenceFlow id="Flow_aj1" name="si, valido" sourceRef="gw_autosim" targetRef="gw_autosim_merge" />
+    <bpmn:sequenceFlow id="Flow_aj2" sourceRef="t_skip_auto" targetRef="gw_autosim_merge" />
+    <bpmn:sequenceFlow id="Flow_aj3" sourceRef="gw_autosim_merge" targetRef="gw_join" />
+    <bpmn:sequenceFlow id="Flow_j2" sourceRef="gw_join" targetRef="t_expert_prep" />
+    <bpmn:sequenceFlow id="Flow_e1" sourceRef="t_expert_prep" targetRef="t_expert_agent" />
+    <bpmn:sequenceFlow id="Flow_e2" sourceRef="t_expert_agent" targetRef="gw2" />
+    <bpmn:sequenceFlow id="Flow_er1" name="no, con reintentos" sourceRef="gw2" targetRef="t_retry2" />
+    <bpmn:sequenceFlow id="Flow_er2" sourceRef="t_retry2" targetRef="gw2" />
+    <bpmn:sequenceFlow id="Flow_es1" name="no, reintentos agotados" sourceRef="gw2" targetRef="end_stop2" />
+    <bpmn:sequenceFlow id="Flow_ev1" name="si, valido" sourceRef="gw2" targetRef="t_render" />
+    <bpmn:sequenceFlow id="Flow_rr1" sourceRef="t_render" targetRef="end_report" />
+    <bpmn:sequenceFlow id="Flow_wf1" sourceRef="t_train" targetRef="t_whatif" />
+    <bpmn:association id="Flow_pub1" sourceRef="end_report" targetRef="t_publish" />
+    <bpmn:sequenceFlow id="Flow_pub2" sourceRef="t_publish" targetRef="t_export" />
     <bpmn:sequenceFlow id="Flow_25" sourceRef="t_perf" targetRef="t_export" />
-    <bpmn:sequenceFlow id="Flow_26" sourceRef="t_render" targetRef="t_export" />
-    <bpmn:sequenceFlow id="Flow_27" sourceRef="t_sim" targetRef="t_export" />
     <bpmn:sequenceFlow id="Flow_28" sourceRef="t_export" targetRef="t_ci" />
     <bpmn:sequenceFlow id="Flow_29" sourceRef="t_ci" targetRef="end" />
   </bpmn:process>
   <bpmndi:BPMNDiagram id="Diagram_1">
     <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Collaboration_1">
       <bpmndi:BPMNShape id="Participant_chec_di" bpmnElement="Participant_chec" isHorizontal="true">
-        <dc:Bounds x="0" y="20.0" width="2100" height="1060.0" />
+        <dc:Bounds x="0" y="20.0" width="4116.0" height="1310.0" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="lane1_di" bpmnElement="lane1" isHorizontal="true">
-        <dc:Bounds x="40" y="50.0" width="2060" height="220.0" />
+        <dc:Bounds x="40.0" y="50.0" width="4036.0" height="220.0" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="lane2_di" bpmnElement="lane2" isHorizontal="true">
-        <dc:Bounds x="40" y="270.0" width="2060" height="260.0" />
+        <dc:Bounds x="40.0" y="270.0" width="4036.0" height="260.0" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="lane3_di" bpmnElement="lane3" isHorizontal="true">
-        <dc:Bounds x="40" y="530.0" width="2060" height="320.0" />
+        <dc:Bounds x="40.0" y="530.0" width="4036.0" height="500.0" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="lane4_di" bpmnElement="lane4" isHorizontal="true">
-        <dc:Bounds x="40" y="850.0" width="2060" height="220.0" />
+        <dc:Bounds x="40.0" y="1030.0" width="4036.0" height="240.0" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="start_di" bpmnElement="start">
         <dc:Bounds x="252.0" y="142.0" width="36.0" height="36.0" />
@@ -197,7 +321,7 @@
         <dc:Bounds x="398.0" y="138.0" width="44.0" height="44.0" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="t_pdf_di" bpmnElement="t_pdf">
-        <dc:Bounds x="470.0" y="128.0" width="160.0" height="64.0" />
+        <dc:Bounds x="470.0" y="128.0" width="180" height="76" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="t_climate_di" bpmnElement="t_climate">
         <dc:Bounds x="690.0" y="128.0" width="160.0" height="64.0" />
@@ -229,32 +353,89 @@
       <bpmndi:BPMNShape id="t_ctx_di" bpmnElement="t_ctx">
         <dc:Bounds x="690.0" y="658.0" width="160.0" height="64.0" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="t_agents_di" bpmnElement="t_agents">
-        <dc:Bounds x="930.0" y="658.0" width="160.0" height="64.0" />
+      <bpmndi:BPMNShape id="t_checkpoint_di" bpmnElement="t_checkpoint">
+        <dc:Bounds x="930.0" y="658.0" width="180" height="76" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="gw1_di" bpmnElement="gw1">
+      <bpmndi:BPMNShape id="gw_check_di" bpmnElement="gw_check">
         <dc:Bounds x="1168.0" y="668.0" width="44.0" height="44.0" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="t_retry_di" bpmnElement="t_retry">
-        <dc:Bounds x="930.0" y="508.0" width="160.0" height="64.0" />
+      <bpmndi:BPMNShape id="end_invalid_di" bpmnElement="end_invalid">
+        <dc:Bounds x="1150.0" y="828.0" width="36.0" height="36.0" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="end_stop_di" bpmnElement="end_stop">
-        <dc:Bounds x="1172.0" y="822.0" width="36.0" height="36.0" />
+      <bpmndi:BPMNShape id="t_prepare_di" bpmnElement="t_prepare">
+        <dc:Bounds x="1280.0" y="658.0" width="200" height="96" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_fork_di" bpmnElement="gw_fork">
+        <dc:Bounds x="1520.0" y="668.0" width="44.0" height="44.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_historical_di" bpmnElement="t_historical">
+        <dc:Bounds x="1660.0" y="538.0" width="160.0" height="64.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_inference_di" bpmnElement="t_inference">
+        <dc:Bounds x="1660.0" y="658.0" width="160.0" height="64.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_autosim_di" bpmnElement="t_autosim">
+        <dc:Bounds x="1660.0" y="818.0" width="170" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw1_di" bpmnElement="gw1">
+        <dc:Bounds x="1900.0" y="668.0" width="44.0" height="44.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_retry_di" bpmnElement="t_retry">
+        <dc:Bounds x="1900.0" y="488.0" width="160.0" height="64.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_stop1_di" bpmnElement="end_stop1">
+        <dc:Bounds x="1912.0" y="358.0" width="36.0" height="36.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_autosim_di" bpmnElement="gw_autosim">
+        <dc:Bounds x="1900.0" y="828.0" width="44.0" height="44.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_retry_auto_di" bpmnElement="t_retry_auto">
+        <dc:Bounds x="1900.0" y="948.0" width="160.0" height="64.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_skip_auto_di" bpmnElement="t_skip_auto">
+        <dc:Bounds x="2140.0" y="948.0" width="160.0" height="64.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_autosim_merge_di" bpmnElement="gw_autosim_merge">
+        <dc:Bounds x="2320.0" y="828.0" width="44.0" height="44.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_join_di" bpmnElement="gw_join">
+        <dc:Bounds x="2380.0" y="668.0" width="44.0" height="44.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_expert_prep_di" bpmnElement="t_expert_prep">
+        <dc:Bounds x="2470.0" y="658.0" width="160.0" height="64.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_expert_agent_di" bpmnElement="t_expert_agent">
+        <dc:Bounds x="2690.0" y="658.0" width="160.0" height="64.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw2_di" bpmnElement="gw2">
+        <dc:Bounds x="2930.0" y="668.0" width="44.0" height="44.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_retry2_di" bpmnElement="t_retry2">
+        <dc:Bounds x="2930.0" y="488.0" width="160.0" height="64.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_stop2_di" bpmnElement="end_stop2">
+        <dc:Bounds x="2942.0" y="358.0" width="36.0" height="36.0" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="t_render_di" bpmnElement="t_render">
-        <dc:Bounds x="1260.0" y="658.0" width="160.0" height="64.0" />
+        <dc:Bounds x="3060.0" y="658.0" width="200" height="96" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="t_sim_di" bpmnElement="t_sim">
-        <dc:Bounds x="1460.0" y="658.0" width="160.0" height="64.0" />
+      <bpmndi:BPMNShape id="end_report_di" bpmnElement="end_report">
+        <dc:Bounds x="3300.0" y="668.0" width="36.0" height="36.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_whatif_di" bpmnElement="t_whatif">
+        <dc:Bounds x="1280.0" y="808.0" width="160.0" height="64.0" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_publish_di" bpmnElement="t_publish">
+        <dc:Bounds x="3300.0" y="1098.0" width="200" height="96" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="t_export_di" bpmnElement="t_export">
-        <dc:Bounds x="1460.0" y="928.0" width="160.0" height="64.0" />
+        <dc:Bounds x="3540.0" y="1098.0" width="160.0" height="64.0" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="t_ci_di" bpmnElement="t_ci">
-        <dc:Bounds x="1670.0" y="928.0" width="160.0" height="64.0" />
+        <dc:Bounds x="3780.0" y="1098.0" width="160.0" height="64.0" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="end_di" bpmnElement="end">
-        <dc:Bounds x="1912.0" y="942.0" width="36.0" height="36.0" />
+        <dc:Bounds x="4020.0" y="1112.0" width="36.0" height="36.0" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1">
         <di:waypoint x="288.0" y="160.0" />
@@ -262,7 +443,9 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_2_di" bpmnElement="Flow_2">
         <di:waypoint x="442.0" y="160.0" />
-        <di:waypoint x="470.0" y="160.0" />
+        <di:waypoint x="456.0" y="160.0" />
+        <di:waypoint x="456.0" y="166.0" />
+        <di:waypoint x="470.0" y="166.0" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_3_di" bpmnElement="Flow_3">
         <di:waypoint x="442.0" y="160.0" />
@@ -270,32 +453,32 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_4_di" bpmnElement="Flow_4">
         <di:waypoint x="442.0" y="160.0" />
-        <di:waypoint x="457.4" y="160.0" />
-        <di:waypoint x="457.4" y="320.0" />
+        <di:waypoint x="456.0" y="160.0" />
+        <di:waypoint x="456.0" y="320.0" />
         <di:waypoint x="470.0" y="320.0" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_5_di" bpmnElement="Flow_5">
         <di:waypoint x="442.0" y="160.0" />
-        <di:waypoint x="457.4" y="160.0" />
-        <di:waypoint x="457.4" y="690.0" />
+        <di:waypoint x="456.0" y="160.0" />
+        <di:waypoint x="456.0" y="690.0" />
         <di:waypoint x="470.0" y="690.0" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_6_di" bpmnElement="Flow_6">
         <di:waypoint x="850.0" y="160.0" />
-        <di:waypoint x="762.0" y="160.0" />
-        <di:waypoint x="762.0" y="480.0" />
+        <di:waypoint x="770.0" y="160.0" />
+        <di:waypoint x="770.0" y="480.0" />
         <di:waypoint x="690.0" y="480.0" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_7_di" bpmnElement="Flow_7">
         <di:waypoint x="850.0" y="480.0" />
-        <di:waypoint x="894.0" y="480.0" />
-        <di:waypoint x="894.0" y="400.0" />
+        <di:waypoint x="890.0" y="480.0" />
+        <di:waypoint x="890.0" y="400.0" />
         <di:waypoint x="930.0" y="400.0" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_8_di" bpmnElement="Flow_8">
         <di:waypoint x="630.0" y="320.0" />
-        <di:waypoint x="795.0" y="320.0" />
-        <di:waypoint x="795.0" y="400.0" />
+        <di:waypoint x="780.0" y="320.0" />
+        <di:waypoint x="780.0" y="400.0" />
         <di:waypoint x="930.0" y="400.0" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_9_di" bpmnElement="Flow_9">
@@ -304,8 +487,8 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_10_di" bpmnElement="Flow_10">
         <di:waypoint x="1212.0" y="400.0" />
-        <di:waypoint x="1238.4" y="400.0" />
-        <di:waypoint x="1238.4" y="320.0" />
+        <di:waypoint x="1236.0" y="400.0" />
+        <di:waypoint x="1236.0" y="320.0" />
         <di:waypoint x="1260.0" y="320.0" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_11_di" bpmnElement="Flow_11">
@@ -314,8 +497,8 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_12_di" bpmnElement="Flow_12">
         <di:waypoint x="1212.0" y="400.0" />
-        <di:waypoint x="1238.4" y="400.0" />
-        <di:waypoint x="1238.4" y="480.0" />
+        <di:waypoint x="1236.0" y="400.0" />
+        <di:waypoint x="1236.0" y="480.0" />
         <di:waypoint x="1260.0" y="480.0" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_13_di" bpmnElement="Flow_13">
@@ -323,88 +506,220 @@
         <di:waypoint x="690.0" y="690.0" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_14_di" bpmnElement="Flow_14">
-        <di:waypoint x="930.0" y="400.0" />
-        <di:waypoint x="886.0" y="400.0" />
-        <di:waypoint x="886.0" y="690.0" />
-        <di:waypoint x="850.0" y="690.0" />
+        <di:waypoint x="1090.0" y="400.0" />
+        <di:waypoint x="890.0" y="400.0" />
+        <di:waypoint x="890.0" y="690.0" />
+        <di:waypoint x="690.0" y="690.0" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_15_di" bpmnElement="Flow_15">
         <di:waypoint x="850.0" y="690.0" />
-        <di:waypoint x="930.0" y="690.0" />
+        <di:waypoint x="890.0" y="690.0" />
+        <di:waypoint x="890.0" y="696.0" />
+        <di:waypoint x="930.0" y="696.0" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_16_di" bpmnElement="Flow_16">
-        <di:waypoint x="630.0" y="160.0" />
-        <di:waypoint x="795.0" y="160.0" />
-        <di:waypoint x="795.0" y="690.0" />
-        <di:waypoint x="930.0" y="690.0" />
+        <di:waypoint x="650.0" y="166.0" />
+        <di:waypoint x="1560.0" y="166.0" />
+        <di:waypoint x="1560.0" y="690.0" />
+        <di:waypoint x="2470.0" y="690.0" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_17_di" bpmnElement="Flow_17">
-        <di:waypoint x="1260.0" y="400.0" />
-        <di:waypoint x="1166.5" y="400.0" />
-        <di:waypoint x="1166.5" y="690.0" />
-        <di:waypoint x="1090.0" y="690.0" />
+        <di:waypoint x="1420.0" y="400.0" />
+        <di:waypoint x="1945.0" y="400.0" />
+        <di:waypoint x="1945.0" y="690.0" />
+        <di:waypoint x="2470.0" y="690.0" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_18_di" bpmnElement="Flow_18">
-        <di:waypoint x="1090.0" y="690.0" />
+      <bpmndi:BPMNEdge id="Flow_ck1_di" bpmnElement="Flow_ck1">
+        <di:waypoint x="1110.0" y="696.0" />
+        <di:waypoint x="1139.0" y="696.0" />
+        <di:waypoint x="1139.0" y="690.0" />
         <di:waypoint x="1168.0" y="690.0" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_19_di" bpmnElement="Flow_19">
-        <di:waypoint x="1168.0" y="690.0" />
-        <di:waypoint x="1125.1" y="690.0" />
-        <di:waypoint x="1125.1" y="540.0" />
-        <di:waypoint x="1090.0" y="540.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_20_di" bpmnElement="Flow_20">
-        <di:waypoint x="1090.0" y="540.0" />
-        <di:waypoint x="1002.0" y="540.0" />
-        <di:waypoint x="1002.0" y="690.0" />
-        <di:waypoint x="930.0" y="690.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_21_di" bpmnElement="Flow_21">
+      <bpmndi:BPMNEdge id="Flow_ck2_di" bpmnElement="Flow_ck2">
         <di:waypoint x="1212.0" y="690.0" />
-        <di:waypoint x="1190.0" y="690.0" />
-        <di:waypoint x="1190.0" y="840.0" />
-        <di:waypoint x="1172.0" y="840.0" />
+        <di:waypoint x="1181.0" y="690.0" />
+        <di:waypoint x="1181.0" y="846.0" />
+        <di:waypoint x="1150.0" y="846.0" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_22_di" bpmnElement="Flow_22">
+      <bpmndi:BPMNEdge id="Flow_ck3_di" bpmnElement="Flow_ck3">
         <di:waypoint x="1212.0" y="690.0" />
-        <di:waypoint x="1260.0" y="690.0" />
+        <di:waypoint x="1246.0" y="690.0" />
+        <di:waypoint x="1246.0" y="706.0" />
+        <di:waypoint x="1280.0" y="706.0" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_23_di" bpmnElement="Flow_23">
+      <bpmndi:BPMNEdge id="Flow_p1_di" bpmnElement="Flow_p1">
         <di:waypoint x="1090.0" y="400.0" />
-        <di:waypoint x="1293.5" y="400.0" />
-        <di:waypoint x="1293.5" y="690.0" />
-        <di:waypoint x="1460.0" y="690.0" />
+        <di:waypoint x="1185.0" y="400.0" />
+        <di:waypoint x="1185.0" y="706.0" />
+        <di:waypoint x="1280.0" y="706.0" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_24_di" bpmnElement="Flow_24">
-        <di:waypoint x="1420.0" y="690.0" />
-        <di:waypoint x="1460.0" y="690.0" />
+      <bpmndi:BPMNEdge id="Flow_p2_di" bpmnElement="Flow_p2">
+        <di:waypoint x="1480.0" y="706.0" />
+        <di:waypoint x="1500.0" y="706.0" />
+        <di:waypoint x="1500.0" y="690.0" />
+        <di:waypoint x="1520.0" y="690.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_f1_di" bpmnElement="Flow_f1">
+        <di:waypoint x="1564.0" y="690.0" />
+        <di:waypoint x="1612.0" y="690.0" />
+        <di:waypoint x="1612.0" y="570.0" />
+        <di:waypoint x="1660.0" y="570.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_f2_di" bpmnElement="Flow_f2">
+        <di:waypoint x="1564.0" y="690.0" />
+        <di:waypoint x="1660.0" y="690.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_f3_di" bpmnElement="Flow_f3">
+        <di:waypoint x="1564.0" y="690.0" />
+        <di:waypoint x="1612.0" y="690.0" />
+        <di:waypoint x="1612.0" y="856.0" />
+        <di:waypoint x="1660.0" y="856.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_g1a_di" bpmnElement="Flow_g1a">
+        <di:waypoint x="1820.0" y="570.0" />
+        <di:waypoint x="1860.0" y="570.0" />
+        <di:waypoint x="1860.0" y="690.0" />
+        <di:waypoint x="1900.0" y="690.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_g1b_di" bpmnElement="Flow_g1b">
+        <di:waypoint x="1820.0" y="690.0" />
+        <di:waypoint x="1900.0" y="690.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_r1_di" bpmnElement="Flow_r1">
+        <di:waypoint x="1944.0" y="690.0" />
+        <di:waypoint x="1922.0" y="690.0" />
+        <di:waypoint x="1922.0" y="520.0" />
+        <di:waypoint x="1900.0" y="520.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_r2_di" bpmnElement="Flow_r2">
+        <di:waypoint x="2060.0" y="520.0" />
+        <di:waypoint x="1980.0" y="520.0" />
+        <di:waypoint x="1980.0" y="690.0" />
+        <di:waypoint x="1900.0" y="690.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_s1_di" bpmnElement="Flow_s1">
+        <di:waypoint x="1944.0" y="690.0" />
+        <di:waypoint x="1928.0" y="690.0" />
+        <di:waypoint x="1928.0" y="376.0" />
+        <di:waypoint x="1912.0" y="376.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_j1_di" bpmnElement="Flow_j1">
+        <di:waypoint x="1944.0" y="690.0" />
+        <di:waypoint x="2380.0" y="690.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_a1_di" bpmnElement="Flow_a1">
+        <di:waypoint x="1830.0" y="856.0" />
+        <di:waypoint x="1865.0" y="856.0" />
+        <di:waypoint x="1865.0" y="850.0" />
+        <di:waypoint x="1900.0" y="850.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ar1_di" bpmnElement="Flow_ar1">
+        <di:waypoint x="1944.0" y="850.0" />
+        <di:waypoint x="1922.0" y="850.0" />
+        <di:waypoint x="1922.0" y="980.0" />
+        <di:waypoint x="1900.0" y="980.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ar2_di" bpmnElement="Flow_ar2">
+        <di:waypoint x="2060.0" y="980.0" />
+        <di:waypoint x="1980.0" y="980.0" />
+        <di:waypoint x="1980.0" y="850.0" />
+        <di:waypoint x="1900.0" y="850.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_as1_di" bpmnElement="Flow_as1">
+        <di:waypoint x="1944.0" y="850.0" />
+        <di:waypoint x="2042.0" y="850.0" />
+        <di:waypoint x="2042.0" y="980.0" />
+        <di:waypoint x="2140.0" y="980.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_aj1_di" bpmnElement="Flow_aj1">
+        <di:waypoint x="1944.0" y="850.0" />
+        <di:waypoint x="2320.0" y="850.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_aj2_di" bpmnElement="Flow_aj2">
+        <di:waypoint x="2300.0" y="980.0" />
+        <di:waypoint x="2310.0" y="980.0" />
+        <di:waypoint x="2310.0" y="850.0" />
+        <di:waypoint x="2320.0" y="850.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_aj3_di" bpmnElement="Flow_aj3">
+        <di:waypoint x="2364.0" y="850.0" />
+        <di:waypoint x="2372.0" y="850.0" />
+        <di:waypoint x="2372.0" y="690.0" />
+        <di:waypoint x="2380.0" y="690.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_j2_di" bpmnElement="Flow_j2">
+        <di:waypoint x="2424.0" y="690.0" />
+        <di:waypoint x="2470.0" y="690.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_e1_di" bpmnElement="Flow_e1">
+        <di:waypoint x="2630.0" y="690.0" />
+        <di:waypoint x="2690.0" y="690.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_e2_di" bpmnElement="Flow_e2">
+        <di:waypoint x="2850.0" y="690.0" />
+        <di:waypoint x="2930.0" y="690.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_er1_di" bpmnElement="Flow_er1">
+        <di:waypoint x="2974.0" y="690.0" />
+        <di:waypoint x="2952.0" y="690.0" />
+        <di:waypoint x="2952.0" y="520.0" />
+        <di:waypoint x="2930.0" y="520.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_er2_di" bpmnElement="Flow_er2">
+        <di:waypoint x="3090.0" y="520.0" />
+        <di:waypoint x="3010.0" y="520.0" />
+        <di:waypoint x="3010.0" y="690.0" />
+        <di:waypoint x="2930.0" y="690.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_es1_di" bpmnElement="Flow_es1">
+        <di:waypoint x="2974.0" y="690.0" />
+        <di:waypoint x="2958.0" y="690.0" />
+        <di:waypoint x="2958.0" y="376.0" />
+        <di:waypoint x="2942.0" y="376.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ev1_di" bpmnElement="Flow_ev1">
+        <di:waypoint x="2974.0" y="690.0" />
+        <di:waypoint x="3017.0" y="690.0" />
+        <di:waypoint x="3017.0" y="706.0" />
+        <di:waypoint x="3060.0" y="706.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_rr1_di" bpmnElement="Flow_rr1">
+        <di:waypoint x="3260.0" y="706.0" />
+        <di:waypoint x="3280.0" y="706.0" />
+        <di:waypoint x="3280.0" y="686.0" />
+        <di:waypoint x="3300.0" y="686.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_wf1_di" bpmnElement="Flow_wf1">
+        <di:waypoint x="1090.0" y="400.0" />
+        <di:waypoint x="1185.0" y="400.0" />
+        <di:waypoint x="1185.0" y="840.0" />
+        <di:waypoint x="1280.0" y="840.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_pub1_di" bpmnElement="Flow_pub1">
+        <di:waypoint x="3336.0" y="686.0" />
+        <di:waypoint x="3318.0" y="686.0" />
+        <di:waypoint x="3318.0" y="1146.0" />
+        <di:waypoint x="3300.0" y="1146.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_pub2_di" bpmnElement="Flow_pub2">
+        <di:waypoint x="3500.0" y="1146.0" />
+        <di:waypoint x="3520.0" y="1146.0" />
+        <di:waypoint x="3520.0" y="1130.0" />
+        <di:waypoint x="3540.0" y="1130.0" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_25_di" bpmnElement="Flow_25">
         <di:waypoint x="1420.0" y="320.0" />
-        <di:waypoint x="1442.0" y="320.0" />
-        <di:waypoint x="1442.0" y="960.0" />
-        <di:waypoint x="1460.0" y="960.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_26_di" bpmnElement="Flow_26">
-        <di:waypoint x="1420.0" y="690.0" />
-        <di:waypoint x="1442.0" y="690.0" />
-        <di:waypoint x="1442.0" y="960.0" />
-        <di:waypoint x="1460.0" y="960.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_27_di" bpmnElement="Flow_27">
-        <di:waypoint x="1620.0" y="690.0" />
-        <di:waypoint x="1532.0" y="690.0" />
-        <di:waypoint x="1532.0" y="960.0" />
-        <di:waypoint x="1460.0" y="960.0" />
+        <di:waypoint x="2480.0" y="320.0" />
+        <di:waypoint x="2480.0" y="1130.0" />
+        <di:waypoint x="3540.0" y="1130.0" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_28_di" bpmnElement="Flow_28">
-        <di:waypoint x="1620.0" y="960.0" />
-        <di:waypoint x="1670.0" y="960.0" />
+        <di:waypoint x="3700.0" y="1130.0" />
+        <di:waypoint x="3780.0" y="1130.0" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_29_di" bpmnElement="Flow_29">
-        <di:waypoint x="1830.0" y="960.0" />
-        <di:waypoint x="1912.0" y="960.0" />
+        <di:waypoint x="3940.0" y="1130.0" />
+        <di:waypoint x="4020.0" y="1130.0" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

@@ -1,6 +1,12 @@
 # Local UITI_VANO Interpreter
 
-Small local repo for notebook-first analysis of `UITI_VANO` in the CHEC wide dataset.
+Agent-native local interpreter for `UITI_VANO` in the CHEC wide dataset. It loads one wide
+structured dataset, filters by circuits and dates, detects relevant points in the daily
+`UITI_VANO` series, builds a structured context package, and has five coding-agent-native LLM
+roles explain the behavior in Spanish and compare it against expert PDF reports — all with
+**zero external LLM API key**: the invoking coding agent (Claude Code or OpenCode) does the
+reasoning itself, never a Python call to Gemini/OpenAI. `/reporte <circuito>` is the primary
+end-to-end entry point. See `AGENTS.md` and `docs/agents-guide.md` for the full architecture.
 
 ## Página del proyecto
 
@@ -11,10 +17,14 @@ https://amalvarezme.github.io/chec-local-uiti-vano-interpreter/
 La versión publicada corresponde a la rama:
 `main`
 
-The workflow covers only steps 1 to 3: select circuits/date window, detect critical
-points from structured data, and build a semantic preliminary diagnosis context. It
-does not use Databricks, Dash, FastAPI, RAG, vector stores, predictive models, masks,
-simulations, or final evidence reports.
+## Scope
+
+Circuit/vano selection, deterministic critical-point detection, and semantic diagnosis
+(`historical`), MGCECDL/SHAP predictive interpretation (`inference`), expert-PDF alignment
+(`expert-alignment`), automatic min/max sensitivity discussion (`auto-simulator`), and
+PDF-discussion-table extraction (`pdf-discussion-extraction`) are all in scope and implemented.
+Does not use Databricks, Dash, FastAPI, RAG, or vector stores. The workflow stays local and
+lightweight.
 
 ## Install
 
@@ -30,8 +40,8 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Place a CSV, Parquet, or Excel dataset under `data/`, or set `DATA_PATH`. The notebook
-default is `data/Indicadores_vano_v3.csv` resolved from the project root.
+Place a CSV, Parquet, or Excel dataset under `data/`, or set `DATA_PATH`. The default is
+`data/Indicadores_vano_v3.csv` resolved from the project root.
 
 Required columns:
 
@@ -43,47 +53,54 @@ Optional columns are used when available and recorded as unavailable when absent
 
 ## Run
 
-```bash
-jupyter notebook notebooks/core/01_local_uiti_vano_interpretability.ipynb
+`/reporte <circuito> [fecha_inicio fecha_fin]` is the primary end-to-end entry point. It is
+**not** a Python CLI you run directly — it is a Claude Code / OpenCode slash-command Skill
+(`.claude/skills/reporte/SKILL.md`), orchestrated by
+`src/chec_local_interpreter/report_pipeline.py`. Invoke it from Claude Code or OpenCode:
+
+```
+/reporte <circuito>
+/reporte <circuito> <fecha_inicio> <fecha_fin>
 ```
 
-Notebook groups:
+- `circuito` is required and must exist in the dataset.
+- `fecha_inicio`/`fecha_fin` are optional **as a pair**: both omitted default to the circuit's
+  full available date range; both given are used as-is; giving exactly one is a usage error.
 
-- `notebooks/core/`: local UITI_VANO interpreter notebooks.
-- `notebooks/inference/`: MGCECDL training, evaluation, and inference notebooks.
-- `notebooks/web/`: notebooks that generate web page graph assets.
+The Skill validates the circuit and date window, confirms once with the user, runs deterministic
+critical-point detection plus the MGCECDL/SHAP and automatic min/max simulators, dispatches the
+`historical`/`inference`/`auto-simulator` agents in parallel, runs `expert-alignment`, and renders
+a single local HTML report. See `.claude/skills/reporte/SKILL.md` for the full contract
+(arguments, run sequence, error handling).
 
-Set notebook parameters in the first section:
+Notebook groups (support/exploration, not part of the `/reporte` flow):
 
-- `DATA_PATH`
-- `SELECTED_CIRCUITOS`
-- `START_DATE`
-- `END_DATE`
-- `MAX_CRITICAL_POINTS`
-- `OUTPUT_DIR`
-- `CALL_LLM`
-- `LLM_MODEL`
-- `LLM_PROVIDER`
-
-`CALL_LLM` is disabled by default. Without an API key, the notebook still saves the
-structured context and final prompt.
+- `notebooks/core/`: `03_geo_network_exploration.ipynb` (GEO layer exploration and per-circuit
+  mapping) and `04_simulador.ipynb` (interactive what-if simulator, no LLM involved —
+  `simulate_feature_values`/`simulate_feature_class_transitions`).
+- `notebooks/inference/`: MGCECDL training, evaluation, SHAP, and document-replication notebooks
+  (`01` through `06`).
+- `notebooks/web/`: `graph_preserved_connections_uiti_vano.ipynb`, expert graph build for the web
+  page.
 
 ### Tabla base de discusiones desde PDFs
 
-El cuaderno `notebooks/core/01_pdf_discussion_table_from_pdfs.ipynb` genera la tabla
-base de discusiones tecnicas verificables a partir de reportes expertos en PDF. La
-skill del agente extractor vive en `.claude/skills/pdf-discussion-extraction/prompt/`. Por
-defecto lee PDFs desde `reports/analysis-documents/` y guarda alli el Excel final.
-Debe ejecutarse cada vez que se agreguen, eliminen o cambien PDFs en esa carpeta.
+La tabla base de discusiones técnicas verificables se genera con el runbook agente-nativo por
+lotes: `chec_local_interpreter.pdf_discussion_pipeline` (Python determinista: conversión de PDF a
+Markdown, selección de secciones candidatas, ensamblado del Excel final) junto con el Skill/agente
+`pdf-discussion-extraction` (`.claude/skills/pdf-discussion-extraction/`), que clasifica, en un
+único turno por PDF, qué secciones candidatas se convierten en fila. Por defecto lee PDFs desde
+`reports/analysis-documents/` y guarda allí el Excel final (`tabla_pdfs_intervalo_*.xlsx`). Debe
+ejecutarse cada vez que se agreguen, eliminen o cambien PDFs en esa carpeta.
 
-Esta version no usa embeddings, FAISS, Chroma ni bases vectoriales. Extrae texto de
-los PDFs, segmenta fragmentos candidatos y usa un LLM como skill/agente extractor para
-decidir si una discusion debe convertirse en fila. Solo se agregan discusiones con
-circuito, fecha o intervalo valido, analisis tecnico breve y evidencia textual
-verificable. Si no hay fecha o evidencia suficiente, no se agrega la fila.
+Esta versión no usa embeddings, FAISS, Chroma ni bases vectoriales. Extrae texto de los PDFs,
+segmenta secciones candidatas y usa un LLM como skill/agente extractor para decidir si una
+discusión debe convertirse en fila. Solo se agregan discusiones con circuito, fecha o intervalo
+válido, análisis técnico breve y evidencia textual verificable. Si no hay fecha o evidencia
+suficiente, no se agrega la fila.
 
-El Excel resultante contiene exactamente estas columnas y queda como insumo para
-analisis posteriores:
+El Excel resultante contiene exactamente estas columnas y queda como insumo para análisis
+posteriores:
 
 - `Circuito`
 - `Fecha inicio`
@@ -91,43 +108,48 @@ analisis posteriores:
 - `Análisis`
 - `Evidencia`
 
-### Flujo de tres agentes LLM
+### Flujo de cinco agentes LLM
 
-El notebook principal integra tres agentes, en orden:
+`/reporte <circuito>` integra cinco roles agente-nativos, cada uno un Skill de Claude Code /
+agente de OpenCode con su propio CLI determinista `build-context`/`validate` (nunca una llamada
+Python a un proveedor LLM externo):
 
-1. Agente base/histórico: explica el comportamiento descriptivo de `UITI_VANO` con
-   contexto histórico, variables y puntos críticos.
-2. Agente de inferencia/modelo/SHAP: resume los resultados MGCECDL, SHAP y grafos
-   estimados permitidos para el flujo de inferencia.
-3. Agente de comparación con reportes expertos: compara LLM1 y LLM2 contra el Excel
-   previamente generado desde PDFs expertos.
+1. **`pdf-discussion-extraction`**: decide, PDF por PDF, qué secciones candidatas de los reportes
+   técnicos expertos se convierten en filas de la tabla de discusión (circuito, fecha/intervalo,
+   análisis, evidencia). Corre por separado, antes de `/reporte`, cuando se agregan o cambian PDFs
+   en `reports/analysis-documents/` — ver la sección anterior.
+2. **`historical`**: diagnóstico base/descriptivo del comportamiento de `UITI_VANO` a partir del
+   contexto estructurado y los puntos críticos detectados.
+3. **`inference`**: interpreta las señales predictivas MGCECDL/SHAP (importancia de variables y
+   modos por escenario, coherencia del grafo estimado, hipótesis predictivas cautelosas).
+4. **`auto-simulator`**: interpreta la tabla automática de sensibilidad mínimo/máximo (escenarios
+   base vs. mínimo/máximo observado por variable) que `prepare()` calcula como efecto colateral;
+   es la única etapa que puede degradarse y omitirse sin detener la ejecución.
+5. **`expert-alignment`**: compara los hallazgos de `historical` + `inference` contra la tabla de
+   discusión ya extraída de los PDFs expertos, citando coincidencias, diferencias y variables que
+   merecen más atención.
 
-El tercer agente no lee PDFs, no extrae texto de PDFs y no usa embeddings, FAISS,
-Chroma ni RAG. Su insumo experto es únicamente el Excel ya generado por el cuaderno de
-discusión desde PDFs. Primero reduce las filas candidatas por coincidencia temporal
-con las fechas del informe y luego compara el contenido técnico para identificar
-coincidencias, diferencias y variables que merecen más atención. Si el Excel no está
-disponible, está vacío o no produce coincidencias temporales comparables, el flujo
-guarda un artefacto de omisión y el HTML continúa con un mensaje de no disponibilidad.
-
-El reporte HTML generado por el notebook usa pestañas:
-
-- `Informe`: conserva el reporte principal del agente base y el agente de inferencia.
-- `Comparación con reportes expertos`: muestra el resultado validado del tercer
-  agente cuando está disponible. Esta pestaña no vuelve a leer PDFs, no modifica el
-  Excel y no muestra JSON crudo.
+`historical`, `inference` y `auto-simulator` se despachan en paralelo cuando el runtime lo
+permite (obligatorio en Claude Code); `expert-alignment` corre después, una vez que `historical` e
+`inference` terminaron. El reporte HTML final (`render()`) fusiona los cuatro roles anteriores en
+un único archivo: el diagnóstico base y de inferencia con sus figuras/grafos, la discusión
+automática mínimo/máximo (cuando el simulador tuvo modelo entrenado y eventos suficientes), y la
+comparación con reportes expertos. Ver `.claude/skills/reporte/SKILL.md` para la secuencia
+completa paso a paso.
 
 ## Flujo del proyecto
 
-Diagrama de flujo end-to-end vigente, desde la ingesta de datos hasta la publicación en
-GitHub Pages. A diferencia de `docs/project-workflow-analysis.md` (snapshot histórico
-fechado 2026-07-08, congelado como artefacto de análisis), este diagrama refleja el
-estado actual: la migración de `llm/` a `.claude/skills/` + `.claude/agents/`, y la
-introducción del skill `/reporte` (`report_pipeline.py`) como punto de entrada principal
-para el flujo `historical` → `inference` → `expert-alignment` → render, que hoy convive
-con el cuaderno interactivo `core/02_local_uiti_vano_interpretability_v3.ipynb`
-(deprecado en el lugar para sus fases 1-8, pero aún activo para el simulador automático
-mínimo/máximo y la exportación web). Fuente Mermaid: `docs/project-workflow.mmd`.
+Diagrama de flujo end-to-end vigente, desde la ingesta de datos hasta la publicación en GitHub
+Pages. A diferencia de `docs/project-workflow-analysis.md` (snapshot histórico fechado
+2026-07-08, congelado como artefacto de análisis), este diagrama refleja el estado actual: el
+skill `/reporte` (`report_pipeline.py`) es el punto de entrada principal ya establecido — no una
+introducción reciente — para el flujo checkpoint único de usuario → `prepare()` (contexto +
+simuladores MGCECDL/SHAP y mínimo/máximo) → `historical`/`inference`/`auto-simulator` en paralelo
+→ `expert-alignment` → `render()`, que produce un único reporte HTML local. El cuaderno
+interactivo `core/02_local_uiti_vano_interpretability_v3.ipynb` fue eliminado una vez que este
+flujo cubrió por completo sus responsabilidades, incluida su antigua discusión automática
+mínimo/máximo de las fases 9-11 (hoy la etapa `auto-simulator`). Fuente Mermaid:
+`docs/project-workflow.mmd`.
 
 ```mermaid
 %% Project workflow — current state
@@ -138,8 +160,8 @@ flowchart TD
 
     %% ===== Lane: Data ingestion =====
     subgraph LANE1[Data ingestion]
-        PDF[(Expert PDFs<br/>reports/analysis-documents)] --> P0[Extract discussion table<br/>core/01_pdf_discussion_table_from_pdfs.ipynb<br/>skill: pdf-discussion-extraction]
-        P0 --> XLSX[(tabla_pdfs_intervalo.xlsx)]
+        PDF[(Expert PDFs<br/>reports/analysis-documents)] --> P0[Batch PDF-discussion runbook<br/>pdf_discussion_pipeline.py<br/>skill: pdf-discussion-extraction]
+        P0 --> XLSX[(tabla_pdfs_intervalo_*.xlsx)]
         CSV[(Indicadores_vano CSV<br/>data/Indicadores_vano_v3.csv)]
         MET[Open-Meteo API] --> P1[Climate enrichment<br/>inference/01_climate.ipynb]
         CSV --> P1
@@ -162,58 +184,56 @@ flowchart TD
     subgraph LANE3[Local interpretation — agents]
         CSV --> D1[Critical point detection<br/>critical_points.py]
         D1 --> D2[Structured context builder<br/>context_builder.py]
+        D2 --> CHK{"Resolve circuito + fecha window<br/>alert+stop if invalid<br/>single confirmation with user"}
+        CHK -- "not found / zero events" --> STOP0([Alert + stop, no run_dir created])
 
-        subgraph REPORTE["/reporte skill — current primary entry point<br/>report_pipeline.py"]
+        subgraph REPORTE["/reporte skill — primary entry point<br/>report_pipeline.py"]
             direction TB
-            D2 --> RP0[prepare&#40;&#41;<br/>critical points + context +<br/>MGCECDL/SHAP scenario simulator]
+            CHK -- "confirmed once" --> RP0["prepare()<br/>critical points + context +<br/>MGCECDL/SHAP scenario simulator +<br/>automatic min/max sensitivity simulator"]
             MODEL --> RP0
-            RP0 --> A1[Agent: historical<br/>.claude/skills/historical]
-            RP0 --> A2[Agent: inference<br/>.claude/skills/inference]
-            A1 --> G1{Schema + provenance<br/>valid?}
+            RP0 --> FORK{{"fork — mandatory parallel dispatch<br/>historical / inference / auto-simulator"}}
+            FORK --> A1[Agent: historical<br/>.claude/skills/historical]
+            FORK --> A2[Agent: inference<br/>.claude/skills/inference]
+            FORK --> A4[Agent: auto-simulator<br/>.claude/skills/auto-simulator<br/>skipped if bc.json absent;<br/>only stage allowed to degrade/skip]
+
+            A1 --> G1{"Schema + provenance<br/>valid? (historical + inference)"}
             A2 --> G1
             G1 -- "no, retries left<br/>(max 2)" --> RET[Revise response]
             RET --> G1
             G1 -- "no, retries exhausted" --> STOP1([Stop this circuit's run])
-            G1 -- yes --> RP1[prepare_expert_alignment&#40;&#41;]
+
+            A4 --> G3{"validate() ok?<br/>(auto-simulator)"}
+            G3 -- "no, retries left<br/>(max 2)" --> RET3[Revise response]
+            RET3 --> G3
+            G3 -- "no, exhausted" --> SKIP3["Skip auto-simulator<br/>(degrade, never blocks run)"]
+
+            G1 -- yes --> JOIN{{"join<br/>(auto-simulator optional)"}}
+            G3 -- yes --> JOIN
+            SKIP3 --> JOIN
+
+            JOIN --> RP1["prepare_expert_alignment()"]
             XLSX --> RP1
             RP1 --> A3[Agent: expert-alignment<br/>.claude/skills/expert-alignment]
             A3 --> G2{Schema + provenance<br/>valid?}
             G2 -- "no, retries left<br/>(max 2)" --> RET2[Revise response]
             RET2 --> G2
             G2 -- "no, retries exhausted" --> STOP2([Stop this circuit's run])
-            G2 -- yes --> RP2[render&#40;&#41;<br/>plotting.render_llm_analysis<br/>no auto-simulator tab]
+            G2 -- yes --> RP2["render()<br/>plotting.render_llm_analysis<br/>merges historical + inference +<br/>auto-simulator (when available) +<br/>expert-alignment comparison"]
         end
-        RP2 --> HTML1[(HTML report<br/>run_dir, no 2nd tab)]
+        RP2 --> HTML1[(HTML report<br/>run_dir, single merged output)]
 
-        subgraph NB02["Legacy interactive notebook &#40;deprecated in place&#41;<br/>core/02_local_uiti_vano_interpretability_v3.ipynb"]
-            direction TB
-            NOTE1["Phases 1-8: superseded by /reporte,<br/>kept unmodified, not deleted"]
-            NB_AUTO[Phase 9-11: still-active only here<br/>10.2 Simulador automático mínimo/máximo]
-        end
-        MODEL --> SIMDATA[simulate_automatic_minmax_sensitivity&#40;&#41;<br/>simulator.py, pure numeric]
-        SIMDATA --> SAVE1[save_auto_minmax_results&#40;&#41;]
-        SAVE1 --> NB_AUTO
-        NB_AUTO --> A4[Agent: auto-simulator<br/>.claude/skills/auto-simulator<br/>invoked inline via call_llm&#40;&#41;]
-        A4 --> G3{"_validate_auto_simulator_response&#40;&#41;<br/>required keys/list-shape valid?"}
-        G3 -- no --> RET3[Retry call_llm]
-        RET3 --> G3
-        G3 -- "exhausted" --> STOP3([RuntimeError: last validation error])
-        G3 -- yes --> NB_RENDER[render_llm_analysis&#40;&#41;<br/>with automatic_simulation_table<br/>= 2nd tab discussion]
-        NB_RENDER --> HTML2[(HTML report<br/>reports/interpretability/html,<br/>includes 2nd tab)]
-
-        MODEL --> SIM4[What-if simulator&#40;interactive, no LLM&#41;<br/>core/04_simulador.ipynb<br/>simulate_feature_values&#40;&#41; /<br/>simulate_feature_class_transitions&#40;&#41;]
+        MODEL --> SIM4["What-if simulator (interactive, no LLM)<br/>core/04_simulador.ipynb<br/>simulate_feature_values() /<br/>simulate_feature_class_transitions()"]
     end
 
     %% ===== Lane: Publication =====
     subgraph LANE4[Publication]
-        HTML2 --> WE[Web export<br/>web_export.py<br/>export_latest_interpretability_report]
-        P4 --> WE
-        WE --> SITE[(src/assets/site/results +<br/>Astro pages src/pages)]
+        P4 --> WE[Web export<br/>web_export.py<br/>export_latest_interpretability_report]
+        WE --> SITE[(site/assets/site/results +<br/>Astro pages site/pages)]
         SITE --> CI[GitHub Actions<br/>.github/workflows/deploy-pages.yml]
         CI --> PAGES([GitHub Pages site])
     end
 
-    HTML1 -.->|"not yet wired to web_export<br/>&#40;current gap&#41;"| WE
+    HTML1 -.->|"manual publish only (by design)"| WE
     PAGES --> END([End])
 ```
 
@@ -221,9 +241,9 @@ Versión renderizada para lectores sin soporte Mermaid: [`docs/project-workflow.
 
 ### Diagrama BPMN
 
-Vista de proceso de negocio (BPMN 2.0) del mismo flujo, con carriles por responsable
-(ingesta de datos, modelado M-GCECDL, agentes LLM, publicación). Es una vista de nivel
-de fase — para el detalle técnico módulo por módulo, usar el diagrama Mermaid anterior.
+Vista de proceso de negocio (BPMN 2.0) del mismo flujo, con carriles por responsable (ingesta de
+datos, modelado M-GCECDL, agentes LLM, publicación). Es una vista de nivel de fase — para el
+detalle técnico módulo por módulo, usar el diagrama Mermaid anterior.
 
 ![Diagrama BPMN del flujo del proyecto](docs/project-workflow-bpmn.svg)
 
@@ -245,11 +265,11 @@ Structured outputs from the local interpreter are saved under
 - optional `expert_alignment_analysis_<timestamp>.json`
 - optional `expert_alignment_pdf_matches_<timestamp>.xlsx`
 
-HTML reports generated by notebook 02 are saved under
+HTML reports generated by `/reporte`'s `render()` step are saved under
 `reports/interpretability/html/`.
 
-Invalid LLM outputs are saved separately with validation errors and are not presented
-as final analysis.
+Invalid LLM outputs are saved separately with validation errors and are not presented as final
+analysis.
 
 ## Tests
 
