@@ -319,6 +319,28 @@ def test_validar_provenance_accepts_correct_real_index_and_real_pdf_rule_pairing
     assert result["ok"], result["errors"]
 
 
+def test_validar_provenance_accepts_combined_real_and_offset_citation_as_reinforcement():
+    """Judgment Day Round 2 CRITICAL fix: the feature's own documented design
+    (`.claude/skills/expert-alignment/prompt/04_prior_report_continuity.md`)
+    explicitly invites a SINGLE claim to cite BOTH a real-PDF row (Modelo
+    Experto backing) AND a prior-report offset row (reinforcement) together
+    in one `data_ref` list. Since the claim has other (real-PDF) backing, it
+    is fundamentally a real-PDF-rule claim reinforced by prior-report
+    evidence, so `01_pdf_report_comparison` is the reasonable rule choice --
+    this combined citation must NOT be rejected."""
+    context = _context_with_prior_report_index()
+    data = _data_with_provenance()
+    data["coincidencias"][0]["provenance"]["rule"] = "01_pdf_report_comparison"
+    data["coincidencias"][0]["provenance"]["data_ref"] = [
+        "pdf_row_index:3",
+        f"pdf_row_index:{PRIOR_REPORT_PDF_ROW_INDEX_OFFSET}",
+    ]
+
+    result = validar_provenance_expert_alignment(data, context)
+
+    assert result["ok"], result["errors"]
+
+
 def test_validar_provenance_deepcopy_is_side_effect_free():
     """Guard against accidental mutation of the input data during validation."""
     context = _context()

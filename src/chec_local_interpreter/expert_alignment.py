@@ -1366,16 +1366,32 @@ def _validate_provenance_data_ref(
 
 def _validate_pdf_row_index_rule_consistency(data: dict[str, Any]) -> list[str]:
     """Structural guard tying a cited `pdf_row_index`'s offset range to the
-    accompanying `provenance.rule` (Judgment Day Round 1 WARNING(real) fix).
+    accompanying `provenance.rule` (Judgment Day Round 1 WARNING(real) fix,
+    relaxed in Judgment Day Round 2 CRITICAL fix to allow combined citations).
 
-    An offset-range index (>= `PRIOR_REPORT_PDF_ROW_INDEX_OFFSET`, i.e. a
-    prior-report continuity row) must only ever be cited together with rule
-    `"04_prior_report_continuity"`, and conversely a real-PDF-range index
-    must never be cited with that rule. Without this check, a validated
-    response could cite an offset-range index under a real-PDF rule id (or
-    vice versa) and still pass `validar_provenance_expert_alignment`'s
-    index-membership check, which only verifies the index is known -- not
-    that its rule matches its provenance kind. Read-only: never mutates `data`.
+    The feature's own documented design
+    (`.claude/skills/expert-alignment/prompt/04_prior_report_continuity.md`)
+    explicitly invites a SINGLE claim to cite BOTH a real-PDF row (Modelo
+    Experto backing) AND a prior-report offset row (reinforcement) together
+    in the same `data_ref` list -- "reinforce, don't sole-source". So this
+    check is evaluated PER CLAIM (i.e. over the whole `data_ref` list of one
+    item), not per individual reference:
+
+    - A `data_ref` citing ONLY offset-range index/indexes (no other
+      supporting reference at all) under a rule other than
+      `"04_prior_report_continuity"` is invalid -- a pure offset-only
+      citation must use the prior-report rule (the original Round-1 bug).
+    - A `data_ref` citing ONLY real-PDF-range index/indexes under rule
+      `"04_prior_report_continuity"` is invalid -- a claim citing zero
+      prior-report evidence has no business using the prior-report rule
+      (the other original Round-1 bug).
+    - A `data_ref` that mixes a real-PDF index and a prior-report offset
+      index in the SAME claim is a legitimate reinforcement pattern and is
+      never flagged by this check, regardless of which rule is used --
+      the claim has other (real-PDF) backing, so it is not the sole-source
+      case this check exists to catch.
+
+    Read-only: never mutates `data`.
     """
     errors: list[str] = []
     for section_name in _PROVENANCE_SECTIONS:
@@ -1392,22 +1408,30 @@ def _validate_pdf_row_index_rule_consistency(data: dict[str, Any]) -> list[str]:
             data_ref = provenance.get("data_ref")
             if not isinstance(data_ref, list):
                 continue
+
+            offset_refs: list[str] = []
+            real_refs: list[str] = []
             for ref in data_ref:
                 match = _PDF_ROW_INDEX_REF_RE.match(str(ref).strip())
                 if not match:
                     continue
-                is_prior_report_index = int(match.group(1)) >= PRIOR_REPORT_PDF_ROW_INDEX_OFFSET
-                if is_prior_report_index and rule != "04_prior_report_continuity":
-                    errors.append(
-                        f"{section_name}: provenance.data_ref cites a prior-report "
-                        f"pdf_row_index ({ref!r}) but provenance.rule is not "
-                        f"'04_prior_report_continuity': {rule!r}"
-                    )
-                elif not is_prior_report_index and rule == "04_prior_report_continuity":
-                    errors.append(
-                        f"{section_name}: provenance.data_ref cites a real-PDF "
-                        f"pdf_row_index ({ref!r}) under rule '04_prior_report_continuity'"
-                    )
+                if int(match.group(1)) >= PRIOR_REPORT_PDF_ROW_INDEX_OFFSET:
+                    offset_refs.append(str(ref))
+                else:
+                    real_refs.append(str(ref))
+
+            if offset_refs and not real_refs and rule != "04_prior_report_continuity":
+                errors.append(
+                    f"{section_name}: provenance.data_ref cites only prior-report "
+                    f"pdf_row_index reference(s) ({offset_refs!r}) but provenance.rule "
+                    f"is not '04_prior_report_continuity': {rule!r}"
+                )
+            elif real_refs and not offset_refs and rule == "04_prior_report_continuity":
+                errors.append(
+                    f"{section_name}: provenance.data_ref cites only real-PDF "
+                    f"pdf_row_index reference(s) ({real_refs!r}) under rule "
+                    "'04_prior_report_continuity'"
+                )
     return errors
 
 
