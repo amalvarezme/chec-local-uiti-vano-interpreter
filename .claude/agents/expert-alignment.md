@@ -39,8 +39,8 @@ Bash shell, a file-write tool outside the CLI's own artifact/report writes, or a
 
 1. **`build-context`** — invoke the CLI's `build-context` verb with the circuit's inputs on
    stdin. Read the resulting envelope: `meta` (circuito, period, tool version), `context`
-   (compact, already-deterministic context), `prompt` (the full instruction text), and `allowed`
-   (the citable universe: dates, variables, PDF row indexes, sources).
+   (compact, already-deterministic context), and `allowed` (the citable universe: dates,
+   variables, PDF row indexes, sources).
 2. **Author** — write the seven required keys (`contexto`, `coincidencias`, `diferencias`,
    `hallazgos_expertos_no_cubiertos`, `hallazgos_modelo_no_respaldados_por_pdf`,
    `variables_a_priorizar`, `sintesis_final`) as JSON, citing only dates/variables/PDF rows

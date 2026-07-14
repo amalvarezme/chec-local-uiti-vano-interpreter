@@ -34,8 +34,10 @@ kind of code-checked-not-prose invariant). For the fully explicit reference, see
 Circuit, period, and critical-point selection and detection are the sole responsibility of the
 deterministic Python layer (L1, `chec_local_interpreter.expert_alignment`). No agent role may
 perform its own selection or detection. Every agent receives already-selected context through the
-L2 `build-context` envelope (`meta`, `context`, `prompt`, `allowed`) and may only interpret it —
-never invent a new date, circuit, or critical point that wasn't already in that envelope.
+L2 `build-context` envelope (`meta`, `context`, `allowed`; `prompt` is reserved for the separate
+headless batch path — `agent_tools/batch.py` — and is not part of the interactive CLI stdout
+contract) and may only interpret it — never invent a new date, circuit, or critical point that
+wasn't already in that envelope.
 
 ## Rule 3 — JSON-Schema / Validator-Gated Output
 

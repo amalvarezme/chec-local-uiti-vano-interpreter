@@ -153,7 +153,10 @@ def test_build_context_cli_matches_in_process_call(tmp_path):
     assert result.returncode == 0, result.stderr
     envelope = json.loads(result.stdout)
     assert envelope["meta"]["circuito"] == "DON23L13"
-    assert envelope == build_context(payload)
+    full_envelope = build_context(payload)
+    assert "prompt" not in envelope
+    assert "prompt" in full_envelope
+    assert envelope == {k: v for k, v in full_envelope.items() if k != "prompt"}
 
 
 def _valid_response_for(envelope: dict) -> dict:

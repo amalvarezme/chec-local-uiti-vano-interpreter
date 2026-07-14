@@ -40,9 +40,8 @@ shell, a file-write tool outside the CLI's own artifact/report writes, or any ne
 
 1. **`build-context`** — invoke the CLI's `build-context` verb with the already-built
    `context_builder.build_context_package(...)` JSON on stdin. Read the resulting envelope: `meta`
-   (circuito, tool version), `context` (the deterministic context, unchanged), `prompt` (the full
-   instruction text), and `allowed` (the citable universe: dates, critical-point ids, unavailable
-   columns).
+   (circuito, tool version), `context` (the deterministic context, unchanged), and `allowed` (the
+   citable universe: dates, critical-point ids, unavailable columns).
 2. **Author** — write the ten required keys (`source`, `prompt_version`, `headline`,
    `section_title`, `executive_summary`, `key_findings`, `circuit_characterization`,
    `period_synthesis`, `data_gaps`, `recommended_actions`) as JSON, citing only dates/critical-point

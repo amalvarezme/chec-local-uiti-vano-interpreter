@@ -45,8 +45,8 @@ paths) arrives pre-computed inside the already-built context payload (Rule 1, Ru
 1. **`build-context`** — invoke the CLI's `build-context` verb with the already-built
    `circuit_analysis.construir_contexto_inferencia(...)` JSON on stdin. Read the resulting
    envelope: `meta` (circuito, tool version), `context` (the deterministic inference context,
-   unchanged), `prompt` (the full instruction text), and `allowed` (the citable universe: dates,
-   derived `cp-YYYY-MM-DD` critical-point ids, `features` variable names, and scenario names).
+   unchanged), and `allowed` (the citable universe: dates, derived `cp-YYYY-MM-DD` critical-point
+   ids, `features` variable names, and scenario names).
 2. **Author** — write the nine required keys (`contexto`, `entregables`, `escenarios`,
    `discusion_grafos`, `coherencia_grafo_modelo`, `hallazgos`, `limitaciones`,
    `inferencias_predictivas`, `hipotesis_modelo_predictivo`) as JSON, citing only

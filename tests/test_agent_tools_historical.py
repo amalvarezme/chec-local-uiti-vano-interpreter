@@ -163,7 +163,10 @@ def test_build_context_cli_matches_in_process_call(tmp_path):
     assert result.returncode == 0, result.stderr
     envelope = json.loads(result.stdout)
     assert envelope["meta"]["circuito"] == "DON23L13"
-    assert envelope == build_context(context)
+    full_envelope = build_context(context)
+    assert "prompt" not in envelope
+    assert "prompt" in full_envelope
+    assert envelope == {k: v for k, v in full_envelope.items() if k != "prompt"}
 
 
 def test_validate_verb_accepts_valid_response_without_provenance():

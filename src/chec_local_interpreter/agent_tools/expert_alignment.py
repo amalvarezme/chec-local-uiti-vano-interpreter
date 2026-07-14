@@ -11,11 +11,14 @@ Verbs:
     build-context   Reads the already-built
                     `expert_alignment.construir_contexto_expert_alignment(...)`
                     JSON output from stdin, emits the envelope
-                    `{meta, context, prompt, allowed}` on stdout. Deterministic
+                    `{meta, context, allowed}` on stdout. Deterministic
                     selection/assembly stays entirely upstream of this CLI, in
                     `report_pipeline.prepare_expert_alignment()` (Rule 2,
                     `.claude/agents/rules/invariants.md`): the stdin payload IS
                     the deterministic context, never raw circuit/date inputs.
+                    The importable `build_context()` function itself still
+                    returns `prompt` too, for `agent_tools/batch.py`'s direct
+                    in-process use.
     validate        Reads `{response_text, context}` from stdin JSON, runs
                     the existing validator, and on failure writes the raw
                     output plus errors under
@@ -170,7 +173,13 @@ def validate(payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
 
 
 def _build_context_handler(payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
-    return build_context(payload), 0
+    envelope = build_context(payload)
+    # The CLI's stdout is read by the interactive Claude Code sub-agent (role file's own Skill
+    # already supplies its instructions); "prompt" re-serializes "context" as text and roughly
+    # doubles the bytes it has to ingest for no informational gain. `build_context()` itself still
+    # returns "prompt" unchanged for `agent_tools/batch.py`'s direct in-process import, which needs
+    # the full rendered string as the sole argument to its headless subprocess agent call.
+    return {k: v for k, v in envelope.items() if k != "prompt"}, 0
 
 
 _HANDLERS: dict[str, tuple[str, Any]] = {
@@ -182,7 +191,13 @@ _HANDLERS: dict[str, tuple[str, Any]] = {
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m chec_local_interpreter.agent_tools.expert_alignment")
     subparsers = parser.add_subparsers(dest="verb", required=True)
-    subparsers.add_parser("build-context", help="Emit the context+prompt+allowed envelope for a circuit.")
+    subparsers.add_parser(
+        "build-context",
+        help=(
+            "Emit the context+allowed envelope for a circuit (prompt omitted from stdout; "
+            "still available via direct build_context() import)."
+        ),
+    )
     subparsers.add_parser("validate", help="Validate a candidate expert-alignment response against its context.")
     args = parser.parse_args(argv)
 
