@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler
 
-from chec_local_interpreter.simulator import (
+from chec_local_interpreter.simulation.simulator import (
     save_prioritized_variables_table,
     simulate_automatic_minmax_sensitivity,
     simulate_feature_class_transitions,

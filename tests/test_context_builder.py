@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pandas as pd
 
-from chec_local_interpreter.attribution import enrich_critical_points
-from chec_local_interpreter.context_builder import build_context_package
-from chec_local_interpreter.critical_points import build_daily_series, compute_daily_features, detect_point_reasons, rank_critical_points
+from chec_local_interpreter.analysis.attribution import enrich_critical_points
+from chec_local_interpreter.analysis.context_builder import build_context_package
+from chec_local_interpreter.analysis.critical_points import build_daily_series, compute_daily_features, detect_point_reasons, rank_critical_points
 
 
 def test_context_package_includes_core_sections_and_missing_optional_columns():

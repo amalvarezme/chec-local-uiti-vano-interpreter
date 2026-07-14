@@ -1,12 +1,12 @@
 import json
-from chec_local_interpreter.data_loader import load_dataset, filter_events
-from chec_local_interpreter.critical_points import (
+from chec_local_interpreter.data.loader import load_dataset, filter_events
+from chec_local_interpreter.analysis.critical_points import (
     build_daily_series, compute_daily_features,
     detect_point_reasons, rank_critical_points, detect_critical_periods
 )
-from chec_local_interpreter.context_builder import build_context_package
-from chec_local_interpreter.attribution import enrich_critical_points
-from chec_local_interpreter.llm_contracts import render_prompt, load_output_schema
+from chec_local_interpreter.analysis.context_builder import build_context_package
+from chec_local_interpreter.analysis.attribution import enrich_critical_points
+from chec_local_interpreter.llm.contracts import render_prompt, load_output_schema
 from chec_local_interpreter.config import PROMPT_VERSION
 
 DATA_PATH = "data/Indicadores_vano_v3.csv"

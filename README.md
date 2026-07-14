@@ -72,7 +72,7 @@ structured context and final prompt.
 
 El cuaderno `notebooks/core/03_pdf_discussion_table_from_pdfs.ipynb` genera la tabla
 base de discusiones tecnicas verificables a partir de reportes expertos en PDF. La
-skill del agente extractor vive en `llm/skills_pdf_discussion_extraction/`. Por
+skill del agente extractor vive en `llm/skills/pdf_discussion_extraction_01_pdf_discussion_extractor.md`. Por
 defecto lee PDFs desde `reports/analysis-documents/` y guarda alli el Excel final.
 Debe ejecutarse cada vez que se agreguen, eliminen o cambien PDFs en esa carpeta.
 

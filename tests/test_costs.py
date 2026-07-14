@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from chec_local_interpreter.costs import build_auto_simulation_cost_context, find_cost_matches
+from chec_local_interpreter.simulation.costs import build_auto_simulation_cost_context, find_cost_matches
 
 
 def test_find_cost_matches_uses_domain_keywords_for_variable():

@@ -5,7 +5,7 @@ import importlib.util
 import pandas as pd
 import pytest
 
-from chec_local_interpreter.data_loader import filter_events, load_dataset, resolve_columns
+from chec_local_interpreter.data.loader import filter_events, load_dataset, resolve_columns
 
 
 def _frame() -> pd.DataFrame:

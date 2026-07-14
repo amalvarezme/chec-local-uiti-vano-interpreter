@@ -7,8 +7,8 @@ from pathlib import Path
 PROJECT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT / "src"))
 
-from chec_local_interpreter.llm_contracts import PROMPT_VERSION, load_output_schema, render_prompt
-from chec_local_interpreter.llm_validation import validate_llm_response
+from chec_local_interpreter.llm.contracts import PROMPT_VERSION, load_output_schema, render_prompt
+from chec_local_interpreter.llm.validation import validate_llm_response
 
 
 def _load_json(path: Path) -> dict:

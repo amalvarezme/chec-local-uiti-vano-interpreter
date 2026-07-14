@@ -14,6 +14,9 @@ import shap
 import torch
 import warnings
 
+from chec_impacto.training.mgcecdl import predict_classification
+
+
 def construir_modos_interpretabilidad(features=None, ventana_climatica_horas=12):
     clima_horas = range(ventana_climatica_horas)
 
@@ -108,6 +111,23 @@ def _normalizar_shap_values(shap_values):
     if vals.ndim == 3:
         vals = vals[:, :, 1] if vals.shape[2] > 1 else vals[:, :, 0]
     return np.nan_to_num(vals, nan=0.0, posinf=0.0, neginf=0.0)
+
+
+class MGCECDLClassifierShapAdapter:
+    """Expose an MGCECDL classifier through a scikit-learn-like predict_proba API."""
+
+    def __init__(self, model, device):
+        self.model = model
+        self.device = device
+
+    def predict_proba(self, values):
+        values = np.asarray(values, dtype=np.float32)
+        if values.ndim == 1:
+            values = values.reshape(1, -1)
+        return np.asarray(
+            predict_classification(self.model, values, device=self.device)["fused_probs"],
+            dtype=np.float64,
+        )
 
 
 class KernelShapTopVarsExtractor:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from chec_local_interpreter.plotting import render_expert_alignment_tab, render_llm_analysis
+from chec_local_interpreter.reports.plotting import render_expert_alignment_tab, render_llm_analysis
 
 
 def test_inference_layout_consolidates_general_discussion(tmp_path):

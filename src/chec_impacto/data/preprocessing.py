@@ -4,7 +4,6 @@ import warnings
 import re
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -293,27 +292,3 @@ def preparar_splits_estratificados(X, y,
     }
 
 
-def plot_VY(y):
-    # Asumiendo que tu variable Y ya está definida y cargada
-    Y_plano = y.flatten()
-
-    plt.figure(figsize=(10, 6))
-
-    # Usamos plt.hist()
-    # El argumento 'density=True' asegura que el área total del histograma sume 1,
-    # lo que lo hace comparable con una curva de densidad.
-    plt.hist(
-        Y_plano,
-        bins=100,             # Más 'bins' (barras) para una mejor granularidad
-        density=True,         # Muestra la densidad en el eje Y, no los conteos
-        alpha=0.7,            # Transparencia
-        color='teal',
-        label='Histograma (Distribución de Frecuencia)'
-    )
-
-    plt.title('Distribución de Frecuencia de la Variable Y (Histograma)', fontsize=16, fontweight='bold')
-    plt.xlabel('Valores de Y', fontsize=12)
-    plt.ylabel('Densidad', fontsize=12)
-    plt.legend()
-    plt.grid(axis='y', linestyle='--', alpha=0.7)
-    plt.show()

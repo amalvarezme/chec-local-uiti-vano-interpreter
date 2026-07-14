@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 
-from chec_local_interpreter.llm_contracts import PROMPT_VERSION, load_output_schema
-from chec_local_interpreter.llm_validation import validate_llm_response
+from chec_local_interpreter.llm.contracts import PROMPT_VERSION, load_output_schema
+from chec_local_interpreter.llm.validation import validate_llm_response
 
 
 def _context(unavailable: list[str] | None = None) -> dict:

@@ -4,7 +4,7 @@ import json
 
 import pandas as pd
 
-from chec_local_interpreter.expert_alignment import (
+from chec_local_interpreter.reports.expert_alignment import (
     construir_contexto_expert_alignment,
     construir_prompt_expert_alignment,
     extraer_fechas_informe,
@@ -12,16 +12,16 @@ from chec_local_interpreter.expert_alignment import (
     seleccionar_top_coincidencias_temporales,
     validar_respuesta_expert_alignment,
 )
-from chec_local_interpreter.llm_skills import assemble_skill_bundle, list_available_skills, verify_required_skills
-from chec_local_interpreter.plotting import render_expert_alignment_tab
+from chec_local_interpreter.llm.skills import assemble_skill_bundle, list_available_skills, verify_required_skills
+from chec_local_interpreter.reports.plotting import render_expert_alignment_tab
 
 
 def test_expert_alignment_skill_profile_loads():
     assert verify_required_skills(profile="expert_alignment") == []
     assert list_available_skills(profile="expert_alignment") == [
-        "01_pdf_report_comparison.md",
-        "02_predictive_variable_prioritization.md",
-        "03_graph_context_for_alignment.md",
+        "expert_alignment_01_pdf_report_comparison.md",
+        "expert_alignment_02_predictive_variable_prioritization.md",
+        "expert_alignment_03_graph_context_for_alignment.md",
     ]
     skill_bundle = assemble_skill_bundle(profile="expert_alignment")
     assert "Comparación de Reportes PDF" in skill_bundle

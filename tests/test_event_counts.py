@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 
 from chec_impacto.interpretability.circuit_analysis import agrupar_por_vano
-from chec_local_interpreter.event_counts import count_unique_event_dates
+from chec_local_interpreter.data.event_counts import count_unique_event_dates
 
 
 def test_count_unique_event_dates_groups_by_distinct_fecha():

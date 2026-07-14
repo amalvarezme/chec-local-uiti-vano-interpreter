@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 
-from chec_local_interpreter.llm_contracts import PROMPT_VERSION, load_output_schema, render_prompt
-from chec_local_interpreter.llm_prompt import render_base_repair_prompt, render_compact_base_repair_prompt
+from chec_local_interpreter.llm.contracts import PROMPT_VERSION, load_output_schema, render_prompt
+from chec_local_interpreter.llm.prompt import render_base_repair_prompt, render_compact_base_repair_prompt
 
 
 def test_prompt_rendering_includes_context_schema_and_version():

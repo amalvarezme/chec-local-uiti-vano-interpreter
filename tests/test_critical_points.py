@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 
 from chec_local_interpreter.config import CriticalityThresholds
-from chec_local_interpreter.critical_points import (
+from chec_local_interpreter.analysis.critical_points import (
     build_daily_series,
     compute_daily_features,
     detect_critical_periods,

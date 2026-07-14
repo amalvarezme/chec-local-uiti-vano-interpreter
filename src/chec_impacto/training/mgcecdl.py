@@ -47,6 +47,31 @@ _CLASSIFICATION_COMPONENT_KEYS = (
     "mutual_information",
     "mutual_information_loss",
 )
+def latest_model_path(model_dir: str | Path, base_name: str, *, verbose: bool = False) -> Path:
+    """Return the latest model artifact matching a base file name pattern."""
+    model_dir = Path(model_dir)
+    base_path = Path(base_name)
+    candidates = sorted(model_dir.glob(f"{base_path.stem}*{base_path.suffix}"))
+    if not candidates:
+        raise FileNotFoundError(f"No encontrado: {base_name} en {model_dir}")
+    selected = candidates[-1]
+    if verbose and len(candidates) > 1:
+        print(f"  {len(candidates)} versiones de {base_name}. Usando: {selected.name}")
+    return selected
+
+
+def checkpoint_path(base_path: str | Path, *, timestamp: str | None = None) -> Path:
+    """Return a timestamped checkpoint path when the base path already exists."""
+    base_path = Path(base_path)
+    if not base_path.exists():
+        return base_path
+    if timestamp is None:
+        from datetime import datetime
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+    return base_path.parent / f"{base_path.stem}_{timestamp}{base_path.suffix}"
+
+
 MGCECDL_CLIMATE_PREFIXES = frozenset(
     {
         "prep",

@@ -45,3 +45,5 @@ node_modules/
 dist/
 .astro/
 .npm-cache/
+# Local Pi runtime state
+.atl/

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from chec_impacto.interpretability.circuit_analysis import construir_prompt_inferencia
-from chec_local_interpreter.llm_skills import assemble_skill_bundle, list_available_skills, verify_required_skills
+from chec_local_interpreter.llm.skills import assemble_skill_bundle, list_available_skills, verify_required_skills
 
 
 def test_all_required_skill_files_exist():
@@ -10,6 +10,9 @@ def test_all_required_skill_files_exist():
 
 def test_skill_bundle_loads():
     bundle = assemble_skill_bundle()
+    assert "Shared JSON Output Safety" in bundle
+    assert "Shared CHEC Domain Language" in bundle
+    assert "Shared Model and Graph Guardrails" in bundle
     assert "Constructor de Contexto Estructurado" in bundle
     assert "Validador de Salida del LLM" in bundle
     assert "Reparación Base" in bundle
@@ -20,6 +23,7 @@ def test_skill_bundle_loads():
 def test_inference_skill_bundle_loads():
     assert verify_required_skills(profile="inferencia") == []
     bundle = assemble_skill_bundle(profile="inferencia")
+    assert "Shared Model and Graph Guardrails" in bundle
     assert "Contrato de Salida de Inferencia" in bundle
     assert len(list_available_skills(profile="inferencia")) == 6
 
