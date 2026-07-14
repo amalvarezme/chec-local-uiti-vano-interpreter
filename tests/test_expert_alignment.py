@@ -455,6 +455,31 @@ class TestSeleccionarReportePrevioMasReciente:
 
         assert result is None
 
+    def test_circuit_dir_iterdir_oserror_is_skipped_not_raised(self, tmp_path, monkeypatch):
+        """Judgment Day Round 2 SUGGESTION(hardening) fix: enumerating
+        `circuit_dir` itself (`iterdir()`) can raise `OSError`
+        (permission-denied, disk-full, concurrent-delete race) just like
+        reading an individual candidate's output can -- that must also
+        degrade to "no qualifying prior run found" rather than crash the
+        CURRENT run's discovery."""
+        circuit_dir = tmp_path / "runs" / "C1"
+        circuit_dir.mkdir(parents=True)
+        current_run_dir = circuit_dir / "20260101T000000000000"
+        current_run_dir.mkdir(parents=True)
+
+        original_iterdir = Path.iterdir
+
+        def _iterdir_failing_for_circuit_dir(self):
+            if self == circuit_dir:
+                raise OSError("simulated permission-denied listing circuit dir")
+            return original_iterdir(self)
+
+        monkeypatch.setattr(Path, "iterdir", _iterdir_failing_for_circuit_dir)
+
+        result = seleccionar_reporte_previo_mas_reciente(current_run_dir)
+
+        assert result is None
+
 
 # ---------------------------------------------------------------------------
 # Phase 2 (PR 1): prior-report normalization

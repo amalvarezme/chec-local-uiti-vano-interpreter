@@ -324,10 +324,26 @@ def seleccionar_reporte_previo_mas_reciente(run_dir: Path) -> Path | None:
         return None
 
     qualifying: list[Path] = []
-    for candidate in circuit_dir.iterdir():
-        if not candidate.is_dir():
-            continue
-        if candidate.resolve() == current:
+    try:
+        candidates = list(circuit_dir.iterdir())
+    except OSError:
+        # Enumerating the circuit directory itself can also fail
+        # (permission-denied, disk-full, concurrent-delete race) -- degrade
+        # to "no qualifying prior run found" here too, fully closing the
+        # "never crashes the current run" contract (Judgment Day Round 2
+        # SUGGESTION(hardening) fix).
+        return None
+
+    for candidate in candidates:
+        try:
+            if not candidate.is_dir():
+                continue
+            if candidate.resolve() == current:
+                continue
+        except OSError:
+            # `is_dir()`/`resolve()` on an individual candidate can race the
+            # same way `iterdir()` can (concurrent-delete, permission
+            # changes) -- skip it as non-qualifying rather than raise.
             continue
         try:
             load_validated_agent_output(candidate, "expert-alignment")
