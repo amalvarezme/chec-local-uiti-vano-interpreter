@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -1300,6 +1301,69 @@ def test_prepare_writes_auto_simulator_artifacts_with_real_model(tmp_path, monke
 
 
 # ---------------------------------------------------------------------------
+# Shared dataset/scaler inputs (SDD `reporte-perf-optimization`, item 3):
+# `_compute_inference_scenarios` (via `_run_inference_simulator`) and
+# `_run_automatic_simulator` must consume the IDENTICAL `procesar_dataset_
+# completo` result and fitted MinMax `feature_scaler` within one `prepare()`
+# call, computed exactly once -- not recomputed independently by each
+# consumer and merely hoped to match.
+# ---------------------------------------------------------------------------
+
+
+def test_prepare_computes_dataset_and_scaler_exactly_once_for_both_simulators(tmp_path, monkeypatch):
+    """Spy test (idiomatic per `test_prepare_creates_run_dir_after_zero_events_
+    check_before_simulator` above, which already spies `_run_inference_
+    simulator`): `procesar_dataset_completo` and `escalar_features_minmax_
+    mgcecdl` must each be invoked exactly ONCE per `prepare()` call, proving
+    both the inference/SHAP simulator and the automatic min/max simulator
+    share the identical dataset dict and fitted scaler object by
+    construction -- `escalar_features_minmax_mgcecdl` returning once and
+    being reused by both consumers is what GUARANTEES the `feature_scaler`
+    handed to each is object-identical (`is`), not merely value-equal."""
+    _enable_real_mgcecdl_model(monkeypatch)
+
+    dataset_calls: list[Any] = []
+    scaler_calls: list[Any] = []
+    original_procesar = report_pipeline_module.procesar_dataset_completo
+    original_escalar = report_pipeline_module.escalar_features_minmax_mgcecdl
+
+    def _tracking_procesar(*args, **kwargs):
+        result = original_procesar(*args, **kwargs)
+        dataset_calls.append(result)
+        return result
+
+    def _tracking_escalar(*args, **kwargs):
+        result = original_escalar(*args, **kwargs)
+        scaler_calls.append(result)
+        return result
+
+    monkeypatch.setattr(report_pipeline_module, "procesar_dataset_completo", _tracking_procesar)
+    monkeypatch.setattr(report_pipeline_module, "escalar_features_minmax_mgcecdl", _tracking_escalar)
+
+    run_dir = prepare(
+        _REAL_SUFFICIENT_CIRCUIT, *_REAL_SUFFICIENT_WINDOW, runs_root=tmp_path / "runs"
+    )
+
+    assert len(dataset_calls) == 1, (
+        f"expected procesar_dataset_completo called exactly once per prepare(), got {len(dataset_calls)}"
+    )
+    assert len(scaler_calls) == 1, (
+        f"expected escalar_features_minmax_mgcecdl called exactly once per prepare(), got {len(scaler_calls)}"
+    )
+
+    # Value-preservation: outputs still populated exactly as the pre-refactor
+    # per-consumer-recompute path produced them.
+    inference_context = _read_json(run_dir / "inference.bc.json")
+    assert inference_context["features"]
+    assert inference_context["escenarios"]
+
+    auto_bc_path = run_dir / "auto-simulator.bc.json"
+    assert auto_bc_path.exists()
+    auto_bc = _read_json(auto_bc_path)
+    assert auto_bc["tabla_simulador_automatico"]
+
+
+# ---------------------------------------------------------------------------
 # `render()` / `_build_auto_simulation_kwargs` (task 1.4): absent auto-
 # simulator artifacts keep every `automatic_simulation_*` kwarg `None`
 # (no crash); present artifacts populate all 5 kwargs from the sidecar +
@@ -1455,4 +1519,260 @@ def test_reporte_end_to_end_with_real_simulator_renders_auto_simulation_section(
     assert "Gráficas del simulador automático" in html, (
         "expected the automatic min/max sensitivity visuals section to actually "
         "render, proving /reporte covers what notebook 02 used to produce"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Real token usage instrumentation (SDD `reporte-perf-optimization`, item 4):
+# `_resolve_token_usage(run_dir) -> (tokens_input, tokens_output, token_source)`
+# replaces `_estimate_token_usage`, preferring real per-stage counts from an
+# optional `run_dir/token_usage.json` sidecar over the char/4 estimate, and
+# labeling the resolved source ("measured"/"mixed"/"estimated"). `render()`'s
+# precedence is explicit kwargs > sidecar > estimate; no-arg callers must stay
+# unbroken (already covered by the pre-existing render() tests above, none of
+# which pass `tokens_input`/`tokens_output`).
+# ---------------------------------------------------------------------------
+
+
+def _write_stage_files(run_dir: Path, stage: str, *, bc_text: str, out_data: dict) -> None:
+    (run_dir / f"{stage}.bc.json").write_text(bc_text, encoding="utf-8")
+    (run_dir / f"{stage}.out.json").write_text(json.dumps(_canned_ok(out_data)), encoding="utf-8")
+
+
+def test_resolve_token_usage_no_sidecar_is_estimated_char_based(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    _write_stage_files(run_dir, "historical", bc_text="x" * 400, out_data={"a": "y" * 200})
+    _write_stage_files(run_dir, "inference", bc_text="x" * 120, out_data={"b": "y" * 80})
+
+    tokens_input, tokens_output, token_source = report_pipeline_module._resolve_token_usage(run_dir)
+
+    expected_chars_in = 400 + 120
+    expected_chars_out = len(json.dumps({"a": "y" * 200})) + len(json.dumps({"b": "y" * 80}))
+    assert tokens_input == expected_chars_in // 4
+    assert tokens_output == expected_chars_out // 4
+    assert token_source == "estimated"
+
+
+def test_resolve_token_usage_full_sidecar_is_measured_real_counts(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    _write_stage_files(run_dir, "historical", bc_text="x" * 400, out_data={"a": "y" * 200})
+    _write_stage_files(run_dir, "inference", bc_text="x" * 120, out_data={"b": "y" * 80})
+    (run_dir / "token_usage.json").write_text(
+        json.dumps({"historical": {"input": 100, "output": 50}, "inference": {"input": 200, "output": 80}}),
+        encoding="utf-8",
+    )
+
+    tokens_input, tokens_output, token_source = report_pipeline_module._resolve_token_usage(run_dir)
+
+    assert tokens_input == 300
+    assert tokens_output == 130
+    assert token_source == "measured"
+
+
+def test_resolve_token_usage_partial_sidecar_is_mixed(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    _write_stage_files(run_dir, "historical", bc_text="x" * 400, out_data={"a": "y" * 200})
+    _write_stage_files(run_dir, "inference", bc_text="x" * 120, out_data={"b": "y" * 80})
+    # Sidecar covers ONLY "historical" -- "inference" must fall back to the
+    # char/4 estimate for its own stage.
+    (run_dir / "token_usage.json").write_text(
+        json.dumps({"historical": {"input": 100, "output": 50}}), encoding="utf-8"
+    )
+
+    tokens_input, tokens_output, token_source = report_pipeline_module._resolve_token_usage(run_dir)
+
+    inference_chars_in = 120
+    inference_chars_out = len(json.dumps({"b": "y" * 80}))
+    assert tokens_input == 100 + inference_chars_in // 4
+    assert tokens_output == 50 + inference_chars_out // 4
+    assert token_source == "mixed"
+
+
+def test_resolve_token_usage_no_stage_files_returns_zero_estimated(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+
+    tokens_input, tokens_output, token_source = report_pipeline_module._resolve_token_usage(run_dir)
+
+    assert (tokens_input, tokens_output, token_source) == (0, 0, "estimated")
+
+
+# ---------------------------------------------------------------------------
+# Judgment Day round 1 fix: `_resolve_token_usage` must degrade gracefully
+# (never raise) for ANY malformed `run_dir/token_usage.json` sidecar --
+# top-level invalid JSON, a considered stage's entry with non-numeric
+# "input"/"output" values, or a considered stage's entry that isn't a dict at
+# all. Each malformed case must degrade to the char/4 estimate for that/those
+# stage(s) only, exactly as if the sidecar were absent for that stage.
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_token_usage_malformed_top_level_json_degrades_to_estimate(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    _write_stage_files(run_dir, "historical", bc_text="x" * 400, out_data={"a": "y" * 200})
+    (run_dir / "token_usage.json").write_text("{not valid json", encoding="utf-8")
+
+    tokens_input, tokens_output, token_source = report_pipeline_module._resolve_token_usage(run_dir)
+
+    expected_chars_in = 400
+    expected_chars_out = len(json.dumps({"a": "y" * 200}))
+    assert tokens_input == expected_chars_in // 4
+    assert tokens_output == expected_chars_out // 4
+    assert token_source == "estimated"
+
+
+def test_resolve_token_usage_non_numeric_stage_values_degrade_that_stage_only(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    _write_stage_files(run_dir, "historical", bc_text="x" * 400, out_data={"a": "y" * 200})
+    (run_dir / "token_usage.json").write_text(
+        json.dumps({"historical": {"input": "lots", "output": 5}}), encoding="utf-8"
+    )
+
+    tokens_input, tokens_output, token_source = report_pipeline_module._resolve_token_usage(run_dir)
+
+    expected_chars_in = 400
+    expected_chars_out = len(json.dumps({"a": "y" * 200}))
+    assert tokens_input == expected_chars_in // 4
+    assert tokens_output == expected_chars_out // 4
+    assert token_source == "estimated"
+
+
+def test_resolve_token_usage_non_dict_stage_entry_degrades_that_stage_only(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    _write_stage_files(run_dir, "historical", bc_text="x" * 400, out_data={"a": "y" * 200})
+    (run_dir / "token_usage.json").write_text(
+        json.dumps({"historical": "not-a-dict"}), encoding="utf-8"
+    )
+
+    tokens_input, tokens_output, token_source = report_pipeline_module._resolve_token_usage(run_dir)
+
+    expected_chars_in = 400
+    expected_chars_out = len(json.dumps({"a": "y" * 200}))
+    assert tokens_input == expected_chars_in // 4
+    assert tokens_output == expected_chars_out // 4
+    assert token_source == "estimated"
+
+
+def _prepare_render_ready_run_dir(tmp_path: Path) -> Path:
+    data_path = _write_fixture_dataset(tmp_path)
+    run_dir = prepare("C1", data_path=data_path, runs_root=tmp_path / "runs")
+    (run_dir / "historical.out.json").write_text(json.dumps(_canned_ok({"hallazgos": ["H1"]})), encoding="utf-8")
+    (run_dir / "inference.out.json").write_text(json.dumps(_canned_ok({"hallazgos": ["I1"]})), encoding="utf-8")
+    prepare_expert_alignment(run_dir)
+    (run_dir / "expert-alignment.out.json").write_text(
+        json.dumps(_canned_ok({"sintesis_final": "Todo alineado."})), encoding="utf-8"
+    )
+    return run_dir
+
+
+def test_render_precedence_explicit_kwargs_beat_sidecar_and_estimate(tmp_path, monkeypatch):
+    run_dir = _prepare_render_ready_run_dir(tmp_path)
+    (run_dir / "token_usage.json").write_text(
+        json.dumps({"historical": {"input": 1, "output": 1}, "inference": {"input": 1, "output": 1}}),
+        encoding="utf-8",
+    )
+
+    captured: dict = {}
+
+    def _spy_render_llm_analysis(*args, **kwargs):
+        captured.update(kwargs)
+        html_path = tmp_path / "html" / "fake.html"
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        html_path.write_text("<html></html>", encoding="utf-8")
+        return html_path
+
+    monkeypatch.setattr(report_pipeline_module, "render_llm_analysis", _spy_render_llm_analysis)
+
+    render(run_dir, output_dir=tmp_path / "html", tokens_input=999, tokens_output=888)
+
+    assert captured["tokens_input"] == 999
+    assert captured["tokens_output"] == 888
+    assert captured["token_source"] == "measured"
+
+
+def test_render_uses_sidecar_when_no_explicit_kwargs(tmp_path, monkeypatch):
+    run_dir = _prepare_render_ready_run_dir(tmp_path)
+    (run_dir / "token_usage.json").write_text(
+        json.dumps(
+            {
+                "historical": {"input": 111, "output": 22},
+                "inference": {"input": 333, "output": 44},
+                "expert-alignment": {"input": 55, "output": 6},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    captured: dict = {}
+
+    def _spy_render_llm_analysis(*args, **kwargs):
+        captured.update(kwargs)
+        html_path = tmp_path / "html" / "fake.html"
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        html_path.write_text("<html></html>", encoding="utf-8")
+        return html_path
+
+    monkeypatch.setattr(report_pipeline_module, "render_llm_analysis", _spy_render_llm_analysis)
+
+    render(run_dir, output_dir=tmp_path / "html")
+
+    assert captured["tokens_input"] == 111 + 333 + 55
+    assert captured["tokens_output"] == 22 + 44 + 6
+    assert captured["token_source"] == "measured"
+
+
+def test_render_falls_back_to_estimated_when_no_sidecar_no_kwargs(tmp_path, monkeypatch):
+    run_dir = _prepare_render_ready_run_dir(tmp_path)
+    assert not (run_dir / "token_usage.json").exists()
+
+    captured: dict = {}
+
+    def _spy_render_llm_analysis(*args, **kwargs):
+        captured.update(kwargs)
+        html_path = tmp_path / "html" / "fake.html"
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        html_path.write_text("<html></html>", encoding="utf-8")
+        return html_path
+
+    monkeypatch.setattr(report_pipeline_module, "render_llm_analysis", _spy_render_llm_analysis)
+
+    render(run_dir, output_dir=tmp_path / "html")
+
+    assert isinstance(captured["tokens_input"], int)
+    assert isinstance(captured["tokens_output"], int)
+    assert captured["token_source"] == "estimated"
+
+
+def test_render_partial_kwargs_explicit_side_never_mislabeled_estimated(tmp_path, monkeypatch):
+    """Judgment Day round 1 fix: supplying exactly one of `tokens_input`/
+    `tokens_output` explicitly is itself a precise/authoritative count for
+    that side -- it must never end up mislabeled "estimated" in the combined
+    `token_source`, even though the other (omitted) side falls back to
+    `_resolve_token_usage`'s char/4 estimate (no sidecar present here)."""
+    run_dir = _prepare_render_ready_run_dir(tmp_path)
+    assert not (run_dir / "token_usage.json").exists()
+
+    captured: dict = {}
+
+    def _spy_render_llm_analysis(*args, **kwargs):
+        captured.update(kwargs)
+        html_path = tmp_path / "html" / "fake.html"
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        html_path.write_text("<html></html>", encoding="utf-8")
+        return html_path
+
+    monkeypatch.setattr(report_pipeline_module, "render_llm_analysis", _spy_render_llm_analysis)
+
+    render(run_dir, output_dir=tmp_path / "html", tokens_input=500, tokens_output=None)
+
+    assert captured["tokens_input"] == 500
+    assert isinstance(captured["tokens_output"], int)
+    assert captured["token_source"] != "estimated", (
+        "an explicitly-provided precise tokens_input must never be mislabeled as estimated"
     )

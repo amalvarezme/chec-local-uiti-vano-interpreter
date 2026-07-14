@@ -66,6 +66,7 @@ import json
 import os
 import warnings
 from contextlib import redirect_stdout
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -323,6 +324,103 @@ def _persist_scenario_render_assets(
     }
 
 
+@dataclass
+class SharedInferenceInputs:
+    """Dataset + fitted MinMax scaler computed AT MOST ONCE per `prepare()`
+    call and shared between the inference/SHAP simulator (`_compute_
+    inference_scenarios`) and the automatic min/max simulator (`_run_
+    automatic_simulator`) (design item 3).
+
+    Before this, both consumers independently recomputed `procesar_dataset_
+    completo` and re-fit a MinMax scaler with byte-identical parameters,
+    relying on "consistency over DRY" to hope the two recomputes matched.
+    Passing one `SharedInferenceInputs` object into both guarantees the
+    `feature_scaler` each observes is the SAME object (`is`), not just
+    value-equal.
+
+    `datos` is `procesar_dataset_completo`'s result dict (computed eagerly --
+    both consumers need it unconditionally, mirroring their own pre-dedup
+    standalone paths). `splits` (`escalar_features_minmax_mgcecdl(preparar_
+    splits_estratificados(...))`'s result dict, carrying `feature_scaler`
+    plus the scaled X splits) is instead computed LAZILY, on first access via
+    the `splits` property, and memoized (`is`-identical across repeated
+    access) -- Judgment Day round 1 fix: before this, `_prepare_shared_
+    inference_inputs` fit the scaler unconditionally in `prepare()`, before
+    either consumer's own circuit+window mask-emptiness check ever ran, so a
+    circuit/window with zero surviving events always paid the (expensive)
+    scaler-fit cost even though neither consumer ends up needing `splits` in
+    that case (both return early on `not mascara.any()` before touching
+    `shared_inputs.splits`). Deferring the fit to first access restores the
+    pre-dedup "empty mask never pays the scaler-fit cost" property for the
+    shared path too.
+    """
+
+    datos: dict[str, Any]
+    _splits: dict[str, Any] | None = field(default=None, init=False, repr=False, compare=False)
+
+    @property
+    def splits(self) -> dict[str, Any]:
+        if self._splits is None:
+            X_full_raw = np.asarray(self.datos["X"], dtype=np.float32)
+            with redirect_stdout(io.StringIO()):
+                splits = escalar_features_minmax_mgcecdl(
+                    preparar_splits_estratificados(
+                        X_full_raw,
+                        self.datos["y"],
+                        modo="clasificacion",
+                        random_state=SHAP_RANDOM_STATE,
+                    )
+                )
+            # Same known limitation as the (now-bypassed) per-consumer
+            # recompute: this MinMax scaler is re-fit from a fresh stratified
+            # split of the CURRENT full CSV, not loaded from a training-time
+            # artifact. See `_compute_inference_scenarios`'s own standalone-
+            # path comment for the full rationale (unchanged, out of scope
+            # here).
+            warnings.warn(
+                "El escalador MinMax de features se recalcula a partir del dataset "
+                "actual en tiempo de reporte, no se carga desde la distribución de "
+                "entrenamiento original del modelo. Si el CSV subyacente cambió desde "
+                "el entrenamiento, el escalado de entradas puede diverger silenciosamente "
+                "de lo que el modelo aprendió.",
+                stacklevel=2,
+            )
+            self._splits = splits
+        return self._splits
+
+
+def _prepare_shared_inference_inputs(
+    source_path: str | Path,
+    variables_path: str | Path,
+) -> SharedInferenceInputs:
+    """Compute `procesar_dataset_completo` ONCE, for `prepare()` to thread
+    into both simulators via `shared_inputs` (design item 3). The stratified-
+    split MinMax scaler fit itself is NOT computed here -- it is deferred to
+    `SharedInferenceInputs.splits`'s first access (Judgment Day round 1 fix),
+    so a circuit/window with zero surviving events never pays that cost (see
+    `SharedInferenceInputs`'s own docstring for the full rationale).
+
+    Uses the same deterministic parameters `_compute_inference_scenarios`/
+    `_run_automatic_simulator` each used to recompute independently
+    (`_FILTRO_UITI_MAX`, `_VENTANA_CLIMATICA_HORAS`).
+    """
+    source_path = Path(source_path)
+    variables_path = Path(variables_path)
+
+    with redirect_stdout(io.StringIO()):
+        datos = procesar_dataset_completo(
+            path_clima=source_path,
+            path_variables_seleccion=variables_path,
+            use_sampling=False,
+            min_samples_per_codigo=5,
+            target="UITI_VANO",
+            filtro_uiti_max=_FILTRO_UITI_MAX,
+            ventana_climatica_horas=_VENTANA_CLIMATICA_HORAS,
+        )
+
+    return SharedInferenceInputs(datos=datos)
+
+
 def _compute_inference_scenarios(
     circuito: str,
     fecha_inicio: str,
@@ -340,6 +438,7 @@ def _compute_inference_scenarios(
     ventana_climatica_horas: int = _VENTANA_CLIMATICA_HORAS,
     figures_output_dir: str | Path | None = None,
     render_assets_sink: dict[str, Any] | None = None,
+    shared_inputs: SharedInferenceInputs | None = None,
 ) -> tuple[list[str], list[dict[str, Any]]]:
     """Compute `features` (always, once per circuit/window) and up to four
     scenario context dicts (severity/frequency x período completo/fechas de
@@ -361,6 +460,14 @@ def _compute_inference_scenarios(
     `top_frecuencia_puntos_criticos`). When omitted (the default), behavior
     is byte-for-byte unchanged from Phase 2 (PR1) -- existing callers/tests
     are unaffected.
+
+    `shared_inputs` (design item 3), when given, reuses its precomputed
+    `procesar_dataset_completo` result and fitted `feature_scaler` instead of
+    recomputing them here -- this is what guarantees `_run_automatic_
+    simulator` observes the identical, object-identical scaler within one
+    `prepare()` call. Defaults to `None`, which recomputes internally exactly
+    as before (standalone callers, e.g. `tests/test_report_pipeline_inference
+    _simulator.py`, are unaffected).
     """
     source_path = Path(data_path) if data_path is not None else DEFAULT_DATA_PATH
     variables_path = (
@@ -369,16 +476,19 @@ def _compute_inference_scenarios(
         else DEFAULT_VARIABLES_SELECCION_PATH
     )
 
-    with redirect_stdout(io.StringIO()):
-        datos_inferencia = procesar_dataset_completo(
-            path_clima=source_path,
-            path_variables_seleccion=variables_path,
-            use_sampling=False,
-            min_samples_per_codigo=5,
-            target="UITI_VANO",
-            filtro_uiti_max=filtro_uiti_max,
-            ventana_climatica_horas=ventana_climatica_horas,
-        )
+    if shared_inputs is not None:
+        datos_inferencia = shared_inputs.datos
+    else:
+        with redirect_stdout(io.StringIO()):
+            datos_inferencia = procesar_dataset_completo(
+                path_clima=source_path,
+                path_variables_seleccion=variables_path,
+                use_sampling=False,
+                min_samples_per_codigo=5,
+                target="UITI_VANO",
+                filtro_uiti_max=filtro_uiti_max,
+                ventana_climatica_horas=ventana_climatica_horas,
+            )
 
     features = list(datos_inferencia["features"])
     X_full_raw = np.asarray(datos_inferencia["X"], dtype=np.float32)
@@ -410,33 +520,37 @@ def _compute_inference_scenarios(
         # attribute 'to'` when a SHAP-driving call touches `model.to(device)`.
         return features, []
 
-    with redirect_stdout(io.StringIO()):
-        splits = escalar_features_minmax_mgcecdl(
-            preparar_splits_estratificados(
-                X_full_raw,
-                datos_inferencia["y"],
-                modo="clasificacion",
-                random_state=SHAP_RANDOM_STATE,
+    if shared_inputs is not None:
+        splits = shared_inputs.splits
+    else:
+        with redirect_stdout(io.StringIO()):
+            splits = escalar_features_minmax_mgcecdl(
+                preparar_splits_estratificados(
+                    X_full_raw,
+                    datos_inferencia["y"],
+                    modo="clasificacion",
+                    random_state=SHAP_RANDOM_STATE,
+                )
             )
+        # KNOWN LIMITATION (bounded scope): this MinMax scaler is re-fit here
+        # from a fresh stratified split of the CURRENT full CSV, not loaded
+        # from any artifact persisted alongside the trained model
+        # (`cargar_modelo_mgcecdl`'s zip does not currently store scaler
+        # stats). If the underlying CSV changes between the model's training
+        # time and a later report run, input scaling silently drifts from
+        # what the model actually learned. Fixing this properly requires a
+        # model-export format change (persisting training-time scaler stats)
+        # that is out of scope for this report-only change -- see
+        # `_load_mgcecdl_model_and_sigma`'s own read-only contract.
+        warnings.warn(
+            "El escalador MinMax de features se recalcula a partir del dataset "
+            "actual en tiempo de reporte, no se carga desde la distribución de "
+            "entrenamiento original del modelo. Si el CSV subyacente cambió desde "
+            "el entrenamiento, el escalado de entradas puede diverger silenciosamente "
+            "de lo que el modelo aprendió.",
+            stacklevel=2,
         )
     feature_scaler = splits["feature_scaler"]
-    # KNOWN LIMITATION (bounded scope): this MinMax scaler is re-fit here from
-    # a fresh stratified split of the CURRENT full CSV, not loaded from any
-    # artifact persisted alongside the trained model (`cargar_modelo_mgcecdl`'s
-    # zip does not currently store scaler stats). If the underlying CSV
-    # changes between the model's training time and a later report run, input
-    # scaling silently drifts from what the model actually learned. Fixing
-    # this properly requires a model-export format change (persisting
-    # training-time scaler stats) that is out of scope for this report-only
-    # change -- see `_load_mgcecdl_model_and_sigma`'s own read-only contract.
-    warnings.warn(
-        "El escalador MinMax de features se recalcula a partir del dataset "
-        "actual en tiempo de reporte, no se carga desde la distribución de "
-        "entrenamiento original del modelo. Si el CSV subyacente cambió desde "
-        "el entrenamiento, el escalado de entradas puede diverger silenciosamente "
-        "de lo que el modelo aprendió.",
-        stacklevel=2,
-    )
     X_full = feature_scaler.transform(X_full_raw).astype(np.float32)
 
     mask_np = mascara.to_numpy()
@@ -761,12 +875,19 @@ def _run_inference_simulator(
     run_dir: str | Path,
     *,
     data_path: str | Path | None = None,
+    shared_inputs: SharedInferenceInputs | None = None,
 ) -> tuple[list[str], list[dict[str, Any]], str, float | None, dict[str, Any]]:
     """Orchestrate the read-only MGCECDL/SHAP simulator for one `prepare()`
     run: compute the four scenario contexts (task 2.3) from the already-
     loaded `model`/`rbf_sigma` (hoisted to `prepare()` -- design D2 -- so the
     model is loaded once per run and shared with `_run_automatic_simulator`),
     and persist each surviving scenario's figures under `run_dir` (task 3.2).
+
+    `shared_inputs` (design item 3), when given, is forwarded to
+    `_compute_inference_scenarios` so this simulator and `_run_automatic_
+    simulator` share the identical dataset/scaler instead of each
+    recomputing it. Defaults to `None` (each recomputes internally, current
+    behavior unchanged).
 
     Returns `(features, escenarios, modelo_label, rbf_sigma, render_assets)`.
 
@@ -803,6 +924,7 @@ def _run_inference_simulator(
         data_path=data_path,
         figures_output_dir=run_dir / "inference_figures",
         render_assets_sink=render_assets,
+        shared_inputs=shared_inputs,
     )
 
     for asset in render_assets.values():
@@ -853,6 +975,7 @@ def _run_automatic_simulator(
     model: Any,
     *,
     data_path: str | Path | None = None,
+    shared_inputs: SharedInferenceInputs | None = None,
 ) -> dict[str, Any] | None:
     """Run the automatic min/max sensitivity simulator (design D2) and
     persist its compact agent context (`auto-simulator.bc.json`) plus a
@@ -863,16 +986,21 @@ def _run_automatic_simulator(
     (59) never filtered the automatic simulator to dates of interest (only
     the full-period mask), so it is currently unused here.
 
-    Independently re-derives the scaled MGCECDL inputs via the same
-    deterministic calls `_compute_inference_scenarios` uses (design D2:
-    "consistency over DRY" -- sharing the scaled matrix would require
-    refactoring that fragile function) rather than reusing anything computed
-    by `_run_inference_simulator`. The candidate variable list is instead
-    read back from the already-persisted `run_dir/inference.bc.json`
-    (written by `prepare()` just before this call), since expert-alignment's
-    `variables_a_priorizar` -- the notebook's other variable source -- does
-    not exist yet at `prepare()` time (D1: expert-alignment runs later, once
-    the historical/inference agents have validated their outputs).
+    `shared_inputs` (design item 3): when given, reuses its precomputed
+    `procesar_dataset_completo` result and fitted `feature_scaler` instead of
+    independently re-deriving the scaled MGCECDL inputs -- this is what
+    GUARANTEES this simulator and `_run_inference_simulator`/`_compute_
+    inference_scenarios` observe the identical dataset and the
+    object-identical (`is`) scaler within one `prepare()` call, replacing the
+    previous "consistency over DRY" hope that two independent recomputes
+    with byte-identical parameters would match. Defaults to `None`, which
+    recomputes internally exactly as before (standalone callers are
+    unaffected). The candidate variable list is still read back from the
+    already-persisted `run_dir/inference.bc.json` (written by `prepare()`
+    just before this call), since expert-alignment's `variables_a_priorizar`
+    -- the notebook's other variable source -- does not exist yet at
+    `prepare()` time (D1: expert-alignment runs later, once the
+    historical/inference agents have validated their outputs).
 
     Returns the compact `auto-simulator.bc.json` context dict, or `None`
     (writing no artifacts) when `model is None` (R3 gap, mirrors
@@ -885,16 +1013,19 @@ def _run_automatic_simulator(
     run_dir = Path(run_dir)
     source_path = Path(data_path) if data_path is not None else DEFAULT_DATA_PATH
 
-    with redirect_stdout(io.StringIO()):
-        datos = procesar_dataset_completo(
-            path_clima=source_path,
-            path_variables_seleccion=DEFAULT_VARIABLES_SELECCION_PATH,
-            use_sampling=False,
-            min_samples_per_codigo=5,
-            target="UITI_VANO",
-            filtro_uiti_max=_FILTRO_UITI_MAX,
-            ventana_climatica_horas=_VENTANA_CLIMATICA_HORAS,
-        )
+    if shared_inputs is not None:
+        datos = shared_inputs.datos
+    else:
+        with redirect_stdout(io.StringIO()):
+            datos = procesar_dataset_completo(
+                path_clima=source_path,
+                path_variables_seleccion=DEFAULT_VARIABLES_SELECCION_PATH,
+                use_sampling=False,
+                min_samples_per_codigo=5,
+                target="UITI_VANO",
+                filtro_uiti_max=_FILTRO_UITI_MAX,
+                ventana_climatica_horas=_VENTANA_CLIMATICA_HORAS,
+            )
 
     features = list(datos["features"])
     X_full_raw = np.asarray(datos["X"], dtype=np.float32)
@@ -914,25 +1045,28 @@ def _run_automatic_simulator(
         return None
     mask_np = mascara.to_numpy()
 
-    with redirect_stdout(io.StringIO()):
-        splits = escalar_features_minmax_mgcecdl(
-            preparar_splits_estratificados(
-                X_full_raw,
-                datos["y"],
-                modo="clasificacion",
-                random_state=SHAP_RANDOM_STATE,
+    if shared_inputs is not None:
+        splits = shared_inputs.splits
+    else:
+        with redirect_stdout(io.StringIO()):
+            splits = escalar_features_minmax_mgcecdl(
+                preparar_splits_estratificados(
+                    X_full_raw,
+                    datos["y"],
+                    modo="clasificacion",
+                    random_state=SHAP_RANDOM_STATE,
+                )
             )
+        # Same known limitation/warning as `_compute_inference_scenarios`:
+        # this MinMax scaler is re-fit here from a fresh stratified split of
+        # the CURRENT full CSV, not loaded from a training-time artifact.
+        warnings.warn(
+            "El escalador MinMax de features se recalcula a partir del dataset "
+            "actual en tiempo de reporte (simulador automático), no se carga "
+            "desde la distribución de entrenamiento original del modelo.",
+            stacklevel=2,
         )
     feature_scaler = splits["feature_scaler"]
-    # Same known limitation/warning as `_compute_inference_scenarios`: this
-    # MinMax scaler is re-fit here from a fresh stratified split of the
-    # CURRENT full CSV, not loaded from a training-time artifact.
-    warnings.warn(
-        "El escalador MinMax de features se recalcula a partir del dataset "
-        "actual en tiempo de reporte (simulador automático), no se carga "
-        "desde la distribución de entrenamiento original del modelo.",
-        stacklevel=2,
-    )
     X_full = feature_scaler.transform(X_full_raw).astype(np.float32)
 
     device = resolve_training_device("auto")
@@ -1170,8 +1304,28 @@ def prepare(
     # inference/SHAP simulator and the automatic min/max simulator each used
     # to load their own copy of the same MGCECDL model.
     model, rbf_sigma = _load_mgcecdl_model_and_sigma()
+    # Computed ONCE here and threaded into both simulators (design item 3):
+    # `_run_inference_simulator`/`_compute_inference_scenarios` and
+    # `_run_automatic_simulator` each used to independently recompute
+    # `procesar_dataset_completo` + re-fit the MinMax scaler with
+    # byte-identical parameters. Guarded by `model is not None` (mirrors the
+    # R3 no-op both simulators already degrade to) so a run with no trained
+    # model artifact never pays this cost for nothing.
+    shared_inputs = (
+        _prepare_shared_inference_inputs(source_path, DEFAULT_VARIABLES_SELECCION_PATH)
+        if model is not None
+        else None
+    )
     features, escenarios, modelo_label, rbf_sigma, render_assets = _run_inference_simulator(
-        model, rbf_sigma, circuito, start, end, fechas_interes, run_dir, data_path=source_path
+        model,
+        rbf_sigma,
+        circuito,
+        start,
+        end,
+        fechas_interes,
+        run_dir,
+        data_path=source_path,
+        shared_inputs=shared_inputs,
     )
     inference_context = construir_contexto_inferencia(
         circuito_interes=circuito,
@@ -1219,8 +1373,20 @@ def prepare(
     # simulator` reads it back to derive its candidate variable list (see
     # its own docstring for why -- D1/D2). Degrades to a no-op (returns
     # `None`, writes nothing) when `model is None`, mirroring the inference
-    # simulator's own R3 gap.
-    _run_automatic_simulator(circuito, start, end, fechas_interes, run_dir, model, data_path=source_path)
+    # simulator's own R3 gap. `shared_inputs` (design item 3) is the SAME
+    # object passed to `_run_inference_simulator` above, guaranteeing this
+    # simulator's `feature_scaler` is object-identical to the inference
+    # simulator's.
+    _run_automatic_simulator(
+        circuito,
+        start,
+        end,
+        fechas_interes,
+        run_dir,
+        model,
+        data_path=source_path,
+        shared_inputs=shared_inputs,
+    )
 
     save_json_artifact(
         {
@@ -1430,31 +1596,104 @@ def _detect_llm_runtime() -> tuple[str, str]:
     return "Desconocido", model_override
 
 
-def _estimate_token_usage(run_dir: Path) -> tuple[int, int]:
-    """Rough input/output token estimate for this run's agent-authored stages.
+def _resolve_token_usage(run_dir: Path) -> tuple[int, int, str]:
+    """Resolve `(tokens_input, tokens_output, token_source)` for this run's
+    agent-authored stages (design item 4), preferring REAL per-stage counts
+    from an optional `run_dir/token_usage.json` sidecar over the char/4
+    estimate (replaces the estimate-only `_estimate_token_usage`).
 
-    Approximates tokens as `characters // 4` (a common rule-of-thumb for
-    English/Spanish text) applied to each agent's deterministic context
-    payload (`*.bc.json`, a proxy for its input) and its validated response
-    (`*.out.json`'s `data`, a proxy for its output). This intentionally
-    excludes the static prompt/playbook text each agent's own `build-context`
-    CLI verb assembles around that context, so the estimate is a
-    conservative undercount -- hence "aproximados" wherever it is displayed.
+    `token_usage.json` (optional -- written by the invoking agent after each
+    Skill call whose runtime exposes usage, see `.claude/skills/reporte/
+    SKILL.md` steps 3/4/4b/6) maps stage name
+    (`"historical"`/`"inference"`/`"auto-simulator"`/`"expert-alignment"`) to
+    `{"input": int, "output": int}`. Only stages that actually ran (i.e. have
+    a `{stage}.bc.json` and/or a successfully-validated `{stage}.out.json`
+    under `run_dir`) are considered; a stage absent from BOTH files
+    contributes nothing to either total, same as the old estimate-only
+    behavior.
+
+    For any considered stage missing from the sidecar (or missing an
+    `"input"`/`"output"` key), falls back to the char/4 estimate for THAT
+    stage only -- applied as `characters // 4` (a common rule-of-thumb for
+    English/Spanish text) over `*.bc.json` (input proxy) and `*.out.json`'s
+    `data` (output proxy), same conservative undercount as before (excludes
+    static prompt/playbook text).
+
+    `token_source`:
+    - `"measured"`: every considered stage's counts came from the sidecar.
+    - `"mixed"`: the sidecar covers some, but not all, considered stages.
+    - `"estimated"`: no sidecar (or it covers none of the considered
+      stages) -- every count is the char/4 estimate. Also returned (as
+      `(0, 0, "estimated")`) when no stage produced any file at all.
+
+    Any malformed sidecar degrades gracefully instead of raising (Judgment
+    Day round 1 fix, matching this function's own documented "optional
+    sidecar" contract): top-level invalid JSON is treated as an absent
+    sidecar entirely, and a considered stage whose entry is not a dict, or
+    whose `"input"`/`"output"` values are not coercible to `int`, falls back
+    to the char/4 estimate for THAT stage only -- exactly as if the sidecar
+    were absent for that stage.
     """
-    chars_in = 0
-    chars_out = 0
+    sidecar_path = run_dir / "token_usage.json"
+    sidecar: Any = {}
+    if sidecar_path.exists():
+        try:
+            sidecar = _read_json(sidecar_path)
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+            sidecar = {}
+    if not isinstance(sidecar, dict):
+        sidecar = {}
+
+    tokens_input = 0
+    tokens_output = 0
+    estimated_chars_in = 0
+    estimated_chars_out = 0
+    considered_count = 0
+    measured_count = 0
+
     for stage in ("historical", "inference", "auto-simulator", "expert-alignment"):
         bc_path = run_dir / f"{stage}.bc.json"
-        if bc_path.exists():
-            chars_in += len(bc_path.read_text(encoding="utf-8"))
+        chars_in = len(bc_path.read_text(encoding="utf-8")) if bc_path.exists() else None
 
+        chars_out = None
         out_path = run_dir / f"{stage}.out.json"
         if out_path.exists():
             payload = _read_json(out_path)
             if isinstance(payload, dict) and payload.get("ok") is True:
-                chars_out += len(json.dumps(payload.get("data"), ensure_ascii=False))
+                chars_out = len(json.dumps(payload.get("data"), ensure_ascii=False))
 
-    return chars_in // 4, chars_out // 4
+        if chars_in is None and chars_out is None:
+            continue
+        considered_count += 1
+
+        stage_usage = sidecar.get(stage)
+        stage_measured = False
+        if isinstance(stage_usage, dict) and "input" in stage_usage and "output" in stage_usage:
+            try:
+                stage_tokens_input = int(stage_usage["input"])
+                stage_tokens_output = int(stage_usage["output"])
+            except (TypeError, ValueError):
+                stage_measured = False
+            else:
+                tokens_input += stage_tokens_input
+                tokens_output += stage_tokens_output
+                measured_count += 1
+                stage_measured = True
+        if not stage_measured:
+            estimated_chars_in += chars_in or 0
+            estimated_chars_out += chars_out or 0
+
+    tokens_input += estimated_chars_in // 4
+    tokens_output += estimated_chars_out // 4
+
+    if considered_count == 0 or measured_count == 0:
+        token_source = "estimated"
+    elif measured_count == considered_count:
+        token_source = "measured"
+    else:
+        token_source = "mixed"
+
+    return tokens_input, tokens_output, token_source
 
 
 def render(
@@ -1482,8 +1721,16 @@ def render(
     OpenCode via environment variables); `llm_model` has no reliable
     environment signal and defaults to `"Desconocido"` unless the caller
     passes it explicitly or sets `CHEC_LLM_MODEL`. `tokens_input`/
-    `tokens_output` default to `_estimate_token_usage`'s deterministic,
-    file-size-based approximation when omitted.
+    `tokens_output` precedence (design item 4): an explicit kwarg wins for
+    its own side; whichever side is omitted (`None`) falls back to
+    `_resolve_token_usage` (real per-stage counts from `run_dir/
+    token_usage.json` when present, else its deterministic file-size-based
+    char/4 estimate). When exactly one side is given explicitly, that side
+    is trusted/precise and the combined `token_source` is never downgraded
+    to `"estimated"` on its account -- it is `"measured"` only when the
+    resolved side is also measured, `"mixed"` otherwise. The resolved source
+    is labeled `measured`/`mixed`/`estimated` in the report header via the
+    `token_source` kwarg passed to `render_llm_analysis`.
     """
     run_dir = Path(run_dir)
     state = _read_json(run_dir / "l1_state.json")
@@ -1501,10 +1748,24 @@ def render(
     daily_df = build_daily_series(events_df)
 
     detected_provider, detected_model = _detect_llm_runtime()
-    if tokens_input is None or tokens_output is None:
-        estimated_input, estimated_output = _estimate_token_usage(run_dir)
-        tokens_input = estimated_input if tokens_input is None else tokens_input
-        tokens_output = estimated_output if tokens_output is None else tokens_output
+    if tokens_input is None and tokens_output is None:
+        # Neither kwarg given -- resolve both from `run_dir` (sidecar-real >
+        # char/4 estimate); the resolved source is authoritative.
+        tokens_input, tokens_output, token_source = _resolve_token_usage(run_dir)
+    elif tokens_input is None or tokens_output is None:
+        # Exactly one kwarg given explicitly (Judgment Day round 1 fix): that
+        # side is itself a precise/authoritative count from the caller, so it
+        # must never be mislabeled by whatever `_resolve_token_usage` reports
+        # for the OTHER (omitted) side. Only fill in the omitted side from
+        # resolution, and combine the label: "measured" when the resolved
+        # side is also measured, "mixed" otherwise -- never "estimated",
+        # since at least one side here is caller-provided/trusted.
+        resolved_input, resolved_output, resolved_source = _resolve_token_usage(run_dir)
+        tokens_input = resolved_input if tokens_input is None else tokens_input
+        tokens_output = resolved_output if tokens_output is None else tokens_output
+        token_source = "measured" if resolved_source == "measured" else "mixed"
+    else:
+        token_source = "measured"
 
     kwargs: dict[str, Any] = {
         "start_date": state["fecha_inicio"],
@@ -1518,6 +1779,7 @@ def render(
         "llm_model": llm_model or detected_model,
         "tokens_input": tokens_input,
         "tokens_output": tokens_output,
+        "token_source": token_source,
         **_build_auto_simulation_kwargs(run_dir),
     }
     if output_dir is not None:

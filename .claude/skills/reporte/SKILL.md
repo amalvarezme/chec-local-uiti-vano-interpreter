@@ -116,6 +116,16 @@ Given `circuito` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair)
      skipped, `escenarios: []` but `features` stays non-empty and `modelo` is the real loaded
      model's class name (distinguishes this data-availability gap from the "no trained model" gap
      above, which has `features: []` too).
+**Steps 3, 4, and 4b are independent of one another** — `historical`, `inference`, and
+`auto-simulator` each read their own `*.bc.json` envelope and write their own distinct
+`*.out.json` file, sharing no mutable state. They MAY be issued as parallel/independent calls in
+one turn where the invoking runtime supports it (e.g. Claude Code dispatching independent
+tool/Skill calls together); on a runtime where concurrency is unconfirmed (e.g. OpenCode), running
+them sequentially in any order is an equally correct, explicitly sanctioned degrade path — this
+runbook never requires true concurrency, only that all of steps 3 and 4 complete successfully
+before step 5. Only `expert-alignment` (steps 5-6) has an ordering dependency: it requires BOTH
+`historical` and `inference` to have already completed.
+
 3. **Invoke `historical`** — load this Skill (`.claude/skills/historical/SKILL.md`), give it
    `run_dir/historical.bc.json`'s envelope via `agent_tools.historical build-context`/`validate`,
    and have it write its validated response to `run_dir/historical.out.json` as
@@ -124,10 +134,12 @@ Given `circuito` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair)
    `inference` or beyond, and report the last validation errors to the user.
 4. **Invoke `inference`** — same pattern as step 3, using `run_dir/inference.bc.json` and this
    Skill's own `agent_tools.inference build-context`/`validate` verbs, writing
-   `run_dir/inference.out.json`. Steps 3 and 4 may run in either order (both must complete
-   successfully before step 5) — the design places no ordering requirement between historical and
-   inference, only that both precede expert-alignment.
-4b. **Invoke `auto-simulator`** — `prepare` (step 2) already ran the automatic min/max sensitivity
+   `run_dir/inference.out.json`. Independent of step 3 (see above) — steps 3 and 4 may run in
+   either order, or in parallel where the runtime supports it (both must complete successfully
+   before step 5) — the design places no ordering requirement between historical and inference,
+   only that both precede expert-alignment.
+4b. **Invoke `auto-simulator`** — also independent of steps 3/4 (see above). `prepare` (step 2)
+   already ran the automatic min/max sensitivity
    simulator as a side effect, using the same loaded MGCECDL model as the inference/SHAP simulator.
    If `run_dir/auto-simulator.bc.json` exists, load `.claude/skills/auto-simulator/SKILL.md`, give it
    that envelope via `agent_tools.auto_simulator build-context`/`validate`, and have it write its
@@ -157,10 +169,21 @@ Given `circuito` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair)
    id has no such signal — it stays `"Desconocido"` unless the invoking agent states it, either via
    the `llm_model=` kwarg or the `CHEC_LLM_MODEL` env var. Getting this wrong (or skipping it)
    silently degrades the report header, it never raises. The report header then shows
-   `"<Provider> (<model>)"`, e.g. `"Claude Code (claude-sonnet-5)"`, plus an approximate
-   input/output token line derived from `run_dir`'s `*.bc.json`/`*.out.json` file sizes
-   (`_estimate_token_usage`, `characters // 4`) — pass `tokens_input`/`tokens_output` yourself only
-   if you have a better count on hand; the default estimate is fine otherwise.
+   `"<Provider> (<model>)"`, e.g. `"Claude Code (claude-sonnet-5)"`, plus an input/output token line
+   whose source is labeled `medidos` (measured), `medidos/estimados` (mixed), or `aproximados`
+   (estimated) — see the optional `token_usage.json` sidecar note after step 4b below.
+   `report_pipeline._resolve_token_usage` resolves this per `run_dir`: explicit `tokens_input`/
+   `tokens_output` kwargs (pass them yourself only if you have a better count on hand) beat the
+   sidecar, which beats the `characters // 4` fallback estimate.
+
+   **Optional: real token counts.** If your runtime exposes actual per-call token usage (input/output
+   tokens for the historical/inference/auto-simulator/expert-alignment Skill invocations in steps
+   3/4/4b/6), write it to `run_dir/token_usage.json` before calling `render` in step 7 — a JSON object
+   mapping stage name to `{"input": <int>, "output": <int>}`, e.g. `{"historical": {"input": 1500,
+   "output": 400}, "inference": {"input": 2100, "output": 600}}`. Partial coverage is fine (any stage
+   you omit falls back to the char/4 estimate for that stage only, and the header shows
+   `medidos/estimados`). Skip this file entirely when your runtime does not expose usage — `render`
+   degrades to the estimate exactly as before, no error either way.
 
    Reads all three validated outputs and calls `plotting.render_llm_analysis`, now also merging in
    the 5 `automatic_simulation_*` kwargs (table, agent analysis, cost context, softmax curves,

@@ -1263,6 +1263,24 @@ La respuesta debe preservar el analisis y mantener una estructura apta para el r
   `periodo_completo` y `puntos_criticos`. Cada lista debe tener maximo 5 items y debe
   sintetizar la discusion general junto con la discusion de grafos correspondiente.
 
+## Claves Requeridas
+
+El objeto de salida debe incluir, en el nivel raíz, exactamente estas claves
+(todas obligatorias según el esquema; ninguna puede faltar):
+
+- `contexto`
+- `entregables`
+- `escenarios`
+- `discusion_grafos`
+- `coherencia_grafo_modelo`
+- `hallazgos`
+- `limitaciones`
+- `inferencias_predictivas`
+- `hipotesis_modelo_predictivo`
+
+`limitaciones` es una clave raíz obligatoria (mínimo un ítem): toda
+respuesta debe declarar sus limitaciones explícitamente, no asumirlas.
+
 ## Esquema JSON recomendado
 
 Usar placeholders solo como nombres de campos; los valores deben venir del contexto real:
@@ -1517,6 +1535,8 @@ Si el contexto informa filtros especificos, incluirlos con sus valores reales. N
 
 Antes de responder, el agente debe poder contestar "si" a:
 
+- Incluye las 9 claves requeridas del nivel raíz (ver "Claves Requeridas"),
+  incluyendo `limitaciones` con al menos un ítem.
 - Use circuito, periodo, features y modelo recibidos.
 - Diferencie severidad, frecuencia y fechas de interes.
 - Interprete variables mediante modos CHEC.

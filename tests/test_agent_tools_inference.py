@@ -251,7 +251,13 @@ def test_validate_cli_rejects_response_with_unresolvable_provenance_and_does_not
     assert list(artifact_dir.glob("*.json"))
 
 
-def test_validate_verb_schema_failure_short_circuits_provenance_check():
+def test_validate_verb_schema_failure_short_circuits_provenance_check(tmp_path, monkeypatch):
+    """Isolates cwd to `tmp_path` first, matching `test_agent_tools_batch.py`'s
+    convention: this test deliberately triggers `validate()`'s failure-artifact
+    writer, and must never write into the tracked
+    `reports/interpretability/artifacts/` tree (subsumed by the autouse
+    `conftest.py` fixture, kept explicit here for local readability)."""
+    monkeypatch.chdir(tmp_path)
     context = _sample_context()
     envelope = build_context(context)
     response = _valid_output_with_provenance(envelope["context"])

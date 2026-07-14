@@ -347,3 +347,54 @@ def test_expert_alignment_tab_renders_auto_simulation_analysis():
     assert "&#x27;" not in html
     assert "&amp;#x27;" not in html
     assert "Mayor sensibilidad" not in html
+
+
+# ---------------------------------------------------------------------------
+# Real token usage instrumentation (SDD `reporte-perf-optimization`, item 4):
+# the report header must label the resolved token source
+# (measured/mixed/estimated) passed in via `token_source`, defaulting to
+# "estimated" for backward compatibility with callers that never pass it.
+# ---------------------------------------------------------------------------
+
+
+def _render_with_tokens(tmp_path, *, tokens_input, tokens_output, token_source=None):
+    raw_df, daily_df = _minimal_raw_and_daily_df()
+    kwargs = dict(
+        validation_data={"hallazgos": ["algo"]},
+        raw_df=raw_df,
+        daily_df=daily_df,
+        critical_points=[],
+        selected_circuitos=["C1"],
+        tokens_input=tokens_input,
+        tokens_output=tokens_output,
+        output_dir=tmp_path,
+    )
+    if token_source is not None:
+        kwargs["token_source"] = token_source
+    html_path = render_llm_analysis(**kwargs)
+    return html_path.read_text(encoding="utf-8")
+
+
+def test_header_labels_measured_token_source_without_tilde(tmp_path):
+    html = _render_with_tokens(tmp_path, tokens_input=1234, tokens_output=567, token_source="measured")
+
+    assert "Tokens medidos usados en la generación del informe" in html
+    assert "entrada 1,234" in html
+    assert "salida 567" in html
+    assert "~1,234" not in html
+
+
+def test_header_labels_mixed_token_source(tmp_path):
+    html = _render_with_tokens(tmp_path, tokens_input=1234, tokens_output=567, token_source="mixed")
+
+    assert "Tokens medidos/estimados usados en la generación del informe" in html
+    assert "~1,234" in html
+
+
+def test_header_defaults_to_estimated_token_source_label(tmp_path):
+    # No `token_source` passed at all -- must match the pre-instrumentation
+    # default text so existing callers never see a behavior change.
+    html = _render_with_tokens(tmp_path, tokens_input=1234, tokens_output=567)
+
+    assert "Tokens aproximados usados en la generación del informe" in html
+    assert "~1,234" in html

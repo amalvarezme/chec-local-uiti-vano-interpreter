@@ -12,15 +12,18 @@ import json
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import pandas as pd
 import pytest
 
 from chec_impacto.interpretability.circuit_analysis import (
     graficar_barras_y_radar as _real_graficar_barras_y_radar,
 )
 from chec_local_interpreter.report_pipeline import (
+    SharedInferenceInputs,
     _compute_inference_scenarios,
     _load_mgcecdl_model_and_sigma,
     _modelo_mas_reciente,
+    _prepare_shared_inference_inputs,
     _run_inference_simulator,
 )
 import chec_local_interpreter.report_pipeline as report_pipeline_module
@@ -403,3 +406,130 @@ def test_run_inference_simulator_persists_figures_with_run_dir_relative_paths(tm
     graphs_dir = run_dir / "inference_graphs"
     assert len(list(figures_dir.glob("*.png"))) == 8  # 4 scenarios x (barras + radar)
     assert len(list(graphs_dir.glob("*.html"))) == 4
+
+
+# ---------------------------------------------------------------------------
+# Judgment Day round 1 fix -- `_prepare_shared_inference_inputs` must not pay
+# the MinMax-scaler-fit cost until a consumer actually needs it. Before the
+# dedup change, `_compute_inference_scenarios`/`_run_automatic_simulator`
+# each independently checked circuit/window mask emptiness BEFORE reaching
+# their own scaler-fit code, so a circuit/window with zero surviving events
+# never paid that cost. The shared path must preserve that property (lazy /
+# memoized fit), not fit unconditionally in `prepare()`.
+# ---------------------------------------------------------------------------
+
+
+class _FakeModel:
+    """Stand-in model so `model is not None` checks pass without loading a
+    real MGCECDL artifact."""
+
+
+def _fake_datos() -> dict:
+    return {
+        "features": ["f1", "f2"],
+        "X": [[0.0, 1.0], [1.0, 0.0]],
+        "y": [0, 1],
+        "Xdata": pd.DataFrame({"f1": [0.0, 1.0], "f2": [1.0, 0.0]}),
+        "df_original_copy": pd.DataFrame(
+            {"CIRCUITO": ["OTHER-CIRCUIT"], "FECHA": ["2020-01-01"]}
+        ),
+        "label_encoders": {},
+        "max_values_imputed": {},
+    }
+
+
+def _install_scaler_fit_spy(monkeypatch) -> list:
+    """Monkeypatch both `procesar_dataset_completo` and
+    `escalar_features_minmax_mgcecdl` (module-level names imported into
+    `report_pipeline`) with fakes/spies, returning the list of scaler-fit
+    calls recorded so far."""
+    scaler_fit_calls: list = []
+
+    def _fake_procesar_dataset_completo(**kwargs):
+        return _fake_datos()
+
+    def _spy_escalar_features_minmax_mgcecdl(*args, **kwargs):
+        scaler_fit_calls.append(1)
+        return {"feature_scaler": object()}
+
+    monkeypatch.setattr(
+        report_pipeline_module, "procesar_dataset_completo", _fake_procesar_dataset_completo
+    )
+    monkeypatch.setattr(
+        report_pipeline_module,
+        "escalar_features_minmax_mgcecdl",
+        _spy_escalar_features_minmax_mgcecdl,
+    )
+    monkeypatch.setattr(
+        report_pipeline_module, "preparar_splits_estratificados", lambda *a, **k: {}
+    )
+    return scaler_fit_calls
+
+
+def test_prepare_shared_inference_inputs_defers_scaler_fit_until_splits_accessed(monkeypatch):
+    scaler_fit_calls = _install_scaler_fit_spy(monkeypatch)
+
+    shared_inputs = _prepare_shared_inference_inputs("dummy-clima.csv", "dummy-variables.xlsx")
+
+    assert scaler_fit_calls == [], (
+        "_prepare_shared_inference_inputs must not fit the MinMax scaler eagerly"
+    )
+
+    with pytest.warns(UserWarning, match="escalador MinMax"):
+        first_splits = shared_inputs.splits
+
+    assert scaler_fit_calls == [1], "accessing .splits must trigger exactly one lazy scaler fit"
+    assert shared_inputs.splits is first_splits, (
+        "a second access must reuse the memoized splits, not refit the scaler"
+    )
+    assert scaler_fit_calls == [1], "the scaler must never be refit on repeated .splits access"
+
+
+def test_compute_inference_scenarios_empty_mask_never_fits_scaler_via_shared_inputs(
+    tmp_path, monkeypatch
+):
+    scaler_fit_calls = _install_scaler_fit_spy(monkeypatch)
+    shared_inputs = SharedInferenceInputs(datos=_fake_datos())
+
+    features, escenarios = _compute_inference_scenarios(
+        "NOT-PRESENT-CIRCUIT",
+        "2020-01-01",
+        "2020-01-02",
+        [],
+        _FakeModel(),
+        1.0,
+        graph_output_dir=tmp_path / "graphs",
+        shared_inputs=shared_inputs,
+    )
+
+    assert features == ["f1", "f2"]
+    assert escenarios == []
+    assert scaler_fit_calls == [], (
+        "a circuit/window with zero surviving events must never pay the "
+        "scaler-fit cost, even via the shared inputs path"
+    )
+
+
+def test_run_automatic_simulator_empty_mask_never_fits_scaler_via_shared_inputs(
+    tmp_path, monkeypatch
+):
+    scaler_fit_calls = _install_scaler_fit_spy(monkeypatch)
+    shared_inputs = SharedInferenceInputs(datos=_fake_datos())
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+
+    result = report_pipeline_module._run_automatic_simulator(
+        "NOT-PRESENT-CIRCUIT",
+        "2020-01-01",
+        "2020-01-02",
+        [],
+        run_dir,
+        _FakeModel(),
+        shared_inputs=shared_inputs,
+    )
+
+    assert result is None
+    assert scaler_fit_calls == [], (
+        "a circuit/window with zero surviving events must never pay the "
+        "scaler-fit cost, even via the shared inputs path"
+    )
