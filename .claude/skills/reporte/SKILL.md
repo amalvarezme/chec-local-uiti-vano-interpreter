@@ -59,6 +59,16 @@ Examples:
 | `/reporte C1 2026-01-01 2026-02-01` | Both dates pass through unchanged |
 | `/reporte C1 2026-01-01` | **Rejected** — usage error, `fecha_fin` missing |
 
+## Single user checkpoint (start of flow only)
+
+`circuito` and the resolved `fecha_inicio`/`fecha_fin` window are the **only** things this Skill
+ever corroborates with the user, and only **once**, at the very start of the run, before step 2
+(`prepare`) does any work. Once that single checkpoint clears, the entire rest of the run (steps
+2-8) proceeds **without asking the user anything else** — no "should I run these in parallel?", no
+"should I proceed automatically?", no intermediate status check-ins. Silence between steps is the
+expected behavior; the next thing the user sees is either an alert (a hard failure below) or the
+step 8 result.
+
 ## Allowed tools
 
 - **Bash** — restricted to invoking the orchestrator's own Python stages
@@ -86,8 +96,24 @@ boundary.
 
 Given `circuito` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
 
-1. **Validate arguments.** Reject a lone date per the argument contract above before doing
-   anything else.
+1. **Validate arguments, resolve the window, and get the one-time user confirmation.** Before
+   touching `prepare` or any agent:
+   1. Reject a lone date per the argument contract above (usage error, stop here — no dataset
+      load needed to catch this case).
+   2. Load the dataset and check `circuito` against `data_loader.available_circuits(frame)`. If it
+      is not present, **generate an alert** (e.g. "Circuito `<circuito>` no encontrado en el
+      dataset — verifica el id") and stop. Do not create a run_dir, do not invoke `prepare`, do not
+      ask a follow-up question — this is a hard stop, not a clarification.
+   3. Resolve the date window: if both dates were omitted, resolve them via
+      `data_loader.circuit_date_range(frame, circuito)`; if both were given, keep them as given
+      but confirm they yield at least one event for `circuito` (the same check `filter_events` +
+      `prepare` perform). If the resolved/given window has zero events, **generate an alert**
+      naming the window that failed and, when available, the circuit's actual full range from
+      `circuit_date_range` — then stop, same as the circuit-not-found case.
+   4. Once `circuito` and the window both check out, state them back to the user once (circuit id
+      + resolved `fecha_inicio`..`fecha_fin`) and get their confirmation before proceeding. This is
+      the single checkpoint described above — do not repeat it, and do not add any other
+      confirmation prompt later in the run.
 2. **`prepare`** — run
    `report_pipeline.prepare(circuito, fecha_inicio, fecha_fin)`. Writes
    `run_dir/historical.bc.json`, `run_dir/inference.bc.json`, `run_dir/l1_state.json`. Raises
@@ -118,13 +144,17 @@ Given `circuito` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair)
      above, which has `features: []` too).
 **Steps 3, 4, and 4b are independent of one another** — `historical`, `inference`, and
 `auto-simulator` each read their own `*.bc.json` envelope and write their own distinct
-`*.out.json` file, sharing no mutable state. They MAY be issued as parallel/independent calls in
-one turn where the invoking runtime supports it (e.g. Claude Code dispatching independent
-tool/Skill calls together); on a runtime where concurrency is unconfirmed (e.g. OpenCode), running
-them sequentially in any order is an equally correct, explicitly sanctioned degrade path — this
-runbook never requires true concurrency, only that all of steps 3 and 4 complete successfully
-before step 5. Only `expert-alignment` (steps 5-6) has an ordering dependency: it requires BOTH
-`historical` and `inference` to have already completed.
+`*.out.json` file, sharing no mutable state. On any runtime where the invoking tool supports
+dispatching independent calls together (e.g. Claude Code issuing independent Agent/Skill calls in
+one turn), they **MUST** be issued that way — parallel dispatch is the default behavior, not an
+option to weigh or ask the user about. Do not fall back to running them one at a time "to be safe"
+or to check in between; that only degrades runtime, it buys no safety since the three stages share
+no state. Sequential execution is reserved strictly for a runtime where concurrent dispatch is
+unconfirmed or unavailable (e.g. OpenCode) — a technical fallback, never a discretionary choice,
+and never something to surface to the user as a question. Either way, all of steps 3 and 4 must
+complete successfully before step 5. Only `expert-alignment` (steps 5-6) has an ordering
+dependency: it requires BOTH `historical` and `inference` to have already completed — dispatch it
+alone, immediately once both are done, without pausing for input.
 
 3. **Invoke `historical`** — load this Skill (`.claude/skills/historical/SKILL.md`), give it
    `run_dir/historical.bc.json`'s envelope via `agent_tools.historical build-context`/`validate`,
@@ -219,11 +249,15 @@ before step 5. Only `expert-alignment` (steps 5-6) has an ordering dependency: i
 
 | Failure | Where | User-facing outcome |
 |---|---|---|
-| Lone date given | Step 1 (this Skill) / `prepare` | Usage error, no stage runs |
-| Circuit not found | `prepare` | `ReportPipelineError`, no run_dir created, no agent invoked |
-| Zero events in window | `prepare` | `ReportPipelineError`, no run_dir created, no agent invoked |
-| Agent validation retries exhausted | Steps 3, 4, or 6 | Stop this circuit's run; surface the last `validate` errors; never invoke a later stage |
+| Lone date given | Step 1 (this Skill) | Usage error, no stage runs |
+| Circuit not found | Step 1 pre-flight (this Skill), re-checked by `prepare` | Alert at step 1, before any run_dir exists — `prepare` would raise `ReportPipelineError` on the same check if step 1 were ever bypassed, so this fails closed either way |
+| Zero events in window | Step 1 pre-flight (this Skill), re-checked by `prepare` | Alert at step 1, before any run_dir exists — same defense-in-depth as above via `prepare`'s `ReportPipelineError` |
+| Agent validation retries exhausted | Steps 3, 4, or 6 | Stop this circuit's run; surface the last `validate` errors; never invoke a later stage; never turn this into a follow-up question — report it and stop |
 | Missing/invalid validated output reaching a later stage | `prepare_expert_alignment` / `render` | `ReportPipelineError`; the affected artifact is never written |
+
+None of the rows above, nor any other mid-run condition, should turn into a question back to the
+user — the single checkpoint is step 1 only (see "Single user checkpoint" above). Every failure
+from step 2 onward is an alert-and-stop, not a prompt.
 
 ### Simulator degrade paths (NOT `ReportPipelineError`)
 
