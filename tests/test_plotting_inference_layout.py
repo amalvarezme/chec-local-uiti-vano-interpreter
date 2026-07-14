@@ -398,3 +398,92 @@ def test_header_defaults_to_estimated_token_source_label(tmp_path):
 
     assert "Tokens aproximados usados en la generación del informe" in html
     assert "~1,234" in html
+
+
+# ---------------------------------------------------------------------------
+# `tokens_total`/`elapsed_seconds` header line -- total tokens across every
+# agent stage that ran (including sub-agents dispatched in parallel), plus
+# the run's total wall-clock execution time. Independent of the existing
+# entrada/salida `tokens_input`/`tokens_output` line above.
+# ---------------------------------------------------------------------------
+
+
+def _render_with_totals(
+    tmp_path,
+    *,
+    tokens_input=None,
+    tokens_output=None,
+    tokens_total=None,
+    elapsed_seconds=None,
+    token_source=None,
+):
+    raw_df, daily_df = _minimal_raw_and_daily_df()
+    kwargs = dict(
+        validation_data={"hallazgos": ["algo"]},
+        raw_df=raw_df,
+        daily_df=daily_df,
+        critical_points=[],
+        selected_circuitos=["C1"],
+        tokens_input=tokens_input,
+        tokens_output=tokens_output,
+        tokens_total=tokens_total,
+        elapsed_seconds=elapsed_seconds,
+        output_dir=tmp_path,
+    )
+    if token_source is not None:
+        kwargs["token_source"] = token_source
+    html_path = render_llm_analysis(**kwargs)
+    return html_path.read_text(encoding="utf-8")
+
+
+def test_header_shows_total_tokens_and_elapsed_time_line(tmp_path):
+    html = _render_with_totals(
+        tmp_path,
+        tokens_input=1234,
+        tokens_output=567,
+        tokens_total=5000,
+        elapsed_seconds=753,
+        token_source="measured",
+    )
+
+    assert (
+        "Tokens totales (todas las etapas, incl. sub-agentes/corridas en paralelo) medidos: 5,000" in html
+    )
+    assert "Tiempo total de ejecución: 12m 33s" in html
+
+
+def test_header_formats_elapsed_seconds_over_an_hour_as_hours_minutes(tmp_path):
+    html = _render_with_totals(tmp_path, tokens_total=100, elapsed_seconds=3661)
+
+    assert "Tiempo total de ejecución: 1h 1m" in html
+
+
+def test_header_omits_total_line_when_both_total_and_elapsed_are_none(tmp_path):
+    html = _render_with_totals(tmp_path, tokens_input=1234, tokens_output=567)
+
+    assert "Tokens totales" not in html
+    assert "Tiempo total de ejecución" not in html
+
+
+def test_header_total_line_renders_independently_of_entrada_salida_block(tmp_path):
+    # tokens_input/tokens_output both None -- the entrada/salida block above
+    # is skipped -- but the tokens_total/elapsed_seconds line must still
+    # render, since the two blocks are independent.
+    html = _render_with_totals(tmp_path, tokens_total=999, elapsed_seconds=65)
+
+    assert "Tokens totales" in html
+    assert "Tiempo total de ejecución: 1m 5s" in html
+    assert "usados en la generación del informe" not in html
+
+
+def test_header_total_line_shows_na_when_tokens_total_is_none(tmp_path):
+    html = _render_with_totals(tmp_path, elapsed_seconds=10)
+
+    assert "Tokens totales: N/D" in html
+    assert "Tiempo total de ejecución: 0m 10s" in html
+
+
+def test_header_total_line_shows_na_when_elapsed_seconds_is_none(tmp_path):
+    html = _render_with_totals(tmp_path, tokens_total=42)
+
+    assert "Tiempo total de ejecución: N/D" in html

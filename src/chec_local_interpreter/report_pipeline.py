@@ -1596,43 +1596,57 @@ def _detect_llm_runtime() -> tuple[str, str]:
     return "Desconocido", model_override
 
 
-def _resolve_token_usage(run_dir: Path) -> tuple[int, int, str]:
-    """Resolve `(tokens_input, tokens_output, token_source)` for this run's
-    agent-authored stages (design item 4), preferring REAL per-stage counts
-    from an optional `run_dir/token_usage.json` sidecar over the char/4
-    estimate (replaces the estimate-only `_estimate_token_usage`).
+def _resolve_token_usage(run_dir: Path) -> tuple[int, int, int, str]:
+    """Resolve `(tokens_input, tokens_output, tokens_total, token_source)`
+    for this run's agent-authored stages (design item 4), preferring REAL
+    per-stage counts from an optional `run_dir/token_usage.json` sidecar over
+    the char/4 estimate (replaces the estimate-only `_estimate_token_usage`).
 
     `token_usage.json` (optional -- written by the invoking agent after each
     Skill call whose runtime exposes usage, see `.claude/skills/reporte/
     SKILL.md` steps 3/4/4b/6) maps stage name
     (`"historical"`/`"inference"`/`"auto-simulator"`/`"expert-alignment"`) to
-    `{"input": int, "output": int}`. Only stages that actually ran (i.e. have
-    a `{stage}.bc.json` and/or a successfully-validated `{stage}.out.json`
-    under `run_dir`) are considered; a stage absent from BOTH files
-    contributes nothing to either total, same as the old estimate-only
-    behavior.
+    EITHER `{"input": int, "output": int}` (a real input/output split) OR
+    `{"total": int}` (a single combined count, for stages dispatched via
+    Claude Code's `Agent` tool as real sub-agents, whose completion
+    notification only reports a combined `subagent_tokens` figure with no
+    input/output split available). Both shapes are valid per-stage and may be
+    mixed across stages in the same sidecar file. Only stages that actually
+    ran (i.e. have a `{stage}.bc.json` and/or a successfully-validated
+    `{stage}.out.json` under `run_dir`) are considered; a stage absent from
+    BOTH files contributes nothing to any total, same as the old
+    estimate-only behavior.
 
-    For any considered stage missing from the sidecar (or missing an
-    `"input"`/`"output"` key), falls back to the char/4 estimate for THAT
-    stage only -- applied as `characters // 4` (a common rule-of-thumb for
-    English/Spanish text) over `*.bc.json` (input proxy) and `*.out.json`'s
-    `data` (output proxy), same conservative undercount as before (excludes
-    static prompt/playbook text).
+    For any considered stage missing from the sidecar (or missing both the
+    `"input"`/`"output"` keys and the `"total"` key), falls back to the
+    char/4 estimate for THAT stage only -- applied as `characters // 4` (a
+    common rule-of-thumb for English/Spanish text) over `*.bc.json` (input
+    proxy) and `*.out.json`'s `data` (output proxy), same conservative
+    undercount as before (excludes static prompt/playbook text).
+
+    `tokens_total` accumulates, per considered stage, the best available
+    number: the sidecar's `"total"` when present, else `input + output` (from
+    either the sidecar's split or, when that stage wasn't measured at all,
+    the char/4 estimate for that stage's input + output) -- it is always
+    populated for every considered stage, mirroring the same
+    "prefer sidecar, else char/4 estimate" precedence used for
+    `tokens_input`/`tokens_output` individually.
 
     `token_source`:
-    - `"measured"`: every considered stage's counts came from the sidecar.
+    - `"measured"`: every considered stage's counts came from the sidecar
+      (either shape).
     - `"mixed"`: the sidecar covers some, but not all, considered stages.
     - `"estimated"`: no sidecar (or it covers none of the considered
       stages) -- every count is the char/4 estimate. Also returned (as
-      `(0, 0, "estimated")`) when no stage produced any file at all.
+      `(0, 0, 0, "estimated")`) when no stage produced any file at all.
 
     Any malformed sidecar degrades gracefully instead of raising (Judgment
     Day round 1 fix, matching this function's own documented "optional
     sidecar" contract): top-level invalid JSON is treated as an absent
     sidecar entirely, and a considered stage whose entry is not a dict, or
-    whose `"input"`/`"output"` values are not coercible to `int`, falls back
-    to the char/4 estimate for THAT stage only -- exactly as if the sidecar
-    were absent for that stage.
+    whose `"input"`/`"output"`/`"total"` values are not coercible to `int`,
+    falls back to the char/4 estimate for THAT stage only -- exactly as if
+    the sidecar were absent for that stage.
     """
     sidecar_path = run_dir / "token_usage.json"
     sidecar: Any = {}
@@ -1646,8 +1660,11 @@ def _resolve_token_usage(run_dir: Path) -> tuple[int, int, str]:
 
     tokens_input = 0
     tokens_output = 0
+    tokens_total = 0
     estimated_chars_in = 0
     estimated_chars_out = 0
+    estimated_total_chars_in = 0
+    estimated_total_chars_out = 0
     considered_count = 0
     measured_count = 0
 
@@ -1667,24 +1684,49 @@ def _resolve_token_usage(run_dir: Path) -> tuple[int, int, str]:
         considered_count += 1
 
         stage_usage = sidecar.get(stage)
-        stage_measured = False
+        stage_split_measured = False
+        stage_total_measured = False
         if isinstance(stage_usage, dict) and "input" in stage_usage and "output" in stage_usage:
             try:
                 stage_tokens_input = int(stage_usage["input"])
                 stage_tokens_output = int(stage_usage["output"])
             except (TypeError, ValueError):
-                stage_measured = False
+                pass
             else:
                 tokens_input += stage_tokens_input
                 tokens_output += stage_tokens_output
-                measured_count += 1
-                stage_measured = True
-        if not stage_measured:
+                tokens_total += stage_tokens_input + stage_tokens_output
+                stage_split_measured = True
+        elif isinstance(stage_usage, dict) and "total" in stage_usage:
+            try:
+                stage_tokens_total = int(stage_usage["total"])
+            except (TypeError, ValueError):
+                pass
+            else:
+                tokens_total += stage_tokens_total
+                stage_total_measured = True
+
+        if stage_split_measured or stage_total_measured:
+            measured_count += 1
+        else:
+            # Fully unmeasured stage (neither shape present/valid) -- both
+            # tokens_total AND tokens_input/tokens_output fall back to the
+            # char/4 estimate for this stage.
+            estimated_total_chars_in += chars_in or 0
+            estimated_total_chars_out += chars_out or 0
+
+        if not stage_split_measured:
+            # No input/output split available (either fully unmeasured, or
+            # measured only via the "total"-only shape) -- tokens_input/
+            # tokens_output individually still fall back to the char/4
+            # estimate for this stage, even though tokens_total already has
+            # a real number from the sidecar in the "total"-only case.
             estimated_chars_in += chars_in or 0
             estimated_chars_out += chars_out or 0
 
     tokens_input += estimated_chars_in // 4
     tokens_output += estimated_chars_out // 4
+    tokens_total += estimated_total_chars_in // 4 + estimated_total_chars_out // 4
 
     if considered_count == 0 or measured_count == 0:
         token_source = "estimated"
@@ -1693,7 +1735,24 @@ def _resolve_token_usage(run_dir: Path) -> tuple[int, int, str]:
     else:
         token_source = "mixed"
 
-    return tokens_input, tokens_output, token_source
+    return tokens_input, tokens_output, tokens_total, token_source
+
+
+def _resolve_elapsed_seconds(run_dir: Path) -> float | None:
+    """Resolve this run's total wall-clock execution time by parsing the
+    UTC timestamp encoded in `run_dir.name` (written by `_new_run_dir` as
+    `datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")`) and diffing it
+    against the current time.
+
+    Degrades gracefully -- returns `None`, never raises -- when `run_dir.name`
+    does not match that exact format (e.g. a caller-supplied `tmp_path` in
+    tests, or any run_dir not created by `_new_run_dir`).
+    """
+    try:
+        parsed_start = datetime.strptime(run_dir.name, "%Y%m%dT%H%M%S%f").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+    return (datetime.now(timezone.utc) - parsed_start).total_seconds()
 
 
 def render(
@@ -1704,6 +1763,8 @@ def render(
     llm_model: str | None = None,
     tokens_input: int | None = None,
     tokens_output: int | None = None,
+    tokens_total: int | None = None,
+    elapsed_seconds: float | None = None,
 ) -> Path:
     """Read all three validated outputs from `run_dir` and render the final
     HTML report via `plotting.render_llm_analysis`.
@@ -1731,6 +1792,17 @@ def render(
     resolved side is also measured, `"mixed"` otherwise. The resolved source
     is labeled `measured`/`mixed`/`estimated` in the report header via the
     `token_source` kwarg passed to `render_llm_analysis`.
+
+    `tokens_total` and `elapsed_seconds` follow the same "explicit kwarg wins,
+    else resolve" precedence, independently of the `tokens_input`/
+    `tokens_output` precedence above: `tokens_total` falls back to
+    `_resolve_token_usage`'s 4th return value (the total across every
+    considered stage, including stages measured only via the sidecar's
+    `{"total": int}` shape -- e.g. sub-agents dispatched via Claude Code's
+    `Agent` tool, which only report a single combined count); `elapsed_seconds`
+    falls back to `_resolve_elapsed_seconds(run_dir)`, which itself may return
+    `None` (propagated through -- the header rendering simply omits that
+    line, same degrade-gracefully pattern as the token fields being `None`).
     """
     run_dir = Path(run_dir)
     state = _read_json(run_dir / "l1_state.json")
@@ -1748,10 +1820,11 @@ def render(
     daily_df = build_daily_series(events_df)
 
     detected_provider, detected_model = _detect_llm_runtime()
+    resolved_input, resolved_output, resolved_total, resolved_source = _resolve_token_usage(run_dir)
     if tokens_input is None and tokens_output is None:
         # Neither kwarg given -- resolve both from `run_dir` (sidecar-real >
         # char/4 estimate); the resolved source is authoritative.
-        tokens_input, tokens_output, token_source = _resolve_token_usage(run_dir)
+        tokens_input, tokens_output, token_source = resolved_input, resolved_output, resolved_source
     elif tokens_input is None or tokens_output is None:
         # Exactly one kwarg given explicitly (Judgment Day round 1 fix): that
         # side is itself a precise/authoritative count from the caller, so it
@@ -1760,12 +1833,16 @@ def render(
         # resolution, and combine the label: "measured" when the resolved
         # side is also measured, "mixed" otherwise -- never "estimated",
         # since at least one side here is caller-provided/trusted.
-        resolved_input, resolved_output, resolved_source = _resolve_token_usage(run_dir)
         tokens_input = resolved_input if tokens_input is None else tokens_input
         tokens_output = resolved_output if tokens_output is None else tokens_output
         token_source = "measured" if resolved_source == "measured" else "mixed"
     else:
         token_source = "measured"
+
+    if tokens_total is None:
+        tokens_total = resolved_total
+    if elapsed_seconds is None:
+        elapsed_seconds = _resolve_elapsed_seconds(run_dir)
 
     kwargs: dict[str, Any] = {
         "start_date": state["fecha_inicio"],
@@ -1779,7 +1856,9 @@ def render(
         "llm_model": llm_model or detected_model,
         "tokens_input": tokens_input,
         "tokens_output": tokens_output,
+        "tokens_total": tokens_total,
         "token_source": token_source,
+        "elapsed_seconds": elapsed_seconds,
         **_build_auto_simulation_kwargs(run_dir),
     }
     if output_dir is not None:

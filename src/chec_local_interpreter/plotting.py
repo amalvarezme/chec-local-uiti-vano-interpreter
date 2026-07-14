@@ -1695,6 +1695,20 @@ def render_expert_alignment_tab(
     )
 
 
+def _format_elapsed_seconds(elapsed_seconds: float) -> str:
+    """Format a wall-clock duration as `"Xm Ys"` (under an hour) or `"Xh Ym"`
+    (an hour or more), e.g. `12m 33s` / `1h 5m`."""
+    total_seconds = int(elapsed_seconds)
+    if total_seconds < 0:
+        total_seconds = 0
+    if total_seconds >= 3600:
+        hours, remainder = divmod(total_seconds, 3600)
+        minutes = remainder // 60
+        return f"{hours}h {minutes}m"
+    minutes, seconds = divmod(total_seconds, 60)
+    return f"{minutes}m {seconds}s"
+
+
 def render_llm_analysis(
     validation_data: dict,
     raw_df: pd.DataFrame,
@@ -1708,7 +1722,9 @@ def render_llm_analysis(
     llm_provider: str = "Desconocido",
     tokens_input: int | None = None,
     tokens_output: int | None = None,
+    tokens_total: int | None = None,
     token_source: str = "estimated",
+    elapsed_seconds: float | None = None,
     all_circuits_df: pd.DataFrame | None = None,
     inference_results: dict | None = None,
     inference_analysis: dict | None = None,
@@ -2511,6 +2527,34 @@ def render_llm_analysis(
             subtitle_info += (
                 "<br><span style='font-size: 0.85em; color: #94a3b8;'>"
                 f"Tokens {token_label} usados en la generación del informe: entrada {tokens_in_str} | salida {tokens_out_str}"
+                "</span>"
+            )
+        if tokens_total is not None or elapsed_seconds is not None:
+            # Independent of the entrada/salida block above -- this line
+            # covers the TOTAL across every agent stage that ran, including
+            # sub-agents dispatched in parallel (see `_resolve_token_usage`'s
+            # `"total"`-only sidecar shape), plus the run's total wall-clock
+            # execution time. Reuses the same `token_source`-derived label
+            # for consistency with the entrada/salida line above.
+            token_source_labels = {
+                "measured": "medidos",
+                "mixed": "medidos/estimados",
+                "estimated": "aproximados",
+            }
+            token_label = token_source_labels.get(token_source, "aproximados")
+            prefix = "" if token_source == "measured" else "~"
+            if tokens_total is not None:
+                tokens_total_part = (
+                    "Tokens totales (todas las etapas, incl. sub-agentes/corridas en paralelo) "
+                    f"{token_label}: {prefix}{tokens_total:,}"
+                )
+            else:
+                tokens_total_part = "Tokens totales: N/D"
+            time_str = _format_elapsed_seconds(elapsed_seconds) if elapsed_seconds is not None else "N/D"
+            time_part = f"Tiempo total de ejecución: {time_str}"
+            subtitle_info += (
+                "<br><span style='font-size: 0.85em; color: #94a3b8;'>"
+                f"{tokens_total_part} | {time_part}"
                 "</span>"
             )
     else:

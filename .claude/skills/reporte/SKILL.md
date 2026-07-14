@@ -215,6 +215,26 @@ alone, immediately once both are done, without pausing for input.
    `medidos/estimados`). Skip this file entirely when your runtime does not expose usage — `render`
    degrades to the estimate exactly as before, no error either way.
 
+   **When a stage runs as a real sub-agent (`{"total": int}` shape).** If a stage was dispatched via
+   Claude Code's `Agent` tool — i.e. `historical`/`inference`/`auto-simulator`/`expert-alignment` ran
+   as an actual sub-agent (including sub-agents dispatched in parallel per this Skill's "MUST dispatch
+   in parallel" instruction), not just a Skill loaded into the orchestrator's own context — that tool's
+   completion notification reports a single combined `usage.subagent_tokens` figure with no
+   input/output split available. In that case, write that stage's `token_usage.json` entry as
+   `{"total": <subagent_tokens>}` instead of the `{"input", "output"}` shape. Both shapes are valid
+   per stage and mixable within the same sidecar file — e.g. one stage measured via `{"total": ...}`
+   because it ran as a sub-agent, another via `{"input", "output"}`, another omitted entirely and left
+   to the char/4 estimate. The report header's new "Tokens totales" line always reflects the best
+   available number per stage across both shapes; a stage's own `{"input"}`/`{"output"}` entries are
+   unaffected by (and never populated from) a `"total"`-only entry for that same stage.
+
+   **Total elapsed time — no extra bookkeeping needed.** `render()` also auto-computes
+   `elapsed_seconds` (the run's total wall-clock execution time, from `prepare()` creating `run_dir`
+   to `render()` being called) directly from `run_dir`'s own folder-name timestamp — zero extra
+   orchestration effort, no sidecar file, nothing to write. The `elapsed_seconds` kwarg on `render()`
+   exists only as an optional explicit override for callers with a better/external timer; you do not
+   need to compute or pass it in the normal flow.
+
    Reads all three validated outputs and calls `plotting.render_llm_analysis`, now also merging in
    the 5 `automatic_simulation_*` kwargs (table, agent analysis, cost context, softmax curves,
    vano-risk table) when `run_dir/auto_simulation_assets.json` and/or

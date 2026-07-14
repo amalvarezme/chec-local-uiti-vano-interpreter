@@ -1524,7 +1524,7 @@ def test_reporte_end_to_end_with_real_simulator_renders_auto_simulation_section(
 
 # ---------------------------------------------------------------------------
 # Real token usage instrumentation (SDD `reporte-perf-optimization`, item 4):
-# `_resolve_token_usage(run_dir) -> (tokens_input, tokens_output, token_source)`
+# `_resolve_token_usage(run_dir) -> (tokens_input, tokens_output, tokens_total, token_source)`
 # replaces `_estimate_token_usage`, preferring real per-stage counts from an
 # optional `run_dir/token_usage.json` sidecar over the char/4 estimate, and
 # labeling the resolved source ("measured"/"mixed"/"estimated"). `render()`'s
@@ -1545,12 +1545,13 @@ def test_resolve_token_usage_no_sidecar_is_estimated_char_based(tmp_path):
     _write_stage_files(run_dir, "historical", bc_text="x" * 400, out_data={"a": "y" * 200})
     _write_stage_files(run_dir, "inference", bc_text="x" * 120, out_data={"b": "y" * 80})
 
-    tokens_input, tokens_output, token_source = report_pipeline_module._resolve_token_usage(run_dir)
+    tokens_input, tokens_output, tokens_total, token_source = report_pipeline_module._resolve_token_usage(run_dir)
 
     expected_chars_in = 400 + 120
     expected_chars_out = len(json.dumps({"a": "y" * 200})) + len(json.dumps({"b": "y" * 80}))
     assert tokens_input == expected_chars_in // 4
     assert tokens_output == expected_chars_out // 4
+    assert tokens_total == tokens_input + tokens_output
     assert token_source == "estimated"
 
 
@@ -1564,10 +1565,11 @@ def test_resolve_token_usage_full_sidecar_is_measured_real_counts(tmp_path):
         encoding="utf-8",
     )
 
-    tokens_input, tokens_output, token_source = report_pipeline_module._resolve_token_usage(run_dir)
+    tokens_input, tokens_output, tokens_total, token_source = report_pipeline_module._resolve_token_usage(run_dir)
 
     assert tokens_input == 300
     assert tokens_output == 130
+    assert tokens_total == tokens_input + tokens_output
     assert token_source == "measured"
 
 
@@ -1582,12 +1584,13 @@ def test_resolve_token_usage_partial_sidecar_is_mixed(tmp_path):
         json.dumps({"historical": {"input": 100, "output": 50}}), encoding="utf-8"
     )
 
-    tokens_input, tokens_output, token_source = report_pipeline_module._resolve_token_usage(run_dir)
+    tokens_input, tokens_output, tokens_total, token_source = report_pipeline_module._resolve_token_usage(run_dir)
 
     inference_chars_in = 120
     inference_chars_out = len(json.dumps({"b": "y" * 80}))
     assert tokens_input == 100 + inference_chars_in // 4
     assert tokens_output == 50 + inference_chars_out // 4
+    assert tokens_total == tokens_input + tokens_output
     assert token_source == "mixed"
 
 
@@ -1595,9 +1598,9 @@ def test_resolve_token_usage_no_stage_files_returns_zero_estimated(tmp_path):
     run_dir = tmp_path / "run"
     run_dir.mkdir()
 
-    tokens_input, tokens_output, token_source = report_pipeline_module._resolve_token_usage(run_dir)
+    tokens_input, tokens_output, tokens_total, token_source = report_pipeline_module._resolve_token_usage(run_dir)
 
-    assert (tokens_input, tokens_output, token_source) == (0, 0, "estimated")
+    assert (tokens_input, tokens_output, tokens_total, token_source) == (0, 0, 0, "estimated")
 
 
 # ---------------------------------------------------------------------------
@@ -1616,12 +1619,13 @@ def test_resolve_token_usage_malformed_top_level_json_degrades_to_estimate(tmp_p
     _write_stage_files(run_dir, "historical", bc_text="x" * 400, out_data={"a": "y" * 200})
     (run_dir / "token_usage.json").write_text("{not valid json", encoding="utf-8")
 
-    tokens_input, tokens_output, token_source = report_pipeline_module._resolve_token_usage(run_dir)
+    tokens_input, tokens_output, tokens_total, token_source = report_pipeline_module._resolve_token_usage(run_dir)
 
     expected_chars_in = 400
     expected_chars_out = len(json.dumps({"a": "y" * 200}))
     assert tokens_input == expected_chars_in // 4
     assert tokens_output == expected_chars_out // 4
+    assert tokens_total == tokens_input + tokens_output
     assert token_source == "estimated"
 
 
@@ -1633,12 +1637,13 @@ def test_resolve_token_usage_non_numeric_stage_values_degrade_that_stage_only(tm
         json.dumps({"historical": {"input": "lots", "output": 5}}), encoding="utf-8"
     )
 
-    tokens_input, tokens_output, token_source = report_pipeline_module._resolve_token_usage(run_dir)
+    tokens_input, tokens_output, tokens_total, token_source = report_pipeline_module._resolve_token_usage(run_dir)
 
     expected_chars_in = 400
     expected_chars_out = len(json.dumps({"a": "y" * 200}))
     assert tokens_input == expected_chars_in // 4
     assert tokens_output == expected_chars_out // 4
+    assert tokens_total == tokens_input + tokens_output
     assert token_source == "estimated"
 
 
@@ -1650,13 +1655,103 @@ def test_resolve_token_usage_non_dict_stage_entry_degrades_that_stage_only(tmp_p
         json.dumps({"historical": "not-a-dict"}), encoding="utf-8"
     )
 
-    tokens_input, tokens_output, token_source = report_pipeline_module._resolve_token_usage(run_dir)
+    tokens_input, tokens_output, tokens_total, token_source = report_pipeline_module._resolve_token_usage(run_dir)
 
     expected_chars_in = 400
     expected_chars_out = len(json.dumps({"a": "y" * 200}))
     assert tokens_input == expected_chars_in // 4
     assert tokens_output == expected_chars_out // 4
+    assert tokens_total == tokens_input + tokens_output
     assert token_source == "estimated"
+
+
+# ---------------------------------------------------------------------------
+# `{"total": int}` sidecar shape -- for stages dispatched as real sub-agents
+# via Claude Code's `Agent` tool, whose completion notification only reports
+# a single combined `subagent_tokens` figure with no input/output split.
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_token_usage_total_only_shape_counts_as_measured(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    _write_stage_files(run_dir, "historical", bc_text="x" * 400, out_data={"a": "y" * 200})
+    (run_dir / "token_usage.json").write_text(
+        json.dumps({"historical": {"total": 777}}), encoding="utf-8"
+    )
+
+    tokens_input, tokens_output, tokens_total, token_source = report_pipeline_module._resolve_token_usage(run_dir)
+
+    # tokens_total gets the real sidecar total directly.
+    assert tokens_total == 777
+    # No split given -- tokens_input/tokens_output individually still fall
+    # back to the char/4 estimate for this stage.
+    expected_chars_in = 400
+    expected_chars_out = len(json.dumps({"a": "y" * 200}))
+    assert tokens_input == expected_chars_in // 4
+    assert tokens_output == expected_chars_out // 4
+    # The stage still counts as "measured" toward token_source (via the
+    # "total"-only shape).
+    assert token_source == "measured"
+
+
+def test_resolve_token_usage_mixed_shapes_across_stages(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    _write_stage_files(run_dir, "historical", bc_text="x" * 400, out_data={"a": "y" * 200})
+    _write_stage_files(run_dir, "inference", bc_text="x" * 120, out_data={"b": "y" * 80})
+    (run_dir / "token_usage.json").write_text(
+        json.dumps(
+            {
+                "historical": {"input": 100, "output": 50},
+                "inference": {"total": 999},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    tokens_input, tokens_output, tokens_total, token_source = report_pipeline_module._resolve_token_usage(run_dir)
+
+    # Both considered stages are measured (one via split, one via total) --
+    # source is "measured", not "mixed".
+    assert token_source == "measured"
+    assert tokens_total == (100 + 50) + 999
+    # historical's split contributes directly; inference's total-only shape
+    # falls back to the char/4 estimate for its own input/output split.
+    inference_chars_in = 120
+    inference_chars_out = len(json.dumps({"b": "y" * 80}))
+    assert tokens_input == 100 + inference_chars_in // 4
+    assert tokens_output == 50 + inference_chars_out // 4
+
+
+# ---------------------------------------------------------------------------
+# `_resolve_elapsed_seconds(run_dir) -> float | None` -- total wall-clock
+# execution time, resolved from `run_dir.name`'s own UTC timestamp (written
+# by `_new_run_dir` as `%Y%m%dT%H%M%S%f`), degrading to `None` (never
+# raising) when the folder name doesn't match that format.
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_elapsed_seconds_valid_timestamp_returns_positive_float(tmp_path):
+    from datetime import datetime, timedelta, timezone
+
+    started_at = datetime.now(timezone.utc) - timedelta(seconds=5)
+    run_dir = tmp_path / started_at.strftime("%Y%m%dT%H%M%S%f")
+    run_dir.mkdir()
+
+    real_now = datetime.now(timezone.utc)
+    elapsed = report_pipeline_module._resolve_elapsed_seconds(run_dir)
+
+    assert elapsed is not None
+    assert elapsed > 0
+    assert elapsed < (real_now - started_at).total_seconds() + 5
+
+
+def test_resolve_elapsed_seconds_invalid_format_returns_none(tmp_path):
+    run_dir = tmp_path / "not-a-timestamp"
+    run_dir.mkdir()
+
+    assert report_pipeline_module._resolve_elapsed_seconds(run_dir) is None
 
 
 def _prepare_render_ready_run_dir(tmp_path: Path) -> Path:
@@ -1696,6 +1791,30 @@ def test_render_precedence_explicit_kwargs_beat_sidecar_and_estimate(tmp_path, m
     assert captured["token_source"] == "measured"
 
 
+def test_render_precedence_explicit_tokens_total_and_elapsed_seconds_win(tmp_path, monkeypatch):
+    run_dir = _prepare_render_ready_run_dir(tmp_path)
+    (run_dir / "token_usage.json").write_text(
+        json.dumps({"historical": {"total": 1}, "inference": {"total": 1}}),
+        encoding="utf-8",
+    )
+
+    captured: dict = {}
+
+    def _spy_render_llm_analysis(*args, **kwargs):
+        captured.update(kwargs)
+        html_path = tmp_path / "html" / "fake.html"
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        html_path.write_text("<html></html>", encoding="utf-8")
+        return html_path
+
+    monkeypatch.setattr(report_pipeline_module, "render_llm_analysis", _spy_render_llm_analysis)
+
+    render(run_dir, output_dir=tmp_path / "html", tokens_total=123456, elapsed_seconds=42.5)
+
+    assert captured["tokens_total"] == 123456
+    assert captured["elapsed_seconds"] == 42.5
+
+
 def test_render_uses_sidecar_when_no_explicit_kwargs(tmp_path, monkeypatch):
     run_dir = _prepare_render_ready_run_dir(tmp_path)
     (run_dir / "token_usage.json").write_text(
@@ -1725,6 +1844,8 @@ def test_render_uses_sidecar_when_no_explicit_kwargs(tmp_path, monkeypatch):
     assert captured["tokens_input"] == 111 + 333 + 55
     assert captured["tokens_output"] == 22 + 44 + 6
     assert captured["token_source"] == "measured"
+    assert captured["tokens_total"] == captured["tokens_input"] + captured["tokens_output"]
+    assert isinstance(captured["elapsed_seconds"], float)
 
 
 def test_render_falls_back_to_estimated_when_no_sidecar_no_kwargs(tmp_path, monkeypatch):
@@ -1747,6 +1868,9 @@ def test_render_falls_back_to_estimated_when_no_sidecar_no_kwargs(tmp_path, monk
     assert isinstance(captured["tokens_input"], int)
     assert isinstance(captured["tokens_output"], int)
     assert captured["token_source"] == "estimated"
+    assert isinstance(captured["tokens_total"], int)
+    assert captured["tokens_total"] == captured["tokens_input"] + captured["tokens_output"]
+    assert isinstance(captured["elapsed_seconds"], float)
 
 
 def test_render_partial_kwargs_explicit_side_never_mislabeled_estimated(tmp_path, monkeypatch):
