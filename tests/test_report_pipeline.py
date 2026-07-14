@@ -674,6 +674,38 @@ def test_prepare_expert_alignment_no_qualifying_prior_run_is_a_pure_no_op(tmp_pa
     assert all(row.get("source_kind") != "prior_report" for row in bc["pdf_expert_matches"])
 
 
+def test_prepare_expert_alignment_schema_invalid_prior_output_degrades_to_no_op(tmp_path):
+    """Judgment Day Round 2 CRITICAL fix: a sibling prior run whose own
+    `expert-alignment.out.json` is syntactically valid JSON with a valid
+    `{"ok": true, "data": ...}` envelope shape, but `data` itself is a
+    non-dict (a realistic partial/buggy write), must be treated as a
+    non-qualifying candidate -- `prepare_expert_alignment` for the CURRENT
+    run must complete normally with no prior-report evidence wired, never
+    crash with `AttributeError`."""
+    runs_root = tmp_path / "runs"
+    data_path = _write_fixture_dataset(tmp_path)
+
+    prior_run_dir = prepare("C1", data_path=data_path, runs_root=runs_root)
+    (prior_run_dir / "expert-alignment.out.json").write_text(
+        json.dumps({"ok": True, "data": ["not", "a", "dict"]}), encoding="utf-8"
+    )
+
+    current_run_dir = prepare("C1", data_path=data_path, runs_root=runs_root)
+    (current_run_dir / "historical.out.json").write_text(
+        json.dumps(_canned_ok({"hallazgos": ["Hallazgo historico actual."]})), encoding="utf-8"
+    )
+    (current_run_dir / "inference.out.json").write_text(
+        json.dumps(_canned_ok({"hallazgos": ["Hallazgo de inferencia actual."]})), encoding="utf-8"
+    )
+
+    result = prepare_expert_alignment(current_run_dir)
+
+    assert result == current_run_dir
+    bc = _read_json(current_run_dir / "expert-alignment.bc.json")
+    assert "reporte_previo_disponible" not in bc
+    assert all(row.get("source_kind") != "prior_report" for row in bc["pdf_expert_matches"])
+
+
 # ---------------------------------------------------------------------------
 # Final Slice B / whole-change gate (task 8.2): end-to-end `/reporte` smoke
 # check as close to real as the harness allows without a live LLM call --
