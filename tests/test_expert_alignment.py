@@ -8,6 +8,10 @@ import pandas as pd
 from chec_local_interpreter.expert_alignment import (
     PRIOR_REPORT_PDF_ROW_INDEX_OFFSET,
     _allowed_pdf_row_indexes,
+    _compact_pdf_matches,
+    _normalize_output_context_metadata,
+    _normalize_visible_sources,
+    _pdf_source_names,
     construir_contexto_expert_alignment,
     construir_prompt_expert_alignment,
     extraer_fechas_informe,
@@ -33,11 +37,13 @@ def test_expert_alignment_skill_profile_loads():
         "01_pdf_report_comparison.md",
         "02_predictive_variable_prioritization.md",
         "03_graph_context_for_alignment.md",
+        "04_prior_report_continuity.md",
     ]
     skill_bundle = assemble_skill_bundle(profile="expert_alignment")
     assert "Comparación de Reportes PDF" in skill_bundle
     assert "Priorización de Variables" in skill_bundle
     assert "Contexto de Grafos" in skill_bundle
+    assert "Continuidad con el Reporte Previo del Circuito" in skill_bundle
 
 
 def test_extraer_fechas_informe_collects_multiple_sources():
@@ -431,6 +437,70 @@ class TestSeleccionarReportePrevioMasReciente:
 
         assert result is None
 
+    def test_prior_expert_alignment_output_with_non_dict_data_is_skipped_not_raised(self, tmp_path):
+        """Judgment Day Round 2 CRITICAL fix: a sibling prior run's own
+        `expert-alignment.out.json` can be syntactically valid JSON with a
+        valid `{"ok": true, "data": ...}` envelope shape, yet still have
+        `data` be a non-dict (e.g. a list, from a partial/buggy write) --
+        that must be treated as a non-qualifying candidate and skipped, never
+        let a downstream `data.get(...)` call raise `AttributeError` out of
+        the CURRENT run's discovery/normalization."""
+        circuit_dir = tmp_path / "runs" / "C1"
+        schema_invalid = circuit_dir / "20260101T000000000000"
+        schema_invalid.mkdir(parents=True)
+        (schema_invalid / "expert-alignment.out.json").write_text(
+            json.dumps({"ok": True, "data": ["not", "a", "dict"]}), encoding="utf-8"
+        )
+        current_run_dir = circuit_dir / "20260102T000000000000"
+        current_run_dir.mkdir(parents=True)
+
+        result = seleccionar_reporte_previo_mas_reciente(current_run_dir)
+
+        assert result is None
+
+    def test_malformed_prior_expert_alignment_output_is_skipped_not_raised(self, tmp_path):
+        """Judgment Day Round 1 CRITICAL fix: a sibling prior run whose own
+        `expert-alignment.out.json` is malformed/non-JSON (truncated write,
+        crash, disk-full, concurrent-write race) must be treated as a
+        non-qualifying candidate and skipped -- never raise `json.JSONDecodeError`
+        out of the CURRENT run's discovery, which would crash the CURRENT
+        run's report generation too."""
+        circuit_dir = tmp_path / "runs" / "C1"
+        malformed = circuit_dir / "20260101T000000000000"
+        malformed.mkdir(parents=True)
+        (malformed / "expert-alignment.out.json").write_text("{not valid json", encoding="utf-8")
+        current_run_dir = circuit_dir / "20260102T000000000000"
+        current_run_dir.mkdir(parents=True)
+
+        result = seleccionar_reporte_previo_mas_reciente(current_run_dir)
+
+        assert result is None
+
+    def test_circuit_dir_iterdir_oserror_is_skipped_not_raised(self, tmp_path, monkeypatch):
+        """Judgment Day Round 2 SUGGESTION(hardening) fix: enumerating
+        `circuit_dir` itself (`iterdir()`) can raise `OSError`
+        (permission-denied, disk-full, concurrent-delete race) just like
+        reading an individual candidate's output can -- that must also
+        degrade to "no qualifying prior run found" rather than crash the
+        CURRENT run's discovery."""
+        circuit_dir = tmp_path / "runs" / "C1"
+        circuit_dir.mkdir(parents=True)
+        current_run_dir = circuit_dir / "20260101T000000000000"
+        current_run_dir.mkdir(parents=True)
+
+        original_iterdir = Path.iterdir
+
+        def _iterdir_failing_for_circuit_dir(self):
+            if self == circuit_dir:
+                raise OSError("simulated permission-denied listing circuit dir")
+            return original_iterdir(self)
+
+        monkeypatch.setattr(Path, "iterdir", _iterdir_failing_for_circuit_dir)
+
+        result = seleccionar_reporte_previo_mas_reciente(current_run_dir)
+
+        assert result is None
+
 
 # ---------------------------------------------------------------------------
 # Phase 2 (PR 1): prior-report normalization
@@ -611,3 +681,270 @@ class TestNormalizarReportePrevioComoMatches:
         fake_context = {"pdf_expert_matches": records}
         allowed = _allowed_pdf_row_indexes(fake_context)
         assert str(records[0]["pdf_row_index"]) in allowed
+
+    def test_records_carry_source_kind_baja_confidence_and_penalized_temporal_score(self, tmp_path):
+        """Phase 3 (PR 2): prior-report records must be marked as lower-trust
+        continuity evidence, distinct from PDF-sourced `pdf_expert_matches`
+        rows: `source_kind: "prior_report"`, `confidence: "baja"`, and a
+        `temporal_score` scaled by a 0.5x penalty relative to what the SAME
+        matcher would compute for an equivalent PDF-sourced row (same dates,
+        same circuit, same fechas_informe window)."""
+        prior_run_dir = tmp_path / "runs" / "C1" / "20260101T000000000000"
+        _write_prior_expert_alignment_data(
+            prior_run_dir,
+            periodo_inicio="2026-01-01",
+            periodo_fin="2026-01-10",
+            coincidencias=[{"tema": "UITI_VANO elevado", "explicacion": "Explicación previa."}],
+            diferencias=[],
+            sintesis_final="",
+        )
+        fechas_informe = [
+            {
+                "source": "critical_point",
+                "fecha_inicio": "2026-01-05",
+                "fecha_fin": "2026-01-05",
+                "descripcion": "cp",
+                "peso": 3.0,
+            }
+        ]
+
+        records = normalizar_reporte_previo_como_matches(
+            prior_run_dir, "C1", fechas_informe, top_k=3
+        )
+
+        assert records
+        for record in records:
+            assert record["source_kind"] == "prior_report"
+            assert record["confidence"] == "baja"
+
+        # Equivalent PDF-sourced row: identical dates/circuit/Análisis/Evidencia
+        # (the candidate row `normalizar_reporte_previo_como_matches` builds
+        # internally carries the `coincidencias` item's `explicacion` as
+        # `Evidencia`), run through the SAME underlying matcher directly (no
+        # prior-report post-processing), to compute the unpenalized reference
+        # score.
+        equivalent_pdf_df = pd.DataFrame(
+            [
+                {
+                    "Circuito": "C1",
+                    "Fecha inicio": "2026-01-01",
+                    "Fecha fin": "2026-01-10",
+                    "Análisis": "UITI_VANO elevado",
+                    "Evidencia": "Explicación previa.",
+                }
+            ]
+        )
+        pdf_matches = seleccionar_top_coincidencias_temporales(
+            fechas_informe=fechas_informe,
+            pdf_df=equivalent_pdf_df,
+            circuito_interes="C1",
+            top_k=3,
+        )
+        assert pdf_matches
+        unpenalized_score = pdf_matches[0]["temporal_score"]
+        matching_record = next(r for r in records if r["Análisis"] == "UITI_VANO elevado")
+        assert matching_record["temporal_score"] == round(unpenalized_score * 0.5, 6)
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 (PR 2): wiring -- availability, renderers, prompt, no-op guard
+# ---------------------------------------------------------------------------
+
+
+_PDF_ONLY_MATCH = {
+    "Circuito": "DON23L13",
+    "Fecha inicio": "2026-01-09",
+    "Fecha fin": "2026-01-11",
+    "Análisis": "UITI_VANO alto",
+    "Evidencia": "Evidencia A",
+    "matched_source": "critical_point",
+    "matched_fecha_inicio": "2026-01-10",
+    "matched_fecha_fin": "2026-01-10",
+    "matched_descripcion": "cp",
+    "temporal_score": 3.3,
+    "overlap_days": 1,
+    "distance_days": 0,
+    "pdf_row_index": 0,
+}
+
+_PRIOR_REPORT_MATCH = {
+    **{k: v for k, v in _PDF_ONLY_MATCH.items() if k not in ("pdf_row_index", "temporal_score")},
+    "temporal_score": 1.65,
+    "pdf_row_index": PRIOR_REPORT_PDF_ROW_INDEX_OFFSET,
+    "source_kind": "prior_report",
+    "confidence": "baja",
+}
+
+
+class TestCompactPdfMatchesCarriesProvenance:
+    def test_source_kind_and_confidence_pass_through_when_present(self):
+        compact = _compact_pdf_matches([_PRIOR_REPORT_MATCH])
+        assert compact[0]["source_kind"] == "prior_report"
+        assert compact[0]["confidence"] == "baja"
+
+    def test_pdf_only_records_have_no_source_kind_or_confidence_keys(self):
+        """Regression guard: PDF-only records (no `source_kind`) must not
+        gain new keys -- required for the byte-identical no-op path."""
+        compact = _compact_pdf_matches([_PDF_ONLY_MATCH])
+        assert "source_kind" not in compact[0]
+        assert "confidence" not in compact[0]
+
+    def test_prior_report_records_have_archivo_pdf_none(self):
+        """Judgment Day Round 1 WARNING(real) fix: a prior-report row was
+        never read from a PDF, so `archivo_pdf` must not fabricate a
+        `"{circuito}.pdf"` string for it."""
+        compact = _compact_pdf_matches([_PRIOR_REPORT_MATCH])
+        assert compact[0]["archivo_pdf"] is None
+
+    def test_pdf_only_records_archivo_pdf_is_unchanged(self):
+        """Regression guard: real PDF rows keep their `archivo_pdf` value."""
+        compact = _compact_pdf_matches([_PDF_ONLY_MATCH])
+        assert compact[0]["archivo_pdf"] == "DON23L13.pdf"
+
+
+class TestCompactPdfMatchesScoreBasedTruncation:
+    def test_strong_prior_report_match_survives_truncation_over_weaker_pdf_matches(self):
+        """Judgment Day Round 1 CRITICAL fix: truncation to `limit` must be
+        score-based (by `temporal_score` descending) across the COMBINED
+        PDF + prior-report list, not a naive first-N-by-list-position --
+        otherwise prior-report rows are silently dropped whenever real PDF
+        matches alone already fill `limit`."""
+        pdf_matches = [
+            {**_PDF_ONLY_MATCH, "pdf_row_index": i, "temporal_score": 10.0 - i}
+            for i in range(10)
+        ]
+        # Ranks between pdf rows scored 6.0 (index 4) and 5.0 (index 5), so
+        # it must survive truncation while the weakest pdf row (index 9,
+        # score 1.0) gets dropped.
+        strong_prior_report_match = {**_PRIOR_REPORT_MATCH, "temporal_score": 5.5}
+        combined = pdf_matches + [strong_prior_report_match]
+
+        compact = _compact_pdf_matches(combined, limit=10)
+
+        assert len(compact) == 10
+        assert any(row.get("source_kind") == "prior_report" for row in compact)
+        assert not any(row.get("pdf_row_index") == 9 for row in compact)
+
+    def test_pdf_only_list_already_sorted_by_score_is_unaffected(self):
+        """A PDF-only list already in descending `temporal_score` order (as
+        produced by `seleccionar_top_coincidencias_temporales`) must
+        sort-then-truncate to an identical order -- the byte-identical
+        golden-test assumption."""
+        pdf_matches = [
+            {**_PDF_ONLY_MATCH, "pdf_row_index": i, "temporal_score": 10.0 - i}
+            for i in range(5)
+        ]
+
+        compact = _compact_pdf_matches(pdf_matches, limit=10)
+
+        assert [row["pdf_row_index"] for row in compact] == [0, 1, 2, 3, 4]
+
+
+class TestConstruirContextoAvailabilitySplit:
+    def test_modelo_experto_disponible_excludes_prior_report_records(self):
+        context = construir_contexto_expert_alignment(
+            circuito="DON23L13",
+            periodo_inicio="2026-01-01",
+            periodo_fin="2026-01-31",
+            fechas_informe=[],
+            validation_data={},
+            inference_validation_data={},
+            pdf_expert_matches=[_PRIOR_REPORT_MATCH],
+        )
+        assert context["modelo_experto_disponible"] is False
+        assert context["reporte_previo_disponible"] is True
+
+    def test_modelo_experto_disponible_true_when_pdf_only_records_present(self):
+        context = construir_contexto_expert_alignment(
+            circuito="DON23L13",
+            periodo_inicio="2026-01-01",
+            periodo_fin="2026-01-31",
+            fechas_informe=[],
+            validation_data={},
+            inference_validation_data={},
+            pdf_expert_matches=[_PDF_ONLY_MATCH],
+        )
+        assert context["modelo_experto_disponible"] is True
+        assert "reporte_previo_disponible" not in context
+
+    def test_visible_source_is_reporte_previo_del_circuito_not_pdf_name(self):
+        context = construir_contexto_expert_alignment(
+            circuito="DON23L13",
+            periodo_inicio="2026-01-01",
+            periodo_fin="2026-01-31",
+            fechas_informe=[],
+            validation_data={},
+            inference_validation_data={},
+            pdf_expert_matches=[_PRIOR_REPORT_MATCH],
+        )
+        assert "Reporte previo del circuito" in context["fuentes_usadas"]
+        assert "DON23L13.pdf" not in context["fuentes_usadas"]
+
+
+class TestPdfSourceNamesExcludesPriorReport:
+    def test_pdf_source_names_ignores_prior_report_rows(self):
+        context = {"pdf_expert_matches": [_PRIOR_REPORT_MATCH]}
+        assert _pdf_source_names(context) == []
+
+    def test_pdf_source_names_unaffected_for_pdf_only_fixtures(self):
+        context = {"pdf_expert_matches": [_PDF_ONLY_MATCH]}
+        assert _pdf_source_names(context) == ["DON23L13.pdf"]
+
+
+class TestNormalizeVisibleSourcesRecognizesPriorReport:
+    def test_reporte_previo_phrase_maps_to_canonical_name(self):
+        context = {"pdf_expert_matches": [_PRIOR_REPORT_MATCH]}
+        assert _normalize_visible_sources(["Reporte previo del circuito"], context) == [
+            "Reporte previo del circuito"
+        ]
+
+    def test_pdf_only_fixture_unaffected(self):
+        context = {"pdf_expert_matches": [_PDF_ONLY_MATCH]}
+        assert _normalize_visible_sources(["Modelo Experto"], context) == ["DON23L13.pdf"]
+
+
+class TestNormalizeOutputContextMetadataRecognizesPriorReport:
+    def test_expert_available_stays_false_with_only_prior_report_rows(self):
+        context = {
+            "pdf_expert_matches": [_PRIOR_REPORT_MATCH],
+            "fuentes_usadas": ["Agente Descriptor", "Agente predictivo", "Reporte previo del circuito"],
+        }
+        data = {"contexto": {}}
+        errors = _normalize_output_context_metadata(data, context)
+        assert errors == []
+        assert data["contexto"]["modelo_experto_disponible"] is False
+
+    def test_pdf_only_fixture_unaffected(self):
+        context = {"pdf_expert_matches": [_PDF_ONLY_MATCH]}
+        data = {"contexto": {}}
+        errors = _normalize_output_context_metadata(data, context)
+        assert errors == []
+        assert data["contexto"]["modelo_experto_disponible"] is True
+
+
+class TestConstruirPromptMentionsPriorReportOnlyWhenPresent:
+    def test_prompt_mentions_reporte_previo_source_when_present(self):
+        context = construir_contexto_expert_alignment(
+            circuito="DON23L13",
+            periodo_inicio="2026-01-01",
+            periodo_fin="2026-01-31",
+            fechas_informe=[],
+            validation_data={},
+            inference_validation_data={},
+            pdf_expert_matches=[_PRIOR_REPORT_MATCH],
+        )
+        prompt = construir_prompt_expert_alignment(context, "Skill bundle")
+        assert "Reporte previo del circuito" in prompt
+
+    def test_prompt_omits_reporte_previo_source_when_absent(self):
+        context = construir_contexto_expert_alignment(
+            circuito="DON23L13",
+            periodo_inicio="2026-01-01",
+            periodo_fin="2026-01-31",
+            fechas_informe=[],
+            validation_data={},
+            inference_validation_data={},
+            pdf_expert_matches=[],
+        )
+        prompt = construir_prompt_expert_alignment(context, "Skill bundle")
+        assert "Reporte previo del circuito" not in prompt

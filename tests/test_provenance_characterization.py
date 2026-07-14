@@ -339,3 +339,15 @@ def test_char_ea_is_side_effect_free():
     snapshot = copy.deepcopy(data)
     validar_provenance_expert_alignment(data, context)
     assert data == snapshot
+
+
+# --- Rule 04: prior-report continuity (sdd/reporte-graph-reuse, PR 2) -----
+
+
+def test_char_ea_rule_04_prior_report_continuity_accepted():
+    """`04_prior_report_continuity` must be a recognized rule id, exactly
+    like rules 01-03: a claim citing it with a valid `data_ref` passes."""
+    context = _ea_context()
+    data = _ea_data(coincidencias=[_ea_item(["CNT_TRF"], rule="04_prior_report_continuity")])
+    result = validar_provenance_expert_alignment(data, context)
+    assert result == {"ok": True, "errors": []}

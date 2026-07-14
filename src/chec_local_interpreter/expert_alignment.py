@@ -42,13 +42,15 @@ EXPERT_ALIGNMENT_PROVENANCE_RULES = frozenset({
     "01_pdf_report_comparison",
     "02_predictive_variable_prioritization",
     "03_graph_context_for_alignment",
+    "04_prior_report_continuity",
 })
 
 # Prior-report normalization (`normalizar_reporte_previo_como_matches`):
 # offset applied to every normalized record's `pdf_row_index` so it can
 # never collide with a real PDF DataFrame's positional index (which is
-# always small -- one xlsx table per circuit). Not yet wired into any
-# pipeline consumer in this PR (PR 1); see design "Normalization (new)".
+# always small -- one xlsx table per circuit). Wired into `prepare_expert_alignment`
+# (`report_pipeline.py`, PR 2 of sdd/reporte-graph-reuse); see design
+# "Normalization (new)" and "Graceful no-op integration point".
 PRIOR_REPORT_PDF_ROW_INDEX_OFFSET = 10000
 
 _PROVENANCE_SECTIONS = ("coincidencias", "diferencias", "variables_a_priorizar")
@@ -301,8 +303,9 @@ def seleccionar_reporte_previo_mas_reciente(run_dir: Path) -> Path | None:
     run, reusable as lower-trust continuity evidence (design decision 1:
     "Which prior artifact feeds the evidence").
 
-    Standalone/pure and NOT wired into any pipeline consumer yet (that
-    wiring is a later PR's scope).
+    Pure/side-effect-free (aside from reading candidate directories). Wired
+    into `prepare_expert_alignment` (`report_pipeline.py`), called right
+    after `pdf_expert_matches` is built.
 
     Self-excludes `run_dir` by resolved-path comparison: `prepare()` already
     creates the CURRENT run's directory before this would ever run, so the
@@ -321,14 +324,37 @@ def seleccionar_reporte_previo_mas_reciente(run_dir: Path) -> Path | None:
         return None
 
     qualifying: list[Path] = []
-    for candidate in circuit_dir.iterdir():
-        if not candidate.is_dir():
-            continue
-        if candidate.resolve() == current:
+    try:
+        candidates = list(circuit_dir.iterdir())
+    except OSError:
+        # Enumerating the circuit directory itself can also fail
+        # (permission-denied, disk-full, concurrent-delete race) -- degrade
+        # to "no qualifying prior run found" here too, fully closing the
+        # "never crashes the current run" contract (Judgment Day Round 2
+        # SUGGESTION(hardening) fix).
+        return None
+
+    for candidate in candidates:
+        try:
+            if not candidate.is_dir():
+                continue
+            if candidate.resolve() == current:
+                continue
+        except OSError:
+            # `is_dir()`/`resolve()` on an individual candidate can race the
+            # same way `iterdir()` can (concurrent-delete, permission
+            # changes) -- skip it as non-qualifying rather than raise.
             continue
         try:
             load_validated_agent_output(candidate, "expert-alignment")
-        except ReportPipelineError:
+        except (ReportPipelineError, json.JSONDecodeError, UnicodeDecodeError, OSError):
+            # A malformed/unreadable candidate (truncated write, crash,
+            # disk-full, concurrent-write race) is a realistic operational
+            # failure -- treat it as a non-qualifying candidate, never let it
+            # crash the CURRENT run's discovery (Judgment Day Round 1
+            # CRITICAL fix). `json.JSONDecodeError` is a `ValueError`
+            # subclass, NOT a `ReportPipelineError` subclass, so it needs its
+            # own catch here.
             continue
         qualifying.append(candidate)
 
@@ -348,9 +374,11 @@ def normalizar_reporte_previo_como_matches(
     records shaped exactly like `pdf_expert_matches` rows (design decision 1
     + "Normalization (new)"), so all generic downstream validator machinery
     (`_allowed_dates`, `_allowed_evidences`, `_allowed_pdf_row_indexes`,
-    provenance validator) can consume them unchanged once wired.
+    provenance validator) consume them unchanged.
 
-    Standalone/pure and NOT wired into any pipeline consumer yet.
+    Pure/side-effect-free (aside from reading `prior_run_dir`). Wired into
+    `prepare_expert_alignment` (`report_pipeline.py`), called with the
+    directory `seleccionar_reporte_previo_mas_reciente` returns.
 
     Builds candidate rows from the prior run's `sintesis_final` plus its
     `coincidencias`/`diferencias` entries, dated by the prior run's OWN
@@ -359,9 +387,14 @@ def normalizar_reporte_previo_como_matches(
     report's `fechas_informe` window (max matcher reuse, zero new matching
     logic). Each returned record's `pdf_row_index` is offset by
     `PRIOR_REPORT_PDF_ROW_INDEX_OFFSET` so it never collides with a real PDF
-    DataFrame's positional index. Returns `[]` when the prior run has no
-    usable evidence (empty `sintesis_final`/`coincidencias`/`diferencias`) or
-    none of it temporally matches `fechas_informe`.
+    DataFrame's positional index. Every record also carries `source_kind:
+    "prior_report"` and `confidence: "baja"` (design decision 3: lower-
+    confidence marking), and its `temporal_score` is scaled by a 0.5x penalty
+    relative to the unpenalized matcher output, so PDF-sourced evidence ranks
+    above prior-report evidence when both are present. Returns `[]` when the
+    prior run has no usable evidence (empty
+    `sintesis_final`/`coincidencias`/`diferencias`) or none of it temporally
+    matches `fechas_informe`.
     """
     data = load_validated_agent_output(prior_run_dir, "expert-alignment")
 
@@ -415,6 +448,9 @@ def normalizar_reporte_previo_como_matches(
     for match in matches:
         if match.get("pdf_row_index") is not None:
             match["pdf_row_index"] = int(match["pdf_row_index"]) + PRIOR_REPORT_PDF_ROW_INDEX_OFFSET
+        match["source_kind"] = "prior_report"
+        match["confidence"] = "baja"
+        match["temporal_score"] = round(float(match["temporal_score"]) * 0.5, 6)
     return matches
 
 
@@ -625,13 +661,31 @@ def _resolve_predictive_variable_name(variable: Any, context: dict[str, Any]) ->
 
 
 def _compact_pdf_matches(matches: list[dict[str, Any]], *, limit: int = 10) -> list[dict[str, Any]]:
+    # Re-sort the COMBINED (PDF + prior-report) list by `temporal_score`
+    # descending before truncating (Judgment Day Round 1 CRITICAL fix):
+    # PDF rows and prior-report rows are built by two independently-capped
+    # calls and simply concatenated (PDF rows first), so a positional
+    # `matches[:limit]` silently dropped ALL prior-report evidence whenever
+    # PDF matches alone already numbered `limit`, regardless of score. `sorted`
+    # is stable, so a PDF-only list already in descending `temporal_score`
+    # order (as produced by `seleccionar_top_coincidencias_temporales`) keeps
+    # its exact relative order -- required for the byte-identical golden test.
+    dict_matches = [item for item in matches if isinstance(item, dict)]
+    ordered = sorted(
+        dict_matches,
+        key=lambda item: float(item.get("temporal_score") or 0.0),
+        reverse=True,
+    )
     compact: list[dict[str, Any]] = []
-    for item in matches[:limit]:
-        if not isinstance(item, dict):
-            continue
+    for item in ordered[:limit]:
         circuito = str(item.get("Circuito") or "").strip()
         archivo_pdf = f"{circuito}.pdf" if circuito else None
-        compact.append({
+        if item.get("source_kind") == "prior_report":
+            # Never read from a PDF -- a fabricated "{circuito}.pdf" string
+            # here would be factually wrong provenance (Judgment Day Round 1
+            # WARNING(real) fix).
+            archivo_pdf = None
+        entry = {
             "pdf_row_index": item.get("pdf_row_index"),
             "Circuito": item.get("Circuito"),
             "archivo_pdf": archivo_pdf,
@@ -645,7 +699,17 @@ def _compact_pdf_matches(matches: list[dict[str, Any]], *, limit: int = 10) -> l
             "temporal_score": item.get("temporal_score"),
             "overlap_days": item.get("overlap_days"),
             "distance_days": item.get("distance_days"),
-        })
+        }
+        # Prior-report provenance/confidence (design decision 3): only added
+        # when present on the input record, so PDF-only records (no
+        # `source_kind`) stay byte-identical -- required for the no-op
+        # regression guard (spec "Graceful No-Op When No Qualifying Prior
+        # Run").
+        if "source_kind" in item:
+            entry["source_kind"] = item["source_kind"]
+        if "confidence" in item:
+            entry["confidence"] = item["confidence"]
+        compact.append(entry)
     return compact
 
 
@@ -674,10 +738,18 @@ def compactar_contexto_expert_alignment_para_prompt(context: dict[str, Any]) -> 
 
 def construir_prompt_expert_alignment(context: dict[str, Any], skill_bundle: str) -> str:
     compact = compactar_contexto_expert_alignment_para_prompt(context)
-    has_pdf_matches = bool(compact.get("pdf_expert_matches"))
+    compact_matches = compact.get("pdf_expert_matches") or []
+    has_pdf_matches = any(
+        isinstance(item, dict) and item.get("source_kind") != "prior_report" for item in compact_matches
+    )
+    has_prior_report_matches = any(
+        isinstance(item, dict) and item.get("source_kind") == "prior_report" for item in compact_matches
+    )
     available_sources = ["Agente Descriptor", "Agente predictivo"]
     if has_pdf_matches:
         available_sources.append("Modelo Experto")
+    if has_prior_report_matches:
+        available_sources.append(PRIOR_REPORT_VISIBLE_SOURCE)
     source_instruction = (
         "Hay filas expertas disponibles en pdf_expert_matches; puedes compararlas contra "
         "Agente Descriptor y Agente predictivo, citando solo los archivos PDF presentes."
@@ -688,6 +760,15 @@ def construir_prompt_expert_alignment(context: dict[str, Any], skill_bundle: str
         "fuente observada, no inventes evidencia PDF y deja vacíos los arreglos que dependan "
         "exclusivamente de hallazgos expertos."
     )
+    if has_prior_report_matches:
+        # Only added when prior-report rows are present -- byte-identical
+        # no-op guard (spec "Graceful No-Op When No Qualifying Prior Run").
+        source_instruction += (
+            " Hay filas de continuidad del \"Reporte previo del circuito\" (source_kind: "
+            '"prior_report", confidence: "baja"); trátalas como evidencia tentativa según la '
+            "regla 04_prior_report_continuity, nunca como Modelo Experto ni como respaldo único "
+            "de una prioridad alta."
+        )
     return (
         "Eres un agente de comparación técnica entre las fuentes disponibles del flujo CHEC. "
         "Devuelve únicamente JSON válido, "
@@ -736,16 +817,27 @@ def construir_contexto_expert_alignment(
         item for item in (pdf_expert_matches or [])
         if isinstance(item, dict) and normalizar_circuito(item.get("Circuito")) == circuito_norm
     ]
+    # Prior-report rows ride in the SAME `pdf_expert_matches` list, discriminated
+    # by `source_kind` (design decision: single-list-with-discriminator, so all
+    # generic validator machinery keeps consuming the list unchanged). Only
+    # PDF-only rows count toward `modelo_experto_disponible` -- prior-report
+    # continuity evidence gets its own sibling flag so it is never conflated
+    # with human-validated expert PDF evidence.
+    pdf_only_matches = [item for item in pdf_expert_matches if item.get("source_kind") != "prior_report"]
+    prior_report_matches = [item for item in pdf_expert_matches if item.get("source_kind") == "prior_report"]
     available_sources = ["Agente Descriptor", "Agente predictivo"]
-    expert_available = bool(pdf_expert_matches)
-    if pdf_expert_matches:
+    expert_available = bool(pdf_only_matches)
+    if expert_available:
         available_sources.append("Modelo Experto")
+    reporte_previo_disponible = bool(prior_report_matches)
+    if reporte_previo_disponible:
+        available_sources.append(PRIOR_REPORT_VISIBLE_SOURCE)
     expert_reason = (
         "Se encontraron discusiones explícitamente asociadas al circuito evaluado."
         if expert_available
         else "No hay discusión experta disponible para el circuito evaluado; la tabla de discusiones se omite."
     )
-    return {
+    context = {
         "circuito": str(circuito),
         "periodo_informe": {
             "inicio": _date_text(periodo_inicio),
@@ -762,6 +854,13 @@ def construir_contexto_expert_alignment(
         "senales_modelo_predictivo": _predictive_model_signals(inference_context_package),
         "pdf_expert_matches": pdf_expert_matches,
     }
+    # Only added when non-empty -- this is the graceful-no-op guarantee (spec
+    # "Graceful No-Op When No Qualifying Prior Run"): a caller that never
+    # passes prior-report rows gets byte-identical output to before this
+    # feature existed, with no new key added to the context dict.
+    if reporte_previo_disponible:
+        context["reporte_previo_disponible"] = True
+    return context
 
 
 def guardar_tabla_coincidencias_pdf(matches: list[dict[str, Any]], path: str | Path) -> Path:
@@ -971,10 +1070,15 @@ def _infer_priority_variables(data: dict[str, Any], context: dict[str, Any]) -> 
     return out
 
 
+PRIOR_REPORT_VISIBLE_SOURCE = "Reporte previo del circuito"
+
+
 def _pdf_source_names(context: dict[str, Any]) -> list[str]:
     names: list[str] = []
     for item in context.get("pdf_expert_matches", []) or []:
         if not isinstance(item, dict):
+            continue
+        if item.get("source_kind") == "prior_report":
             continue
         circuito = str(item.get("Circuito") or "").strip()
         if circuito:
@@ -982,6 +1086,13 @@ def _pdf_source_names(context: dict[str, Any]) -> list[str]:
             if name not in names:
                 names.append(name)
     return names
+
+
+def _prior_report_present(context: dict[str, Any]) -> bool:
+    return any(
+        isinstance(item, dict) and item.get("source_kind") == "prior_report"
+        for item in context.get("pdf_expert_matches", []) or []
+    )
 
 
 def _normalize_visible_sources(value: Any, context: dict[str, Any]) -> list[str]:
@@ -1010,6 +1121,9 @@ def _normalize_visible_sources(value: Any, context: dict[str, Any]) -> list[str]
         "pdf_experto": fallback_pdf,
         "reportes expertos": fallback_pdf,
         "reporte experto": fallback_pdf,
+        "reporte previo del circuito": [PRIOR_REPORT_VISIBLE_SOURCE],
+        "reporte previo": [PRIOR_REPORT_VISIBLE_SOURCE],
+        "prior_report": [PRIOR_REPORT_VISIBLE_SOURCE],
     }
     for item in raw_items:
         text = str(item or "").strip()
@@ -1051,10 +1165,16 @@ def _normalize_output_context_metadata(data: dict[str, Any], context: dict[str, 
         errors.append("contexto debe ser un objeto.")
         return errors
 
-    expected_expert_available = bool(context.get("modelo_experto_disponible") or context.get("pdf_expert_matches"))
+    # `_pdf_source_names` already excludes `source_kind == "prior_report"`
+    # rows, so this stays PDF-only availability even when `pdf_expert_matches`
+    # also carries prior-report continuity rows for the same circuit.
+    expected_expert_available = bool(context.get("modelo_experto_disponible")) or bool(_pdf_source_names(context))
+    expected_reporte_previo_disponible = bool(context.get("reporte_previo_disponible")) or _prior_report_present(context)
     expected_sources = list(context.get("fuentes_usadas") or ["Agente Descriptor", "Agente predictivo"])
     if expected_expert_available and "Modelo Experto" not in expected_sources:
         expected_sources.append("Modelo Experto")
+    if expected_reporte_previo_disponible and PRIOR_REPORT_VISIBLE_SOURCE not in expected_sources:
+        expected_sources.append(PRIOR_REPORT_VISIBLE_SOURCE)
     expected_expert_reason = str(context.get("modelo_experto_razon") or "").strip()
     if not expected_expert_reason:
         expected_expert_reason = (
@@ -1088,6 +1208,8 @@ def _normalize_output_context_metadata(data: dict[str, Any], context: dict[str, 
                 mapped = "Agente predictivo"
             elif lower in {"modelo experto", "agente del modelo experto", "pdf_experto", "reportes expertos", "reporte experto"} or text in pdf_names:
                 mapped = "Modelo Experto"
+            elif lower in {"reporte previo del circuito", "reporte previo", "prior_report"}:
+                mapped = PRIOR_REPORT_VISIBLE_SOURCE
             else:
                 mapped = text
             if mapped and mapped not in normalized_sources:
@@ -1151,7 +1273,11 @@ def validar_respuesta_expert_alignment(response_text: str, context: dict[str, An
         evidence = str(item.get("evidencia_pdf") or "").strip()
         if evidence and not _evidence_is_supported(evidence, evidences, allowed_indexes):
             errors.append(f"Evidencia PDF no proviene de filas comparadas: {evidence[:120]}")
-    if not context.get("pdf_expert_matches"):
+    # Gated on real PDF-sourced rows only (`_pdf_source_names` excludes
+    # `source_kind == "prior_report"`) -- prior-report continuity evidence
+    # must never unlock "hallazgos_expertos_no_cubiertos", which is about
+    # PDF/human-validated expert findings specifically.
+    if not _pdf_source_names(context):
         expert_only_sections = (
             "hallazgos_expertos_no_cubiertos",
         )
@@ -1238,6 +1364,77 @@ def _validate_provenance_data_ref(
     return None
 
 
+def _validate_pdf_row_index_rule_consistency(data: dict[str, Any]) -> list[str]:
+    """Structural guard tying a cited `pdf_row_index`'s offset range to the
+    accompanying `provenance.rule` (Judgment Day Round 1 WARNING(real) fix,
+    relaxed in Judgment Day Round 2 CRITICAL fix to allow combined citations).
+
+    The feature's own documented design
+    (`.claude/skills/expert-alignment/prompt/04_prior_report_continuity.md`)
+    explicitly invites a SINGLE claim to cite BOTH a real-PDF row (Modelo
+    Experto backing) AND a prior-report offset row (reinforcement) together
+    in the same `data_ref` list -- "reinforce, don't sole-source". So this
+    check is evaluated PER CLAIM (i.e. over the whole `data_ref` list of one
+    item), not per individual reference:
+
+    - A `data_ref` citing ONLY offset-range index/indexes (no other
+      supporting reference at all) under a rule other than
+      `"04_prior_report_continuity"` is invalid -- a pure offset-only
+      citation must use the prior-report rule (the original Round-1 bug).
+    - A `data_ref` citing ONLY real-PDF-range index/indexes under rule
+      `"04_prior_report_continuity"` is invalid -- a claim citing zero
+      prior-report evidence has no business using the prior-report rule
+      (the other original Round-1 bug).
+    - A `data_ref` that mixes a real-PDF index and a prior-report offset
+      index in the SAME claim is a legitimate reinforcement pattern and is
+      never flagged by this check, regardless of which rule is used --
+      the claim has other (real-PDF) backing, so it is not the sole-source
+      case this check exists to catch.
+
+    Read-only: never mutates `data`.
+    """
+    errors: list[str] = []
+    for section_name in _PROVENANCE_SECTIONS:
+        section = data.get(section_name, [])
+        if not isinstance(section, list):
+            continue
+        for item in section:
+            if not isinstance(item, dict):
+                continue
+            provenance = item.get("provenance")
+            if not isinstance(provenance, dict):
+                continue
+            rule = provenance.get("rule")
+            data_ref = provenance.get("data_ref")
+            if not isinstance(data_ref, list):
+                continue
+
+            offset_refs: list[str] = []
+            real_refs: list[str] = []
+            for ref in data_ref:
+                match = _PDF_ROW_INDEX_REF_RE.match(str(ref).strip())
+                if not match:
+                    continue
+                if int(match.group(1)) >= PRIOR_REPORT_PDF_ROW_INDEX_OFFSET:
+                    offset_refs.append(str(ref))
+                else:
+                    real_refs.append(str(ref))
+
+            if offset_refs and not real_refs and rule != "04_prior_report_continuity":
+                errors.append(
+                    f"{section_name}: provenance.data_ref cites only prior-report "
+                    f"pdf_row_index reference(s) ({offset_refs!r}) but provenance.rule "
+                    f"is not '04_prior_report_continuity': {rule!r}"
+                )
+            elif real_refs and not offset_refs and rule == "04_prior_report_continuity":
+                errors.append(
+                    f"{section_name}: provenance.data_ref cites only real-PDF "
+                    f"pdf_row_index reference(s) ({real_refs!r}) under rule "
+                    "'04_prior_report_continuity'"
+                )
+    return errors
+
+
 def validar_provenance_expert_alignment(data: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
     """Additively validate per-claim `provenance` objects, when present.
 
@@ -1261,7 +1458,7 @@ def validar_provenance_expert_alignment(data: dict[str, Any], context: dict[str,
             allowed_indexes_set=allowed_indexes_set,
         )
 
-    return validar_provenance_generico(
+    result = validar_provenance_generico(
         data,
         sections=_PROVENANCE_SECTIONS,
         agent_id=EXPERT_ALIGNMENT_AGENT_ID,
@@ -1274,3 +1471,8 @@ def validar_provenance_expert_alignment(data: dict[str, Any], context: dict[str,
         error_bad_rule=lambda rule: f"provenance.rule no está en la lista de reglas permitidas: {rule!r}",
         error_empty_data_ref=lambda: "provenance.data_ref debe ser una lista no vacía.",
     )
+    consistency_errors = _validate_pdf_row_index_rule_consistency(data)
+    if consistency_errors:
+        result["errors"] = [*result["errors"], *consistency_errors]
+        result["ok"] = False
+    return result

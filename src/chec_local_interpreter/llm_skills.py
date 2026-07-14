@@ -27,6 +27,7 @@ EXPERT_ALIGNMENT_REQUIRED_SKILLS = (
     "01_pdf_report_comparison.md",
     "02_predictive_variable_prioritization.md",
     "03_graph_context_for_alignment.md",
+    "04_prior_report_continuity.md",
 )
 
 AUTO_SIMULATOR_REQUIRED_SKILLS = (

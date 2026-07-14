@@ -30,8 +30,13 @@ def load_validated_agent_output(run_dir: Path, agent_name: str) -> dict[str, Any
     success shape `{"ok": true, "data": {...}}`.
 
     Raises `ReportPipelineError` if the file is absent (the Skill never
-    produced a validated output — e.g. retries exhausted) or present but not
-    a successful envelope (`ok` missing/false, or malformed JSON shape).
+    produced a validated output — e.g. retries exhausted), present but not
+    a successful envelope (`ok` missing/false, or malformed JSON shape), or
+    the envelope is otherwise valid but its `data` payload is not itself a
+    dict (e.g. a list, from a partial/buggy write — Judgment Day Round 2
+    CRITICAL fix: a schema-invalid-but-JSON-valid prior output must never
+    reach callers as if it were a usable record, since every caller
+    immediately does dict-shaped access like `data.get(...)`).
     """
     path = run_dir / f"{agent_name}.out.json"
     if not path.exists():
@@ -46,4 +51,10 @@ def load_validated_agent_output(run_dir: Path, agent_name: str) -> dict[str, Any
             f"Validated output for agent '{agent_name}' at {path} is not a "
             "successful envelope (expected {'ok': true, 'data': ...})."
         )
-    return payload["data"]
+    data = payload["data"]
+    if not isinstance(data, dict):
+        raise ReportPipelineError(
+            f"Validated output for agent '{agent_name}' at {path} has a "
+            f"non-dict 'data' payload (expected an object, got {type(data).__name__})."
+        )
+    return data

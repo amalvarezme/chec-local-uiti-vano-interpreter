@@ -93,8 +93,8 @@ present" (it isn't — any `data_ref` supplied is held to the full resolvability
 - **expert-alignment** — attaches provenance per item in `coincidencias`, `diferencias`, and
   `variables_a_priorizar`. `agent` must equal `expert-alignment`. `rule` must be one of:
   `01_pdf_report_comparison`, `02_predictive_variable_prioritization`,
-  `03_graph_context_for_alignment` — the three playbook ids ported into
-  `.claude/skills/expert-alignment/SKILL.md`. `data_ref` entries resolve against the circuit's
+  `03_graph_context_for_alignment`, `04_prior_report_continuity` — the four playbook ids ported
+  into `.claude/skills/expert-alignment/SKILL.md`. `data_ref` entries resolve against the circuit's
   allowed dates, predictive-model variables, and PDF row references.
 - **historical** — attaches provenance per item in `key_findings` (the base agent's per-claim
   evidence-bearing list, the analog of expert-alignment's per-item sections). `agent` must equal

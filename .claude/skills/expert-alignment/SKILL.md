@@ -11,6 +11,7 @@ metadata:
     - .claude/skills/expert-alignment/prompt/01_pdf_report_comparison.md
     - .claude/skills/expert-alignment/prompt/02_predictive_variable_prioritization.md
     - .claude/skills/expert-alignment/prompt/03_graph_context_for_alignment.md
+    - .claude/skills/expert-alignment/prompt/04_prior_report_continuity.md
 ---
 
 ## Overview
@@ -62,6 +63,16 @@ Source rules:
   otros nombres internos en la salida visible.
 - Prioriza las filas con mayor `temporal_score`. Si una fila experta coincide temporalmente pero
   no temáticamente, dilo; si coincide temáticamente pero está lejos en fechas, dilo también.
+
+## Prior-report continuity (lower-trust source)
+
+When a prior completed run for the SAME circuit exists, its own reconciled synthesis is reused
+as a fourth, lower-trust evidence source: rows shaped exactly like `pdf_expert_matches` but
+carrying `source_kind: "prior_report"` and `confidence: "baja"`. Cite this source as `Reporte
+previo del circuito` — never as `Modelo Experto` or a `CIRCUITO.pdf` file. Treat it as a prior
+model interpretation, not human-validated evidence: never let it alone justify a `prioridad:
+"alta"`, and defer to PDF/human-sourced evidence when the two conflict. See
+`04_prior_report_continuity.md` for the full rule.
 
 ## Required comparison
 
@@ -195,4 +206,5 @@ ni evidencia textual dentro del ítem; las fuentes deben ser trazables (`Agente 
   `assemble_skill_bundle(profile="expert_alignment")`):
   `.claude/skills/expert-alignment/prompt/01_pdf_report_comparison.md`,
   `.claude/skills/expert-alignment/prompt/02_predictive_variable_prioritization.md`,
-  `.claude/skills/expert-alignment/prompt/03_graph_context_for_alignment.md`
+  `.claude/skills/expert-alignment/prompt/03_graph_context_for_alignment.md`,
+  `.claude/skills/expert-alignment/prompt/04_prior_report_continuity.md`

@@ -1,0 +1,64 @@
+{
+  "circuito": "C1",
+  "periodo_informe": {
+    "inicio": "2026-01-01",
+    "fin": "2026-01-10"
+  },
+  "fuentes_disponibles": [
+    "Agente Descriptor",
+    "Agente predictivo",
+    "Modelo Experto"
+  ],
+  "fuentes_usadas": [
+    "Agente Descriptor",
+    "Agente predictivo",
+    "Modelo Experto"
+  ],
+  "modelo_experto_disponible": true,
+  "modelo_experto_razon": "Se encontraron discusiones explícitamente asociadas al circuito evaluado.",
+  "fechas_informe": [
+    {
+      "source": "critical_point",
+      "fecha_inicio": "2026-01-06",
+      "fecha_fin": "2026-01-06",
+      "descripcion": "[0]",
+      "peso": 3.0
+    },
+    {
+      "source": "context",
+      "fecha_inicio": "2026-01-01",
+      "fecha_fin": "2026-01-10",
+      "descripcion": "periodo_global_informe",
+      "peso": 0.5
+    }
+  ],
+  "llm1_analysis": {
+    "hallazgos": [
+      "Hallazgo historico."
+    ]
+  },
+  "llm2_inference_analysis": {
+    "hallazgos": [
+      "Hallazgo de inferencia."
+    ]
+  },
+  "variables_modelo_predictivo": [],
+  "senales_modelo_predictivo": [],
+  "pdf_expert_matches": [
+    {
+      "Circuito": "C1",
+      "Fecha inicio": "2026-01-05",
+      "Fecha fin": "2026-01-07",
+      "Análisis": "Análisis experto sobre el pico de C1.",
+      "Evidencia": "Evidencia documentada en el informe experto.",
+      "matched_source": "critical_point",
+      "matched_fecha_inicio": "2026-01-06",
+      "matched_fecha_fin": "2026-01-06",
+      "matched_descripcion": "[0]",
+      "temporal_score": 4.1,
+      "overlap_days": 1,
+      "distance_days": 0,
+      "pdf_row_index": 0
+    }
+  ]
+}
