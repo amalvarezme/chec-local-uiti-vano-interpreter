@@ -21,16 +21,23 @@ import pytest
 from chec_local_interpreter.agent_tools import _atomic_io, batch as batch_module
 from chec_local_interpreter.agent_tools import inference as inference_module
 from chec_local_interpreter.agent_tools.expert_alignment import TOOL_VERSION
+from chec_local_interpreter.expert_alignment import construir_contexto_expert_alignment
 
 EXPERT_ALIGNMENT_AGENT = batch_module.EXPERT_ALIGNMENT_AGENT
 
 
 def _sample_payload(circuito: str = "DON23L13") -> dict:
-    return {
-        "circuito": circuito,
-        "periodo_inicio": "2026-01-01",
-        "periodo_fin": "2026-01-31",
-        "fechas_informe": [
+    """Build an already-built expert-alignment context — the real payload
+    shape `EXPERT_ALIGNMENT_AGENT.build_context` (== `agent_tools.expert_alignment.build_context`)
+    expects post-fix, matching what `report_pipeline.prepare_expert_alignment()`
+    writes to `expert-alignment.bc.json`. `circuito` stays a top-level key
+    (it already is, on the built context) since `run_circuit` keys its own
+    manifest/dedupe/publish bookkeeping off it regardless of agent role."""
+    context = construir_contexto_expert_alignment(
+        circuito=circuito,
+        periodo_inicio="2026-01-01",
+        periodo_fin="2026-01-31",
+        fechas_informe=[
             {
                 "source": "critical_point",
                 "fecha_inicio": "2026-01-10",
@@ -39,9 +46,9 @@ def _sample_payload(circuito: str = "DON23L13") -> dict:
                 "peso": 3.0,
             }
         ],
-        "validation_data": {"period_synthesis": "UITI_VANO sube en el punto crítico."},
-        "inference_validation_data": {"hallazgos": ["El modelo resalta CNT_TRF."]},
-        "pdf_expert_matches": [
+        validation_data={"period_synthesis": "UITI_VANO sube en el punto crítico."},
+        inference_validation_data={"hallazgos": ["El modelo resalta CNT_TRF."]},
+        pdf_expert_matches=[
             {
                 "Circuito": circuito,
                 "Fecha inicio": "2026-01-09",
@@ -51,9 +58,10 @@ def _sample_payload(circuito: str = "DON23L13") -> dict:
                 "pdf_row_index": 3,
             }
         ],
-        "variables_modelo_predictivo": ["CNT_TRF"],
-        "skill_bundle": "Skill bundle de prueba",
-    }
+        variables_modelo_predictivo=["CNT_TRF"],
+    )
+    context["skill_bundle"] = "Skill bundle de prueba"
+    return context
 
 
 def _valid_response(circuito: str = "DON23L13") -> dict:
@@ -583,10 +591,13 @@ def test_run_circuit_null_byte_circuito_does_not_crash_and_is_failed(tmp_path, m
     assert "error" in entry
 
 
-def test_run_circuit_malformed_periodo_inicio_does_not_crash_and_is_failed(tmp_path, monkeypatch):
-    """A malformed `periodo_inicio` (e.g. a dict instead of a scalar) makes
-    pandas.to_datetime(..., errors="coerce") raise inside build_context — this
-    must be captured as a FAILED manifest entry, not an uncaught exception."""
+def test_run_circuit_malformed_context_missing_periodo_informe_does_not_crash_and_is_failed(tmp_path, monkeypatch):
+    """`build_context` no longer parses a raw `periodo_inicio` (that
+    assembly now lives entirely upstream, in
+    `report_pipeline.prepare_expert_alignment()`) — the analogous new-contract
+    failure mode is an already-built context missing a field `build_context`
+    still reads directly (`context["periodo_informe"]`). This must still be
+    captured as a FAILED manifest entry, not an uncaught exception."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
         batch_module.subprocess,
@@ -595,7 +606,7 @@ def test_run_circuit_malformed_periodo_inicio_does_not_crash_and_is_failed(tmp_p
     )
 
     payload = _sample_payload("BADPERIOD")
-    payload["periodo_inicio"] = {"a": 1}
+    del payload["periodo_informe"]
 
     entry = batch_module.run_circuit(payload, agent=EXPERT_ALIGNMENT_AGENT)
 
@@ -634,7 +645,7 @@ def test_run_circuit_unexpected_error_logs_full_traceback_to_stderr(tmp_path, mo
 
 
 def test_run_batch_continues_when_one_circuit_has_a_malformed_field(tmp_path, monkeypatch):
-    """A batch with one bad circuit (malformed periodo_inicio) and one good
+    """A batch with one bad circuit (missing periodo_informe) and one good
     circuit must still complete with both entries in the manifest."""
     monkeypatch.chdir(tmp_path)
 
@@ -647,7 +658,7 @@ def test_run_batch_continues_when_one_circuit_has_a_malformed_field(tmp_path, mo
     monkeypatch.setattr(batch_module.subprocess, "run", fake_run)
 
     bad_payload = _sample_payload("BADCKT")
-    bad_payload["periodo_inicio"] = {"a": 1}
+    del bad_payload["periodo_informe"]
 
     manifest = batch_module.run_batch(
         [bad_payload, _sample_payload("OKCKT")],

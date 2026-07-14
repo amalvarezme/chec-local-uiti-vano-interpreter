@@ -30,11 +30,16 @@ AGENT_TOOLS_MODULE = PROJECT_ROOT / "src" / "chec_local_interpreter" / "agent_to
 
 
 def _sample_context_payload() -> dict:
-    return {
-        "circuito": "DON23L13",
-        "periodo_inicio": "2026-01-01",
-        "periodo_fin": "2026-01-31",
-        "fechas_informe": [
+    """Build an already-built expert-alignment context, matching what
+    `report_pipeline.prepare_expert_alignment()` writes to
+    `expert-alignment.bc.json` (the real production payload for this CLI's
+    `build-context` verb). `skill_bundle` is added as a sibling top-level
+    key, exactly as a real caller does."""
+    context = construir_contexto_expert_alignment(
+        circuito="DON23L13",
+        periodo_inicio="2026-01-01",
+        periodo_fin="2026-01-31",
+        fechas_informe=[
             {
                 "source": "critical_point",
                 "fecha_inicio": "2026-01-10",
@@ -43,9 +48,9 @@ def _sample_context_payload() -> dict:
                 "peso": 3.0,
             }
         ],
-        "validation_data": {"period_synthesis": "UITI_VANO sube en el punto crítico."},
-        "inference_validation_data": {"hallazgos": ["El modelo resalta CNT_TRF."]},
-        "pdf_expert_matches": [
+        validation_data={"period_synthesis": "UITI_VANO sube en el punto crítico."},
+        inference_validation_data={"hallazgos": ["El modelo resalta CNT_TRF."]},
+        pdf_expert_matches=[
             {
                 "Circuito": "DON23L13",
                 "Fecha inicio": "2026-01-09",
@@ -55,9 +60,10 @@ def _sample_context_payload() -> dict:
                 "pdf_row_index": 3,
             }
         ],
-        "variables_modelo_predictivo": ["CNT_TRF"],
-        "skill_bundle": "Skill bundle de prueba",
-    }
+        variables_modelo_predictivo=["CNT_TRF"],
+    )
+    context["skill_bundle"] = "Skill bundle de prueba"
+    return context
 
 
 def _run_cli(verb: str, payload: dict, cwd: Path) -> subprocess.CompletedProcess:
@@ -78,19 +84,6 @@ def _run_cli_raw(verb: str, raw_stdin: str, cwd: Path) -> subprocess.CompletedPr
     )
 
 
-def _reference_context(payload: dict) -> dict:
-    return construir_contexto_expert_alignment(
-        circuito=payload["circuito"],
-        periodo_inicio=payload["periodo_inicio"],
-        periodo_fin=payload["periodo_fin"],
-        fechas_informe=payload["fechas_informe"],
-        validation_data=payload["validation_data"],
-        inference_validation_data=payload["inference_validation_data"],
-        pdf_expert_matches=payload["pdf_expert_matches"],
-        variables_modelo_predictivo=payload["variables_modelo_predictivo"],
-    )
-
-
 def test_build_context_envelope_shape_matches_allowed_helpers():
     payload = _sample_context_payload()
     envelope = build_context(payload)
@@ -103,7 +96,9 @@ def test_build_context_envelope_shape_matches_allowed_helpers():
     assert isinstance(envelope["prompt"], str) and envelope["prompt"]
     assert isinstance(envelope["context"], dict)
 
-    reference_context = _reference_context(payload)
+    # `payload` IS already the full, deterministic context (this CLI never
+    # rebuilds it) — so it doubles as the "reference" full context here.
+    reference_context = payload
     assert set(envelope["allowed"].keys()) == {"dates", "variables", "pdf_row_indexes", "sources"}
     assert sorted(envelope["allowed"]["dates"]) == sorted(_allowed_dates(reference_context))
     assert sorted(envelope["allowed"]["variables"]) == sorted(_allowed_variables(reference_context))
@@ -138,9 +133,10 @@ def test_build_context_allowed_derives_from_the_compacted_context_not_the_full_o
     # the top 20 fechas_informe records.
     assert len(envelope["context"]["fechas_informe"]) == 20
 
-    # The full, untruncated context would have advertised the truncated-out
-    # date too — this is the bug's shape, asserted here before the fix check.
-    full_context = _reference_context(payload)
+    # The full, untruncated context (the payload itself) would have
+    # advertised the truncated-out date too — this is the bug's shape,
+    # asserted here before the fix check.
+    full_context = payload
     truncated_out_date = "2026-03-25"  # the 25th entry (index 24), outside the top 20
     assert truncated_out_date in _allowed_dates(full_context)
 
@@ -395,9 +391,18 @@ def test_cli_validate_missing_response_text_is_malformed_not_a_crash(tmp_path):
     assert stdout_data["errors"]
 
 
-def test_cli_build_context_malformed_nested_periodo_inicio_is_not_a_crash(tmp_path):
+def test_cli_build_context_missing_periodo_informe_is_not_a_crash(tmp_path):
+    """`build-context` no longer parses/assembles the context (Rule 2:
+    deterministic assembly stays upstream in
+    `report_pipeline.prepare_expert_alignment()`), so a malformed raw
+    `periodo_inicio` is no longer a reachable failure mode here. The
+    analogous new-contract edge case is an already-built context missing a
+    required top-level field this CLI still reads directly
+    (`context["periodo_informe"]` for `meta.periodo`) — the required-field
+    dispatch check only covers `circuito`, so this must still fail cleanly
+    (exit 3, one JSON document on stdout), not crash with a bare traceback."""
     payload = _sample_context_payload()
-    payload["periodo_inicio"] = {"a": 1}
+    del payload["periodo_informe"]
 
     result = _run_cli("build-context", payload, tmp_path)
 

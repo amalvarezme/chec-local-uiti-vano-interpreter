@@ -66,7 +66,10 @@ promise in a docstring.
 
 ## The envelope contract (L1 -> L2 -> L3)
 
-`build-context` reads a circuit's inputs from stdin JSON and emits this envelope on stdout:
+`build-context` reads the already-built
+`expert_alignment.construir_contexto_expert_alignment(...)` JSON directly from stdin (no raw
+circuit/date inputs, deterministic selection/assembly stays entirely upstream in
+`report_pipeline.prepare_expert_alignment()` — Rule 2) and emits this envelope on stdout:
 
 ```json
 {

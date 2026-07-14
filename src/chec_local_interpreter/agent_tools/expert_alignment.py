@@ -3,13 +3,19 @@
 This module is a thin stdin/stdout JSON boundary around the deterministic,
 already-validated functions in `chec_local_interpreter.expert_alignment`
 (L1). It has no import path to the model training package or the frozen
-classifier artifact: it packages precomputed context and gates output
+classifier artifact: it packages an already-built context and gates output
 through the existing validator, it does not implement any new selection
 logic.
 
 Verbs:
-    build-context   Reads circuit/context inputs from stdin JSON, emits the
-                    envelope `{meta, context, prompt, allowed}` on stdout.
+    build-context   Reads the already-built
+                    `expert_alignment.construir_contexto_expert_alignment(...)`
+                    JSON output from stdin, emits the envelope
+                    `{meta, context, prompt, allowed}` on stdout. Deterministic
+                    selection/assembly stays entirely upstream of this CLI, in
+                    `report_pipeline.prepare_expert_alignment()` (Rule 2,
+                    `.claude/agents/rules/invariants.md`): the stdin payload IS
+                    the deterministic context, never raw circuit/date inputs.
     validate        Reads `{response_text, context}` from stdin JSON, runs
                     the existing validator, and on failure writes the raw
                     output plus errors under
@@ -44,7 +50,6 @@ from chec_local_interpreter.expert_alignment import (
     allowed_pdf_row_indexes,
     allowed_variables,
     compactar_contexto_expert_alignment_para_prompt,
-    construir_contexto_expert_alignment,
     construir_prompt_expert_alignment,
     validar_provenance_expert_alignment,
     validar_respuesta_expert_alignment,
@@ -59,18 +64,14 @@ ARTIFACTS_ROOT = Path("reports/interpretability/artifacts")
 
 
 def build_context(payload: dict[str, Any]) -> dict[str, Any]:
-    """Build the `build-context` envelope from a raw stdin JSON payload."""
-    context = construir_contexto_expert_alignment(
-        circuito=payload["circuito"],
-        periodo_inicio=payload.get("periodo_inicio"),
-        periodo_fin=payload.get("periodo_fin"),
-        fechas_informe=payload.get("fechas_informe", []),
-        validation_data=payload.get("validation_data", {}),
-        inference_validation_data=payload.get("inference_validation_data", {}),
-        pdf_expert_matches=payload.get("pdf_expert_matches", []),
-        inference_context_package=payload.get("inference_context_package"),
-        variables_modelo_predictivo=payload.get("variables_modelo_predictivo"),
-    )
+    """Build the `build-context` envelope from the already-built context JSON.
+
+    `payload` IS the deterministic
+    `expert_alignment.construir_contexto_expert_alignment(...)` output
+    (already selected, already JSON-serializable) — this CLI never performs
+    its own selection or assembly.
+    """
+    context = payload
     compact_context = compactar_contexto_expert_alignment_para_prompt(context)
     prompt = construir_prompt_expert_alignment(context, payload.get("skill_bundle", ""))
 
