@@ -33,7 +33,7 @@ GOVERNANCE_MARKDOWN_ROOTS = (
     PROJECT_ROOT / ".claude" / "skills" / "expert-alignment",
     PROJECT_ROOT / ".claude" / "skills" / "historical",
     PROJECT_ROOT / ".claude" / "skills" / "inference",
-    PROJECT_ROOT / ".claude" / "skills" / "reporte",
+    PROJECT_ROOT / ".claude" / "skills" / "report",
     PROJECT_ROOT / ".claude" / "skills" / "auto-simulator",
     PROJECT_ROOT / ".claude" / "skills" / "pdf-discussion-extraction",
 )
@@ -206,20 +206,20 @@ def test_inference_skill_directory_is_included_in_governance_roots():
 
 
 def test_reporte_skill_directory_is_included_in_governance_roots():
-    """The `/reporte` orchestrator Skill directory (report-command-pipeline,
+    """The `/report` orchestrator Skill directory (report-command-pipeline,
     Phase 7) must be scanned by the frozen-model content guard, same as
     historical's/inference's/expert-alignment's (mirrors historical's Phase
     9.3 / inference's Slice A precedent)."""
-    assert PROJECT_ROOT / ".claude" / "skills" / "reporte" in GOVERNANCE_MARKDOWN_ROOTS
+    assert PROJECT_ROOT / ".claude" / "skills" / "report" in GOVERNANCE_MARKDOWN_ROOTS
     scanned_paths = {path.name for path in _iter_governance_markdown_files()}
     assert "SKILL.md" in scanned_paths
-    assert (PROJECT_ROOT / ".claude" / "skills" / "reporte" / "SKILL.md").exists()
+    assert (PROJECT_ROOT / ".claude" / "skills" / "report" / "SKILL.md").exists()
 
 
 def test_auto_simulator_skill_directory_is_included_in_governance_roots():
     """The auto-simulator agent's Skill directory (agent-native-pipeline-
     and-site-split, PR A1) must be scanned by the frozen-model content
-    guard, same as historical's/inference's/reporte's/expert-alignment's."""
+    guard, same as historical's/inference's/report's/expert-alignment's."""
     assert PROJECT_ROOT / ".claude" / "skills" / "auto-simulator" in GOVERNANCE_MARKDOWN_ROOTS
     scanned_paths = {path.name for path in _iter_governance_markdown_files()}
     assert "SKILL.md" in scanned_paths
@@ -230,7 +230,7 @@ def test_pdf_discussion_extraction_skill_directory_is_included_in_governance_roo
     """The pdf-discussion-extraction agent's Skill directory (agent-native-
     pipeline-and-site-split, PR A2b -- second of the two roots planned
     alongside auto-simulator's) must be scanned by the frozen-model content
-    guard, same as historical's/inference's/reporte's/expert-alignment's/
+    guard, same as historical's/inference's/report's/expert-alignment's/
     auto-simulator's."""
     assert PROJECT_ROOT / ".claude" / "skills" / "pdf-discussion-extraction" in GOVERNANCE_MARKDOWN_ROOTS
     scanned_paths = {path.name for path in _iter_governance_markdown_files()}

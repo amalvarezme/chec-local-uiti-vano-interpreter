@@ -323,20 +323,36 @@ governed by this framework (that frozen function itself is untouched and still c
   their respective provenance validators, alongside the pre-existing base-agent eval case in the
   same file.
 
-### `/reporte` orchestrator (Implemented, `report-command-pipeline` change, Slice B)
+### Report orchestrator (multi-runtime adapters)
 
-`/reporte` is **not** a fourth entry in the "Agent roles" table above — it does not itself author
-or validate one persona's JSON output, so it does not fit that table's L1/L2/L3/L4 shape. It is the
-orchestrating Claude Code Skill that sequences the three existing agent roles
-(`historical` -> `inference` -> `expert-alignment`, either order for the first two) around a
-pure-Python, LLM-call-free orchestrator, and produces the final HTML report.
+The full report entry point is runtime-native but contract-compatible across supported coding-agent
+runtimes:
 
-- Claude Code Skill (runbook): [`.claude/skills/reporte/SKILL.md`](../.claude/skills/reporte/SKILL.md)
-  — no distinct `.claude/agents/reporte.md` role file (see that Skill's own "Allowed tools" section
-  for why: no `agent_tools.report_pipeline` CLI exists in this change's scope to restrict Bash to).
+| Runtime | Invocation |
+|---|---|
+| Claude Code | `/report <circuito> [fecha_inicio fecha_fin]` |
+| OpenCode | `@report <circuito> [fecha_inicio fecha_fin]` fallback until project slash commands are verified |
+| Codex | `$report <circuito> [fecha_inicio fecha_fin]` |
+| Pi / el Gentleman | `/skill:report <circuito> [fecha_inicio fecha_fin]` |
+
+This report entry point is **not** a fourth entry in the "Agent roles" table above — it does not
+itself author or validate one persona's JSON output, so it does not fit that table's L1/L2/L3/L4
+shape. It is a thin runtime adapter over a shared contract that sequences the existing agent roles
+(`historical` -> `inference` -> `auto-simulator` -> `expert-alignment`, with the first three
+parallel-capable where supported) around a pure-Python, LLM-call-free orchestrator, and produces the
+final local HTML report.
+
+- Shared contract: [`src/chec_local_interpreter/report_contract.py`](../src/chec_local_interpreter/report_contract.py)
+  — normalizes runtime requests, preflight outcomes, metadata, and JSON lifecycle states.
+- Claude Code Skill (runbook): [`.claude/skills/report/SKILL.md`](../.claude/skills/report/SKILL.md).
+- OpenCode fallback adapter: [`.opencode/agent/report.md`](../.opencode/agent/report.md).
+- Codex skill adapter: [`.codex/skills/report/SKILL.md`](../.codex/skills/report/SKILL.md).
+- Pi skill adapter: [`.pi/skills/report/SKILL.md`](../.pi/skills/report/SKILL.md).
+- Runtime contract docs: [`docs/report-runtime-contract.md`](report-runtime-contract.md).
 - Orchestrator (L1, pure Python, no LLM call in this module):
-  `src/chec_local_interpreter/report_pipeline.py` — `prepare(circuito, fecha_inicio=None,
-  fecha_fin=None) -> Path`, `prepare_expert_alignment(run_dir) -> Path`, `render(run_dir) -> Path`.
+  `src/chec_local_interpreter/report_pipeline.py` — `preflight(circuito, fecha_inicio=None,
+  fecha_fin=None) -> ReportPreflight`, `prepare(circuito, fecha_inicio=None, fecha_fin=None) -> Path`,
+  `prepare_expert_alignment(run_dir) -> Path`, `render(run_dir) -> Path`.
 - Per-circuit date-range default: `data_loader.circuit_date_range(frame, circuito)`.
 - Argument contract: `circuito` required; `fecha_inicio`/`fecha_fin` optional as a pair — giving
   exactly one is a usage error, rejected by `prepare` itself (`ReportPipelineError`) before touching

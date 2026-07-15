@@ -53,5 +53,7 @@ dist/
 .astro/
 .npm-cache/
 
-# Gentle AI skill-registry cache
+# Gentle AI local harness metadata
 .atl/
+.pi/gentle-ai/
+openspec/

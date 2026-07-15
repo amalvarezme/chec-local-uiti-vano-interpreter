@@ -1,4 +1,4 @@
-"""Structural guard: `.claude/skills/reporte/SKILL.md` must declare
+"""Structural guard: `.claude/skills/report/SKILL.md` must declare
 `historical`, `inference`, and `auto-simulator` (steps 3/4/4b) as
 independent, parallel-eligible calls, while still preserving the
 `expert-alignment` (step 5/6) dependency on both `historical` and
@@ -21,7 +21,7 @@ import re
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-REPORTE_SKILL_PATH = PROJECT_ROOT / ".claude" / "skills" / "reporte" / "SKILL.md"
+REPORTE_SKILL_PATH = PROJECT_ROOT / ".claude" / "skills" / "report" / "SKILL.md"
 
 
 def _run_sequence_text() -> str:
@@ -62,3 +62,24 @@ def test_skill_preserves_expert_alignment_dependency_on_both_stages():
     assert step5_match is not None, "Step 5 (prepare_expert_alignment) must still be documented"
     step5_text = step5_match.group(0)
     assert "historical" in step5_text and "inference" in step5_text
+
+
+def test_skill_forbids_ambiguous_generic_worker_dispatch():
+    body = _run_sequence_text()
+
+    assert "Role-dispatch safety contract" in body
+    assert "exactly one role" in body
+    assert "never\nlaunch multiple identical generic workers" in body
+    assert "If any worker asks which role it has" in body
+    assert "verify that the selected agent can run" in body
+    assert "A read-only/research-only worker cannot author a" in body
+    assert "historical.out.json" in body and "inference.out.json" in body
+    assert "report the stalled role" in body
+
+
+def test_skill_requires_measured_subagent_totals_when_runtime_exposes_them():
+    body = _run_sequence_text()
+
+    assert "Pi's subagent runner" in body
+    assert "This is mandatory whenever the runtime exposes that" in body
+    assert "do not show a `chars // 4` artifact estimate" in body

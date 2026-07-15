@@ -12,6 +12,7 @@ from chec_local_interpreter.config import DEFAULT_MODEL_DIR as _REAL_DEFAULT_MOD
 from chec_local_interpreter.inference_validation import validar_respuesta_inferencia_strict
 from chec_local_interpreter.report_pipeline import (
     ReportPipelineError,
+    preflight,
     prepare,
     prepare_expert_alignment,
     render,
@@ -72,6 +73,45 @@ def _canned_ok(data: dict) -> dict:
 
 def _read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+# ---------------------------------------------------------------------------
+# preflight()
+# ---------------------------------------------------------------------------
+
+
+def test_preflight_resolves_default_window_without_creating_run_dir(tmp_path):
+    data_path = _write_fixture_dataset(tmp_path)
+    runs_root = tmp_path / "runs"
+
+    result = preflight("C1", data_path=data_path)
+
+    assert result.circuito == "C1"
+    assert result.fecha_inicio == "2026-01-01"
+    assert result.fecha_fin == "2026-01-10"
+    assert result.event_count == 10
+    assert not runs_root.exists()
+
+
+def test_preflight_rejects_lone_date_before_run_dir(tmp_path):
+    data_path = _write_fixture_dataset(tmp_path)
+    runs_root = tmp_path / "runs"
+
+    with pytest.raises(ReportPipelineError, match="pair"):
+        preflight("C1", "2026-01-01", data_path=data_path)
+
+    assert not runs_root.exists()
+
+
+def test_preflight_matches_prepare_resolved_window(tmp_path):
+    data_path = _write_fixture_dataset(tmp_path)
+
+    resolved = preflight("C1", data_path=data_path)
+    run_dir = prepare("C1", data_path=data_path, runs_root=tmp_path / "runs")
+    state = _read_json(run_dir / "l1_state.json")
+
+    assert state["fecha_inicio"] == resolved.fecha_inicio
+    assert state["fecha_fin"] == resolved.fecha_fin
 
 
 # ---------------------------------------------------------------------------
@@ -1524,7 +1564,7 @@ def test_reporte_end_to_end_with_real_simulator_renders_auto_simulation_section(
 
 # ---------------------------------------------------------------------------
 # Real token usage instrumentation (SDD `reporte-perf-optimization`, item 4):
-# `_resolve_token_usage(run_dir) -> (tokens_input, tokens_output, tokens_total, token_source)`
+# `_resolve_token_usage(run_dir) -> (tokens_input, tokens_output, tokens_total, token_source, token_total_source)`
 # replaces `_estimate_token_usage`, preferring real per-stage counts from an
 # optional `run_dir/token_usage.json` sidecar over the char/4 estimate, and
 # labeling the resolved source ("measured"/"mixed"/"estimated"). `render()`'s
@@ -1545,7 +1585,7 @@ def test_resolve_token_usage_no_sidecar_is_estimated_char_based(tmp_path):
     _write_stage_files(run_dir, "historical", bc_text="x" * 400, out_data={"a": "y" * 200})
     _write_stage_files(run_dir, "inference", bc_text="x" * 120, out_data={"b": "y" * 80})
 
-    tokens_input, tokens_output, tokens_total, token_source = report_pipeline_module._resolve_token_usage(run_dir)
+    tokens_input, tokens_output, tokens_total, token_source, token_total_source = report_pipeline_module._resolve_token_usage(run_dir)
 
     expected_chars_in = 400 + 120
     expected_chars_out = len(json.dumps({"a": "y" * 200})) + len(json.dumps({"b": "y" * 80}))
@@ -1565,7 +1605,7 @@ def test_resolve_token_usage_full_sidecar_is_measured_real_counts(tmp_path):
         encoding="utf-8",
     )
 
-    tokens_input, tokens_output, tokens_total, token_source = report_pipeline_module._resolve_token_usage(run_dir)
+    tokens_input, tokens_output, tokens_total, token_source, token_total_source = report_pipeline_module._resolve_token_usage(run_dir)
 
     assert tokens_input == 300
     assert tokens_output == 130
@@ -1584,7 +1624,7 @@ def test_resolve_token_usage_partial_sidecar_is_mixed(tmp_path):
         json.dumps({"historical": {"input": 100, "output": 50}}), encoding="utf-8"
     )
 
-    tokens_input, tokens_output, tokens_total, token_source = report_pipeline_module._resolve_token_usage(run_dir)
+    tokens_input, tokens_output, tokens_total, token_source, token_total_source = report_pipeline_module._resolve_token_usage(run_dir)
 
     inference_chars_in = 120
     inference_chars_out = len(json.dumps({"b": "y" * 80}))
@@ -1598,9 +1638,9 @@ def test_resolve_token_usage_no_stage_files_returns_zero_estimated(tmp_path):
     run_dir = tmp_path / "run"
     run_dir.mkdir()
 
-    tokens_input, tokens_output, tokens_total, token_source = report_pipeline_module._resolve_token_usage(run_dir)
+    tokens_input, tokens_output, tokens_total, token_source, token_total_source = report_pipeline_module._resolve_token_usage(run_dir)
 
-    assert (tokens_input, tokens_output, tokens_total, token_source) == (0, 0, 0, "estimated")
+    assert (tokens_input, tokens_output, tokens_total, token_source, token_total_source) == (0, 0, 0, "estimated", "estimated")
 
 
 # ---------------------------------------------------------------------------
@@ -1619,7 +1659,7 @@ def test_resolve_token_usage_malformed_top_level_json_degrades_to_estimate(tmp_p
     _write_stage_files(run_dir, "historical", bc_text="x" * 400, out_data={"a": "y" * 200})
     (run_dir / "token_usage.json").write_text("{not valid json", encoding="utf-8")
 
-    tokens_input, tokens_output, tokens_total, token_source = report_pipeline_module._resolve_token_usage(run_dir)
+    tokens_input, tokens_output, tokens_total, token_source, token_total_source = report_pipeline_module._resolve_token_usage(run_dir)
 
     expected_chars_in = 400
     expected_chars_out = len(json.dumps({"a": "y" * 200}))
@@ -1637,7 +1677,7 @@ def test_resolve_token_usage_non_numeric_stage_values_degrade_that_stage_only(tm
         json.dumps({"historical": {"input": "lots", "output": 5}}), encoding="utf-8"
     )
 
-    tokens_input, tokens_output, tokens_total, token_source = report_pipeline_module._resolve_token_usage(run_dir)
+    tokens_input, tokens_output, tokens_total, token_source, token_total_source = report_pipeline_module._resolve_token_usage(run_dir)
 
     expected_chars_in = 400
     expected_chars_out = len(json.dumps({"a": "y" * 200}))
@@ -1655,7 +1695,7 @@ def test_resolve_token_usage_non_dict_stage_entry_degrades_that_stage_only(tmp_p
         json.dumps({"historical": "not-a-dict"}), encoding="utf-8"
     )
 
-    tokens_input, tokens_output, tokens_total, token_source = report_pipeline_module._resolve_token_usage(run_dir)
+    tokens_input, tokens_output, tokens_total, token_source, token_total_source = report_pipeline_module._resolve_token_usage(run_dir)
 
     expected_chars_in = 400
     expected_chars_out = len(json.dumps({"a": "y" * 200}))
@@ -1680,7 +1720,7 @@ def test_resolve_token_usage_total_only_shape_counts_as_measured(tmp_path):
         json.dumps({"historical": {"total": 777}}), encoding="utf-8"
     )
 
-    tokens_input, tokens_output, tokens_total, token_source = report_pipeline_module._resolve_token_usage(run_dir)
+    tokens_input, tokens_output, tokens_total, token_source, token_total_source = report_pipeline_module._resolve_token_usage(run_dir)
 
     # tokens_total gets the real sidecar total directly.
     assert tokens_total == 777
@@ -1690,9 +1730,9 @@ def test_resolve_token_usage_total_only_shape_counts_as_measured(tmp_path):
     expected_chars_out = len(json.dumps({"a": "y" * 200}))
     assert tokens_input == expected_chars_in // 4
     assert tokens_output == expected_chars_out // 4
-    # The stage still counts as "measured" toward token_source (via the
-    # "total"-only shape).
-    assert token_source == "measured"
+    # The total is measured, but the input/output split is still estimated.
+    assert token_source == "estimated"
+    assert token_total_source == "measured"
 
 
 def test_resolve_token_usage_mixed_shapes_across_stages(tmp_path):
@@ -1710,11 +1750,12 @@ def test_resolve_token_usage_mixed_shapes_across_stages(tmp_path):
         encoding="utf-8",
     )
 
-    tokens_input, tokens_output, tokens_total, token_source = report_pipeline_module._resolve_token_usage(run_dir)
+    tokens_input, tokens_output, tokens_total, token_source, token_total_source = report_pipeline_module._resolve_token_usage(run_dir)
 
-    # Both considered stages are measured (one via split, one via total) --
-    # source is "measured", not "mixed".
-    assert token_source == "measured"
+    # The total is measured for both stages, but the input/output split is
+    # measured for only one stage.
+    assert token_source == "mixed"
+    assert token_total_source == "measured"
     assert tokens_total == (100 + 50) + 999
     # historical's split contributes directly; inference's total-only shape
     # falls back to the char/4 estimate for its own input/output split.
@@ -1868,8 +1909,8 @@ def test_render_falls_back_to_estimated_when_no_sidecar_no_kwargs(tmp_path, monk
     assert isinstance(captured["tokens_input"], int)
     assert isinstance(captured["tokens_output"], int)
     assert captured["token_source"] == "estimated"
-    assert isinstance(captured["tokens_total"], int)
-    assert captured["tokens_total"] == captured["tokens_input"] + captured["tokens_output"]
+    assert captured["tokens_total"] is None
+    assert captured["token_total_source"] == "estimated"
     assert isinstance(captured["elapsed_seconds"], float)
 
 
@@ -1900,3 +1941,50 @@ def test_render_partial_kwargs_explicit_side_never_mislabeled_estimated(tmp_path
     assert captured["token_source"] != "estimated", (
         "an explicitly-provided precise tokens_input must never be mislabeled as estimated"
     )
+
+
+def test_render_reuses_same_html_path_when_metadata_is_enriched_for_same_run(tmp_path, monkeypatch):
+    run_dir = _prepare_render_ready_run_dir(tmp_path)
+    output_dir = tmp_path / "html"
+
+    def _spy_render_llm_analysis(*args, **kwargs):
+        html_path = Path(kwargs["output_dir"]) / kwargs["output_filename"]
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        html_path.write_text(
+            f"Modelo LLM: {kwargs.get('llm_provider')} ({kwargs.get('llm_model')})",
+            encoding="utf-8",
+        )
+        return html_path
+
+    monkeypatch.setattr(report_pipeline_module, "render_llm_analysis", _spy_render_llm_analysis)
+
+    first_path = render(run_dir, output_dir=output_dir)
+    second_path = render(run_dir, output_dir=output_dir, llm_provider="Claude Code", llm_model="claude-sonnet-5")
+
+    assert second_path == first_path
+    assert sorted(output_dir.glob("*.html")) == [second_path]
+    assert "Claude Code (claude-sonnet-5)" in second_path.read_text(encoding="utf-8")
+
+
+def test_render_uses_distinct_html_paths_for_distinct_run_dirs(tmp_path, monkeypatch):
+    first_root = tmp_path / "first"
+    second_root = tmp_path / "second"
+    first_root.mkdir()
+    second_root.mkdir()
+    first_run_dir = _prepare_render_ready_run_dir(first_root)
+    second_run_dir = _prepare_render_ready_run_dir(second_root)
+    output_dir = tmp_path / "html"
+
+    def _spy_render_llm_analysis(*args, **kwargs):
+        html_path = Path(kwargs["output_dir"]) / kwargs["output_filename"]
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        html_path.write_text("<html></html>", encoding="utf-8")
+        return html_path
+
+    monkeypatch.setattr(report_pipeline_module, "render_llm_analysis", _spy_render_llm_analysis)
+
+    first_path = render(first_run_dir, output_dir=output_dir)
+    second_path = render(second_run_dir, output_dir=output_dir)
+
+    assert first_path != second_path
+    assert len(list(output_dir.glob("*.html"))) == 2

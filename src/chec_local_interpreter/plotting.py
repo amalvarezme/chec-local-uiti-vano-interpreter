@@ -1128,6 +1128,45 @@ def render_expert_alignment_tab(
         lis = "".join(f"<li>{_escape(item)}</li>" for item in clean_items)
         return f"<ul class='report-list'>{lis}</ul>"
 
+    def _auto_simulation_agent_discussion() -> str:
+        analysis_context = automatic_simulation_analysis if isinstance(automatic_simulation_analysis, dict) else {}
+        if not analysis_context:
+            return ""
+        title = analysis_context.get("titulo") or "Análisis automático de sensibilidad"
+        blocks = [
+            "<div class='insight-card'>",
+            f"<h4>{_escape(title)}</h4>",
+        ]
+        section_specs = [
+            ("resumen", "Resumen ejecutivo"),
+            ("variables_mas_sensibles", "Variables más sensibles"),
+            ("patrones_minimo_maximo", "Patrones mínimo/máximo"),
+            ("hallazgos_para_criticidad", "Hallazgos para criticidad"),
+            ("limitaciones", "Limitaciones"),
+            ("contexto_reutilizado", "Contexto reutilizado"),
+        ]
+        for key, label in section_specs:
+            value = analysis_context.get(key)
+            if value in (None, "", []):
+                continue
+            blocks.append(f"<h5>{_escape(label)}</h5>")
+            if key == "variables_mas_sensibles" and isinstance(value, list):
+                items = []
+                for item in value[:5]:
+                    if isinstance(item, dict):
+                        variable = item.get("variable", "")
+                        lectura = item.get("lectura", "")
+                        cambio = item.get("mayor_cambio_abs", "")
+                        suffix = f" (cambio máx. {_escape(cambio)})" if str(cambio).strip() else ""
+                        items.append(f"<li><strong>{_escape(variable)}</strong>{suffix}: {_escape(lectura)}</li>")
+                    elif str(item).strip():
+                        items.append(f"<li>{_escape(item)}</li>")
+                blocks.append(f"<ul class='report-list'>{''.join(items)}</ul>" if items else _empty_message())
+            else:
+                blocks.append(_list_to_items(value, max_items=5))
+        blocks.append("</div>")
+        return "".join(blocks)
+
     def _auto_simulation_cost_section() -> str:
         context = automatic_simulation_cost_context if isinstance(automatic_simulation_cost_context, dict) else {}
         if not context:
@@ -1137,12 +1176,39 @@ def render_expert_alignment_tab(
             )
         warnings = context.get("advertencias") if isinstance(context.get("advertencias"), list) else []
         matches = context.get("coincidencias") if isinstance(context.get("coincidencias"), list) else []
+        prioritized_items = analysis.get("variables_a_priorizar", []) if analysis else []
+        prioritized_variables = []
+        if isinstance(prioritized_items, list):
+            prioritized_variables = [
+                str(item.get("variable", "")).strip()
+                for item in prioritized_items
+                if isinstance(item, dict) and str(item.get("variable", "")).strip()
+            ]
+        matched_variables = [
+            str(item.get("variable", "")).strip()
+            for item in matches
+            if isinstance(item, dict) and str(item.get("variable", "")).strip()
+        ]
+        direct_overlap = [variable for variable in prioritized_variables if variable in set(matched_variables)]
         parts = [
             "<h4>Costos aproximados por ítems de contrato</h4>",
             "<p class='muted'>Los costos se estiman por cercanía textual entre variables sensibles del simulador "
             "y apartados del archivo COSTOS ITEMS CONTRATOS.xlsx. Son referencias para discusión económica, "
             "no presupuestos cerrados ni causalidad de intervención.</p>",
         ]
+        if prioritized_variables:
+            if direct_overlap:
+                parts.append(
+                    "<p class='muted'><strong>Contraste con variables priorizadas:</strong> "
+                    f"{_escape(', '.join(direct_overlap[:6]))} también aparece en las coincidencias de costos. "
+                    "Las demás variables se interpretan por cercanía operativa del simulador.</p>"
+                )
+            else:
+                parts.append(
+                    "<p class='muted'><strong>Contraste con variables priorizadas:</strong> no hay equivalencia directa "
+                    "entre la lista priorizada y los ítems de costos; se muestran los costos cercanos a las variables "
+                    "sensibles del simulador como referencia operativa.</p>"
+                )
         if warnings:
             parts.append(_list_to_items(warnings, max_items=5))
         if not matches:
@@ -1511,9 +1577,14 @@ def render_expert_alignment_tab(
             "<div class='content-box'>",
             "<h3 style='margin-top:0;'>Gráficas del simulador automático</h3>",
         ]
+        parts.append(_auto_simulation_agent_discussion())
         if has_curves:
             parts.append(_auto_simulation_softmax_grid_html())
         parts.append(_auto_simulation_brief_comparison())
+        if automatic_simulation_cost_context is not None:
+            parts.append(_auto_simulation_cost_section())
+            if has_curves:
+                parts.append(_auto_simulation_low_risk_cost_estimate())
         if automatic_simulation_risk_maps_html:
             parts.append(automatic_simulation_risk_maps_html)
         parts.append("</div>")
@@ -1718,12 +1789,14 @@ def render_llm_analysis(
     start_date: str = None,
     end_date: str = None,
     output_dir: str | Path = PROJECT_ROOT / "reports" / "interpretability" / "html",
+    output_filename: str | None = None,
     llm_model: str = "Desconocido",
     llm_provider: str = "Desconocido",
     tokens_input: int | None = None,
     tokens_output: int | None = None,
     tokens_total: int | None = None,
     token_source: str = "estimated",
+    token_total_source: str | None = None,
     elapsed_seconds: float | None = None,
     all_circuits_df: pd.DataFrame | None = None,
     inference_results: dict | None = None,
@@ -2524,9 +2597,15 @@ def render_llm_analysis(
             prefix = "" if token_source == "measured" else "~"
             tokens_in_str = f"{prefix}{tokens_input:,}" if tokens_input is not None else "N/D"
             tokens_out_str = f"{prefix}{tokens_output:,}" if tokens_output is not None else "N/D"
+            if token_source == "measured":
+                split_label = f"Tokens de entrada/salida medidos ({token_label})"
+            else:
+                split_label = (
+                    f"Tokens parciales disponibles ({token_label}; no representan el consumo global)"
+                )
             subtitle_info += (
                 "<br><span style='font-size: 0.85em; color: #94a3b8;'>"
-                f"Tokens {token_label} usados en la generación del informe: entrada {tokens_in_str} | salida {tokens_out_str}"
+                f"{split_label}: entrada {tokens_in_str} | salida {tokens_out_str}"
                 "</span>"
             )
         if tokens_total is not None or elapsed_seconds is not None:
@@ -2534,22 +2613,23 @@ def render_llm_analysis(
             # covers the TOTAL across every agent stage that ran, including
             # sub-agents dispatched in parallel (see `_resolve_token_usage`'s
             # `"total"`-only sidecar shape), plus the run's total wall-clock
-            # execution time. Reuses the same `token_source`-derived label
-            # for consistency with the entrada/salida line above.
+            # execution time. `token_total_source` is independent because a
+            # runtime may expose measured totals without an input/output split.
             token_source_labels = {
                 "measured": "medidos",
                 "mixed": "medidos/estimados",
                 "estimated": "aproximados",
             }
-            token_label = token_source_labels.get(token_source, "aproximados")
-            prefix = "" if token_source == "measured" else "~"
+            effective_total_source = token_total_source or token_source
+            token_label = token_source_labels.get(effective_total_source, "aproximados")
+            prefix = "" if effective_total_source == "measured" else "~"
             if tokens_total is not None:
                 tokens_total_part = (
                     "Tokens totales (todas las etapas, incl. sub-agentes/corridas en paralelo) "
                     f"{token_label}: {prefix}{tokens_total:,}"
                 )
             else:
-                tokens_total_part = "Tokens totales: N/D"
+                tokens_total_part = "Uso total de tokens: no disponible"
             time_str = _format_elapsed_seconds(elapsed_seconds) if elapsed_seconds is not None else "N/D"
             time_part = f"Tiempo total de ejecución: {time_str}"
             subtitle_info += (
@@ -2800,13 +2880,16 @@ def render_llm_analysis(
     </html>
     """
 
-    # Save to disk
+    # Save to disk. Callers that can identify a report run should pass a
+    # deterministic filename so metadata enrichment re-renders replace the same
+    # artifact instead of leaving a model-less preliminary HTML next to the final one.
     os.makedirs(output_dir, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
-    start_str = start_date.strftime("%Y%m%d") if hasattr(start_date, 'strftime') else str(start_date).replace('-', '') if start_date else "inicio"
-    end_str = end_date.strftime("%Y%m%d") if hasattr(end_date, 'strftime') else str(end_date).replace('-', '') if end_date else "fin"
-    filename = f"{primary_circuit}_{start_str}_{end_str}_{timestamp}.html"
-    filepath = Path(output_dir) / filename
+    if output_filename is None:
+        timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+        start_str = start_date.strftime("%Y%m%d") if hasattr(start_date, 'strftime') else str(start_date).replace('-', '') if start_date else "inicio"
+        end_str = end_date.strftime("%Y%m%d") if hasattr(end_date, 'strftime') else str(end_date).replace('-', '') if end_date else "fin"
+        output_filename = f"{primary_circuit}_{start_str}_{end_str}_{timestamp}.html"
+    filepath = Path(output_dir) / output_filename
 
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(html_content)

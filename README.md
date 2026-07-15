@@ -4,9 +4,10 @@ Agent-native local interpreter for `UITI_VANO` in the CHEC wide dataset. It load
 structured dataset, filters by circuits and dates, detects relevant points in the daily
 `UITI_VANO` series, builds a structured context package, and has five coding-agent-native LLM
 roles explain the behavior in Spanish and compare it against expert PDF reports — all with
-**zero external LLM API key**: the invoking coding agent (Claude Code or OpenCode) does the
-reasoning itself, never a Python call to Gemini/OpenAI. `/reporte <circuito>` is the primary
-end-to-end entry point. See `AGENTS.md` and `docs/agents-guide.md` for the full architecture.
+**zero external LLM API key**: the invoking coding agent (Claude Code, OpenCode, Codex, or Pi)
+does the reasoning itself, never a Python call to Gemini/OpenAI. The primary end-to-end entry
+point is runtime-native (`/report`, `@report`, `$report`, or `/skill:report`; see below). See
+`AGENTS.md`, `docs/agents-guide.md`, and `docs/report-runtime-contract.md` for the full architecture.
 
 ## Página del proyecto
 
@@ -53,14 +54,24 @@ Optional columns are used when available and recorded as unavailable when absent
 
 ## Run
 
-`/reporte <circuito> [fecha_inicio fecha_fin]` is the primary end-to-end entry point. It is
-**not** a Python CLI you run directly — it is a Claude Code / OpenCode slash-command Skill
-(`.claude/skills/reporte/SKILL.md`), orchestrated by
-`src/chec_local_interpreter/report_pipeline.py`. Invoke it from Claude Code or OpenCode:
+The report workflow is exposed through thin runtime adapters over the shared local contract in
+`src/chec_local_interpreter/report_contract.py`, with report behavior still owned by
+`src/chec_local_interpreter/report_pipeline.py`.
+
+| Runtime | Invocation |
+|---|---|
+| Claude Code | `/report <circuito> [fecha_inicio fecha_fin]` |
+| OpenCode | `@report <circuito> [fecha_inicio fecha_fin]` fallback until project slash commands are verified |
+| Codex | `$report <circuito> [fecha_inicio fecha_fin]` |
+| Pi / el Gentleman | `/skill:report <circuito> [fecha_inicio fecha_fin]` |
+
+Examples:
 
 ```
-/reporte <circuito>
-/reporte <circuito> <fecha_inicio> <fecha_fin>
+/report C1
+@report C1 2026-01-01 2026-02-01
+$report C1
+/skill:report C1 2026-01-01 2026-02-01
 ```
 
 - `circuito` is required and must exist in the dataset.
@@ -70,10 +81,10 @@ Optional columns are used when available and recorded as unavailable when absent
 The Skill validates the circuit and date window, confirms once with the user, runs deterministic
 critical-point detection plus the MGCECDL/SHAP and automatic min/max simulators, dispatches the
 `historical`/`inference`/`auto-simulator` agents in parallel, runs `expert-alignment`, and renders
-a single local HTML report. See `.claude/skills/reporte/SKILL.md` for the full contract
+a single local HTML report. See `.claude/skills/report/SKILL.md` for the full contract
 (arguments, run sequence, error handling).
 
-Notebook groups (support/exploration, not part of the `/reporte` flow):
+Notebook groups (support/exploration, not part of the `/report` flow):
 
 - `notebooks/core/`: `03_geo_network_exploration.ipynb` (GEO layer exploration and per-circuit
   mapping) and `04_simulador.ipynb` (interactive what-if simulator, no LLM involved —
@@ -110,13 +121,13 @@ posteriores:
 
 ### Flujo de cinco agentes LLM
 
-`/reporte <circuito>` integra cinco roles agente-nativos, cada uno un Skill de Claude Code /
+`/report <circuito>` integra cinco roles agente-nativos, cada uno un Skill de Claude Code /
 agente de OpenCode con su propio CLI determinista `build-context`/`validate` (nunca una llamada
 Python a un proveedor LLM externo):
 
 1. **`pdf-discussion-extraction`**: decide, PDF por PDF, qué secciones candidatas de los reportes
    técnicos expertos se convierten en filas de la tabla de discusión (circuito, fecha/intervalo,
-   análisis, evidencia). Corre por separado, antes de `/reporte`, cuando se agregan o cambian PDFs
+   análisis, evidencia). Corre por separado, antes de `/report`, cuando se agregan o cambian PDFs
    en `reports/analysis-documents/` — ver la sección anterior.
 2. **`historical`**: diagnóstico base/descriptivo del comportamiento de `UITI_VANO` a partir del
    contexto estructurado y los puntos críticos detectados.
@@ -134,7 +145,7 @@ permite (obligatorio en Claude Code); `expert-alignment` corre después, una vez
 `inference` terminaron. El reporte HTML final (`render()`) fusiona los cuatro roles anteriores en
 un único archivo: el diagnóstico base y de inferencia con sus figuras/grafos, la discusión
 automática mínimo/máximo (cuando el simulador tuvo modelo entrenado y eventos suficientes), y la
-comparación con reportes expertos. Ver `.claude/skills/reporte/SKILL.md` para la secuencia
+comparación con reportes expertos. Ver `.claude/skills/report/SKILL.md` para la secuencia
 completa paso a paso.
 
 ## Flujo del proyecto
@@ -142,7 +153,7 @@ completa paso a paso.
 Diagrama de flujo end-to-end vigente, desde la ingesta de datos hasta la publicación en GitHub
 Pages. A diferencia de `docs/project-workflow-analysis.md` (snapshot histórico fechado
 2026-07-08, congelado como artefacto de análisis), este diagrama refleja el estado actual: el
-skill `/reporte` (`report_pipeline.py`) es el punto de entrada principal ya establecido — no una
+skill `/report` (`report_pipeline.py`) es el punto de entrada principal ya establecido — no una
 introducción reciente — para el flujo checkpoint único de usuario → `prepare()` (contexto +
 simuladores MGCECDL/SHAP y mínimo/máximo) → `historical`/`inference`/`auto-simulator` en paralelo
 → `expert-alignment` → `render()`, que produce un único reporte HTML local. El cuaderno
@@ -187,7 +198,7 @@ flowchart TD
         D2 --> CHK{"Resolve circuito + fecha window<br/>alert+stop if invalid<br/>single confirmation with user"}
         CHK -- "not found / zero events" --> STOP0([Alert + stop, no run_dir created])
 
-        subgraph REPORTE["/reporte skill — primary entry point<br/>report_pipeline.py"]
+        subgraph REPORTE["/report skill — primary entry point<br/>report_pipeline.py"]
             direction TB
             CHK -- "confirmed once" --> RP0["prepare()<br/>critical points + context +<br/>MGCECDL/SHAP scenario simulator +<br/>automatic min/max sensitivity simulator"]
             MODEL --> RP0
@@ -265,7 +276,7 @@ Structured outputs from the local interpreter are saved under
 - optional `expert_alignment_analysis_<timestamp>.json`
 - optional `expert_alignment_pdf_matches_<timestamp>.xlsx`
 
-HTML reports generated by `/reporte`'s `render()` step are saved under
+HTML reports generated by `/report`'s `render()` step are saved under
 `reports/interpretability/html/`.
 
 Invalid LLM outputs are saved separately with validation errors and are not presented as final

@@ -69,7 +69,7 @@ from contextlib import redirect_stdout
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 import matplotlib
 
@@ -1222,6 +1222,64 @@ def _run_automatic_simulator(
 _load_validated_agent_output = load_validated_agent_output
 
 
+@dataclass(frozen=True)
+class ReportPreflight:
+    """Resolved report window without creating a run directory."""
+
+    circuito: str
+    fecha_inicio: str
+    fecha_fin: str
+    event_count: int
+
+
+def preflight(
+    circuito: str,
+    fecha_inicio: str | None = None,
+    fecha_fin: str | None = None,
+    *,
+    data_path: str | Path | None = None,
+) -> ReportPreflight:
+    """Validate and resolve the report window without writing artifacts.
+
+    This is the shared adapter-facing preflight hook. It mirrors `prepare()`'s
+    hard-fail checks but deliberately stops before run_dir creation, simulator
+    setup, or context generation. `prepare()` remains authoritative and repeats
+    the same checks before writing anything.
+    """
+
+    if (fecha_inicio is None) != (fecha_fin is None):
+        raise ReportPipelineError(
+            "fecha_inicio and fecha_fin must be given as a pair: provide both "
+            "(pass-through) or omit both (defaults via circuit_date_range to "
+            "the circuit's full range) -- exactly one date was given, which "
+            "is a usage error and is never silently defaulted."
+        )
+
+    source_path = Path(data_path) if data_path is not None else DEFAULT_DATA_PATH
+    frame = load_dataset(source_path)
+
+    if circuito not in available_circuits(frame):
+        raise ReportPipelineError(f"Circuit not found in dataset: {circuito!r}")
+
+    if fecha_inicio is None:
+        start, end = circuit_date_range(frame, circuito)
+    else:
+        start, end = fecha_inicio, fecha_fin
+
+    events_df = filter_events(frame, selected_circuitos=[circuito], start_date=start, end_date=end)
+    if events_df.empty:
+        raise ReportPipelineError(
+            f"No events found for circuit {circuito!r} in window {start!r}..{end!r}"
+        )
+
+    return ReportPreflight(
+        circuito=circuito,
+        fecha_inicio=str(start),
+        fecha_fin=str(end),
+        event_count=int(len(events_df)),
+    )
+
+
 def prepare(
     circuito: str,
     fecha_inicio: str | None = None,
@@ -1596,14 +1654,101 @@ def _detect_llm_runtime() -> tuple[str, str]:
     return "Desconocido", model_override
 
 
-def _resolve_token_usage(run_dir: Path) -> tuple[int, int, int, str]:
-    """Resolve `(tokens_input, tokens_output, tokens_total, token_source)`
+TOKEN_USAGE_STAGES = ("historical", "inference", "auto-simulator", "expert-alignment")
+
+
+def _validate_usage_measurement(*, total: Any = None, input: Any = None, output: Any = None) -> dict[str, int]:
+    provided_total = total is not None
+    provided_split = input is not None or output is not None
+    if provided_total == provided_split or (provided_split and (input is None or output is None)):
+        raise ValueError("provide exactly one usage shape: total OR input and output")
+    values = {"total": total} if provided_total else {"input": input, "output": output}
+    if not all(isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0 and float(value).is_integer() for value in values.values()):
+        raise ValueError("token usage values must be non-negative integers")
+    return {key: int(value) for key, value in values.items()}
+
+
+def record_token_usage(run_dir: str | Path, stage: str, *, total: Any = None, input: Any = None, output: Any = None) -> dict[str, int]:
+    if stage not in TOKEN_USAGE_STAGES:
+        raise ValueError(f"unknown token usage stage: {stage}")
+    measurement = _validate_usage_measurement(total=total, input=input, output=output)
+    run_path = Path(run_dir)
+    sidecar = run_path / "token_usage.json"
+    try:
+        existing = _read_json(sidecar) if sidecar.exists() else {}
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise ReportPipelineError(f"invalid token usage sidecar: {exc}") from exc
+    if not isinstance(existing, dict) or set(existing) - set(TOKEN_USAGE_STAGES):
+        raise ReportPipelineError("token usage sidecar has an invalid shape or unknown stage")
+    merged = dict(existing)
+    merged[stage] = measurement
+    run_path.mkdir(parents=True, exist_ok=True)
+    temporary = sidecar.with_name(f".{sidecar.name}.tmp")
+    temporary.write_text(json.dumps(merged, sort_keys=True), encoding="utf-8")
+    os.replace(temporary, sidecar)
+    return measurement
+
+
+@dataclass(frozen=True)
+class TokenUsageVerification:
+    expected_roles: tuple[str, ...]
+    executed_roles: tuple[str, ...]
+    valid_roles: tuple[str, ...]
+    missing_measurements: tuple[str, ...]
+    invalid_roles: tuple[str, ...]
+    errors: tuple[str, ...]
+
+    @property
+    def ok(self) -> bool:
+        return not self.errors and not self.missing_measurements and not self.invalid_roles
+
+    def to_json(self) -> dict[str, Any]:
+        return {"ok": self.ok, "expected_roles": list(self.expected_roles), "executed_roles": list(self.executed_roles), "valid_roles": list(self.valid_roles), "missing_measurements": list(self.missing_measurements), "invalid_roles": list(self.invalid_roles), "errors": list(self.errors)}
+
+
+def verify_token_usage(run_dir: str | Path, *, expected_roles: Sequence[str], executed_roles: Sequence[str]) -> TokenUsageVerification:
+    expected = tuple(dict.fromkeys(expected_roles))
+    executed = tuple(dict.fromkeys(executed_roles))
+    errors = [f"unknown token usage stage: {role}" for role in (*expected, *executed) if role not in TOKEN_USAGE_STAGES]
+    if expected:
+        errors.extend(
+            f"executed role is not expected: {role}"
+            for role in executed
+            if role in TOKEN_USAGE_STAGES and role not in expected
+        )
+    try:
+        sidecar = _read_json(Path(run_dir) / "token_usage.json")
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        sidecar = None
+    if not isinstance(sidecar, dict):
+        errors.append("token usage sidecar is missing or invalid")
+        sidecar = {}
+    errors.extend(f"unknown token usage stage: {role}" for role in sorted(set(sidecar) - set(TOKEN_USAGE_STAGES)))
+    valid, invalid = [], []
+    for role in executed:
+        entry = sidecar.get(role)
+        if entry is None:
+            continue
+        try:
+            if not isinstance(entry, dict) or set(entry) - {"total", "input", "output"}:
+                raise ValueError("invalid usage entry")
+            _validate_usage_measurement(**entry)
+        except ValueError:
+            invalid.append(role)
+        else:
+            valid.append(role)
+    missing = [role for role in executed if role not in valid]
+    return TokenUsageVerification(expected, executed, tuple(valid), tuple(missing), tuple(invalid), tuple(errors))
+
+
+def _resolve_token_usage(run_dir: Path) -> tuple[int, int, int, str, str]:
+    """Resolve `(tokens_input, tokens_output, tokens_total, token_source, token_total_source)`
     for this run's agent-authored stages (design item 4), preferring REAL
     per-stage counts from an optional `run_dir/token_usage.json` sidecar over
     the char/4 estimate (replaces the estimate-only `_estimate_token_usage`).
 
     `token_usage.json` (optional -- written by the invoking agent after each
-    Skill call whose runtime exposes usage, see `.claude/skills/reporte/
+    Skill call whose runtime exposes usage, see `.claude/skills/report/
     SKILL.md` steps 3/4/4b/6) maps stage name
     (`"historical"`/`"inference"`/`"auto-simulator"`/`"expert-alignment"`) to
     EITHER `{"input": int, "output": int}` (a real input/output split) OR
@@ -1666,7 +1811,8 @@ def _resolve_token_usage(run_dir: Path) -> tuple[int, int, int, str]:
     estimated_total_chars_in = 0
     estimated_total_chars_out = 0
     considered_count = 0
-    measured_count = 0
+    split_measured_count = 0
+    total_measured_count = 0
 
     for stage in ("historical", "inference", "auto-simulator", "expert-alignment"):
         bc_path = run_dir / f"{stage}.bc.json"
@@ -1706,8 +1852,10 @@ def _resolve_token_usage(run_dir: Path) -> tuple[int, int, int, str]:
                 tokens_total += stage_tokens_total
                 stage_total_measured = True
 
+        if stage_split_measured:
+            split_measured_count += 1
         if stage_split_measured or stage_total_measured:
-            measured_count += 1
+            total_measured_count += 1
         else:
             # Fully unmeasured stage (neither shape present/valid) -- both
             # tokens_total AND tokens_input/tokens_output fall back to the
@@ -1728,14 +1876,21 @@ def _resolve_token_usage(run_dir: Path) -> tuple[int, int, int, str]:
     tokens_output += estimated_chars_out // 4
     tokens_total += estimated_total_chars_in // 4 + estimated_total_chars_out // 4
 
-    if considered_count == 0 or measured_count == 0:
+    if considered_count == 0 or split_measured_count == 0:
         token_source = "estimated"
-    elif measured_count == considered_count:
+    elif split_measured_count == considered_count:
         token_source = "measured"
     else:
         token_source = "mixed"
 
-    return tokens_input, tokens_output, tokens_total, token_source
+    if considered_count == 0 or total_measured_count == 0:
+        token_total_source = "estimated"
+    elif total_measured_count == considered_count:
+        token_total_source = "measured"
+    else:
+        token_total_source = "mixed"
+
+    return tokens_input, tokens_output, tokens_total, token_source, token_total_source
 
 
 def _resolve_elapsed_seconds(run_dir: Path) -> float | None:
@@ -1755,6 +1910,21 @@ def _resolve_elapsed_seconds(run_dir: Path) -> float | None:
     return (datetime.now(timezone.utc) - parsed_start).total_seconds()
 
 
+def _render_output_filename(state: dict[str, Any], run_dir: Path) -> str:
+    """Return the stable HTML filename for a prepared report run.
+
+    The run directory is the report identity. Using it in the filename makes
+    repeated renders idempotent: a metadata-less preliminary render and a later
+    metadata-enriched render replace the same artifact instead of producing two
+    same-window HTML files.
+    """
+    circuito = str(state.get("circuito") or "TODOS")
+    start_str = str(state.get("fecha_inicio") or "inicio").replace("-", "")
+    end_str = str(state.get("fecha_fin") or "fin").replace("-", "")
+    run_id = run_dir.name or "run"
+    return f"{circuito}_{start_str}_{end_str}_{run_id}.html"
+
+
 def render(
     run_dir: str | Path,
     *,
@@ -1765,6 +1935,9 @@ def render(
     tokens_output: int | None = None,
     tokens_total: int | None = None,
     elapsed_seconds: float | None = None,
+        require_measured_usage: bool = False,
+        expected_roles: Sequence[str] = (),
+        executed_roles: Sequence[str] = (),
 ) -> Path:
     """Read all three validated outputs from `run_dir` and render the final
     HTML report via `plotting.render_llm_analysis`.
@@ -1820,7 +1993,7 @@ def render(
     daily_df = build_daily_series(events_df)
 
     detected_provider, detected_model = _detect_llm_runtime()
-    resolved_input, resolved_output, resolved_total, resolved_source = _resolve_token_usage(run_dir)
+    resolved_input, resolved_output, resolved_total, resolved_source, resolved_total_source = _resolve_token_usage(run_dir)
     if tokens_input is None and tokens_output is None:
         # Neither kwarg given -- resolve both from `run_dir` (sidecar-real >
         # char/4 estimate); the resolved source is authoritative.
@@ -1840,7 +2013,13 @@ def render(
         token_source = "measured"
 
     if tokens_total is None:
-        tokens_total = resolved_total
+        # A char/4 fallback is useful for the split line as a partial artifact
+        # estimate, but it is not defensible as the whole-run aggregate. Expose
+        # a total only when every considered stage supplied measured accounting.
+        tokens_total = resolved_total if resolved_total_source == "measured" else None
+        token_total_source = resolved_total_source
+    else:
+        token_total_source = "measured"
     if elapsed_seconds is None:
         elapsed_seconds = _resolve_elapsed_seconds(run_dir)
 
@@ -1858,7 +2037,9 @@ def render(
         "tokens_output": tokens_output,
         "tokens_total": tokens_total,
         "token_source": token_source,
+        "token_total_source": token_total_source,
         "elapsed_seconds": elapsed_seconds,
+        "output_filename": _render_output_filename(state, run_dir),
         **_build_auto_simulation_kwargs(run_dir),
     }
     if output_dir is not None:
