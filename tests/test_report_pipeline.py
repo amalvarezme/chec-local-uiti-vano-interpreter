@@ -1988,3 +1988,378 @@ def test_render_uses_distinct_html_paths_for_distinct_run_dirs(tmp_path, monkeyp
 
     assert first_path != second_path
     assert len(list(output_dir.glob("*.html"))) == 2
+
+
+# ---------------------------------------------------------------------------
+# `_resolve_stage_timing(run_dir) -> dict[str, float | None]` -- per-stage
+# wall-clock duration read from the optional `run_dir/stage_timing.json`
+# sidecar (design ADR-1/ADR-3, PR2). Degrades exactly like
+# `_resolve_token_usage`'s sidecar handling: absent/malformed top-level JSON
+# -> every stage `None`; a stage whose stored value is negative/non-numeric
+# degrades to `None` for THAT stage only. Never raises.
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_stage_timing_no_sidecar_returns_all_none(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+
+    result = report_pipeline_module._resolve_stage_timing(run_dir)
+
+    assert result == {stage: None for stage in report_pipeline_module.TOKEN_USAGE_STAGES}
+
+
+def test_resolve_stage_timing_malformed_top_level_json_returns_all_none(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "stage_timing.json").write_text("{not valid json", encoding="utf-8")
+
+    result = report_pipeline_module._resolve_stage_timing(run_dir)
+
+    assert result == {stage: None for stage in report_pipeline_module.TOKEN_USAGE_STAGES}
+
+
+def test_resolve_stage_timing_negative_or_non_numeric_stage_value_degrades_that_stage_only(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "stage_timing.json").write_text(
+        json.dumps(
+            {
+                "historical": {"duration_seconds": 42.5},
+                "inference": {"duration_seconds": -1.0},
+                "auto-simulator": {"duration_seconds": "not-a-number"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = report_pipeline_module._resolve_stage_timing(run_dir)
+
+    assert result["historical"] == 42.5
+    assert result["inference"] is None
+    assert result["auto-simulator"] is None
+    assert result["expert-alignment"] is None
+
+
+def test_resolve_stage_timing_partial_coverage_returns_mix_of_float_and_none(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "stage_timing.json").write_text(
+        json.dumps({"historical": {"duration_seconds": 10.0}}), encoding="utf-8"
+    )
+
+    result = report_pipeline_module._resolve_stage_timing(run_dir)
+
+    assert result["historical"] == 10.0
+    assert result["inference"] is None
+    assert result["auto-simulator"] is None
+    assert result["expert-alignment"] is None
+
+
+def test_resolve_stage_timing_non_dict_stage_entry_degrades_that_stage_only(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "stage_timing.json").write_text(
+        json.dumps({"historical": "not-a-dict", "inference": {"duration_seconds": 3.0}}),
+        encoding="utf-8",
+    )
+
+    result = report_pipeline_module._resolve_stage_timing(run_dir)
+
+    assert result["historical"] is None
+    assert result["inference"] == 3.0
+
+
+# ---------------------------------------------------------------------------
+# `_resolve_stage_breakdown(run_dir) -> list[dict]` -- additive-only, per
+# design's explicit "resolver decision": duplicates ONLY `_resolve_token_usage`'s
+# minimal considered-stage gate + char/4 estimate math, does NOT call or
+# modify `_resolve_token_usage`. Each considered stage yields
+# `{stage, tokens_total, token_source, duration_seconds, duration_source}`;
+# an absent stage (no `.bc.json`/ok `.out.json`) is omitted entirely, never
+# errored. Duration is measured-or-absent, never estimated.
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_stage_breakdown_all_stages_measured_tokens_and_duration(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    _write_stage_files(run_dir, "historical", bc_text="x" * 400, out_data={"a": "y" * 200})
+    _write_stage_files(run_dir, "inference", bc_text="x" * 120, out_data={"b": "y" * 80})
+    (run_dir / "token_usage.json").write_text(
+        json.dumps(
+            {
+                "historical": {"input": 100, "output": 50},
+                "inference": {"total": 999},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "stage_timing.json").write_text(
+        json.dumps(
+            {
+                "historical": {"duration_seconds": 77.4},
+                "inference": {"duration_seconds": 123.1},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    breakdown = report_pipeline_module._resolve_stage_breakdown(run_dir)
+    by_stage = {entry["stage"]: entry for entry in breakdown}
+
+    assert by_stage["historical"]["tokens_total"] == 150
+    assert by_stage["historical"]["token_source"] == "measured"
+    assert by_stage["historical"]["duration_seconds"] == 77.4
+    assert by_stage["historical"]["duration_source"] == "measured"
+
+    assert by_stage["inference"]["tokens_total"] == 999
+    assert by_stage["inference"]["token_source"] == "measured"
+    assert by_stage["inference"]["duration_seconds"] == 123.1
+    assert by_stage["inference"]["duration_source"] == "measured"
+
+
+def test_resolve_stage_breakdown_stage_missing_from_token_sidecar_falls_back_to_char4_estimate(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    _write_stage_files(run_dir, "historical", bc_text="x" * 400, out_data={"a": "y" * 200})
+    # No token_usage.json at all -- historical must degrade to the char/4
+    # estimate, exactly like `_resolve_token_usage`'s own degrade.
+
+    breakdown = report_pipeline_module._resolve_stage_breakdown(run_dir)
+    by_stage = {entry["stage"]: entry for entry in breakdown}
+
+    expected_chars_in = 400
+    expected_chars_out = len(json.dumps({"a": "y" * 200}))
+    assert by_stage["historical"]["tokens_total"] == expected_chars_in // 4 + expected_chars_out // 4
+    assert by_stage["historical"]["token_source"] == "estimated"
+
+
+def test_resolve_stage_breakdown_stage_missing_stage_timing_duration_is_absent_not_estimated(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    _write_stage_files(run_dir, "historical", bc_text="x" * 400, out_data={"a": "y" * 200})
+    (run_dir / "token_usage.json").write_text(
+        json.dumps({"historical": {"input": 10, "output": 5}}), encoding="utf-8"
+    )
+    # No stage_timing.json -- duration must be None/absent, never estimated.
+
+    breakdown = report_pipeline_module._resolve_stage_breakdown(run_dir)
+    by_stage = {entry["stage"]: entry for entry in breakdown}
+
+    assert by_stage["historical"]["duration_seconds"] is None
+    assert by_stage["historical"]["duration_source"] is None
+    assert by_stage["historical"]["tokens_total"] == 15
+
+
+def test_resolve_stage_breakdown_auto_simulator_entirely_absent_is_omitted_not_errored(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    _write_stage_files(run_dir, "historical", bc_text="x" * 400, out_data={"a": "y" * 200})
+    assert not (run_dir / "auto-simulator.bc.json").exists()
+    assert not (run_dir / "auto-simulator.out.json").exists()
+
+    breakdown = report_pipeline_module._resolve_stage_breakdown(run_dir)
+    stages_present = {entry["stage"] for entry in breakdown}
+
+    assert "auto-simulator" not in stages_present
+    assert "historical" in stages_present
+
+
+def test_resolve_stage_breakdown_no_stage_files_returns_empty_list(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+
+    assert report_pipeline_module._resolve_stage_breakdown(run_dir) == []
+
+
+# ---------------------------------------------------------------------------
+# `render()` wiring (PR2): passes `stage_breakdown=_resolve_stage_breakdown(run_dir)`
+# into `render_llm_analysis`'s kwargs, additive-only (default `None` there).
+# ---------------------------------------------------------------------------
+
+
+def test_render_passes_stage_breakdown_kwarg_to_render_llm_analysis(tmp_path, monkeypatch):
+    run_dir = _prepare_render_ready_run_dir(tmp_path)
+    (run_dir / "token_usage.json").write_text(
+        json.dumps({"historical": {"total": 111}}), encoding="utf-8"
+    )
+    (run_dir / "stage_timing.json").write_text(
+        json.dumps({"historical": {"duration_seconds": 5.5}}), encoding="utf-8"
+    )
+
+    captured: dict = {}
+
+    def _spy_render_llm_analysis(*args, **kwargs):
+        captured.update(kwargs)
+        html_path = tmp_path / "html" / "fake.html"
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        html_path.write_text("<html></html>", encoding="utf-8")
+        return html_path
+
+    monkeypatch.setattr(report_pipeline_module, "render_llm_analysis", _spy_render_llm_analysis)
+
+    render(run_dir, output_dir=tmp_path / "html")
+
+    assert "stage_breakdown" in captured
+    by_stage = {entry["stage"]: entry for entry in captured["stage_breakdown"]}
+    assert by_stage["historical"]["tokens_total"] == 111
+    assert by_stage["historical"]["duration_seconds"] == 5.5
+
+
+# ---------------------------------------------------------------------------
+# Regression locks (PR2 task 2.7/2.8): `_resolve_token_usage`/`render()`'s
+# pre-existing behavior must stay byte-identical -- `stage_timing.json` must
+# have ZERO influence on token resolution, and no new exception path may be
+# introduced for missing/malformed `stage_timing.json`.
+# ---------------------------------------------------------------------------
+
+
+def test_stage_timing_sidecar_has_no_influence_on_token_resolution(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    _write_stage_files(run_dir, "historical", bc_text="x" * 400, out_data={"a": "y" * 200})
+    _write_stage_files(run_dir, "inference", bc_text="x" * 120, out_data={"b": "y" * 80})
+    (run_dir / "token_usage.json").write_text(
+        json.dumps({"historical": {"input": 100, "output": 50}}), encoding="utf-8"
+    )
+
+    without_timing = report_pipeline_module._resolve_token_usage(run_dir)
+
+    (run_dir / "stage_timing.json").write_text(
+        json.dumps(
+            {
+                "historical": {"duration_seconds": 77.4},
+                "inference": {"duration_seconds": 12.0},
+                "auto-simulator": {"duration_seconds": 5.0},
+                "expert-alignment": {"duration_seconds": 5.0},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with_timing = report_pipeline_module._resolve_token_usage(run_dir)
+
+    assert with_timing == without_timing
+
+
+def test_render_and_prepare_raise_no_new_exception_for_stage_timing_edge_cases(tmp_path, monkeypatch):
+    """Spec #326 no-crash requirement: malformed sidecar, missing sidecar
+    entirely, and a stray timing entry for a stage that never ran must all
+    render successfully with no new exception type."""
+    run_dir = _prepare_render_ready_run_dir(tmp_path)
+
+    captured: dict = {}
+
+    def _spy_render_llm_analysis(*args, **kwargs):
+        captured.update(kwargs)
+        html_path = tmp_path / "html" / "fake.html"
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        html_path.write_text("<html></html>", encoding="utf-8")
+        return html_path
+
+    monkeypatch.setattr(report_pipeline_module, "render_llm_analysis", _spy_render_llm_analysis)
+
+    # 1) malformed stage_timing.json
+    (run_dir / "stage_timing.json").write_text("{not valid json", encoding="utf-8")
+    render(run_dir, output_dir=tmp_path / "html")
+    assert captured["stage_breakdown"] is not None
+
+    # 2) stray timing entry for a stage that never ran (auto-simulator has
+    # no .bc.json/.out.json in this fixture) must not error and must not
+    # surface a phantom auto-simulator row.
+    (run_dir / "stage_timing.json").write_text(
+        json.dumps({"auto-simulator": {"duration_seconds": 9.0}}), encoding="utf-8"
+    )
+    render(run_dir, output_dir=tmp_path / "html")
+    stages_present = {entry["stage"] for entry in captured["stage_breakdown"]}
+    assert "auto-simulator" not in stages_present
+
+    # 3) stage_timing.json missing entirely
+    (run_dir / "stage_timing.json").unlink()
+    render(run_dir, output_dir=tmp_path / "html")
+    assert captured["stage_breakdown"] is not None
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 scenario tests interleaved at the resolver/render layer (spec #326):
+# inline dispatch with no duration signal, auto-simulator entirely absent,
+# and the mid-run-hard-stop data-preservation guarantee.
+# ---------------------------------------------------------------------------
+
+
+def test_scenario_inline_dispatch_no_duration_signal_renders_with_absent_duration(tmp_path, monkeypatch):
+    run_dir = _prepare_render_ready_run_dir(tmp_path)
+    (run_dir / "token_usage.json").write_text(
+        json.dumps({"historical": {"total": 50}}), encoding="utf-8"
+    )
+    assert not (run_dir / "stage_timing.json").exists()
+
+    captured: dict = {}
+
+    def _spy_render_llm_analysis(*args, **kwargs):
+        captured.update(kwargs)
+        html_path = tmp_path / "html" / "fake.html"
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        html_path.write_text("<html></html>", encoding="utf-8")
+        return html_path
+
+    monkeypatch.setattr(report_pipeline_module, "render_llm_analysis", _spy_render_llm_analysis)
+
+    html_path = render(run_dir, output_dir=tmp_path / "html")
+
+    assert html_path.exists()
+    by_stage = {entry["stage"]: entry for entry in captured["stage_breakdown"]}
+    assert by_stage["historical"]["duration_seconds"] is None
+    assert by_stage["historical"]["duration_source"] is None
+    assert by_stage["historical"]["tokens_total"] == 50
+
+
+def test_scenario_auto_simulator_absent_does_not_affect_other_stages_or_total(tmp_path, monkeypatch):
+    run_dir = _prepare_render_ready_run_dir(tmp_path)
+    assert not (run_dir / "auto-simulator.bc.json").exists()
+    assert not (run_dir / "auto-simulator.out.json").exists()
+
+    captured: dict = {}
+
+    def _spy_render_llm_analysis(*args, **kwargs):
+        captured.update(kwargs)
+        html_path = tmp_path / "html" / "fake.html"
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        html_path.write_text("<html></html>", encoding="utf-8")
+        return html_path
+
+    monkeypatch.setattr(report_pipeline_module, "render_llm_analysis", _spy_render_llm_analysis)
+
+    render(run_dir, output_dir=tmp_path / "html")
+
+    stages_present = {entry["stage"] for entry in captured["stage_breakdown"]}
+    assert "auto-simulator" not in stages_present
+    assert {"historical", "inference", "expert-alignment"} <= stages_present
+    # Whole-run total line is unaffected by the per-stage breakdown wiring.
+    assert isinstance(captured["tokens_total"], int) or captured["tokens_total"] is None
+    assert isinstance(captured["elapsed_seconds"], float)
+
+
+def test_scenario_mid_run_hard_stop_preserves_completed_stages_data_on_disk(tmp_path):
+    """Spec #326: historical+inference complete and record usage/duration,
+    then the run stops (validation retries exhausted) before `render` is ever
+    called -- the two completed stages' data must not be discarded."""
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+
+    report_pipeline_module.record_token_usage(run_dir, "historical", total=111)
+    report_pipeline_module.record_stage_timing(run_dir, "historical", seconds=10.0)
+    report_pipeline_module.record_token_usage(run_dir, "inference", total=222)
+    report_pipeline_module.record_stage_timing(run_dir, "inference", seconds=20.0)
+
+    # Simulate the hard stop: expert-alignment exhausts validation retries,
+    # so `render()` is never invoked for this run.
+
+    token_usage_on_disk = json.loads((run_dir / "token_usage.json").read_text(encoding="utf-8"))
+    stage_timing_on_disk = json.loads((run_dir / "stage_timing.json").read_text(encoding="utf-8"))
+
+    assert token_usage_on_disk["historical"] == {"total": 111}
+    assert token_usage_on_disk["inference"] == {"total": 222}
+    assert stage_timing_on_disk["historical"] == {"duration_seconds": 10.0}
+    assert stage_timing_on_disk["inference"] == {"duration_seconds": 20.0}

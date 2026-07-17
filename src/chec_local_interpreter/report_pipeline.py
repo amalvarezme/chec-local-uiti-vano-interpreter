@@ -1934,6 +1934,126 @@ def _resolve_token_usage(run_dir: Path) -> tuple[int, int, int, str, str]:
     return tokens_input, tokens_output, tokens_total, token_source, token_total_source
 
 
+def _resolve_stage_timing(run_dir: Path) -> dict[str, float | None]:
+    """Resolve each of `TOKEN_USAGE_STAGES`' wall-clock duration from the
+    optional `run_dir/stage_timing.json` sidecar (design ADR-1/ADR-3),
+    mirroring `_resolve_token_usage`'s sidecar-degrade contract: absent file,
+    invalid top-level JSON, or a non-dict top-level value all degrade to
+    every stage resolving `None` (never raise); a single stage's entry that
+    is not a dict, or whose `"duration_seconds"` is missing/non-numeric/
+    negative/non-finite, degrades to `None` for THAT stage only.
+
+    Unlike token usage, a missing/invalid duration is never estimated -- it
+    is always either the measured wall-clock value or `None`.
+    """
+    sidecar_path = run_dir / "stage_timing.json"
+    sidecar: Any = {}
+    if sidecar_path.exists():
+        try:
+            sidecar = _read_json(sidecar_path)
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+            sidecar = {}
+    if not isinstance(sidecar, dict):
+        sidecar = {}
+
+    result: dict[str, float | None] = {}
+    for stage in TOKEN_USAGE_STAGES:
+        entry = sidecar.get(stage)
+        value: float | None = None
+        if isinstance(entry, dict):
+            raw = entry.get("duration_seconds")
+            if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+                candidate = float(raw)
+                if math.isfinite(candidate) and candidate >= 0:
+                    value = candidate
+        result[stage] = value
+    return result
+
+
+def _resolve_stage_breakdown(run_dir: Path) -> list[dict[str, Any]]:
+    """Resolve a per-stage `{stage, tokens_total, token_source,
+    duration_seconds, duration_source}` breakdown for each CONSIDERED agent
+    stage (design item "per-stage breakdown"; PR2 of the report-usage-
+    accounting chain).
+
+    Additive-only per the design's explicit resolver decision: this
+    duplicates ONLY `_resolve_token_usage`'s minimal "considered stage" gate
+    (has a `{stage}.bc.json` and/or an ok `{stage}.out.json`) and its char/4
+    estimate math for a SINGLE stage at a time -- it does not call or modify
+    `_resolve_token_usage`, which stays byte-for-byte untouched. Duration is
+    joined from `_resolve_stage_timing` and is measured-or-absent, never
+    estimated (design ADR-1/ADR-3).
+
+    A stage entirely absent from `run_dir` (e.g. `auto-simulator` skipped)
+    is OMITTED from the returned list rather than errored or shown as a
+    failed row -- same "considered stage" gate `_resolve_token_usage` uses.
+    """
+    sidecar_path = run_dir / "token_usage.json"
+    sidecar: Any = {}
+    if sidecar_path.exists():
+        try:
+            sidecar = _read_json(sidecar_path)
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+            sidecar = {}
+    if not isinstance(sidecar, dict):
+        sidecar = {}
+
+    stage_durations = _resolve_stage_timing(run_dir)
+
+    breakdown: list[dict[str, Any]] = []
+    for stage in TOKEN_USAGE_STAGES:
+        bc_path = run_dir / f"{stage}.bc.json"
+        chars_in = len(bc_path.read_text(encoding="utf-8")) if bc_path.exists() else None
+
+        chars_out = None
+        out_path = run_dir / f"{stage}.out.json"
+        if out_path.exists():
+            payload = _read_json(out_path)
+            if isinstance(payload, dict) and payload.get("ok") is True:
+                chars_out = len(json.dumps(payload.get("data"), ensure_ascii=False))
+
+        if chars_in is None and chars_out is None:
+            continue  # not considered -- stage never ran, omit entirely
+
+        stage_usage = sidecar.get(stage)
+        tokens_total: int | None = None
+        token_source = "estimated"
+        if isinstance(stage_usage, dict) and "input" in stage_usage and "output" in stage_usage:
+            try:
+                candidate_total = int(stage_usage["input"]) + int(stage_usage["output"])
+            except (TypeError, ValueError):
+                pass
+            else:
+                tokens_total = candidate_total
+                token_source = "measured"
+        if tokens_total is None and isinstance(stage_usage, dict) and "total" in stage_usage:
+            try:
+                candidate_total = int(stage_usage["total"])
+            except (TypeError, ValueError):
+                pass
+            else:
+                tokens_total = candidate_total
+                token_source = "measured"
+        if tokens_total is None:
+            tokens_total = (chars_in or 0) // 4 + (chars_out or 0) // 4
+            token_source = "estimated"
+
+        duration_seconds = stage_durations.get(stage)
+        duration_source = "measured" if duration_seconds is not None else None
+
+        breakdown.append(
+            {
+                "stage": stage,
+                "tokens_total": tokens_total,
+                "token_source": token_source,
+                "duration_seconds": duration_seconds,
+                "duration_source": duration_source,
+            }
+        )
+
+    return breakdown
+
+
 def _resolve_elapsed_seconds(run_dir: Path) -> float | None:
     """Resolve this run's total wall-clock execution time by parsing the
     UTC timestamp encoded in `run_dir.name` (written by `_new_run_dir` as
@@ -2081,6 +2201,7 @@ def render(
         "token_total_source": token_total_source,
         "elapsed_seconds": elapsed_seconds,
         "output_filename": _render_output_filename(state, run_dir),
+        "stage_breakdown": _resolve_stage_breakdown(run_dir),
         **_build_auto_simulation_kwargs(run_dir),
     }
     if output_dir is not None:
