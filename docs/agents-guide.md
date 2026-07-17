@@ -361,6 +361,29 @@ final local HTML report.
   (deprecated in place, not deleted — see that notebook's own top cell); phases 9-11 are untouched.
 - Tests: `tests/test_report_pipeline.py`.
 
+### Standalone circuit-clustering chart (multi-runtime adapters)
+
+The standalone circuit-clustering chart is also runtime-native and local-only:
+
+| Runtime | Invocation |
+|---|---|
+| Claude Code | `/agrupamiento-circuitos [fecha_inicio fecha_fin]` |
+| OpenCode | `@agrupamiento-circuitos [fecha_inicio fecha_fin]` |
+| Pi / el Gentleman | `/skill:agrupamiento-circuitos [fecha_inicio fecha_fin]` |
+
+This entry point renders only the circuit-clustering HTML, not the full report. It is a thin adapter
+over a shared contract that resolves the date window, asks the user to confirm it, then reuses
+`plot_interactive_circuit_clustering` to write a standalone local HTML artifact.
+
+- Shared contract: `src/chec_local_interpreter/circuit_clustering_contract.py`.
+- Claude Code skill: `.claude/skills/agrupamiento-circuitos/SKILL.md`.
+- OpenCode adapter: `.opencode/agent/agrupamiento-circuitos.md`.
+- Pi skill: `.pi/skills/agrupamiento-circuitos/SKILL.md`.
+- Date behavior: dates are optional as a pair; omitting both resolves the full dataset range, which
+  must be confirmed with the user before render.
+- Output: local standalone HTML only; no publishing and no site-asset mutation.
+- Plot source of truth: `src/chec_local_interpreter/plotting.py::plot_interactive_circuit_clustering`.
+
 ## Follow-on (out of this slice)
 
 Agent2 (inference/SHAP) remains unported. The following items are explicitly deferred, listed
