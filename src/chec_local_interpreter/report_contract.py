@@ -403,6 +403,14 @@ def _build_parser() -> argparse.ArgumentParser:
     verify_command.add_argument("--run-dir", required=True)
     verify_command.add_argument("--expected-role", action="append", default=[])
     verify_command.add_argument("--executed-role", action="append", default=[])
+
+    record_duration_command = subparsers.add_parser("record-duration")
+    record_duration_command.add_argument("--run-dir", required=True)
+    record_duration_command.add_argument("--stage", required=True)
+    record_duration_command.add_argument("--seconds", type=float, required=True)
+    # Deliberately no "verify-duration" verb: duration never gates run
+    # success (design ADR-1 / spec "Duration capture never gates run
+    # success").
     return parser
 
 
@@ -435,6 +443,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = report_pipeline.verify_token_usage(args.run_dir, expected_roles=args.expected_role, executed_roles=args.executed_role)
         print(json.dumps(result.to_json(), sort_keys=True))
         return 0 if result.ok else 2
+    if args.command == "record-duration":
+        try:
+            timing = report_pipeline.record_stage_timing(args.run_dir, args.stage, seconds=args.seconds)
+        except (ValueError, ReportPipelineError) as exc:
+            print(json.dumps({"status": "error", "errors": [str(exc)]}, sort_keys=True))
+            return 2
+        print(json.dumps({"status": "success", "timing": timing}, sort_keys=True))
+        return 0
     try:
         request = _request_from_args(args)
     except ValueError as exc:
