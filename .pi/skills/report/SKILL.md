@@ -58,6 +58,8 @@ This is a thin Pi adapter over the shared report contract. It preserves el Gentl
    ```
 
    Include only stages that actually ran. If Pi does not expose a measured total, omit that stage and let the shared renderer label the resulting total as mixed/estimated; never invent a count. The `tokens_total` header is the all-stage figure; the input/output split is unavailable for total-only Pi subagent usage and must not be treated as the full-run count.
+
+   **Also record per-stage duration (mandatory, orchestrator-owned).** Independently of `usage`, note your own wall-clock time immediately before and after each `subagent_run` dispatch and call `PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.report_contract record-duration --run-dir <run_dir> --stage <role> --seconds <after minus before>`. Pi's `subagent_run` result exposes only a combined `usage` total and NO duration field, so this wall-clock delta — which you own as the orchestrator — is the ONLY duration source and is always available regardless of what the sub-agent returns. Record the final successful attempt's delta only. Include only stages that actually ran; a skipped `auto-simulator` records neither usage nor duration and is omitted from the header. Per-stage duration therefore renders as `medidos` on Pi even though per-stage tokens remain a combined total.
 7. When rendering, let the shared contract resolve the effective Pi model from runtime evidence:
 
    ```bash

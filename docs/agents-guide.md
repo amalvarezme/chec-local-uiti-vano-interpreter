@@ -361,6 +361,33 @@ final local HTML report.
   (deprecated in place, not deleted — see that notebook's own top cell); phases 9-11 are untouched.
 - Tests: `tests/test_report_pipeline.py`.
 
+**Per-stage usage and duration accounting.** `token_usage.json` (per-stage `{"total": n}` or
+`{"input": n, "output": n}`) and the newer `stage_timing.json` (per-stage `{"duration_seconds":
+float}`) are two independent, optional sidecars written into `run_dir` by the `record-usage` and
+`record-duration` CLI verbs (`report_contract.py`), respectively. `record-usage` captures the
+sub-agent's own reported token total (Claude Code's `Agent` tool completion notification's
+`subagent_tokens` field, or Pi's `subagent_run` result's `usage` field); `record-duration` captures
+the orchestrating Skill's own wall-clock delta around each stage's dispatch — a source that does not
+depend on any field the sub-agent returns, so it is available identically on both Claude Code and
+Pi. Both verbs are additive and never gate run success: a stage missing either sidecar entry
+degrades to an estimate (tokens: `chars // 4`) or `N/D` (duration), never an error. There is
+deliberately no `verify-duration` counterpart to `verify-usage` — duration never participates in
+the strict fail-closed token-verification path. At render time, `report_pipeline.render()` resolves
+both sidecars per stage and passes a `stage_breakdown` list into
+`plotting.render_llm_analysis`, which renders it as a per-stage table (Etapa / Tokens / Tiempo) for
+each of `historical`/`inference`/`auto-simulator`/`expert-alignment`, shown beneath the pre-existing
+whole-run totals line (`tokens_total` + `elapsed_seconds`) — the whole-run line is preserved
+unchanged, not replaced. Both sidecars are optional and backward-compatible: their absence in older
+`run_dir`s renders identically to before this accounting existed.
+
+**Non-goal: OpenCode is out of scope for this accounting.** The `record-usage`/`record-duration`
+capture instructions above are wired into the Claude Code (`.claude/skills/report/SKILL.md`) and Pi
+(`.pi/skills/report/SKILL.md`) runbooks only. OpenCode's fallback adapter
+(`.opencode/agent/report.md`) does not receive matching capture instructions, and its generic
+worker/subagent completion notification has not been investigated for an equivalent token/duration
+signal — this is a deliberate, documented gap (not an oversight), left for a future change if
+OpenCode's subagent API is confirmed to expose one.
+
 ### Standalone circuit-clustering chart (multi-runtime adapters)
 
 The standalone circuit-clustering chart is also runtime-native and local-only:

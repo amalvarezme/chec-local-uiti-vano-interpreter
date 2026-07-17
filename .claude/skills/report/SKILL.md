@@ -183,12 +183,41 @@ already completed — dispatch it alone, immediately once both are done, without
    `{"ok": true, "data": <response>}` once `validate` returns exit code `0`. If validation retries
    are exhausted, stop the whole `/report` run for this circuit here — do not proceed to
    `inference` or beyond, and report the last validation errors to the user.
+
+   **Capture usage + duration for this stage (mandatory when available).** Note your own
+   wall-clock time immediately BEFORE dispatching this stage's `Agent` and again immediately AFTER
+   its `validate` returns exit code `0`. As soon as the stage completes, in the same turn call
+   BOTH:
+   - `PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.report_contract record-usage
+     --run-dir <run_dir> --stage historical --total <subagent_tokens>` — use the combined token
+     figure the `Agent` completion reports (Claude Code exposes a single combined `subagent_tokens`
+     total, not an input/output split, so use the `--total` shape; never pass a `chars // 4`
+     estimate as if it were measured). If your runtime does not expose a token total, omit
+     `record-usage` for THIS stage only (it degrades to the char/4 estimate).
+   - `PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.report_contract record-duration
+     --run-dir <run_dir> --stage historical --seconds <after minus before>` — use YOUR OWN
+     wall-clock delta around the dispatch. This does not depend on any field the sub-agent
+     returns, so it is always available to you; record it even when the token total is not. Record
+     the FINAL successful attempt's delta only (do not sum abandoned validation retries).
+
+   Do not scrape prose, session history, or output sizes for either value.
 4. **Invoke `inference`** — same pattern as step 3, using `run_dir/inference.bc.json` and this
    Skill's own `agent_tools.inference build-context`/`validate` verbs, writing
    `run_dir/inference.out.json`. Independent of step 3 (see above) — steps 3 and 4 may run in
    either order, or in parallel where the runtime supports it (both must complete successfully
    before step 5) — the design places no ordering requirement between historical and inference,
    only that both precede expert-alignment.
+
+   **Capture usage + duration for this stage (mandatory when available).** Same pattern as step 3,
+   swapping the stage name: note your own wall-clock time immediately BEFORE dispatching and again
+   immediately AFTER `validate` returns exit code `0`, then in the same turn call BOTH
+   `PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.report_contract record-usage
+   --run-dir <run_dir> --stage inference --total <subagent_tokens>` (omit only if your runtime
+   exposes no token total) and `PYTHONPATH=src .venv/bin/python -m
+   chec_local_interpreter.report_contract record-duration --run-dir <run_dir> --stage inference
+   --seconds <after minus before>` (always available — it is your own clock, not the sub-agent's
+   return value). Record the FINAL successful attempt's delta only. Do not scrape prose, session
+   history, or output sizes for either value.
 4b. **Invoke `auto-simulator`** — also independent of steps 3/4 (see above). `prepare` (step 2)
    already ran the automatic min/max sensitivity
    simulator as a side effect, using the same loaded MGCECDL model as the inference/SHAP simulator.
@@ -202,6 +231,15 @@ already completed — dispatch it alone, immediately once both are done, without
    `run_dir/auto-simulator.bc.json` is absent (R3 gap: no trained model, or zero events for this
    circuit/window in the automatic simulator's re-derived mask), skip this step entirely — there is
    nothing to build a prompt from.
+
+   **Capture usage + duration for this stage (mandatory only when it actually ran).** Capture
+   exactly as in steps 3/4 — `record-usage --run-dir <run_dir> --stage auto-simulator --total
+   <subagent_tokens>` and `record-duration --run-dir <run_dir> --stage auto-simulator --seconds
+   <after minus before>` — ONLY if this stage actually ran (i.e. `run_dir/auto-simulator.bc.json`
+   existed and you dispatched the agent). If step 4b degraded to skip (no
+   `auto-simulator.bc.json`, or validation-retries-exhausted), do NOT record usage or duration for
+   it — a skipped stage has no measurement and is simply omitted from the header. A missing
+   auto-simulator measurement must NEVER block the run.
 5. **`prepare_expert_alignment`** — run
    `report_pipeline.prepare_expert_alignment(run_dir)`. Reads the validated
    `historical.out.json`/`inference.out.json` from steps 3-4, pools report dates, matches the
@@ -211,6 +249,17 @@ already completed — dispatch it alone, immediately once both are done, without
 6. **Invoke `expert-alignment`** — same validate-gated pattern, using
    `run_dir/expert-alignment.bc.json` and `agent_tools.expert_alignment build-context`/`validate`,
    writing `run_dir/expert-alignment.out.json`.
+
+   **Capture usage + duration for this stage (mandatory when available).** Same pattern as steps
+   3/4: note your own wall-clock time immediately BEFORE dispatching and again immediately AFTER
+   `validate` returns exit code `0`, then in the same turn call BOTH `PYTHONPATH=src
+   .venv/bin/python -m chec_local_interpreter.report_contract record-usage --run-dir <run_dir>
+   --stage expert-alignment --total <subagent_tokens>` (omit only if your runtime exposes no token
+   total) and `PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.report_contract
+   record-duration --run-dir <run_dir> --stage expert-alignment --seconds <after minus before>`
+   (always available — your own clock, not the sub-agent's return value). Record the FINAL
+   successful attempt's delta only. Do not scrape prose, session history, or output sizes for
+   either value.
 7. **`render`** — prefer the shared contract render command. Pass runtime metadata explicitly when your runtime exposes it; otherwise let the contract resolve the effective runtime model from execution evidence:
 
    ```bash
@@ -221,7 +270,11 @@ already completed — dispatch it alone, immediately once both are done, without
    silently degrades the report header, it never raises. The report header then shows
    `"<Provider> (<model>)"`, e.g. `"Claude Code (claude-sonnet-5)"`, plus an input/output token line
    whose source is labeled `medidos` (measured), `medidos/estimados` (mixed), or `aproximados`
-   (estimated) — see the optional `token_usage.json` sidecar note after step 4b below.
+   (estimated) — see the optional `token_usage.json` sidecar note after step 4b below. Beneath that
+   preserved whole-run total line, the header now also shows a per-stage breakdown (tokens + tiempo
+   for each of historical/inference/auto-simulator/expert-alignment), sourced from the capture
+   calls above plus the new `stage_timing.json` sidecar (see the "Per-stage duration sidecar" note
+   below).
    `report_pipeline._resolve_token_usage` resolves this per `run_dir`: explicit `tokens_input`/
    `tokens_output` kwargs (pass them yourself only if you have a better count on hand) beat the
    sidecar, which beats the `characters // 4` fallback estimate.
@@ -255,6 +308,14 @@ already completed — dispatch it alone, immediately once both are done, without
    orchestration effort, no sidecar file, nothing to write. The `elapsed_seconds` kwarg on `render()`
    exists only as an optional explicit override for callers with a better/external timer; you do not
    need to compute or pass it in the normal flow.
+
+   **Per-stage duration sidecar.** The `record-duration` calls above (steps 3/4/4b/6) accumulate
+   into an optional `run_dir/stage_timing.json` (one `{"duration_seconds": <float>}` entry per
+   stage) — the timing counterpart to `token_usage.json`. It is fully additive and independent:
+   `render` reads it to show a per-stage "Tiempo" column alongside the per-stage "Tokens" column;
+   any stage missing from it (or the whole file absent) renders `N/D` for that stage, never an
+   error. The whole-run "Tiempo total de ejecución" line above is computed separately from the
+   run_dir timestamp and does not depend on this sidecar.
 
    Reads all three validated outputs and calls `plotting.render_llm_analysis`, now also merging in
    the 5 `automatic_simulation_*` kwargs (table, agent analysis, cost context, softmax curves,
