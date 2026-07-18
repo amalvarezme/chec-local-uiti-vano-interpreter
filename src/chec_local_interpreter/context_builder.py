@@ -4,7 +4,6 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-import numpy as np
 
 import pandas as pd
 
@@ -147,36 +146,23 @@ def _compute_circuit_characterization(
     counts = count_unique_event_dates(df_copy, 'CIRCUITO')
     sums = df_copy.groupby('CIRCUITO')['UITI_VANO'].sum()
     
-    df_coords = pd.DataFrame({
-        'event_count': counts,
-        'uiti_vano_sum': sums
-    }).dropna()
-    
+    try:
+        from chec_local_interpreter.plotting import compute_circuit_criticality_groups
+        # No dates passed: df_copy is already the caller-selected/pre-filtered
+        # window, so re-filtering here would be a no-op (mirrors the previous
+        # inline behavior, which never filtered by date either).
+        df_coords = compute_circuit_criticality_groups(df_copy)
+    except ImportError:
+        df_coords = pd.DataFrame({
+            'event_count': counts,
+            'uiti_vano_sum': sums
+        }).dropna()
+        df_coords['cluster'] = 0
+        df_coords['criticidad'] = "Desconocido"
+
     if df_coords.empty:
         return []
-        
-    X = df_coords[['event_count', 'uiti_vano_sum']].astype(float).values
-    X_mean = X.mean(axis=0)
-    X_std = np.where(X.std(axis=0) == 0, 1e-9, X.std(axis=0)) 
-    X_scaled = (X - X_mean) / X_std
 
-    try:
-        from chec_local_interpreter.plotting import run_kmeans, CRITICALITY_GROUP_LABELS
-        n_clusters = min(len(CRITICALITY_GROUP_LABELS), len(df_coords))
-        df_coords['cluster'] = run_kmeans(X_scaled, n_clusters=n_clusters, random_state=42)
-
-        cluster_scores = {}
-        for cluster_id in range(n_clusters):
-            cluster_mask = df_coords['cluster'] == cluster_id
-            cluster_scores[cluster_id] = X_scaled[cluster_mask].mean()
-
-        sorted_clusters = sorted(cluster_scores.keys(), key=lambda c: cluster_scores[c], reverse=True)
-        group_labels = list(CRITICALITY_GROUP_LABELS)
-    except ImportError:
-        df_coords['cluster'] = 0
-        sorted_clusters = [0]
-        group_labels = ["Desconocido"]
-        
     global_avg_events = counts.mean()
     global_avg_uiti = sums.mean()
     
@@ -187,10 +173,8 @@ def _compute_circuit_characterization(
     for circuito in circuits_to_process:
         if circuito in df_coords.index:
             row = df_coords.loc[circuito]
-            cluster_id = row['cluster']
-            rank = sorted_clusters.index(cluster_id) if cluster_id in sorted_clusters else 0
-            label = group_labels[rank] if rank < len(group_labels) else "Desconocida"
-            
+            label = row['criticidad']
+
             percentile = min(max(float(top_vanos_percentile), 0.0), 100.0)
             quantile_value = percentile / 100.0
 

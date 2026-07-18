@@ -94,19 +94,27 @@ CRITICALITY_GROUP_LABELS: tuple[str, ...] = ("Muy Alta", "Alta", "Media", "Baja"
 CRITICALITY_GROUP_COLORS: tuple[str, ...] = ("#dc2626", "#ea580c", "#ca8a04", "#16a34a", "#2563eb")
 
 
-def plot_interactive_circuit_clustering(raw_df, start_date=None, end_date=None, highlighted_circuits=None):
+def compute_circuit_criticality_groups(raw_df, start_date=None, end_date=None):
     """
-    Plots an interactive log-log scatter map of events frequency vs UITI_VANO sums
-    clustered via K-Means.
+    Compute per-circuit event-frequency / UITI_VANO-sum coordinates, K-Means
+    cluster assignment, and ranked criticality label.
+
+    Shared by `plot_interactive_circuit_clustering` (chart) and
+    `context_builder._compute_circuit_characterization` (LLM context) so both
+    call sites derive `criticidad` from a single source of truth.
 
     Parameters:
     - raw_df (pd.DataFrame): The main dataset containing 'CIRCUITO', 'UITI_VANO', and 'FECHA'.
     - start_date (str, optional): Start date string (e.g. '2023-01-01').
     - end_date (str, optional): End date string.
-    - highlighted_circuits (list): List of circuit names to highlight with an 'X'.
+
+    Returns:
+    - pd.DataFrame indexed by CIRCUITO with columns `event_count`,
+      `uiti_vano_sum`, `cluster` (raw K-Means id), `criticidad` (ranked label
+      from CRITICALITY_GROUP_LABELS). Empty (same columns) if no data
+      survives filtering.
     """
-    if highlighted_circuits is None:
-        highlighted_circuits = []
+    empty_columns = ["event_count", "uiti_vano_sum", "cluster", "criticidad"]
 
     df = raw_df.copy()
 
@@ -124,11 +132,12 @@ def plot_interactive_circuit_clustering(raw_df, start_date=None, end_date=None, 
             print("Warning: 'FECHA' column not found in dataframe. Showing all data without date filtering.")
 
     # 2. Data Preparation
-    df['UITI_VANO'] = pd.to_numeric(df['UITI_VANO'], errors='coerce').fillna(0.0)
+    if 'UITI_VANO' in df.columns:
+        df['UITI_VANO'] = pd.to_numeric(df['UITI_VANO'], errors='coerce').fillna(0.0)
 
     # Calculate metrics per circuit. Frequency counts distinct FECHA values.
-    counts = count_unique_event_dates(df, "CIRCUITO")
-    sums = df.groupby('CIRCUITO')['UITI_VANO'].sum()
+    counts = count_unique_event_dates(df, "CIRCUITO") if not df.empty else pd.Series(dtype=float)
+    sums = df.groupby('CIRCUITO')['UITI_VANO'].sum() if not df.empty else pd.Series(dtype=float)
 
     # Merge into a coordinate dataframe
     df_coords = pd.DataFrame({
@@ -138,8 +147,12 @@ def plot_interactive_circuit_clustering(raw_df, start_date=None, end_date=None, 
 
     # Handle empty dataframe edge case
     if df_coords.empty:
-        print("No data available for the given date range.")
-        return go.Figure()
+        df_coords['cluster'] = pd.Series(dtype=float)
+        df_coords['criticidad'] = pd.Series(dtype=object)
+        df_coords.index.name = "CIRCUITO"
+        return df_coords[empty_columns]
+
+    df_coords.index.name = "CIRCUITO"
 
     # Explicitly cast to float before converting to NumPy values
     X = df_coords[['event_count', 'uiti_vano_sum']].astype(float).values
@@ -150,9 +163,17 @@ def plot_interactive_circuit_clustering(raw_df, start_date=None, end_date=None, 
     X_std = np.where(X.std(axis=0) == 0, 1e-9, X.std(axis=0))
     X_scaled = (X - X_mean) / X_std
 
-    # Execute clustering
+    # Execute clustering. `run_kmeans(random_state=...)` seeds the numpy
+    # GLOBAL RNG (`np.random.seed`), a process-wide side effect. Save/restore
+    # the global state around the call so this function never silently
+    # resets or correlates unrelated randomness for other code sharing the
+    # process afterward (e.g. the SHAP simulator in report_pipeline.py).
     n_clusters = min(len(CRITICALITY_GROUP_LABELS), len(df_coords))
-    df_coords['cluster'] = run_kmeans(X_scaled, n_clusters=n_clusters, random_state=42)
+    rng_state = np.random.get_state()
+    try:
+        df_coords['cluster'] = run_kmeans(X_scaled, n_clusters=n_clusters, random_state=42)
+    finally:
+        np.random.set_state(rng_state)
 
     # Rank clusters based on the mean of their scaled coordinates (higher means more critical)
     cluster_scores = {}
@@ -162,18 +183,46 @@ def plot_interactive_circuit_clustering(raw_df, start_date=None, end_date=None, 
 
     sorted_clusters = sorted(cluster_scores.keys(), key=lambda c: cluster_scores[c], reverse=True)
     group_labels = list(CRITICALITY_GROUP_LABELS)
+
+    df_coords['criticidad'] = df_coords['cluster'].apply(
+        lambda cluster_id: group_labels[sorted_clusters.index(cluster_id)]
+    )
+
+    return df_coords[empty_columns]
+
+
+def plot_interactive_circuit_clustering(raw_df, start_date=None, end_date=None, highlighted_circuits=None):
+    """
+    Plots an interactive log-log scatter map of events frequency vs UITI_VANO sums
+    clustered via K-Means.
+
+    Parameters:
+    - raw_df (pd.DataFrame): The main dataset containing 'CIRCUITO', 'UITI_VANO', and 'FECHA'.
+    - start_date (str, optional): Start date string (e.g. '2023-01-01').
+    - end_date (str, optional): End date string.
+    - highlighted_circuits (list): List of circuit names to highlight with an 'X'.
+    """
+    if highlighted_circuits is None:
+        highlighted_circuits = []
+
+    df_coords = compute_circuit_criticality_groups(raw_df, start_date, end_date)
+
+    # Handle empty dataframe edge case
+    if df_coords.empty:
+        print("No data available for the given date range.")
+        return go.Figure()
+
     group_colors = list(CRITICALITY_GROUP_COLORS)
 
     # 4. Plotting Setup
     fig = go.Figure()
 
     # Plot clusters (Combining both normal and highlighted logic inside the same loop)
-    for rank, cluster_id in enumerate(sorted_clusters):
-        cluster_data = df_coords[df_coords['cluster'] == cluster_id]
+    for rank, label in enumerate(CRITICALITY_GROUP_LABELS):
+        cluster_data = df_coords[df_coords['criticidad'] == label]
         if cluster_data.empty:
             continue
 
-        label = group_labels[rank]
         color = group_colors[rank]
 
         # Split into normal vs highlighted for this specific cluster
