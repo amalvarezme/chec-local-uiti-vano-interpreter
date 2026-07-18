@@ -19,7 +19,7 @@ CONFIRM_PHRASE = "BORRAR TODO"
 
 
 def _build_fake_project(tmp_path):
-    """Build a fake project tree mirroring the real repo's 9 cleanup categories,
+    """Build a fake project tree mirroring the real repo's 10 cleanup categories,
     plus untouchable siblings (analysis-documents, geo)."""
     root = tmp_path
 
@@ -81,6 +81,12 @@ def _build_fake_project(tmp_path):
     nb_outputs_ws.mkdir(parents=True)
     (nb_outputs_ws / "workspace.tmp").write_text("scratch")
 
+    # 10. reports/vault/ -- disposable/regenerable circuit notes, .gitkeep preserved
+    vault = root / "reports" / "vault"
+    vault.mkdir(parents=True)
+    (vault / "CHA23L14.md").write_text("# CHA23L14\n")
+    (vault / ".gitkeep").write_text("")
+
     # Hard exclusions -- must NEVER be touched
     analysis_docs = root / "reports" / "analysis-documents"
     analysis_docs.mkdir(parents=True)
@@ -112,7 +118,7 @@ def test_discover_targets_finds_expected_files_and_counts(tmp_path):
     categories = discover_targets(root)
 
     by_name = {c.name for c in categories}
-    assert len(categories) == 9
+    assert len(categories) == 10
     assert by_name == {c[0] for c in CATEGORIES}
 
     runs_cat = next(c for c in categories if c.name == "runs")
@@ -124,18 +130,31 @@ def test_discover_targets_finds_expected_files_and_counts(tmp_path):
     assert all(p.name != ".gitkeep" for p in artifacts_cat.paths)
     assert artifacts_cat.item_count >= 1
 
+    vault_cat = next(c for c in categories if c.name == "vault")
+    assert all(p.name != ".gitkeep" for p in vault_cat.paths)
+    assert vault_cat.item_count >= 1
+    assert vault_cat.total_bytes > 0
+
 
 def test_discover_targets_reports_missing_roots_as_empty_not_error(tmp_path):
-    # Fresh empty tmp_path -- none of the 9 roots exist on disk yet.
+    # Fresh empty tmp_path -- none of the 10 roots exist on disk yet.
     root = tmp_path
 
     categories = discover_targets(root)
 
-    assert len(categories) == 9
+    assert len(categories) == 10
     for cat in categories:
         assert cat.item_count == 0
         assert cat.total_bytes == 0
         assert cat.paths == []
+
+
+def test_vault_category_registered_with_correct_root_and_must_survive():
+    vault_entry = next((c for c in CATEGORIES if c[0] == "vault"), None)
+    assert vault_entry is not None, "'vault' category must be present in CATEGORIES"
+    _name, relative_root, must_survive = vault_entry
+    assert relative_root == "reports/vault"
+    assert must_survive is True
 
 
 def test_discover_targets_rejects_relative_path_outside_allowlist(tmp_path):
@@ -207,6 +226,7 @@ def test_dry_run_deletes_nothing(tmp_path, capsys):
     assert (root / "reports" / "legacy-model-assets" / "model.zip").exists()
     assert (root / "outputs" / "graphify_workspace" / "workspace.tmp").exists()
     assert (root / "notebooks" / "outputs" / "graphify_workspace" / "workspace.tmp").exists()
+    assert (root / "reports" / "vault" / "CHA23L14.md").exists()
     assert _real_doc(root).exists()
     assert _geo_csv(root).exists()
 
@@ -232,6 +252,7 @@ def test_confirmed_deletion_removes_selected_categories_but_preserves_gitkeep_an
     assert not (root / "reports" / "graphify" / "graphify-out" / "graph.json").exists()
     assert not (root / "reports" / "mgcecdl-results" / "result.csv").exists()
     assert not (root / "reports" / "legacy-model-assets" / "model.zip").exists()
+    assert not (root / "reports" / "vault" / "CHA23L14.md").exists()
 
     # .gitkeep preserved
     assert (root / "reports" / "interpretability" / "artifacts" / ".gitkeep").exists()
@@ -240,6 +261,7 @@ def test_confirmed_deletion_removes_selected_categories_but_preserves_gitkeep_an
     assert (root / "reports" / "graphify" / ".gitkeep").exists()
     assert (root / "reports" / "mgcecdl-results" / ".gitkeep").exists()
     assert (root / "reports" / "legacy-model-assets" / ".gitkeep").exists()
+    assert (root / "reports" / "vault" / ".gitkeep").exists()
 
     # "root must survive" category roots still exist as (empty/.gitkeep-only) dirs
     assert (root / "reports" / "interpretability" / "runs").is_dir()
@@ -249,6 +271,7 @@ def test_confirmed_deletion_removes_selected_categories_but_preserves_gitkeep_an
     assert (root / "reports" / "graphify").is_dir()
     assert (root / "reports" / "mgcecdl-results").is_dir()
     assert (root / "reports" / "legacy-model-assets").is_dir()
+    assert (root / "reports" / "vault").is_dir()
 
     # hard exclusions untouched
     assert _real_doc(root).exists()
@@ -306,7 +329,7 @@ def test_skip_excludes_category_from_deletion(tmp_path):
         "--project-root", str(root),
         "--skip",
         "runs,artifacts,published,html,graphify,mgcecdl-results,legacy-model-assets,"
-        "graphify-workspace-outputs,notebooks-graphify-workspace-outputs",
+        "graphify-workspace-outputs,notebooks-graphify-workspace-outputs,vault",
         "--confirm", CONFIRM_PHRASE,
     ])
 
@@ -314,6 +337,7 @@ def test_skip_excludes_category_from_deletion(tmp_path):
     # everything skipped -- nothing deleted
     assert (root / "reports" / "interpretability" / "runs" / "CHA23L14").exists()
     assert (root / "notebooks" / "outputs" / "graphify_workspace" / "workspace.tmp").exists()
+    assert (root / "reports" / "vault" / "CHA23L14.md").exists()
 
 
 def test_only_with_unknown_name_errors_clearly(tmp_path, capsys):

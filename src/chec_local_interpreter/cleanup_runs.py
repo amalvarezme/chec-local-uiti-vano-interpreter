@@ -5,7 +5,7 @@ delete the contents of a fixed, explicitly enumerated set of report/output
 directories, while defending against path-traversal/typo bugs and requiring
 an exact typed confirmation phrase before touching anything.
 
-The 9 known category roots (relative to the project root) are the ONLY
+The 10 known category roots (relative to the project root) are the ONLY
 directories this tool will ever operate on. Nothing outside this allowlist
 is ever resolved, even if a caller passes a bogus category table in (see
 `discover_targets`'s `categories` parameter, used for defense-in-depth
@@ -28,9 +28,9 @@ GITKEEP_NAME = ".gitkeep"
 CONFIRM_PHRASE = "BORRAR TODO"
 
 # (name, relative_root, must_survive)
-# must_survive=True  -> categories 1-7: root dir itself must exist afterward
+# must_survive=True  -> categories 1-8: root dir itself must exist afterward
 #                        (possibly .gitkeep-only), only its contents are removed.
-# must_survive=False -> categories 8-9: root dir may be removed entirely.
+# must_survive=False -> categories 9-10: root dir may be removed entirely.
 CATEGORIES: tuple[tuple[str, str, bool], ...] = (
     ("runs", "reports/interpretability/runs", True),
     ("artifacts", "reports/interpretability/artifacts", True),
@@ -39,6 +39,7 @@ CATEGORIES: tuple[tuple[str, str, bool], ...] = (
     ("graphify", "reports/graphify", True),
     ("mgcecdl-results", "reports/mgcecdl-results", True),
     ("legacy-model-assets", "reports/legacy-model-assets", True),
+    ("vault", "reports/vault", True),
     ("graphify-workspace-outputs", "outputs/graphify_workspace", False),
     ("notebooks-graphify-workspace-outputs", "notebooks/outputs/graphify_workspace", False),
 )
@@ -66,7 +67,7 @@ class DeletionResult:
 
 
 def _validate_relative_root(relative_root: str) -> None:
-    """Refuse anything that is not one of the 9 known allowlisted roots.
+    """Refuse anything that is not one of the 10 known allowlisted roots.
 
     This is deliberately checked against the hardcoded
     `_ALLOWED_RELATIVE_ROOTS`, never against a caller-supplied category
@@ -75,7 +76,7 @@ def _validate_relative_root(relative_root: str) -> None:
     if relative_root not in _ALLOWED_RELATIVE_ROOTS:
         raise ValueError(
             f"Refusing unknown category root {relative_root!r}: not in the "
-            f"allowlist of 9 known report-run artifact roots."
+            f"allowlist of 10 known report-run artifact roots."
         )
 
 
@@ -134,7 +135,7 @@ def discover_targets(
     """Resolve the known cleanup categories under `project_root`.
 
     Every category root is validated against the hardcoded allowlist before
-    being included -- a category whose relative root is not one of the 9
+    being included -- a category whose relative root is not one of the 10
     known roots, or whose resolved path escapes `project_root`, raises
     `ValueError` instead of being silently skipped or processed.
 
@@ -204,7 +205,7 @@ def delete_targets(
     """Delete files/dirs belonging to `selected_names` categories.
 
     Skips `.gitkeep`. For "must survive" categories, the root dir itself is
-    never removed -- only its contents. For categories 8-9 (must_survive is
+    never removed -- only its contents. For categories 9-10 (must_survive is
     False), the root dir may be removed entirely along with its contents.
     """
     result = DeletionResult()
