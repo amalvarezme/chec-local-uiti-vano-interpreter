@@ -1798,6 +1798,7 @@ def render_llm_analysis(
     token_source: str = "estimated",
     token_total_source: str | None = None,
     elapsed_seconds: float | None = None,
+    stage_breakdown: list[dict] | None = None,
     all_circuits_df: pd.DataFrame | None = None,
     inference_results: dict | None = None,
     inference_analysis: dict | None = None,
