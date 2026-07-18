@@ -95,3 +95,29 @@ def test_compute_circuit_characterization_uses_five_criticality_tiers():
     assert by_circuito["MUYALTA_1"]["criticidad"] == "Muy Alta"
     if "MUYBAJA_1" in by_circuito:
         assert by_circuito["MUYBAJA_1"]["criticidad"] == "Muy Baja"
+
+
+def test_compute_circuit_characterization_matches_shared_clustering_helper():
+    """Both call sites must derive `criticidad` from the same shared helper."""
+    from chec_local_interpreter.plotting import compute_circuit_criticality_groups
+
+    frames = [
+        _rows_for_circuit("MUYALTA_1", n_events=40, total_uiti=50000.0),
+        _rows_for_circuit("MUYALTA_2", n_events=40, total_uiti=55000.0),
+        _rows_for_circuit("ALTA_1", n_events=20, total_uiti=5000.0),
+        _rows_for_circuit("ALTA_2", n_events=20, total_uiti=5500.0),
+        _rows_for_circuit("MEDIA_1", n_events=10, total_uiti=500.0),
+        _rows_for_circuit("MEDIA_2", n_events=10, total_uiti=550.0),
+        _rows_for_circuit("BAJA_1", n_events=4, total_uiti=40.0),
+        _rows_for_circuit("BAJA_2", n_events=4, total_uiti=45.0),
+        _rows_for_circuit("MUYBAJA_1", n_events=2, total_uiti=2.0),
+        _rows_for_circuit("MUYBAJA_2", n_events=2, total_uiti=4.0),
+    ]
+    df = pd.concat(frames, ignore_index=True)
+    selected_circuitos = ["MUYBAJA_1", "BAJA_1", "MEDIA_1", "ALTA_1", "MUYALTA_1"]
+
+    results = _compute_circuit_characterization(df, selected_circuitos=selected_circuitos)
+    expected = compute_circuit_criticality_groups(df)
+
+    for row in results:
+        assert row["criticidad"] == expected.loc[row["circuito"], "criticidad"]

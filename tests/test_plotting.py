@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from chec_local_interpreter.plotting import (
     CRITICALITY_GROUP_LABELS,
+    compute_circuit_criticality_groups,
     plot_interactive_circuit_clustering,
 )
 
@@ -88,3 +90,57 @@ def test_two_circuits_degrade_gracefully_without_crash():
 
     assert len(labels_present) <= 2
     assert "Muy Baja" not in labels_present
+
+
+def test_compute_circuit_criticality_groups_returns_expected_shape_and_labels():
+    raw_df = _five_tier_raw_df()
+
+    df_coords = compute_circuit_criticality_groups(raw_df)
+
+    assert df_coords.index.name == "CIRCUITO"
+    assert set(df_coords.columns) == {"event_count", "uiti_vano_sum", "cluster", "criticidad"}
+
+    by_circuito = df_coords["criticidad"].to_dict()
+    assert by_circuito["MUYALTA_1"] == "Muy Alta"
+    assert by_circuito["MUYALTA_2"] == "Muy Alta"
+    assert by_circuito["MUYBAJA_1"] == "Muy Baja"
+    assert by_circuito["MUYBAJA_2"] == "Muy Baja"
+    assert set(df_coords["criticidad"]) == set(CRITICALITY_GROUP_LABELS)
+
+
+def test_compute_circuit_criticality_groups_empty_input_returns_empty_with_same_columns():
+    empty_df = pd.DataFrame(columns=["CIRCUITO", "FECHA", "UITI_VANO"])
+
+    df_coords = compute_circuit_criticality_groups(empty_df)
+
+    assert df_coords.empty
+    assert set(df_coords.columns) == {"event_count", "uiti_vano_sum", "cluster", "criticidad"}
+
+
+def test_compute_circuit_criticality_groups_date_filter_excludes_out_of_window_rows():
+    raw_df = pd.concat(
+        [
+            _rows_for_circuit("IN_WINDOW", n_events=5, total_uiti=100.0, start="2026-02-01"),
+            _rows_for_circuit("OUT_OF_WINDOW", n_events=5, total_uiti=100.0, start="2020-01-01"),
+        ],
+        ignore_index=True,
+    )
+
+    df_coords = compute_circuit_criticality_groups(raw_df, start_date="2026-01-01", end_date="2026-03-01")
+
+    assert "IN_WINDOW" in df_coords.index
+    assert "OUT_OF_WINDOW" not in df_coords.index
+
+
+def test_compute_circuit_criticality_groups_restores_global_rng_state():
+    raw_df = _five_tier_raw_df()
+
+    np.random.seed(123)
+    state_before = np.random.get_state()
+
+    compute_circuit_criticality_groups(raw_df)
+
+    state_after = np.random.get_state()
+    assert state_before[0] == state_after[0]
+    assert np.array_equal(state_before[1], state_after[1])
+    assert state_before[2:] == state_after[2:]
