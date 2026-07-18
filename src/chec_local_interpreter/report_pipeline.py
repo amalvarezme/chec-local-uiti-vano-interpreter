@@ -63,6 +63,7 @@ from __future__ import annotations
 
 import io
 import json
+import math
 import os
 import warnings
 from contextlib import redirect_stdout
@@ -1680,6 +1681,46 @@ def record_token_usage(run_dir: str | Path, stage: str, *, total: Any = None, in
         raise ReportPipelineError(f"invalid token usage sidecar: {exc}") from exc
     if not isinstance(existing, dict) or set(existing) - set(TOKEN_USAGE_STAGES):
         raise ReportPipelineError("token usage sidecar has an invalid shape or unknown stage")
+    merged = dict(existing)
+    merged[stage] = measurement
+    run_path.mkdir(parents=True, exist_ok=True)
+    temporary = sidecar.with_name(f".{sidecar.name}.tmp")
+    temporary.write_text(json.dumps(merged, sort_keys=True), encoding="utf-8")
+    os.replace(temporary, sidecar)
+    return measurement
+
+
+def _validate_duration_measurement(seconds: Any) -> dict[str, float]:
+    if isinstance(seconds, bool) or not isinstance(seconds, (int, float)):
+        raise ValueError("stage duration must be a non-negative real number")
+    value = float(seconds)
+    if not math.isfinite(value) or value < 0:
+        raise ValueError("stage duration must be a non-negative real number")
+    return {"duration_seconds": value}
+
+
+def record_stage_timing(run_dir: str | Path, stage: str, *, seconds: Any) -> dict[str, float]:
+    """Record `stage`'s wall-clock duration (seconds) into the optional
+    `run_dir/stage_timing.json` sidecar, mirroring `record_token_usage`'s
+    merge/atomic-write mechanics exactly. This function only PERSISTS a
+    duration the caller measured itself (the orchestrator's own wall-clock
+    around the stage dispatch, per design ADR-3) -- it never measures time.
+
+    There is deliberately no `verify_stage_timing`/`verify-duration`
+    counterpart: duration must never become a hard-failure gate (design
+    ADR-1, spec "Duration capture never gates run success").
+    """
+    if stage not in TOKEN_USAGE_STAGES:
+        raise ValueError(f"unknown stage timing stage: {stage}")
+    measurement = _validate_duration_measurement(seconds)
+    run_path = Path(run_dir)
+    sidecar = run_path / "stage_timing.json"
+    try:
+        existing = _read_json(sidecar) if sidecar.exists() else {}
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise ReportPipelineError(f"invalid stage timing sidecar: {exc}") from exc
+    if not isinstance(existing, dict) or set(existing) - set(TOKEN_USAGE_STAGES):
+        raise ReportPipelineError("stage timing sidecar has an invalid shape or unknown stage")
     merged = dict(existing)
     merged[stage] = measurement
     run_path.mkdir(parents=True, exist_ok=True)
