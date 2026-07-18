@@ -161,17 +161,17 @@ def _compute_circuit_characterization(
     X_scaled = (X - X_mean) / X_std
 
     try:
-        from chec_local_interpreter.plotting import run_kmeans
-        n_clusters = min(4, len(df_coords))
+        from chec_local_interpreter.plotting import run_kmeans, CRITICALITY_GROUP_LABELS
+        n_clusters = min(len(CRITICALITY_GROUP_LABELS), len(df_coords))
         df_coords['cluster'] = run_kmeans(X_scaled, n_clusters=n_clusters, random_state=42)
-        
+
         cluster_scores = {}
         for cluster_id in range(n_clusters):
             cluster_mask = df_coords['cluster'] == cluster_id
             cluster_scores[cluster_id] = X_scaled[cluster_mask].mean()
-            
+
         sorted_clusters = sorted(cluster_scores.keys(), key=lambda c: cluster_scores[c], reverse=True)
-        group_labels = ["Muy Alta", "Alta", "Media", "Baja"]
+        group_labels = list(CRITICALITY_GROUP_LABELS)
     except ImportError:
         df_coords['cluster'] = 0
         sorted_clusters = [0]

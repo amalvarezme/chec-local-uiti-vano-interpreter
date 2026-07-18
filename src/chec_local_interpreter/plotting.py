@@ -85,6 +85,15 @@ def run_kmeans(data, n_clusters=5, max_iters=100, random_state=42):
 
     return labels
 
+
+# Single source of truth for the circuit-criticality tiers shared by the
+# clustering chart (`plot_interactive_circuit_clustering`) and the LLM-facing
+# context builder (`context_builder._compute_circuit_characterization`), so
+# the chart legend and the report narrative never drift out of sync.
+CRITICALITY_GROUP_LABELS: tuple[str, ...] = ("Muy Alta", "Alta", "Media", "Baja", "Muy Baja")
+CRITICALITY_GROUP_COLORS: tuple[str, ...] = ("#dc2626", "#ea580c", "#ca8a04", "#16a34a", "#2563eb")
+
+
 def plot_interactive_circuit_clustering(raw_df, start_date=None, end_date=None, highlighted_circuits=None):
     """
     Plots an interactive log-log scatter map of events frequency vs UITI_VANO sums
@@ -142,7 +151,7 @@ def plot_interactive_circuit_clustering(raw_df, start_date=None, end_date=None, 
     X_scaled = (X - X_mean) / X_std
 
     # Execute clustering
-    n_clusters = min(4, len(df_coords))
+    n_clusters = min(len(CRITICALITY_GROUP_LABELS), len(df_coords))
     df_coords['cluster'] = run_kmeans(X_scaled, n_clusters=n_clusters, random_state=42)
 
     # Rank clusters based on the mean of their scaled coordinates (higher means more critical)
@@ -152,8 +161,8 @@ def plot_interactive_circuit_clustering(raw_df, start_date=None, end_date=None, 
         cluster_scores[cluster_id] = X_scaled[cluster_mask].mean()
 
     sorted_clusters = sorted(cluster_scores.keys(), key=lambda c: cluster_scores[c], reverse=True)
-    group_labels = ["Muy Alta", "Alta", "Media", "Baja"]
-    group_colors = ["#ef4444", "#f97316", "#eab308", "#22c55e"] # Red, Orange, Yellow, Green
+    group_labels = list(CRITICALITY_GROUP_LABELS)
+    group_colors = list(CRITICALITY_GROUP_COLORS)
 
     # 4. Plotting Setup
     fig = go.Figure()
