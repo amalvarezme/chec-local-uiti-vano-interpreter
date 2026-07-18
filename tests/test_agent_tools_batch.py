@@ -936,15 +936,22 @@ def test_inference_agent_is_registered_in_agent_specs():
 
 
 def test_no_other_source_module_hardcodes_the_flat_published_path():
-    """Only agent_tools/batch.py may reference the published-reports root —
-    every publish must go through the role-namespaced
+    """Only agent_tools/batch.py may reference the published-reports root for
+    publishing purposes — every publish must go through the role-namespaced
     `PUBLISHED_REPORTS_ROOT / agent.role` composition, never the flat
     (pre-namespacing) path string, so a future agent's L2 CLI can never
-    reintroduce a cross-agent publish collision by bypassing the runner."""
+    reintroduce a cross-agent publish collision by bypassing the runner.
+
+    `cleanup_runs.py` is also allowlisted: it references the same flat root
+    purely as a deletion target (one of the 9 known report-run artifact
+    category roots enumerated in its `CATEGORIES` constant), never to
+    construct a publish path, so it cannot reintroduce the bypass this guard
+    defends against."""
     src_root = Path(__file__).resolve().parents[1] / "src" / "chec_local_interpreter"
+    allowed_names = {"batch.py", "cleanup_runs.py"}
     offenders = [
         str(path)
         for path in src_root.rglob("*.py")
-        if path.name != "batch.py" and "reports/interpretability/published" in path.read_text()
+        if path.name not in allowed_names and "reports/interpretability/published" in path.read_text()
     ]
     assert offenders == []
