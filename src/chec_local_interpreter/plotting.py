@@ -1780,6 +1780,29 @@ def _format_elapsed_seconds(elapsed_seconds: float) -> str:
     return f"{minutes}m {seconds}s"
 
 
+_TOKEN_SOURCE_LABELS = {
+    "measured": "medidos",
+    "mixed": "medidos/estimados",
+    "estimated": "aproximados",
+}
+
+
+def _token_source_label(token_source: str | None) -> tuple[str, str]:
+    """Resolve a `token_source` value (`"measured"`/`"mixed"`/`"estimated"`,
+    see `report_pipeline._resolve_token_usage`/`_resolve_stage_breakdown`)
+    into its Spanish display label and its `"~"`-or-empty numeric prefix.
+
+    Exact ("measured") counts drop the "~" prefix; anything with an
+    estimated component keeps it, since it is still an approximation.
+    Shared by the entrada/salida block, the whole-run total line, and the
+    per-stage breakdown table below -- the same mapping used to be
+    duplicated inline at each of those three call sites.
+    """
+    label = _TOKEN_SOURCE_LABELS.get(token_source, "aproximados")
+    prefix = "" if token_source == "measured" else "~"
+    return label, prefix
+
+
 def render_llm_analysis(
     validation_data: dict,
     raw_df: pd.DataFrame,
@@ -2589,13 +2612,7 @@ def render_llm_analysis(
             # `report_pipeline._resolve_token_usage`. Exact ("measured")
             # counts drop the "~" prefix; anything with an estimated
             # component keeps it, since it is still an approximation.
-            token_source_labels = {
-                "measured": "medidos",
-                "mixed": "medidos/estimados",
-                "estimated": "aproximados",
-            }
-            token_label = token_source_labels.get(token_source, "aproximados")
-            prefix = "" if token_source == "measured" else "~"
+            token_label, prefix = _token_source_label(token_source)
             tokens_in_str = f"{prefix}{tokens_input:,}" if tokens_input is not None else "N/D"
             tokens_out_str = f"{prefix}{tokens_output:,}" if tokens_output is not None else "N/D"
             if token_source == "measured":
@@ -2616,14 +2633,8 @@ def render_llm_analysis(
             # `"total"`-only sidecar shape), plus the run's total wall-clock
             # execution time. `token_total_source` is independent because a
             # runtime may expose measured totals without an input/output split.
-            token_source_labels = {
-                "measured": "medidos",
-                "mixed": "medidos/estimados",
-                "estimated": "aproximados",
-            }
             effective_total_source = token_total_source or token_source
-            token_label = token_source_labels.get(effective_total_source, "aproximados")
-            prefix = "" if effective_total_source == "measured" else "~"
+            token_label, prefix = _token_source_label(effective_total_source)
             if tokens_total is not None:
                 tokens_total_part = (
                     "Tokens totales (todas las etapas, incl. sub-agentes/corridas en paralelo) "
@@ -2637,6 +2648,44 @@ def render_llm_analysis(
                 "<br><span style='font-size: 0.85em; color: #94a3b8;'>"
                 f"{tokens_total_part} | {time_part}"
                 "</span>"
+            )
+        if stage_breakdown:
+            # Per-stage breakdown (design #327 ADR-2): one row per agent
+            # stage (historical/inference/auto-simulator/expert-alignment)
+            # from `report_pipeline._resolve_stage_breakdown`. Additive --
+            # placed AFTER the whole-run tokens_total/elapsed_seconds block
+            # above, never replacing it. Reuses the SAME
+            # measured/mixed/estimated label convention as that block, via
+            # `_token_source_label` (extracted above `render_llm_analysis`
+            # since this is now the third occurrence of the same mapping).
+            rows_html = []
+            for entry in stage_breakdown:
+                stage_token_source = entry.get("token_source", "estimated")
+                stage_label, stage_prefix = _token_source_label(stage_token_source)
+                stage_tokens_total = entry.get("tokens_total")
+                if stage_tokens_total is not None:
+                    tok_cell = f"{stage_prefix}{stage_tokens_total:,} ({stage_label})"
+                else:
+                    tok_cell = "N/D"
+                stage_duration = entry.get("duration_seconds")
+                if stage_duration is not None:
+                    dur_cell = f"{_format_elapsed_seconds(stage_duration)} (medidos)"
+                else:
+                    dur_cell = "N/D"
+                rows_html.append(
+                    "<tr>"
+                    f"<td style='text-align:left;'>{entry.get('stage', '')}</td>"
+                    f"<td>{tok_cell}</td>"
+                    f"<td>{dur_cell}</td>"
+                    "</tr>"
+                )
+            subtitle_info += (
+                "<br><span style='font-size: 0.8em; color: #94a3b8;'>"
+                "Desglose por etapa (agente):"
+                "<table style='display:inline-table; font-size:0.95em; border-collapse:collapse;'>"
+                "<tr><th style='text-align:left;'>Etapa</th><th>Tokens</th><th>Tiempo</th></tr>"
+                f"{''.join(rows_html)}"
+                "</table></span>"
             )
     else:
         subtitle_info = f"Período de análisis: {period_str} | (Solo visualización, sin análisis LLM)"

@@ -6,6 +6,10 @@ import pandas as pd
 
 from chec_local_interpreter.plotting import render_expert_alignment_tab, render_llm_analysis
 
+# Sentinel distinguishing "kwarg omitted entirely" from "kwarg passed as None"
+# for the `stage_breakdown` byte-identical regression-lock tests below.
+_UNSET = object()
+
 
 # ---------------------------------------------------------------------------
 # Task 3.5 -- `_figure_html` accepts a persisted PNG path (str/Path), not
@@ -545,3 +549,156 @@ def test_header_total_line_shows_na_when_elapsed_seconds_is_none(tmp_path):
     html = _render_with_totals(tmp_path, tokens_total=42)
 
     assert "Tiempo total de ejecución: N/D" in html
+
+
+# ---------------------------------------------------------------------------
+# `stage_breakdown` per-stage header rows (PR3 of the report-usage-accounting
+# chain, design #327 ADR-2). Additive block placed AFTER the existing
+# tokens_total/elapsed_seconds whole-run line, never replacing it. Shape per
+# entry: {stage, tokens_total, token_source, duration_seconds, duration_source}
+# per `report_pipeline._resolve_stage_breakdown`.
+# ---------------------------------------------------------------------------
+
+
+def _extract_header_h1(html: str) -> str:
+    """Pull out the `<h1>...</h1>` header block (contains `title_html`/
+    `subtitle_info`, plotting.py L2826) for regression-lock comparisons.
+
+    The rest of the document embeds Plotly figures with randomly generated
+    per-call `div` UUIDs, so a full-document byte comparison across two
+    separate `render_llm_analysis` calls is never stable even with zero
+    behavior change -- the header block itself has no such randomness and is
+    the correct byte-identical anchor for the `stage_breakdown` regression
+    lock.
+    """
+    import re as _re
+
+    match = _re.search(r"<h1>.*?</h1>", html, _re.DOTALL)
+    assert match, "expected an <h1> header block in the rendered HTML"
+    return match.group(0)
+
+
+def _render_with_stage_breakdown(
+    tmp_path, *, stage_breakdown=_UNSET, output_filename="reporte.html", token_source=None
+):
+    raw_df, daily_df = _minimal_raw_and_daily_df()
+    kwargs = dict(
+        validation_data={"hallazgos": ["algo"]},
+        raw_df=raw_df,
+        daily_df=daily_df,
+        critical_points=[],
+        selected_circuitos=["C1"],
+        tokens_total=5000,
+        elapsed_seconds=753,
+        output_dir=tmp_path,
+        output_filename=output_filename,
+    )
+    if stage_breakdown is not _UNSET:
+        kwargs["stage_breakdown"] = stage_breakdown
+    if token_source is not None:
+        kwargs["token_source"] = token_source
+    html_path = render_llm_analysis(**kwargs)
+    return html_path.read_text(encoding="utf-8")
+
+
+def test_header_shows_per_stage_rows_when_all_four_stages_measured(tmp_path):
+    stage_breakdown = [
+        {
+            "stage": "historical",
+            "tokens_total": 1000,
+            "token_source": "measured",
+            "duration_seconds": 77.4,
+            "duration_source": "measured",
+        },
+        {
+            "stage": "inference",
+            "tokens_total": 2000,
+            "token_source": "mixed",
+            "duration_seconds": 123.1,
+            "duration_source": "measured",
+        },
+        {
+            "stage": "auto-simulator",
+            "tokens_total": 500,
+            "token_source": "estimated",
+            "duration_seconds": 65.0,
+            "duration_source": "measured",
+        },
+        {
+            "stage": "expert-alignment",
+            "tokens_total": 1500,
+            "token_source": "measured",
+            "duration_seconds": 102.7,
+            "duration_source": "measured",
+        },
+    ]
+    html = _render_with_stage_breakdown(tmp_path, stage_breakdown=stage_breakdown, token_source="measured")
+
+    # Every stage row is present with its token count and its token-source
+    # label, plus its duration labeled "medidos" (never estimated).
+    assert "historical" in html
+    assert "1,000" in html and "medidos" in html
+    assert "inference" in html
+    assert "2,000" in html and "medidos/estimados" in html
+    assert "auto-simulator" in html
+    assert "500" in html and "aproximados" in html
+    assert "expert-alignment" in html
+    assert "1,500" in html
+    for expected_duration in ("1m 17s", "2m 3s", "1m 5s", "1m 42s"):
+        assert expected_duration in html
+    # The pre-existing whole-run total line is preserved, not replaced.
+    assert "Tokens totales (todas las etapas, incl. sub-agentes/corridas en paralelo) medidos: 5,000" in html
+    assert "Tiempo total de ejecución: 12m 33s" in html
+
+
+def test_header_stage_row_shows_na_time_when_duration_missing_for_one_stage(tmp_path):
+    stage_breakdown = [
+        {
+            "stage": "historical",
+            "tokens_total": 1000,
+            "token_source": "measured",
+            "duration_seconds": 77.4,
+            "duration_source": "measured",
+        },
+        {
+            "stage": "inference",
+            "tokens_total": 2000,
+            "token_source": "measured",
+            "duration_seconds": None,
+            "duration_source": None,
+        },
+    ]
+    html = _render_with_stage_breakdown(tmp_path, stage_breakdown=stage_breakdown)
+
+    assert "2,000" in html  # inference's tokens still shown normally
+    assert "N/D" in html
+    # historical's own row keeps its measured duration; only inference's
+    # Tiempo cell degrades to N/D.
+    assert "1m 17s" in html
+
+
+def test_header_omits_stage_breakdown_block_when_stage_breakdown_is_none(tmp_path):
+    baseline_html = _render_with_totals(tmp_path, tokens_total=5000, elapsed_seconds=753)
+    html = _render_with_stage_breakdown(tmp_path, stage_breakdown=None)
+
+    assert _extract_header_h1(html) == _extract_header_h1(baseline_html)
+    assert "Desglose por etapa" not in html
+
+
+def test_header_omits_stage_breakdown_block_when_stage_breakdown_is_empty_list(tmp_path):
+    baseline_html = _render_with_totals(tmp_path, tokens_total=5000, elapsed_seconds=753)
+    html = _render_with_stage_breakdown(tmp_path, stage_breakdown=[])
+
+    assert _extract_header_h1(html) == _extract_header_h1(baseline_html)
+    assert "Desglose por etapa" not in html
+
+
+def test_header_default_stage_breakdown_matches_explicit_none_byte_identical(tmp_path):
+    # No `stage_breakdown` kwarg passed at all (uses the PR2-added default of
+    # `None`) -- byte-identical regression lock against the pre-PR3 render
+    # path, proven by comparing against an explicit `stage_breakdown=None`
+    # call rather than merely asserting "no crash".
+    html_default = _render_with_stage_breakdown(tmp_path, stage_breakdown=_UNSET)
+    html_explicit_none = _render_with_stage_breakdown(tmp_path, stage_breakdown=None)
+
+    assert _extract_header_h1(html_default) == _extract_header_h1(html_explicit_none)
