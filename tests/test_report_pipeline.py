@@ -67,6 +67,42 @@ def _write_fixture_dataset(directory: Path) -> Path:
     return csv_path
 
 
+_MULTI_MONTH_SPIKE_DAYS = (
+    "2026-01-15",
+    "2026-02-15",
+    "2026-03-15",
+    "2026-04-15",
+    "2026-05-15",
+    "2026-06-15",
+    "2026-07-15",
+)
+
+
+def _write_multi_month_fixture_dataset(directory: Path) -> Path:
+    """Circuit C1 spanning 7 distinct calendar months (2026-01-01..2026-07-31)
+    with one clear spike day per month (`_MULTI_MONTH_SPIKE_DAYS`, value 60.0
+    against a flat 4.0 baseline) -- enough qualifying critical-point
+    candidates that the month-scaled budget (7, within [5, 12]) is the
+    binding constraint, not the number of detected candidates."""
+    dates = pd.date_range("2026-01-01", "2026-07-31", freq="D")
+    rows = []
+    for date in dates:
+        fecha_text = date.strftime("%Y-%m-%d")
+        rows.append(
+            {
+                "CIRCUITO": "C1",
+                "FECHA": fecha_text,
+                "UITI_VANO": 60.0 if fecha_text in _MULTI_MONTH_SPIKE_DAYS else 4.0,
+                "FID_VANO": f"V{fecha_text}",
+                "DESC_CAUSA": "Viento",
+            }
+        )
+    frame = pd.DataFrame(rows)
+    csv_path = directory / "dataset_multi_month.csv"
+    frame.to_csv(csv_path, index=False)
+    return csv_path
+
+
 def _canned_ok(data: dict) -> dict:
     return {"ok": True, "data": data}
 
@@ -145,6 +181,21 @@ def test_prepare_happy_path_no_dates_uses_full_circuit_range(tmp_path):
     assert inference_context["circuito_interes"] == "C1"
     assert inference_context["fecha_inicio"] == "2026-01-01"
     assert inference_context["fecha_fin"] == "2026-01-10"
+
+
+def test_prepare_multi_month_window_scales_critical_point_budget_above_floor(tmp_path):
+    """The month-scaled budget (7, for a 7-calendar-month window), not the
+    fixed floor of 5, must bound `critical_points` when enough candidates
+    qualify (proves the fixed floor no longer applies for longer windows)."""
+    data_path = _write_multi_month_fixture_dataset(tmp_path)
+
+    run_dir = prepare(
+        "C1", "2026-01-01", "2026-07-31", data_path=data_path, runs_root=tmp_path / "runs"
+    )
+
+    state = _read_json(run_dir / "l1_state.json")
+    assert len(state["critical_points"]) == min(7, len(_MULTI_MONTH_SPIKE_DAYS))
+    assert len(state["critical_points"]) > 5
 
 
 def test_prepare_wires_real_simulator_stub_replaced_by_r3_gap_when_model_missing(tmp_path):
