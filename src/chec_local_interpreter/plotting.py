@@ -124,10 +124,11 @@ def compute_circuit_criticality_groups(raw_df, start_date=None, end_date=None):
             if not pd.api.types.is_datetime64_any_dtype(df['FECHA']):
                 df['FECHA'] = pd.to_datetime(df['FECHA'], errors='coerce')
 
+            fecha_dia = df['FECHA'].dt.floor("D")
             if start_date is not None:
-                df = df[df['FECHA'] >= pd.to_datetime(start_date)]
+                df = df[fecha_dia >= pd.to_datetime(start_date).floor("D")]
             if end_date is not None:
-                df = df[df['FECHA'] <= pd.to_datetime(end_date)]
+                df = df[fecha_dia <= pd.to_datetime(end_date).floor("D")]
         else:
             print("Warning: 'FECHA' column not found in dataframe. Showing all data without date filtering.")
 

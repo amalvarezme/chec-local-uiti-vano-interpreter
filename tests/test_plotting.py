@@ -136,6 +136,40 @@ def test_compute_circuit_criticality_groups_date_filter_excludes_out_of_window_r
     assert "OUT_OF_WINDOW" not in df_coords.index
 
 
+def test_compute_circuit_criticality_groups_end_date_includes_late_time_of_day_event():
+    """Production-shaped data (CHA23L14): an event timestamped late on the
+    `end_date` calendar day (e.g. 23:56:04) must not be excluded just because
+    its raw timestamp is later than midnight of `end_date`. The full calendar
+    day of `end_date` must be inclusive, matching `data_loader.filter_events`'s
+    floor-to-day convention.
+    """
+    raw_df = pd.DataFrame(
+        {
+            "CIRCUITO": ["LATE_IN_DAY"],
+            "FECHA": ["2026-03-01 23:56:04"],
+            "UITI_VANO": [10.0],
+        }
+    )
+
+    df_coords = compute_circuit_criticality_groups(raw_df, start_date="2026-01-01", end_date="2026-03-01")
+
+    assert "LATE_IN_DAY" in df_coords.index
+
+    # Cross-path parity (Spec Scenario 3): computing directly on the raw frame
+    # with dates passed in must agree with computing on a frame pre-filtered
+    # via `data_loader.filter_events` for the same window (dates not re-passed
+    # to the inner call, since the frame is already filtered).
+    from chec_local_interpreter.data_loader import filter_events
+
+    filtered_df = filter_events(raw_df, start_date="2026-01-01", end_date="2026-03-01")
+    df_coords_via_filter_events = compute_circuit_criticality_groups(filtered_df)
+
+    assert (
+        df_coords.loc["LATE_IN_DAY", "criticidad"]
+        == df_coords_via_filter_events.loc["LATE_IN_DAY", "criticidad"]
+    )
+
+
 def test_compute_circuit_criticality_groups_restores_global_rng_state():
     raw_df = _five_tier_raw_df()
 
