@@ -114,7 +114,7 @@ def compute_circuit_criticality_groups(raw_df, start_date=None, end_date=None):
       from CRITICALITY_GROUP_LABELS). Empty (same columns) if no data
       survives filtering.
     """
-    empty_columns = ["event_count", "uiti_vano_sum", "cluster", "criticidad"]
+    empty_columns = ["event_count", "uiti_vano_sum", "cluster", "criticidad", "centroid_distance"]
 
     df = raw_df.copy()
 
@@ -149,6 +149,7 @@ def compute_circuit_criticality_groups(raw_df, start_date=None, end_date=None):
     if df_coords.empty:
         df_coords['cluster'] = pd.Series(dtype=float)
         df_coords['criticidad'] = pd.Series(dtype=object)
+        df_coords['centroid_distance'] = pd.Series(dtype=float)
         df_coords.index.name = "CIRCUITO"
         return df_coords[empty_columns]
 
@@ -187,6 +188,17 @@ def compute_circuit_criticality_groups(raw_df, start_date=None, end_date=None):
     df_coords['criticidad'] = df_coords['cluster'].apply(
         lambda cluster_id: group_labels[sorted_clusters.index(cluster_id)]
     )
+
+    # Post-hoc centroid recompute (informe-gerencial, additive): does NOT
+    # change `run_kmeans`'s signature/return value. Centroids are the mean
+    # of each cluster's `X_scaled` points; `centroid_distance` is each
+    # circuit's Euclidean distance to its OWN cluster's centroid (most
+    # representative circuits have the smallest value).
+    cluster_labels = df_coords['cluster'].values
+    centroids = np.array([
+        X_scaled[cluster_labels == k].mean(axis=0) for k in range(n_clusters)
+    ])
+    df_coords['centroid_distance'] = np.linalg.norm(X_scaled - centroids[cluster_labels], axis=1)
 
     return df_coords[empty_columns]
 

@@ -98,7 +98,9 @@ def test_compute_circuit_criticality_groups_returns_expected_shape_and_labels():
     df_coords = compute_circuit_criticality_groups(raw_df)
 
     assert df_coords.index.name == "CIRCUITO"
-    assert set(df_coords.columns) == {"event_count", "uiti_vano_sum", "cluster", "criticidad"}
+    assert set(df_coords.columns) == {
+        "event_count", "uiti_vano_sum", "cluster", "criticidad", "centroid_distance",
+    }
 
     by_circuito = df_coords["criticidad"].to_dict()
     assert by_circuito["MUYALTA_1"] == "Muy Alta"
@@ -114,7 +116,9 @@ def test_compute_circuit_criticality_groups_empty_input_returns_empty_with_same_
     df_coords = compute_circuit_criticality_groups(empty_df)
 
     assert df_coords.empty
-    assert set(df_coords.columns) == {"event_count", "uiti_vano_sum", "cluster", "criticidad"}
+    assert set(df_coords.columns) == {
+        "event_count", "uiti_vano_sum", "cluster", "criticidad", "centroid_distance",
+    }
 
 
 def test_compute_circuit_criticality_groups_date_filter_excludes_out_of_window_rows():
@@ -144,3 +148,48 @@ def test_compute_circuit_criticality_groups_restores_global_rng_state():
     assert state_before[0] == state_after[0]
     assert np.array_equal(state_before[1], state_after[1])
     assert state_before[2:] == state_after[2:]
+
+
+# ---------------------------------------------------------------------------
+# centroid_distance (informe-gerencial change, Phase 1 task 1.1-1.3)
+# ---------------------------------------------------------------------------
+
+
+def test_compute_circuit_criticality_groups_centroid_distance_present_on_normal_group():
+    raw_df = _five_tier_raw_df()
+
+    df_coords = compute_circuit_criticality_groups(raw_df)
+
+    assert "centroid_distance" in df_coords.columns
+    assert len(df_coords["centroid_distance"]) == len(df_coords)
+    assert df_coords["centroid_distance"].notna().all()
+    assert (df_coords["centroid_distance"] >= 0).all()
+    # Non-trivial: distances are not all identical across a spread-out fixture.
+    assert df_coords["centroid_distance"].nunique() > 1
+
+
+def test_compute_circuit_criticality_groups_centroid_distance_present_on_empty_result():
+    empty_df = pd.DataFrame(columns=["CIRCUITO", "FECHA", "UITI_VANO"])
+
+    df_coords = compute_circuit_criticality_groups(empty_df)
+
+    assert df_coords.empty
+    assert "centroid_distance" in df_coords.columns
+
+
+def test_compute_circuit_criticality_groups_centroid_distance_populated_for_small_group():
+    raw_df = pd.concat(
+        [
+            _rows_for_circuit("SMALL_1", n_events=40, total_uiti=50000.0),
+            _rows_for_circuit("SMALL_2", n_events=20, total_uiti=5000.0),
+            _rows_for_circuit("SMALL_3", n_events=2, total_uiti=2.0),
+        ],
+        ignore_index=True,
+    )
+
+    df_coords = compute_circuit_criticality_groups(raw_df)
+
+    assert len(df_coords) == 3
+    assert "centroid_distance" in df_coords.columns
+    assert df_coords["centroid_distance"].notna().all()
+    assert (df_coords["centroid_distance"] >= 0).all()
