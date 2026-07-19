@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 from chec_local_interpreter.config import CriticalityThresholds
 from chec_local_interpreter.critical_points import (
@@ -10,6 +11,7 @@ from chec_local_interpreter.critical_points import (
     detect_point_reasons,
     rank_critical_points,
     robust_z,
+    scaled_max_critical_points,
 )
 
 
@@ -72,6 +74,22 @@ def test_build_daily_series_fills_missing_dates_without_quality_error():
     daily = build_daily_series(events)
     assert daily.shape[0] == 3
     assert daily.loc[1, "UITI_VANO"] == 0
+
+
+@pytest.mark.parametrize(
+    "fecha_inicio, fecha_fin, expected",
+    [
+        ("2026-01-01", "2026-01-31", 5),
+        ("2026-01-01", "2026-05-31", 5),
+        ("2026-01-01", "2026-06-30", 6),
+        ("2026-01-01", "2026-12-31", 12),
+        ("2025-01-01", "2026-12-31", 12),
+        ("2025-11-01", "2026-01-31", 5),
+        ("2026-03-15", "2026-03-15", 5),
+    ],
+)
+def test_scaled_max_critical_points_clamps_to_month_budget(fecha_inicio, fecha_fin, expected):
+    assert scaled_max_critical_points(fecha_inicio, fecha_fin) == expected
 
 
 def test_build_daily_series_counts_unique_fecha_values_as_events():

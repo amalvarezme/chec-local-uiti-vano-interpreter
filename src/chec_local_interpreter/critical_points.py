@@ -5,7 +5,11 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from chec_local_interpreter.config import CriticalityThresholds
+from chec_local_interpreter.config import (
+    CriticalityThresholds,
+    MAX_CRITICAL_POINTS,
+    MAX_CRITICAL_POINTS_CEILING,
+)
 from chec_local_interpreter.data_loader import numeric_series, resolve_column
 from chec_local_interpreter.event_counts import event_date_key
 
@@ -227,6 +231,21 @@ def _selection_reason_text(reasons: list[dict[str, Any]]) -> str:
     details = [str(item.get("detail") or "") for item in sorted(reasons, key=lambda item: item["score"], reverse=True)]
     details = [item for item in details if item]
     return " ".join(details[:2]) if details else "Seleccionado por el detector deterministico de puntos de interes."
+
+
+def scaled_max_critical_points(fecha_inicio: str, fecha_fin: str) -> int:
+    """Critical-point budget scaled to the analyzed window length.
+
+    One critical point per calendar month the interval touches (inclusive),
+    clamped to [MAX_CRITICAL_POINTS, MAX_CRITICAL_POINTS_CEILING] = [5, 12].
+    Short windows keep today's fixed floor of 5; multi-month windows scale
+    up; multi-year windows are capped. Assumes fecha_inicio <= fecha_fin
+    (guaranteed upstream by circuit_date_range / filter_events).
+    """
+    start = pd.to_datetime(fecha_inicio)
+    end = pd.to_datetime(fecha_fin)
+    months_touched = (end.year - start.year) * 12 + (end.month - start.month) + 1
+    return max(MAX_CRITICAL_POINTS, min(months_touched, MAX_CRITICAL_POINTS_CEILING))
 
 
 def rank_critical_points(

@@ -125,6 +125,7 @@ from chec_local_interpreter.critical_points import (
     detect_critical_periods,
     detect_point_reasons,
     rank_critical_points,
+    scaled_max_critical_points,
 )
 from chec_local_interpreter.data_loader import (
     available_circuits,
@@ -1339,7 +1340,7 @@ def prepare(
     feature_df = compute_daily_features(daily_df)
     thresholds = CriticalityThresholds()
     reasons = detect_point_reasons(feature_df, thresholds)
-    critical_points = rank_critical_points(feature_df, reasons, thresholds.max_points)
+    critical_points = rank_critical_points(feature_df, reasons, scaled_max_critical_points(start, end))
     critical_points = enrich_critical_points(events_df, critical_points)
     critical_periods = detect_critical_periods(feature_df, thresholds)
 

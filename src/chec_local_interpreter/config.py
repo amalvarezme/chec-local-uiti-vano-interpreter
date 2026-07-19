@@ -31,7 +31,12 @@ HIGH_PERCENTILE = 0.97
 TOP_CONTRIBUTOR_PCT = 0.10
 SUSTAINED_PERCENTILE = 0.80
 SUSTAINED_MIN_DAYS = 3
-MAX_CRITICAL_POINTS = 5
+MAX_CRITICAL_POINTS = 5  # Floor for the month-scaled critical-point budget
+# (scaled_max_critical_points). Also the default of
+# CriticalityThresholds.max_points, kept for the frozen dataclass / public
+# export; the real code path derives the count from the window.
+MAX_CRITICAL_POINTS_CEILING = 12  # Upper bound: caps long-window budgets to
+# protect LLM token + simulator cost.
 
 REQUIRED_COLUMNS = ("CIRCUITO", "FECHA", "UITI_VANO")
 
