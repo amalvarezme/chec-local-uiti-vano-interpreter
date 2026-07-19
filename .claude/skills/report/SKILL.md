@@ -12,6 +12,7 @@ metadata:
     - .claude/skills/inference/SKILL.md
     - .claude/skills/expert-alignment/SKILL.md
     - .claude/skills/auto-simulator/SKILL.md
+    - .claude/skills/vault-circuito/SKILL.md
 ---
 
 ## Overview
@@ -346,6 +347,20 @@ already completed — dispatch it alone, immediately once both are done, without
    call `web_export.export_latest_interpretability_report(html_path)` yourself when you actually
    want a given report to go live, never as an automatic side effect of generating one. Do not claim
    the report is final if any stage above raised and stopped the run early.
+9. **Vault note + graphify (post-report, alert-and-continue).** After step 8 has already reported the
+   HTML path — this step never blocks or delays that report — load
+   [`.claude/skills/vault-circuito/SKILL.md`](../vault-circuito/SKILL.md) with `circuito` and run its
+   two-step sequence: (1) project the run's 3 validated `*.out.json` narratives into
+   `reports/vault/<circuito>.md` via `chec_local_interpreter.vault_note_contract render <circuito>`
+   (upsert, latest-run-wins), then (2) chain the real `/graphify reports/vault --update` slash-command
+   so the vault stays incrementally indexed. Both the vault write and the graphify chain follow
+   **alert-and-continue**, never alert-and-stop: a `skipped_incomplete`/`usage_error`/
+   `execution_error` outcome from the vault projection, or a failure of the chained `/graphify`
+   invocation, is surfaced as a clear message but never rolls back the already-reported HTML from
+   step 8, never re-raises into this run, and never turns into a question back to the user. See
+   `vault-circuito/SKILL.md`'s own "Error handling summary" for the exact per-outcome behavior. This
+   step is additive only — it does not change step 8's own report or `report_pipeline.py`'s
+   `prepare`/`render` behavior in any way.
 
 ## Error handling summary
 
@@ -356,10 +371,13 @@ already completed — dispatch it alone, immediately once both are done, without
 | Zero events in window | Step 1 pre-flight (this Skill), re-checked by `prepare` | Alert at step 1, before any run_dir exists — same defense-in-depth as above via `prepare`'s `ReportPipelineError` |
 | Agent validation retries exhausted | Steps 3, 4, or 6 | Stop this circuit's run; surface the last `validate` errors; never invoke a later stage; never turn this into a follow-up question — report it and stop |
 | Missing/invalid validated output reaching a later stage | `prepare_expert_alignment` / `render` | `ReportPipelineError`; the affected artifact is never written |
+| Vault note projection or chained `/graphify --update` fails | Step 9 (`vault-circuito`) | **Alert-and-continue, NOT alert-and-stop** — step 8's HTML report already succeeded and is never rolled back; see `vault-circuito/SKILL.md`'s own error table |
 
 None of the rows above, nor any other mid-run condition, should turn into a question back to the
-user — the single checkpoint is step 1 only (see "Single user checkpoint" above). Every failure
-from step 2 onward is an alert-and-stop, not a prompt.
+user — the single checkpoint is step 1 only (see "Single user checkpoint" above). Every failure from
+step 2 through step 8 is an alert-and-stop, not a prompt; step 9 is the sole exception and is
+alert-and-continue by design (see step 9 above), since the report it might degrade has already
+completed successfully.
 
 ### Simulator degrade paths (NOT `ReportPipelineError`)
 
@@ -390,6 +408,9 @@ always continues, the report always generates:
     [`.claude/agents/inference.md`](../../agents/inference.md)
   - [`.claude/skills/expert-alignment/SKILL.md`](../expert-alignment/SKILL.md) /
     [`.claude/agents/expert-alignment.md`](../../agents/expert-alignment.md)
+- Post-report step 9 (alert-and-continue, additive only):
+  [`.claude/skills/vault-circuito/SKILL.md`](../vault-circuito/SKILL.md) /
+  [`src/chec_local_interpreter/vault_note_contract.py`](../../../src/chec_local_interpreter/vault_note_contract.py)
 - Binding invariants (shared with every agent role above): `.claude/agents/rules/invariants.md`
 - Architecture and envelope contract: `docs/agents-guide.md`
 - `notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb` — deleted; this Skill supersedes it

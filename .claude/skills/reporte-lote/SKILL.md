@@ -18,7 +18,7 @@ circuit in the dataset, for `todos`). It does not reimplement any part of the si
 pipeline. It owns exactly one thing `/report` does not: resolving a group slug to a concrete circuit
 list plus a shared dataset-wide date window, behind a single up-front confirmation. Once that
 checkpoint clears, this Skill loops over the resolved circuits and, for each one, runs
-[`report/SKILL.md`](../report/SKILL.md)'s existing Run-sequence steps 2-8 exactly as documented
+[`report/SKILL.md`](../report/SKILL.md)'s existing Run-sequence steps 2-9 exactly as documented
 there — by reference, never by copying or restating their prose. The one deliberate, explicitly
 scoped exception is how a per-circuit failure is handled inside this loop (see "Alert-and-continue
 override" below); `report/SKILL.md` itself is never edited and a standalone `/report` invocation is
@@ -59,7 +59,7 @@ Examples:
 
 The resolved circuit list, its count, and the resolved `fecha_inicio`/`fecha_fin` window are the
 **only** things this Skill ever corroborates with the user, and only **once**, before any circuit's
-`report/SKILL.md` steps 2-8 begin. Once that single checkpoint clears, the entire rest of the batch —
+`report/SKILL.md` steps 2-9 begin. Once that single checkpoint clears, the entire rest of the batch —
 every circuit's full run, in sequence, through to the final summary — proceeds **without asking the
 user anything else**. This holds even for `grupo=todos` regardless of how many circuits that
 resolves to: there is no per-circuit checkpoint, no "continue to the next one?", and no second
@@ -72,11 +72,11 @@ or the final batch summary.
 - **Bash** — restricted to invoking the shared batch contract's own verbs
   (`chec_local_interpreter.batch_report_contract preflight` / `write-manifest`, e.g. via `python -m
   chec_local_interpreter.batch_report_contract ...`) for this Skill's own step 1 and final summary
-  step, plus whatever Bash surface `report/SKILL.md` itself uses while its steps 2-8 run for the
+  step, plus whatever Bash surface `report/SKILL.md` itself uses while its steps 2-9 run for the
   current circuit (this Skill does not relax or widen that surface — see its own "Allowed tools").
   This Skill never gets a general shell — same structural guarantee as `report` and every agent role
   (`.claude/agents/rules/invariants.md`, Rule 1).
-- **Skill** — to invoke `report/SKILL.md`'s Run-sequence steps 2-8, per circuit, in the loop below.
+- **Skill** — to invoke `report/SKILL.md`'s Run-sequence steps 2-9, per circuit, in the loop below.
   `report/SKILL.md` governs its own further Bash/Skill/Read restrictions independently for those
   steps; this Skill does not bypass them.
 - **Read** — to inspect the batch contract's JSON output and any run_dir artifacts needed to report
@@ -114,35 +114,48 @@ Given `grupo` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
       confirmation before proceeding. This is the single checkpoint described above — do not repeat
       it, and do not add any other confirmation prompt later in the run, including per circuit.
 
-2. **Run `report/SKILL.md` steps 2-8 for each confirmed circuit, in order.** For each `circuito` in
+2. **Run `report/SKILL.md` steps 2-9 for each confirmed circuit, in order.** For each `circuito` in
    the confirmed `group.circuitos` list, sequentially (never in parallel across circuits — only the
    independent sub-steps *within* one circuit's own step 3/4/4b may run concurrently, exactly as
    `report/SKILL.md` already documents for those): execute
-   [`report/SKILL.md`](../report/SKILL.md)'s Run-sequence **steps 2 through 8 exactly as written
+   [`report/SKILL.md`](../report/SKILL.md)'s Run-sequence **steps 2 through 9 exactly as written
    there**, substituting the current `circuito` and this batch's already-resolved
    `fecha_inicio`/`fecha_fin` for `report/SKILL.md`'s own step-1 outputs. Do **not** run
    `report/SKILL.md`'s step 1 (its own argument validation/preflight/checkpoint) for any circuit —
    this Skill's step 1 above already replaced it for the whole batch. Every other instruction in
-   `report/SKILL.md`'s steps 2-8 — `prepare`, the historical/inference/auto-simulator dispatch and
+   `report/SKILL.md`'s steps 2-9 — `prepare`, the historical/inference/auto-simulator dispatch and
    its parallel-dispatch rule, the per-stage `record-usage`/`record-duration` capture,
-   `prepare_expert_alignment`, `expert-alignment`, and `render` — applies to each circuit's run
-   unchanged and in full.
+   `prepare_expert_alignment`, `expert-alignment`, `render`, and the step-9 vault-note +
+   `/graphify --update` chain (`vault-circuito/SKILL.md`) — applies to each circuit's run unchanged
+   and in full.
 
    **Alert-and-continue override (batch-only, scoped to this loop).** `report/SKILL.md`'s own "Error
    handling summary" table makes every step 2-8 failure (zero events in the window, a `prepare`/
    `prepare_expert_alignment`/`render` `ReportPipelineError`, or agent validation retries exhausted)
    an alert-and-**stop** for that single circuit's run. Inside this Skill's loop only, that becomes
-   alert-and-**continue**: on any such failure for `circuito`, append `{"circuito": <circuito>,
-   "status": "FAILED", "artifact_paths": [], "error": "<short failure reason>"}` to the in-memory
-   batch results list, do **not** stop the batch, and proceed immediately to the next circuito in the
-   list — never turn a per-circuit failure into a question back to the user. This override applies
-   **only** inside `/reporte-lote`'s own loop; it does not change one character of
+   alert-and-**continue**: on any such steps-2-8 failure for `circuito`, append `{"circuito":
+   <circuito>, "status": "FAILED", "artifact_paths": [], "error": "<short failure reason>"}` to the
+   in-memory batch results list, do **not** stop the batch, and proceed immediately to the next
+   circuito in the list — never turn a per-circuit failure into a question back to the user. This
+   override applies **only** inside `/reporte-lote`'s own loop; it does not change one character of
    `report/SKILL.md`'s file or behavior for a standalone `/report`/`/reporte` invocation, which
    remains alert-and-stop exactly as documented there.
 
-   On a circuit's successful completion of step 8, append `{"circuito": <circuito>, "status":
-   "SUCCESS", "artifact_paths": [<the returned HTML Path>], "error": null}` to the same in-memory
-   list instead.
+   **Step-9 degradation rule (manifest status stays `SUCCESS`).** Step 9 (`vault-circuito`) is
+   already alert-and-continue by its own design, standalone or batched — see `report/SKILL.md` step 9
+   and `vault-circuito/SKILL.md`'s error table. Inside this loop, a step-9 degradation for `circuito`
+   (vault note `skipped_incomplete`/`usage_error`/`execution_error`, or a failed chained `/graphify
+   reports/vault --update`) does **NOT** flip that circuit's batch status to `FAILED` — its report
+   HTML from steps 2-8 already succeeded. Instead, record the circuit `SUCCESS` exactly as on a clean
+   run, but append a short degradation note to its entry: `{"circuito": <circuito>, "status":
+   "SUCCESS", "artifact_paths": [<the returned HTML Path>], "error": null, "note": "<short step-9
+   degradation reason, e.g. 'vault note skipped_incomplete: missing historical.out.json' or 'graphify
+   --update failed: <reason>'>"}`. Only a steps-2-8 failure ever yields `FAILED`; a steps-2-8 success
+   followed by a step-9 degradation is always `SUCCESS` (+ note).
+
+   On a circuit's clean completion of step 9 with no degradation, append `{"circuito": <circuito>,
+   "status": "SUCCESS", "artifact_paths": [<the returned HTML Path>], "error": null}` to the same
+   in-memory list instead (no `note` key).
 
 3. **Summarize the batch and persist the manifest.** Once every circuit in `group.circuitos` has
    either succeeded or been recorded FAILED:
@@ -165,20 +178,25 @@ Given `grupo` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
 | Zero events anywhere in the resolved window (`execution_error`) | Step 1 preflight (this Skill) | Alert at step 1, before any run_dir exists, no confirmation requested |
 | Group resolves to zero circuits (`empty_group`) | Step 1 preflight (this Skill) | Alert at step 1, before any run_dir exists, no confirmation requested |
 | Any step 2-8 failure for one circuit (zero events in window, `ReportPipelineError`, agent validation retries exhausted) | Step 2 loop, per circuit | Recorded as `FAILED` with a reason in the batch results; the batch **continues** to the next circuit (see "Alert-and-continue override" above) — this is the one deliberate departure from `report/SKILL.md`'s own alert-and-stop table, scoped to this loop only |
+| Step 9 degradation for one circuit (vault note `skipped_incomplete`/`usage_error`/`execution_error`, or chained `/graphify --update` failure) — steps 2-8 already succeeded | Step 2 loop, per circuit | Recorded as `SUCCESS` with the returned HTML path AND a short degradation `note` appended (see "Step-9 degradation rule" above); the batch **continues** to the next circuit; this is NEVER `FAILED` |
 | Every circuit fails | Step 2 loop (all iterations) | Batch completes without crashing; step 3's summary and manifest list every circuit as `FAILED` with its reason |
 
 None of the rows above, nor any mid-batch condition, turns into a question back to the user — the
 single checkpoint is step 1.4 only (see "Single user checkpoint" above). Every failure from step 1's
-preflight is an alert-and-stop; every failure from step 2's per-circuit loop is an alert-and-continue
-recorded into the batch summary.
+preflight is an alert-and-stop; every steps-2-8 failure inside step 2's per-circuit loop is an
+alert-and-continue recorded as `FAILED`; every step-9-only degradation inside that same loop is an
+alert-and-continue recorded as `SUCCESS` with a degradation note.
 
 ## Related artifacts
 
 - Batch resolution contract (L1, pure Python, no LLM call anywhere in this module):
   [`src/chec_local_interpreter/batch_report_contract.py`](../../../src/chec_local_interpreter/batch_report_contract.py)
-- Per-circuit orchestrator, invoked by reference for steps 2-8 of every circuit in the batch:
+- Per-circuit orchestrator, invoked by reference for steps 2-9 of every circuit in the batch:
   [`.claude/skills/report/SKILL.md`](../report/SKILL.md) /
   [`src/chec_local_interpreter/report_pipeline.py`](../../../src/chec_local_interpreter/report_pipeline.py)
+- Step 9's own vault-note + graphify chaining, invoked transitively via `report/SKILL.md` step 9 for
+  every circuit in the batch: [`.claude/skills/vault-circuito/SKILL.md`](../vault-circuito/SKILL.md) /
+  [`src/chec_local_interpreter/vault_note_contract.py`](../../../src/chec_local_interpreter/vault_note_contract.py)
 - Shared criticality-group computation used by the batch contract:
   `plotting.compute_circuit_criticality_groups`
 - Structurally closest existing preflight-then-checkpoint Skill (frontmatter shape, Execution Steps
