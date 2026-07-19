@@ -9,6 +9,7 @@ metadata:
   canonical_contract: src/chec_local_interpreter/informe_gerencial_contract.py
   invokes_skills:
     - .claude/skills/report/SKILL.md
+    - .claude/skills/agrupamiento-circuitos/SKILL.md
 ---
 
 ## Overview
@@ -20,8 +21,11 @@ batch loop, or `compute_circuit_criticality_groups`'s clustering. It owns exactl
 three do not: sampling a group down to its 20 most representative circuits (by `centroid_distance`
 to their assigned cluster centroid), detecting which of those 20 are missing a prior `/report` run,
 gating on a single explicit confirmation before auto-triggering `/report` for the missing ones (by
-reference to [`report/SKILL.md`](../report/SKILL.md), never by copying its prose), loading each
-sampled circuit's narrative content, and assembling the cross-circuit synthesis (common patterns,
+reference to [`report/SKILL.md`](../report/SKILL.md), never by copying its prose), **always**
+rendering the standalone circuit-clustering chart for the confirmed window right after that same
+checkpoint (step 1.5, reusing `agrupamiento-circuitos`'s own shared contract by reference, never a
+second confirmation), loading each sampled circuit's narrative content, and assembling the
+cross-circuit synthesis (common patterns,
 notable outliers, aggregate/fleet-level risk, recommended actions) plus one embedded full-fleet
 clustering scatter into a single HTML page. `report/SKILL.md` is never edited and a standalone
 `/report`/`/reporte-lote` invocation is completely unaffected by this Skill's existence.
@@ -138,6 +142,20 @@ Given `grupo` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
       and get their confirmation before proceeding. This is the single checkpoint described above.
       If `missing_runs.count == 0`, this confirmation still covers proceeding straight to step 3 (no
       missing-run sub-list to show, but the checkpoint still applies before touching content/synthesis).
+   5. **Render the circuit-clustering chart for the confirmed window (always, no exceptions).**
+      Immediately once 1.4's confirmation clears — before step 2's missing-circuit auto-trigger (or,
+      when nothing is missing, before step 3) — run the same shared contract `agrupamiento-circuitos`
+      uses, directly by its render verb:
+      `PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.circuit_clustering_contract render <fecha_inicio> <fecha_fin> --runtime claude`.
+      Reuse this Skill's own already-resolved/confirmed `fecha_inicio`/`fecha_fin` from 1.2-1.4 — never
+      re-run `agrupamiento-circuitos`'s own preflight or its own confirmation prompt, since that would
+      ask the user to confirm the identical window a second time in the same checkpoint. Unconditional:
+      run it for every `/informe-gerencial` invocation regardless of `grupo`, including `todos`, and
+      independent of whether `missing_runs.count` is 0. A failure here is alert-and-**continue** (see
+      the Error handling summary below) — it never blocks or delays step 2/3. Report the returned
+      `output_html` path to the user alongside the step 1.4 confirmation summary. Note this is a
+      distinct artifact from the full-fleet scatter embedded inside the final managerial HTML by step
+      3 (see "Full-fleet scatter (non-negotiable)" below) — the two never substitute for each other.
 
 2. **Auto-trigger `/report` for each missing circuit, in order (only when `missing_runs.count > 0`
    and the user confirmed).** For each `circuito` in the confirmed `missing_runs.circuitos` list,
@@ -184,6 +202,7 @@ available — the report is never blocked by one circuit's missing content.
 | Zero events anywhere in the resolved window (`execution_error`) | Step 1 (this Skill) | Alert at step 1, before any confirmation is requested |
 | Group resolves to zero circuits (`empty_group`) | Step 1 (this Skill) | Alert at step 1, before any confirmation is requested |
 | User declines the confirmation | Step 1.4 | **Stop.** No `/report` auto-trigger, no synthesis, no HTML produced |
+| Circuit-clustering chart render fails (step 1.5) | Step 1.5 (this Skill) | Alert-and-**continue** — reported to the user, but never blocks or delays step 2/3 |
 | Any step 2-8 failure for one missing circuit | Step 2 loop, per circuit | Recorded and skipped; the loop **continues** to the next missing circuit (alert-and-continue, same departure `reporte-lote` documents, scoped to this loop only) |
 | A sampled circuit still has no content at render time | Step 3 (`load_circuit_content` returns `None`) | Annex entry marked "sin contenido disponible"; the report still renders for every other circuit |
 
@@ -216,6 +235,10 @@ the single checkpoint is step 1.4 only.
   bypass): `plotting.compute_circuit_criticality_groups`
 - Shared full-fleet clustering scatter, reused AS-IS with `highlighted_circuits`:
   `plotting.plot_interactive_circuit_clustering`
+- Standalone pre-batch clustering chart, invoked directly by its render verb in step 1.5 (distinct
+  from the full-fleet scatter embedded in the final HTML above):
+  [`.claude/skills/agrupamiento-circuitos/SKILL.md`](../agrupamiento-circuitos/SKILL.md) /
+  [`src/chec_local_interpreter/circuit_clustering_contract.py`](../../../src/chec_local_interpreter/circuit_clustering_contract.py)
 - Binding invariants (shared with every agent role/orchestrator above):
   `.claude/agents/rules/invariants.md`
 - Tests: `tests/test_informe_gerencial_contract.py` (sampling, group resolution, missing-run

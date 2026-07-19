@@ -9,6 +9,7 @@ metadata:
   canonical_contract: src/chec_local_interpreter/batch_report_contract.py
   invokes_skills:
     - .claude/skills/report/SKILL.md
+    - .claude/skills/agrupamiento-circuitos/SKILL.md
 ---
 
 ## Overview
@@ -17,8 +18,10 @@ metadata:
 circuit in the dataset, for `todos`). It does not reimplement any part of the single-circuit report
 pipeline. It owns exactly one thing `/report` does not: resolving a group slug to a concrete circuit
 list plus a shared dataset-wide date window, behind a single up-front confirmation. Once that
-checkpoint clears, this Skill loops over the resolved circuits and, for each one, runs
-[`report/SKILL.md`](../report/SKILL.md)'s existing Run-sequence steps 2-9 exactly as documented
+checkpoint clears, this Skill **always** renders the circuit-clustering chart for the confirmed
+window first (step 1.5, reusing `agrupamiento-circuitos`'s own shared contract by reference — never a
+second confirmation for the same window), then loops over the resolved circuits and, for each one,
+runs [`report/SKILL.md`](../report/SKILL.md)'s existing Run-sequence steps 2-9 exactly as documented
 there — by reference, never by copying or restating their prose. The one deliberate, explicitly
 scoped exception is how a per-circuit failure is handled inside this loop (see "Alert-and-continue
 override" below); `report/SKILL.md` itself is never edited and a standalone `/report` invocation is
@@ -113,6 +116,17 @@ Given `grupo` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
       count, and the full circuit list (`group.circuitos`) back to the user **once**, and get their
       confirmation before proceeding. This is the single checkpoint described above — do not repeat
       it, and do not add any other confirmation prompt later in the run, including per circuit.
+   5. **Render the circuit-clustering chart for the confirmed window (always, no exceptions).**
+      Immediately once 1.4's confirmation clears — before starting the circuit loop in step 2 — run
+      the same shared contract `agrupamiento-circuitos` uses, directly by its render verb:
+      `PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.circuit_clustering_contract render <fecha_inicio> <fecha_fin> --runtime claude`.
+      Reuse the batch's own already-resolved/confirmed `fecha_inicio`/`fecha_fin` from 1.2-1.4 —
+      never re-run `agrupamiento-circuitos`'s own preflight or its own confirmation prompt, since that
+      would ask the user to confirm the identical window a second time in the same checkpoint. This is
+      unconditional: run it for every `/reporte-lote` invocation regardless of `grupo`, including
+      `todos`. A failure here is alert-and-**continue** (see the Error handling summary below) — it
+      never blocks or delays the circuit loop in step 2. Report the returned `output_html` path to the
+      user alongside the step 1.4 confirmation summary, before the loop's per-circuit output begins.
 
 2. **Run `report/SKILL.md` steps 2-9 for each confirmed circuit, in order.** For each `circuito` in
    the confirmed `group.circuitos` list, sequentially (never in parallel across circuits — only the
@@ -177,6 +191,7 @@ Given `grupo` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
 | Lone date given | Step 1 (this Skill) | Usage error, no dataset load, no circuit runs |
 | Zero events anywhere in the resolved window (`execution_error`) | Step 1 preflight (this Skill) | Alert at step 1, before any run_dir exists, no confirmation requested |
 | Group resolves to zero circuits (`empty_group`) | Step 1 preflight (this Skill) | Alert at step 1, before any run_dir exists, no confirmation requested |
+| Circuit-clustering chart render fails (step 1.5) | Step 1.5 (this Skill) | Alert-and-**continue** — reported to the user, but never blocks or delays step 2's circuit loop |
 | Any step 2-8 failure for one circuit (zero events in window, `ReportPipelineError`, agent validation retries exhausted) | Step 2 loop, per circuit | Recorded as `FAILED` with a reason in the batch results; the batch **continues** to the next circuit (see "Alert-and-continue override" above) — this is the one deliberate departure from `report/SKILL.md`'s own alert-and-stop table, scoped to this loop only |
 | Step 9 degradation for one circuit (vault note `skipped_incomplete`/`usage_error`/`execution_error`, or chained `/graphify --update` failure) — steps 2-8 already succeeded | Step 2 loop, per circuit | Recorded as `SUCCESS` with the returned HTML path AND a short degradation `note` appended (see "Step-9 degradation rule" above); the batch **continues** to the next circuit; this is NEVER `FAILED` |
 | Every circuit fails | Step 2 loop (all iterations) | Batch completes without crashing; step 3's summary and manifest list every circuit as `FAILED` with its reason |
@@ -200,8 +215,10 @@ alert-and-continue recorded as `SUCCESS` with a degradation note.
 - Shared criticality-group computation used by the batch contract:
   `plotting.compute_circuit_criticality_groups`
 - Structurally closest existing preflight-then-checkpoint Skill (frontmatter shape, Execution Steps
-  numbering, Output Contract section):
-  [`.claude/skills/agrupamiento-circuitos/SKILL.md`](../agrupamiento-circuitos/SKILL.md)
+  numbering, Output Contract section), and the Skill whose shared render verb step 1.5 invokes
+  directly for the mandatory pre-batch clustering chart:
+  [`.claude/skills/agrupamiento-circuitos/SKILL.md`](../agrupamiento-circuitos/SKILL.md) /
+  [`src/chec_local_interpreter/circuit_clustering_contract.py`](../../../src/chec_local_interpreter/circuit_clustering_contract.py)
 - Binding invariants (shared with every agent role/orchestrator above):
   `.claude/agents/rules/invariants.md`
 - Tests: `tests/test_batch_report_contract.py` (argument/slug validation, group resolution, window
