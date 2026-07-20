@@ -411,6 +411,38 @@ over a shared contract that resolves the date window, asks the user to confirm i
 - Output: local standalone HTML only; no publishing and no site-asset mutation.
 - Plot source of truth: `src/chec_local_interpreter/plotting.py::plot_interactive_circuit_clustering`.
 
+### Pi compatibility mirrors for Claude-native entry points
+
+Pi now exposes thin compatibility wrappers for the existing Claude-native skills and agent roles.
+These Pi files do not introduce new business logic: each Pi skill points to the canonical Claude skill
+through `metadata.canonical_skill`, and each Pi role mirror tells the runner to read the canonical
+Claude role plus Claude skill for the full contract.
+
+#### Skill command equivalence
+
+| Capability | Claude Code | OpenCode | Pi / el Gentleman |
+|---|---|---|---|
+| Historical analysis | `.claude/skills/historical/SKILL.md` | `.opencode/agent/historical.md` | `/skill:historical` -> `.pi/skills/historical/SKILL.md` |
+| Inference analysis | `.claude/skills/inference/SKILL.md` | `.opencode/agent/inference.md` | `/skill:inference` -> `.pi/skills/inference/SKILL.md` |
+| Expert alignment | `.claude/skills/expert-alignment/SKILL.md` | `.opencode/agent/expert-alignment.md` | `/skill:expert-alignment` -> `.pi/skills/expert-alignment/SKILL.md` |
+| Auto simulator | `.claude/skills/auto-simulator/SKILL.md` | `.opencode/agent/auto-simulator.md` | `/skill:auto-simulator` -> `.pi/skills/auto-simulator/SKILL.md` |
+| PDF discussion extraction | `.claude/skills/pdf-discussion-extraction/SKILL.md` | `.opencode/agent/pdf-discussion-extraction.md` | `/skill:pdf-discussion-extraction` -> `.pi/skills/pdf-discussion-extraction/SKILL.md` |
+| Batch report | `/reporte-lote` -> `.claude/skills/reporte-lote/SKILL.md` | none | `/skill:reporte-lote` -> `.pi/skills/reporte-lote/SKILL.md` |
+| Managerial report | `/informe-gerencial` -> `.claude/skills/informe-gerencial/SKILL.md` | none | `/skill:informe-gerencial` -> `.pi/skills/informe-gerencial/SKILL.md` |
+
+#### Role mirror equivalence
+
+| Role | Claude Code role | OpenCode mirror | Pi mirror |
+|---|---|---|---|
+| `historical` | `.claude/agents/historical.md` | `.opencode/agent/historical.md` | `.pi/agents/historical.md` |
+| `inference` | `.claude/agents/inference.md` | `.opencode/agent/inference.md` | `.pi/agents/inference.md` |
+| `expert-alignment` | `.claude/agents/expert-alignment.md` | `.opencode/agent/expert-alignment.md` | `.pi/agents/expert-alignment.md` |
+| `auto-simulator` | `.claude/agents/auto-simulator.md` | `.opencode/agent/auto-simulator.md` | `.pi/agents/auto-simulator.md` |
+| `pdf-discussion-extraction` | `.claude/agents/pdf-discussion-extraction.md` | `.opencode/agent/pdf-discussion-extraction.md` | `.pi/agents/pdf-discussion-extraction.md` |
+
+In Pi, the intended flow is: invoke the thin `/skill:<name>` wrapper, then let that wrapper defer to
+Claude's canonical skill contract and the matching role mirror when the workflow needs an agent role.
+
 ## Follow-on (out of this slice)
 
 Agent2 (inference/SHAP) remains unported. The following items are explicitly deferred, listed
