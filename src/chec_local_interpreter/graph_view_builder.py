@@ -1,10 +1,15 @@
 """Scoped cross-circuit graph-view builder for `/informe-gerencial`'s step
 2.5.6 (design: "informe-gerencial-vault-graph-embed" D2/D4).
 
-Reads the shared `graphify-out/graph.json` (already refreshed by step 2.5's
-own `/graphify reports/vault --update`), filters it down to a sub-graph
-scoped to the batch's sampled circuits via a seed/bridge provenance predicate,
-and hands the result to `graphify.export.to_html` for rendering.
+Reads the isolated `reports/vault/graphify-out/graph.json` (a vault-only
+graph rebuilt fresh by step 2.5's own graphify invocation, scoped to its own
+working directory and never the project-root `graphify-out/graph.json`),
+filters it down to a sub-graph scoped to the batch's sampled circuits via a
+seed/bridge provenance predicate, and hands the result to
+`graphify.export.to_html` for rendering. The caller passes the graph path
+explicitly via `--graph-json`; this module has no opinion on which graph
+that is, so the isolation is enforced entirely by the caller (see
+`informe-gerencial/SKILL.md` step 2.5.2).
 
 This is the ONLY module in the `informe-gerencial-vault-graph-embed` feature
 that imports/calls `graphify` directly -- `informe_gerencial_contract.py`
@@ -68,6 +73,47 @@ def _provenance_basename(node_data: dict[str, Any]) -> str | None:
     return None
 
 
+def _circuit_communities(
+    subgraph: Any,
+    sampled_list: Sequence[str],
+) -> tuple[dict[int, list[str]], dict[int, str]]:
+    """Group `subgraph`'s retained nodes into one community PER SAMPLED
+    CIRCUIT, by the same provenance predicate `build_graph_view` uses for its
+    seed/bridge split -- never graphify's own topic-based `community`
+    clustering attribute (design: the exported HTML's "Communities" side
+    panel is a per-community checkbox filter, see `graphify.export.to_html`;
+    grouping it by circuit lets a manager toggle one circuit's nodes on/off
+    directly, which is the whole point of embedding this figure in a
+    cross-circuit report -- grouping it by graphify's own topic clusters
+    instead would neither match the panel's label to a circuit name nor let
+    the manager isolate one circuit's contribution).
+
+    Community ids are assigned in `sampled_list`'s order, so the panel is
+    stable/reproducible across runs. Any retained node whose own provenance
+    does not resolve to exactly one sampled circuit (a genuine bridge node
+    reached only via `>= 2` seed neighbors, with no single owning vault note)
+    falls into one trailing "Vinculos compartidos" community instead of being
+    silently left out of every group -- `graphify.export.to_html` colors an
+    ungrouped node as if it belonged to community 0, which would misattribute
+    it to the first circuit in the panel.
+    """
+    basename_to_circuit = {f"{canonical_circuit_identity(c)}.md": c for c in sampled_list}
+    circuit_index = {c: i for i, c in enumerate(sampled_list)}
+    shared_cid = len(sampled_list)
+
+    communities: dict[int, list[str]] = {}
+    for node_id, node_data in subgraph.nodes(data=True):
+        basename = _provenance_basename(node_data)
+        circuit = basename_to_circuit.get(basename) if basename else None
+        cid = circuit_index[circuit] if circuit is not None else shared_cid
+        communities.setdefault(cid, []).append(node_id)
+
+    labels = {circuit_index[c]: c for c in sampled_list}
+    if shared_cid in communities:
+        labels[shared_cid] = "Vinculos compartidos"
+    return communities, labels
+
+
 def build_graph_view(
     graph_json_path: str | Path,
     sampled: Sequence[str],
@@ -85,8 +131,10 @@ def build_graph_view(
     Predicate (design D2): `seed` = nodes whose provenance basename matches
     `<canonical_circuit_identity(c)>.md` for `c` in `sampled`; `bridge` =
     non-seed nodes with `>= 2` distinct seed neighbors; `keep = seed | bridge`,
-    induced subgraph on `keep`. Communities are reconstructed from `keep`'s
-    own `community` node attribute, skipping nodes with `community is None`.
+    induced subgraph on `keep`. The exported panel's communities are then
+    built PER CIRCUIT from `keep` via `_circuit_communities` (see there),
+    with `community_labels` passed through so the panel's checkboxes are
+    populated and labeled by circuit name.
     """
     sampled_list = list(sampled)
     if len(sampled_list) < 2:
@@ -126,14 +174,15 @@ def build_graph_view(
         keep = seed | bridge
         subgraph = graph.subgraph(keep).copy()
 
-        communities: dict[int, list[str]] = {}
-        for node_id in subgraph.nodes():
-            community = subgraph.nodes[node_id].get("community")
-            if community is None:
-                continue
-            communities.setdefault(int(community), []).append(node_id)
+        communities, community_labels = _circuit_communities(subgraph, sampled_list)
 
-        to_html(subgraph, communities, str(output_path), node_limit=node_limit)
+        to_html(
+            subgraph,
+            communities,
+            str(output_path),
+            community_labels=community_labels,
+            node_limit=node_limit,
+        )
     except Exception as exc:  # noqa: BLE001 -- graphify export must never propagate here
         return GraphViewOutcome(status="execution_error", errors=[str(exc)])
 

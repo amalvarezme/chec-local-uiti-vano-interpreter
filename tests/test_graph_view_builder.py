@@ -83,8 +83,11 @@ def realistic_graph_json_fixture() -> dict[str, Any]:
         _node("bridge_strong", source_file="llm/evals/run_llm_eval.py", community=3, label="bridge strong"),
         # Bridge candidate with only 1 seed neighbor -> excluded.
         _node("bridge_weak", source_file="llm/evals/other_module.py", community=3, label="bridge weak"),
-        # Retained bridge node (2 distinct seed neighbors) but with NO community
-        # -- exercises community reconstruction skipping `community=None`.
+        # Retained bridge node (2 distinct seed neighbors) whose own provenance
+        # (a non-vault-note file) resolves to no single sampled circuit --
+        # exercises the "Vinculos compartidos" shared-bucket fallback in
+        # `_circuit_communities`, regardless of its (now-unused-for-grouping)
+        # `community` attribute.
         _node("no_community_bridge", source_file="llm/evals/uncommunitied.py", community=None, label="no community bridge"),
         # Node from an UNSAMPLED circuit -- must be excluded entirely, even
         # though it carries an edge (to bridge_weak, itself excluded).
@@ -192,7 +195,7 @@ def test_build_graph_view_bridge_requires_two_seed_neighbors(tmp_path, monkeypat
     assert outcome.node_count == len(captured["nodes"])
 
 
-def test_build_graph_view_communities_reconstructed_from_retained_nodes(tmp_path, monkeypatch):
+def test_build_graph_view_communities_grouped_by_circuit(tmp_path, monkeypatch):
     graph_json_path = tmp_path / "graph.json"
     _write_graph_json(graph_json_path, realistic_graph_json_fixture())
     output_path = tmp_path / "graph-view.html"
@@ -200,7 +203,9 @@ def test_build_graph_view_communities_reconstructed_from_retained_nodes(tmp_path
     captured: dict[str, Any] = {}
 
     def _fake_to_html(G, communities, output, **kwargs):
+        captured["nodes"] = set(G.nodes())
         captured["communities"] = communities
+        captured["community_labels"] = kwargs.get("community_labels")
         Path(output).write_text("<html></html>", encoding="utf-8")
 
     monkeypatch.setattr(graph_view_builder, "to_html", _fake_to_html)
@@ -208,15 +213,64 @@ def test_build_graph_view_communities_reconstructed_from_retained_nodes(tmp_path
     build_graph_view(graph_json_path, SAMPLED, output_path)
 
     communities = captured["communities"]
-    # community 1 groups both cha seed nodes AND the fallback-matched node.
-    assert set(communities[1]) == {"cha_seed_1", "cha_seed_2", "cha_fallback"}
-    assert set(communities[2]) == {"don_seed_1", "don_seed_2"}
-    # bridge_strong (community 3) is retained and grouped.
-    assert "bridge_strong" in communities[3]
-    # no_community_bridge is retained (2 distinct seed neighbors) but its
-    # `community` attribute is None -- it must be excluded from every group.
+    # Community ids follow SAMPLED's order: CHA23L14 -> 0, DON23L13 -> 1.
+    # Community 0 groups both cha seed nodes AND the fallback-matched node.
+    assert set(communities[0]) == {"cha_seed_1", "cha_seed_2", "cha_fallback"}
+    assert set(communities[1]) == {"don_seed_1", "don_seed_2"}
+    # bridge_strong and no_community_bridge are retained (>=2 distinct seed
+    # neighbors) but neither has provenance matching a single sampled
+    # circuit -- both land in the trailing shared community (id == len(SAMPLED)).
+    shared_cid = len(SAMPLED)
+    assert set(communities[shared_cid]) == {"bridge_strong", "no_community_bridge"}
+    # Every retained node is grouped into exactly one community -- none left
+    # ungrouped (an ungrouped node would default to community 0's color in
+    # `graphify.export.to_html`, misattributing it to the first circuit).
     all_grouped_nodes = {node for members in communities.values() for node in members}
-    assert "no_community_bridge" not in all_grouped_nodes
+    assert all_grouped_nodes == captured["nodes"]
+
+    # community_labels names each circuit community by the circuit itself,
+    # and the shared bucket by its own label -- this is what populates the
+    # exported HTML's "Communities" panel checkboxes.
+    assert captured["community_labels"] == {
+        0: "CHA23L14",
+        1: "DON23L13",
+        shared_cid: "Vinculos compartidos",
+    }
+
+
+def test_build_graph_view_no_shared_bucket_when_no_bridge_nodes(tmp_path, monkeypatch):
+    graph_json_path = tmp_path / "graph.json"
+    _write_graph_json(
+        graph_json_path,
+        {
+            "directed": False,
+            "multigraph": False,
+            "graph": {},
+            "nodes": [
+                _node("cha_only", source_file="reports/vault/CHA23L14.md", community=1, label="cha only"),
+                _node("don_only", source_file="reports/vault/DON23L13.md", community=2, label="don only"),
+            ],
+            "links": [_link("cha_only", "don_only")],
+        },
+    )
+    output_path = tmp_path / "graph-view.html"
+
+    captured: dict[str, Any] = {}
+
+    def _fake_to_html(G, communities, output, **kwargs):
+        captured["communities"] = communities
+        captured["community_labels"] = kwargs.get("community_labels")
+        Path(output).write_text("<html></html>", encoding="utf-8")
+
+    monkeypatch.setattr(graph_view_builder, "to_html", _fake_to_html)
+
+    build_graph_view(graph_json_path, SAMPLED, output_path)
+
+    # No bridge/off-circuit node was retained -- the shared bucket (id ==
+    # len(SAMPLED)) must not appear at all, in `communities` or its labels.
+    shared_cid = len(SAMPLED)
+    assert shared_cid not in captured["communities"]
+    assert captured["community_labels"] == {0: "CHA23L14", 1: "DON23L13"}
 
 
 def test_build_graph_view_skipped_empty_too_few_sampled(tmp_path):

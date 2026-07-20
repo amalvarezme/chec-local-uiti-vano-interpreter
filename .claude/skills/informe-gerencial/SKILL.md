@@ -116,13 +116,15 @@ scatter itself.
 - **Skill** — to invoke `report/SKILL.md`'s Run-sequence steps 2-8 ONLY, per missing circuit, in step
   2's loop. `report/SKILL.md` governs its own further Bash/Skill/Read restrictions independently for
   those steps; this Skill does not bypass them.
-  - **`graphify/SKILL.md` carve-out, scoped to step 2.5 only** — `/graphify reports/vault --update`
-    (incremental refresh) and `/graphify query "<question>"` are invoked ONLY inside step 2.5, to
-    produce the cross-circuit graph-patterns JSON handed to step 3's `--graph-patterns`. This is the
-    ONLY place any LLM-assisted/graph tool is invoked in this Skill's entire run sequence; step 1, step
-    2's `/report` loop, and step 3's `render` verb never touch `graphify`. `informe_gerencial_contract.py`
-    itself never calls `graphify` or any LLM — it only reads the JSON file step 2.5 already wrote (design:
-    "LLM step lives in the SKILL runbook, file handoff to Python").
+  - **`graphify/SKILL.md` carve-out, scoped to step 2.5 only** — a full (non-incremental) graphify
+    rebuild scoped to `reports/vault` as graphify's OWN working directory (never `--update` against
+    the shared project-root graph — see step 2.5.2 for why) and `/graphify query "<question>"` are
+    invoked ONLY inside step 2.5, to produce the cross-circuit graph-patterns JSON handed to step 3's
+    `--graph-patterns`. This is the ONLY place any LLM-assisted/graph tool is invoked in this Skill's
+    entire run sequence; step 1, step 2's `/report` loop, and step 3's `render` verb never touch
+    `graphify`. `informe_gerencial_contract.py` itself never calls `graphify` or any LLM — it only
+    reads the JSON file step 2.5 already wrote (design: "LLM step lives in the SKILL runbook, file
+    handoff to Python").
     **Carve-out note:** step 2's new vault-population sub-step below directly calls
     `vault_note_contract.render(circuito)` — the same vault PROJECTION `report/SKILL.md`'s own step 9
     performs — but deliberately WITHOUT step 9's chained `/graphify` call. That duplicated projection is
@@ -221,17 +223,31 @@ Given `grupo` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
       entirely — cross-circuit comparison is meaningless for a single circuit — and proceed to step 3
       without a `--graph-patterns` path (the contract's own `n_sampled < 2` render state then omits the
       subsection; see `_graph_patterns_html`).
-   2. **Force a graph refresh:** run `/graphify reports/vault --update` (incremental — only new/changed
-      vault notes are re-extracted, so this stays cheap even on a large vault) BEFORE the query below.
-      `graphify`'s own `<path>` argument operates at directory granularity, not per-file, so
-      `reports/vault` (not the whole repo) is the scoping unit this step uses; combined with the
-      `--update` incremental behavior, only the sampled circuits' recently-written/updated notes
-      actually change what the graph has to say. If this refresh fails or times out, alert and
-      **continue** straight to step 3 with no `--graph-patterns` path (same alert-and-continue
-      convention step 1.5's chart render already uses) — never retry, never block.
-   3. **Query for recurring cross-circuit themes**, restricted to circuits that actually have a vault
-      note (drop any sampled circuit with none from the query's own input list — it simply does not
-      contribute a data point, the graph step still runs for the rest):
+   2. **Force a graph rebuild, fully isolated from the project-wide graph:** run the graphify pipeline
+      (`.claude/skills/graphify/SKILL.md`, by reference — same "by reference, never copying its prose"
+      convention step 2 uses for `/report`) with `reports/vault` as graphify's OWN working directory
+      AND input path (every bash block in that run executes with cwd `reports/vault`, `INPUT_PATH='.'`),
+      so its own `graphify-out/` lands at `reports/vault/graphify-out/graph.json` — structurally
+      identical in shape to the project-root `graphify-out/graph.json` an ordinary whole-project
+      `/graphify .` run produces, but a genuinely SEPARATE file, never read or written by that other
+      run, and never touched by anything outside this step. This is a deliberate full (non-incremental)
+      rebuild every invocation — never `--update` — because a scoped `--update` against a manifest that
+      was ever built from a wider scope is exactly the bug class this isolation exists to eliminate (a
+      prior run of this step, before this fix, misread ~271 unrelated project files as "deleted" and
+      would have pruned them from the shared project graph). The vault corpus is tiny (typically 4-12
+      short markdown notes, a few thousand words total) and graphify's own content-hash semantic-
+      extraction cache (Step 3 Part B0 of its own SKILL.md) still applies across runs regardless of
+      incremental vs. full mode, so this costs effectively nothing extra. If this rebuild fails, times
+      out, or hits graphify's own shrink-guard (a vault note was deleted since the last run and the new
+      graph would be smaller than the isolated graph already on disk), alert and **continue** straight
+      to step 3 with no `--graph-patterns` path (same alert-and-continue convention step 1.5's chart
+      render already uses) — never retry, never block, and NEVER fall back to reading the project-root
+      `graphify-out/graph.json` instead — that file is out of scope for this step, unconditionally.
+   3. **Query for recurring cross-circuit themes** against THIS isolated vault graph only (invoke
+      `graphify query` with `reports/vault` as its own working directory, same isolation as step 2.5.2
+      — never the project-root graph), restricted to circuits that actually have a vault note (drop any
+      sampled circuit with none from the query's own input list — it simply does not contribute a data
+      point, the graph step still runs for the rest):
       `/graphify query "temas recurrentes en <lista de circuitos muestreados con nota de bóveda>"`.
    4. **Parse the answer into the validated JSON shape** (`informe-gerencial-graph-patterns/v1`):
       `{"schema_version": "informe-gerencial-graph-patterns/v1", "query": "<the question asked>",
@@ -244,20 +260,23 @@ Given `grupo` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
       (creating the `.informe-gerencial/` directory if absent), then pass that exact path to step 3 as
       `--graph-patterns <path>`.
    6. **Build the scoped graph-view figure** (new sub-step, runs after the JSON write above, regardless
-      of whether steps 2.5.2-2.5.5 succeeded or degraded — it only needs the `graph.json` that step
-      2.5.2's `/graphify --update` refresh already produced on disk, whether from this run or a prior
-      one): run
+      of whether steps 2.5.2-2.5.5 succeeded or degraded — it only needs the isolated `graph.json` that
+      step 2.5.2's rebuild already produced on disk, whether from this run or a prior one): run
       `PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.graph_view_builder build --graph-json
-      <resolved graphify-out/graph.json path> --output
+      reports/vault/graphify-out/graph.json --output
       reports/interpretability/runs/.informe-gerencial/graph-view.<grupo>.<fecha_inicio>_<fecha_fin>.html
       --sampled <sampled circuits that have a vault note>`. This is a plain Python CLI invocation, never
       a `/graphify` slash-command call (see the Allowed-tools carve-out note above) — it reads the
-      already-refreshed `graph.json` file directly via `graphify.export.to_html`, isolated inside that
-      module only. On success, pass the written HTML path to step 3 as `--graph-view <path>`. On any
-      failure (`execution_error`, `skipped_empty`, or a non-zero exit), alert and **continue** straight
-      to step 3 with no `--graph-view` path — exactly the same alert-and-continue convention the
-      `/graphify`-refresh-fails row above already uses; the itemized graph-patterns list (if it built)
-      still renders, only the embedded figure is omitted.
+      isolated vault graph directly via `graphify.export.to_html`, isolated inside that module only,
+      and NEVER the project-root `graphify-out/graph.json`. The figure's "Communities" side panel is
+      grouped PER SAMPLED CIRCUIT (one toggleable checkbox per circuit, plus a shared bucket for any
+      bridge node with no single owning circuit) — never graphify's own topic-based clustering — so a
+      reader can isolate one circuit's contribution to the cross-circuit sub-graph. On success, pass
+      the written HTML path to
+      step 3 as `--graph-view <path>`. On any failure (`execution_error`, `skipped_empty`, or a non-zero
+      exit), alert and **continue** straight to step 3 with no `--graph-view` path — exactly the same
+      alert-and-continue convention the graph-rebuild-fails row above already uses; the itemized
+      graph-patterns list (if it built) still renders, only the embedded figure is omitted.
 
 3. **Load content, synthesize, and render the single HTML report.** Once step 2.5 has either produced a
    graph-patterns path and/or a graph-view path, or been skipped/failed (never blocks on either), run
@@ -298,25 +317,36 @@ section — `variable_groups_used`/`variables_a_priorizar` are never fabricated 
 
 Beyond the deterministic `patrones_comunes` (tallies of each circuit's OWN previously-produced
 technical fields), the final report's "Patrones cross-circuito (grafo)" subsection surfaces themes
-that recur ACROSS the sampled circuits' vault notes, mined by `/graphify query` over the vault's own
-knowledge graph — the one and only LLM-assisted step in this Skill's run sequence (see Allowed tools
+that recur ACROSS the sampled circuits' vault notes, mined by `/graphify query` over an isolated,
+vault-only knowledge graph (`reports/vault/graphify-out/graph.json`, rebuilt fresh every invocation —
+see step 2.5.2) — the one and only LLM-assisted step in this Skill's run sequence (see Allowed tools
 above). It degrades independently of every other section:
 
 | Condition | Behavior |
 |---|---|
 | Fewer than 2 circuits sampled | Step 2.5 is skipped outright; the subsection is omitted from the HTML entirely (no muted placeholder — cross-circuit comparison does not apply to a single circuit) |
 | One or more sampled circuits lack a vault note | Those circuits are excluded from the `/graphify query` input only; the step still runs for the remaining circuits with notes |
-| `/graphify reports/vault --update` fails or times out | Alert-and-**continue** straight to step 3 with no `--graph-patterns` path — the deterministic sections still render; subsection shows "análisis de grafo no disponible en esta corrida" |
+| The isolated vault-graph rebuild (step 2.5.2) fails, times out, or hits graphify's own shrink-guard | Alert-and-**continue** straight to step 3 with no `--graph-patterns` path — the deterministic sections still render; subsection shows "análisis de grafo no disponible en esta corrida" |
 | `/graphify query` returns nothing meeting `soporte >= 2` | The written JSON has an empty `patterns` list; subsection shows "sin patrones recurrentes con soporte >= 2" explicitly (never a silent omission) |
 | `graph_view_builder build` (sub-step 2.5.6) fails, or the sub-graph has no matched nodes | Alert-and-**continue** straight to step 3 with no `--graph-view` path — the itemized pattern list still renders (independently of this failure), only the embedded figure is omitted |
 
-**Known limitation (documented, not fixed by this change):** if a sampled circuit's vault note is
-deleted between the graph's last refresh and this run, `/graphify reports/vault --update`'s own
-incremental cache may not immediately reflect that deletion, so a stale pattern citing that circuit
-could still surface. `informe_gerencial_contract.load_graph_patterns` mitigates this at the boundary
-(it intersects every pattern's `circuitos` with the CURRENT `sampled` list and recomputes `soporte`
-from that intersection, dropping anything that falls below `>= 2`), but does not fully eliminate
-staleness sourced from `graphify`'s own incremental cache. This is a non-goal for this change.
+**Resolved limitation (formerly documented as a known limitation, fixed by the isolation change
+above):** the previous design ran `/graphify reports/vault --update` as an incremental refresh
+against a manifest that could be scoped wider than `reports/vault` (e.g. a whole-project graph built
+at repo root) — besides the staleness risk this created (a deleted vault note not immediately
+reflected by the incremental cache, so a stale pattern citing it could surface), a repo-root-anchored
+manifest diffed against a subfolder-scoped rescan could misinterpret unrelated project files as
+"deleted from scope" and prune real project-wide graph nodes on merge — a bug caught in production
+before it corrupted the shared graph. Rebuilding a genuinely isolated vault-only graph from scratch
+every invocation (step 2.5.2) eliminates both failure modes: there is no shared manifest to
+misdiagnose, and the graph always reflects exactly what is currently on disk in `reports/vault/`,
+never a stale incremental snapshot. `informe_gerencial_contract.load_graph_patterns` still additionally
+intersects every pattern's `circuitos` with the CURRENT `sampled` list and recomputes `soporte` from
+that intersection as defense-in-depth, but this is no longer compensating for a known staleness gap.
+The one residual behavior worth knowing: graphify's own shrink-guard can make a single invocation's
+rebuild fail loud (rather than silently corrupt) if the vault genuinely shrank since the last run
+(e.g. a circuit's vault note was deleted) — handled as an ordinary step 2.5 alert-and-continue case,
+per the table above.
 
 ## Error handling summary
 
@@ -332,7 +362,7 @@ staleness sourced from `graphify`'s own incremental cache. This is a non-goal fo
 | Vault-render failure (`usage_error`/`skipped_incomplete`/`execution_error`) for one circuit | Step 2 loop, vault-population sub-step | Alert-and-**continue** to the next missing circuit; that circuit's already-succeeded steps 2-8 report artifacts are NEVER rolled back |
 | Fewer than 2 circuits sampled | Step 2.5 (this Skill) | Step 2.5 skipped outright; graph subsection omitted entirely from the HTML, no error |
 | A sampled circuit has no vault note | Step 2.5 (this Skill) | That circuit excluded from the `/graphify query` input only; step 2.5 proceeds with the rest |
-| `/graphify reports/vault --update` or `/graphify query` fails/times out | Step 2.5 (this Skill) | Alert-and-**continue** to step 3 with no `--graph-patterns` path — deterministic sections still render, subsection shows "análisis de grafo no disponible en esta corrida" |
+| Isolated vault-graph rebuild (step 2.5.2) or `/graphify query` fails/times out/hits shrink-guard | Step 2.5 (this Skill) | Alert-and-**continue** to step 3 with no `--graph-patterns` path — deterministic sections still render, subsection shows "análisis de grafo no disponible en esta corrida" |
 | `/graphify query` returns nothing meeting `soporte >= 2` | Step 2.5 (this Skill) | Empty `patterns` list written; subsection explicitly states no recurring pattern was found, never a silent omission |
 | `graph_view_builder build` fails (sub-step 2.5.6) | Step 2.5 (this Skill) | Alert-and-**continue** to step 3 with no `--graph-view` path — list-only rendering if patterns succeeded, no figure; deterministic sections unaffected |
 | A sampled circuit still has no content at render time | Step 3 (`load_circuit_content` returns `None`) | Annex entry marked "sin contenido disponible"; the report still renders for every other circuit |
@@ -362,8 +392,11 @@ the single checkpoint is step 1.4 only.
   this feature that imports/calls `graphify.export.to_html` directly (a Python API call, not the
   `/graphify` slash-command) — `informe_gerencial_contract.py` only ever reads that module's already-
   written HTML file from disk.
-- Graph staleness from a vault note deleted between `/graphify reports/vault --update` runs (see
-  "Cross-circuit graph patterns (step 2.5)" above) is a documented known limitation, not fixed here.
+- The isolated vault graph (`reports/vault/graphify-out/graph.json`) is rebuilt fresh every
+  invocation and never merged with, read from, or written to the project-root `graphify-out/graph.json`
+  produced by an ordinary whole-project `/graphify .` run — see "Resolved limitation" under
+  "Cross-circuit graph patterns (step 2.5)" above for the incident that made this isolation
+  non-negotiable.
 
 ## Related artifacts
 
@@ -396,5 +429,6 @@ the single checkpoint is step 1.4 only.
   `render_and_write()` status matrices, path-injection rejection, `synthesize`/`render_managerial_report`
   section assembly including the 3-state graph-patterns subsection, full-fleet-highlight behavior, CLI
   verbs including `--graph-patterns`/`--graph-view`), `tests/test_graph_view_builder.py` (seed/bridge
-  sub-graph predicate, community reconstruction, oversize/malformed-input/never-raise behavior, CLI exit
-  codes)
+  sub-graph predicate, per-circuit community grouping for the embedded figure's "Communities" panel
+  — one toggleable group per sampled circuit plus a shared bucket for off-circuit bridge nodes, never
+  graphify's own topic-based clustering — oversize/malformed-input/never-raise behavior, CLI exit codes)
