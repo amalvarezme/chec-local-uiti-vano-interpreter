@@ -214,9 +214,12 @@ def test_load_circuit_content_vault_note_with_run_dir_populates_structured_field
             {
                 "ok": True,
                 "data": {
+                    "headline": "Evento crítico en DON23L13 el 2026-01-01.",
                     "cause_hypothesis_note": "Compatible con exposición a fauna.",
                     "recommended_actions": ["Verificar en campo."],
-                    "key_findings": [{"variable_groups_used": ["Entorno/Riesgo"]}],
+                    "key_findings": [
+                        {"title": "Fauna en zona de vano", "variable_groups_used": ["Entorno/Riesgo"]}
+                    ],
                 },
             }
         ),
@@ -228,6 +231,8 @@ def test_load_circuit_content_vault_note_with_run_dir_populates_structured_field
     assert result is not None
     assert result["source"] == "vault_note"
     assert result["content"] == "# Nota bóveda DON23L13"
+    assert result["headline"] == "Evento crítico en DON23L13 el 2026-01-01."
+    assert result["key_finding_titles"] == ["Fauna en zona de vano"]
     assert result["cause_hypothesis_note"] == "Compatible con exposición a fauna."
     assert result["variable_groups_used"] == ["Entorno/Riesgo"]
     assert result["variables_a_priorizar"] == [{"variable": "CNT_VN", "prioridad": "alta"}]
@@ -260,6 +265,8 @@ def test_load_circuit_content_vault_note_without_run_dir_parses_only_cause_hypot
     assert result["cause_hypothesis_note"] == "Compatible con exposición a fauna en los vanos implicados."
     assert result["variable_groups_used"] == []
     assert result["variables_a_priorizar"] == []
+    assert result["headline"] is None
+    assert result["key_finding_titles"] == []
 
 
 def test_load_circuit_content_falls_back_to_raw_json_when_vault_note_absent(tmp_path):
@@ -312,11 +319,12 @@ def test_load_circuit_content_surfaces_technical_fields_and_own_report_html(tmp_
             {
                 "ok": True,
                 "data": {
+                    "headline": "Falla recurrente de conductor en DON23L13.",
                     "cause_hypothesis_note": "Compatible con exposición a fauna y clima atmosférico.",
                     "recommended_actions": ["Verificar en campo el estado del conductor."],
                     "key_findings": [
-                        {"variable_groups_used": ["Topologia", "Entorno/Riesgo"]},
-                        {"variable_groups_used": ["Entorno/Riesgo"]},
+                        {"title": "Concentración topológica", "variable_groups_used": ["Topologia", "Entorno/Riesgo"]},
+                        {"title": "Recurrencia climática", "variable_groups_used": ["Entorno/Riesgo"]},
                     ],
                 },
             }
@@ -336,6 +344,8 @@ def test_load_circuit_content_surfaces_technical_fields_and_own_report_html(tmp_
 
     assert result is not None
     assert result["report_html"] == str(expected_html)
+    assert result["headline"] == "Falla recurrente de conductor en DON23L13."
+    assert result["key_finding_titles"] == ["Concentración topológica", "Recurrencia climática"]
     assert result["cause_hypothesis_note"] == "Compatible con exposición a fauna y clima atmosférico."
     assert result["recommended_actions"] == ["Verificar en campo el estado del conductor."]
     assert result["variable_groups_used"] == ["Topologia", "Entorno/Riesgo", "Entorno/Riesgo"]
@@ -756,14 +766,117 @@ def test_synthesize_returns_all_required_sections_with_real_content():
     assert missing_entry["report_html"] is None
     present_entry = next(e for e in result["anexo_por_circuito"] if e["circuito"] == "C01")
     assert present_entry["fuente"] == "vault_note"
-    assert "C01" in present_entry["extracto"] or "riesgo alto" in present_entry["extracto"]
+    assert any("C01" in line or "riesgo alto" in line for line in present_entry["resumen"])
 
 
-def test_annex_per_circuit_never_truncates_the_full_paragraph():
-    """A circuit's narrative summary must land in the annex whole -- cutting
-    it off mid-sentence is worse than a long paragraph.
+def test_annex_per_circuit_summary_uses_structured_findings_when_available():
+    """When headline/key_finding_titles/cause_hypothesis_note are available
+    (the normal case -- `load_circuit_content` always populates these via
+    `_structured_fields` when a run_dir is resolvable), the annex must show a
+    short, human-readable 3-4 line summary built from THOSE fields, never a
+    dump of the full raw narrative text.
     """
-    long_text = "Frase técnica extensa sobre causas y variables. " * 15  # ~735 chars, past the old 220-char cutoff
+    long_raw_text = "Frase técnica extensa sobre causas y variables. " * 15  # ~735 chars
+    sampled_records = _sampled_records([("C01", 40, 50000.0, "Muy Alta")])
+    loaded_content = [
+        {
+            "circuito": "C01",
+            "source": "vault_note",
+            "content": long_raw_text,
+            "headline": "Pico crítico el 2026-03-02 por falla de transformador.",
+            "key_finding_titles": [
+                "Concentración de UITI_VANO en un solo evento",
+                "Recurrencia de vanos en fallas de línea MT",
+            ],
+            "cause_hypothesis_note": "Posible degradación del transformador de distribución.",
+            "variables_a_priorizar": [{"variable": "CNT_TRF", "prioridad": "alta"}],
+        }
+    ]
+    group = {"slug": "muy-alta", "label": "Muy Alta", "circuit_count": 1}
+
+    result = synthesize(sampled_records, loaded_content, group)
+
+    entry = result["anexo_por_circuito"][0]
+    resumen = entry["resumen"]
+    assert isinstance(resumen, list)
+    assert 3 <= len(resumen) <= 4
+    assert any("Pico crítico" in line for line in resumen)
+    assert any("Concentración de UITI_VANO" in line for line in resumen)
+    # The full raw narrative text must never land verbatim in the summary --
+    # that is exactly the unreadable-table bug this behavior replaces.
+    assert not any(long_raw_text in line for line in resumen)
+    assert "resumen" in entry
+    assert "extracto" not in entry
+
+
+def test_annex_hypothesis_shown_complete_when_it_fits():
+    """A short cause_hypothesis_note (the common case) must land COMPLETE in
+    the annex, never truncated -- truncation is reserved for hypotheses that
+    genuinely exceed the ~4-line budget (see the next test).
+    """
+    short_cause = "Posible degradación del transformador de distribución."
+    sampled_records = _sampled_records([("C01", 40, 50000.0, "Muy Alta")])
+    loaded_content = [
+        {"circuito": "C01", "source": "vault_note", "content": "x", "cause_hypothesis_note": short_cause}
+    ]
+    group = {"slug": "muy-alta", "label": "Muy Alta", "circuit_count": 1}
+
+    result = synthesize(sampled_records, loaded_content, group)
+    resumen = result["anexo_por_circuito"][0]["resumen"]
+
+    hypothesis_line = next(line for line in resumen if line.startswith("Hipótesis de causa:"))
+    assert hypothesis_line == f"Hipótesis de causa: {short_cause}"
+    assert "…" not in hypothesis_line
+
+
+def test_annex_hypothesis_summarized_to_clause_boundary_when_too_long():
+    """A long, real-world-shaped hypothesis (multiple ';'-separated points
+    packed into one long sentence, as historical.out.json's agent output
+    actually produces) must be condensed to ~4 lines by keeping COMPLETE
+    clauses -- never cut off mid-word -- with a trailing ellipsis marking
+    the excerpt.
+    """
+    long_cause = (
+        "Dentro de las variables disponibles, el comportamiento del UITI_VANO es compatible "
+        "con una combinacion de dos mecanismos: (1) eventos puntuales de alta severidad, como "
+        "la falla de linea de media tension y contacto de fauna del 13 de abril de 2026 y el "
+        "evento de condiciones atmosfericas del 28 de febrero de 2026, ambos con alta duracion "
+        "acumulada segun las variables DURACION y DESC_CAUSA; y (2) una exposicion topologica "
+        "recurrente en un subconjunto reducido de vanos, compatible con las variables FID_VANO, "
+        "CNT_VN y LVSW del grupo Topologia. Las variables de Entorno/Riesgo, en particular NR_T "
+        "y DDT junto con las series de viento y precipitacion, son compatibles con un rol "
+        "modulador adicional sobre la frecuencia y severidad, pero el contexto entregado no "
+        "permite aislar su contribucion especifica por vano."
+    )
+    sampled_records = _sampled_records([("C01", 40, 50000.0, "Muy Alta")])
+    loaded_content = [
+        {"circuito": "C01", "source": "vault_note", "content": "x", "cause_hypothesis_note": long_cause}
+    ]
+    group = {"slug": "muy-alta", "label": "Muy Alta", "circuit_count": 1}
+
+    result = synthesize(sampled_records, loaded_content, group)
+    resumen = result["anexo_por_circuito"][0]["resumen"]
+
+    hypothesis_line = next(line for line in resumen if line.startswith("Hipótesis de causa:"))
+    body = hypothesis_line[len("Hipótesis de causa: ") :]
+
+    assert body != long_cause
+    assert body.endswith("…")
+    # Never mid-word: the kept text (minus the ellipsis) must be an exact
+    # prefix of the original, collapsed-whitespace hypothesis.
+    collapsed_original = " ".join(long_cause.split())
+    assert collapsed_original.startswith(body[:-1])
+    # Condensed to roughly a 4-line budget, not the ~900-char original.
+    assert len(body) <= 420
+
+
+def test_annex_per_circuit_summary_falls_back_to_shortened_raw_content():
+    """Without any structured fields (e.g. a vault note whose run_dir is no
+    longer resolvable), the annex falls back to a SHORTENED excerpt of the
+    raw content rather than showing nothing -- but it must be short, never
+    the full unreadable dump.
+    """
+    long_text = "Frase técnica extensa sobre causas y variables. " * 15  # ~735 chars
     sampled_records = _sampled_records([("C01", 40, 50000.0, "Muy Alta")])
     loaded_content = [{"circuito": "C01", "source": "raw_json", "content": long_text}]
     group = {"slug": "muy-alta", "label": "Muy Alta", "circuit_count": 1}
@@ -771,8 +884,10 @@ def test_annex_per_circuit_never_truncates_the_full_paragraph():
     result = synthesize(sampled_records, loaded_content, group)
 
     entry = result["anexo_por_circuito"][0]
-    assert entry["extracto"] == long_text.strip()
-    assert "…" not in entry["extracto"]
+    resumen = entry["resumen"]
+    assert isinstance(resumen, list) and resumen
+    assert all(len(line) <= 240 for line in resumen)
+    assert "…" in resumen[0]
 
 
 def test_synthesize_with_no_outliers_and_full_content_produces_empty_outlier_list():
@@ -897,6 +1012,8 @@ def test_render_managerial_report_embeds_scatter_and_all_sections():
         sampled=["MUYALTA_0", "MUYALTA_1"],
     )
 
+    assert "<title>Informe Gerencial: Circuitos con Criticidad Muy Alta</title>" in html
+    assert "<h1>Informe Gerencial: Circuitos con Criticidad Muy Alta</h1>" in html
     assert "Resumen ejecutivo" in html
     assert "Patrones comunes" in html
     assert "Circuitos atípicos" in html

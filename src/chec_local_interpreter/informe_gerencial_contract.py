@@ -249,11 +249,14 @@ def _cause_hypothesis_from_note(note_text: str) -> str | None:
 
 def _structured_fields(run_dir: Path) -> dict[str, Any]:
     """Extract `variables_a_priorizar` (expert-alignment) and
-    `cause_hypothesis_note`/`variable_groups_used`/`recommended_actions`
-    (historical) from `run_dir`'s own JSON artifacts -- the authoritative
-    source already on disk, shared by BOTH the vault-note and raw-JSON
-    branches of `load_circuit_content` (bugfix: the vault branch previously
-    hardcoded these to `None`/`[]` instead of reusing this same extraction).
+    `cause_hypothesis_note`/`variable_groups_used`/`recommended_actions`/
+    `headline`/`key_finding_titles` (historical) from `run_dir`'s own JSON
+    artifacts -- the authoritative source already on disk, shared by BOTH the
+    vault-note and raw-JSON branches of `load_circuit_content` (bugfix: the
+    vault branch previously hardcoded these to `None`/`[]` instead of reusing
+    this same extraction). `headline`/`key_finding_titles` feed the annex's
+    short human-readable summary (see `_annex_summary_lines`) so the
+    managerial report never has to dump a circuit's full raw narrative text.
     Never raises -- degrades to empty defaults on any missing/invalid data.
     """
     try:
@@ -270,6 +273,8 @@ def _structured_fields(run_dir: Path) -> dict[str, Any]:
     cause_hypothesis_note: str | None = None
     variable_groups_used: list[str] = []
     recommended_actions: list[str] = []
+    headline: str | None = None
+    key_finding_titles: list[str] = []
     try:
         historical_data = load_validated_agent_output(run_dir, "historical")
     except (ReportPipelineError, json.JSONDecodeError, UnicodeDecodeError, OSError):
@@ -277,14 +282,20 @@ def _structured_fields(run_dir: Path) -> dict[str, Any]:
     if historical_data:
         cause_hypothesis_note = historical_data.get("cause_hypothesis_note")
         recommended_actions = list(historical_data.get("recommended_actions") or [])
+        headline = historical_data.get("headline")
         for finding in historical_data.get("key_findings") or []:
             variable_groups_used.extend(finding.get("variable_groups_used") or [])
+            title = finding.get("title")
+            if title:
+                key_finding_titles.append(title)
 
     return {
         "cause_hypothesis_note": cause_hypothesis_note,
         "variable_groups_used": variable_groups_used,
         "variables_a_priorizar": variables_a_priorizar,
         "recommended_actions": recommended_actions,
+        "headline": headline,
+        "key_finding_titles": key_finding_titles,
     }
 
 
@@ -336,6 +347,8 @@ def load_circuit_content(
                 "variable_groups_used": [],
                 "variables_a_priorizar": [],
                 "recommended_actions": [],
+                "headline": None,
+                "key_finding_titles": [],
             }
         return {
             "circuito": circuito,
@@ -801,29 +814,127 @@ def _recommended_actions(
     return actions
 
 
+def _shorten(text: str, *, limit: int = 220) -> str:
+    """Collapse whitespace/newlines and truncate at a word boundary with an
+    ellipsis -- used only as a last-resort fallback when no structured
+    finding fields are available (see `_annex_summary_lines`), never for the
+    normal case where `headline`/`key_finding_titles` already are short.
+    """
+    collapsed = " ".join(text.split())
+    if len(collapsed) <= limit:
+        return collapsed
+    return collapsed[:limit].rsplit(" ", 1)[0].rstrip(",.;:") + "…"
+
+
+_HYPOTHESIS_LINE_BUDGET_CHARS = 400  # ~4 rendered lines at this table's column width/font size
+_CLAUSE_SPLIT_RE = re.compile(r"(?<=[.;])\s+")
+
+
+def _summarize_hypothesis(text: str, *, line_budget_chars: int = _HYPOTHESIS_LINE_BUDGET_CHARS) -> str:
+    """Present `cause_hypothesis_note` COMPLETE when it already fits within
+    `line_budget_chars` (~4 rendered lines); otherwise condense it to the
+    longest prefix of COMPLETE clauses (split on sentence/semicolon
+    boundaries -- this module's agent-authored hypotheses are often one long
+    enumerated sentence using ';' between points, not separate '.'-delimited
+    sentences) that fits the budget, so a long hypothesis is summarized to
+    ~4 lines without ever cutting off mid-word/mid-clause. Deterministic, no
+    LLM call (extractive clause selection, not paraphrasing) -- consistent
+    with this module's LLM-free design.
+
+    The first clause is ALWAYS included complete even if it alone exceeds
+    the budget (a slightly-over-budget complete clause reads better than a
+    truncated one); only as a genuine last resort, when clause-splitting
+    finds nothing at all, does this fall back to a word-boundary cut with an
+    ellipsis.
+    """
+    collapsed = " ".join(text.split())
+    if len(collapsed) <= line_budget_chars:
+        return collapsed
+
+    clauses = _CLAUSE_SPLIT_RE.split(collapsed)
+    kept: list[str] = []
+    total = 0
+    for clause in clauses:
+        added = len(clause) + (1 if kept else 0)
+        if kept and total + added > line_budget_chars:
+            break
+        kept.append(clause)
+        total += added
+
+    if not kept:
+        return collapsed[:line_budget_chars].rsplit(" ", 1)[0].rstrip(",.;:") + "…"
+
+    summary = " ".join(kept)
+    if summary != collapsed:
+        summary = summary.rstrip(".;") + "…"
+    return summary
+
+
+def _annex_summary_lines(content: dict[str, Any] | None) -> list[str]:
+    """Build a short, human-readable 3-4 line summary of a circuit's main
+    findings for the managerial annex, from already-extracted structured
+    fields (`headline`, `key_finding_titles`, `cause_hypothesis_note`,
+    `variables_a_priorizar`) -- NEVER the full raw vault-note/report
+    narrative text, which can run to many paragraphs and is unreadable
+    inside a table cell (this replaces the previous `extracto` field, which
+    dumped that full text verbatim).
+    """
+    if content is None:
+        return ["Sin contenido disponible."]
+
+    lines: list[str] = []
+
+    headline = content.get("headline")
+    if headline:
+        lines.append(str(headline))
+
+    for title in (content.get("key_finding_titles") or [])[:2]:
+        lines.append(f"Hallazgo: {title}")
+
+    cause = content.get("cause_hypothesis_note")
+    if cause and len(lines) < 4:
+        lines.append(f"Hipótesis de causa: {_summarize_hypothesis(cause)}")
+
+    if len(lines) < 4:
+        variables = [
+            item.get("variable")
+            for item in (content.get("variables_a_priorizar") or [])
+            if item.get("variable")
+        ][:3]
+        if variables:
+            lines.append(f"Variables priorizadas: {', '.join(variables)}")
+
+    if not lines:
+        # No structured fields recovered at all (e.g. a vault note whose
+        # run_dir is no longer resolvable) -- fall back to a SHORTENED
+        # excerpt of the raw content rather than showing nothing, but never
+        # the full unreadable dump.
+        raw = str(content.get("content", "")).strip()
+        lines.append(_shorten(raw) if raw else "Sin hallazgos estructurados disponibles.")
+
+    return lines[:4]
+
+
 def _annex_per_circuit(
     sampled_records: Sequence[dict[str, Any]], loaded_content: Sequence[dict[str, Any] | None]
 ) -> list[dict[str, Any]]:
-    """Build the per-circuit annex row: `extracto` is the FULL narrative
-    summary (never truncated -- a cut-off paragraph is worse than a long
-    one), and `report_html` is the ONLY file this module cites to the user
-    (the circuit's own rendered `/report`, never the internal JSON/markdown
-    run artifacts `fuente` merely categorizes internally).
+    """Build the per-circuit annex row: `resumen` is a short (3-4 line),
+    human-readable summary of the circuit's main findings (see
+    `_annex_summary_lines`), and `report_html` is the ONLY file this module
+    cites to the user for the complete report (the circuit's own rendered
+    `/report`, never the internal JSON/markdown run artifacts `fuente`
+    merely categorizes internally).
     """
     annex: list[dict[str, Any]] = []
     for record, content in zip(sampled_records, loaded_content):
-        if content is None:
-            fuente, extracto, report_html = "sin_contenido", "Sin contenido disponible.", None
-        else:
-            fuente = content.get("source", "desconocido")
-            extracto = str(content.get("content", "")).strip()
-            report_html = content.get("report_html")
+        fuente = content.get("source", "desconocido") if content else "sin_contenido"
+        report_html = content.get("report_html") if content else None
         annex.append(
             {
                 "circuito": record["circuito"],
                 "criticidad": record.get("criticidad"),
                 "fuente": fuente,
-                "extracto": extracto,
+                "resumen": _annex_summary_lines(content),
                 "report_html": report_html,
             }
         )
@@ -1050,13 +1161,15 @@ def _annex_html(annex: Sequence[dict[str, Any]]) -> str:
         f"<td>{_escape(entry['circuito'])}</td>"
         f"<td>{_escape(entry.get('criticidad'))}</td>"
         f"<td>{_report_reference_html(entry.get('report_html'))}</td>"
-        f"<td>{_escape(entry['extracto'])}</td>"
+        f"<td><ul class='annex-summary'>"
+        f"{''.join(f'<li>{_escape(line)}</li>' for line in entry['resumen'])}"
+        f"</ul></td>"
         "</tr>"
         for entry in annex
     )
     return (
         "<table class='annex-table'><thead><tr>"
-        "<th>Circuito</th><th>Criticidad</th><th>Informe del circuito</th><th>Resumen completo</th>"
+        "<th>Circuito</th><th>Criticidad</th><th>Informe del circuito</th><th>Hallazgos principales</th>"
         f"</tr></thead><tbody>{rows}</tbody></table>"
     )
 
@@ -1070,6 +1183,8 @@ h2 { font-size: 1.2rem; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; }
 .muted { color: #94a3b8; font-style: italic; }
 .annex-table { width: 100%; border-collapse: collapse; }
 .annex-table th, .annex-table td { border: 1px solid #e2e8f0; padding: 6px 8px; text-align: left; font-size: 0.9rem; vertical-align: top; }
+.annex-summary { margin: 0; padding-left: 1.1rem; }
+.annex-summary li { margin: 2px 0; }
 .badge-llm { display: inline-block; background: #ede9fe; color: #5b21b6; border-radius: 999px; padding: 2px 10px; font-size: 0.75rem; font-weight: 600; margin: 0 0 8px; }
 .badge-deterministic { display: inline-block; background: #dcfce7; color: #166534; border-radius: 999px; padding: 2px 10px; font-size: 0.75rem; font-weight: 600; margin: 0 0 8px; }
 """
@@ -1113,11 +1228,11 @@ def render_managerial_report(
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<title>Informe Gerencial - {_escape(label)}</title>
+<title>Informe Gerencial: Circuitos con Criticidad {_escape(label)}</title>
 <style>{_REPORT_CSS}</style>
 </head>
 <body>
-<h1>Informe Gerencial: {_escape(label)}</h1>
+<h1>Informe Gerencial: Circuitos con Criticidad {_escape(label)}</h1>
 <p class="meta">Ventana: {_escape(resolved_window.get('fecha_inicio'))} a {_escape(resolved_window.get('fecha_fin'))}
 &middot; Circuitos muestreados: {len(sampled)} de {circuit_count}</p>
 
