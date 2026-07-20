@@ -416,6 +416,26 @@ def load_graph_patterns(
     return result
 
 
+def load_graph_view(path: str | Path | None) -> str | None:
+    """Load the raw HTML text produced by `graph_view_builder build` (step
+    2.5.6), if any -- pure I/O, no `graphify` import/call here (non-goal:
+    this module stays graphify-free), never raises (threat matrix: path
+    injection via `--graph-view`):
+    - `path is None` or the file does not exist -> `None`.
+    - unreadable (`OSError`/decode failure) -> `None`.
+    - readable -> the raw HTML text, verbatim, for `_iframe_srcdoc` to embed.
+    """
+    if path is None:
+        return None
+    candidate = Path(path)
+    if not candidate.is_file():
+        return None
+    try:
+        return candidate.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Phase 4: request/outcome contract + resolve() + CLI
 # ---------------------------------------------------------------------------
@@ -933,6 +953,21 @@ def _escape(value: Any) -> str:
     return html_lib.escape("" if value is None else str(value))
 
 
+def _iframe_srcdoc(html: str, *, height: int = 620) -> str:
+    """Wrap `html` in a self-contained `<iframe srcdoc="...">` embed -- a
+    small, deliberate 4-line duplicate of `plotting.py`'s own nested
+    `_iframe_srcdoc` closure (design D3), reusing THIS module's own
+    `_escape` rather than importing from `plotting.py` (that closure is not
+    importable without a `plotting.py` refactor, explicitly out of scope).
+    """
+    if not html:
+        return ""
+    return (
+        f"<iframe class='embedded-map-frame' srcdoc=\"{_escape(html)}\" "
+        f"loading='lazy' style='width:100%;height:{height}px;border:0;background:#ffffff;'></iframe>"
+    )
+
+
 def _list_html(items: Sequence[str]) -> str:
     if not items:
         return "<p class='muted'>Sin hallazgos.</p>"
@@ -958,16 +993,25 @@ def _report_reference_html(report_html: str | None) -> str:
     return _escape(Path(report_html).name)
 
 
-def _graph_patterns_html(graph_patterns: list[dict[str, Any]] | None, *, n_sampled: int) -> str:
-    """Render the "Patrones cross-circuito (grafo)" subsection per the 3
-    render states (design: "Section always assembled in Python, 3 render
-    states"): omitted entirely when `n_sampled < 2` (empty string, caller
-    skips the whole `<section>`); muted "not available this run" when the
-    step never produced a file (`graph_patterns is None`); muted "no
-    recurring pattern" when it ran but produced nothing meeting min-support
-    (`graph_patterns == []`); otherwise the populated pattern list, always
-    carrying the visible LLM-assisted provenance badge (spec: "Provenance
-    labeling of the graph subsection").
+def _graph_patterns_html(
+    graph_patterns: list[dict[str, Any]] | None,
+    graph_view_html: str | None,
+    *,
+    n_sampled: int,
+) -> str:
+    """Render the "Patrones cross-circuito (grafo)" subsection per the render
+    states (design: "Section always assembled in Python" / D5 "3-way graph-
+    embed state"): omitted entirely when `n_sampled < 2` (empty string,
+    caller skips the whole `<section>`); muted "not available this run" when
+    the patterns step never produced a file (`graph_patterns is None`);
+    muted "no recurring pattern" when it ran but produced nothing meeting
+    min-support (`graph_patterns == []`); otherwise the populated itemized
+    pattern list, always carrying the visible LLM-assisted provenance badge
+    (spec: "Provenance labeling of the graph subsection") -- PLUS, only when
+    the itemized list itself is populated, the embedded `graph_view_html`
+    figure (`_iframe_srcdoc`) when available, or a muted "figure not
+    available this run" indicator when it is not (independent degradation
+    from the patterns list, design D5/spec "Graceful degradation").
     """
     if n_sampled < 2:
         return ""
@@ -986,6 +1030,10 @@ def _graph_patterns_html(graph_patterns: list[dict[str, Any]] | None, *, n_sampl
             for pattern in graph_patterns
         )
         body = f"<ul>{rows}</ul>"
+        if graph_view_html:
+            body += _iframe_srcdoc(graph_view_html)
+        else:
+            body += "<p class='muted'>figura de grafo no disponible en esta corrida.</p>"
 
     return f"""
 <section class="report-section">
@@ -1035,6 +1083,7 @@ def render_managerial_report(
     resolved_window: dict[str, Any],
     sampled: Sequence[str],
     graph_patterns: list[dict[str, Any]] | None = None,
+    graph_view_html: str | None = None,
 ) -> str:
     """Render the single standalone HTML report (spec: "Single HTML output
     per invocation") -- resumen/patrones/outliers/riesgo/acciones sections
@@ -1058,7 +1107,7 @@ def render_managerial_report(
 
     label = group.get("label") or group.get("slug") or "grupo"
     circuit_count = group.get("circuit_count", len(sampled))
-    graph_section_html = _graph_patterns_html(graph_patterns, n_sampled=len(sampled))
+    graph_section_html = _graph_patterns_html(graph_patterns, graph_view_html, n_sampled=len(sampled))
 
     return f"""<!DOCTYPE html>
 <html lang="es">
@@ -1120,6 +1169,7 @@ def render_and_write(
     vault_root: str | Path | None = None,
     output_root: str | Path | None = None,
     graph_patterns_path: str | Path | None = None,
+    graph_view_path: str | Path | None = None,
 ) -> InformeGerencialOutcome:
     """Full render pipeline: re-resolve the SAME deterministic group/window/
     sampling as `resolve()` (K-Means is seeded, so the sampled set is
@@ -1179,6 +1229,7 @@ def render_and_write(
         load_circuit_content(circuito, runs_root=runs_root, vault_root=vault_root) for circuito in sampled
     ]
     graph_patterns = load_graph_patterns(graph_patterns_path, sampled)
+    graph_view_html = load_graph_view(graph_view_path)
 
     synthesis = synthesize(sampled_records, loaded_content, group)
     html = render_managerial_report(
@@ -1188,6 +1239,7 @@ def render_and_write(
         resolved_window=resolved_window,
         sampled=sampled,
         graph_patterns=graph_patterns,
+        graph_view_html=graph_view_html,
     )
 
     try:
@@ -1246,6 +1298,7 @@ def _build_parser() -> argparse.ArgumentParser:
     render_command.add_argument("--vault-root")
     render_command.add_argument("--output-root")
     render_command.add_argument("--graph-patterns")
+    render_command.add_argument("--graph-view")
 
     return parser
 
@@ -1296,6 +1349,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             vault_root=args.vault_root,
             output_root=args.output_root,
             graph_patterns_path=args.graph_patterns,
+            graph_view_path=args.graph_view,
         )
         print(outcome.to_json_text())
         return 0 if outcome.status == "success" else 2

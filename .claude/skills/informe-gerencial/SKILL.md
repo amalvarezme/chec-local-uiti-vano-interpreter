@@ -79,9 +79,11 @@ This Skill has exactly **one** interactive checkpoint, and it fires only when ne
   `/reporte-lote` uses once its own single checkpoint clears.
 - If ANY sampled circuit has no prior run, state the missing **count** and the **list of missing
   circuit names** to the user **once**, and require explicit confirmation before auto-triggering
-  `report/SKILL.md`'s Run-sequence steps 2-8 (including its sub-step 4b, the auto-simulator dispatch
-  — nine distinct actions in total per that Skill's own numbering) for those circuits only. If the
-  user declines, **stop here** — do not trigger any missing pipeline and do not proceed to synthesis.
+  `report/SKILL.md`'s Run-sequence steps 2-8 ONLY (including its sub-step 4b, the auto-simulator
+  dispatch — nine distinct actions in total per that Skill's own numbering; step 9, the
+  vault-note-plus-chained-`/graphify` projection, is deliberately excluded here — see step 2's own
+  vault-population sub-step below) for those circuits only. If the user declines, **stop here** — do
+  not trigger any missing pipeline and do not proceed to synthesis.
 
 This mirrors the `awaiting_confirmation` → `confirm`/`confirm_and_trigger_missing` contract shape
 `informe_gerencial_contract.resolve()` already returns, and the exact same single-checkpoint UX
@@ -103,14 +105,17 @@ scatter itself.
 - **Bash** — restricted to invoking the shared contract's own verbs
   (`chec_local_interpreter.informe_gerencial_contract resolve` / `render`, e.g. via `python -m
   chec_local_interpreter.informe_gerencial_contract ...`) for this Skill's own steps 1 and 3, plus
-  whatever Bash surface `report/SKILL.md` itself uses while its steps 2-8 run for a missing circuit in
-  step 2 below. This Skill never gets a general shell — same structural guarantee as `report` and
+  whatever Bash surface `report/SKILL.md` itself uses while its steps 2-8 (ONLY — never its step 9) run
+  for a missing circuit in step 2 below, plus this Skill's own two additional direct CLI verbs: `python
+  -m chec_local_interpreter.vault_note_contract render <circuito>` (step 2's new vault-population
+  sub-step) and `python -m chec_local_interpreter.graph_view_builder build ...` (step 2.5's new
+  sub-step). This Skill never gets a general shell — same structural guarantee as `report` and
   `reporte-lote` (`.claude/agents/rules/invariants.md`, Rule 1). No subprocess/shell string-building
   happens in Python anywhere in this flow: `report/SKILL.md`'s steps are invoked by-reference through
   the Skill tool, never assembled into a shell command from user-controlled text.
-- **Skill** — to invoke `report/SKILL.md`'s Run-sequence steps 2-8, per missing circuit, in step 2's
-  loop. `report/SKILL.md` governs its own further Bash/Skill/Read restrictions independently for those
-  steps; this Skill does not bypass them.
+- **Skill** — to invoke `report/SKILL.md`'s Run-sequence steps 2-8 ONLY, per missing circuit, in step
+  2's loop. `report/SKILL.md` governs its own further Bash/Skill/Read restrictions independently for
+  those steps; this Skill does not bypass them.
   - **`graphify/SKILL.md` carve-out, scoped to step 2.5 only** — `/graphify reports/vault --update`
     (incremental refresh) and `/graphify query "<question>"` are invoked ONLY inside step 2.5, to
     produce the cross-circuit graph-patterns JSON handed to step 3's `--graph-patterns`. This is the
@@ -118,10 +123,19 @@ scatter itself.
     2's `/report` loop, and step 3's `render` verb never touch `graphify`. `informe_gerencial_contract.py`
     itself never calls `graphify` or any LLM — it only reads the JSON file step 2.5 already wrote (design:
     "LLM step lives in the SKILL runbook, file handoff to Python").
+    **Carve-out note:** step 2's new vault-population sub-step below directly calls
+    `vault_note_contract.render(circuito)` — the same vault PROJECTION `report/SKILL.md`'s own step 9
+    performs — but deliberately WITHOUT step 9's chained `/graphify` call. That duplicated projection is
+    a direct Python/CLI render call, not a `/graphify` invocation, so this invariant ("step 2.5 is the
+    ONLY place any LLM-assisted/graph tool is invoked") stays true; step 2.5's new sub-step 2.5.6
+    (`graph_view_builder build`, see below) is likewise a plain CLI verb over an already-refreshed
+    `graph.json`, not a `/graphify` call itself, so it does not violate this invariant either.
 - **Read** — to inspect the contract's JSON output and the final rendered HTML path.
 - **Write** — scoped to step 2.5 only, to persist the agent-authored graph-patterns JSON to
-  `reports/interpretability/runs/.informe-gerencial/graph-patterns.<grupo>.<win>.json` before step 3
-  reads it back.
+  `reports/interpretability/runs/.informe-gerencial/graph-patterns.<grupo>.<win>.json` and the
+  `graph_view_builder`-produced graph-view HTML to
+  `reports/interpretability/runs/.informe-gerencial/graph-view.<grupo>.<win>.html` before step 3 reads
+  them back.
 
 ## Run sequence
 
@@ -171,17 +185,32 @@ Given `grupo` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
 2. **Auto-trigger `/report` for each missing circuit, in order (only when `missing_runs.count > 0`
    and the user confirmed).** For each `circuito` in the confirmed `missing_runs.circuitos` list,
    sequentially: execute [`report/SKILL.md`](../report/SKILL.md)'s Run-sequence **steps 2 through 8
-   exactly as written there** (including its sub-step 4b), substituting the current `circuito` and
-   THIS Skill's already-resolved `fecha_inicio`/`fecha_fin` for `report/SKILL.md`'s own step-1
-   outputs — no per-circuit re-preflight, no new date window. Do **not** run `report/SKILL.md`'s step
-   1 for any circuit; this Skill's step 1 already replaced it for the whole group.
+   exactly as written there, and NO FURTHER** (including its sub-step 4b, but explicitly stopping
+   before its own step 9 — see the vault-population sub-step below), substituting the current
+   `circuito` and THIS Skill's already-resolved `fecha_inicio`/`fecha_fin` for `report/SKILL.md`'s own
+   step-1 outputs — no per-circuit re-preflight, no new date window. Do **not** run `report/SKILL.md`'s
+   step 1 for any circuit; this Skill's step 1 already replaced it for the whole group.
 
    **Alert-and-continue override (scoped to this loop only, same convention `reporte-lote` uses).** On
    any step 2-8 failure for `circuito` (zero events in the window, a `ReportPipelineError`, or agent
    validation retries exhausted), record it and proceed to the next missing circuit — never turn a
    per-circuit failure into a question back to the user. A circuit that fails here still has no
    content in the final synthesis step (its `load_circuit_content` call returns `None`; the render
-   step's Annex marks it "sin contenido disponible" instead of erroring the whole report).
+   step's Annex marks it "sin contenido disponible" instead of erroring the whole report). A circuit
+   that fails here also skips the vault-population sub-step below entirely (there is nothing to
+   project a vault note from).
+
+   **Vault population (new sub-step, runs once steps 2-8 succeed for `circuito`).** Immediately after
+   steps 2-8 succeed for this `circuito` (never on a step 2-8 failure — see above), run
+   `PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.vault_note_contract render <circuito>`
+   directly — the SAME vault PROJECTION `report/SKILL.md`'s own step 9 performs, called here as a
+   direct CLI verb rather than by re-executing step 9 verbatim, and deliberately WITHOUT step 9's
+   chained `/graphify reports/vault --update` (that graphify refresh happens exactly once, batched for
+   every sampled circuit together, in step 2.5 below — never per-circuit here). This projects
+   `reports/vault/<circuito>.md` before step 2.5 runs. A non-zero exit (`usage_error`,
+   `skipped_incomplete`, or `execution_error`) is **alert-and-continue**: record it and proceed to the
+   next missing circuit — it NEVER rolls back this circuit's already-succeeded steps 2-8 report
+   artifacts (see the Error handling summary below).
 
 2.5. **Refresh the graph, query cross-circuit patterns, and hand off a validated JSON file to step 3
    (always attempted, degrades gracefully, never a second confirmation).** Runs once, after step 2 (so
@@ -214,24 +243,43 @@ Given `grupo` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
       `reports/interpretability/runs/.informe-gerencial/graph-patterns.<grupo>.<fecha_inicio>_<fecha_fin>.json`
       (creating the `.informe-gerencial/` directory if absent), then pass that exact path to step 3 as
       `--graph-patterns <path>`.
+   6. **Build the scoped graph-view figure** (new sub-step, runs after the JSON write above, regardless
+      of whether steps 2.5.2-2.5.5 succeeded or degraded — it only needs the `graph.json` that step
+      2.5.2's `/graphify --update` refresh already produced on disk, whether from this run or a prior
+      one): run
+      `PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.graph_view_builder build --graph-json
+      <resolved graphify-out/graph.json path> --output
+      reports/interpretability/runs/.informe-gerencial/graph-view.<grupo>.<fecha_inicio>_<fecha_fin>.html
+      --sampled <sampled circuits that have a vault note>`. This is a plain Python CLI invocation, never
+      a `/graphify` slash-command call (see the Allowed-tools carve-out note above) — it reads the
+      already-refreshed `graph.json` file directly via `graphify.export.to_html`, isolated inside that
+      module only. On success, pass the written HTML path to step 3 as `--graph-view <path>`. On any
+      failure (`execution_error`, `skipped_empty`, or a non-zero exit), alert and **continue** straight
+      to step 3 with no `--graph-view` path — exactly the same alert-and-continue convention the
+      `/graphify`-refresh-fails row above already uses; the itemized graph-patterns list (if it built)
+      still renders, only the embedded figure is omitted.
 
 3. **Load content, synthesize, and render the single HTML report.** Once step 2.5 has either produced a
-   graph-patterns path or been skipped/failed (never blocks on it), run the shared contract's `render`
-   verb:
-   `PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.informe_gerencial_contract render <grupo> [fecha_inicio fecha_fin] --runtime claude [--graph-patterns <path from step 2.5>]`.
+   graph-patterns path and/or a graph-view path, or been skipped/failed (never blocks on either), run
+   the shared contract's `render` verb:
+   `PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.informe_gerencial_contract render <grupo> [fecha_inicio fecha_fin] --runtime claude [--graph-patterns <path from step 2.5.5>] [--graph-view <path from step 2.5.6>]`.
    This re-resolves the SAME deterministic group/window/sampling as step 1 (K-Means is
    `random_state=42`-seeded, so the sampled 12 are reproducible), then for each sampled circuit calls
    `load_circuit_content` (vault-note preferred, raw-JSON fallback per Content sourcing below),
    loads and re-validates `--graph-patterns` via `load_graph_patterns` (missing/omitted path -> `None`,
    malformed file -> `[]`, valid file -> filtered/recomputed pattern list, never raising regardless of
-   what step 2.5 produced), assembles the cross-circuit synthesis via `synthesize(...)` (Resumen
-   ejecutivo del grupo, Patrones comunes, Circuitos atípicos, Riesgo agregado, Acciones recomendadas,
-   Anexo por circuito), renders the full HTML page via `render_managerial_report(...)` with the embedded
-   full-fleet scatter described above plus the "Patrones cross-circuito (grafo)" subsection (labeled
-   "Interpretación asistida por LLM (grafo)", visibly distinct from the deterministic "Patrones
-   comunes"/"Cálculo determinista" table) when it applies, and persists it to disk. Report the returned
-   `output_html` path to the user. This step runs exactly once per invocation and never asks the user
-   anything further.
+   what step 2.5 produced), loads `--graph-view` via `load_graph_view` (missing/omitted path -> `None`,
+   unreadable -> `None`, readable -> raw HTML text, never raising), assembles the cross-circuit
+   synthesis via `synthesize(...)` (Resumen ejecutivo del grupo, Patrones comunes, Circuitos atípicos,
+   Riesgo agregado, Acciones recomendadas, Anexo por circuito), renders the full HTML page via
+   `render_managerial_report(...)` with the embedded full-fleet scatter described above plus the
+   "Patrones cross-circuito (grafo)" subsection (labeled "Interpretación asistida por LLM (grafo)",
+   visibly distinct from the deterministic "Patrones comunes"/"Cálculo determinista" table) — including,
+   when both the itemized pattern list AND the graph-view HTML are available, the embedded `srcdoc`
+   figure alongside the list; when only the list is available, the list alone with a muted indicator
+   that the figure is not available this run — and persists the whole report to disk. Report the
+   returned `output_html` path to the user. This step runs exactly once per invocation and never asks
+   the user anything further.
 
 ## Content sourcing
 
@@ -260,6 +308,7 @@ above). It degrades independently of every other section:
 | One or more sampled circuits lack a vault note | Those circuits are excluded from the `/graphify query` input only; the step still runs for the remaining circuits with notes |
 | `/graphify reports/vault --update` fails or times out | Alert-and-**continue** straight to step 3 with no `--graph-patterns` path — the deterministic sections still render; subsection shows "análisis de grafo no disponible en esta corrida" |
 | `/graphify query` returns nothing meeting `soporte >= 2` | The written JSON has an empty `patterns` list; subsection shows "sin patrones recurrentes con soporte >= 2" explicitly (never a silent omission) |
+| `graph_view_builder build` (sub-step 2.5.6) fails, or the sub-graph has no matched nodes | Alert-and-**continue** straight to step 3 with no `--graph-view` path — the itemized pattern list still renders (independently of this failure), only the embedded figure is omitted |
 
 **Known limitation (documented, not fixed by this change):** if a sampled circuit's vault note is
 deleted between the graph's last refresh and this run, `/graphify reports/vault --update`'s own
@@ -280,10 +329,12 @@ staleness sourced from `graphify`'s own incremental cache. This is a non-goal fo
 | User declines the confirmation | Step 1.4 | **Stop.** No `/report` auto-trigger, no synthesis, no HTML produced |
 | Circuit-clustering chart render fails (step 1.5) | Step 1.5 (this Skill) | Alert-and-**continue** — reported to the user, but never blocks or delays step 2/3 |
 | Any step 2-8 failure for one missing circuit | Step 2 loop, per circuit | Recorded and skipped; the loop **continues** to the next missing circuit (alert-and-continue, same departure `reporte-lote` documents, scoped to this loop only) |
+| Vault-render failure (`usage_error`/`skipped_incomplete`/`execution_error`) for one circuit | Step 2 loop, vault-population sub-step | Alert-and-**continue** to the next missing circuit; that circuit's already-succeeded steps 2-8 report artifacts are NEVER rolled back |
 | Fewer than 2 circuits sampled | Step 2.5 (this Skill) | Step 2.5 skipped outright; graph subsection omitted entirely from the HTML, no error |
 | A sampled circuit has no vault note | Step 2.5 (this Skill) | That circuit excluded from the `/graphify query` input only; step 2.5 proceeds with the rest |
 | `/graphify reports/vault --update` or `/graphify query` fails/times out | Step 2.5 (this Skill) | Alert-and-**continue** to step 3 with no `--graph-patterns` path — deterministic sections still render, subsection shows "análisis de grafo no disponible en esta corrida" |
 | `/graphify query` returns nothing meeting `soporte >= 2` | Step 2.5 (this Skill) | Empty `patterns` list written; subsection explicitly states no recurring pattern was found, never a silent omission |
+| `graph_view_builder build` fails (sub-step 2.5.6) | Step 2.5 (this Skill) | Alert-and-**continue** to step 3 with no `--graph-view` path — list-only rendering if patterns succeeded, no figure; deterministic sections unaffected |
 | A sampled circuit still has no content at render time | Step 3 (`load_circuit_content` returns `None`) | Annex entry marked "sin contenido disponible"; the report still renders for every other circuit |
 
 None of the rows above, nor any mid-run condition, turns into a second question back to the user —
@@ -302,9 +353,15 @@ the single checkpoint is step 1.4 only.
   managerial report's HTML shell is its own small, self-contained implementation in
   `render_managerial_report` (accepted duplication, logged as follow-up tech debt).
 - `informe_gerencial_contract.py` stays deterministic and LLM-free — it never calls `graphify` or any
-  LLM; step 2.5 above is the ONLY place this Skill's run sequence invokes `graphify`, and it lives
-  entirely in this SKILL.md's own runbook, never inside the Python contract. `plotting.py` is not
-  touched by the graph-patterns feature at all.
+  LLM; step 2.5 above is the ONLY place this Skill's run sequence invokes the `/graphify`
+  slash-command, and it lives entirely in this SKILL.md's own runbook, never inside the Python
+  contract. `plotting.py` is not touched by the graph-patterns feature, nor by the graph-view feature —
+  the new `_iframe_srcdoc` helper in `informe_gerencial_contract.py` is a small, deliberate 4-line
+  duplicate, not an import from `plotting.py`'s own nested closure (accepted duplication, same
+  established convention as the bullet above). `graph_view_builder.py` is the ONLY module anywhere in
+  this feature that imports/calls `graphify.export.to_html` directly (a Python API call, not the
+  `/graphify` slash-command) — `informe_gerencial_contract.py` only ever reads that module's already-
+  written HTML file from disk.
 - Graph staleness from a vault note deleted between `/graphify reports/vault --update` runs (see
   "Cross-circuit graph patterns (step 2.5)" above) is a documented known limitation, not fixed here.
 
@@ -327,6 +384,10 @@ the single checkpoint is step 1.4 only.
   [`src/chec_local_interpreter/circuit_clustering_contract.py`](../../../src/chec_local_interpreter/circuit_clustering_contract.py)
 - Cross-circuit graph query, invoked ONLY in step 2.5 (the sole LLM-assisted step in this Skill's run
   sequence): [`.claude/skills/graphify/SKILL.md`](../graphify/SKILL.md)
+- Vault-population sub-step (step 2), reused directly rather than via `report/SKILL.md`'s own step 9:
+  [`src/chec_local_interpreter/vault_note_contract.py`](../../../src/chec_local_interpreter/vault_note_contract.py)
+- Scoped graph-view builder, invoked ONLY in step 2.5.6 (the sole direct `graphify.export.to_html`
+  caller in this feature): [`src/chec_local_interpreter/graph_view_builder.py`](../../../src/chec_local_interpreter/graph_view_builder.py)
 - Binding invariants (shared with every agent role/orchestrator above):
   `.claude/agents/rules/invariants.md`
 - Tests: `tests/test_informe_gerencial_contract.py` (sampling, group resolution, missing-run
@@ -334,4 +395,6 @@ the single checkpoint is step 1.4 only.
   `load_graph_patterns` threshold/intersection/malformed-input handling, `resolve()`/
   `render_and_write()` status matrices, path-injection rejection, `synthesize`/`render_managerial_report`
   section assembly including the 3-state graph-patterns subsection, full-fleet-highlight behavior, CLI
-  verbs including `--graph-patterns`)
+  verbs including `--graph-patterns`/`--graph-view`), `tests/test_graph_view_builder.py` (seed/bridge
+  sub-graph predicate, community reconstruction, oversize/malformed-input/never-raise behavior, CLI exit
+  codes)

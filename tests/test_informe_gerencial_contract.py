@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import html as html_lib
 import json
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -1067,3 +1068,134 @@ def test_cli_render_passes_graph_patterns_path_through_to_output(monkeypatch, ca
     written = Path(payload["output_html"]).read_text(encoding="utf-8")
     assert "fauna en vanos" in written
     assert "Interpretación asistida por LLM (grafo)" in written
+
+
+# ---------------------------------------------------------------------------
+# Graph-view embed: `<ul>/<li>` structural guard + load_graph_view + 3-way
+# states + CLI arg (Phase 4, tasks 4.1-4.4)
+# ---------------------------------------------------------------------------
+
+
+_LI_ITEM_RE = re.compile(r"<li>.*?</li>", re.DOTALL)
+
+
+def test_graph_patterns_html_renders_ul_li_structural():
+    """Locks the ALREADY-correct itemized-list rendering: a populated
+    pattern list must produce real `<ul>`/`<li>` elements (structural, not
+    substring-only), guarding against regression to non-list rendering
+    (spec: "Itemized patterns list is structurally verifiable").
+    """
+    patterns = [
+        {"tema": "fauna en vanos", "circuitos": ["MUYALTA_0", "MUYALTA_1"], "soporte": 2},
+        {"tema": "clima aislado", "circuitos": ["MUYALTA_0", "MUYALTA_2"], "soporte": 2},
+    ]
+
+    html = informe_contract._graph_patterns_html(patterns, None, n_sampled=2)
+
+    ul_match = re.search(r"<ul>(.*?)</ul>", html, re.DOTALL)
+    assert ul_match is not None
+    li_items = _LI_ITEM_RE.findall(ul_match.group(1))
+    assert len(li_items) == 2
+    assert "fauna en vanos" in li_items[0]
+    assert "clima aislado" in li_items[1]
+
+
+def test_load_graph_view_missing_or_omitted_path_returns_none(tmp_path):
+    assert informe_contract.load_graph_view(None) is None
+    assert informe_contract.load_graph_view(tmp_path / "does-not-exist.html") is None
+
+
+def test_load_graph_view_readable_path_returns_raw_html(tmp_path):
+    path = tmp_path / "graph-view.html"
+    path.write_text("<html><body>grafo</body></html>", encoding="utf-8")
+
+    result = informe_contract.load_graph_view(path)
+
+    assert result == "<html><body>grafo</body></html>"
+
+
+def test_load_graph_view_unreadable_path_degrades_to_none(tmp_path):
+    directory_as_path = tmp_path / "not-a-file"
+    directory_as_path.mkdir()
+
+    result = informe_contract.load_graph_view(directory_as_path)
+
+    assert result is None
+
+
+@pytest.mark.parametrize(
+    "graph_patterns,graph_view_html,expect_ul,expect_figure,expect_muted_no_figure",
+    [
+        # patterns present + view present -> <ul> list + embedded figure.
+        (
+            [{"tema": "fauna en vanos", "circuitos": ["MUYALTA_0", "MUYALTA_1"], "soporte": 2}],
+            "<html><body>view</body></html>",
+            True,
+            True,
+            False,
+        ),
+        # patterns present + view None -> list only, muted figure-unavailable indicator.
+        (
+            [{"tema": "fauna en vanos", "circuitos": ["MUYALTA_0", "MUYALTA_1"], "soporte": 2}],
+            None,
+            True,
+            False,
+            True,
+        ),
+        # patterns None + view present -> existing muted "no data" state, no figure.
+        (None, "<html><body>view</body></html>", False, False, False),
+        # patterns [] + view present -> existing muted "no pattern" state, no figure.
+        ([], "<html><body>view</body></html>", False, False, False),
+    ],
+)
+def test_graph_patterns_html_three_way_graph_embed_states(
+    graph_patterns, graph_view_html, expect_ul, expect_figure, expect_muted_no_figure
+):
+    html = informe_contract._graph_patterns_html(graph_patterns, graph_view_html, n_sampled=2)
+
+    assert ("<ul>" in html) is expect_ul
+    assert ("srcdoc=" in html) is expect_figure
+    assert ("figura de grafo no disponible en esta corrida" in html) is expect_muted_no_figure
+
+
+def test_cli_render_accepts_graph_view_arg(monkeypatch, capsys, tmp_path):
+    frame = _five_tier_raw_df(per_tier=2)
+    monkeypatch.setattr(informe_contract, "load_dataset", lambda path: frame)
+    df_coords = _known_tier_df_coords_full()
+    monkeypatch.setattr(informe_contract, "resolve_group_dataframe", lambda *a, **k: df_coords)
+    monkeypatch.setattr(
+        informe_contract,
+        "load_circuit_content",
+        lambda circuito, **kwargs: {"circuito": circuito, "source": "vault_note", "content": f"Narrativa {circuito}"},
+    )
+    output_root = tmp_path / "html"
+    graph_view_path = tmp_path / "graph-view.html"
+    graph_view_path.write_text("<html><body>vista de grafo</body></html>", encoding="utf-8")
+    graph_patterns_path = tmp_path / "graph-patterns.json"
+    _write_graph_patterns_json(
+        graph_patterns_path,
+        [{"tema": "fauna en vanos", "circuitos": ["MUYALTA_0", "MUYALTA_1", "MUYALTA_2"], "soporte": 3}],
+    )
+
+    exit_code = informe_contract.main(
+        [
+            "render",
+            "muy-alta",
+            "2026-01-01",
+            "2026-01-02",
+            "--data-path",
+            "data.csv",
+            "--output-root",
+            str(output_root),
+            "--graph-patterns",
+            str(graph_patterns_path),
+            "--graph-view",
+            str(graph_view_path),
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "success"
+    written = Path(payload["output_html"]).read_text(encoding="utf-8")
+    assert "srcdoc=" in written
