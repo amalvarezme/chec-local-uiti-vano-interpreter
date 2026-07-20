@@ -30,8 +30,6 @@ reports/mgcecdl-results/*
 !reports/mgcecdl-results/.gitkeep
 reports/legacy-model-assets/*
 !reports/legacy-model-assets/.gitkeep
-reports/vault/*
-!reports/vault/.gitkeep
 lib/
 
 .vscode/
