@@ -45,45 +45,45 @@ def _df_coords(names: list[str], distances: list[float]) -> pd.DataFrame:
 
 
 def test_sample_representatives_under_threshold_returns_all_circuits():
-    names = [f"C{i:02d}" for i in range(14)]
-    distances = list(range(14))
+    names = [f"C{i:02d}" for i in range(10)]
+    distances = list(range(10))
     df_coords = _df_coords(names, distances)
 
     result = sample_representatives(df_coords)
 
-    assert len(result) == 14
+    assert len(result) == 10
     assert set(result.index) == set(names)
 
 
-def test_sample_representatives_over_threshold_returns_exactly_20_smallest():
+def test_sample_representatives_over_threshold_returns_exactly_12_smallest():
     names = [f"C{i:02d}" for i in range(37)]
     distances = list(range(37))  # C00 has smallest distance, C36 the largest
     df_coords = _df_coords(names, distances)
 
     result = sample_representatives(df_coords)
 
-    assert len(result) == 20
-    assert set(result.index) == {f"C{i:02d}" for i in range(20)}
-    assert result["centroid_distance"].max() == 19
+    assert len(result) == 12
+    assert set(result.index) == {f"C{i:02d}" for i in range(12)}
+    assert result["centroid_distance"].max() == 11
 
 
 def test_sample_representatives_deterministic_tie_break_by_ascending_name():
-    # 19 circuits with unique, strictly-smaller distances are certain top-19.
-    names = [f"C{i:02d}" for i in range(19)]
-    distances = list(range(19))
-    # Two circuits tied at the boundary distance (19): only one fits in the
-    # top-20. Alphabetically earlier name ("AAA_TIE" < "ZZZ_TIE") must win.
+    # 11 circuits with unique, strictly-smaller distances are certain top-11.
+    names = [f"C{i:02d}" for i in range(11)]
+    distances = list(range(11))
+    # Two circuits tied at the boundary distance (11): only one fits in the
+    # top-12. Alphabetically earlier name ("AAA_TIE" < "ZZZ_TIE") must win.
     names += ["ZZZ_TIE", "AAA_TIE"]
-    distances += [19, 19]
+    distances += [11, 11]
     df_coords = _df_coords(names, distances)
 
     result = sample_representatives(df_coords)
     result_again = sample_representatives(df_coords)
 
-    assert len(result) == 20
+    assert len(result) == 12
     assert "AAA_TIE" in result.index
     assert "ZZZ_TIE" not in result.index
-    # Reproducible: identical input produces the identical 20-circuit set.
+    # Reproducible: identical input produces the identical 12-circuit set.
     assert list(result.index) == list(result_again.index)
 
 
@@ -125,7 +125,7 @@ def test_resolve_group_dataframe_todos_returns_full_universe_all_80_circuits():
     assert set(result["criticidad"]) == {"Muy Alta", "Alta", "Media", "Baja", "Muy Baja"}
 
     sampled = sample_representatives(result)
-    assert len(sampled) == 20
+    assert len(sampled) == 12
 
 
 # ---------------------------------------------------------------------------
@@ -473,7 +473,7 @@ def test_resolve_awaiting_confirmation_with_missing_runs(monkeypatch, tmp_path):
     assert outcome.status == "awaiting_confirmation"
     assert outcome.next_actions == ["confirm_and_trigger_missing"]
     assert outcome.missing_runs["count"] == len(outcome.sampled)
-    assert len(outcome.sampled) == 20
+    assert len(outcome.sampled) == 12
 
 
 def test_resolve_awaiting_confirmation_without_missing_runs(monkeypatch, tmp_path):

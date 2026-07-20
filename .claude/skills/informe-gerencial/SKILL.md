@@ -19,8 +19,8 @@ metadata:
 representative circuits of one criticality group (or the whole fleet, for `todos`), instead of one
 report per circuit. It does not reimplement `/report`'s single-circuit pipeline, `/reporte-lote`'s
 batch loop, or `compute_circuit_criticality_groups`'s clustering. It owns exactly the pieces those
-three do not: sampling a group down to its 20 most representative circuits (by `centroid_distance`
-to their assigned cluster centroid), detecting which of those 20 are missing a prior `/report` run,
+three do not: sampling a group down to its 12 most representative circuits (by `centroid_distance`
+to their assigned cluster centroid), detecting which of those 12 are missing a prior `/report` run,
 gating on a single explicit confirmation before auto-triggering `/report` for the missing ones (by
 reference to [`report/SKILL.md`](../report/SKILL.md), never by copying its prose), **always**
 rendering the standalone circuit-clustering chart for the confirmed window right after that same
@@ -61,13 +61,13 @@ Examples:
 | `/informe-gerencial media 2026-01-01 2026-02-01` | Group `media` resolved against that explicit window |
 | `/informe-gerencial baja 2026-01-01` | **Rejected** — usage error, `fecha_fin` missing |
 | `/informe-gerencial critica` | **Rejected** — usage error, unknown `grupo` |
-| `/informe-gerencial todos` | Full fleet computed via `compute_circuit_criticality_groups`, then sampled to 20 |
+| `/informe-gerencial todos` | Full fleet computed via `compute_circuit_criticality_groups`, then sampled to 12 |
 
-## Representativeness sampling (>20 circuits)
+## Representativeness sampling (>12 circuits)
 
-When the resolved group has more than 20 circuits, exactly the 20 circuits with the smallest
+When the resolved group has more than 12 circuits, exactly the 12 circuits with the smallest
 `centroid_distance` (most representative of their cluster) are used — never all of them, never a
-random subset. Groups with 20 or fewer circuits use all of them unfiltered. This is entirely owned by
+random subset. Groups with 12 or fewer circuits use all of them unfiltered. This is entirely owned by
 `informe_gerencial_contract.sample_representatives`; this Skill never re-derives or overrides it.
 
 ## Single user checkpoint (missing-run confirmation gate)
@@ -138,7 +138,7 @@ Given `grupo` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
       This delegates to `resolve(...)`, which loads the dataset, resolves the window (dataset-wide
       default via `_dataset_date_range` when omitted, or the explicit pair), computes criticality via
       `compute_circuit_criticality_groups` directly (independent of, and never calling,
-      `batch_report_contract.preflight_batch`'s own `todos` bypass), samples down to the 20 most
+      `batch_report_contract.preflight_batch`'s own `todos` bypass), samples down to the 12 most
       representative circuits when the group exceeds that threshold, and checks each sampled circuit
       for a prior `/report` run.
    3. Branch on the returned `status`:
@@ -220,7 +220,7 @@ Given `grupo` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
    verb:
    `PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.informe_gerencial_contract render <grupo> [fecha_inicio fecha_fin] --runtime claude [--graph-patterns <path from step 2.5>]`.
    This re-resolves the SAME deterministic group/window/sampling as step 1 (K-Means is
-   `random_state=42`-seeded, so the sampled 20 are reproducible), then for each sampled circuit calls
+   `random_state=42`-seeded, so the sampled 12 are reproducible), then for each sampled circuit calls
    `load_circuit_content` (vault-note preferred, raw-JSON fallback per Content sourcing below),
    loads and re-validates `--graph-patterns` via `load_graph_patterns` (missing/omitted path -> `None`,
    malformed file -> `[]`, valid file -> filtered/recomputed pattern list, never raising regardless of

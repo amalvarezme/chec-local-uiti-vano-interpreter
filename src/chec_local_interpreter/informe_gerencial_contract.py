@@ -9,7 +9,7 @@ universe via `compute_circuit_criticality_groups` (reusing
 `batch_report_contract.preflight_batch`'s own `todos` bypass is NEVER called
 or modified here; this module always computes criticality via
 `compute_circuit_criticality_groups` for every group including `todos`), then
-samples the top-20 most representative circuits (smallest `centroid_distance`
+samples the top-12 most representative circuits (smallest `centroid_distance`
 to their assigned cluster centroid), detects any of them missing a prior
 `/report` run, and loads their narrative content.
 
@@ -57,7 +57,7 @@ from chec_local_interpreter.plotting import (
 
 SCHEMA_VERSION = "informe-gerencial-contract/v1"
 
-TOP_N_REPRESENTATIVE = 20
+TOP_N_REPRESENTATIVE = 12
 
 DEFAULT_RUNS_ROOT = PROJECT_ROOT / "reports" / "interpretability" / "runs"
 DEFAULT_VAULT_ROOT = PROJECT_ROOT / "reports" / "vault"
@@ -598,7 +598,7 @@ def _compute_outliers(sampled_records: Sequence[dict[str, Any]]) -> list[dict[st
     per-circuit threshold (spec: "notable outliers").
 
     Uses the group's own median (robust to small samples/skew) rather than
-    mean+stdev: with <=20 samples a single extreme value drags mean/stdev
+    mean+stdev: with <=12 samples a single extreme value drags mean/stdev
     enough that a mean-based threshold can fail to flag the very outlier it
     is meant to catch. Requires at least 3 sampled circuits -- "outlier"
     relative to a group of 1-2 is not a meaningful signal.
