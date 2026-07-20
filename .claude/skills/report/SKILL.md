@@ -174,16 +174,38 @@ render, and relaunch with explicit one-role instructions. Before `prepare_expert
 `historical.out.json` and `inference.out.json` to exist and validate successfully; otherwise stop and
 report the stalled role.
 
-**Scratch-file collision avoidance (mandatory when dispatching more than one circuit's roles
-concurrently — e.g. `reporte-lote`/`informe-gerencial`'s missing-run loop).** A runtime's scratchpad
-directory is shared per session, not per dispatched agent — two circuits' `historical`/`inference`/
-`auto-simulator`/`expert-alignment` agents running in parallel can silently overwrite each other's
-generically-named intermediate files (`envelope.json`, `response.json`, `validate_payload.json`),
-corrupting one circuit's draft with another's context before validation. Every dispatch prompt for a
-role-authoring task MUST instruct the agent to prefix any scratch file it writes with the current
-`circuito` (e.g. `<circuito>_envelope.json`, `<circuito>_response.json`). This is orchestrator-side
-boilerplate to add to the prompt, not a fix in `agent_tools.*` or `report_pipeline.py` — those modules
-have no scratch-file involvement; the collision happens purely in agent-authored intermediate files.
+**Scratch-file collision avoidance (mandatory on EVERY `/report` run, not just multi-circuit
+batches).** A runtime's scratchpad directory is shared per session, not per dispatched agent. This
+bites even a single circuit's own steps 3/4/4b: those three roles are dispatched *concurrently by
+design* (see above — parallel dispatch is the default, not optional), so `historical`, `inference`,
+and `auto-simulator` for the SAME circuit are three live agents writing to the same scratchpad at
+the same time. A `circuito`-only prefix is not enough to separate them — confirmed in production:
+one circuit's `inference` agent had its own `<circuito>_envelope.json` silently overwritten by that
+same circuit's concurrently-running `historical`/`auto-simulator` agents, and in a multi-circuit
+`informe-gerencial` batch the same failure mode recurred across circuits despite per-circuit
+prefixing. Under batch dispatch (`reporte-lote`/`informe-gerencial`'s missing-run loop), the risk
+compounds: N circuits × 3-4 roles each, all sharing one scratchpad.
+
+Every dispatch prompt for a role-authoring task MUST instruct the agent to:
+1. Prefix any scratch file it writes with BOTH the current `circuito` AND its own role name, plus a
+   uniqueness token it generates itself (its PID, a timestamp, or a random suffix) — e.g.
+   `<circuito>_<role>_<pid>_envelope.json`, never a bare `<circuito>_envelope.json` shared across
+   roles.
+2. Re-read back any scratch file immediately after writing it, and confirm its content actually
+   matches what it just wrote (e.g. check the envelope's own role-specific key shape:
+   `historical.bc.json`'s ten-key schema vs. `inference.bc.json`'s nine-key schema vs.
+   `auto-simulator.bc.json`'s seven-key schema) before relying on it for the next step. This
+   self-check is what let agents recover from a live collision in production; skipping it lets a
+   silently-clobbered file poison the rest of that role's work.
+
+This is orchestrator-side boilerplate to add to the dispatch prompt, not a fix in `agent_tools.*` or
+`report_pipeline.py` — those modules have no scratch-file involvement; the collision happens purely
+in agent-authored intermediate files. The orchestrator itself also has a duty here: after any stage
+completion notification, verify the stage's OWN target output file (`run_dir/<role>.out.json`) has
+the expected role-specific key shape before recording usage/duration or advancing to the next step —
+never trust a sub-agent's self-report of success without that direct check, since a collision can
+leave the target file holding another role's content even when the reporting agent believes its own
+`validate` passed.
 
 Either way, all of steps 3 and 4 must complete successfully before step 5. Only `expert-alignment`
 (steps 5-6) has an ordering dependency: it requires BOTH `historical` and `inference` to have

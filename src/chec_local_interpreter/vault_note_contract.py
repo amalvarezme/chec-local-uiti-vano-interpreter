@@ -11,7 +11,10 @@ This module performs NO LLM calls and NO subprocess/shell invocations -- it
 only reads already-written `*.out.json` files and writes markdown. The
 `/graphify reports/vault --update` chaining that follows a successful write
 is an orchestrator-level (runbook) concern, not something this module ever
-shells out to (see design decision "How `/graphify` is invoked").
+shells out to (see design decision "How `/graphify` is invoked"). That
+chained update is scoped to an isolated graph rooted at
+`reports/vault/graphify-out/graph.json`, never the project-root
+`graphify-out/graph.json` -- see `vault-circuito/SKILL.md` step 2.
 """
 
 from __future__ import annotations
