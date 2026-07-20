@@ -174,6 +174,17 @@ render, and relaunch with explicit one-role instructions. Before `prepare_expert
 `historical.out.json` and `inference.out.json` to exist and validate successfully; otherwise stop and
 report the stalled role.
 
+**Scratch-file collision avoidance (mandatory when dispatching more than one circuit's roles
+concurrently — e.g. `reporte-lote`/`informe-gerencial`'s missing-run loop).** A runtime's scratchpad
+directory is shared per session, not per dispatched agent — two circuits' `historical`/`inference`/
+`auto-simulator`/`expert-alignment` agents running in parallel can silently overwrite each other's
+generically-named intermediate files (`envelope.json`, `response.json`, `validate_payload.json`),
+corrupting one circuit's draft with another's context before validation. Every dispatch prompt for a
+role-authoring task MUST instruct the agent to prefix any scratch file it writes with the current
+`circuito` (e.g. `<circuito>_envelope.json`, `<circuito>_response.json`). This is orchestrator-side
+boilerplate to add to the prompt, not a fix in `agent_tools.*` or `report_pipeline.py` — those modules
+have no scratch-file involvement; the collision happens purely in agent-authored intermediate files.
+
 Either way, all of steps 3 and 4 must complete successfully before step 5. Only `expert-alignment`
 (steps 5-6) has an ordering dependency: it requires BOTH `historical` and `inference` to have
 already completed — dispatch it alone, immediately once both are done, without pausing for input.
@@ -185,23 +196,38 @@ already completed — dispatch it alone, immediately once both are done, without
    are exhausted, stop the whole `/report` run for this circuit here — do not proceed to
    `inference` or beyond, and report the last validation errors to the user.
 
-   **Capture usage + duration for this stage (mandatory when available).** Note your own
-   wall-clock time immediately BEFORE dispatching this stage's `Agent` and again immediately AFTER
-   its `validate` returns exit code `0`. As soon as the stage completes, in the same turn call
-   BOTH:
+   **Capture usage + duration for this stage (mandatory when available — this is the FIRST
+   action taken on this stage's completion, before reading its prose result, before verifying its
+   output file, before dispatching or reacting to anything else).** When this stage runs as a real
+   sub-agent (Claude Code's `Agent` tool or an equivalent runtime), its completion notification
+   carries a `<usage>` block with `subagent_tokens` and `duration_ms` already measured by the
+   harness — read those two fields directly rather than tracking your own separate wall-clock
+   before/after (manual tracking is what silently drops this under multi-circuit parallel fan-out,
+   see the note below). As soon as the notification for this stage arrives, in the same turn call
+   BOTH, before doing anything else with that notification:
    - `PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.report_contract record-usage
-     --run-dir <run_dir> --stage historical --total <subagent_tokens>` — use the combined token
-     figure the `Agent` completion reports (Claude Code exposes a single combined `subagent_tokens`
-     total, not an input/output split, so use the `--total` shape; never pass a `chars // 4`
-     estimate as if it were measured). If your runtime does not expose a token total, omit
-     `record-usage` for THIS stage only (it degrades to the char/4 estimate).
+     --run-dir <run_dir> --stage historical --total <subagent_tokens>` — the combined token figure
+     from the notification's `<usage>` block (never a `chars // 4` estimate passed off as
+     measured). If your runtime exposes no token total, omit `record-usage` for THIS stage only
+     (it degrades to the char/4 estimate).
    - `PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.report_contract record-duration
-     --run-dir <run_dir> --stage historical --seconds <after minus before>` — use YOUR OWN
-     wall-clock delta around the dispatch. This does not depend on any field the sub-agent
-     returns, so it is always available to you; record it even when the token total is not. Record
-     the FINAL successful attempt's delta only (do not sum abandoned validation retries).
+     --run-dir <run_dir> --stage historical --seconds <duration_ms / 1000>` — from the SAME
+     notification's `<usage><duration_ms>`. If your runtime does not expose a duration figure in
+     the completion (no `<usage>` block at all), fall back to your own wall-clock delta noted
+     immediately BEFORE dispatching and immediately AFTER `validate` returns exit code `0`. Record
+     the FINAL successful attempt's value only (do not sum abandoned validation retries).
 
    Do not scrape prose, session history, or output sizes for either value.
+
+   **Multi-circuit parallel fan-out reminder (`reporte-lote`/`informe-gerencial`'s missing-run
+   loop).** When several circuits' stages are dispatched concurrently, their completion
+   notifications arrive interleaved, one at a time, over the course of the run. The failure mode
+   observed in practice is processing a notification's text summary and moving straight to the
+   next action (verifying a file, dispatching the next circuit) WITHOUT calling `record-usage`/
+   `record-duration` first — silently leaving every stage's timing/token sidecar unwritten and the
+   final report's "Tiempo por etapa"/tokens columns showing `N/D` for the whole run, even though
+   the measurement was available in the notification the whole time. Treat these two calls as a
+   blocking part of handling ANY stage-completion notification, never a follow-up to get back to.
 4. **Invoke `inference`** — same pattern as step 3, using `run_dir/inference.bc.json` and this
    Skill's own `agent_tools.inference build-context`/`validate` verbs, writing
    `run_dir/inference.out.json`. Independent of step 3 (see above) — steps 3 and 4 may run in
@@ -209,16 +235,17 @@ already completed — dispatch it alone, immediately once both are done, without
    before step 5) — the design places no ordering requirement between historical and inference,
    only that both precede expert-alignment.
 
-   **Capture usage + duration for this stage (mandatory when available).** Same pattern as step 3,
-   swapping the stage name: note your own wall-clock time immediately BEFORE dispatching and again
-   immediately AFTER `validate` returns exit code `0`, then in the same turn call BOTH
+   **Capture usage + duration for this stage (mandatory when available — the FIRST action on this
+   stage's completion notification, before anything else).** Same pattern as step 3: read
+   `subagent_tokens`/`duration_ms` directly from the completion notification's `<usage>` block (own
+   wall-clock only as a fallback when no `<usage>` block exists), then in the same turn call BOTH
    `PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.report_contract record-usage
    --run-dir <run_dir> --stage inference --total <subagent_tokens>` (omit only if your runtime
    exposes no token total) and `PYTHONPATH=src .venv/bin/python -m
    chec_local_interpreter.report_contract record-duration --run-dir <run_dir> --stage inference
-   --seconds <after minus before>` (always available — it is your own clock, not the sub-agent's
-   return value). Record the FINAL successful attempt's delta only. Do not scrape prose, session
-   history, or output sizes for either value.
+   --seconds <duration_ms / 1000>`. Record the FINAL successful attempt's value only. Do not scrape
+   prose, session history, or output sizes for either value. Under multi-circuit parallel
+   dispatch, do this BEFORE reacting to any other notification — see step 3's fan-out reminder.
 4b. **Invoke `auto-simulator`** — also independent of steps 3/4 (see above). `prepare` (step 2)
    already ran the automatic min/max sensitivity
    simulator as a side effect, using the same loaded MGCECDL model as the inference/SHAP simulator.
@@ -233,14 +260,17 @@ already completed — dispatch it alone, immediately once both are done, without
    circuit/window in the automatic simulator's re-derived mask), skip this step entirely — there is
    nothing to build a prompt from.
 
-   **Capture usage + duration for this stage (mandatory only when it actually ran).** Capture
-   exactly as in steps 3/4 — `record-usage --run-dir <run_dir> --stage auto-simulator --total
-   <subagent_tokens>` and `record-duration --run-dir <run_dir> --stage auto-simulator --seconds
-   <after minus before>` — ONLY if this stage actually ran (i.e. `run_dir/auto-simulator.bc.json`
-   existed and you dispatched the agent). If step 4b degraded to skip (no
-   `auto-simulator.bc.json`, or validation-retries-exhausted), do NOT record usage or duration for
-   it — a skipped stage has no measurement and is simply omitted from the header. A missing
-   auto-simulator measurement must NEVER block the run.
+   **Capture usage + duration for this stage (mandatory only when it actually ran — the FIRST
+   action on this stage's completion notification).** Capture exactly as in steps 3/4 — read
+   `subagent_tokens`/`duration_ms` from the completion notification's `<usage>` block, then
+   `record-usage --run-dir <run_dir> --stage auto-simulator --total <subagent_tokens>` and
+   `record-duration --run-dir <run_dir> --stage auto-simulator --seconds <duration_ms / 1000>` —
+   ONLY if this stage actually ran (i.e. `run_dir/auto-simulator.bc.json` existed and you
+   dispatched the agent). If step 4b degraded to skip (no `auto-simulator.bc.json`, or
+   validation-retries-exhausted), do NOT record usage or duration for it — a skipped stage has no
+   measurement and is simply omitted from the header. A missing auto-simulator measurement must
+   NEVER block the run. Under multi-circuit parallel dispatch, do this before reacting to any
+   other notification — see step 3's fan-out reminder.
 5. **`prepare_expert_alignment`** — run
    `report_pipeline.prepare_expert_alignment(run_dir)`. Reads the validated
    `historical.out.json`/`inference.out.json` from steps 3-4, pools report dates, matches the
@@ -251,16 +281,18 @@ already completed — dispatch it alone, immediately once both are done, without
    `run_dir/expert-alignment.bc.json` and `agent_tools.expert_alignment build-context`/`validate`,
    writing `run_dir/expert-alignment.out.json`.
 
-   **Capture usage + duration for this stage (mandatory when available).** Same pattern as steps
-   3/4: note your own wall-clock time immediately BEFORE dispatching and again immediately AFTER
-   `validate` returns exit code `0`, then in the same turn call BOTH `PYTHONPATH=src
-   .venv/bin/python -m chec_local_interpreter.report_contract record-usage --run-dir <run_dir>
-   --stage expert-alignment --total <subagent_tokens>` (omit only if your runtime exposes no token
-   total) and `PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.report_contract
-   record-duration --run-dir <run_dir> --stage expert-alignment --seconds <after minus before>`
-   (always available — your own clock, not the sub-agent's return value). Record the FINAL
-   successful attempt's delta only. Do not scrape prose, session history, or output sizes for
-   either value.
+   **Capture usage + duration for this stage (mandatory when available — the FIRST action on this
+   stage's completion notification, before anything else).** Same pattern as steps 3/4: read
+   `subagent_tokens`/`duration_ms` directly from the completion notification's `<usage>` block (own
+   wall-clock only as a fallback when no `<usage>` block exists), then in the same turn call BOTH
+   `PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.report_contract record-usage
+   --run-dir <run_dir> --stage expert-alignment --total <subagent_tokens>` (omit only if your
+   runtime exposes no token total) and `PYTHONPATH=src .venv/bin/python -m
+   chec_local_interpreter.report_contract record-duration --run-dir <run_dir> --stage
+   expert-alignment --seconds <duration_ms / 1000>`. Record the FINAL successful attempt's value
+   only. Do not scrape prose, session history, or output sizes for either value. Under
+   multi-circuit parallel dispatch, do this before reacting to any other notification — see step
+   3's fan-out reminder.
 7. **`render`** — prefer the shared contract render command. Pass runtime metadata explicitly when your runtime exposes it; otherwise let the contract resolve the effective runtime model from execution evidence:
 
    ```bash
