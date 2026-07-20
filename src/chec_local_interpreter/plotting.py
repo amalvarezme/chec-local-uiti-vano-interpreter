@@ -303,8 +303,11 @@ def plot_interactive_circuit_clustering(raw_df, start_date=None, end_date=None, 
             hoverinfo='none'
         ))
 
-    # Dynamic Title
-    title_text = 'Agrupamiento de Circuitos: Frecuencia de Eventos vs Suma de UITI_VANO (K=4)'
+    # Dynamic Title. K reflects the actual number of clusters K-Means produced
+    # for this data (min(len(CRITICALITY_GROUP_LABELS), len(df_coords)) inside
+    # compute_circuit_criticality_groups), not a hardcoded constant.
+    n_clusters_used = df_coords['cluster'].nunique()
+    title_text = f'Agrupamiento de Circuitos: Frecuencia de Eventos vs Suma de UITI_VANO (K={n_clusters_used})'
     if start_date and end_date:
         title_text += f'<br><sup>Periodo: {start_date} a {end_date}</sup>'
     elif start_date:
