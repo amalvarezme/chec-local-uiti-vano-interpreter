@@ -34,6 +34,7 @@ reports/geo/*
 !reports/geo/.gitkeep
 reports/vault/*
 !reports/vault/.gitkeep
+!reports/vault/*.md
 lib/
 
 .vscode/
