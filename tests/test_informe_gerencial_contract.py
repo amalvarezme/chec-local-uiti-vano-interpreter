@@ -809,10 +809,16 @@ def test_annex_per_circuit_summary_uses_structured_findings_when_available():
     assert "extracto" not in entry
 
 
-def test_annex_hypothesis_shown_complete_when_it_fits():
-    """A short cause_hypothesis_note (the common case) must land COMPLETE in
-    the annex, never truncated -- truncation is reserved for hypotheses that
-    genuinely exceed the ~4-line budget (see the next test).
+def _hypothesis_entry(resumen: list) -> dict:
+    return next(item for item in resumen if isinstance(item, dict) and item.get("label") == "Hipótesis de causa")
+
+
+def test_annex_hypothesis_shown_as_single_subitem_when_it_fits():
+    """A short, single-clause cause_hypothesis_note (the common case) still
+    renders as the "Hipótesis de causa" sub-item structure -- one item in
+    `items`, COMPLETE, never truncated -- so the shape is the SAME on every
+    run regardless of how long a given hypothesis happens to be (design:
+    "consistent flow across runs").
     """
     short_cause = "Posible degradación del transformador de distribución."
     sampled_records = _sampled_records([("C01", 40, 50000.0, "Muy Alta")])
@@ -824,17 +830,18 @@ def test_annex_hypothesis_shown_complete_when_it_fits():
     result = synthesize(sampled_records, loaded_content, group)
     resumen = result["anexo_por_circuito"][0]["resumen"]
 
-    hypothesis_line = next(line for line in resumen if line.startswith("Hipótesis de causa:"))
-    assert hypothesis_line == f"Hipótesis de causa: {short_cause}"
-    assert "…" not in hypothesis_line
+    entry = _hypothesis_entry(resumen)
+    assert entry == {"label": "Hipótesis de causa", "items": [short_cause]}
 
 
-def test_annex_hypothesis_summarized_to_clause_boundary_when_too_long():
-    """A long, real-world-shaped hypothesis (multiple ';'-separated points
-    packed into one long sentence, as historical.out.json's agent output
-    actually produces) must be condensed to ~4 lines by keeping COMPLETE
-    clauses -- never cut off mid-word -- with a trailing ellipsis marking
-    the excerpt.
+def test_annex_hypothesis_split_into_subitems_by_clause_when_long():
+    """A long, real-world-shaped hypothesis (multiple ';'/'.'-separated
+    points packed into one long sentence, as historical.out.json's agent
+    output actually produces) is split into one sub-item PER CLAUSE -- never
+    truncated, never an ellipsis, and every word of the original text is
+    preserved across the joined sub-items. A manager acting on the annex
+    needs the full cause hypothesis presented as scannable points, not a
+    partial excerpt or one dense paragraph.
     """
     long_cause = (
         "Dentro de las variables disponibles, el comportamiento del UITI_VANO es compatible "
@@ -857,17 +864,62 @@ def test_annex_hypothesis_summarized_to_clause_boundary_when_too_long():
     result = synthesize(sampled_records, loaded_content, group)
     resumen = result["anexo_por_circuito"][0]["resumen"]
 
-    hypothesis_line = next(line for line in resumen if line.startswith("Hipótesis de causa:"))
-    body = hypothesis_line[len("Hipótesis de causa: ") :]
+    entry = _hypothesis_entry(resumen)
+    items = entry["items"]
 
-    assert body != long_cause
-    assert body.endswith("…")
-    # Never mid-word: the kept text (minus the ellipsis) must be an exact
-    # prefix of the original, collapsed-whitespace hypothesis.
+    assert len(items) > 1  # actually split into multiple sub-items
+    assert not any("…" in item for item in items)
+    # No word lost: rejoining every sub-item reproduces the whitespace-
+    # collapsed original exactly.
     collapsed_original = " ".join(long_cause.split())
-    assert collapsed_original.startswith(body[:-1])
-    # Condensed to roughly a 4-line budget, not the ~900-char original.
-    assert len(body) <= 420
+    assert " ".join(items) == collapsed_original
+
+
+def test_annex_hypothesis_with_newlines_is_whitespace_collapsed_but_complete():
+    """A hypothesis containing embedded newlines/extra spacing (as raw agent
+    JSON sometimes carries) still lands complete in the annex sub-items, with
+    only whitespace collapsed -- not one word of content dropped.
+    """
+    cause_with_newlines = "Falla de linea de\nmedia tension  rota,   confirmada por dos eventos independientes."
+    sampled_records = _sampled_records([("C01", 40, 50000.0, "Muy Alta")])
+    loaded_content = [
+        {"circuito": "C01", "source": "vault_note", "content": "x", "cause_hypothesis_note": cause_with_newlines}
+    ]
+    group = {"slug": "muy-alta", "label": "Muy Alta", "circuit_count": 1}
+
+    result = synthesize(sampled_records, loaded_content, group)
+    resumen = result["anexo_por_circuito"][0]["resumen"]
+
+    entry = _hypothesis_entry(resumen)
+    assert " ".join(entry["items"]) == (
+        "Falla de linea de media tension rota, confirmada por dos eventos independientes."
+    )
+    assert not any("…" in item for item in entry["items"])
+
+
+def test_annex_html_renders_hypothesis_as_nested_subitem_list():
+    """`_annex_html` renders the cause-hypothesis dict entry as a labeled
+    `<li>` containing a nested `<ul class='annex-subitems'>`, one `<li>` per
+    clause -- not a flat paragraph -- and HTML-escapes each sub-item.
+    """
+    annex = [
+        {
+            "circuito": "C01",
+            "criticidad": "Muy Alta",
+            "fuente": "vault_note",
+            "resumen": [
+                "Titular breve.",
+                {"label": "Hipótesis de causa", "items": ["Primer punto <raro>.", "Segundo punto."]},
+            ],
+            "report_html": None,
+        }
+    ]
+
+    html = informe_contract._annex_html(annex)
+
+    assert "<li>Hipótesis de causa<ul class='annex-subitems'>" in html
+    assert "<li>Primer punto &lt;raro&gt;.</li><li>Segundo punto.</li>" in html
+    assert "<li>Titular breve.</li>" in html
 
 
 def test_annex_per_circuit_summary_falls_back_to_shortened_raw_content():

@@ -826,63 +826,47 @@ def _shorten(text: str, *, limit: int = 220) -> str:
     return collapsed[:limit].rsplit(" ", 1)[0].rstrip(",.;:") + "…"
 
 
-_HYPOTHESIS_LINE_BUDGET_CHARS = 400  # ~4 rendered lines at this table's column width/font size
 _CLAUSE_SPLIT_RE = re.compile(r"(?<=[.;])\s+")
 
 
-def _summarize_hypothesis(text: str, *, line_budget_chars: int = _HYPOTHESIS_LINE_BUDGET_CHARS) -> str:
-    """Present `cause_hypothesis_note` COMPLETE when it already fits within
-    `line_budget_chars` (~4 rendered lines); otherwise condense it to the
-    longest prefix of COMPLETE clauses (split on sentence/semicolon
-    boundaries -- this module's agent-authored hypotheses are often one long
-    enumerated sentence using ';' between points, not separate '.'-delimited
-    sentences) that fits the budget, so a long hypothesis is summarized to
-    ~4 lines without ever cutting off mid-word/mid-clause. Deterministic, no
-    LLM call (extractive clause selection, not paraphrasing) -- consistent
-    with this module's LLM-free design.
+def _hypothesis_clauses(text: str) -> list[str]:
+    """Split a `cause_hypothesis_note` into its component clauses (sentence/
+    semicolon boundaries) so the annex can render it as SUB-ITEMS under
+    "Hipótesis de causa" instead of one dense paragraph -- this module's
+    agent-authored hypotheses are routinely one long enumerated sentence
+    using ';'/numbered markers between points, not separate '.'-delimited
+    sentences (see `_annex_summary_lines`/`_annex_html`). Never truncates or
+    drops any text -- every clause survives, whitespace-collapsed only.
 
-    The first clause is ALWAYS included complete even if it alone exceeds
-    the budget (a slightly-over-budget complete clause reads better than a
-    truncated one); only as a genuine last resort, when clause-splitting
-    finds nothing at all, does this fall back to a word-boundary cut with an
-    ellipsis.
+    Always returns at least one clause (the whole collapsed text, when there
+    is nothing to split on) so the annex's sub-item structure is the SAME
+    shape on every run regardless of how a given hypothesis happens to be
+    punctuated (design: "consistent flow across runs").
     """
     collapsed = " ".join(text.split())
-    if len(collapsed) <= line_budget_chars:
-        return collapsed
-
-    clauses = _CLAUSE_SPLIT_RE.split(collapsed)
-    kept: list[str] = []
-    total = 0
-    for clause in clauses:
-        added = len(clause) + (1 if kept else 0)
-        if kept and total + added > line_budget_chars:
-            break
-        kept.append(clause)
-        total += added
-
-    if not kept:
-        return collapsed[:line_budget_chars].rsplit(" ", 1)[0].rstrip(",.;:") + "…"
-
-    summary = " ".join(kept)
-    if summary != collapsed:
-        summary = summary.rstrip(".;") + "…"
-    return summary
+    clauses = [c.strip() for c in _CLAUSE_SPLIT_RE.split(collapsed) if c.strip()]
+    return clauses or [collapsed]
 
 
-def _annex_summary_lines(content: dict[str, Any] | None) -> list[str]:
-    """Build a short, human-readable 3-4 line summary of a circuit's main
+def _annex_summary_lines(content: dict[str, Any] | None) -> list[str | dict[str, Any]]:
+    """Build a short, human-readable 3-4 item summary of a circuit's main
     findings for the managerial annex, from already-extracted structured
     fields (`headline`, `key_finding_titles`, `cause_hypothesis_note`,
     `variables_a_priorizar`) -- NEVER the full raw vault-note/report
     narrative text, which can run to many paragraphs and is unreadable
     inside a table cell (this replaces the previous `extracto` field, which
     dumped that full text verbatim).
+
+    Every item is a plain string EXCEPT the cause hypothesis, which is a
+    `{"label": "Hipótesis de causa", "items": [...]}` dict -- rendered by
+    `_annex_html` as a labeled sub-list, one `<li>` per clause from
+    `_hypothesis_clauses`, so a long hypothesis (always shown COMPLETE, never
+    truncated) reads as scannable sub-points instead of one wall of text.
     """
     if content is None:
         return ["Sin contenido disponible."]
 
-    lines: list[str] = []
+    lines: list[str | dict[str, Any]] = []
 
     headline = content.get("headline")
     if headline:
@@ -893,7 +877,7 @@ def _annex_summary_lines(content: dict[str, Any] | None) -> list[str]:
 
     cause = content.get("cause_hypothesis_note")
     if cause and len(lines) < 4:
-        lines.append(f"Hipótesis de causa: {_summarize_hypothesis(cause)}")
+        lines.append({"label": "Hipótesis de causa", "items": _hypothesis_clauses(cause)})
 
     if len(lines) < 4:
         variables = [
@@ -918,7 +902,7 @@ def _annex_summary_lines(content: dict[str, Any] | None) -> list[str]:
 def _annex_per_circuit(
     sampled_records: Sequence[dict[str, Any]], loaded_content: Sequence[dict[str, Any] | None]
 ) -> list[dict[str, Any]]:
-    """Build the per-circuit annex row: `resumen` is a short (3-4 line),
+    """Build the per-circuit annex row: `resumen` is a short (3-4 item),
     human-readable summary of the circuit's main findings (see
     `_annex_summary_lines`), and `report_html` is the ONLY file this module
     cites to the user for the complete report (the circuit's own rendered
@@ -1155,6 +1139,20 @@ def _graph_patterns_html(
 """
 
 
+def _resumen_item_html(item: str | dict[str, Any]) -> str:
+    """Render one `resumen` entry: a plain string as a single `<li>`, or the
+    cause-hypothesis dict (`{"label": ..., "items": [...]}` from
+    `_annex_summary_lines`) as a labeled `<li>` with a nested sub-list, one
+    `<li>` per clause -- so the annex table shows the hypothesis as scannable
+    sub-items rather than one dense paragraph, consistently on every run.
+    """
+    if isinstance(item, dict):
+        label = _escape(item.get("label"))
+        sub_items = "".join(f"<li>{_escape(sub)}</li>" for sub in item.get("items") or [])
+        return f"<li>{label}<ul class='annex-subitems'>{sub_items}</ul></li>"
+    return f"<li>{_escape(item)}</li>"
+
+
 def _annex_html(annex: Sequence[dict[str, Any]]) -> str:
     rows = "".join(
         "<tr>"
@@ -1162,7 +1160,7 @@ def _annex_html(annex: Sequence[dict[str, Any]]) -> str:
         f"<td>{_escape(entry.get('criticidad'))}</td>"
         f"<td>{_report_reference_html(entry.get('report_html'))}</td>"
         f"<td><ul class='annex-summary'>"
-        f"{''.join(f'<li>{_escape(line)}</li>' for line in entry['resumen'])}"
+        f"{''.join(_resumen_item_html(line) for line in entry['resumen'])}"
         f"</ul></td>"
         "</tr>"
         for entry in annex
@@ -1185,6 +1183,8 @@ h2 { font-size: 1.2rem; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; }
 .annex-table th, .annex-table td { border: 1px solid #e2e8f0; padding: 6px 8px; text-align: left; font-size: 0.9rem; vertical-align: top; }
 .annex-summary { margin: 0; padding-left: 1.1rem; }
 .annex-summary li { margin: 2px 0; }
+.annex-subitems { margin: 4px 0 2px; padding-left: 1.1rem; list-style-type: circle; }
+.annex-subitems li { margin: 2px 0; color: #334155; }
 .badge-llm { display: inline-block; background: #ede9fe; color: #5b21b6; border-radius: 999px; padding: 2px 10px; font-size: 0.75rem; font-weight: 600; margin: 0 0 8px; }
 .badge-deterministic { display: inline-block; background: #dcfce7; color: #166534; border-radius: 999px; padding: 2px 10px; font-size: 0.75rem; font-weight: 600; margin: 0 0 8px; }
 """
