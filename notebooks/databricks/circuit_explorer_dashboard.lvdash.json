@@ -797,13 +797,13 @@
               },
               "widgetType": "symbol-map",
               "encodings": {
-                "lat": {
+                "latitude": {
                   "fieldName": "lat",
                   "scale": {
                     "type": "quantitative"
                   }
                 },
-                "lon": {
+                "longitude": {
                   "fieldName": "lon",
                   "scale": {
                     "type": "quantitative"
