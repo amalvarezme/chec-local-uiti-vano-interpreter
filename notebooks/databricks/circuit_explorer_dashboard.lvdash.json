@@ -620,23 +620,19 @@
               }
             ],
             "spec": {
-              "version": 3,
+              "version": 2,
               "frame": {
-                "title": "Mapa de eventos (circuito + fechas seleccionados)",
+                "title": "Mapa de eventos por vano (circuito + fechas seleccionados)",
                 "showTitle": true
               },
               "widgetType": "symbol-map",
               "encodings": {
-                "latitude": {
-                  "fieldName": "lat",
-                  "scale": {
-                    "type": "quantitative"
-                  }
-                },
-                "longitude": {
-                  "fieldName": "lon",
-                  "scale": {
-                    "type": "quantitative"
+                "coordinates": {
+                  "latitude": {
+                    "fieldName": "lat"
+                  },
+                  "longitude": {
+                    "fieldName": "lon"
                   }
                 },
                 "color": {
@@ -655,7 +651,73 @@
           "position": {
             "x": 0,
             "y": 16,
-            "width": 12,
+            "width": 6,
+            "height": 8
+          }
+        },
+        {
+          "widget": {
+            "name": "uiti_map",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "geo_ds",
+                  "fields": [
+                    {
+                      "name": "lat",
+                      "expression": "`lat`"
+                    },
+                    {
+                      "name": "lon",
+                      "expression": "`lon`"
+                    },
+                    {
+                      "name": "uiti_vano_sum",
+                      "expression": "`uiti_vano_sum`"
+                    },
+                    {
+                      "name": "fid_vano",
+                      "expression": "`fid_vano`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "title": "Mapa de UITI_VANO por vano (circuito + fechas seleccionados)",
+                "showTitle": true
+              },
+              "widgetType": "symbol-map",
+              "encodings": {
+                "coordinates": {
+                  "latitude": {
+                    "fieldName": "lat"
+                  },
+                  "longitude": {
+                    "fieldName": "lon"
+                  }
+                },
+                "color": {
+                  "fieldName": "uiti_vano_sum",
+                  "displayName": "uiti_vano_sum",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 16,
+            "width": 6,
             "height": 8
           }
         }
