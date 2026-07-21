@@ -436,10 +436,12 @@
                     "type": "categorical"
                   }
                 },
-                "label": {
-                  "fieldName": "circuito",
-                  "displayName": "circuito"
-                }
+                "extra": [
+                  {
+                    "fieldName": "circuito",
+                    "displayName": "Circuito"
+                  }
+                ]
               },
               "data": {
                 "queryName": "main_query"
