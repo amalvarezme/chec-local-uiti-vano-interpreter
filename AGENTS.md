@@ -35,10 +35,20 @@ the JSON response, never a Python `call_llm()`. Role definitions:
 - OpenCode: `.opencode/agent/<role>.md` (mirrors the same role; OpenCode reads
   `.claude/skills/` directly, so only the agent role file needs a separate copy).
 
-Do not add Databricks, Dash, FastAPI, RAG, or vector stores. Predictive model inference and
-forecasting language are prohibited in `historical`'s base explanations, EXCEPT within outputs
-validated by `validar_respuesta_inferencia`, where predictive analysis and final evidence
-report generation are fully permitted and encouraged.
+Do not add Databricks, Dash, FastAPI, RAG, or vector stores to `src/chec_local_interpreter` or
+any of the 5 LLM agent roles (`historical`, `inference`, `expert-alignment`, `auto-simulator`,
+`pdf-discussion-extraction`). Predictive model inference and forecasting language are prohibited
+in `historical`'s base explanations, EXCEPT within outputs validated by
+`validar_respuesta_inferencia`, where predictive analysis and final evidence report generation
+are fully permitted and encouraged.
+
+**Sanctioned exception**: `notebooks/databricks/` hosts a manual, one-time Databricks AI/BI PoC
+(circuit-clustering + geo-exploration dashboard) that imports and reuses
+`plotting.compute_circuit_criticality_groups` for exact parity with the local pipeline, but never
+modifies `report_pipeline.py`, any of the 5 LLM agent roles, or the local pipeline's runtime
+dependencies. It is a standalone, headless-run data-prep/dashboard script invoked via the
+Databricks CLI — not an automation pipeline, and not a reversal of this repo's notebook-to-Python
+migration for the local interpreter itself.
 
 ## Coding Style
 
