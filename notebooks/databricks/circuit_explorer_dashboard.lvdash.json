@@ -111,19 +111,12 @@
     {
       "name": "geo_ds",
       "displayName": "circuit_geo (join filtrable por circuito y fecha)",
-      "queryLines": [
-        "SELECT g.lat AS lat, g.lon AS lon, g.fid_vano AS fid_vano, i.CIRCUITO AS circuito, i.FECHA_DIA AS fecha_dia, COUNT(*) AS event_count, SUM(i.UITI_VANO) AS uiti_vano_sum\n",
-        "FROM workspace.default.indicadores_vano i\n",
-        "JOIN workspace.default.circuit_geo g ON i.FID_VANO_NORM = g.fid_vano AND i.CIRCUITO = g.circuito\n",
-        "GROUP BY g.lat, g.lon, g.fid_vano, i.CIRCUITO, i.FECHA_DIA"
-      ]
+      "query": "SELECT g.lat AS lat, g.lon AS lon, g.fid_vano AS fid_vano, i.CIRCUITO AS circuito, i.FECHA_DIA AS fecha_dia, COUNT(*) AS event_count, SUM(i.UITI_VANO) AS uiti_vano_sum\nFROM workspace.default.indicadores_vano i\nJOIN workspace.default.circuit_geo g ON i.FID_VANO_NORM = g.fid_vano AND i.CIRCUITO = g.circuito\nGROUP BY g.lat, g.lon, g.fid_vano, i.CIRCUITO, i.FECHA_DIA"
     },
     {
       "name": "date_bounds_ds",
       "displayName": "date_bounds (rango completo disponible)",
-      "queryLines": [
-        "SELECT MIN(FECHA_DIA) AS fecha_min, MAX(FECHA_DIA) AS fecha_max FROM workspace.default.indicadores_vano"
-      ]
+      "query": "SELECT MIN(FECHA_DIA) AS fecha_min, MAX(FECHA_DIA) AS fecha_max FROM workspace.default.indicadores_vano"
     }
   ],
   "pages": [
