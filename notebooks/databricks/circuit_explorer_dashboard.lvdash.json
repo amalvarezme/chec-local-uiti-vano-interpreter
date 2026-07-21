@@ -111,7 +111,56 @@
     {
       "name": "circuit_map_lines_equipment_ds",
       "displayName": "Vanos (lineas X1,Y1-X2,Y2) + equipos (transformadores/switches), filtrable por circuito y fecha",
-      "query": "SELECT circuito, geom_type, fid, lon1, lat1, lon2, lat2, fecha_dia, event_count, uiti_vano_sum FROM (\n  SELECT CIRCUITO AS circuito, 'vano' AS geom_type, CAST(FID_VANO AS STRING) AS fid, X1 AS lon1, Y1 AS lat1, X2 AS lon2, Y2 AS lat2, DATE_TRUNC('DAY', FECHA) AS fecha_dia, COUNT(*) AS event_count, SUM(UITI_VANO) AS uiti_vano_sum\n  FROM workspace.default.indicadores_vano_v_3\n  WHERE X1 IS NOT NULL AND Y1 IS NOT NULL AND X2 IS NOT NULL AND Y2 IS NOT NULL\n  GROUP BY CIRCUITO, FID_VANO, X1, Y1, X2, Y2, DATE_TRUNC('DAY', FECHA)\n\n  UNION ALL\n\n  SELECT CIRCUITO AS circuito, 'transformador' AS geom_type, CAST(FID_TRAFO AS STRING) AS fid, X2 AS lon1, Y2 AS lat1, CAST(NULL AS DOUBLE) AS lon2, CAST(NULL AS DOUBLE) AS lat2, DATE_TRUNC('DAY', FECHA) AS fecha_dia, CAST(NULL AS BIGINT) AS event_count, CAST(NULL AS DOUBLE) AS uiti_vano_sum\n  FROM workspace.default.indicadores_vano_v_3\n  WHERE FID_TRAFO IS NOT NULL AND X2 IS NOT NULL AND Y2 IS NOT NULL\n  GROUP BY CIRCUITO, FID_TRAFO, X2, Y2, DATE_TRUNC('DAY', FECHA)\n\n  UNION ALL\n\n  SELECT CIRCUITO AS circuito, 'switch' AS geom_type, CAST(FID_SW AS STRING) AS fid, X1 AS lon1, Y1 AS lat1, CAST(NULL AS DOUBLE) AS lon2, CAST(NULL AS DOUBLE) AS lat2, DATE_TRUNC('DAY', FECHA) AS fecha_dia, CAST(NULL AS BIGINT) AS event_count, CAST(NULL AS DOUBLE) AS uiti_vano_sum\n  FROM workspace.default.indicadores_vano_v_3\n  WHERE FID_SW IS NOT NULL AND X1 IS NOT NULL AND Y1 IS NOT NULL\n  GROUP BY CIRCUITO, FID_SW, X1, Y1, DATE_TRUNC('DAY', FECHA)\n)"
+      "config": {
+        "version": "1.1",
+        "source": "workspace.default.circuit_map_lines_equipment",
+        "dimensions": [
+          {
+            "name": "circuito",
+            "expr": "circuito"
+          },
+          {
+            "name": "geom_type",
+            "expr": "geom_type"
+          },
+          {
+            "name": "fid",
+            "expr": "fid"
+          },
+          {
+            "name": "lon1",
+            "expr": "lon1"
+          },
+          {
+            "name": "lat1",
+            "expr": "lat1"
+          },
+          {
+            "name": "lon2",
+            "expr": "lon2"
+          },
+          {
+            "name": "lat2",
+            "expr": "lat2"
+          },
+          {
+            "name": "fecha_dia",
+            "expr": "fecha_dia"
+          }
+        ],
+        "measures": [
+          {
+            "name": "event_count_sum",
+            "expr": "SUM(event_count)",
+            "displayName": "event_count"
+          },
+          {
+            "name": "uiti_vano_sum_total",
+            "expr": "SUM(uiti_vano_sum)",
+            "displayName": "uiti_vano_sum"
+          }
+        ]
+      }
     }
   ],
   "pages": [
@@ -585,10 +634,10 @@
                     },
                     {
                       "name": "event_count",
-                      "expression": "`event_count`"
+                      "expression": "MEASURE(`event_count_sum`)"
                     }
                   ],
-                  "disaggregated": true
+                  "disaggregated": false
                 }
               }
             ],
@@ -682,10 +731,10 @@
                     },
                     {
                       "name": "uiti_vano_sum",
-                      "expression": "`uiti_vano_sum`"
+                      "expression": "MEASURE(`uiti_vano_sum_total`)"
                     }
                   ],
-                  "disaggregated": true
+                  "disaggregated": false
                 }
               }
             ],
