@@ -112,11 +112,6 @@
       "name": "geo_ds",
       "displayName": "circuit_geo (join filtrable por circuito y fecha)",
       "query": "SELECT g.lat AS lat, g.lon AS lon, g.fid_vano AS fid_vano, i.CIRCUITO AS circuito, i.FECHA_DIA AS fecha_dia, COUNT(*) AS event_count, SUM(i.UITI_VANO) AS uiti_vano_sum\nFROM workspace.default.indicadores_vano i\nJOIN workspace.default.circuit_geo g ON i.FID_VANO_NORM = g.fid_vano AND i.CIRCUITO = g.circuito\nGROUP BY g.lat, g.lon, g.fid_vano, i.CIRCUITO, i.FECHA_DIA"
-    },
-    {
-      "name": "date_bounds_ds",
-      "displayName": "date_bounds (rango completo disponible)",
-      "query": "SELECT MIN(FECHA_DIA) AS fecha_min, MAX(FECHA_DIA) AS fecha_max FROM workspace.default.indicadores_vano"
     }
   ],
   "pages": [
@@ -225,7 +220,7 @@
           "position": {
             "x": 0,
             "y": 1,
-            "width": 4,
+            "width": 6,
             "height": 2
           }
         },
@@ -234,26 +229,34 @@
             "name": "date_filter",
             "queries": [
               {
-                "name": "q_daily_date",
+                "name": "dashboards/01f1849e6bbd1be9a5188c08fb912a80/datasets/01f184b3ccc414c0b146a85c7f005b86_fecha_dia",
                 "query": {
                   "datasetName": "daily_line_ds",
                   "fields": [
                     {
                       "name": "fecha_dia",
                       "expression": "`fecha_dia`"
+                    },
+                    {
+                      "name": "fecha_dia_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
                   ],
                   "disaggregated": false
                 }
               },
               {
-                "name": "q_geo_date",
+                "name": "dashboards/01f1849e6bbd1be9a5188c08fb912a80/datasets/01f184b3ccc414c3bbd92b5ec54e44cb_fecha_dia",
                 "query": {
                   "datasetName": "geo_ds",
                   "fields": [
                     {
                       "name": "fecha_dia",
                       "expression": "`fecha_dia`"
+                    },
+                    {
+                      "name": "fecha_dia_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
                   ],
                   "disaggregated": false
@@ -261,97 +264,43 @@
               }
             ],
             "spec": {
-              "version": 2,
               "frame": {
                 "title": "Rango de fechas (no afecta al clustering)",
                 "showTitle": true
+              },
+              "version": 2,
+              "selection": {
+                "defaultSelection": {
+                  "range": {
+                    "dataType": "DATE",
+                    "min": {
+                      "value": "2025-11-01"
+                    },
+                    "max": {
+                      "value": "2026-04-30"
+                    }
+                  }
+                }
               },
               "widgetType": "filter-date-range-picker",
               "encodings": {
                 "fields": [
                   {
                     "fieldName": "fecha_dia",
-                    "queryName": "q_daily_date"
+                    "queryName": "dashboards/01f1849e6bbd1be9a5188c08fb912a80/datasets/01f184b3ccc414c0b146a85c7f005b86_fecha_dia"
                   },
                   {
                     "fieldName": "fecha_dia",
-                    "queryName": "q_geo_date"
+                    "queryName": "dashboards/01f1849e6bbd1be9a5188c08fb912a80/datasets/01f184b3ccc414c3bbd92b5ec54e44cb_fecha_dia"
                   }
                 ]
-              },
-              "selection": {
-                "defaultSelection": {
-                  "range": {
-                    "dateRangeValue": {
-                      "startTimestampRange": {
-                        "value": "2025-11-01T00:00:00.000Z"
-                      },
-                      "endTimestampRange": {
-                        "value": "2026-04-30T00:00:00.000Z"
-                      }
-                    }
-                  }
-                }
               }
             }
           },
           "position": {
-            "x": 4,
+            "x": 6,
             "y": 1,
-            "width": 4,
-            "height": 2
-          }
-        },
-        {
-          "widget": {
-            "name": "date_bounds_table",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "date_bounds_ds",
-                  "fields": [
-                    {
-                      "name": "fecha_min",
-                      "expression": "`fecha_min`"
-                    },
-                    {
-                      "name": "fecha_max",
-                      "expression": "`fecha_max`"
-                    }
-                  ],
-                  "disaggregated": true
-                }
-              }
-            ],
-            "spec": {
-              "version": 2,
-              "frame": {
-                "showTitle": true,
-                "title": "Rango completo disponible (MIN..MAX)"
-              },
-              "widgetType": "table",
-              "encodings": {
-                "columns": [
-                  {
-                    "fieldName": "fecha_min",
-                    "displayName": "fecha_min"
-                  },
-                  {
-                    "fieldName": "fecha_max",
-                    "displayName": "fecha_max"
-                  }
-                ]
-              },
-              "data": {
-                "queryName": "main_query"
-              }
-            }
-          },
-          "position": {
-            "x": 8,
-            "y": 1,
-            "width": 4,
+            "width": 6,
             "height": 2
           }
         },
