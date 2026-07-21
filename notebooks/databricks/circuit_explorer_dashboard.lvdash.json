@@ -342,12 +342,18 @@
                 "columns": [
                   {
                     "fieldName": "fecha_min",
+                    "type": "date",
                     "displayAs": "string",
+                    "visible": true,
+                    "order": 0,
                     "title": "fecha_min"
                   },
                   {
                     "fieldName": "fecha_max",
+                    "type": "date",
                     "displayAs": "string",
+                    "visible": true,
+                    "order": 1,
                     "title": "fecha_max"
                   }
                 ]
@@ -420,16 +426,16 @@
               "encodings": {
                 "x": {
                   "fieldName": "measure(event_count_sum)",
-                  "displayName": "event_count (escala log)",
+                  "displayName": "event_count",
                   "scale": {
-                    "type": "log"
+                    "type": "quantitative"
                   }
                 },
                 "y": {
                   "fieldName": "measure(uiti_vano_sum_total)",
-                  "displayName": "uiti_vano_sum (escala log)",
+                  "displayName": "uiti_vano_sum",
                   "scale": {
-                    "type": "log"
+                    "type": "quantitative"
                   }
                 },
                 "color": {
@@ -505,32 +511,50 @@
                 "columns": [
                   {
                     "fieldName": "circuito",
+                    "type": "string",
                     "displayAs": "string",
+                    "visible": true,
+                    "order": 0,
                     "title": "circuito"
                   },
                   {
                     "fieldName": "criticidad",
+                    "type": "string",
                     "displayAs": "string",
+                    "visible": true,
+                    "order": 1,
                     "title": "criticidad"
                   },
                   {
                     "fieldName": "cluster",
+                    "type": "integer",
                     "displayAs": "number",
+                    "visible": true,
+                    "order": 2,
                     "title": "cluster"
                   },
                   {
                     "fieldName": "measure(event_count_sum)",
+                    "type": "integer",
                     "displayAs": "number",
+                    "visible": true,
+                    "order": 3,
                     "title": "event_count"
                   },
                   {
                     "fieldName": "measure(uiti_vano_sum_total)",
+                    "type": "float",
                     "displayAs": "number",
+                    "visible": true,
+                    "order": 4,
                     "title": "uiti_vano_sum"
                   },
                   {
                     "fieldName": "measure(centroid_distance_avg)",
+                    "type": "float",
                     "displayAs": "number",
+                    "visible": true,
+                    "order": 5,
                     "title": "centroid_distance"
                   }
                 ]
