@@ -411,16 +411,22 @@
               "encodings": {
                 "x": {
                   "fieldName": "measure(event_count_sum)",
-                  "displayName": "event_count",
+                  "displayName": "event_count (log scale)",
                   "scale": {
-                    "type": "quantitative"
+                    "type": "quantitative",
+                    "fn": {
+                      "type": "symlog"
+                    }
                   }
                 },
                 "y": {
                   "fieldName": "measure(uiti_vano_sum_total)",
-                  "displayName": "uiti_vano_sum",
+                  "displayName": "uiti_vano_sum (log scale)",
                   "scale": {
-                    "type": "quantitative"
+                    "type": "quantitative",
+                    "fn": {
+                      "type": "symlog"
+                    }
                   }
                 },
                 "color": {
