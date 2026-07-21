@@ -109,9 +109,9 @@
       }
     },
     {
-      "name": "geo_ds",
-      "displayName": "circuit_geo (join filtrable por circuito y fecha)",
-      "query": "SELECT g.lat AS lat, g.lon AS lon, g.fid_vano AS fid_vano, i.CIRCUITO AS circuito, i.FECHA_DIA AS fecha_dia, COUNT(*) AS event_count, SUM(i.UITI_VANO) AS uiti_vano_sum\nFROM workspace.default.indicadores_vano i\nJOIN workspace.default.circuit_geo g ON i.FID_VANO_NORM = g.fid_vano AND i.CIRCUITO = g.circuito\nGROUP BY g.lat, g.lon, g.fid_vano, i.CIRCUITO, i.FECHA_DIA"
+      "name": "circuit_map_lines_equipment_ds",
+      "displayName": "Vanos (lineas X1,Y1-X2,Y2) + equipos (transformadores/switches), filtrable por circuito y fecha",
+      "query": "SELECT circuito, geom_type, fid, lon1, lat1, lon2, lat2, fecha_dia, event_count, uiti_vano_sum FROM (\n  SELECT CIRCUITO AS circuito, 'vano' AS geom_type, CAST(FID_VANO AS STRING) AS fid, X1 AS lon1, Y1 AS lat1, X2 AS lon2, Y2 AS lat2, DATE_TRUNC('DAY', FECHA) AS fecha_dia, COUNT(*) AS event_count, SUM(UITI_VANO) AS uiti_vano_sum\n  FROM workspace.default.indicadores_vano_v_3\n  WHERE X1 IS NOT NULL AND Y1 IS NOT NULL AND X2 IS NOT NULL AND Y2 IS NOT NULL\n  GROUP BY CIRCUITO, FID_VANO, X1, Y1, X2, Y2, DATE_TRUNC('DAY', FECHA)\n\n  UNION ALL\n\n  SELECT CIRCUITO AS circuito, 'transformador' AS geom_type, CAST(FID_TRAFO AS STRING) AS fid, X2 AS lon1, Y2 AS lat1, CAST(NULL AS DOUBLE) AS lon2, CAST(NULL AS DOUBLE) AS lat2, DATE_TRUNC('DAY', FECHA) AS fecha_dia, CAST(NULL AS BIGINT) AS event_count, CAST(NULL AS DOUBLE) AS uiti_vano_sum\n  FROM workspace.default.indicadores_vano_v_3\n  WHERE FID_TRAFO IS NOT NULL AND X2 IS NOT NULL AND Y2 IS NOT NULL\n  GROUP BY CIRCUITO, FID_TRAFO, X2, Y2, DATE_TRUNC('DAY', FECHA)\n\n  UNION ALL\n\n  SELECT CIRCUITO AS circuito, 'switch' AS geom_type, CAST(FID_SW AS STRING) AS fid, X1 AS lon1, Y1 AS lat1, CAST(NULL AS DOUBLE) AS lon2, CAST(NULL AS DOUBLE) AS lat2, DATE_TRUNC('DAY', FECHA) AS fecha_dia, CAST(NULL AS BIGINT) AS event_count, CAST(NULL AS DOUBLE) AS uiti_vano_sum\n  FROM workspace.default.indicadores_vano_v_3\n  WHERE FID_SW IS NOT NULL AND X1 IS NOT NULL AND Y1 IS NOT NULL\n  GROUP BY CIRCUITO, FID_SW, X1, Y1, DATE_TRUNC('DAY', FECHA)\n)"
     }
   ],
   "pages": [
@@ -177,7 +177,7 @@
               {
                 "name": "q_geo",
                 "query": {
-                  "datasetName": "geo_ds",
+                  "datasetName": "circuit_map_lines_equipment_ds",
                   "fields": [
                     {
                       "name": "circuito",
@@ -248,7 +248,7 @@
               {
                 "name": "dashboards/01f1849e6bbd1be9a5188c08fb912a80/datasets/01f184b3ccc414c3bbd92b5ec54e44cb_fecha_dia",
                 "query": {
-                  "datasetName": "geo_ds",
+                  "datasetName": "circuit_map_lines_equipment_ds",
                   "fields": [
                     {
                       "name": "fecha_dia",
@@ -553,23 +553,39 @@
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "geo_ds",
+                  "datasetName": "circuit_map_lines_equipment_ds",
                   "fields": [
                     {
-                      "name": "lat",
-                      "expression": "`lat`"
+                      "name": "circuito",
+                      "expression": "`circuito`"
                     },
                     {
-                      "name": "lon",
-                      "expression": "`lon`"
+                      "name": "geom_type",
+                      "expression": "`geom_type`"
+                    },
+                    {
+                      "name": "fid",
+                      "expression": "`fid`"
+                    },
+                    {
+                      "name": "lon1",
+                      "expression": "`lon1`"
+                    },
+                    {
+                      "name": "lat1",
+                      "expression": "`lat1`"
+                    },
+                    {
+                      "name": "lon2",
+                      "expression": "`lon2`"
+                    },
+                    {
+                      "name": "lat2",
+                      "expression": "`lat2`"
                     },
                     {
                       "name": "event_count",
                       "expression": "`event_count`"
-                    },
-                    {
-                      "name": "fid_vano",
-                      "expression": "`fid_vano`"
                     }
                   ],
                   "disaggregated": true
@@ -577,28 +593,43 @@
               }
             ],
             "spec": {
-              "version": 2,
+              "version": 1,
               "frame": {
-                "title": "Mapa de eventos por vano (circuito + fechas seleccionados)",
+                "title": "Mapa de vanos + equipos por eventos (circuito seleccionado)",
                 "showTitle": true
               },
-              "widgetType": "symbol-map",
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v6.json\",\"data\":{\"name\":\"databricks_query\"},\"width\":\"container\",\"height\":\"container\",\"config\":{\"autosize\":{\"type\":\"fit\",\"contains\":\"padding\"}},\"projection\":{\"type\":\"mercator\"},\"layer\":[{\"transform\":[{\"filter\":\"datum.geom_type == 'vano'\"}],\"mark\":{\"type\":\"rule\",\"strokeWidth\":2,\"opacity\":0.85},\"encoding\":{\"longitude\":{\"field\":\"lon1\",\"type\":\"quantitative\"},\"latitude\":{\"field\":\"lat1\",\"type\":\"quantitative\"},\"longitude2\":{\"field\":\"lon2\"},\"latitude2\":{\"field\":\"lat2\"},\"color\":{\"field\":\"event_count\",\"type\":\"quantitative\",\"scale\":{\"scheme\":\"blues\"},\"legend\":{\"title\":\"Eventos\"}},\"tooltip\":[{\"field\":\"circuito\",\"type\":\"nominal\",\"title\":\"Circuito\"},{\"field\":\"fid\",\"type\":\"nominal\",\"title\":\"FID vano\"},{\"field\":\"event_count\",\"type\":\"quantitative\",\"title\":\"Eventos\"}]}},{\"transform\":[{\"filter\":\"datum.geom_type == 'transformador'\"}],\"mark\":{\"type\":\"square\",\"size\":45,\"color\":\"#f59e0b\",\"opacity\":0.9,\"stroke\":\"white\",\"strokeWidth\":0.5},\"encoding\":{\"longitude\":{\"field\":\"lon1\",\"type\":\"quantitative\"},\"latitude\":{\"field\":\"lat1\",\"type\":\"quantitative\"},\"tooltip\":[{\"field\":\"circuito\",\"type\":\"nominal\",\"title\":\"Circuito\"},{\"field\":\"fid\",\"type\":\"nominal\",\"title\":\"FID transformador\"}]}},{\"transform\":[{\"filter\":\"datum.geom_type == 'switch'\"}],\"mark\":{\"type\":\"circle\",\"size\":35,\"color\":\"#7c3aed\",\"opacity\":0.9,\"stroke\":\"white\",\"strokeWidth\":0.5},\"encoding\":{\"longitude\":{\"field\":\"lon1\",\"type\":\"quantitative\"},\"latitude\":{\"field\":\"lat1\",\"type\":\"quantitative\"},\"tooltip\":[{\"field\":\"circuito\",\"type\":\"nominal\",\"title\":\"Circuito\"},{\"field\":\"fid\",\"type\":\"nominal\",\"title\":\"FID switch\"}]}}]}"
+              },
+              "widgetType": "custom-vega-viz",
               "encodings": {
-                "coordinates": {
-                  "latitude": {
-                    "fieldName": "lat"
+                "fields": [
+                  {
+                    "fieldName": "circuito"
                   },
-                  "longitude": {
-                    "fieldName": "lon"
+                  {
+                    "fieldName": "geom_type"
+                  },
+                  {
+                    "fieldName": "fid"
+                  },
+                  {
+                    "fieldName": "lon1"
+                  },
+                  {
+                    "fieldName": "lat1"
+                  },
+                  {
+                    "fieldName": "lon2"
+                  },
+                  {
+                    "fieldName": "lat2"
+                  },
+                  {
+                    "fieldName": "event_count"
                   }
-                },
-                "color": {
-                  "fieldName": "event_count",
-                  "displayName": "event_count",
-                  "scale": {
-                    "type": "quantitative"
-                  }
-                }
+                ]
               },
               "data": {
                 "queryName": "main_query"
@@ -609,7 +640,7 @@
             "x": 0,
             "y": 16,
             "width": 6,
-            "height": 8
+            "height": 9
           }
         },
         {
@@ -619,23 +650,39 @@
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "geo_ds",
+                  "datasetName": "circuit_map_lines_equipment_ds",
                   "fields": [
                     {
-                      "name": "lat",
-                      "expression": "`lat`"
+                      "name": "circuito",
+                      "expression": "`circuito`"
                     },
                     {
-                      "name": "lon",
-                      "expression": "`lon`"
+                      "name": "geom_type",
+                      "expression": "`geom_type`"
+                    },
+                    {
+                      "name": "fid",
+                      "expression": "`fid`"
+                    },
+                    {
+                      "name": "lon1",
+                      "expression": "`lon1`"
+                    },
+                    {
+                      "name": "lat1",
+                      "expression": "`lat1`"
+                    },
+                    {
+                      "name": "lon2",
+                      "expression": "`lon2`"
+                    },
+                    {
+                      "name": "lat2",
+                      "expression": "`lat2`"
                     },
                     {
                       "name": "uiti_vano_sum",
                       "expression": "`uiti_vano_sum`"
-                    },
-                    {
-                      "name": "fid_vano",
-                      "expression": "`fid_vano`"
                     }
                   ],
                   "disaggregated": true
@@ -643,28 +690,43 @@
               }
             ],
             "spec": {
-              "version": 2,
+              "version": 1,
               "frame": {
-                "title": "Mapa de UITI_VANO por vano (circuito + fechas seleccionados)",
+                "title": "Mapa de vanos + equipos por UITI_VANO (circuito seleccionado)",
                 "showTitle": true
               },
-              "widgetType": "symbol-map",
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v6.json\",\"data\":{\"name\":\"databricks_query\"},\"width\":\"container\",\"height\":\"container\",\"config\":{\"autosize\":{\"type\":\"fit\",\"contains\":\"padding\"}},\"projection\":{\"type\":\"mercator\"},\"layer\":[{\"transform\":[{\"filter\":\"datum.geom_type == 'vano'\"}],\"mark\":{\"type\":\"rule\",\"strokeWidth\":2,\"opacity\":0.85},\"encoding\":{\"longitude\":{\"field\":\"lon1\",\"type\":\"quantitative\"},\"latitude\":{\"field\":\"lat1\",\"type\":\"quantitative\"},\"longitude2\":{\"field\":\"lon2\"},\"latitude2\":{\"field\":\"lat2\"},\"color\":{\"field\":\"uiti_vano_sum\",\"type\":\"quantitative\",\"scale\":{\"scheme\":\"oranges\"},\"legend\":{\"title\":\"UITI_VANO\"}},\"tooltip\":[{\"field\":\"circuito\",\"type\":\"nominal\",\"title\":\"Circuito\"},{\"field\":\"fid\",\"type\":\"nominal\",\"title\":\"FID vano\"},{\"field\":\"uiti_vano_sum\",\"type\":\"quantitative\",\"title\":\"UITI_VANO\"}]}},{\"transform\":[{\"filter\":\"datum.geom_type == 'transformador'\"}],\"mark\":{\"type\":\"square\",\"size\":45,\"color\":\"#f59e0b\",\"opacity\":0.9,\"stroke\":\"white\",\"strokeWidth\":0.5},\"encoding\":{\"longitude\":{\"field\":\"lon1\",\"type\":\"quantitative\"},\"latitude\":{\"field\":\"lat1\",\"type\":\"quantitative\"},\"tooltip\":[{\"field\":\"circuito\",\"type\":\"nominal\",\"title\":\"Circuito\"},{\"field\":\"fid\",\"type\":\"nominal\",\"title\":\"FID transformador\"}]}},{\"transform\":[{\"filter\":\"datum.geom_type == 'switch'\"}],\"mark\":{\"type\":\"circle\",\"size\":35,\"color\":\"#7c3aed\",\"opacity\":0.9,\"stroke\":\"white\",\"strokeWidth\":0.5},\"encoding\":{\"longitude\":{\"field\":\"lon1\",\"type\":\"quantitative\"},\"latitude\":{\"field\":\"lat1\",\"type\":\"quantitative\"},\"tooltip\":[{\"field\":\"circuito\",\"type\":\"nominal\",\"title\":\"Circuito\"},{\"field\":\"fid\",\"type\":\"nominal\",\"title\":\"FID switch\"}]}}]}"
+              },
+              "widgetType": "custom-vega-viz",
               "encodings": {
-                "coordinates": {
-                  "latitude": {
-                    "fieldName": "lat"
+                "fields": [
+                  {
+                    "fieldName": "circuito"
                   },
-                  "longitude": {
-                    "fieldName": "lon"
+                  {
+                    "fieldName": "geom_type"
+                  },
+                  {
+                    "fieldName": "fid"
+                  },
+                  {
+                    "fieldName": "lon1"
+                  },
+                  {
+                    "fieldName": "lat1"
+                  },
+                  {
+                    "fieldName": "lon2"
+                  },
+                  {
+                    "fieldName": "lat2"
+                  },
+                  {
+                    "fieldName": "uiti_vano_sum"
                   }
-                },
-                "color": {
-                  "fieldName": "uiti_vano_sum",
-                  "displayName": "uiti_vano_sum",
-                  "scale": {
-                    "type": "quantitative"
-                  }
-                }
+                ]
               },
               "data": {
                 "queryName": "main_query"
@@ -675,7 +737,7 @@
             "x": 6,
             "y": 16,
             "width": 6,
-            "height": 8
+            "height": 9
           }
         }
       ],
