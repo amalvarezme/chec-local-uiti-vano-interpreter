@@ -291,10 +291,10 @@
                   "range": {
                     "dateRangeValue": {
                       "startTimestampRange": {
-                        "unbounded": true
+                        "value": "2025-11-01T00:00:00.000Z"
                       },
                       "endTimestampRange": {
-                        "unbounded": true
+                        "value": "2026-04-30T00:00:00.000Z"
                       }
                     }
                   }
