@@ -1,0 +1,674 @@
+{
+  "datasets": [
+    {
+      "name": "circuit_clustering_ds",
+      "displayName": "circuit_clustering (rango completo)",
+      "config": {
+        "version": "1.1",
+        "source": "workspace.default.circuit_clustering",
+        "dimensions": [
+          {
+            "name": "circuito",
+            "expr": "circuito"
+          },
+          {
+            "name": "criticidad",
+            "expr": "criticidad"
+          },
+          {
+            "name": "cluster",
+            "expr": "cluster"
+          }
+        ],
+        "measures": [
+          {
+            "name": "event_count_sum",
+            "expr": "SUM(event_count)",
+            "displayName": "event_count"
+          },
+          {
+            "name": "uiti_vano_sum_total",
+            "expr": "SUM(uiti_vano_sum)",
+            "displayName": "uiti_vano_sum"
+          },
+          {
+            "name": "centroid_distance_avg",
+            "expr": "AVG(centroid_distance)",
+            "displayName": "centroid_distance"
+          }
+        ]
+      }
+    },
+    {
+      "name": "circuit_detail_ds",
+      "displayName": "circuit_clustering (detalle circuito seleccionado)",
+      "config": {
+        "version": "1.1",
+        "source": "workspace.default.circuit_clustering",
+        "dimensions": [
+          {
+            "name": "circuito",
+            "expr": "circuito"
+          },
+          {
+            "name": "criticidad",
+            "expr": "criticidad"
+          },
+          {
+            "name": "cluster",
+            "expr": "cluster"
+          }
+        ],
+        "measures": [
+          {
+            "name": "event_count_sum",
+            "expr": "SUM(event_count)",
+            "displayName": "event_count"
+          },
+          {
+            "name": "uiti_vano_sum_total",
+            "expr": "SUM(uiti_vano_sum)",
+            "displayName": "uiti_vano_sum"
+          },
+          {
+            "name": "centroid_distance_avg",
+            "expr": "AVG(centroid_distance)",
+            "displayName": "centroid_distance"
+          }
+        ]
+      }
+    },
+    {
+      "name": "daily_line_ds",
+      "displayName": "indicadores_vano (evolucion diaria)",
+      "config": {
+        "version": "1.1",
+        "source": "workspace.default.indicadores_vano",
+        "dimensions": [
+          {
+            "name": "circuito",
+            "expr": "CIRCUITO"
+          },
+          {
+            "name": "fecha_dia",
+            "expr": "FECHA_DIA"
+          }
+        ],
+        "measures": [
+          {
+            "name": "uiti_vano_daily_sum",
+            "expr": "SUM(UITI_VANO)",
+            "displayName": "UITI_VANO diario"
+          },
+          {
+            "name": "daily_event_count",
+            "expr": "COUNT(*)",
+            "displayName": "eventos diarios"
+          }
+        ]
+      }
+    },
+    {
+      "name": "geo_ds",
+      "displayName": "circuit_geo (join filtrable por circuito y fecha)",
+      "queryLines": [
+        "SELECT g.lat AS lat, g.lon AS lon, g.fid_vano AS fid_vano, i.CIRCUITO AS circuito, i.FECHA_DIA AS fecha_dia, COUNT(*) AS event_count, SUM(i.UITI_VANO) AS uiti_vano_sum\n",
+        "FROM workspace.default.indicadores_vano i\n",
+        "JOIN workspace.default.circuit_geo g ON i.FID_VANO_NORM = g.fid_vano AND i.CIRCUITO = g.circuito\n",
+        "GROUP BY g.lat, g.lon, g.fid_vano, i.CIRCUITO, i.FECHA_DIA"
+      ]
+    },
+    {
+      "name": "date_bounds_ds",
+      "displayName": "date_bounds (rango completo disponible)",
+      "queryLines": [
+        "SELECT MIN(FECHA_DIA) AS fecha_min, MAX(FECHA_DIA) AS fecha_max FROM workspace.default.indicadores_vano"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "main_page",
+      "displayName": "Explorador de circuito",
+      "layout": [
+        {
+          "widget": {
+            "name": "header_md",
+            "multilineTextboxSpec": {
+              "lines": [
+                "# CHEC — Explorador de Circuito UITI_VANO\n",
+                "Seleccione un circuito para ver su posición de clustering (rango completo), su evolución diaria de UITI_VANO y el mapa de eventos, ambos filtrables por rango de fechas."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "circuit_filter",
+            "queries": [
+              {
+                "name": "q_detail",
+                "query": {
+                  "datasetName": "circuit_detail_ds",
+                  "fields": [
+                    {
+                      "name": "circuito",
+                      "expression": "`circuito`"
+                    },
+                    {
+                      "name": "circuito_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "q_daily",
+                "query": {
+                  "datasetName": "daily_line_ds",
+                  "fields": [
+                    {
+                      "name": "circuito",
+                      "expression": "`circuito`"
+                    },
+                    {
+                      "name": "circuito_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "q_geo",
+                "query": {
+                  "datasetName": "geo_ds",
+                  "fields": [
+                    {
+                      "name": "circuito",
+                      "expression": "`circuito`"
+                    },
+                    {
+                      "name": "circuito_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "title": "Circuito",
+                "showTitle": true
+              },
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "circuito",
+                    "queryName": "q_detail"
+                  },
+                  {
+                    "fieldName": "circuito",
+                    "queryName": "q_daily"
+                  },
+                  {
+                    "fieldName": "circuito",
+                    "queryName": "q_geo"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 1,
+            "width": 4,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "date_filter",
+            "queries": [
+              {
+                "name": "q_daily_date",
+                "query": {
+                  "datasetName": "daily_line_ds",
+                  "fields": [
+                    {
+                      "name": "fecha_dia",
+                      "expression": "`fecha_dia`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "q_geo_date",
+                "query": {
+                  "datasetName": "geo_ds",
+                  "fields": [
+                    {
+                      "name": "fecha_dia",
+                      "expression": "`fecha_dia`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "title": "Rango de fechas (no afecta al clustering)",
+                "showTitle": true
+              },
+              "widgetType": "filter-date-range-picker",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "fecha_dia",
+                    "queryName": "q_daily_date"
+                  },
+                  {
+                    "fieldName": "fecha_dia",
+                    "queryName": "q_geo_date"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 1,
+            "width": 4,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "date_bounds_table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "date_bounds_ds",
+                  "fields": [
+                    {
+                      "name": "fecha_min",
+                      "expression": "`fecha_min`"
+                    },
+                    {
+                      "name": "fecha_max",
+                      "expression": "`fecha_max`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "frame": {
+                "title": "Rango completo disponible (MIN..MAX)",
+                "showTitle": true
+              },
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "fecha_min",
+                    "displayAs": "string",
+                    "title": "fecha_min"
+                  },
+                  {
+                    "fieldName": "fecha_max",
+                    "displayAs": "string",
+                    "title": "fecha_max"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 8,
+            "y": 1,
+            "width": 4,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "scatter_label_md",
+            "multilineTextboxSpec": {
+              "lines": [
+                "⚠️ **Clustering — RANGO HISTÓRICO COMPLETO.** Este panel refleja el snapshot de clustering de TODO el historial disponible y **NO reacciona al filtro de fechas** de arriba (solo la línea diaria y el mapa reaccionan a fechas). Seleccione un circuito para ver su detalle a la derecha."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 3,
+            "width": 12,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "clustering_scatter",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "circuit_clustering_ds",
+                  "fields": [
+                    {
+                      "name": "circuito",
+                      "expression": "`circuito`"
+                    },
+                    {
+                      "name": "criticidad",
+                      "expression": "`criticidad`"
+                    },
+                    {
+                      "name": "measure(event_count_sum)",
+                      "expression": "MEASURE(`event_count_sum`)"
+                    },
+                    {
+                      "name": "measure(uiti_vano_sum_total)",
+                      "expression": "MEASURE(`uiti_vano_sum_total`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "frame": {
+                "title": "Posición de clustering — TODOS los circuitos (rango completo)",
+                "showTitle": true
+              },
+              "widgetType": "scatter",
+              "encodings": {
+                "x": {
+                  "fieldName": "measure(event_count_sum)",
+                  "displayName": "event_count",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "measure(uiti_vano_sum_total)",
+                  "displayName": "uiti_vano_sum",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "criticidad",
+                  "displayName": "criticidad",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "label": {
+                  "fieldName": "circuito",
+                  "displayName": "circuito"
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 4,
+            "width": 7,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "circuit_detail_table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "circuit_detail_ds",
+                  "fields": [
+                    {
+                      "name": "circuito",
+                      "expression": "`circuito`"
+                    },
+                    {
+                      "name": "criticidad",
+                      "expression": "`criticidad`"
+                    },
+                    {
+                      "name": "cluster",
+                      "expression": "`cluster`"
+                    },
+                    {
+                      "name": "measure(event_count_sum)",
+                      "expression": "MEASURE(`event_count_sum`)"
+                    },
+                    {
+                      "name": "measure(uiti_vano_sum_total)",
+                      "expression": "MEASURE(`uiti_vano_sum_total`)"
+                    },
+                    {
+                      "name": "measure(centroid_distance_avg)",
+                      "expression": "MEASURE(`centroid_distance_avg`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "frame": {
+                "title": "Circuito seleccionado — detalle (rango completo)",
+                "showTitle": true
+              },
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "circuito",
+                    "displayAs": "string",
+                    "title": "circuito"
+                  },
+                  {
+                    "fieldName": "criticidad",
+                    "displayAs": "string",
+                    "title": "criticidad"
+                  },
+                  {
+                    "fieldName": "cluster",
+                    "displayAs": "number",
+                    "title": "cluster"
+                  },
+                  {
+                    "fieldName": "measure(event_count_sum)",
+                    "displayAs": "number",
+                    "title": "event_count"
+                  },
+                  {
+                    "fieldName": "measure(uiti_vano_sum_total)",
+                    "displayAs": "number",
+                    "title": "uiti_vano_sum"
+                  },
+                  {
+                    "fieldName": "measure(centroid_distance_avg)",
+                    "displayAs": "number",
+                    "title": "centroid_distance"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 7,
+            "y": 4,
+            "width": 5,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "daily_line",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "daily_line_ds",
+                  "fields": [
+                    {
+                      "name": "fecha_dia",
+                      "expression": "`fecha_dia`"
+                    },
+                    {
+                      "name": "measure(uiti_vano_daily_sum)",
+                      "expression": "MEASURE(`uiti_vano_daily_sum`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "frame": {
+                "title": "Evolución diaria de UITI_VANO (circuito + fechas seleccionados)",
+                "showTitle": true
+              },
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "fecha_dia",
+                  "displayName": "fecha",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "fieldName": "measure(uiti_vano_daily_sum)",
+                  "displayName": "UITI_VANO diario",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 10,
+            "width": 12,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "events_map",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "geo_ds",
+                  "fields": [
+                    {
+                      "name": "lat",
+                      "expression": "`lat`"
+                    },
+                    {
+                      "name": "lon",
+                      "expression": "`lon`"
+                    },
+                    {
+                      "name": "event_count",
+                      "expression": "`event_count`"
+                    },
+                    {
+                      "name": "fid_vano",
+                      "expression": "`fid_vano`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "frame": {
+                "title": "Mapa de eventos (circuito + fechas seleccionados)",
+                "showTitle": true
+              },
+              "widgetType": "symbol-map",
+              "encodings": {
+                "lat": {
+                  "fieldName": "lat",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "lon": {
+                  "fieldName": "lon",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "event_count",
+                  "displayName": "event_count",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 16,
+            "width": 12,
+            "height": 8
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1"
+    }
+  ],
+  "uiSettings": {
+    "theme": {
+      "widgetHeaderAlignment": "ALIGNMENT_UNSPECIFIED"
+    },
+    "applyModeEnabled": false
+  }
+}
