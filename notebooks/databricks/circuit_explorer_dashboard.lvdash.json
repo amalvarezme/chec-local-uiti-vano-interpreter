@@ -285,6 +285,20 @@
                     "queryName": "q_geo_date"
                   }
                 ]
+              },
+              "selection": {
+                "defaultSelection": {
+                  "range": {
+                    "dateRangeValue": {
+                      "startTimestampRange": {
+                        "unbounded": true
+                      },
+                      "endTimestampRange": {
+                        "unbounded": true
+                      }
+                    }
+                  }
+                }
               }
             }
           },
@@ -406,16 +420,16 @@
               "encodings": {
                 "x": {
                   "fieldName": "measure(event_count_sum)",
-                  "displayName": "event_count",
+                  "displayName": "event_count (escala log)",
                   "scale": {
-                    "type": "quantitative"
+                    "type": "log"
                   }
                 },
                 "y": {
                   "fieldName": "measure(uiti_vano_sum_total)",
-                  "displayName": "uiti_vano_sum",
+                  "displayName": "uiti_vano_sum (escala log)",
                   "scale": {
-                    "type": "quantitative"
+                    "type": "log"
                   }
                 },
                 "color": {
