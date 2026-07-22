@@ -80,29 +80,29 @@
     },
     {
       "name": "daily_line_ds",
-      "displayName": "indicadores_vano (evolucion diaria)",
+      "displayName": "circuit_daily_evolution (evolucion diaria, ceros en dias sin datos)",
       "config": {
         "version": "1.1",
-        "source": "workspace.default.indicadores_vano",
+        "source": "workspace.default.circuit_daily_evolution",
         "dimensions": [
           {
             "name": "circuito",
-            "expr": "CIRCUITO"
+            "expr": "circuito"
           },
           {
             "name": "fecha_dia",
-            "expr": "FECHA_DIA"
+            "expr": "fecha_dia"
           }
         ],
         "measures": [
           {
             "name": "uiti_vano_daily_sum",
-            "expr": "SUM(UITI_VANO)",
+            "expr": "SUM(uiti_vano_sum)",
             "displayName": "UITI_VANO diario"
           },
           {
             "name": "daily_event_count",
-            "expr": "COUNT(*)",
+            "expr": "SUM(event_count)",
             "displayName": "eventos diarios"
           }
         ]
@@ -552,6 +552,10 @@
                       "expression": "`fecha_dia`"
                     },
                     {
+                      "name": "measure(daily_event_count)",
+                      "expression": "MEASURE(`daily_event_count`)"
+                    },
+                    {
                       "name": "measure(uiti_vano_daily_sum)",
                       "expression": "MEASURE(`uiti_vano_daily_sum`)"
                     }
@@ -561,12 +565,12 @@
               }
             ],
             "spec": {
-              "version": 3,
+              "version": 1,
               "frame": {
                 "title": "Evolución diaria de UITI_VANO (circuito + fechas seleccionados)",
                 "showTitle": true
               },
-              "widgetType": "line",
+              "widgetType": "combo",
               "encodings": {
                 "x": {
                   "fieldName": "fecha_dia",
@@ -576,10 +580,33 @@
                   }
                 },
                 "y": {
-                  "fieldName": "measure(uiti_vano_daily_sum)",
-                  "displayName": "UITI_VANO diario",
-                  "scale": {
-                    "type": "quantitative"
+                  "primary": {
+                    "fields": [
+                      {
+                        "fieldName": "measure(daily_event_count)",
+                        "displayName": "Eventos diarios"
+                      }
+                    ],
+                    "scale": {
+                      "type": "quantitative"
+                    },
+                    "axis": {
+                      "title": "Eventos diarios"
+                    }
+                  },
+                  "secondary": {
+                    "fields": [
+                      {
+                        "fieldName": "measure(uiti_vano_daily_sum)",
+                        "displayName": "UITI_VANO diario"
+                      }
+                    ],
+                    "scale": {
+                      "type": "quantitative"
+                    },
+                    "axis": {
+                      "title": "UITI_VANO diario"
+                    }
                   }
                 }
               },
