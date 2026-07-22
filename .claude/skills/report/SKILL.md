@@ -28,7 +28,7 @@ from one stage to the next. Read this Skill top to bottom as a checklist, not as
 guidance — the actual domain reasoning for each stage lives in that stage's own Skill
 (`historical`, `inference`, `expert-alignment`).
 
-Supersedes the interactive notebook `notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`
+Supersedes the interactive notebook `the retired interactive notebook`
 in full, including its phase 9-11 automatic min/max ("second tab") discussion — now step 4b below,
 via the `auto-simulator` agent. That notebook was deleted once this Skill's coverage was proven
 equivalent (see git history for its prior content).
@@ -467,7 +467,7 @@ always continues, the report always generates:
   [`src/chec_local_interpreter/vault_note_contract.py`](../../../src/chec_local_interpreter/vault_note_contract.py)
 - Binding invariants (shared with every agent role above): `.claude/agents/rules/invariants.md`
 - Architecture and envelope contract: `docs/agents-guide.md`
-- `notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb` — deleted; this Skill supersedes it
+- `the retired interactive notebook` — deleted; this Skill supersedes it
   in full (see git history for its prior content).
 - Tests: `tests/test_report_pipeline.py` (argument-pair contract, simulator wiring/degrade paths, the
   real-simulator integration tests using the committed model/Optuna/Variables artifacts, and the

@@ -25,7 +25,7 @@ human/agent context, not a separate copy.
 
 **Batch contract (superseding the earlier per-fragment shape)**: this Skill previously classified
 one PDF text fragment per agent turn, mirroring the now-retired
-`notebooks/core/01_pdf_discussion_table_from_pdfs.ipynb`'s inline `PDFDiscussionExtractionSkill`
+`the retired PDF-discussion notebook`'s inline `PDFDiscussionExtractionSkill`
 driver loop one-to-one. Design D5 replaced that entirely with a per-PDF BATCH: the deterministic
 `chec_local_interpreter.pdf_discussion_pipeline` module (PR A2a) now owns PDF-to-Markdown
 conversion, candidate-section selection, and batch-payload assembly

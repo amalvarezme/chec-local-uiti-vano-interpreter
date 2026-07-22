@@ -410,7 +410,7 @@ def save_invalid_output(response_text: str, errors: list[str], output_dir: str |
 # --- Auto-simulator response validator ---------------------------------
 #
 # Ported verbatim from `_validate_auto_simulator_response`, defined inline in
-# the deprecated `notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`
+# the deprecated `the retired interactive notebook`
 # ("10.2 Simulador automático mínimo/máximo" section). Reuses `parse_llm_json`
 # (already defined above in this module) rather than reimplementing JSON
 # extraction — the notebook cell already imported and called the same
@@ -459,7 +459,7 @@ def validate_auto_simulator_response(response_text: str) -> dict[str, Any]:
 # --- PDF-discussion-extraction row validator ----------------------------
 #
 # `_MESES`/`_parse_fecha`/`_iso_fecha`/`_overlaps` and `COLUMNAS_FINALES` are
-# ported verbatim from `notebooks/core/01_pdf_discussion_table_from_pdfs.ipynb`
+# ported verbatim from `the retired PDF-discussion notebook`
 # (deprecated), prefixed with `_` to match this module's existing private-
 # helper convention (`_context_dates`, `_critical_point_ids`, ...).
 # `validate_pdf_discussion_row` combines the notebook's `validate_llm_row`

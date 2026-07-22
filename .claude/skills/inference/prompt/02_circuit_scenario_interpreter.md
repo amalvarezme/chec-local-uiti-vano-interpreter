@@ -10,7 +10,7 @@ CHEC, su posición en el grafo, sus conexiones directas o preservadas y su camin
 hacia `UITI_VANO`.
 
 En el flujo MGCECDL actual, el cuaderno
-`notebooks/inference/05_mgcecdl_circuit_analysis.ipynb` agrega un entregable adicional por
+`notebooks/project_flow/05_mgcecdl_circuit_analysis.ipynb` agrega un entregable adicional por
 escenario: un HTML de grafo estimado. Ese grafo no es la matriz experta original; se deriva
 de la capa de reconstrucción del modelo para las muestras del escenario y de una similitud
 RBF entre variables. Se usa para explorar asociaciones inducidas por el modelo.

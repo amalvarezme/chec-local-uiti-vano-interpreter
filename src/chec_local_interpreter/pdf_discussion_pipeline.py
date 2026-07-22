@@ -3,7 +3,7 @@
 This module owns every non-judgment step of the PDF-discussion extraction
 runbook: PDF -> Markdown, candidate-section selection, batch payload
 assembly, and xlsx assembly. It replaces the deterministic-Python cells of
-the deprecated `notebooks/core/01_pdf_discussion_table_from_pdfs.ipynb`
+the deprecated `the retired PDF-discussion notebook`
 end to end -- porting `chunk_pdf_pages`, `is_candidate_fragment`,
 `detect_report_period`, and `circuito_from_pdf_name` behavior-preservingly.
 

@@ -237,7 +237,7 @@ CHEC, su posición en el grafo, sus conexiones directas o preservadas y su camin
 hacia `UITI_VANO`.
 
 En el flujo MGCECDL actual, el cuaderno
-`notebooks/inference/05_mgcecdl_circuit_analysis.ipynb` agrega un entregable adicional por
+`notebooks/project_flow/05_mgcecdl_circuit_analysis.ipynb` agrega un entregable adicional por
 escenario: un HTML de grafo estimado. Ese grafo no es la matriz experta original; se deriva
 de la capa de reconstrucción del modelo para las muestras del escenario y de una similitud
 RBF entre variables. Se usa para explorar asociaciones inducidas por el modelo.
@@ -557,7 +557,7 @@ El agente puede recibir:
 - Fechas de interes o subconjuntos de eventos.
 - Matriz de adyacencia y aristas preservadas del grafo usado por la corrida.
 - Rutas HTML de grafos estimados por escenario generados desde
-  `notebooks/inference/05_mgcecdl_circuit_analysis.ipynb`.
+  `notebooks/project_flow/05_mgcecdl_circuit_analysis.ipynb`.
 
 El agente debe distinguir siempre la granularidad:
 
@@ -883,7 +883,7 @@ El agente debe distinguir tres niveles:
 2. **Grafo de entrenamiento:** matriz alineada exactamente con `features`; es el grafo que
    MGCECDL puede usar durante entrenamiento para reconstruccion/regularizacion.
 3. **Grafo estimado HTML del cuaderno 05:** entregable interpretativo generado por
-   `notebooks/inference/05_mgcecdl_circuit_analysis.ipynb` para cada escenario de circuito.
+   `notebooks/project_flow/05_mgcecdl_circuit_analysis.ipynb` para cada escenario de circuito.
 
 El grafo estimado HTML:
 
@@ -1234,7 +1234,7 @@ seleccionadas como marco principal.
 
 ## Formato obligatorio en este notebook
 
-Cuando la salida sea consumida por `notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`,
+Cuando la salida sea consumida por el flujo interactivo retirado,
 el agente debe producir **solo un objeto JSON valido**. No usar markdown, tablas markdown,
 bloques de codigo, texto antes del JSON, texto despues del JSON ni etiquetas `<think>`.
 

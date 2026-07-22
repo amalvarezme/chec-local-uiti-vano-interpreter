@@ -32,7 +32,7 @@ dedicated provenance validator** — its `validate` verb is a required-keys/list
 provenance validator", not "no CLI": a coding agent (Claude Code) is meant to invoke the CLI
 directly — see Allowed tools and Workflow below — reading the built prompt and authoring the JSON
 response itself, with no Python code ever calling an LLM API. The original notebook cell
-(`notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`'s "10.2 Simulador automático
+(`the retired interactive notebook`'s "10.2 Simulador automático
 mínimo/máximo" section, calling `call_llm(...)` directly and validating with
 `_validate_auto_simulator_response(...)`) still exists unchanged, as a manual/legacy fallback for
 headless runs with an API key configured.

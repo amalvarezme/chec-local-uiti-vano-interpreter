@@ -18,7 +18,7 @@ El proceso integra datos estructurados (tabulares) y no estructurados (texto de 
 6. **Inferencia del Modelo M-GCECDL:** Un modelo de IA predictiva procesa las variables tabulares del evento actual y entrega:
    - La clase o nivel de impacto asociado a `UITI_VANO`, junto con probabilidades del clasificador.
    - **Relevancia de variables:** Kernel SHAP + Borda ponderado, radares por modo y soportes del modelo cuando estén disponibles.
-   - **Grafos HTML por escenario:** mapas interactivos generados en `notebooks/inference/05_mgcecdl_circuit_analysis.ipynb` y guardados en `reports/mgcecdl-results/interactive_graphs/`.
+   - **Grafos HTML por escenario:** mapas interactivos generados en `notebooks/project_flow/05_mgcecdl_circuit_analysis.ipynb` y guardados en `reports/mgcecdl-results/interactive_graphs/`.
 7. **Cotejo Analítico a Tres Vías (Razonamiento Cruzado):** El sistema realiza un cruce crítico y justifica las causas combinando los patrones históricos, las justificaciones de bitácoras/normas y las máscaras del modelo ML. Coteja diagnósticos en puntos 3, 5 y 6.
 8. **Identificación de Escenarios Guiados:** Basado en el cotejo, se presenta una lista filtrada de variables candidatas a intervenir, estrictamente guiadas y validadas por los hallazgos en las bitácoras y la norma.
 9. **Simulación "*What-If*":** El usuario modifica los valores de las variables sugeridas en la interfaz.
@@ -90,7 +90,7 @@ graph TD
     A6[Agente 6: Redactor Informes\nModelo High]:::agentHigh
     
     MP{{MGCECDL Clasificacion\nPre-entrenado}}:::model
-    Graphs[(HTML Grafos estimados\nnotebooks/inference/05_mgcecdl_circuit_analysis)]:::db
+    Graphs[(HTML Grafos estimados\nnotebooks/project_flow/05_mgcecdl_circuit_analysis)]:::db
     Reporte[[Reporte de Evidencias\ny Razonamientos]]:::outputDoc
 
     %% Flujo Inicial

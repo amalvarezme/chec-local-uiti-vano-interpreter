@@ -9,21 +9,21 @@ flowchart TD
         PDF[(Expert PDFs<br/>reports/analysis-documents)] --> P0[Batch PDF-discussion runbook<br/>pdf_discussion_pipeline.py<br/>skill: pdf-discussion-extraction]
         P0 --> XLSX[(tabla_pdfs_intervalo_*.xlsx)]
         CSV[(Indicadores_vano CSV<br/>data/Indicadores_vano_v3.csv)]
-        MET[Open-Meteo API] --> P1[Climate enrichment<br/>inference/01_climate.ipynb]
+        MET[Open-Meteo API] --> P1[Climate enrichment<br/>project_flow/01_climate.ipynb]
         CSV --> P1
     end
 
     %% ===== Lane: ML modeling (chec_impacto) =====
     subgraph LANE2[ML modeling — M-GCECDL]
-        P1 --> P2[Optuna hyperparameter search<br/>inference/02_mgcecdl_optuna_classification_search.ipynb]
-        VARS[(variables.json /<br/>Variables_seleccion.xlsx)] --> P7[Expert graph build<br/>web/graph_preserved_connections_uiti_vano.ipynb]
+        P1 --> P2[Optuna hyperparameter search<br/>project_flow/02_mgcecdl_optuna_classification_search.ipynb]
+        VARS[(variables.json /<br/>Variables_seleccion.xlsx)] --> P7[Expert graph build<br/>project_flow/07_graph_preserved_connections_uiti_vano.ipynb]
         P7 --> ADJ[(adjacency matrix + edges)]
-        P2 --> P3[Training on Colab GPU<br/>inference/03_mgcecdl_training.ipynb]
+        P2 --> P3[Training on Colab GPU<br/>project_flow/03_mgcecdl_training.ipynb]
         ADJ --> P3
         P3 --> MODEL[(mgcecdl_classifier_best.zip)]
-        MODEL --> P4[Performance evaluation<br/>inference/04_mgcecdl_performance.ipynb]
-        MODEL --> P5[Per-circuit SHAP analysis<br/>inference/05_mgcecdl_circuit_analysis.ipynb]
-        MODEL --> P6[Document replication<br/>inference/06_mgcecdl_document_replication.ipynb]
+        MODEL --> P4[Performance evaluation<br/>project_flow/04_mgcecdl_performance.ipynb]
+        MODEL --> P5[Per-circuit SHAP analysis<br/>project_flow/05_mgcecdl_circuit_analysis.ipynb]
+        MODEL --> P6[Document replication<br/>project_flow/06_mgcecdl_document_replication.ipynb]
     end
 
     %% ===== Lane: Local interpretation / agents =====
@@ -68,7 +68,7 @@ flowchart TD
         end
         RP2 --> HTML1[(HTML report<br/>run_dir, single merged output)]
 
-        MODEL --> SIM4["What-if simulator (interactive, no LLM)<br/>core/04_simulador.ipynb<br/>simulate_feature_values() /<br/>simulate_feature_class_transitions()"]
+        MODEL --> SIM4["What-if simulator (interactive, no LLM)<br/>project_flow/09_simulador.ipynb<br/>simulate_feature_values() /<br/>simulate_feature_class_transitions()"]
     end
 
     %% ===== Lane: Publication =====

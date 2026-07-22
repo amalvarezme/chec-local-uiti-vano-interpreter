@@ -11,17 +11,15 @@ Notebook-first data-science + LLM-interpretability project for CHEC that analyze
 
 | # | Phase | Actor | Inputs | Outputs | Risks / problems found |
 |---|-------|-------|--------|---------|------------------------|
-| 0 | Expert-PDF discussion extraction | `notebooks/core/01_pdf_discussion_table_from_pdfs.ipynb` + `llm/skills_pdf_discussion_extraction/` | `reports/analysis-documents/*.pdf` | `tabla_pdfs_intervalo_*.xlsx` | README cites wrong notebook number (`03_...`) |
-| 1 | Climate enrichment | `notebooks/inference/01_climate.ipynb` | vano CSV + Open-Meteo API | climate-filled CSV | External API, no retry/caching contract documented |
-| 2 | Hyperparameter search | `notebooks/inference/02_mgcecdl_optuna_classification_search.ipynb` + `src/chec_impacto/training/mgcecdl.py` | processed data | `data/optuna/*.pkl`, `.journal` | Notebook internal title says "01"; `chec_impacto` has zero tests |
-| 3 | Model training | `notebooks/inference/03_mgcecdl_training.ipynb` (Colab GPU) | optuna journal, features, expert graph | `data/models/mgcecdl_classifier_best.zip` | GPU step assumes Colab; model zip in plain git (no LFS) |
-| 4 | Performance evaluation | `notebooks/inference/04_mgcecdl_performance.ipynb` + `interpretability/mgcecdl.py` | best model | confusion matrix / ROC / importance PNGs → `src/assets/site/results/` | Untested; outputs committed manually |
-| 5 | Per-circuit SHAP analysis | `notebooks/inference/05_mgcecdl_circuit_analysis.ipynb` + `interpretability/circuit_analysis.py` | model + filtered dataset | bar/radar/graph HTML | Docs reference `reports/mgcecdl-results/interactive_graphs/`, which does not exist → code always falls to fallback branch |
-| 6 | Document replication | `notebooks/inference/06_mgcecdl_document_replication.ipynb` | full dataset + model | 4 CSVs in `reports/mgcecdl-results/` | Directory gitignored except `.gitkeep`; outputs ephemeral |
-| 7 | Graph/adjacency generation | `notebooks/web/graph_preserved_connections_uiti_vano.ipynb` + `chec_impacto/data/graph.py` | `variables.json`, `Variables_seleccion.xlsx` | `data/graphs/mgcecdl_*` + grafo HTMLs | Untested |
-| 8 | GEO exploration | `notebooks/core/03_geo_network_exploration.ipynb` | `data/GEO/*.shp` + vano CSV | `reports/geo/geo_resumen_circuitos.csv`, circuit map HTML | Notebook internal title says "04" |
-| 9 | Local interpreter — 3 LLM agents | `notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb` + `src/chec_local_interpreter/*` | vano CSV, expert Excel, model outputs, `llm/skills*` | structured context, prompts, critical points, LLM analyses, final HTML report | `llm_client.py`, `graph_extractor.py` untested; `graph_extractor` swallows subprocess failures silently |
-| 10 | What-if simulator | `notebooks/core/04_simulador.ipynb` + `simulator.py` | model + prioritized variables | interactive sensitivity | Covered by `test_simulator.py` |
+| 1 | Climate enrichment | `notebooks/project_flow/01_climate.ipynb` | vano CSV + Open-Meteo API | climate-filled CSV | External API, no retry/caching contract documented |
+| 2 | Hyperparameter search | `notebooks/project_flow/02_mgcecdl_optuna_classification_search.ipynb` + `src/chec_impacto/training/mgcecdl.py` | processed data | `data/optuna/*.pkl`, `.journal` | Notebook internal title says "01"; `chec_impacto` has zero tests |
+| 3 | Model training | `notebooks/project_flow/03_mgcecdl_training.ipynb` (Colab GPU) | optuna journal, features, expert graph | `data/models/mgcecdl_classifier_best.zip` | GPU step assumes Colab; model zip in plain git (no LFS) |
+| 4 | Performance evaluation | `notebooks/project_flow/04_mgcecdl_performance.ipynb` + `interpretability/mgcecdl.py` | best model | confusion matrix / ROC / importance PNGs → `src/assets/site/results/` | Untested; outputs committed manually |
+| 5 | Per-circuit SHAP analysis | `notebooks/project_flow/05_mgcecdl_circuit_analysis.ipynb` + `interpretability/circuit_analysis.py` | model + filtered dataset | bar/radar/graph HTML | Docs reference `reports/mgcecdl-results/interactive_graphs/`, which does not exist → code always falls to fallback branch |
+| 6 | Document replication | `notebooks/project_flow/06_mgcecdl_document_replication.ipynb` | full dataset + model | 4 CSVs in `reports/mgcecdl-results/` | Directory gitignored except `.gitkeep`; outputs ephemeral |
+| 7 | Graph/adjacency generation | `notebooks/project_flow/07_graph_preserved_connections_uiti_vano.ipynb` + `chec_impacto/data/graph.py` | `variables.json`, `Variables_seleccion.xlsx` | `data/graphs/mgcecdl_*` + grafo HTMLs | Untested |
+| 8 | GEO exploration | `notebooks/project_flow/08_geo_network_exploration.ipynb` | `data/GEO/*.shp` + vano CSV | `reports/geo/geo_resumen_circuitos.csv`, circuit map HTML | Notebook internal title says "04" |
+| 10 | What-if simulator | `notebooks/project_flow/09_simulador.ipynb` + `simulator.py` | model + prioritized variables | interactive sensitivity | Covered by `test_simulator.py` |
 | 11 | Web export | `src/chec_local_interpreter/web_export.py` | artifacts/report HTML | copies into `src/assets/site/results/` + `interpretabilidad.json` | Duplicates the ~9 MB report into git a second time; untested |
 | 12 | Publish | `.github/workflows/deploy-pages.yml` | `src/pages/*`, site assets | GitHub Pages site | Only CI in the repo — Python tests and LLM evals never run in CI |
 
@@ -35,7 +33,6 @@ Notebook-first data-science + LLM-interpretability project for CHEC that analyze
 ## 4. Inconsistencies
 
 1. **Scope docs contradict the code:** `README.md:14-17` and `AGENTS.md:11-20` claim the project covers "only steps 1–3, no predictive models/simulations", yet M-GCECDL, SHAP, the simulator, and the inference agent all exist.
-2. **README points to nonexistent notebooks:** `notebooks/core/01_local_uiti_vano_interpretability.ipynb` (actual: `02_..._v3.ipynb`) and `03_pdf_discussion_table_from_pdfs.ipynb` (actual: `01_...`).
 3. **`.env.example` referenced in setup (`README.md:30`) but the file does not exist.**
 4. **Notebook titles vs filenames:** `core/03_geo...` titled "04", `inference/02_mgcecdl_optuna...` titled "01".
 5. **`web_export.py:85` and docs reference `reports/mgcecdl-results/interactive_graphs/`, which never exists** — the copy step always hits the fallback.

@@ -357,7 +357,7 @@ final local HTML report.
 - Argument contract: `circuito` required; `fecha_inicio`/`fecha_fin` optional as a pair — giving
   exactly one is a usage error, rejected by `prepare` itself (`ReportPipelineError`) before touching
   the dataset, not just documented in the Skill.
-- Supersedes phases 1-8 of `notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`
+- Supersedes phases 1-8 of `the retired interactive notebook`
   (deprecated in place, not deleted — see that notebook's own top cell); phases 9-11 are untouched.
 - Tests: `tests/test_report_pipeline.py`.
 

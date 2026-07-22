@@ -151,7 +151,7 @@ from chec_local_interpreter.simulator import (
 
 # Mirrors the notebook's own defaults (`TOP_N_VANOS`/`TOP_K_VARS`/
 # `FILTRO_UITI_MAX`/`VENTANA_CLIMATICA_HORAS` in
-# `notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`), preserved
+# `the retired interactive notebook`), preserved
 # for parity since this change does not introduce a new tuning surface.
 # `TOP_N_VANOS` is interpreted as a percentile (97 => vanos with metric >=
 # P97) and is deliberately passed as BOTH `top_n_vanos` and
@@ -233,7 +233,7 @@ class _MGCECDLClassifierShapAdapter:
     """`predict_proba` adapter so Kernel SHAP can drive the MGCECDL classifier.
 
     Ported from the notebook's `MGCECDLClassifierShapAdapter`
-    (`notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`, cell 35,
+    (`the retired interactive notebook`, cell 35,
     deprecated in place).
     """
 
@@ -1477,7 +1477,7 @@ def prepare_expert_alignment(
     is out of scope for this change. This function only READS that
     already-built table and matches it against the circuit, exactly like the
     original (now-superseded) notebook flow
-    (`notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`, cell ~55):
+    (`the retired interactive notebook`, cell ~55):
     `cargar_discussiones_pdf_excel` -> `extraer_fechas_informe` ->
     `filtrar_discussiones_por_circuito` -> `seleccionar_top_coincidencias_temporales`.
 

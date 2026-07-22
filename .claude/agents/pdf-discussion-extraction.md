@@ -35,7 +35,7 @@ an LLM API.
 
 **Batch contract (design D5, `sdd/agent-native-pipeline-and-site-split` PR A2b)**: this role
 previously classified one PDF text fragment per turn, invoked inline by
-`notebooks/core/01_pdf_discussion_table_from_pdfs.ipynb`'s `PDFDiscussionExtractionSkill` driver
+`the retired PDF-discussion notebook`'s `PDFDiscussionExtractionSkill` driver
 loop. That notebook, its `call_llm(...)` fallback path, and the `llm_client.py` module it was the
 last live caller of have all been retired — deleted once this batch runbook (the deterministic
 `chec_local_interpreter.pdf_discussion_pipeline` module plus this revised CLI) shipped with a green

@@ -18,7 +18,7 @@ the behavior spec/design require:
 The notebook-content characterization tests this file previously carried
 (`test_notebook_guards_missing_skills_before_llm_call`,
 `test_notebook_has_no_hardcoded_old_auto_simulator_path`) asserted against
-`notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`'s raw text.
+`the retired interactive notebook`'s raw text.
 That notebook was deleted by `agent-native-pipeline-and-site-split` PR A1
 once `/reporte` was proven to cover everything it did (the automatic
 min/max simulator is now wired into `report_pipeline.py` -- see

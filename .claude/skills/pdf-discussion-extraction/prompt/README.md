@@ -2,7 +2,7 @@
 
 Habilidades para generar la tabla base de discusiones técnicas verificables desde reportes expertos en PDF.
 
-Esta carpeta separa el contrato del agente extractor del cuaderno que lo ejecuta. El cuaderno `notebooks/core/03_pdf_discussion_table_from_pdfs.ipynb` carga `01_pdf_discussion_extractor.md`, rellena los metadatos del fragmento y valida la salida antes de agregar filas al Excel final.
+Esta carpeta separa el contrato del agente extractor del antiguo cuaderno ejecutor. El flujo cargaba `01_pdf_discussion_extractor.md`, rellenaba los metadatos del fragmento y validaba la salida antes de agregar filas al Excel final.
 
 Restricciones de esta función:
 

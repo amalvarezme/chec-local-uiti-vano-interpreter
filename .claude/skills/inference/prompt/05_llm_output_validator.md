@@ -7,7 +7,7 @@ seleccionadas como marco principal.
 
 ## Formato obligatorio en este notebook
 
-Cuando la salida sea consumida por `notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`,
+Cuando la salida sea consumida por el flujo interactivo retirado,
 el agente debe producir **solo un objeto JSON valido**. No usar markdown, tablas markdown,
 bloques de codigo, texto antes del JSON, texto despues del JSON ni etiquetas `<think>`.
 

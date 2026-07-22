@@ -17,7 +17,7 @@ DEFAULT_OPTUNA_STUDY_PATH = (
 DEFAULT_VARIABLES_SELECCION_PATH = PROJECT_ROOT / "data" / "Variables_seleccion.xlsx"
 
 # Mirrors the notebook's own `SHAP_RANDOM_STATE` (deprecated
-# `notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`), threaded
+# `the retired interactive notebook`), threaded
 # explicitly into every `KernelShapTopVarsExtractor(...)` call for
 # reproducible SHAP background sampling and ranking.
 SHAP_RANDOM_STATE = 42
@@ -88,8 +88,8 @@ def agent_prompt_dir(agent_slug: str) -> Path:
 def _modelo_mas_reciente(model_dir: str | Path, base_name: str) -> Path:
     """Return "the" model file among several dated candidates under `model_dir`.
 
-    Ported from the notebook precedent (`notebooks/inference/04_mgcecdl_performance.ipynb`
-    and `notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`, deprecated in
+    Ported from the notebook precedent (`notebooks/project_flow/04_mgcecdl_performance.ipynb`
+    and `the retired interactive notebook`, deprecated in
     place): glob `{stem}*{suffix}` from `base_name` and deterministically pick
     the lexicographically last candidate (`sorted(candidates)[-1]`).
 

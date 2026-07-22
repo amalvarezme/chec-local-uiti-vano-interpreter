@@ -256,20 +256,20 @@ flowchart TD
         PDF[(PDFs expertos<br/>reports/analysis-documents)] --> P0[Runbook batch de discusión PDF<br/>pdf_discussion_pipeline.py<br/>skill: pdf-discussion-extraction]
         P0 --> XLSX[(tabla_pdfs_intervalo_*.xlsx)]
         CSV[(CSV Indicadores_vano<br/>data/Indicadores_vano_v3.csv)]
-        MET[API Open-Meteo] --> P1[Enriquecimiento climático<br/>inference/01_climate.ipynb]
+        MET[API Open-Meteo] --> P1[Enriquecimiento climático<br/>project_flow/01_climate.ipynb]
         CSV --> P1
     end
 
     subgraph LANE2[Modelado ML, M-GCECDL]
-        P1 --> P2[Búsqueda de hiperparámetros con Optuna<br/>inference/02_mgcecdl_optuna_classification_search.ipynb]
-        VARS[(variables.json /<br/>Variables_seleccion.xlsx)] --> P7[Construcción de grafo experto<br/>web/graph_preserved_connections_uiti_vano.ipynb]
+        P1 --> P2[Búsqueda de hiperparámetros con Optuna<br/>project_flow/02_mgcecdl_optuna_classification_search.ipynb]
+        VARS[(variables.json /<br/>Variables_seleccion.xlsx)] --> P7[Construcción de grafo experto<br/>project_flow/07_graph_preserved_connections_uiti_vano.ipynb]
         P7 --> ADJ[(matriz de adyacencia + edges)]
-        P2 --> P3[Entrenamiento en Colab GPU<br/>inference/03_mgcecdl_training.ipynb]
+        P2 --> P3[Entrenamiento en Colab GPU<br/>project_flow/03_mgcecdl_training.ipynb]
         ADJ --> P3
         P3 --> MODEL[(mgcecdl_classifier_best.zip)]
-        MODEL --> P4[Evaluación de desempeño<br/>inference/04_mgcecdl_performance.ipynb]
-        MODEL --> P5[Análisis SHAP por circuito<br/>inference/05_mgcecdl_circuit_analysis.ipynb]
-        MODEL --> P6[Replicación documental<br/>inference/06_mgcecdl_document_replication.ipynb]
+        MODEL --> P4[Evaluación de desempeño<br/>project_flow/04_mgcecdl_performance.ipynb]
+        MODEL --> P5[Análisis SHAP por circuito<br/>project_flow/05_mgcecdl_circuit_analysis.ipynb]
+        MODEL --> P6[Replicación documental<br/>project_flow/06_mgcecdl_document_replication.ipynb]
     end
 
     subgraph LANE3[Interpretación local, agentes]
@@ -411,15 +411,15 @@ Las salidas LLM inválidas se guardan por separado con sus errores de validació
 
 Estos notebooks soportan exploración, modelado o replicación. **No** son el punto de entrada canónico del flujo de reporte:
 
-- `notebooks/core/03_geo_network_exploration.ipynb`
-- `notebooks/core/04_simulador.ipynb`
-- `notebooks/inference/01_climate.ipynb`
-- `notebooks/inference/02_mgcecdl_optuna_classification_search.ipynb`
-- `notebooks/inference/03_mgcecdl_training.ipynb`
-- `notebooks/inference/04_mgcecdl_performance.ipynb`
-- `notebooks/inference/05_mgcecdl_circuit_analysis.ipynb`
-- `notebooks/inference/06_mgcecdl_document_replication.ipynb`
-- `notebooks/web/graph_preserved_connections_uiti_vano.ipynb`
+- `notebooks/project_flow/08_geo_network_exploration.ipynb`
+- `notebooks/project_flow/09_simulador.ipynb`
+- `notebooks/02_project_flow/01_climate.ipynb`
+- `notebooks/02_project_flow/02_mgcecdl_optuna_classification_search.ipynb`
+- `notebooks/02_project_flow/03_mgcecdl_training.ipynb`
+- `notebooks/02_project_flow/04_mgcecdl_performance.ipynb`
+- `notebooks/02_project_flow/05_mgcecdl_circuit_analysis.ipynb`
+- `notebooks/02_project_flow/06_mgcecdl_document_replication.ipynb`
+- `notebooks/03_project_flow/07_graph_preserved_connections_uiti_vano.ipynb`
 
 ## Pruebas
 

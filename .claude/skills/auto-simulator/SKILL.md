@@ -15,7 +15,7 @@ metadata:
 ## Overview
 
 This Skill documents the reasoning contract used inline by
-`notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`'s "10.2 Simulador automático
+`the retired interactive notebook`'s "10.2 Simulador automático
 mínimo/máximo" section to interpret the automatic minmax-sensitivity table before writing the
 second-tab discussion of the local report. It **ports** (does not duplicate) the two prompt
 playbooks listed in `ported_from` above, per `docs/agents-guide.md`'s three-meanings-of-"skills"
@@ -125,7 +125,7 @@ that validation or retry behavior.
 - Architecture and the three-meanings-of-"skills" table: `docs/agents-guide.md`
 - Notebook caller (legacy/manual fallback — inline `call_llm` +
   `_validate_auto_simulator_response`, section "10.2 Simulador automático mínimo/máximo"):
-  `notebooks/core/02_local_uiti_vano_interpretability_v3.ipynb`
+  `the retired interactive notebook`
 - Shared profile resolver: `chec_local_interpreter.llm_skills.skills_dir(profile="auto_simulator")`
 - Ported-from playbooks (the machine-fed source, loaded by
   `assemble_skill_bundle(profile="auto_simulator")`):
