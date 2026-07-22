@@ -481,20 +481,12 @@
                       "expression": "`criticidad`"
                     },
                     {
-                      "name": "cluster",
-                      "expression": "`cluster`"
-                    },
-                    {
                       "name": "measure(event_count_sum)",
                       "expression": "MEASURE(`event_count_sum`)"
                     },
                     {
                       "name": "measure(uiti_vano_sum_total)",
                       "expression": "MEASURE(`uiti_vano_sum_total`)"
-                    },
-                    {
-                      "name": "measure(centroid_distance_avg)",
-                      "expression": "MEASURE(`centroid_distance_avg`)"
                     }
                   ],
                   "disaggregated": false
@@ -519,20 +511,12 @@
                     "displayName": "criticidad"
                   },
                   {
-                    "fieldName": "cluster",
-                    "displayName": "cluster"
-                  },
-                  {
                     "fieldName": "measure(event_count_sum)",
                     "displayName": "event_count"
                   },
                   {
                     "fieldName": "measure(uiti_vano_sum_total)",
                     "displayName": "uiti_vano_sum"
-                  },
-                  {
-                    "fieldName": "measure(centroid_distance_avg)",
-                    "displayName": "centroid_distance"
                   }
                 ]
               },
