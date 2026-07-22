@@ -379,12 +379,12 @@
                   "datasetName": "circuit_clustering_ds",
                   "fields": [
                     {
-                      "name": "circuito",
-                      "expression": "`circuito`"
-                    },
-                    {
                       "name": "criticidad",
                       "expression": "`criticidad`"
+                    },
+                    {
+                      "name": "circuito",
+                      "expression": "`circuito`"
                     },
                     {
                       "name": "measure(event_count_sum)",
@@ -431,7 +431,17 @@
                   "fieldName": "criticidad",
                   "displayName": "criticidad",
                   "scale": {
-                    "type": "categorical"
+                    "type": "categorical",
+                    "sort": {
+                      "by": "custom-order",
+                      "orderedValues": [
+                        "Muy Baja",
+                        "Baja",
+                        "Media",
+                        "Alta",
+                        "Muy Alta"
+                      ]
+                    }
                   }
                 },
                 "extra": [
