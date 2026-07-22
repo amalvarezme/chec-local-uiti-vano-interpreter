@@ -1,0 +1,426 @@
+<title>Flujo del proyecto — CHEC UITI_VANO Interpreter</title>
+<style>
+  :root {
+    --paper: #EDEEE9;
+    --paper-raised: #F7F7F3;
+    --ink: #1B1F1D;
+    --ink-soft: #4B524D;
+    --line: #D6D8D1;
+    --copper: #A85A20;
+    --copper-soft: #E8D2BC;
+    --teal: #2B6E71;
+    --teal-soft: #CFE3E2;
+    --slate: #545C61;
+    --slate-soft: #DEE2E4;
+    --good: #3F7F52;
+    --warn: #A9791F;
+    --bad: #B0473C;
+    --code-bg: #E2E4DD;
+    --shadow: 0 1px 2px rgba(27,31,29,0.06), 0 8px 24px -12px rgba(27,31,29,0.18);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #15181A;
+      --paper-raised: #1C2023;
+      --ink: #E7E6E0;
+      --ink-soft: #A8ADA6;
+      --line: #30363A;
+      --copper: #E0954E;
+      --copper-soft: #3A2A1B;
+      --teal: #6FBFC0;
+      --teal-soft: #1C3436;
+      --slate: #9BA3A8;
+      --slate-soft: #262C2F;
+      --good: #6FBF87;
+      --warn: #D9AE55;
+      --bad: #E08277;
+      --code-bg: #1F2427;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 28px -12px rgba(0,0,0,0.55);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #15181A; --paper-raised: #1C2023; --ink: #E7E6E0; --ink-soft: #A8ADA6;
+    --line: #30363A; --copper: #E0954E; --copper-soft: #3A2A1B; --teal: #6FBFC0;
+    --teal-soft: #1C3436; --slate: #9BA3A8; --slate-soft: #262C2F;
+    --good: #6FBF87; --warn: #D9AE55; --bad: #E08277; --code-bg: #1F2427;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 28px -12px rgba(0,0,0,0.55);
+  }
+  :root[data-theme="light"] {
+    --paper: #EDEEE9; --paper-raised: #F7F7F3; --ink: #1B1F1D; --ink-soft: #4B524D;
+    --line: #D6D8D1; --copper: #A85A20; --copper-soft: #E8D2BC; --teal: #2B6E71;
+    --teal-soft: #CFE3E2; --slate: #545C61; --slate-soft: #DEE2E4;
+    --good: #3F7F52; --warn: #A9791F; --bad: #B0473C; --code-bg: #E2E4DD;
+    --shadow: 0 1px 2px rgba(27,31,29,0.06), 0 8px 24px -12px rgba(27,31,29,0.18);
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: var(--paper); color: var(--ink);
+    font-family: Charter, "Iowan Old Style", Georgia, "Times New Roman", serif;
+    font-size: 16.5px; line-height: 1.62;
+  }
+  body { overflow-x: hidden; }
+  main { max-width: 880px; margin: 0 auto; padding: 3.2rem 1.5rem 6rem; }
+
+  h1, h2, h3, .eyebrow, .chip, .toc a, th, .mono, code, pre {
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+
+  header.masthead {
+    border-bottom: 3px solid var(--ink);
+    padding-bottom: 1.6rem;
+    margin-bottom: 2.6rem;
+  }
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--copper);
+    margin: 0 0 0.6rem;
+  }
+  h1 {
+    font-size: clamp(1.7rem, 4vw, 2.5rem);
+    line-height: 1.12;
+    margin: 0 0 0.5rem;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    font-weight: 700;
+  }
+  .subtitle {
+    color: var(--ink-soft);
+    font-size: 1.05rem;
+    margin: 0 0 1.2rem;
+    max-width: 60ch;
+    text-wrap: balance;
+  }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .chip {
+    font-size: 0.72rem; font-weight: 600; letter-spacing: 0.03em;
+    padding: 0.3rem 0.65rem; border-radius: 999px;
+    background: var(--paper-raised); border: 1px solid var(--line); color: var(--ink-soft);
+  }
+  .chip b { color: var(--ink); font-weight: 700; }
+
+  section { margin: 3.2rem 0; }
+  h2 {
+    font-size: 1.4rem; margin: 0 0 0.3rem; letter-spacing: -0.005em;
+    display: flex; align-items: baseline; gap: 0.6rem;
+  }
+  h2 .num { color: var(--slate); font-weight: 400; font-size: 1.1rem; }
+  .section-lede { color: var(--ink-soft); font-size: 0.98rem; margin: 0 0 1.4rem; max-width: 68ch; }
+  h3 { font-size: 1.05rem; margin: 1.6rem 0 0.6rem; color: var(--ink); }
+
+  p { margin: 0 0 1rem; max-width: 70ch; }
+  a { color: var(--teal); }
+  strong { color: var(--ink); }
+
+  code {
+    background: var(--code-bg); padding: 0.1rem 0.4rem; border-radius: 4px;
+    font-size: 0.85em; white-space: nowrap;
+  }
+  pre.cmd {
+    background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 0.9rem 1.1rem; overflow-x: auto; font-size: 0.82rem; line-height: 1.5;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: var(--ink);
+  }
+
+  .callout {
+    border-left: 3px solid var(--teal); background: var(--teal-soft);
+    padding: 0.9rem 1.1rem; border-radius: 0 8px 8px 0; margin: 1.2rem 0;
+    font-size: 0.94rem;
+  }
+  .callout.warn { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 16%, var(--paper)); }
+  .callout.evidence { border-color: var(--good); background: color-mix(in srgb, var(--good) 14%, var(--paper)); }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout .label { font-weight: 700; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.08em; display: block; margin-bottom: 0.35rem; }
+
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; margin: 1.2rem 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.86rem; min-width: 560px; }
+  thead th {
+    text-align: left; background: var(--paper-raised); color: var(--ink-soft);
+    font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700;
+    padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--line);
+  }
+  tbody td { padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody code { white-space: nowrap; }
+
+  .pill {
+    display: inline-block; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.03em;
+    padding: 0.12rem 0.5rem; border-radius: 999px;
+  }
+  .pill.repo { background: var(--slate-soft); color: var(--slate); }
+  .pill.repro { background: color-mix(in srgb, var(--good) 20%, transparent); color: var(--good); }
+  .pill.ext { background: color-mix(in srgb, var(--bad) 20%, transparent); color: var(--bad); }
+
+  .diagram-frame {
+    background: var(--paper-raised); border: 1px solid var(--line); border-radius: 12px;
+    padding: 1.4rem; margin: 1.4rem 0; box-shadow: var(--shadow); overflow-x: auto;
+  }
+  .diagram-frame figcaption {
+    font-size: 0.78rem; color: var(--ink-soft); margin-top: 0.8rem; text-align: center;
+  }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 1rem; font-size: 0.78rem; color: var(--ink-soft); margin: 0.6rem 0 0; }
+  .legend span { display: inline-flex; align-items: center; gap: 0.4rem; }
+  .swatch { width: 0.7rem; height: 0.7rem; border-radius: 3px; display: inline-block; }
+
+  footer {
+    margin-top: 4rem; padding-top: 1.4rem; border-top: 1px solid var(--line);
+    font-size: 0.82rem; color: var(--ink-soft);
+  }
+
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<main>
+  <header class="masthead">
+    <p class="eyebrow">Revisión de arquitectura &middot; chec-local-uiti-vano-interpreter</p>
+    <h1>Del reporte por circuito al dashboard en Databricks</h1>
+    <p class="subtitle">Cómo encajan los comandos, Skills y agentes de Claude Code que generan y publican los reportes de UITI_VANO, y cómo el comando <code>/deploy-databricks-dashboard</code> replica esa misma historia como un dashboard AI/BI.</p>
+    <div class="meta-row">
+      <span class="chip">Rama: <b>databricks-integration</b></span>
+      <span class="chip">Motor de reportes: <b>report_pipeline.py</b></span>
+      <span class="chip">Despliegue verificado: <b>dashboard_id 01f18567…</b></span>
+    </div>
+  </header>
+
+  <section id="panorama">
+    <h2><span class="num">§1</span> Panorama</h2>
+    <p class="section-lede">El proyecto sostiene dos flujos que comparten la misma fuente de verdad (el CSV <code>Indicadores_vano_v3.csv</code> y la función real <code>compute_circuit_criticality_groups</code>), pero terminan en destinos distintos.</p>
+    <p><strong>Flujo A — pipeline local de reportes.</strong> Un circuito y una ventana de fechas entran a <code>report_pipeline.py</code>, que es determinista y no llama a ningún LLM por sí mismo. Alrededor de sus tres funciones (<code>prepare</code>, <code>prepare_expert_alignment</code>, <code>render</code>) la Skill <code>report</code> orquesta cuatro agentes (historical, inference, auto-simulator, expert-alignment) que sí razonan con LLM, cada uno validando su propio JSON. El resultado es un HTML local que opcionalmente se proyecta a <code>reports/vault/</code> y se indexa con graphify.</p>
+    <p><strong>Flujo B — despliegue a Databricks.</strong> El mismo dominio (circuitos, vanos, clustering de criticidad, evolución diaria) se replica como un dashboard AI/BI de Databricks Lakeview, respaldado por tablas/vistas Delta. El comando <code>/deploy-databricks-dashboard</code> automatiza ese despliegue completo en cualquier workspace destino, preguntando solo el nombre del dashboard y la URL del workspace.</p>
+    <div class="callout">
+      <span class="label">Relación entre ambos flujos</span>
+      No comparten runtime ni credenciales: el Flujo B lee del mismo CSV fuente pero a través de tablas Delta independientes en Unity Catalog, nunca del pipeline Python local. Un cambio en <code>plotting.py</code> no se refleja en Databricks hasta que se re-ejecuta el notebook <code>uiti_vano_tables.py</code>.
+    </div>
+  </section>
+
+  <section id="resumen">
+    <h2><span class="num">§2</span> Diagrama resumen</h2>
+    <p class="section-lede">Vista de alto nivel: qué comando dispara qué, y dónde termina cada flujo.</p>
+    <figure class="diagram-frame">
+<pre class="mermaid">
+flowchart TD
+    U(["Usuario"])
+
+    subgraph LOCAL["Flujo A — pipeline local"]
+        direction TB
+        R["/report circuito/"]
+        RL["/reporte-lote grupo/"]
+        IG["/informe-gerencial grupo/"]
+        AC["/agrupamiento-circuitos/"]
+        PIPE[["report_pipeline.py<br/>prepare · agentes · render"]]
+        VAULT[("reports/vault/*.md")]
+        GRAPH[("graphify<br/>knowledge graph")]
+        HTML_LOCAL["HTML de reporte<br/>(local, no se auto-publica)"]
+
+        R --> PIPE --> HTML_LOCAL
+        R -.paso 9, alert-and-continue.-> VAULT
+        RL -- "steps 2-9 de report, por circuito" --> R
+        IG -- "steps 2-8 de report, por circuito" --> R
+        IG -- "paso 2.5: grafo aislado + patrones" --> GRAPH
+        VAULT --> GRAPH
+        AC -.reutilizada por RL/IG.-> PIPE
+    end
+
+    subgraph DBX["Flujo B — despliegue Databricks"]
+        direction TB
+        DD["/deploy-databricks-dashboard/"]
+        CHK{"¿Existen los<br/>6 objetos de datos?"}
+        BUILD["Construir tablas/vistas<br/>faltantes (notebook + SQL)"]
+        PUB[["Lakeview create + publish"]]
+        DASH[("Dashboard AI/BI<br/>publicado")]
+
+        DD --> CHK
+        CHK -- "faltan" --> BUILD --> PUB
+        CHK -- "completos" --> PUB
+        PUB --> DASH
+    end
+
+    U --> R
+    U --> RL
+    U --> IG
+    U --> AC
+    U --> DD
+
+    classDef local fill:#E8D2BC,stroke:#A85A20,stroke-width:1.4px,color:#1B1F1D;
+    classDef dbx fill:#CFE3E2,stroke:#2B6E71,stroke-width:1.4px,color:#1B1F1D;
+    classDef store fill:#DEE2E4,stroke:#545C61,stroke-width:1px,color:#1B1F1D;
+    class R,RL,IG,AC,PIPE,HTML_LOCAL local;
+    class DD,CHK,BUILD,PUB dbx;
+    class VAULT,GRAPH,DASH store;
+</pre>
+      <figcaption>Los dos flujos parten del mismo usuario pero no se cruzan en runtime: el único punto de contacto conceptual es el dominio de datos (circuitos/vanos), no el código.</figcaption>
+    </figure>
+  </section>
+
+  <section id="local-pipeline">
+    <h2><span class="num">§3</span> report / reporte-lote / informe-gerencial</h2>
+    <p class="section-lede">Los tres comparten el mismo motor de 9 pasos, pero cada uno lo recorta y lo confirma distinto.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Skill</th><th>Alcance</th><th>Pasos de <code>report</code> ejecutados</th><th>Confirmación</th><th>Extra</th></tr></thead>
+        <tbody>
+          <tr><td><code>report</code></td><td>1 circuito</td><td>1–9 completos</td><td>Única, al inicio (circuito + ventana)</td><td>Paso 9 proyecta a vault (alert-and-continue, nunca bloquea el paso 8)</td></tr>
+          <tr><td><code>reporte-lote</code></td><td>Grupo de criticidad completo</td><td>2–9 por circuito, en loop</td><td>Única, al resolver el grupo</td><td>Siempre renderiza antes el scatter de clustering; fallas por circuito son alert-and-continue</td></tr>
+          <tr><td><code>informe-gerencial</code></td><td>12 circuitos representativos (K-Means, distancia al centroide)</td><td>2–8 por circuito faltante (nunca el 9)</td><td>Solo si falta algún circuito</td><td>Paso 2.5 propio: grafo vault aislado + patrones cross-circuito + vista de sub-grafo embebida</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Los cuatro agentes que hacen el razonamiento LLM (<code>historical</code>, <code>inference</code>, <code>auto-simulator</code>, <code>expert-alignment</code>) son los mismos en los tres casos — <code>reporte-lote</code> e <code>informe-gerencial</code> nunca los reimplementan, solo re-invocan <code>report/SKILL.md</code> por referencia. <code>historical</code> e <code>inference</code> corren en paralelo (no dependen entre sí); <code>expert-alignment</code> requiere que ambos hayan terminado.</p>
+    <div class="callout warn">
+      <span class="label">Lección aprendida — aislamiento de graphify</span>
+      El paso 2.5 de <code>informe-gerencial</code> reconstruye el grafo del vault de forma <strong>completamente aislada</strong> (nunca <code>--update</code> sobre el manifiesto amplio) después de un incidente de producción donde una actualización con alcance mal delimitado podó ~271 archivos no relacionados. <code>vault-circuito</code> (paso 9 de <code>report</code>) sigue el mismo principio: su <code>/graphify --update</code> queda acotado únicamente a <code>reports/vault/graphify-out/graph.json</code>.
+    </div>
+  </section>
+
+  <section id="databricks">
+    <h2><span class="num">§4</span> Despliegue a Databricks</h2>
+    <p class="section-lede">El comando <code>/deploy-databricks-dashboard</code> reconstruye 6 objetos de datos y publica el dashboard Lakeview, todo desde dos preguntas al usuario.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Objeto</th><th>Tipo</th><th>Origen</th><th></th></tr></thead>
+        <tbody>
+          <tr><td><code>indicadores_vano</code></td><td>Tabla Delta</td><td>CSV tipado, construido por <code>uiti_vano_tables.py</code></td><td><span class="pill repro">reproducible</span></td></tr>
+          <tr><td><code>circuit_clustering</code></td><td>Tabla Delta</td><td>Llama <em>verbatim</em> a <code>plotting.compute_circuit_criticality_groups</code></td><td><span class="pill repro">reproducible</span></td></tr>
+          <tr><td><code>circuit_geo</code></td><td>Tabla Delta</td><td>Shapefile <code>MVLINSEC.shp</code> vía geopandas</td><td><span class="pill repro">reproducible</span></td></tr>
+          <tr><td><code>indicadores_vano_v_3</code></td><td>Tabla ancha (clima + circuito)</td><td>Sin ETL en este repo</td><td><span class="pill ext">prerrequisito externo</span></td></tr>
+          <tr><td><code>circuit_map_lines_equipment</code></td><td>Vista</td><td>UNION de vanos/transformadores/switches sobre <code>indicadores_vano_v_3</code></td><td><span class="pill repro">reproducible*</span></td></tr>
+          <tr><td><code>circuit_daily_evolution</code></td><td>Vista</td><td>Serie diaria con ceros, sobre <code>indicadores_vano</code></td><td><span class="pill repro">reproducible</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:0.85rem;color:var(--ink-soft)">* depende de que <code>indicadores_vano_v_3</code> ya exista — si falta, el comando se detiene y avisa antes de continuar.</p>
+
+    <h3>Widgets del dashboard publicado</h3>
+    <p><code>clustering_scatter</code> (dispersión log-log por criticidad) · <code>circuit_detail_table</code> (detalle del circuito seleccionado) · <code>daily_line</code> (combo: eventos diarios + UITI_VANO) · <code>events_map</code> / <code>uiti_map</code> (mapas Vega-Lite en capas, sin basemap) · filtros de circuito y rango de fechas compartidos entre widgets.</p>
+
+    <div class="callout evidence">
+      <span class="label">Evidencia — corrida real de esta sesión</span>
+      <code>/deploy-databricks-dashboard</code> se ejecutó de punta a punta contra el workspace <code>dbc-24ddce05-76d1.cloud.databricks.com</code>: los 6 objetos ya existían, así que saltó directo a publicar. Resultado verificado vía <code>databricks lakeview get</code>: <code>dashboard_id 01f18567bd7e10c7bc200e190abedd31</code>, <code>lifecycle_state: ACTIVE</code>, <code>warehouse_id 9ff827fa83282a1a</code>.
+    </div>
+  </section>
+
+  <section id="bpmn">
+    <h2><span class="num">§5</span> Diagrama tipo BPMN</h2>
+    <p class="section-lede">Carriles por responsable: el usuario dispara, las Skills orquestan, los agentes LLM razonan, y el flujo de Databricks corre en paralelo con su propia cadena de decisiones.</p>
+    <figure class="diagram-frame">
+<pre class="mermaid">
+flowchart TD
+    START(("Usuario<br/>invoca comando"))
+
+    subgraph L1["Carril · Usuario"]
+        direction TB
+        CH{"¿Qué comando?"}
+    end
+
+    subgraph L2["Carril · Skill orquestadora"]
+        direction TB
+        P1["report paso 1<br/>confirmar circuito + ventana"]
+        P2["prepare()<br/>detección de puntos críticos"]
+        GW1{{"despacho paralelo"}}
+        P7["prepare_expert_alignment()"]
+        P8["render()"]
+        OUT["Entrega HTML local<br/>(nunca auto-publica)"]
+        BATCHGW{"lote vs individual"}
+    end
+
+    subgraph L3["Carril · Agentes LLM"]
+        direction TB
+        A_HIST["historical<br/>diagnóstico descriptivo"]
+        A_INF["inference<br/>SHAP / MGCECDL"]
+        A_SIM["auto-simulator<br/>sensibilidad minmax"]
+        GW2{"¿historical + inference<br/>completos?"}
+        A_EXP["expert-alignment<br/>vs discusión experta PDF"]
+    end
+
+    subgraph L4["Carril · Vault / graphify"]
+        direction TB
+        V1["vault-circuito<br/>proyecta 3 JSON validados"]
+        V2[("reports/vault/*.md")]
+        GRAPHIFY["graphify --update<br/>(aislado a vault)"]
+    end
+
+    subgraph L5["Carril · deploy-databricks-dashboard"]
+        direction TB
+        D1["Preguntar nombre +<br/>URL de workspace"]
+        D2["Resolver perfil CLI<br/>+ warehouse"]
+        D3{"¿Perfil / warehouse<br/>disponibles?"}
+        D4["Pedir al usuario<br/>databricks auth login"]
+        D5{"¿Existen los<br/>6 objetos?"}
+        D6["Subir código real +<br/>correr notebook como job"]
+        D7["Crear vistas SQL<br/>faltantes"]
+        D8["lakeview create<br/>+ publish"]
+        END_DBX(("Dashboard<br/>publicado"))
+    end
+
+    START --> CH
+    CH -- "/report" --> P1
+    CH -- "/reporte-lote, /informe-gerencial" --> BATCHGW
+    CH -- "/deploy-databricks-dashboard" --> D1
+    BATCHGW -- "por cada circuito" --> P1
+
+    P1 --> P2 --> GW1
+    GW1 --> A_HIST
+    GW1 --> A_INF
+    GW1 --> A_SIM
+    A_HIST --> GW2
+    A_INF --> GW2
+    GW2 -- "sí" --> P7 --> A_EXP --> P8
+    A_SIM -.opcional, degrada solo.-> P8
+    P8 --> OUT
+    OUT -- "paso 9, alert-and-continue" --> V1 --> V2 --> GRAPHIFY
+
+    D1 --> D2 --> D3
+    D3 -- "no" --> D4 --> D2
+    D3 -- "sí" --> D5
+    D5 -- "faltan" --> D6 --> D7 --> D8
+    D5 -- "completos" --> D8
+    D8 --> END_DBX
+
+    classDef user fill:#DEE2E4,stroke:#545C61,color:#1B1F1D;
+    classDef skill fill:#E8D2BC,stroke:#A85A20,color:#1B1F1D;
+    classDef agent fill:#F3E4D3,stroke:#A85A20,stroke-dasharray: 3 2,color:#1B1F1D;
+    classDef store fill:#DEE2E4,stroke:#545C61,color:#1B1F1D;
+    classDef dbx fill:#CFE3E2,stroke:#2B6E71,color:#1B1F1D;
+    class CH user;
+    class P1,P2,GW1,P7,P8,OUT,BATCHGW skill;
+    class A_HIST,A_INF,A_SIM,GW2,A_EXP agent;
+    class V1,V2,GRAPHIFY store;
+    class D1,D2,D3,D4,D5,D6,D7,D8,END_DBX dbx;
+</pre>
+      <div class="legend">
+        <span><i class="swatch" style="background:#DEE2E4;border:1px solid #545C61"></i> Usuario / carril de entrada</span>
+        <span><i class="swatch" style="background:#E8D2BC;border:1px solid #A85A20"></i> Skill orquestadora (determinista)</span>
+        <span><i class="swatch" style="background:#F3E4D3;border:1px dashed #A85A20"></i> Agente LLM (razona)</span>
+        <span><i class="swatch" style="background:#CFE3E2;border:1px solid #2B6E71"></i> Comando Databricks</span>
+      </div>
+      <figcaption>Rombos = puntos de decisión reales del código (gateways); el hexágono marca el único despacho verdaderamente paralelo (historical + inference + auto-simulator).</figcaption>
+    </figure>
+  </section>
+
+  <section id="comandos">
+    <h2><span class="num">§6</span> Referencia rápida de comandos</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Comando</th><th>Uso</th><th>Qué produce</th></tr></thead>
+        <tbody>
+          <tr><td><code>/report</code></td><td><code>/report CIRCUITO [fecha_inicio fecha_fin]</code></td><td>HTML de un circuito, 9 pasos completos</td></tr>
+          <tr><td><code>/reporte-lote</code></td><td><code>/reporte-lote grupo=alta</code></td><td>Un reporte por circuito del grupo + scatter de clustering</td></tr>
+          <tr><td><code>/informe-gerencial</code></td><td><code>/informe-gerencial grupo=media</code></td><td>Un HTML gerencial cross-circuito (12 representativos)</td></tr>
+          <tr><td><code>/agrupamiento-circuitos</code></td><td><code>/agrupamiento-circuitos</code></td><td>Solo el scatter de clustering, sin reporte</td></tr>
+          <tr><td><code>/limpiar-corridas</code></td><td><code>/limpiar-corridas</code> (dry-run primero, confirmación explícita)</td><td>Borra artefactos desechables de corridas previas</td></tr>
+          <tr><td><code>/deploy-databricks-dashboard</code></td><td><code>/deploy-databricks-dashboard</code> → pide nombre + URL del workspace</td><td>Dashboard AI/BI publicado en Databricks</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    Generado a partir de una exploración estructural del repo (report_pipeline.py, .claude/skills, .claude/agents, .claude/commands, notebooks/databricks). El prerrequisito externo <code>indicadores_vano_v_3</code> y la ausencia de basemap en los mapas geo de Databricks son limitaciones conocidas, no pendientes de este documento.
+  </footer>
+</main>
