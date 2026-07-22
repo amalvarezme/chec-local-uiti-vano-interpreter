@@ -45,12 +45,14 @@ lib/
 graphify-out/
 outputs/graphify_workspace/
 
-# Claude Code local config and memory (agent and skill definitions are tracked)
+# Claude Code local config and memory (agent, skill, and command definitions are tracked)
 .claude/*
 !.claude/agents/
 !.claude/agents/**
 !.claude/skills/
 !.claude/skills/**
+!.claude/commands/
+!.claude/commands/**
 
 # Web (Astro) — root project
 node_modules/
