@@ -14,10 +14,6 @@
           {
             "name": "criticidad",
             "expr": "criticidad"
-          },
-          {
-            "name": "cluster",
-            "expr": "cluster"
           }
         ],
         "measures": [
@@ -30,11 +26,6 @@
             "name": "uiti_vano_sum_total",
             "expr": "SUM(uiti_vano_sum)",
             "displayName": "uiti_vano_sum"
-          },
-          {
-            "name": "centroid_distance_avg",
-            "expr": "AVG(centroid_distance)",
-            "displayName": "centroid_distance"
           }
         ]
       }
@@ -53,10 +44,6 @@
           {
             "name": "criticidad",
             "expr": "criticidad"
-          },
-          {
-            "name": "cluster",
-            "expr": "cluster"
           }
         ],
         "measures": [
@@ -69,11 +56,6 @@
             "name": "uiti_vano_sum_total",
             "expr": "SUM(uiti_vano_sum)",
             "displayName": "uiti_vano_sum"
-          },
-          {
-            "name": "centroid_distance_avg",
-            "expr": "AVG(centroid_distance)",
-            "displayName": "centroid_distance"
           }
         ]
       }
@@ -670,7 +652,7 @@
               },
               "jsonSpec": {
                 "type": "vega-lite",
-                "spec": "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v6.json\",\"data\":{\"name\":\"databricks_query\"},\"width\":\"container\",\"height\":\"container\",\"config\":{\"autosize\":{\"type\":\"fit\",\"contains\":\"padding\"}},\"projection\":{\"type\":\"mercator\"},\"layer\":[{\"transform\":[{\"filter\":\"datum.geom_type == 'vano'\"}],\"mark\":{\"type\":\"rule\",\"strokeWidth\":2,\"opacity\":0.85},\"encoding\":{\"longitude\":{\"field\":\"lon1\",\"type\":\"quantitative\"},\"latitude\":{\"field\":\"lat1\",\"type\":\"quantitative\"},\"longitude2\":{\"field\":\"lon2\"},\"latitude2\":{\"field\":\"lat2\"},\"color\":{\"field\":\"event_count\",\"type\":\"quantitative\",\"scale\":{\"scheme\":\"blues\"},\"legend\":{\"title\":\"Eventos\"}},\"tooltip\":[{\"field\":\"circuito\",\"type\":\"nominal\",\"title\":\"Circuito\"},{\"field\":\"fid\",\"type\":\"nominal\",\"title\":\"FID vano\"},{\"field\":\"event_count\",\"type\":\"quantitative\",\"title\":\"Eventos\"}]}},{\"transform\":[{\"filter\":\"datum.geom_type == 'transformador'\"}],\"mark\":{\"type\":\"square\",\"size\":45,\"color\":\"#f59e0b\",\"opacity\":0.9,\"stroke\":\"white\",\"strokeWidth\":0.5},\"encoding\":{\"longitude\":{\"field\":\"lon1\",\"type\":\"quantitative\"},\"latitude\":{\"field\":\"lat1\",\"type\":\"quantitative\"},\"tooltip\":[{\"field\":\"circuito\",\"type\":\"nominal\",\"title\":\"Circuito\"},{\"field\":\"fid\",\"type\":\"nominal\",\"title\":\"FID transformador\"}]}},{\"transform\":[{\"filter\":\"datum.geom_type == 'switch'\"}],\"mark\":{\"type\":\"circle\",\"size\":35,\"color\":\"#7c3aed\",\"opacity\":0.9,\"stroke\":\"white\",\"strokeWidth\":0.5},\"encoding\":{\"longitude\":{\"field\":\"lon1\",\"type\":\"quantitative\"},\"latitude\":{\"field\":\"lat1\",\"type\":\"quantitative\"},\"tooltip\":[{\"field\":\"circuito\",\"type\":\"nominal\",\"title\":\"Circuito\"},{\"field\":\"fid\",\"type\":\"nominal\",\"title\":\"FID switch\"}]}}]}"
+                "spec": "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v6.json\",\"data\":{\"name\":\"databricks_query\"},\"width\":\"container\",\"height\":\"container\",\"config\":{\"autosize\":{\"type\":\"fit\",\"contains\":\"padding\"}},\"projection\":{\"type\":\"mercator\"},\"resolve\":{\"scale\":{\"color\":\"independent\"}},\"layer\":[{\"transform\":[{\"filter\":\"datum.geom_type == 'vano'\"}],\"mark\":{\"type\":\"rule\",\"strokeWidth\":2,\"opacity\":0.85},\"encoding\":{\"longitude\":{\"field\":\"lon1\",\"type\":\"quantitative\"},\"latitude\":{\"field\":\"lat1\",\"type\":\"quantitative\"},\"longitude2\":{\"field\":\"lon2\"},\"latitude2\":{\"field\":\"lat2\"},\"color\":{\"field\":\"event_count\",\"type\":\"quantitative\",\"scale\":{\"scheme\":\"blues\"},\"legend\":{\"title\":\"Eventos\"}},\"tooltip\":[{\"field\":\"circuito\",\"type\":\"nominal\",\"title\":\"Circuito\"},{\"field\":\"fid\",\"type\":\"nominal\",\"title\":\"FID vano\"},{\"field\":\"event_count\",\"type\":\"quantitative\",\"title\":\"Eventos\"}]}},{\"transform\":[{\"filter\":\"datum.geom_type == 'transformador'\"},{\"calculate\":\"'Transformador'\",\"as\":\"equipo\"}],\"mark\":{\"type\":\"square\",\"size\":45,\"opacity\":0.9,\"stroke\":\"white\",\"strokeWidth\":0.5},\"encoding\":{\"longitude\":{\"field\":\"lon1\",\"type\":\"quantitative\"},\"latitude\":{\"field\":\"lat1\",\"type\":\"quantitative\"},\"color\":{\"field\":\"equipo\",\"type\":\"nominal\",\"scale\":{\"domain\":[\"Transformador\",\"Switch\"],\"range\":[\"#f59e0b\",\"#7c3aed\"]},\"legend\":{\"title\":\"Equipo\"}},\"tooltip\":[{\"field\":\"circuito\",\"type\":\"nominal\",\"title\":\"Circuito\"},{\"field\":\"fid\",\"type\":\"nominal\",\"title\":\"FID transformador\"}]}},{\"transform\":[{\"filter\":\"datum.geom_type == 'switch'\"},{\"calculate\":\"'Switch'\",\"as\":\"equipo\"}],\"mark\":{\"type\":\"circle\",\"size\":35,\"opacity\":0.9,\"stroke\":\"white\",\"strokeWidth\":0.5},\"encoding\":{\"longitude\":{\"field\":\"lon1\",\"type\":\"quantitative\"},\"latitude\":{\"field\":\"lat1\",\"type\":\"quantitative\"},\"color\":{\"field\":\"equipo\",\"type\":\"nominal\",\"scale\":{\"domain\":[\"Transformador\",\"Switch\"],\"range\":[\"#f59e0b\",\"#7c3aed\"]},\"legend\":{\"title\":\"Equipo\"}},\"tooltip\":[{\"field\":\"circuito\",\"type\":\"nominal\",\"title\":\"Circuito\"},{\"field\":\"fid\",\"type\":\"nominal\",\"title\":\"FID switch\"}]}}]}"
               },
               "widgetType": "custom-vega-viz",
               "encodings": {
@@ -767,7 +749,7 @@
               },
               "jsonSpec": {
                 "type": "vega-lite",
-                "spec": "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v6.json\",\"data\":{\"name\":\"databricks_query\"},\"width\":\"container\",\"height\":\"container\",\"config\":{\"autosize\":{\"type\":\"fit\",\"contains\":\"padding\"}},\"projection\":{\"type\":\"mercator\"},\"layer\":[{\"transform\":[{\"filter\":\"datum.geom_type == 'vano'\"}],\"mark\":{\"type\":\"rule\",\"strokeWidth\":2,\"opacity\":0.85},\"encoding\":{\"longitude\":{\"field\":\"lon1\",\"type\":\"quantitative\"},\"latitude\":{\"field\":\"lat1\",\"type\":\"quantitative\"},\"longitude2\":{\"field\":\"lon2\"},\"latitude2\":{\"field\":\"lat2\"},\"color\":{\"field\":\"uiti_vano_sum\",\"type\":\"quantitative\",\"scale\":{\"scheme\":\"oranges\"},\"legend\":{\"title\":\"UITI_VANO\"}},\"tooltip\":[{\"field\":\"circuito\",\"type\":\"nominal\",\"title\":\"Circuito\"},{\"field\":\"fid\",\"type\":\"nominal\",\"title\":\"FID vano\"},{\"field\":\"uiti_vano_sum\",\"type\":\"quantitative\",\"title\":\"UITI_VANO\"}]}},{\"transform\":[{\"filter\":\"datum.geom_type == 'transformador'\"}],\"mark\":{\"type\":\"square\",\"size\":45,\"color\":\"#f59e0b\",\"opacity\":0.9,\"stroke\":\"white\",\"strokeWidth\":0.5},\"encoding\":{\"longitude\":{\"field\":\"lon1\",\"type\":\"quantitative\"},\"latitude\":{\"field\":\"lat1\",\"type\":\"quantitative\"},\"tooltip\":[{\"field\":\"circuito\",\"type\":\"nominal\",\"title\":\"Circuito\"},{\"field\":\"fid\",\"type\":\"nominal\",\"title\":\"FID transformador\"}]}},{\"transform\":[{\"filter\":\"datum.geom_type == 'switch'\"}],\"mark\":{\"type\":\"circle\",\"size\":35,\"color\":\"#7c3aed\",\"opacity\":0.9,\"stroke\":\"white\",\"strokeWidth\":0.5},\"encoding\":{\"longitude\":{\"field\":\"lon1\",\"type\":\"quantitative\"},\"latitude\":{\"field\":\"lat1\",\"type\":\"quantitative\"},\"tooltip\":[{\"field\":\"circuito\",\"type\":\"nominal\",\"title\":\"Circuito\"},{\"field\":\"fid\",\"type\":\"nominal\",\"title\":\"FID switch\"}]}}]}"
+                "spec": "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v6.json\",\"data\":{\"name\":\"databricks_query\"},\"width\":\"container\",\"height\":\"container\",\"config\":{\"autosize\":{\"type\":\"fit\",\"contains\":\"padding\"}},\"projection\":{\"type\":\"mercator\"},\"resolve\":{\"scale\":{\"color\":\"independent\"}},\"layer\":[{\"transform\":[{\"filter\":\"datum.geom_type == 'vano'\"}],\"mark\":{\"type\":\"rule\",\"strokeWidth\":2,\"opacity\":0.85},\"encoding\":{\"longitude\":{\"field\":\"lon1\",\"type\":\"quantitative\"},\"latitude\":{\"field\":\"lat1\",\"type\":\"quantitative\"},\"longitude2\":{\"field\":\"lon2\"},\"latitude2\":{\"field\":\"lat2\"},\"color\":{\"field\":\"uiti_vano_sum\",\"type\":\"quantitative\",\"scale\":{\"scheme\":\"oranges\"},\"legend\":{\"title\":\"UITI_VANO\"}},\"tooltip\":[{\"field\":\"circuito\",\"type\":\"nominal\",\"title\":\"Circuito\"},{\"field\":\"fid\",\"type\":\"nominal\",\"title\":\"FID vano\"},{\"field\":\"uiti_vano_sum\",\"type\":\"quantitative\",\"title\":\"UITI_VANO\"}]}},{\"transform\":[{\"filter\":\"datum.geom_type == 'transformador'\"},{\"calculate\":\"'Transformador'\",\"as\":\"equipo\"}],\"mark\":{\"type\":\"square\",\"size\":45,\"opacity\":0.9,\"stroke\":\"white\",\"strokeWidth\":0.5},\"encoding\":{\"longitude\":{\"field\":\"lon1\",\"type\":\"quantitative\"},\"latitude\":{\"field\":\"lat1\",\"type\":\"quantitative\"},\"color\":{\"field\":\"equipo\",\"type\":\"nominal\",\"scale\":{\"domain\":[\"Transformador\",\"Switch\"],\"range\":[\"#f59e0b\",\"#7c3aed\"]},\"legend\":{\"title\":\"Equipo\"}},\"tooltip\":[{\"field\":\"circuito\",\"type\":\"nominal\",\"title\":\"Circuito\"},{\"field\":\"fid\",\"type\":\"nominal\",\"title\":\"FID transformador\"}]}},{\"transform\":[{\"filter\":\"datum.geom_type == 'switch'\"},{\"calculate\":\"'Switch'\",\"as\":\"equipo\"}],\"mark\":{\"type\":\"circle\",\"size\":35,\"opacity\":0.9,\"stroke\":\"white\",\"strokeWidth\":0.5},\"encoding\":{\"longitude\":{\"field\":\"lon1\",\"type\":\"quantitative\"},\"latitude\":{\"field\":\"lat1\",\"type\":\"quantitative\"},\"color\":{\"field\":\"equipo\",\"type\":\"nominal\",\"scale\":{\"domain\":[\"Transformador\",\"Switch\"],\"range\":[\"#f59e0b\",\"#7c3aed\"]},\"legend\":{\"title\":\"Equipo\"}},\"tooltip\":[{\"field\":\"circuito\",\"type\":\"nominal\",\"title\":\"Circuito\"},{\"field\":\"fid\",\"type\":\"nominal\",\"title\":\"FID switch\"}]}}]}"
               },
               "widgetType": "custom-vega-viz",
               "encodings": {
