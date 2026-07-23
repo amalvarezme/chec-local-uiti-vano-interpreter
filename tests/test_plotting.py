@@ -23,28 +23,34 @@ def _rows_for_circuit(circuit: str, n_events: int, total_uiti: float, start: str
     )
 
 
-def _five_tier_raw_df() -> pd.DataFrame:
-    """10 circuits across 5 clearly separated magnitude tiers, 2 circuits per tier.
+def _four_tier_raw_df() -> pd.DataFrame:
+    """8 circuits across 4 clearly separated magnitude tiers, 2 circuits per tier.
 
     (event_count, uiti_vano_sum) values below were verified empirically against
     this module's deterministic `run_kmeans(..., random_state=42)` to produce
-    exactly 5 singleton-pair clusters ranked in the expected order -- with only
-    6 points the tied-lowest pair can occasionally land on two *different*
-    initial K-Means centroids (since they are the closest pair yet each is
-    already its own cluster once chosen as a seed) and never merge, so 2 points
-    per tier is used for a clustering result that is robust, not just close.
+    exactly 4 singleton-pair clusters ranked in the expected order. Note ALTO
+    and MEDIO deliberately share `event_count=10` (differing only in
+    `uiti_vano_sum`): with this fixture's alphabetical circuit-name ordering
+    (ALTO, BAJO, MEDIO, MUYALTO -- `compute_circuit_criticality_groups` groups
+    by `CIRCUITO` internally), the seeded `np.random.choice` initial-centroid
+    draw for n=8/k=4 lands two initial centroids inside the ALTO tier and none
+    in BAJO; using ALTO's original `event_count=20` here reliably caused ALTO
+    to split into two clusters while MEDIO/BAJO merged into one. Matching
+    ALTO's `event_count` to MEDIO's removes the spurious extra separation
+    axis between them and lets `uiti_vano_sum` alone drive a clean 4-way
+    split. Verified stable under +/-3% jitter of every `uiti_vano_sum` across
+    200 randomized trials (see PR discussion / task notes), not just a single
+    lucky run.
     """
     frames = [
-        _rows_for_circuit("MUYALTA_1", n_events=40, total_uiti=50000.0),
-        _rows_for_circuit("MUYALTA_2", n_events=40, total_uiti=55000.0),
-        _rows_for_circuit("ALTA_1", n_events=20, total_uiti=5000.0),
-        _rows_for_circuit("ALTA_2", n_events=20, total_uiti=5500.0),
-        _rows_for_circuit("MEDIA_1", n_events=10, total_uiti=500.0),
-        _rows_for_circuit("MEDIA_2", n_events=10, total_uiti=550.0),
-        _rows_for_circuit("BAJA_1", n_events=4, total_uiti=40.0),
-        _rows_for_circuit("BAJA_2", n_events=4, total_uiti=45.0),
-        _rows_for_circuit("MUYBAJA_1", n_events=2, total_uiti=2.0),
-        _rows_for_circuit("MUYBAJA_2", n_events=2, total_uiti=4.0),
+        _rows_for_circuit("MUYALTO_1", n_events=40, total_uiti=50000.0),
+        _rows_for_circuit("MUYALTO_2", n_events=40, total_uiti=55000.0),
+        _rows_for_circuit("ALTO_1", n_events=10, total_uiti=5000.0),
+        _rows_for_circuit("ALTO_2", n_events=10, total_uiti=5500.0),
+        _rows_for_circuit("MEDIO_1", n_events=10, total_uiti=500.0),
+        _rows_for_circuit("MEDIO_2", n_events=10, total_uiti=550.0),
+        _rows_for_circuit("BAJO_1", n_events=4, total_uiti=40.0),
+        _rows_for_circuit("BAJO_2", n_events=4, total_uiti=45.0),
     ]
     return pd.concat(frames, ignore_index=True)
 
@@ -55,8 +61,8 @@ def _trace_label(name: str | None) -> str | None:
     return name.split(" (n=")[0]
 
 
-def test_five_tiers_all_labels_present_and_correctly_ranked():
-    raw_df = _five_tier_raw_df()
+def test_four_tiers_all_labels_present_and_correctly_ranked():
+    raw_df = _four_tier_raw_df()
 
     fig = plot_interactive_circuit_clustering(raw_df)
 
@@ -65,13 +71,13 @@ def test_five_tiers_all_labels_present_and_correctly_ranked():
 
     assert set(CRITICALITY_GROUP_LABELS) <= labels_present
 
-    muy_alta_trace = next(t for t in named_traces if _trace_label(t.name) == "Muy Alta")
-    assert "MUYALTA_1" in list(muy_alta_trace.text)
-    assert "MUYALTA_2" in list(muy_alta_trace.text)
+    muy_alto_trace = next(t for t in named_traces if _trace_label(t.name) == "Riesgo Muy Alto")
+    assert "MUYALTO_1" in list(muy_alto_trace.text)
+    assert "MUYALTO_2" in list(muy_alto_trace.text)
 
-    muy_baja_trace = next(t for t in named_traces if _trace_label(t.name) == "Muy Baja")
-    assert "MUYBAJA_1" in list(muy_baja_trace.text)
-    assert "MUYBAJA_2" in list(muy_baja_trace.text)
+    bajo_trace = next(t for t in named_traces if _trace_label(t.name) == "Riesgo Bajo")
+    assert "BAJO_1" in list(bajo_trace.text)
+    assert "BAJO_2" in list(bajo_trace.text)
 
 
 def test_two_circuits_degrade_gracefully_without_crash():
@@ -89,11 +95,11 @@ def test_two_circuits_degrade_gracefully_without_crash():
     labels_present = {_trace_label(trace.name) for trace in named_traces}
 
     assert len(labels_present) <= 2
-    assert "Muy Baja" not in labels_present
+    assert "Riesgo Bajo" not in labels_present
 
 
 def test_compute_circuit_criticality_groups_returns_expected_shape_and_labels():
-    raw_df = _five_tier_raw_df()
+    raw_df = _four_tier_raw_df()
 
     df_coords = compute_circuit_criticality_groups(raw_df)
 
@@ -103,10 +109,10 @@ def test_compute_circuit_criticality_groups_returns_expected_shape_and_labels():
     }
 
     by_circuito = df_coords["criticidad"].to_dict()
-    assert by_circuito["MUYALTA_1"] == "Muy Alta"
-    assert by_circuito["MUYALTA_2"] == "Muy Alta"
-    assert by_circuito["MUYBAJA_1"] == "Muy Baja"
-    assert by_circuito["MUYBAJA_2"] == "Muy Baja"
+    assert by_circuito["MUYALTO_1"] == "Riesgo Muy Alto"
+    assert by_circuito["MUYALTO_2"] == "Riesgo Muy Alto"
+    assert by_circuito["BAJO_1"] == "Riesgo Bajo"
+    assert by_circuito["BAJO_2"] == "Riesgo Bajo"
     assert set(df_coords["criticidad"]) == set(CRITICALITY_GROUP_LABELS)
 
 
@@ -171,7 +177,7 @@ def test_compute_circuit_criticality_groups_end_date_includes_late_time_of_day_e
 
 
 def test_compute_circuit_criticality_groups_restores_global_rng_state():
-    raw_df = _five_tier_raw_df()
+    raw_df = _four_tier_raw_df()
 
     np.random.seed(123)
     state_before = np.random.get_state()
@@ -190,7 +196,7 @@ def test_compute_circuit_criticality_groups_restores_global_rng_state():
 
 
 def test_compute_circuit_criticality_groups_centroid_distance_present_on_normal_group():
-    raw_df = _five_tier_raw_df()
+    raw_df = _four_tier_raw_df()
 
     df_coords = compute_circuit_criticality_groups(raw_df)
 

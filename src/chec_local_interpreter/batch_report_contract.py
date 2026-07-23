@@ -34,7 +34,7 @@ SCHEMA_VERSION = "batch-report-contract/v1"
 # Drift-proof by construction: zipped against CRITICALITY_GROUP_LABELS so the
 # CLI slug vocabulary can never fall out of sync with the shared clustering
 # helper's tier ordering.
-GROUP_SLUGS: tuple[str, ...] = ("muy-alta", "alta", "media", "baja", "muy-baja")
+GROUP_SLUGS: tuple[str, ...] = ("muy-alta", "alta", "media", "baja")
 GROUP_SLUG_TO_LABEL: dict[str, str] = dict(zip(GROUP_SLUGS, CRITICALITY_GROUP_LABELS))
 ALL_GROUPS_SLUG = "todos"
 VALID_GROUP_SLUGS: tuple[str, ...] = (*GROUP_SLUGS, ALL_GROUPS_SLUG)

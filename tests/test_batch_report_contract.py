@@ -31,19 +31,17 @@ def _rows_for_circuit(circuit: str, n_events: int, total_uiti: float, start: str
     )
 
 
-def _five_tier_raw_df() -> pd.DataFrame:
-    """Same deterministic 5-tier fixture proven in `tests/test_plotting.py`."""
+def _four_tier_raw_df() -> pd.DataFrame:
+    """Same deterministic 4-tier fixture proven in `tests/test_plotting.py`."""
     frames = [
         _rows_for_circuit("MUYALTA_1", n_events=40, total_uiti=50000.0),
         _rows_for_circuit("MUYALTA_2", n_events=40, total_uiti=55000.0),
-        _rows_for_circuit("ALTA_1", n_events=20, total_uiti=5000.0),
-        _rows_for_circuit("ALTA_2", n_events=20, total_uiti=5500.0),
+        _rows_for_circuit("ALTA_1", n_events=10, total_uiti=5000.0),
+        _rows_for_circuit("ALTA_2", n_events=10, total_uiti=5500.0),
         _rows_for_circuit("MEDIA_1", n_events=10, total_uiti=500.0),
         _rows_for_circuit("MEDIA_2", n_events=10, total_uiti=550.0),
         _rows_for_circuit("BAJA_1", n_events=4, total_uiti=40.0),
         _rows_for_circuit("BAJA_2", n_events=4, total_uiti=45.0),
-        _rows_for_circuit("MUYBAJA_1", n_events=2, total_uiti=2.0),
-        _rows_for_circuit("MUYBAJA_2", n_events=2, total_uiti=4.0),
     ]
     return pd.concat(frames, ignore_index=True)
 
@@ -56,11 +54,10 @@ def _five_tier_raw_df() -> pd.DataFrame:
 @pytest.mark.parametrize(
     "slug,expected_label",
     [
-        ("muy-alta", "Muy Alta"),
-        ("alta", "Alta"),
-        ("media", "Media"),
-        ("baja", "Baja"),
-        ("muy-baja", "Muy Baja"),
+        ("muy-alta", "Riesgo Muy Alto"),
+        ("alta", "Riesgo Alto"),
+        ("media", "Riesgo Medio"),
+        ("baja", "Riesgo Bajo"),
     ],
 )
 def test_normalize_request_maps_slug_to_label(slug, expected_label):
@@ -99,7 +96,7 @@ def test_normalize_request_rejects_lone_fecha_fin():
 
 
 def test_preflight_resolves_dataset_wide_range_when_dates_omitted(monkeypatch):
-    frame = _five_tier_raw_df()
+    frame = _four_tier_raw_df()
     monkeypatch.setattr(batch_contract, "load_dataset", lambda path: frame)
 
     outcome = preflight_batch(normalize_request("todos", runtime="claude"), data_path="data.csv")
@@ -109,7 +106,7 @@ def test_preflight_resolves_dataset_wide_range_when_dates_omitted(monkeypatch):
 
 
 def test_preflight_execution_error_when_explicit_window_has_no_events(monkeypatch):
-    frame = _five_tier_raw_df()
+    frame = _four_tier_raw_df()
     monkeypatch.setattr(batch_contract, "load_dataset", lambda path: frame)
 
     outcome = preflight_batch(
@@ -123,14 +120,14 @@ def test_preflight_execution_error_when_explicit_window_has_no_events(monkeypatc
 
 def _known_tier_df_coords() -> pd.DataFrame:
     """A controlled `compute_circuit_criticality_groups`-shaped result covering
-    all 5 labels with one distinct circuit each -- deterministic label-to-
+    all 4 labels with one distinct circuit each -- deterministic label-to-
     circuit membership, independent of real K-Means's known instability on
     the *middle* tiers (only the top/bottom tiers are empirically robust;
-    see `tests/test_plotting.py::_five_tier_raw_df`'s own docstring)."""
+    see `tests/test_plotting.py::_four_tier_raw_df`'s own docstring)."""
     return pd.DataFrame(
-        {"criticidad": ["Muy Alta", "Alta", "Media", "Baja", "Muy Baja"]},
+        {"criticidad": ["Riesgo Muy Alto", "Riesgo Alto", "Riesgo Medio", "Riesgo Bajo"]},
         index=pd.Index(
-            ["MUYALTA_1", "ALTA_1", "MEDIA_1", "BAJA_1", "MUYBAJA_1"], name="CIRCUITO"
+            ["MUYALTA_1", "ALTA_1", "MEDIA_1", "BAJA_1"], name="CIRCUITO"
         ),
     )
 
@@ -142,7 +139,6 @@ def _known_tier_df_coords() -> pd.DataFrame:
         ("alta", {"ALTA_1"}),
         ("media", {"MEDIA_1"}),
         ("baja", {"BAJA_1"}),
-        ("muy-baja", {"MUYBAJA_1"}),
     ],
 )
 def test_preflight_happy_path_resolves_each_tier(monkeypatch, slug, expected_circuitos):
@@ -163,40 +159,40 @@ def test_preflight_happy_path_resolves_each_tier(monkeypatch, slug, expected_cir
     assert outcome.next_actions == ["confirm_batch"]
 
 
-def test_preflight_happy_path_resolves_real_five_tier_fixture_top_and_bottom_tiers(monkeypatch):
+def test_preflight_happy_path_resolves_real_four_tier_fixture_top_and_bottom_tiers(monkeypatch):
     """Real (non-monkeypatched) clustering. Only asserts that the tier's own
     circuits are MEMBERS of the resolved group -- the exact same, weaker
-    containment assertion `tests/test_plotting.py::test_five_tiers_all_labels
+    containment assertion `tests/test_plotting.py::test_four_tiers_all_labels
     _present_and_correctly_ranked` itself relies on, since K-Means may pull a
     neighboring-magnitude circuit into the extreme rank clusters too."""
-    frame = _five_tier_raw_df()
+    frame = _four_tier_raw_df()
     monkeypatch.setattr(batch_contract, "load_dataset", lambda path: frame)
 
     muy_alta = preflight_batch(normalize_request("muy-alta"), data_path="data.csv")
     assert muy_alta.status == "awaiting_confirmation"
     assert {"MUYALTA_1", "MUYALTA_2"} <= set(muy_alta.group["circuitos"])
 
-    muy_baja = preflight_batch(normalize_request("muy-baja"), data_path="data.csv")
-    assert muy_baja.status == "awaiting_confirmation"
-    assert {"MUYBAJA_1", "MUYBAJA_2"} <= set(muy_baja.group["circuitos"])
+    baja = preflight_batch(normalize_request("baja"), data_path="data.csv")
+    assert baja.status == "awaiting_confirmation"
+    assert {"BAJA_1", "BAJA_2"} <= set(baja.group["circuitos"])
 
 
 def test_preflight_todos_returns_every_available_circuit_without_label_filter(monkeypatch):
-    frame = _five_tier_raw_df()
+    frame = _four_tier_raw_df()
     monkeypatch.setattr(batch_contract, "load_dataset", lambda path: frame)
 
     outcome = preflight_batch(normalize_request(ALL_GROUPS_SLUG), data_path="data.csv")
 
     assert outcome.status == "awaiting_confirmation"
     assert outcome.group["label"] is None
-    assert outcome.group["circuit_count"] == 10
+    assert outcome.group["circuit_count"] == 8
     assert set(outcome.group["circuitos"]) == {
         "MUYALTA_1", "MUYALTA_2", "ALTA_1", "ALTA_2", "MEDIA_1", "MEDIA_2",
-        "BAJA_1", "BAJA_2", "MUYBAJA_1", "MUYBAJA_2",
+        "BAJA_1", "BAJA_2",
     }
 
 
-def test_preflight_empty_group_when_two_circuit_dataset_has_no_muy_baja_tier(monkeypatch):
+def test_preflight_empty_group_when_two_circuit_dataset_has_no_baja_tier(monkeypatch):
     frame = pd.concat(
         [
             _rows_for_circuit("MUYALTA_1", n_events=40, total_uiti=50000.0),
@@ -206,7 +202,7 @@ def test_preflight_empty_group_when_two_circuit_dataset_has_no_muy_baja_tier(mon
     )
     monkeypatch.setattr(batch_contract, "load_dataset", lambda path: frame)
 
-    outcome = preflight_batch(normalize_request("muy-baja"), data_path="data.csv")
+    outcome = preflight_batch(normalize_request("baja"), data_path="data.csv")
 
     assert outcome.status == "empty_group"
     assert outcome.group["circuitos"] == []
@@ -229,14 +225,14 @@ def test_preflight_zero_events_in_window_for_specific_group_returns_empty_group(
 
     def fake_compute(filtered_df, start_date=None, end_date=None):
         # C2's row was already dropped by the window filter before this is
-        # even called; only C1 survives, always ranked "Alta".
+        # even called; only C1 survives, always ranked "Riesgo Alto".
         assert "C2" not in filtered_df["CIRCUITO"].values
-        return pd.DataFrame({"criticidad": ["Alta"]}, index=pd.Index(["C1"], name="CIRCUITO"))
+        return pd.DataFrame({"criticidad": ["Riesgo Alto"]}, index=pd.Index(["C1"], name="CIRCUITO"))
 
     monkeypatch.setattr(batch_contract, "compute_circuit_criticality_groups", fake_compute)
 
     outcome = preflight_batch(
-        normalize_request("muy-baja", "2026-01-01", "2026-01-02"),
+        normalize_request("baja", "2026-01-01", "2026-01-02"),
         data_path="data.csv",
     )
 
@@ -249,7 +245,7 @@ def test_preflight_single_circuit_group_returns_one_entry_manifest(monkeypatch):
     monkeypatch.setattr(batch_contract, "load_dataset", lambda path: frame)
 
     def fake_compute(filtered_df, start_date=None, end_date=None):
-        return pd.DataFrame({"criticidad": ["Muy Alta"]}, index=pd.Index(["ONLY1"], name="CIRCUITO"))
+        return pd.DataFrame({"criticidad": ["Riesgo Muy Alto"]}, index=pd.Index(["ONLY1"], name="CIRCUITO"))
 
     monkeypatch.setattr(batch_contract, "compute_circuit_criticality_groups", fake_compute)
 
@@ -274,7 +270,7 @@ def test_write_manifest_writes_expected_path_and_shape(tmp_path):
     result = write_manifest(
         entries,
         grupo="muy-alta",
-        criticidad="Muy Alta",
+        criticidad="Riesgo Muy Alto",
         fecha_inicio="2026-01-01",
         fecha_fin="2026-01-31",
         runs_root=tmp_path,
@@ -290,7 +286,7 @@ def test_write_manifest_writes_expected_path_and_shape(tmp_path):
     payload = json.loads((tmp_path / filename).read_text(encoding="utf-8"))
     assert payload["tool_version"] == batch_contract.SCHEMA_VERSION
     assert payload["grupo"] == "muy-alta"
-    assert payload["criticidad"] == "Muy Alta"
+    assert payload["criticidad"] == "Riesgo Muy Alto"
     assert payload["fecha_inicio"] == "2026-01-01"
     assert payload["fecha_fin"] == "2026-01-31"
     assert payload["circuits"] == entries
@@ -367,7 +363,7 @@ def test_cli_parse_rejects_unknown_grupo(capsys):
 
 
 def test_cli_preflight_exit_code_matches_status(monkeypatch, capsys):
-    frame = _five_tier_raw_df()
+    frame = _four_tier_raw_df()
     monkeypatch.setattr(batch_contract, "load_dataset", lambda path: frame)
 
     exit_code = batch_contract.main(["preflight", "muy-alta", "--data-path", "data.csv"])

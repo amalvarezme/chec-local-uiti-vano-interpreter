@@ -93,13 +93,21 @@ def test_sample_representatives_deterministic_tie_break_by_ascending_name():
 # ---------------------------------------------------------------------------
 
 
-def _five_tier_raw_df(per_tier: int = 2) -> pd.DataFrame:
+def _four_tier_raw_df(per_tier: int = 2) -> pd.DataFrame:
+    """4 magnitude tiers, `per_tier` circuits each. (event_count, uiti_vano_sum)
+    values verified empirically against this module's real
+    `compute_circuit_criticality_groups` (deterministic `run_kmeans(...,
+    random_state=42)`) for BOTH `per_tier=2` (exact per-circuit tier
+    assignment, robust under +/-2% jitter across 200 trials) and
+    `per_tier=16` (all 4 labels present across the full 64-circuit universe,
+    which is all `test_resolve_group_dataframe_todos_returns_full_universe`
+    requires -- it does not assert exact per-circuit membership).
+    """
     tiers = [
         ("MUYALTA", 40, 50000.0),
-        ("ALTA", 20, 5000.0),
+        ("ALTA", 10, 5000.0),
         ("MEDIA", 10, 500.0),
-        ("BAJA", 4, 40.0),
-        ("MUYBAJA", 2, 2.0),
+        ("BAJA", 2, 40.0),
     ]
     frames = []
     for label, n_events, total in tiers:
@@ -109,21 +117,21 @@ def _five_tier_raw_df(per_tier: int = 2) -> pd.DataFrame:
 
 
 def test_resolve_group_dataframe_named_group_filters_by_criticidad():
-    raw_df = _five_tier_raw_df(per_tier=2)
+    raw_df = _four_tier_raw_df(per_tier=2)
 
-    result = resolve_group_dataframe(raw_df, "muy-alta", "Muy Alta")
+    result = resolve_group_dataframe(raw_df, "muy-alta", "Riesgo Muy Alto")
 
     assert set(result.index) <= {"MUYALTA_0", "MUYALTA_1"}
-    assert (result["criticidad"] == "Muy Alta").all()
+    assert (result["criticidad"] == "Riesgo Muy Alto").all()
 
 
-def test_resolve_group_dataframe_todos_returns_full_universe_all_80_circuits():
-    raw_df = _five_tier_raw_df(per_tier=16)  # 16 circuits x 5 tiers = 80
+def test_resolve_group_dataframe_todos_returns_full_universe_all_64_circuits():
+    raw_df = _four_tier_raw_df(per_tier=16)  # 16 circuits x 4 tiers = 64
 
     result = resolve_group_dataframe(raw_df, "todos", None)
 
-    assert len(result) == 80
-    assert set(result["criticidad"]) == {"Muy Alta", "Alta", "Media", "Baja", "Muy Baja"}
+    assert len(result) == 64
+    assert set(result["criticidad"]) == {"Riesgo Muy Alto", "Riesgo Alto", "Riesgo Medio", "Riesgo Bajo"}
 
     sampled = sample_representatives(result)
     assert len(sampled) == 12
@@ -471,7 +479,7 @@ def _known_tier_df_coords_with_distance() -> pd.DataFrame:
 
 
 def test_resolve_awaiting_confirmation_with_missing_runs(monkeypatch, tmp_path):
-    frame = _five_tier_raw_df(per_tier=2)
+    frame = _four_tier_raw_df(per_tier=2)
     monkeypatch.setattr(informe_contract, "load_dataset", lambda path: frame)
     monkeypatch.setattr(
         informe_contract, "resolve_group_dataframe", lambda *a, **k: _known_tier_df_coords_with_distance()
@@ -488,7 +496,7 @@ def test_resolve_awaiting_confirmation_with_missing_runs(monkeypatch, tmp_path):
 
 
 def test_resolve_awaiting_confirmation_without_missing_runs(monkeypatch, tmp_path):
-    frame = _five_tier_raw_df(per_tier=2)
+    frame = _four_tier_raw_df(per_tier=2)
     monkeypatch.setattr(informe_contract, "load_dataset", lambda path: frame)
     df_coords = _known_tier_df_coords_with_distance()
     monkeypatch.setattr(informe_contract, "resolve_group_dataframe", lambda *a, **k: df_coords)
@@ -512,7 +520,7 @@ def test_resolve_never_loads_content_or_writes_output_declined_confirmation_safe
     `render_and_write`, so there is nothing to undo: the declined path is
     safe by construction, not by an extra runtime guard.
     """
-    frame = _five_tier_raw_df(per_tier=2)
+    frame = _four_tier_raw_df(per_tier=2)
     monkeypatch.setattr(informe_contract, "load_dataset", lambda path: frame)
     monkeypatch.setattr(
         informe_contract, "resolve_group_dataframe", lambda *a, **k: _known_tier_df_coords_with_distance()
@@ -536,7 +544,7 @@ def test_resolve_empty_group_status(monkeypatch):
     empty_df = pd.DataFrame({"criticidad": []}, index=pd.Index([], name="CIRCUITO"))
     monkeypatch.setattr(informe_contract, "resolve_group_dataframe", lambda *a, **k: empty_df)
 
-    request = informe_contract.normalize_request("muy-baja")
+    request = informe_contract.normalize_request("baja")
     outcome = informe_contract.resolve(request, data_path="data.csv")
 
     assert outcome.status == "empty_group"
@@ -549,7 +557,7 @@ def test_resolve_usage_error_invalid_grupo_rejected_before_computation():
 
 
 def test_resolve_execution_error_wraps_value_error(monkeypatch):
-    frame = _five_tier_raw_df(per_tier=2)
+    frame = _four_tier_raw_df(per_tier=2)
     monkeypatch.setattr(informe_contract, "load_dataset", lambda path: frame)
 
     request = informe_contract.normalize_request("todos", "2030-01-01", "2030-01-02")
@@ -587,7 +595,7 @@ def test_load_circuit_content_rejects_path_traversal_in_circuito(tmp_path):
 
 
 def test_cli_resolve_exit_code_matches_status(monkeypatch, capsys, tmp_path):
-    frame = _five_tier_raw_df(per_tier=2)
+    frame = _four_tier_raw_df(per_tier=2)
     monkeypatch.setattr(informe_contract, "load_dataset", lambda path: frame)
     df_coords = _known_tier_df_coords_with_distance()
     monkeypatch.setattr(informe_contract, "resolve_group_dataframe", lambda *a, **k: df_coords)
@@ -620,7 +628,7 @@ def _known_tier_df_coords_full() -> pd.DataFrame:
 
 
 def test_render_and_write_persists_html_and_returns_success(monkeypatch, tmp_path):
-    frame = _five_tier_raw_df(per_tier=2)
+    frame = _four_tier_raw_df(per_tier=2)
     monkeypatch.setattr(informe_contract, "load_dataset", lambda path: frame)
     df_coords = _known_tier_df_coords_full()
     monkeypatch.setattr(informe_contract, "resolve_group_dataframe", lambda *a, **k: df_coords)
@@ -645,7 +653,7 @@ def test_render_and_write_persists_html_and_returns_success(monkeypatch, tmp_pat
 
 
 def test_cli_render_exit_code_matches_status(monkeypatch, capsys, tmp_path):
-    frame = _five_tier_raw_df(per_tier=2)
+    frame = _four_tier_raw_df(per_tier=2)
     monkeypatch.setattr(informe_contract, "load_dataset", lambda path: frame)
     df_coords = _known_tier_df_coords_full()
     monkeypatch.setattr(informe_contract, "resolve_group_dataframe", lambda *a, **k: df_coords)
@@ -1042,7 +1050,7 @@ def test_synthesize_surfaces_cross_circuit_technical_patterns_and_causes():
 
 
 def test_render_managerial_report_embeds_scatter_and_all_sections():
-    raw_df = _five_tier_raw_df(per_tier=2)
+    raw_df = _four_tier_raw_df(per_tier=2)
     sampled_records = _sampled_records(
         [
             ("MUYALTA_0", 40, 50000.0, "Muy Alta"),
@@ -1086,7 +1094,7 @@ def test_render_managerial_report_embeds_scatter_and_all_sections():
 
 
 def test_render_managerial_report_full_fleet_scatter_with_only_sampled_highlighted(monkeypatch):
-    raw_df = _five_tier_raw_df(per_tier=2)  # 10 circuits across all 5 tiers
+    raw_df = _four_tier_raw_df(per_tier=2)  # 8 circuits across all 4 tiers
     sampled_names = ["MUYALTA_0", "ALTA_0"]
     sampled_records = _sampled_records(
         [
@@ -1095,7 +1103,7 @@ def test_render_managerial_report_full_fleet_scatter_with_only_sampled_highlight
         ]
     )
     loaded_content = [None, None]
-    group = {"slug": "todos", "label": None, "circuit_count": 10}
+    group = {"slug": "todos", "label": None, "circuit_count": 8}
     synthesis = synthesize(sampled_records, loaded_content, group)
 
     calls: dict = {}
@@ -1124,7 +1132,6 @@ def test_render_managerial_report_full_fleet_scatter_with_only_sampled_highlight
     # the rendered scatter (nothing hidden -- only highlighting differs).
     assert "MEDIA_0" in html
     assert "BAJA_1" in html
-    assert "MUYBAJA_0" in html
 
 
 # ---------------------------------------------------------------------------
@@ -1143,7 +1150,7 @@ def _render_report_html(
     render states key off of).
     """
     if raw_df is None:
-        raw_df = _five_tier_raw_df(per_tier=2)
+        raw_df = _four_tier_raw_df(per_tier=2)
     sampled_records = _sampled_records(
         [(name, 40, 50000.0, "Muy Alta") for name in sampled]
     )
@@ -1200,7 +1207,7 @@ def test_render_managerial_report_patrones_comunes_labeled_deterministic():
 
 
 def test_cli_render_passes_graph_patterns_path_through_to_output(monkeypatch, capsys, tmp_path):
-    frame = _five_tier_raw_df(per_tier=2)
+    frame = _four_tier_raw_df(per_tier=2)
     monkeypatch.setattr(informe_contract, "load_dataset", lambda path: frame)
     df_coords = _known_tier_df_coords_full()
     monkeypatch.setattr(informe_contract, "resolve_group_dataframe", lambda *a, **k: df_coords)
@@ -1328,7 +1335,7 @@ def test_graph_patterns_html_three_way_graph_embed_states(
 
 
 def test_cli_render_accepts_graph_view_arg(monkeypatch, capsys, tmp_path):
-    frame = _five_tier_raw_df(per_tier=2)
+    frame = _four_tier_raw_df(per_tier=2)
     monkeypatch.setattr(informe_contract, "load_dataset", lambda path: frame)
     df_coords = _known_tier_df_coords_full()
     monkeypatch.setattr(informe_contract, "resolve_group_dataframe", lambda *a, **k: df_coords)

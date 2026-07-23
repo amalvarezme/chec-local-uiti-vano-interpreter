@@ -46,7 +46,7 @@ cross-circuit view), use `/reporte-lote` instead.
 
 Invocation: `/informe-gerencial <grupo> [fecha_inicio fecha_fin]`.
 
-- `grupo` — **required**. Must be one of `muy-alta|alta|media|baja|muy-baja|todos`; any other value
+- `grupo` — **required**. Must be one of `muy-alta|alta|media|baja|todos`; any other value
   is a usage error, rejected before any dataset access — same allowlist `/reporte-lote` uses.
 - `fecha_inicio` / `fecha_fin` — **optional, as a PAIR**, same pair contract `/reporte-lote` uses:
   - Both omitted: resolve to the dataset-wide date range.

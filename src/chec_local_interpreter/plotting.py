@@ -90,8 +90,8 @@ def run_kmeans(data, n_clusters=5, max_iters=100, random_state=42):
 # clustering chart (`plot_interactive_circuit_clustering`) and the LLM-facing
 # context builder (`context_builder._compute_circuit_characterization`), so
 # the chart legend and the report narrative never drift out of sync.
-CRITICALITY_GROUP_LABELS: tuple[str, ...] = ("Muy Alta", "Alta", "Media", "Baja", "Muy Baja")
-CRITICALITY_GROUP_COLORS: tuple[str, ...] = ("#dc2626", "#ea580c", "#ca8a04", "#16a34a", "#2563eb")
+CRITICALITY_GROUP_LABELS: tuple[str, ...] = ("Riesgo Muy Alto", "Riesgo Alto", "Riesgo Medio", "Riesgo Bajo")
+CRITICALITY_GROUP_COLORS: tuple[str, ...] = ("#ef4444", "#f97316", "#eab308", "#22c55e")
 
 
 def compute_circuit_criticality_groups(raw_df, start_date=None, end_date=None):
@@ -206,7 +206,7 @@ def compute_circuit_criticality_groups(raw_df, start_date=None, end_date=None):
 
 def plot_interactive_circuit_clustering(raw_df, start_date=None, end_date=None, highlighted_circuits=None):
     """
-    Plots an interactive log-log scatter map of events frequency vs UITI_VANO sums
+    Plots an interactive scatter map of events frequency vs UITI_VANO sums
     clustered via K-Means.
 
     Parameters:
@@ -335,8 +335,6 @@ def plot_interactive_circuit_clustering(raw_df, start_date=None, end_date=None, 
         ),
         xaxis_title='Número de Eventos por Circuito',
         yaxis_title='Suma de UITI_VANO',
-        xaxis_type="log", # Set Log Scale
-        yaxis_type="log", # Set Log Scale
         plot_bgcolor='#f8fafc',
         paper_bgcolor='#ffffff',
         xaxis=dict(
@@ -344,18 +342,12 @@ def plot_interactive_circuit_clustering(raw_df, start_date=None, end_date=None, 
             gridcolor='#e2e8f0',
             gridwidth=1,
             griddash='dot',
-            dtick=1,
-            exponentformat='power',
-            showexponent='all',
         ),
         yaxis=dict(
             showgrid=True,
             gridcolor='#e2e8f0',
             gridwidth=1,
             griddash='dot',
-            dtick=1,
-            exponentformat='power',
-            showexponent='all',
         ),
         legend=dict(
             title='Grupos Criticidad',

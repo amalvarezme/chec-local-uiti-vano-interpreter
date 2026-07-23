@@ -38,7 +38,7 @@ this Skill is strictly for the multi-circuit, group-resolved case.
 
 Invocation: `/reporte-lote <grupo> [fecha_inicio fecha_fin]`.
 
-- `grupo` — **required**. Must be one of `muy-alta|alta|media|baja|muy-baja|todos`; any other value
+- `grupo` — **required**. Must be one of `muy-alta|alta|media|baja|todos`; any other value
   is a usage error, rejected before any dataset access — no preflight call, no run_dir, nothing.
 - `fecha_inicio` / `fecha_fin` — **optional, as a PAIR**, same pair contract `/report` uses:
   - Both omitted: resolve to the **dataset-wide** date range (the min/max `FECHA` across ALL
