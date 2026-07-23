@@ -43,10 +43,10 @@ el CSV base, no lo consume ningún otro notebook ni el flujo de agentes.
 | `01_climate.ipynb` | Enriquece el CSV base con 225 columnas climáticas (9 variables × 25 horas) vía Open-Meteo | `data/Indicadores_vano_v1.csv`, API Open-Meteo | `data/Indicadores_vano_v2.csv`, `data/Indicadores_vano_v3.csv` |
 | `02_mgcecdl_optuna_classification_search.ipynb` | Búsqueda de hiperparámetros (40 trials, Optuna GPSampler) para el clasificador MGCECDL | `Indicadores_vano_v3.csv`, `Variables_seleccion.xlsx` | `data/optuna/*.journal`, `*.pkl`, `data/graphs/mgcecdl_*` |
 | `03_mgcecdl_training.ipynb` | Entrena el clasificador MGCECDL final con los mejores hiperparámetros de `02` | journal de `02`, mismo dataset/grafo | `data/models/mgcecdl_classifier_best.zip` |
-| `04_mgcecdl_performance.ipynb` | Evalúa desempeño del modelo (métricas, matriz de confusión, ROC) + SHAP agregado por modo temático | modelo de `03` | PNGs en `reports/mgcecdl-results/` + copia en `src/assets/site/results/` |
+| `04_mgcecdl_performance.ipynb` | Evalúa desempeño del modelo (métricas, matriz de confusión, ROC) + SHAP agregado por modo temático | modelo de `03` | PNGs en `reports/mgcecdl-results/` + copia en `site/assets/site/results/` |
 | `05_mgcecdl_circuit_analysis.ipynb` | SHAP por circuito/período para un circuito configurado a mano (`DON23L13`) | modelo de `03`, `rbf_sigma` del estudio Optuna de `02` | 4 grafos HTML interactivos en `reports/mgcecdl-results/interactive_graphs/` |
 | `06_mgcecdl_document_replication.ipynb` | Replicación en modo producción: SHAP Top-20 sobre **todo** el dataset, agregado a nivel vano/circuito/criticidad | modelo de `03` | 4 CSVs en `reports/mgcecdl-results/` |
-| `07_graph_preserved_connections_uiti_vano.ipynb` | Construye y valida el grafo experto de 156 variables que regulariza el entrenamiento de MGCECDL | `site/data/variables.json`, `Variables_seleccion.xlsx` | grafos HTML en `src/assets/site/results/`, `data/graphs/mgcecdl_adjacency_matrix.npy` |
+| `07_graph_preserved_connections_uiti_vano.ipynb` | Construye y valida el grafo experto de 156 variables que regulariza el entrenamiento de MGCECDL | `site/data/variables.json`, `Variables_seleccion.xlsx` | grafos HTML en `site/assets/site/results/`, `data/graphs/mgcecdl_adjacency_matrix.npy` |
 | `08_geo_network_exploration.ipynb` | Exploración GIS de calidad de datos (líneas, transformadores, switches) y mapas de ejemplo | shapefiles en `data/GEO/`, `Indicadores_vano_v3.csv` | `reports/geo/geo_resumen_circuitos.csv`, mapas Folium HTML |
 | `09_simulador.ipynb` | Simulador manual interactivo (ipywidgets): barre el valor de UNA variable y grafica el efecto en las probabilidades de clase | modelo de `03`, `variables_a_priorizar.xlsx` (opcional) | Excel + PNG/PDF en `reports/interpretability/artifacts/` |
 
@@ -171,7 +171,7 @@ el agente `auto-simulator`.
 - `reports/mgcecdl-results/` — figuras de desempeño, grafos interactivos SHAP, CSVs de replicación.
 - `reports/geo/` — resumen y mapas del análisis GIS.
 - `reports/interpretability/artifacts/` — salidas del simulador manual (`09`).
-- `src/assets/site/results/` — copias de figuras que sí se publican en el sitio estático.
+- `site/assets/site/results/` — copias de figuras que sí se publican en el sitio estático.
 
 ## Referencias
 
