@@ -324,6 +324,109 @@ Fuentes BPMN:
 - `docs/project-workflow.bpmn`
 - `docs/project-workflow-bpmn.svg`
 
+### Diagrama de la familia de comandos de reporte
+
+Los cinco comandos que operan sobre el pipeline de reportes — `/report`, `/reporte-lote`,
+`/informe-gerencial`, `/agrupamiento-circuitos` y `/limpiar-corridas` — se reparten el trabajo así:
+`report` es el único orquestador de un circuito; `reporte-lote` e `informe-gerencial` lo invocan
+**por referencia** (nunca copian su lógica) y además reutilizan el mismo contrato de clustering que
+`agrupamiento-circuitos` expone como comando standalone; `limpiar-corridas` es el único que no invoca
+ningún agente ni skill — solo hace mantenimiento sobre los artefactos que los otros cuatro producen.
+
+| Comando | Tipo | Invoca | Contrato L1 |
+|---|---|---|---|
+| `/report` | Skill orquestador | Agentes `historical`, `inference`, `auto-simulator`, `expert-alignment`; skill `vault-circuito` (paso 9) → `graphify` incremental | `report_pipeline.py` |
+| `/reporte-lote` | Skill de lote | `report` (pasos 2-9 completos, por circuito); `agrupamiento-circuitos` (paso 1.5) | `batch_report_contract.py` |
+| `/informe-gerencial` | Skill de síntesis | `report` (solo pasos 2-8, circuitos faltantes); `agrupamiento-circuitos`; `graphify` (rebuild completo aislado, paso 2.5) | `informe_gerencial_contract.py`, `graph_view_builder.py` |
+| `/agrupamiento-circuitos` | Skill standalone | Ninguno — expone el contrato que los dos anteriores reutilizan | `circuit_clustering_contract.py` |
+| `/limpiar-corridas` | Command de mantenimiento | Ninguno — dry-run + confirmación explícita antes de borrar | `cleanup_runs.py` |
+
+```mermaid
+%% Familia de comandos de reporte — agentes, skills e interacciones
+%% Verificado contra .claude/skills/*/SKILL.md y .claude/commands/limpiar-corridas.md (2026-07-22)
+flowchart TB
+    CMD_REPORT(["/report circuito [fechas]"])
+    CMD_LOTE(["/reporte-lote grupo [fechas]"])
+    CMD_GER(["/informe-gerencial grupo [fechas]"])
+    CMD_AGR(["/agrupamiento-circuitos [fechas]"])
+    CMD_LIMPIAR(["/limpiar-corridas"])
+
+    CCC["circuit_clustering_contract.py<br/>plot_interactive_circuit_clustering"]
+    CMD_AGR --> CCC
+
+    subgraph REPORT["Skill report — orquestador de UN circuito"]
+        direction TB
+        RP_PREPARE["prepare()<br/>puntos criticos + contexto +<br/>simulador MGCECDL-SHAP + auto-min-max"]
+        RP_FORK{{"fork paralelo obligatorio"}}
+        AG_HIST["Agente historical"]
+        AG_INF["Agente inference"]
+        AG_AUTO["Agente auto-simulator<br/>(omitido si falta bc.json)"]
+        RP_JOIN{{join}}
+        RP_PEA["prepare_expert_alignment()"]
+        AG_EXP["Agente expert-alignment"]
+        RP_RENDER["render() -> HTML del circuito"]
+        VAULT["Skill vault-circuito (paso 9)"]
+        RP_PREPARE --> RP_FORK
+        RP_FORK --> AG_HIST --> RP_JOIN
+        RP_FORK --> AG_INF --> RP_JOIN
+        RP_FORK --> AG_AUTO --> RP_JOIN
+        RP_JOIN --> RP_PEA --> AG_EXP --> RP_RENDER --> VAULT
+    end
+    CMD_REPORT --> RP_PREPARE
+
+    subgraph GRAPHV["graphify aislado a reports/vault (nunca el grafo raiz del proyecto)"]
+        GV_INC["graphify reports/vault --update<br/>incremental, por circuito"]
+        GV_FULL["graphify reports/vault<br/>rebuild completo + query cross-circuito"]
+    end
+    VAULT --> GV_INC
+
+    subgraph LOTE["Skill reporte-lote — un grupo de criticidad"]
+        direction TB
+        LOTE_RESOLVE["resolver grupo + ventana<br/>batch_report_contract.preflight"]
+        LOTE_CHART["renderizar chart clustering<br/>paso 1.5, ventana ya confirmada"]
+        LOTE_LOOP["loop secuencial: report pasos 2-9<br/>por cada circuito confirmado<br/>fallo de un circuito -> continua (alert-and-continue)"]
+        LOTE_MANIFEST["manifest JSON del lote"]
+        LOTE_RESOLVE --> LOTE_CHART --> LOTE_LOOP --> LOTE_MANIFEST
+    end
+    CMD_LOTE --> LOTE_RESOLVE
+    LOTE_CHART -.reutiliza.-> CCC
+    LOTE_LOOP -.ejecuta pasos 2-9 de.-> RP_PREPARE
+
+    subgraph GER["Skill informe-gerencial — sintesis cross-circuito"]
+        direction TB
+        GER_RESOLVE["resolver grupo + muestreo<br/>hasta 12 circuitos representativos"]
+        GER_CHART["renderizar chart clustering<br/>paso 1.5, misma ventana confirmada"]
+        GER_MISSING["auto-trigger report pasos 2-8<br/>SOLO circuitos sin corrida previa<br/>(nunca el paso 9)"]
+        GER_VAULT2["vault_note_contract.render directo<br/>(sin encadenar graphify aqui)"]
+        GER_GRAPH["paso 2.5: graphify rebuild aislado<br/>+ query temas recurrentes<br/>+ graph_view_builder"]
+        GER_SYNTH["synthesize() + render_managerial_report()<br/>scatter full-fleet + patrones de grafo"]
+        GER_RESOLVE --> GER_CHART --> GER_MISSING --> GER_VAULT2 --> GER_GRAPH --> GER_SYNTH
+    end
+    CMD_GER --> GER_RESOLVE
+    GER_CHART -.reutiliza.-> CCC
+    GER_MISSING -.ejecuta pasos 2-8 de.-> RP_PREPARE
+    GER_GRAPH -.rebuild completo.-> GV_FULL
+
+    subgraph LIMPIAR["Command limpiar-corridas — mantenimiento"]
+        direction TB
+        LIMPIAR_DRY["cleanup_runs.py<br/>dry-run, resumen por categoria"]
+        LIMPIAR_CONFIRM{"confirmacion explicita<br/>del usuario"}
+        LIMPIAR_DELETE["cleanup_runs.py --confirm<br/>borra runs/html/vault descartables"]
+        LIMPIAR_DRY --> LIMPIAR_CONFIRM
+        LIMPIAR_CONFIRM -- si --> LIMPIAR_DELETE
+        LIMPIAR_CONFIRM -- no --> LIMPIAR_DRY
+    end
+    CMD_LIMPIAR --> LIMPIAR_DRY
+    LIMPIAR_DELETE -.limpia artefactos de.-> RP_RENDER
+    LIMPIAR_DELETE -.limpia.-> LOTE_MANIFEST
+    LIMPIAR_DELETE -.limpia.-> GER_SYNTH
+```
+
+Artefactos de referencia:
+
+- fuente Mermaid: `docs/report-family-workflow.mmd`
+- SVG renderizado: `docs/report-family-workflow.svg`
+
 ## GitHub y modelo de publicación
 
 ### Repositorio y ramas
