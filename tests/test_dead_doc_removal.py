@@ -11,9 +11,11 @@ exploration). This test pins two things:
 Note: bare filename citations (e.g. "`ContextoProyectoSimuladorCHEC.md`" with
 no `llm/prompts/` prefix) inside `.claude/skills/historical/prompt/*.md` and
 `docs/*.md` are NOT stale — they refer to the still-existing
-`docs/ContextoProyectoSimuladorCHEC.md` / `docs/arquitecturayflujo.md` copies
-of the same-named document, not to the deleted `llm/prompts/` variant. Only
-the literal old path is checked here.
+`docs/ContextoProyectoSimuladorCHEC.md` copy of the same-named document, not
+to the deleted `llm/prompts/` variant. Only the literal old path is checked
+here. (`docs/arquitecturayflujo.md` itself was later removed as an orphaned,
+pre-pivot architecture draft, unrelated to this guard's own scope — see the
+docs cleanup that removed it alongside `docs/reference/architecture/`.)
 
 `docs/project-workflow-analysis.md` is a pre-existing, tracked scratch
 analysis document explicitly out of scope for this change (it predates and
