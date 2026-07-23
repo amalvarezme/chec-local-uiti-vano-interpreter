@@ -223,25 +223,43 @@ Given `grupo` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
       entirely — cross-circuit comparison is meaningless for a single circuit — and proceed to step 3
       without a `--graph-patterns` path (the contract's own `n_sampled < 2` render state then omits the
       subsection; see `_graph_patterns_html`).
-   2. **Force a graph rebuild, fully isolated from the project-wide graph:** run the graphify pipeline
-      (`.claude/skills/graphify/SKILL.md`, by reference — same "by reference, never copying its prose"
-      convention step 2 uses for `/report`) with `reports/vault` as graphify's OWN working directory
-      AND input path (every bash block in that run executes with cwd `reports/vault`, `INPUT_PATH='.'`),
-      so its own `graphify-out/` lands at `reports/vault/graphify-out/graph.json` — structurally
-      identical in shape to the project-root `graphify-out/graph.json` an ordinary whole-project
-      `/graphify .` run produces, but a genuinely SEPARATE file, never read or written by that other
-      run, and never touched by anything outside this step. This is a deliberate full (non-incremental)
-      rebuild every invocation — never `--update` — because a scoped `--update` against a manifest that
-      was ever built from a wider scope is exactly the bug class this isolation exists to eliminate (a
-      prior run of this step, before this fix, misread ~271 unrelated project files as "deleted" and
-      would have pruned them from the shared project graph). The vault corpus is tiny (typically 4-12
-      short markdown notes, a few thousand words total) and graphify's own content-hash semantic-
-      extraction cache (Step 3 Part B0 of its own SKILL.md) still applies across runs regardless of
-      incremental vs. full mode, so this costs effectively nothing extra. If this rebuild fails, times
-      out, or hits graphify's own shrink-guard (a vault note was deleted since the last run and the new
-      graph would be smaller than the isolated graph already on disk), alert and **continue** straight
-      to step 3 with no `--graph-patterns` path (same alert-and-continue convention step 1.5's chart
-      render already uses) — never retry, never block, and NEVER fall back to reading the project-root
+   2. **Delete, then force a graph rebuild, fully isolated from the project-wide graph:** before
+      invoking graphify, delete `reports/vault/graphify-out/` in its entirety (`graph.json`, `cache/`,
+      `manifest.json`, and every other sidecar it contains) — mandatory every single invocation,
+      regardless of whether a prior `graphify-out/` exists or looks healthy. Only then run the
+      graphify pipeline (`.claude/skills/graphify/SKILL.md`, by reference — same "by reference, never
+      copying its prose" convention step 2 uses for `/report`) with `reports/vault` as graphify's OWN
+      working directory AND input path (every bash block in that run executes with cwd
+      `reports/vault`, `INPUT_PATH='.'`), so its own `graphify-out/` lands at
+      `reports/vault/graphify-out/graph.json` — structurally identical in shape to the project-root
+      `graphify-out/graph.json` an ordinary whole-project `/graphify .` run produces, but a genuinely
+      SEPARATE file, never read or written by that other run, and never touched by anything outside
+      this step.
+
+      **Why deleting first is mandatory, not just "pass full mode":** a scoped `--update` against a
+      manifest ever built from a wider scope was the original bug this isolation eliminated (a prior
+      run of this step, before that fix, misread ~271 unrelated project files as "deleted" and would
+      have pruned them from the shared project graph) — but "full mode" alone does not fully close
+      this. Confirmed in production twice: an `/informe-gerencial alta` run's step 2.5 silently
+      dropped previously-cached concept nodes and collapsed edges 256→26 while nominally running
+      "full" extraction, because graphify's own content-hash semantic-extraction cache (Step 3 Part
+      B0 of its own SKILL.md) reuses cached per-file results across invocations **regardless of
+      `--update` vs. full mode**; the very next `/informe-gerencial medio-alta` run then found
+      `reports/vault/graphify-out/graph.json` already sitting at 0 edges on disk before doing any
+      work, inherited unnoticed from that same corruption. A cross-run content-hash cache is exactly
+      the incremental-in-spirit shortcut this step exists to avoid, even when no `--update` flag is
+      ever passed. Deleting the whole directory first — cache included — guarantees every node and
+      edge is freshly re-derived from the vault notes' actual on-disk content every invocation, with
+      nothing left to merge from and nothing to silently disagree with. The vault corpus is tiny
+      (typically 4-40 short markdown notes, a few thousand words total), so a fully fresh extraction
+      costs effectively nothing extra — this is a correctness fix, not a cost trade-off.
+
+      Because the directory is deleted first, graphify's own `#479` shrink-guard (refusing to write a
+      graph smaller than the existing `graph.json`) can never trigger for this step — there is no
+      existing file left to shrink against. If the rebuild itself fails outright (a hard error, a
+      timeout, or `Graph is empty`), alert and **continue** straight to step 3 with no
+      `--graph-patterns` path (same alert-and-continue convention step 1.5's chart render already
+      uses) — never retry, never block, and NEVER fall back to reading the project-root
       `graphify-out/graph.json` instead — that file is out of scope for this step, unconditionally.
    3. **Query for recurring cross-circuit themes** against THIS isolated vault graph only (invoke
       `graphify query` with `reports/vault` as its own working directory, same isolation as step 2.5.2
@@ -326,7 +344,7 @@ above). It degrades independently of every other section:
 |---|---|
 | Fewer than 2 circuits sampled | Step 2.5 is skipped outright; the subsection is omitted from the HTML entirely (no muted placeholder — cross-circuit comparison does not apply to a single circuit) |
 | One or more sampled circuits lack a vault note | Those circuits are excluded from the `/graphify query` input only; the step still runs for the remaining circuits with notes |
-| The isolated vault-graph rebuild (step 2.5.2) fails, times out, or hits graphify's own shrink-guard | Alert-and-**continue** straight to step 3 with no `--graph-patterns` path — the deterministic sections still render; subsection shows "análisis de grafo no disponible en esta corrida" |
+| The isolated vault-graph rebuild (step 2.5.2) fails outright or times out | Alert-and-**continue** straight to step 3 with no `--graph-patterns` path — the deterministic sections still render; subsection shows "análisis de grafo no disponible en esta corrida" |
 | `/graphify query` returns nothing meeting `soporte >= 2` | The written JSON has an empty `patterns` list; subsection shows "sin patrones recurrentes con soporte >= 2" explicitly (never a silent omission) |
 | `graph_view_builder build` (sub-step 2.5.6) fails, or the sub-graph has no matched nodes | Alert-and-**continue** straight to step 3 with no `--graph-view` path — the itemized pattern list still renders (independently of this failure), only the embedded figure is omitted |
 
@@ -343,10 +361,19 @@ misdiagnose, and the graph always reflects exactly what is currently on disk in 
 never a stale incremental snapshot. `informe_gerencial_contract.load_graph_patterns` still additionally
 intersects every pattern's `circuitos` with the CURRENT `sampled` list and recomputes `soporte` from
 that intersection as defense-in-depth, but this is no longer compensating for a known staleness gap.
-The one residual behavior worth knowing: graphify's own shrink-guard can make a single invocation's
-rebuild fail loud (rather than silently corrupt) if the vault genuinely shrank since the last run
-(e.g. a circuit's vault note was deleted) — handled as an ordinary step 2.5 alert-and-continue case,
-per the table above.
+
+**Second resolved limitation (delete-before-rebuild):** "full (non-incremental) rebuild" alone was
+not sufficient — graphify's own content-hash semantic-extraction cache (Step 3 Part B0 of its own
+SKILL.md) persists across invocations regardless of `--update` vs. full mode, so a "full" rebuild
+could still silently reuse and merge stale per-file cache entries. This produced two confirmed
+production incidents: a `/informe-gerencial alta` step 2.5 run that collapsed edges 256→26 while
+mid-run, and the graph sitting corrupted at 0 edges when the following `/informe-gerencial
+medio-alta` run started. Step 2.5.2 now deletes `reports/vault/graphify-out/` (graph, cache, and
+manifest) before every rebuild, so there is no cross-run cache left to consult — see step 2.5.2's own
+prose for the full mechanism. As a direct consequence, graphify's `#479` shrink-guard can no longer
+trigger for this step either (there is no existing `graph.json` left to shrink against), so that row
+is removed from the tables above and below; only an outright rebuild failure or timeout degrades this
+step now.
 
 ## Error handling summary
 
@@ -362,7 +389,7 @@ per the table above.
 | Vault-render failure (`usage_error`/`skipped_incomplete`/`execution_error`) for one circuit | Step 2 loop, vault-population sub-step | Alert-and-**continue** to the next missing circuit; that circuit's already-succeeded steps 2-8 report artifacts are NEVER rolled back |
 | Fewer than 2 circuits sampled | Step 2.5 (this Skill) | Step 2.5 skipped outright; graph subsection omitted entirely from the HTML, no error |
 | A sampled circuit has no vault note | Step 2.5 (this Skill) | That circuit excluded from the `/graphify query` input only; step 2.5 proceeds with the rest |
-| Isolated vault-graph rebuild (step 2.5.2) or `/graphify query` fails/times out/hits shrink-guard | Step 2.5 (this Skill) | Alert-and-**continue** to step 3 with no `--graph-patterns` path — deterministic sections still render, subsection shows "análisis de grafo no disponible en esta corrida" |
+| Isolated vault-graph rebuild (step 2.5.2) or `/graphify query` fails outright or times out | Step 2.5 (this Skill) | Alert-and-**continue** to step 3 with no `--graph-patterns` path — deterministic sections still render, subsection shows "análisis de grafo no disponible en esta corrida" |
 | `/graphify query` returns nothing meeting `soporte >= 2` | Step 2.5 (this Skill) | Empty `patterns` list written; subsection explicitly states no recurring pattern was found, never a silent omission |
 | `graph_view_builder build` fails (sub-step 2.5.6) | Step 2.5 (this Skill) | Alert-and-**continue** to step 3 with no `--graph-view` path — list-only rendering if patterns succeeded, no figure; deterministic sections unaffected |
 | A sampled circuit still has no content at render time | Step 3 (`load_circuit_content` returns `None`) | Annex entry marked "sin contenido disponible"; the report still renders for every other circuit |
