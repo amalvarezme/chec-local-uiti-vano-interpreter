@@ -127,9 +127,9 @@ clustering_sdf.write.mode("overwrite").format("delta").saveAsTable("workspace.de
 # column derived from `compute_circuit_criticality_groups` itself, included in the assert since it
 # has a real local counterpart (unlike the prior, invalid substitute-logic build).
 REFERENCE_CIRCUITS = {
-    "AGU23L15": dict(event_count=67, uiti_vano_sum=90284.498285, cluster=4, criticidad="Media", centroid_distance=0.429679),
-    "BQE23L12": dict(event_count=36, uiti_vano_sum=708703.870541, cluster=3, criticidad="Alta", centroid_distance=2.149314),
-    "HER23L16": dict(event_count=130, uiti_vano_sum=507228.424002, cluster=2, criticidad="Muy Alta", centroid_distance=1.085148),
+    "AGU23L15": dict(event_count=67, uiti_vano_sum=90284.498285, cluster=4, criticidad="Riesgo Medio-Bajo", centroid_distance=0.074235),
+    "BQE23L12": dict(event_count=36, uiti_vano_sum=708703.870541, cluster=3, criticidad="Riesgo Muy Alto", centroid_distance=0.376585),
+    "HER23L16": dict(event_count=130, uiti_vano_sum=507228.424002, cluster=3, criticidad="Riesgo Muy Alto", centroid_distance=0.382530),
 }
 
 clustering_check_pdf = spark.table("workspace.default.circuit_clustering").toPandas().set_index("circuito")
@@ -148,7 +148,7 @@ assert clustering_row_count == EXPECTED_CIRCUIT_COUNT, (
 )
 
 criticidad_labels = {row["criticidad"] for row in spark.table("workspace.default.circuit_clustering").select("criticidad").distinct().collect()}
-assert criticidad_labels == {"Muy Alta", "Alta", "Media", "Baja", "Muy Baja"}, (
+assert criticidad_labels == {"Riesgo Muy Alto", "Riesgo Alto", "Riesgo Medio-Alto", "Riesgo Medio-Bajo", "Riesgo Bajo"}, (
     f"circuit_clustering criticidad labels {criticidad_labels} != the 5-label CRITICALITY_GROUP_LABELS set"
 )
 

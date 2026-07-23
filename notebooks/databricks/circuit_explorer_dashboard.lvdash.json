@@ -369,11 +369,11 @@
                       "expression": "`circuito`"
                     },
                     {
-                      "name": "measure(event_count_sum)",
+                      "name": "event_count",
                       "expression": "MEASURE(`event_count_sum`)"
                     },
                     {
-                      "name": "measure(uiti_vano_sum_total)",
+                      "name": "uiti_vano_sum",
                       "expression": "MEASURE(`uiti_vano_sum_total`)"
                     }
                   ],
@@ -382,54 +382,29 @@
               }
             ],
             "spec": {
-              "version": 3,
+              "version": 1,
               "frame": {
                 "title": "Posición de clustering — TODOS los circuitos (rango completo)",
                 "showTitle": true
               },
-              "widgetType": "scatter",
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v6.json\",\"data\":{\"name\":\"databricks_query\"},\"width\":\"container\",\"height\":\"container\",\"mark\":{\"type\":\"circle\",\"size\":60,\"opacity\":0.65,\"stroke\":\"#0f172a\",\"strokeWidth\":0.5},\"encoding\":{\"x\":{\"field\":\"event_count\",\"type\":\"quantitative\",\"title\":\"N\\u00famero de Eventos por Circuito\",\"scale\":{\"type\":\"log\"}},\"y\":{\"field\":\"uiti_vano_sum\",\"type\":\"quantitative\",\"title\":\"Suma de UITI_VANO\",\"scale\":{\"type\":\"log\"}},\"color\":{\"field\":\"criticidad\",\"type\":\"nominal\",\"scale\":{\"domain\":[\"Riesgo Muy Alto\",\"Riesgo Alto\",\"Riesgo Medio-Alto\",\"Riesgo Medio-Bajo\",\"Riesgo Bajo\"],\"range\":[\"#ef4444\",\"#f97316\",\"#eab308\",\"#84cc16\",\"#22c55e\"]},\"legend\":{\"title\":\"Grupos Criticidad\"}},\"tooltip\":[{\"field\":\"circuito\",\"type\":\"nominal\",\"title\":\"Circuito\"},{\"field\":\"criticidad\",\"type\":\"nominal\",\"title\":\"Grupo\"},{\"field\":\"event_count\",\"type\":\"quantitative\",\"title\":\"Eventos\"},{\"field\":\"uiti_vano_sum\",\"type\":\"quantitative\",\"title\":\"Suma UITI_VANO\"}]}}"
+              },
+              "widgetType": "custom-vega-viz",
               "encodings": {
-                "x": {
-                  "fieldName": "measure(event_count_sum)",
-                  "displayName": "event_count (log scale)",
-                  "scale": {
-                    "type": "quantitative",
-                    "fn": {
-                      "type": "symlog"
-                    }
-                  }
-                },
-                "y": {
-                  "fieldName": "measure(uiti_vano_sum_total)",
-                  "displayName": "uiti_vano_sum (log scale)",
-                  "scale": {
-                    "type": "quantitative",
-                    "fn": {
-                      "type": "symlog"
-                    }
-                  }
-                },
-                "color": {
-                  "fieldName": "criticidad",
-                  "displayName": "criticidad",
-                  "scale": {
-                    "type": "categorical",
-                    "sort": {
-                      "by": "custom-order",
-                      "orderedValues": [
-                        "Muy Baja",
-                        "Baja",
-                        "Media",
-                        "Alta",
-                        "Muy Alta"
-                      ]
-                    }
-                  }
-                },
-                "extra": [
+                "fields": [
                   {
-                    "fieldName": "circuito",
-                    "displayName": "Circuito"
+                    "fieldName": "criticidad"
+                  },
+                  {
+                    "fieldName": "circuito"
+                  },
+                  {
+                    "fieldName": "event_count"
+                  },
+                  {
+                    "fieldName": "uiti_vano_sum"
                   }
                 ]
               },

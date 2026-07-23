@@ -57,6 +57,16 @@ Check for these six objects in the result:
 
 **If `indicadores_vano_v_3` is missing**, stop here. Explain to the user that this table is an external data-engineering prerequisite outside this repo's scope (no ETL for it exists in the repo) and must be provisioned in the target workspace before the dashboard's geo maps can work. Offer to continue building everything else (clustering/daily-evolution widgets will work; maps will show query errors) only if the user explicitly agrees to proceed without maps.
 
+**If `circuit_clustering` already exists**, do not skip it silently — its `criticidad` values can go stale relative to the repo's current label scheme even though the table itself is present (this happened once: an earlier deploy's uploaded `chec_local_interpreter` source went stale relative to a later `plotting.py` rename, so the notebook kept computing the old label set even on a "verbatim" re-run). Check the live label set against the repo's current source of truth before trusting the table:
+```
+databricks api post /api/2.0/sql/statements -p <profile> --json '{
+  "warehouse_id": "<warehouse_id>",
+  "statement": "SELECT DISTINCT criticidad FROM workspace.default.circuit_clustering",
+  "wait_timeout": "30s"
+}'
+```
+Compare the returned set against `CRITICALITY_GROUP_LABELS` in `src/chec_local_interpreter/plotting.py` (read the file, don't guess). If they differ, tell the user the deployed table is stale and offer to rebuild it: redo step 4's sub-steps 2–5 (refresh the uploaded source + notebook, then re-run the job) — the CSV/shapefile-existence check in sub-step 1 and the view-creation sub-step 6 can be skipped since only `circuit_clustering` needs rebuilding.
+
 ## 4. Build the reproducible base tables (only the missing ones)
 
 Only do this for tables/views actually missing from step 3.
@@ -73,15 +83,15 @@ Only do this for tables/views actually missing from step 3.
    ```
    Use the returned `userName` in place of `andresmarino07@gmail.com` below.
 
-3. Upload the real repo source files as workspace files (never reimplement `compute_circuit_criticality_groups` — import it verbatim, same pattern as the existing PoC):
+3. Upload the real repo source files as workspace files (never reimplement `compute_circuit_criticality_groups` — import it verbatim, same pattern as the existing PoC). `import-dir` has no `--format` flag — pass `--overwrite` so a re-run always refreshes a stale copy:
    ```
-   databricks workspace import-dir src/chec_local_interpreter /Workspace/Users/<userName>/databricks-integration/chec_local_interpreter_src/chec_local_interpreter --format AUTO -p <profile>
+   databricks workspace import-dir src/chec_local_interpreter /Workspace/Users/<userName>/databricks-integration/chec_local_interpreter_src/chec_local_interpreter --overwrite -p <profile>
    ```
-   (If `import-dir` rejects non-notebook files, fall back to individual `databricks workspace import <file> --format RAW` calls for `__init__.py`, `config.py`, `event_counts.py`, `plotting.py`.)
+   (If `import-dir` rejects non-notebook files, fall back to individual `databricks workspace import <target_path> --file <local_file> --language PYTHON --format RAW --overwrite -p <profile>` calls for `__init__.py`, `config.py`, `event_counts.py`, `plotting.py`.)
 
-4. Upload the notebook itself:
+4. Upload the notebook itself. `workspace import` takes exactly one positional arg (the target path) — the source file goes in `--file`, not as a second positional arg:
    ```
-   databricks workspace import notebooks/databricks/uiti_vano_tables.py /Workspace/Users/<userName>/databricks-integration/uiti_vano_tables --language PYTHON --format SOURCE -p <profile>
+   databricks workspace import /Workspace/Users/<userName>/databricks-integration/uiti_vano_tables --file notebooks/databricks/uiti_vano_tables.py --language PYTHON --format SOURCE --overwrite -p <profile>
    ```
    If `<userName>` differs from `andresmarino07@gmail.com`, the notebook's `CHEC_SRC_DIR` constant hardcodes the old path — edit the uploaded copy's `CHEC_SRC_DIR` (or the local file before upload) to match the new user path.
 
