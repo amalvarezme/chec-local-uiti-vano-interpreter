@@ -56,7 +56,8 @@ def _four_tier_raw_df() -> pd.DataFrame:
     [
         ("muy-alta", "Riesgo Muy Alto"),
         ("alta", "Riesgo Alto"),
-        ("media", "Riesgo Medio"),
+        ("medio-alta", "Riesgo Medio-Alto"),
+        ("medio-baja", "Riesgo Medio-Bajo"),
         ("baja", "Riesgo Bajo"),
     ],
 )
@@ -82,12 +83,12 @@ def test_normalize_request_rejects_unknown_grupo():
 
 def test_normalize_request_rejects_lone_fecha_inicio():
     with pytest.raises(ValueError, match="provided together"):
-        normalize_request("media", "2026-01-01")
+        normalize_request("medio-alta", "2026-01-01")
 
 
 def test_normalize_request_rejects_lone_fecha_fin():
     with pytest.raises(ValueError, match="provided together"):
-        normalize_request("media", None, "2026-01-02")
+        normalize_request("medio-alta", None, "2026-01-02")
 
 
 # ---------------------------------------------------------------------------
@@ -120,14 +121,19 @@ def test_preflight_execution_error_when_explicit_window_has_no_events(monkeypatc
 
 def _known_tier_df_coords() -> pd.DataFrame:
     """A controlled `compute_circuit_criticality_groups`-shaped result covering
-    all 4 labels with one distinct circuit each -- deterministic label-to-
+    all 5 labels with one distinct circuit each -- deterministic label-to-
     circuit membership, independent of real K-Means's known instability on
     the *middle* tiers (only the top/bottom tiers are empirically robust;
     see `tests/test_plotting.py::_four_tier_raw_df`'s own docstring)."""
     return pd.DataFrame(
-        {"criticidad": ["Riesgo Muy Alto", "Riesgo Alto", "Riesgo Medio", "Riesgo Bajo"]},
+        {
+            "criticidad": [
+                "Riesgo Muy Alto", "Riesgo Alto", "Riesgo Medio-Alto",
+                "Riesgo Medio-Bajo", "Riesgo Bajo",
+            ]
+        },
         index=pd.Index(
-            ["MUYALTA_1", "ALTA_1", "MEDIA_1", "BAJA_1"], name="CIRCUITO"
+            ["MUYALTA_1", "ALTA_1", "MEDIOALTA_1", "MEDIOBAJA_1", "BAJA_1"], name="CIRCUITO"
         ),
     )
 
@@ -137,7 +143,8 @@ def _known_tier_df_coords() -> pd.DataFrame:
     [
         ("muy-alta", {"MUYALTA_1"}),
         ("alta", {"ALTA_1"}),
-        ("media", {"MEDIA_1"}),
+        ("medio-alta", {"MEDIOALTA_1"}),
+        ("medio-baja", {"MEDIOBAJA_1"}),
         ("baja", {"BAJA_1"}),
     ],
 )

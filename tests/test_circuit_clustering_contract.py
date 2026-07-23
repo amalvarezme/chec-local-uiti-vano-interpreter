@@ -80,16 +80,21 @@ def test_render_clustering_reuses_plotting_and_writes_deterministic_html(monkeyp
             assert div_id == "circuit-clustering-chart"
             return "<html><body>chart</body></html>"
 
-    def fake_plot(raw_df, start_date=None, end_date=None, highlighted_circuits=None):
+    def fake_plot(raw_df, start_date=None, end_date=None, highlighted_circuits=None, group_labels=None, group_colors=None):
         calls.append((raw_df.copy(), start_date, end_date))
         assert highlighted_circuits is None
+        # render_clustering no longer overrides the tiers: it relies on
+        # plot_interactive_circuit_clustering's own defaults (the shared
+        # 5-tier CRITICALITY_GROUP_LABELS/_COLORS in plotting.py).
+        assert group_labels is None
+        assert group_colors is None
         return FigureStub()
 
     monkeypatch.setattr(clustering_contract, "load_dataset", lambda path: frame)
     monkeypatch.setattr(clustering_contract, "plot_interactive_circuit_clustering", fake_plot)
 
     outcome = render_clustering(
-        normalize_request(runtime="opencode"),
+        normalize_request(runtime="pi"),
         data_path="data.csv",
         output_root=tmp_path,
     )

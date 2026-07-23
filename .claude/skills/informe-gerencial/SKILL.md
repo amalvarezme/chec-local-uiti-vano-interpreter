@@ -46,7 +46,7 @@ cross-circuit view), use `/reporte-lote` instead.
 
 Invocation: `/informe-gerencial <grupo> [fecha_inicio fecha_fin]`.
 
-- `grupo` — **required**. Must be one of `muy-alta|alta|media|baja|todos`; any other value
+- `grupo` — **required**. Must be one of `muy-alta|alta|medio-alta|medio-baja|baja|todos`; any other value
   is a usage error, rejected before any dataset access — same allowlist `/reporte-lote` uses.
 - `fecha_inicio` / `fecha_fin` — **optional, as a PAIR**, same pair contract `/reporte-lote` uses:
   - Both omitted: resolve to the dataset-wide date range.
@@ -58,7 +58,7 @@ Examples:
 | Invocation | Result |
 |---|---|
 | `/informe-gerencial alta` | Group `alta` resolved against the full dataset-wide date range |
-| `/informe-gerencial media 2026-01-01 2026-02-01` | Group `media` resolved against that explicit window |
+| `/informe-gerencial medio-alta 2026-01-01 2026-02-01` | Group `medio-alta` resolved against that explicit window |
 | `/informe-gerencial baja 2026-01-01` | **Rejected** — usage error, `fecha_fin` missing |
 | `/informe-gerencial critica` | **Rejected** — usage error, unknown `grupo` |
 | `/informe-gerencial todos` | Full fleet computed via `compute_circuit_criticality_groups`, then sampled to 12 |

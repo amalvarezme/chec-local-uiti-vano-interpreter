@@ -94,14 +94,15 @@ def test_sample_representatives_deterministic_tie_break_by_ascending_name():
 
 
 def _four_tier_raw_df(per_tier: int = 2) -> pd.DataFrame:
-    """4 magnitude tiers, `per_tier` circuits each. (event_count, uiti_vano_sum)
-    values verified empirically against this module's real
-    `compute_circuit_criticality_groups` (deterministic `run_kmeans(...,
-    random_state=42)`) for BOTH `per_tier=2` (exact per-circuit tier
-    assignment, robust under +/-2% jitter across 200 trials) and
-    `per_tier=16` (all 4 labels present across the full 64-circuit universe,
-    which is all `test_resolve_group_dataframe_todos_returns_full_universe`
-    requires -- it does not assert exact per-circuit membership).
+    """4 magnitude tiers, `per_tier` circuits each, fed through the shared
+    5-tier `compute_circuit_criticality_groups` (deterministic
+    `run_kmeans(..., random_state=42)`). `per_tier=2` gives exact per-circuit
+    tier assignment for the top/bottom magnitude tiers (robust under +/-2%
+    jitter across 200 trials); `per_tier=16` empirically yields all 5
+    `CRITICALITY_GROUP_LABELS` populated across the full 64-circuit universe
+    (K-Means splits one of the 4 magnitude tiers in two), which is all
+    `test_resolve_group_dataframe_todos_returns_full_universe` requires -- it
+    does not assert exact per-circuit membership.
     """
     tiers = [
         ("MUYALTA", 40, 50000.0),
@@ -131,7 +132,9 @@ def test_resolve_group_dataframe_todos_returns_full_universe_all_64_circuits():
     result = resolve_group_dataframe(raw_df, "todos", None)
 
     assert len(result) == 64
-    assert set(result["criticidad"]) == {"Riesgo Muy Alto", "Riesgo Alto", "Riesgo Medio", "Riesgo Bajo"}
+    assert set(result["criticidad"]) == {
+        "Riesgo Muy Alto", "Riesgo Alto", "Riesgo Medio-Alto", "Riesgo Medio-Bajo", "Riesgo Bajo",
+    }
 
     sampled = sample_representatives(result)
     assert len(sampled) == 12

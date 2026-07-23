@@ -90,11 +90,13 @@ def run_kmeans(data, n_clusters=5, max_iters=100, random_state=42):
 # clustering chart (`plot_interactive_circuit_clustering`) and the LLM-facing
 # context builder (`context_builder._compute_circuit_characterization`), so
 # the chart legend and the report narrative never drift out of sync.
-CRITICALITY_GROUP_LABELS: tuple[str, ...] = ("Riesgo Muy Alto", "Riesgo Alto", "Riesgo Medio", "Riesgo Bajo")
-CRITICALITY_GROUP_COLORS: tuple[str, ...] = ("#ef4444", "#f97316", "#eab308", "#22c55e")
+CRITICALITY_GROUP_LABELS: tuple[str, ...] = (
+    "Riesgo Muy Alto", "Riesgo Alto", "Riesgo Medio-Alto", "Riesgo Medio-Bajo", "Riesgo Bajo"
+)
+CRITICALITY_GROUP_COLORS: tuple[str, ...] = ("#ef4444", "#f97316", "#eab308", "#84cc16", "#22c55e")
 
 
-def compute_circuit_criticality_groups(raw_df, start_date=None, end_date=None):
+def compute_circuit_criticality_groups(raw_df, start_date=None, end_date=None, group_labels=None):
     """
     Compute per-circuit event-frequency / UITI_VANO-sum coordinates, K-Means
     cluster assignment, and ranked criticality label.
@@ -107,13 +109,19 @@ def compute_circuit_criticality_groups(raw_df, start_date=None, end_date=None):
     - raw_df (pd.DataFrame): The main dataset containing 'CIRCUITO', 'UITI_VANO', and 'FECHA'.
     - start_date (str, optional): Start date string (e.g. '2023-01-01').
     - end_date (str, optional): End date string.
+    - group_labels (sequence[str], optional): Tier labels ordered from most to
+      least critical, overriding `CRITICALITY_GROUP_LABELS`. Its length sets
+      the number of K-Means clusters. All callers (standalone agrupamiento
+      chart, batch reports, informe-gerencial, context builder) share the
+      same 5-tier default.
 
     Returns:
     - pd.DataFrame indexed by CIRCUITO with columns `event_count`,
       `uiti_vano_sum`, `cluster` (raw K-Means id), `criticidad` (ranked label
-      from CRITICALITY_GROUP_LABELS). Empty (same columns) if no data
-      survives filtering.
+      from `group_labels`). Empty (same columns) if no data survives
+      filtering.
     """
+    group_labels = list(group_labels) if group_labels is not None else list(CRITICALITY_GROUP_LABELS)
     empty_columns = ["event_count", "uiti_vano_sum", "cluster", "criticidad", "centroid_distance"]
 
     df = raw_df.copy()
@@ -156,21 +164,26 @@ def compute_circuit_criticality_groups(raw_df, start_date=None, end_date=None):
 
     df_coords.index.name = "CIRCUITO"
 
-    # Explicitly cast to float before converting to NumPy values
-    X = df_coords[['event_count', 'uiti_vano_sum']].astype(float).values
+    # Explicitly cast to float before converting to NumPy values. K-Means
+    # clusters in the ORIGINAL (non-log) event_count/uiti_vano_sum space,
+    # min-max scaled; the chart itself renders both axes log-scaled, so the
+    # visualized space and the clustering space intentionally differ here.
+    X_raw = df_coords[['event_count', 'uiti_vano_sum']].astype(float).values
+    X = X_raw
 
-    # 3. Scaling (Z-score normalization)
-    X_mean = X.mean(axis=0)
-    # Add a small epsilon to standard deviation to avoid division by zero
-    X_std = np.where(X.std(axis=0) == 0, 1e-9, X.std(axis=0))
-    X_scaled = (X - X_mean) / X_std
+    # 3. Scaling (Min-Max normalization to [0, 1])
+    X_min = X.min(axis=0)
+    X_range = X.max(axis=0) - X_min
+    # Add a small epsilon to the range to avoid division by zero
+    X_range = np.where(X_range == 0, 1e-9, X_range)
+    X_scaled = (X - X_min) / X_range
 
     # Execute clustering. `run_kmeans(random_state=...)` seeds the numpy
     # GLOBAL RNG (`np.random.seed`), a process-wide side effect. Save/restore
     # the global state around the call so this function never silently
     # resets or correlates unrelated randomness for other code sharing the
     # process afterward (e.g. the SHAP simulator in report_pipeline.py).
-    n_clusters = min(len(CRITICALITY_GROUP_LABELS), len(df_coords))
+    n_clusters = min(len(group_labels), len(df_coords))
     rng_state = np.random.get_state()
     try:
         df_coords['cluster'] = run_kmeans(X_scaled, n_clusters=n_clusters, random_state=42)
@@ -184,7 +197,6 @@ def compute_circuit_criticality_groups(raw_df, start_date=None, end_date=None):
         cluster_scores[cluster_id] = X_scaled[cluster_mask].mean()
 
     sorted_clusters = sorted(cluster_scores.keys(), key=lambda c: cluster_scores[c], reverse=True)
-    group_labels = list(CRITICALITY_GROUP_LABELS)
 
     df_coords['criticidad'] = df_coords['cluster'].apply(
         lambda cluster_id: group_labels[sorted_clusters.index(cluster_id)]
@@ -204,7 +216,9 @@ def compute_circuit_criticality_groups(raw_df, start_date=None, end_date=None):
     return df_coords[empty_columns]
 
 
-def plot_interactive_circuit_clustering(raw_df, start_date=None, end_date=None, highlighted_circuits=None):
+def plot_interactive_circuit_clustering(
+    raw_df, start_date=None, end_date=None, highlighted_circuits=None, group_labels=None, group_colors=None
+):
     """
     Plots an interactive scatter map of events frequency vs UITI_VANO sums
     clustered via K-Means.
@@ -214,24 +228,30 @@ def plot_interactive_circuit_clustering(raw_df, start_date=None, end_date=None, 
     - start_date (str, optional): Start date string (e.g. '2023-01-01').
     - end_date (str, optional): End date string.
     - highlighted_circuits (list): List of circuit names to highlight with an 'X'.
+    - group_labels (sequence[str], optional): Overrides `CRITICALITY_GROUP_LABELS`;
+      forwarded to `compute_circuit_criticality_groups`. All callers share the
+      same 5-tier default unless explicitly overridden.
+    - group_colors (sequence[str], optional): Overrides `CRITICALITY_GROUP_COLORS`;
+      must be at least as long as `group_labels` when both are provided.
     """
     if highlighted_circuits is None:
         highlighted_circuits = []
 
-    df_coords = compute_circuit_criticality_groups(raw_df, start_date, end_date)
+    group_labels = list(group_labels) if group_labels is not None else list(CRITICALITY_GROUP_LABELS)
+    group_colors = list(group_colors) if group_colors is not None else list(CRITICALITY_GROUP_COLORS)
+
+    df_coords = compute_circuit_criticality_groups(raw_df, start_date, end_date, group_labels=group_labels)
 
     # Handle empty dataframe edge case
     if df_coords.empty:
         print("No data available for the given date range.")
         return go.Figure()
 
-    group_colors = list(CRITICALITY_GROUP_COLORS)
-
     # 4. Plotting Setup
     fig = go.Figure()
 
     # Plot clusters (Combining both normal and highlighted logic inside the same loop)
-    for rank, label in enumerate(CRITICALITY_GROUP_LABELS):
+    for rank, label in enumerate(group_labels):
         cluster_data = df_coords[df_coords['criticidad'] == label]
         if cluster_data.empty:
             continue
@@ -265,7 +285,7 @@ def plot_interactive_circuit_clustering(raw_df, start_date=None, end_date=None, 
                 name=legend_name,
                 legendgroup=legend_group_name,
                 showlegend=True if highlighted_data.empty else True, # Main legend toggle
-                hovertemplate='<b>%{text}</b><br>Eventos: %{x:,.0f}<br>Suma UITI_VANO: %{y:,.2f}<extra></extra>'
+                hovertemplate=f'<b>%{{text}}</b><br>Grupo: {label}<br>Eventos: %{{x:,.0f}}<br>Suma UITI_VANO: %{{y:,.2f}}<extra></extra>'
             ))
 
         # 4b. Plot highlighted points (Crosses 'X') retaining cluster color
@@ -287,7 +307,7 @@ def plot_interactive_circuit_clustering(raw_df, start_date=None, end_date=None, 
                 name=legend_name,
                 legendgroup=legend_group_name,
                 showlegend=False if not normal_data.empty else True, # Hide legend duplicate if normal points exist
-                hovertemplate='<b>%{text}</b><br>Eventos: %{x:,.0f}<br>Suma UITI_VANO: %{y:,.2f}<br><i>DESTACADO</i><extra></extra>'
+                hovertemplate=f'<b>%{{text}}</b><br>Grupo: {label}<br>Eventos: %{{x:,.0f}}<br>Suma UITI_VANO: %{{y:,.2f}}<br><i>DESTACADO</i><extra></extra>'
             ))
 
     # Expand axes limits by 10%
@@ -338,12 +358,14 @@ def plot_interactive_circuit_clustering(raw_df, start_date=None, end_date=None, 
         plot_bgcolor='#f8fafc',
         paper_bgcolor='#ffffff',
         xaxis=dict(
+            type='log',
             showgrid=True,
             gridcolor='#e2e8f0',
             gridwidth=1,
             griddash='dot',
         ),
         yaxis=dict(
+            type='log',
             showgrid=True,
             gridcolor='#e2e8f0',
             gridwidth=1,
