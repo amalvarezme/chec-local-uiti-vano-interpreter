@@ -4,7 +4,7 @@ Intérprete local, nativo para agentes, de `UITI_VANO` sobre el dataset amplio d
 
 Este proyecto carga un dataset estructurado ancho, filtra por circuitos y fechas, detecta puntos relevantes en la serie diaria de `UITI_VANO`, construye un paquete de contexto estructurado y usa roles LLM nativos del runtime para explicar el comportamiento en español y compararlo contra reportes PDF expertos.
 
-**Restricción clave:** **no existe ninguna llamada a APIs externas de LLM desde Python**. El razonamiento lo hace el runtime del agente invocador, Claude Code, OpenCode, Codex o Pi / el Gentleman. Python se mantiene determinista, local y controlado.
+**Restricción clave:** **no existe ninguna llamada a APIs externas de LLM desde Python**. El razonamiento lo hace el runtime del agente invocador, Claude Code o Pi / el Gentleman. Python se mantiene determinista, local y controlado.
 
 ## Ruta rápida
 
@@ -57,7 +57,6 @@ El repositorio cubre el flujo completo de interpretabilidad local para el análi
 | `src/chec_impacto/` | Código de modelado relacionado con MGCECDL y lógica de soporte |
 | `.claude/skills/` | Contratos canónicos de workflow y skills |
 | `.claude/agents/` | Definiciones canónicas de roles para Claude |
-| `.opencode/agent/` | Mirrors y adaptadores para OpenCode |
 | `.pi/skills/` | Wrappers de skills para Pi sobre los skills canónicos de Claude |
 | `.pi/agents/` | Mirrors de roles para Pi sobre los roles canónicos de Claude |
 | `docs/` | Arquitectura, workflow, contrato de runtime, BPMN y documentación de soporte |
@@ -100,32 +99,28 @@ La lógica de negocio **no** vive en los adaptadores. Vive en los contratos Pyth
 | Runtime | Comando |
 |---|---|
 | Claude Code | `/report <circuito> [fecha_inicio fecha_fin]` |
-| OpenCode | `@report <circuito> [fecha_inicio fecha_fin]` |
-| Codex | `$report <circuito> [fecha_inicio fecha_fin]` |
 | Pi / el Gentleman | `/skill:report <circuito> [fecha_inicio fecha_fin]` |
 
 Ejemplos:
 
 ```text
 /report C1
-@report C1 2026-01-01 2026-02-01
-$report C1
 /skill:report C1 2026-01-01 2026-02-01
 ```
 
 ### Equivalencia de capacidades compatibles
 
-| Capacidad | Claude Code | OpenCode | Pi / el Gentleman |
-|---|---|---|---|
-| Reporte completo | `/report <circuito> [fecha_inicio fecha_fin]` | `@report <circuito> [fecha_inicio fecha_fin]` | `/skill:report <circuito> [fecha_inicio fecha_fin]` |
-| Solo agrupamiento de circuitos | `/agrupamiento-circuitos [fecha_inicio fecha_fin]` | `@agrupamiento-circuitos [fecha_inicio fecha_fin]` | `/skill:agrupamiento-circuitos [fecha_inicio fecha_fin]` |
-| Análisis histórico | flujo canónico `historical` de Claude | `.opencode/agent/historical.md` | `/skill:historical` + `.pi/agents/historical.md` |
-| Análisis de inferencia | flujo canónico `inference` de Claude | `.opencode/agent/inference.md` | `/skill:inference` + `.pi/agents/inference.md` |
-| Alineación experta | flujo canónico `expert-alignment` de Claude | `.opencode/agent/expert-alignment.md` | `/skill:expert-alignment` + `.pi/agents/expert-alignment.md` |
-| Simulador automático | flujo canónico `auto-simulator` de Claude | `.opencode/agent/auto-simulator.md` | `/skill:auto-simulator` + `.pi/agents/auto-simulator.md` |
-| Extracción de discusiones PDF | flujo canónico `pdf-discussion-extraction` de Claude | `.opencode/agent/pdf-discussion-extraction.md` | `/skill:pdf-discussion-extraction` + `.pi/agents/pdf-discussion-extraction.md` |
-| Reporte por lote | `/reporte-lote <grupo> [fecha_inicio fecha_fin]` | none | `/skill:reporte-lote <grupo> [fecha_inicio fecha_fin]` |
-| Informe gerencial | `/informe-gerencial <grupo> [fecha_inicio fecha_fin]` | none | `/skill:informe-gerencial <grupo> [fecha_inicio fecha_fin]` |
+| Capacidad | Claude Code | Pi / el Gentleman |
+|---|---|---|
+| Reporte completo | `/report <circuito> [fecha_inicio fecha_fin]` | `/skill:report <circuito> [fecha_inicio fecha_fin]` |
+| Solo agrupamiento de circuitos | `/agrupamiento-circuitos [fecha_inicio fecha_fin]` | `/skill:agrupamiento-circuitos [fecha_inicio fecha_fin]` |
+| Análisis histórico | flujo canónico `historical` de Claude | `/skill:historical` + `.pi/agents/historical.md` |
+| Análisis de inferencia | flujo canónico `inference` de Claude | `/skill:inference` + `.pi/agents/inference.md` |
+| Alineación experta | flujo canónico `expert-alignment` de Claude | `/skill:expert-alignment` + `.pi/agents/expert-alignment.md` |
+| Simulador automático | flujo canónico `auto-simulator` de Claude | `/skill:auto-simulator` + `.pi/agents/auto-simulator.md` |
+| Extracción de discusiones PDF | flujo canónico `pdf-discussion-extraction` de Claude | `/skill:pdf-discussion-extraction` + `.pi/agents/pdf-discussion-extraction.md` |
+| Reporte por lote | `/reporte-lote <grupo> [fecha_inicio fecha_fin]` | `/skill:reporte-lote <grupo> [fecha_inicio fecha_fin]` |
+| Informe gerencial | `/informe-gerencial <grupo> [fecha_inicio fecha_fin]` | `/skill:informe-gerencial <grupo> [fecha_inicio fecha_fin]` |
 
 ### Modelo de compatibilidad en Pi
 
@@ -192,10 +187,8 @@ Estos archivos definen:
 
 Los controlan wrappers y mirrors específicos del runtime:
 
-- `.opencode/agent/*`
 - `.pi/skills/*`
 - `.pi/agents/*`
-- `.codex/skills/*` cuando aplique
 
 Estos adaptadores traducen la sintaxis del runtime al contrato local compartido sin duplicar comportamiento de negocio.
 

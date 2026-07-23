@@ -13,8 +13,6 @@ Adapters must translate native invocation syntax into the shared contract. They 
 | Runtime | Preferred invocation | Notes |
 |---|---|---|
 | Claude Code | `/report <circuito> [fecha_inicio fecha_fin]` | Existing first-class workflow. |
-| OpenCode | `@report <circuito> [fecha_inicio fecha_fin]` | Reliable fallback until project slash-command support is verified. If verified, `/report` may be added as an alias. |
-| Codex | `$report <circuito> [fecha_inicio fecha_fin]` | Codex must not prefer `/report`; Pi uses `/skill:report`. |
 | Pi / el Gentleman | `/skill:report <circuito> [fecha_inicio fecha_fin]` | Pi-native skill command. |
 
 ## Argument contract

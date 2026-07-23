@@ -2,16 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from chec_local_interpreter.report_contract import normalize_request
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 ADAPTERS = {
     "claude": PROJECT_ROOT / ".claude" / "skills" / "report" / "SKILL.md",
-    "opencode": PROJECT_ROOT / ".opencode" / "agent" / "report.md",
-    "codex": PROJECT_ROOT / ".codex" / "skills" / "report" / "SKILL.md",
     "pi": PROJECT_ROOT / ".pi" / "skills" / "report" / "SKILL.md",
 }
 
@@ -48,21 +44,11 @@ def test_runtime_adapter_files_exist():
 
 def test_runtime_adapter_base_name_is_report():
     assert "name: report" in _read(ADAPTERS["claude"])
-    assert ADAPTERS["opencode"].stem == "report"
-    assert "name: report" in _read(ADAPTERS["codex"])
     assert "name: report" in _read(ADAPTERS["pi"])
 
 
 def test_runtime_invocation_discovery_is_explicit():
     assert "/report <circuito> [fecha_inicio fecha_fin]" in _read(ADAPTERS["claude"])
-
-    opencode = _read(ADAPTERS["opencode"])
-    assert "@report <circuito> [fecha_inicio fecha_fin]" in opencode
-    assert "Until verified" in opencode
-
-    codex = _read(ADAPTERS["codex"])
-    assert "$report <circuito> [fecha_inicio fecha_fin]" in codex
-    assert "Do not document or suggest `/report` for Codex" in codex
 
     pi = _read(ADAPTERS["pi"])
     assert "/skill:report <circuito> [fecha_inicio fecha_fin]" in pi
@@ -81,8 +67,6 @@ def test_equivalent_runtime_inputs_normalize_to_same_report_request_except_metad
     base = normalize_request("C1", "2026-01-01", "2026-01-02")
     runtime_requests = [
         normalize_request("C1", "2026-01-01", "2026-01-02", runtime="claude"),
-        normalize_request("C1", "2026-01-01", "2026-01-02", runtime="opencode"),
-        normalize_request("C1", "2026-01-01", "2026-01-02", runtime="codex"),
         normalize_request("C1", "2026-01-01", "2026-01-02", runtime="pi"),
     ]
 
@@ -92,15 +76,11 @@ def test_equivalent_runtime_inputs_normalize_to_same_report_request_except_metad
         assert request.fecha_fin == base.fecha_fin
 
 
-@pytest.mark.parametrize(
-    "runtime,path",
-    [(runtime, path) for runtime, path in ADAPTERS.items() if runtime != "claude"],
-)
-def test_runtime_adapters_do_not_contain_business_logic(runtime: str, path: Path):
-    content = _read(path)
+def test_runtime_adapters_do_not_contain_business_logic():
+    content = _read(ADAPTERS["pi"])
 
     for marker in FORBIDDEN_BUSINESS_MARKERS:
-        assert marker not in content, f"{runtime} adapter duplicates or calls business logic: {marker}"
+        assert marker not in content, f"pi adapter duplicates or calls business logic: {marker}"
 
 
 def test_runtime_adapters_do_not_directly_import_domain_modules():
@@ -123,10 +103,7 @@ def test_runtime_contract_documentation_matrix_matches_adapters():
     docs = _read(PROJECT_ROOT / "docs" / "report-runtime-contract.md")
 
     assert "/report <circuito> [fecha_inicio fecha_fin]" in docs
-    assert "@report <circuito> [fecha_inicio fecha_fin]" in docs
-    assert "$report <circuito> [fecha_inicio fecha_fin]" in docs
     assert "/skill:report <circuito> [fecha_inicio fecha_fin]" in docs
-    assert "Codex must not prefer `/report`" in docs
     assert "no automatic publishing" in docs
     assert "no site asset mutation" in docs
 
@@ -142,12 +119,11 @@ def test_pi_adapter_uses_runtime_model_resolution_not_frontmatter():
 
 
 def test_runtime_adapters_forbid_ambiguous_generic_worker_dispatch():
-    for runtime in ("codex", "opencode", "pi"):
-        content = _read(ADAPTERS[runtime])
+    content = _read(ADAPTERS["pi"])
 
-        assert "one explicit task per role" in content, runtime
-        assert "Never launch multiple identical workers" in content, runtime
-        assert "historical" in content and "inference" in content and "auto-simulator" in content, runtime
+    assert "one explicit task per role" in content
+    assert "Never launch multiple identical workers" in content
+    assert "historical" in content and "inference" in content and "auto-simulator" in content
 
 
 def test_runtime_adapters_reject_read_only_workers_for_role_authoring():
@@ -158,13 +134,6 @@ def test_runtime_adapters_reject_read_only_workers_for_role_authoring():
     assert "historical.out.json" in pi and "inference.out.json" in pi
     assert "stalled role" in pi
 
-    for runtime in ("codex", "opencode"):
-        content = _read(ADAPTERS[runtime])
-        assert "verify that a candidate worker can run" in content, runtime
-        assert "read-only/research-only worker" in content, runtime
-        assert "historical.out.json" in content and "inference.out.json" in content, runtime
-        assert "stalled role" in content, runtime
-
 
 def test_runtime_adapters_require_measured_token_usage_when_available():
     pi = _read(ADAPTERS["pi"])
@@ -173,13 +142,6 @@ def test_runtime_adapters_require_measured_token_usage_when_available():
     assert "verify-usage" in pi
     assert "Do not scrape prose or session history" in pi
     assert '"historical": {"total": 77611}' in pi
-
-    for runtime in ("codex", "opencode"):
-        content = _read(ADAPTERS[runtime])
-        assert "Token accounting" in content, runtime
-        assert "record-usage --run-dir <run_dir> --stage <role>" in content, runtime
-        assert "verify-usage" in content, runtime
-        assert "actual structured usage" in content, runtime
 
 
 def test_runtime_adapters_use_project_virtualenv_before_declaring_environment_missing():

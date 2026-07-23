@@ -8,8 +8,8 @@ This is a documentation/runbook change (SDD `reporte-perf-optimization`
 item 2, Report Orchestration Concurrency): the three calls write disjoint
 files and share no mutable state, so a runtime that supports issuing
 independent tool/Skill calls in one turn (e.g. Claude Code) MAY run them in
-parallel, while a runtime with unconfirmed concurrency (e.g. OpenCode)
-degrades safely to sequential-in-any-order. Nothing here asserts true
+parallel, while a runtime with unconfirmed concurrency degrades safely to
+sequential-in-any-order. Nothing here asserts true
 concurrency happened -- SKILL.md is a runbook read by an LLM orchestrator,
 not executable code -- so this test only checks the declarative text is
 present and internally consistent.

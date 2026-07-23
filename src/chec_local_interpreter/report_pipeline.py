@@ -1634,12 +1634,12 @@ def _detect_llm_runtime() -> tuple[str, str]:
     """Best-effort detection of the orchestrating agent host and its model.
 
     The report is authored by whichever interactive agent runtime is driving
-    this run (Claude Code or OpenCode) -- there is no LLM API call inside
-    this module to introspect (see module docstring). The host is
-    identifiable from environment variables the CLI sets on its subprocesses;
-    the specific orchestrator *model* id is not exposed via any environment
-    variable, so it can only come from an explicit override -- the invoking
-    agent knows its own identity and is expected to pass `CHEC_LLM_MODEL` (or
+    this run (Claude Code) -- there is no LLM API call inside this module to
+    introspect (see module docstring). The host is identifiable from
+    environment variables the CLI sets on its subprocesses; the specific
+    orchestrator *model* id is not exposed via any environment variable, so
+    it can only come from an explicit override -- the invoking agent knows
+    its own identity and is expected to pass `CHEC_LLM_MODEL` (or
     `render(..., llm_model=...)` directly).
 
     Returns `(provider, model)`, each `"Desconocido"` when undetected.
@@ -1651,8 +1651,6 @@ def _detect_llm_runtime() -> tuple[str, str]:
         return provider_override, model_override
     if os.environ.get("CLAUDECODE") == "1" or "CLAUDE_CODE_ENTRYPOINT" in os.environ:
         return "Claude Code", model_override
-    if any(key.startswith("OPENCODE") for key in os.environ):
-        return "OpenCode", model_override
     return "Desconocido", model_override
 
 
@@ -2113,10 +2111,10 @@ def render(
 
     `llm_provider`/`llm_model` identify, in the report header, which agent
     host and which orchestrator model produced this run. `llm_provider`
-    defaults to autodetection (`_detect_llm_runtime`, Claude Code vs
-    OpenCode via environment variables); `llm_model` has no reliable
-    environment signal and defaults to `"Desconocido"` unless the caller
-    passes it explicitly or sets `CHEC_LLM_MODEL`. `tokens_input`/
+    defaults to autodetection (`_detect_llm_runtime`, Claude Code via
+    environment variables); `llm_model` has no reliable environment signal
+    and defaults to `"Desconocido"` unless the caller passes it explicitly
+    or sets `CHEC_LLM_MODEL`. `tokens_input`/
     `tokens_output` precedence (design item 4): an explicit kwarg wins for
     its own side; whichever side is omitted (`None`) falls back to
     `_resolve_token_usage` (real per-stage counts from `run_dir/

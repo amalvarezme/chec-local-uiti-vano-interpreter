@@ -157,8 +157,8 @@ one turn), they **MUST** be issued that way — parallel dispatch is the default
 option to weigh or ask the user about. Do not fall back to running them one at a time "to be safe"
 or to check in between; that only degrades runtime, it buys no safety since the three stages share
 no state. Sequential execution is reserved strictly for a runtime where concurrent dispatch is
-unconfirmed or unavailable (e.g. OpenCode) — a technical fallback, never a discretionary choice,
-and never something to surface to the user as a question.
+unconfirmed or unavailable — a technical fallback, never a discretionary choice, and never
+something to surface to the user as a question.
 
 **Role-dispatch safety contract:** every dispatched role-authoring task must name exactly one role
 in its first line (`historical`, `inference`, or `auto-simulator`) and exactly one source envelope

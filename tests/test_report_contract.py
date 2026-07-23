@@ -56,7 +56,7 @@ def test_normalize_request_preserves_paired_dates_and_runtime_metadata():
 
 
 def test_unknown_model_is_explicit_not_invented():
-    request = normalize_request("C1", runtime="codex")
+    request = normalize_request("C1", runtime="unknown-runtime")
 
     assert request.runtime.to_json()["model"] == UNKNOWN_MODEL_LABEL
     assert request.runtime.to_json()["model_known"] is False

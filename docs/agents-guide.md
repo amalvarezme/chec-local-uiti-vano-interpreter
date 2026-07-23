@@ -331,8 +331,6 @@ runtimes:
 | Runtime | Invocation |
 |---|---|
 | Claude Code | `/report <circuito> [fecha_inicio fecha_fin]` |
-| OpenCode | `@report <circuito> [fecha_inicio fecha_fin]` fallback until project slash commands are verified |
-| Codex | `$report <circuito> [fecha_inicio fecha_fin]` |
 | Pi / el Gentleman | `/skill:report <circuito> [fecha_inicio fecha_fin]` |
 
 This report entry point is **not** a fourth entry in the "Agent roles" table above — it does not
@@ -345,8 +343,6 @@ final local HTML report.
 - Shared contract: [`src/chec_local_interpreter/report_contract.py`](../src/chec_local_interpreter/report_contract.py)
   — normalizes runtime requests, preflight outcomes, metadata, and JSON lifecycle states.
 - Claude Code Skill (runbook): [`.claude/skills/report/SKILL.md`](../.claude/skills/report/SKILL.md).
-- OpenCode fallback adapter: [`.opencode/agent/report.md`](../.opencode/agent/report.md).
-- Codex skill adapter: [`.codex/skills/report/SKILL.md`](../.codex/skills/report/SKILL.md).
 - Pi skill adapter: [`.pi/skills/report/SKILL.md`](../.pi/skills/report/SKILL.md).
 - Runtime contract docs: [`docs/report-runtime-contract.md`](report-runtime-contract.md).
 - Orchestrator (L1, pure Python, no LLM call in this module):
@@ -380,14 +376,6 @@ whole-run totals line (`tokens_total` + `elapsed_seconds`) — the whole-run lin
 unchanged, not replaced. Both sidecars are optional and backward-compatible: their absence in older
 `run_dir`s renders identically to before this accounting existed.
 
-**Non-goal: OpenCode is out of scope for this accounting.** The `record-usage`/`record-duration`
-capture instructions above are wired into the Claude Code (`.claude/skills/report/SKILL.md`) and Pi
-(`.pi/skills/report/SKILL.md`) runbooks only. OpenCode's fallback adapter
-(`.opencode/agent/report.md`) does not receive matching capture instructions, and its generic
-worker/subagent completion notification has not been investigated for an equivalent token/duration
-signal — this is a deliberate, documented gap (not an oversight), left for a future change if
-OpenCode's subagent API is confirmed to expose one.
-
 ### Standalone circuit-clustering chart (multi-runtime adapters)
 
 The standalone circuit-clustering chart is also runtime-native and local-only:
@@ -395,7 +383,6 @@ The standalone circuit-clustering chart is also runtime-native and local-only:
 | Runtime | Invocation |
 |---|---|
 | Claude Code | `/agrupamiento-circuitos [fecha_inicio fecha_fin]` |
-| OpenCode | `@agrupamiento-circuitos [fecha_inicio fecha_fin]` |
 | Pi / el Gentleman | `/skill:agrupamiento-circuitos [fecha_inicio fecha_fin]` |
 
 This entry point renders only the circuit-clustering HTML, not the full report. It is a thin adapter
@@ -404,7 +391,6 @@ over a shared contract that resolves the date window, asks the user to confirm i
 
 - Shared contract: `src/chec_local_interpreter/circuit_clustering_contract.py`.
 - Claude Code skill: `.claude/skills/agrupamiento-circuitos/SKILL.md`.
-- OpenCode adapter: `.opencode/agent/agrupamiento-circuitos.md`.
 - Pi skill: `.pi/skills/agrupamiento-circuitos/SKILL.md`.
 - Date behavior: dates are optional as a pair; omitting both resolves the full dataset range, which
   must be confirmed with the user before render.
@@ -420,25 +406,25 @@ Claude role plus Claude skill for the full contract.
 
 #### Skill command equivalence
 
-| Capability | Claude Code | OpenCode | Pi / el Gentleman |
-|---|---|---|---|
-| Historical analysis | `.claude/skills/historical/SKILL.md` | `.opencode/agent/historical.md` | `/skill:historical` -> `.pi/skills/historical/SKILL.md` |
-| Inference analysis | `.claude/skills/inference/SKILL.md` | `.opencode/agent/inference.md` | `/skill:inference` -> `.pi/skills/inference/SKILL.md` |
-| Expert alignment | `.claude/skills/expert-alignment/SKILL.md` | `.opencode/agent/expert-alignment.md` | `/skill:expert-alignment` -> `.pi/skills/expert-alignment/SKILL.md` |
-| Auto simulator | `.claude/skills/auto-simulator/SKILL.md` | `.opencode/agent/auto-simulator.md` | `/skill:auto-simulator` -> `.pi/skills/auto-simulator/SKILL.md` |
-| PDF discussion extraction | `.claude/skills/pdf-discussion-extraction/SKILL.md` | `.opencode/agent/pdf-discussion-extraction.md` | `/skill:pdf-discussion-extraction` -> `.pi/skills/pdf-discussion-extraction/SKILL.md` |
-| Batch report | `/reporte-lote` -> `.claude/skills/reporte-lote/SKILL.md` | none | `/skill:reporte-lote` -> `.pi/skills/reporte-lote/SKILL.md` |
-| Managerial report | `/informe-gerencial` -> `.claude/skills/informe-gerencial/SKILL.md` | none | `/skill:informe-gerencial` -> `.pi/skills/informe-gerencial/SKILL.md` |
+| Capability | Claude Code | Pi / el Gentleman |
+|---|---|---|
+| Historical analysis | `.claude/skills/historical/SKILL.md` | `/skill:historical` -> `.pi/skills/historical/SKILL.md` |
+| Inference analysis | `.claude/skills/inference/SKILL.md` | `/skill:inference` -> `.pi/skills/inference/SKILL.md` |
+| Expert alignment | `.claude/skills/expert-alignment/SKILL.md` | `/skill:expert-alignment` -> `.pi/skills/expert-alignment/SKILL.md` |
+| Auto simulator | `.claude/skills/auto-simulator/SKILL.md` | `/skill:auto-simulator` -> `.pi/skills/auto-simulator/SKILL.md` |
+| PDF discussion extraction | `.claude/skills/pdf-discussion-extraction/SKILL.md` | `/skill:pdf-discussion-extraction` -> `.pi/skills/pdf-discussion-extraction/SKILL.md` |
+| Batch report | `/reporte-lote` -> `.claude/skills/reporte-lote/SKILL.md` | `/skill:reporte-lote` -> `.pi/skills/reporte-lote/SKILL.md` |
+| Managerial report | `/informe-gerencial` -> `.claude/skills/informe-gerencial/SKILL.md` | `/skill:informe-gerencial` -> `.pi/skills/informe-gerencial/SKILL.md` |
 
 #### Role mirror equivalence
 
-| Role | Claude Code role | OpenCode mirror | Pi mirror |
-|---|---|---|---|
-| `historical` | `.claude/agents/historical.md` | `.opencode/agent/historical.md` | `.pi/agents/historical.md` |
-| `inference` | `.claude/agents/inference.md` | `.opencode/agent/inference.md` | `.pi/agents/inference.md` |
-| `expert-alignment` | `.claude/agents/expert-alignment.md` | `.opencode/agent/expert-alignment.md` | `.pi/agents/expert-alignment.md` |
-| `auto-simulator` | `.claude/agents/auto-simulator.md` | `.opencode/agent/auto-simulator.md` | `.pi/agents/auto-simulator.md` |
-| `pdf-discussion-extraction` | `.claude/agents/pdf-discussion-extraction.md` | `.opencode/agent/pdf-discussion-extraction.md` | `.pi/agents/pdf-discussion-extraction.md` |
+| Role | Claude Code role | Pi mirror |
+|---|---|---|
+| `historical` | `.claude/agents/historical.md` | `.pi/agents/historical.md` |
+| `inference` | `.claude/agents/inference.md` | `.pi/agents/inference.md` |
+| `expert-alignment` | `.claude/agents/expert-alignment.md` | `.pi/agents/expert-alignment.md` |
+| `auto-simulator` | `.claude/agents/auto-simulator.md` | `.pi/agents/auto-simulator.md` |
+| `pdf-discussion-extraction` | `.claude/agents/pdf-discussion-extraction.md` | `.pi/agents/pdf-discussion-extraction.md` |
 
 In Pi, the intended flow is: invoke the thin `/skill:<name>` wrapper, then let that wrapper defer to
 Claude's canonical skill contract and the matching role mirror when the workflow needs an agent role.
