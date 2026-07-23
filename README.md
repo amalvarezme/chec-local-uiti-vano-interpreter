@@ -505,17 +505,19 @@ Las salidas LLM inválidas se guardan por separado con sus errores de validació
 
 ## Notebooks
 
-Estos notebooks soportan exploración, modelado o replicación. **No** son el punto de entrada canónico del flujo de reporte:
+Estos notebooks soportan exploración, modelado o replicación. **No** son el punto de entrada canónico del flujo de reporte, pero son el pipeline real que entrena el modelo MGCECDL y produce los artefactos que el agente `inference` carga en cada corrida de `/report`:
 
+- `notebooks/project_flow/01_climate.ipynb`
+- `notebooks/project_flow/02_mgcecdl_optuna_classification_search.ipynb`
+- `notebooks/project_flow/03_mgcecdl_training.ipynb`
+- `notebooks/project_flow/04_mgcecdl_performance.ipynb`
+- `notebooks/project_flow/05_mgcecdl_circuit_analysis.ipynb`
+- `notebooks/project_flow/06_mgcecdl_document_replication.ipynb`
+- `notebooks/project_flow/07_graph_preserved_connections_uiti_vano.ipynb`
 - `notebooks/project_flow/08_geo_network_exploration.ipynb`
 - `notebooks/project_flow/09_simulador.ipynb`
-- `notebooks/02_project_flow/01_climate.ipynb`
-- `notebooks/02_project_flow/02_mgcecdl_optuna_classification_search.ipynb`
-- `notebooks/02_project_flow/03_mgcecdl_training.ipynb`
-- `notebooks/02_project_flow/04_mgcecdl_performance.ipynb`
-- `notebooks/02_project_flow/05_mgcecdl_circuit_analysis.ipynb`
-- `notebooks/02_project_flow/06_mgcecdl_document_replication.ipynb`
-- `notebooks/03_project_flow/07_graph_preserved_connections_uiti_vano.ipynb`
+
+Resumen detallado de propósito, entradas/salidas, orden real de dependencias (con una corrección al orden lineal implícito arriba) y hallazgos por notebook: **[`docs/notebooks-project-flow.md`](docs/notebooks-project-flow.md)**.
 
 ## Pruebas
 
