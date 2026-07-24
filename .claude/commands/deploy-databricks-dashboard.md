@@ -89,7 +89,17 @@ Only do this for tables/views actually missing from step 3.
    ```
    (If `import-dir` rejects non-notebook files, fall back to individual `databricks workspace import <target_path> --file <local_file> --language PYTHON --format RAW --overwrite -p <profile>` calls for `__init__.py`, `config.py`, `event_counts.py`, `plotting.py`.)
 
-4. Upload the notebook itself. `workspace import` takes exactly one positional arg (the target path) — the source file goes in `--file`, not as a second positional arg:
+   `import-dir` also has no exclude mechanism — if the local `src/chec_local_interpreter` tree has any `__pycache__/*.pyc` from local runs, they get uploaded too (confirmed empirically: a run against a real workspace uploaded 100+ stale `.pyc` files this way). Clean them up afterward — do not leave them in the Workspace:
+   ```
+   databricks workspace delete --recursive /Workspace/Users/<userName>/databricks-integration/chec_local_interpreter_src/chec_local_interpreter/__pycache__ -p <profile>
+   ```
+   (repeat for any nested `__pycache__` subfolder the local tree has — check with `find src/chec_local_interpreter -type d -name __pycache__` first).
+
+4. Create the parent Workspace folder before importing single files into it — `workspace import` does NOT auto-create parent directories (confirmed empirically: on a workspace where `.../databricks-integration` didn't exist yet, this failed with "The parent folder ... does not exist"):
+   ```
+   databricks workspace mkdirs /Workspace/Users/<userName>/databricks-integration -p <profile>
+   ```
+   Then upload the notebook itself. `workspace import` takes exactly one positional arg (the target path) — the source file goes in `--file`, not as a second positional arg:
    ```
    databricks workspace import /Workspace/Users/<userName>/databricks-integration/uiti_vano_tables --file notebooks/databricks/uiti_vano_tables.py --language PYTHON --format SOURCE --overwrite -p <profile>
    ```

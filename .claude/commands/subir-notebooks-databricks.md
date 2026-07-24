@@ -45,6 +45,13 @@ databricks workspace import-dir src/chec_impacto /Workspace/Users/<userName>/dat
 
 If `import-dir` rejects a non-notebook file in either package, fall back to individual `databricks workspace import <target_path> --file <local_file> --language PYTHON --format RAW --overwrite -p <profile>` calls for the rejected files, same fallback `/deploy-databricks-dashboard` documents.
 
+`import-dir` has no exclude/filter mechanism — if either local package tree has `__pycache__/*.pyc` from local runs, they get uploaded too (confirmed empirically: a run against a real workspace uploaded 106 stale `.pyc` files across both packages this way). Clean them up right after both imports — do not leave them in the Workspace:
+```
+databricks workspace delete --recursive /Workspace/Users/<userName>/databricks-integration/chec_local_interpreter_src/chec_local_interpreter/__pycache__ -p <profile>
+databricks workspace delete --recursive /Workspace/Users/<userName>/databricks-integration/chec_impacto_src/chec_impacto/__pycache__ -p <profile>
+```
+Both packages have `__pycache__` nested under multiple subpackages, not just at the root — find every one locally first (`find src/chec_local_interpreter src/chec_impacto -type d -name __pycache__`) and repeat the delete for each match; deleting only the top-level `__pycache__` leaves the nested ones behind.
+
 Also upload the shared `requirements.txt` next to the two package roots, so the notebooks in step 4 can `%pip install -r` it from the Volume-relative bootstrap:
 ```
 databricks workspace import /Workspace/Users/<userName>/databricks-integration/requirements.txt --file requirements.txt --language PYTHON --format RAW --overwrite -p <profile>
@@ -53,6 +60,8 @@ databricks workspace import /Workspace/Users/<userName>/databricks-integration/r
 ## 4. Notebook bootstrap shim (staged copies only — never touch the originals)
 
 **Hard invariant**: every notebook uploaded in this step is a modified COPY prepared in a scratch location (e.g. `/private/tmp/.../scratchpad/`), never the file under `notebooks/project_flow/` in this repo. Only the notebook's bootstrap cell(s) — the code that computes where the repo/data/`src` live — is rewritten in the copy. All other cells (markdown, analysis, outputs) stay byte-identical to the repo original. After this step finishes, `git status --porcelain notebooks/project_flow/` in this repo MUST show zero changes — if it does not, something wrote to the wrong path; stop and fix that before continuing.
+
+**Strip cell outputs from every staged copy before upload.** `databricks workspace import --format JUPYTER` enforces a 10MB payload limit; a notebook that was last run locally (and so still carries embedded output images — e.g. `08_geo_network_exploration.ipynb`'s folium maps) can exceed that even though its source code is small (confirmed empirically: `08` was 16.7MB with outputs, 43KB without). Clear `outputs` and `execution_count` on every code cell of every staged copy — this only discards stale rendering from a prior local run, never source code, and those outputs regenerate the first time the notebook actually runs in Databricks. Do this for all 9 notebooks as a standard step, not only the ones that happen to be over the limit.
 
 The 9 notebooks fall into 3 bootstrap variants.
 
@@ -147,6 +156,11 @@ Do not delete the name (cells 5/7 still reference it) — just alias it to the s
 | 07 | `REPO_ROOT` (+ `MGCECDL_PROJECT_ROOT`) | `JSON_PATH`, `FULL_OUTPUT`, `SELECTED_OUTPUT`, `MGCECDL_OUTPUT` (used in the graph-build cell); `REPO_ROOT`/`MGCECDL_PROJECT_ROOT` themselves (`resolve_selection_path()`); imports `json`, `os`, `sys`, `np`, `nx`, `load_workbook`, `Network`; dict `MODE_COLORS` | Yes — dedicated shim aliases both `MGCECDL_PROJECT_ROOT` and `REPO_ROOT`, and keeps all 8 original imports plus `MODE_COLORS` byte-identical |
 | 08 | `ROOT` | `GEO_DIR`, `EVENTS_PATH`, `OUTPUT_DIR`, `LINE_PATH`, `TRANSFORMER_PATH`, `SWITCH_PATH` (used across most later cells) | Yes — kept unchanged, derive from `ROOT`/`GEO_DIR` |
 | 09 | `ROOT` | `DATA_PATH`, `VARIABLES_SELECCION_PATH`, `MODEL_DIR`, `OUTPUT_DIR` (cell 4) | Yes — kept unchanged, derive from `ROOT` |
+
+Create the target Workspace folder first — `workspace import` does NOT auto-create parent directories (confirmed empirically: importing straight into `.../databricks-integration/project_flow/<name>` on a workspace where that folder didn't exist yet failed with "The parent folder ... does not exist"):
+```
+databricks workspace mkdirs /Workspace/Users/<userName>/databricks-integration/project_flow -p <profile>
+```
 
 Upload all 9 staged copies (format `JUPYTER`, matching each file's `.ipynb` content):
 ```

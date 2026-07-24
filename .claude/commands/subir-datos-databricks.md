@@ -30,7 +30,14 @@ Mirror the full local `data/` directory to the Volume as-is — no format conver
 databricks fs cp -r data dbfs:/Volumes/workspace/default/chec-simulador/data --overwrite -p <profile>
 ```
 
-Exclude before uploading (do not copy these): `.DS_Store`, `.gitkeep`, `.openmeteo_cache.sqlite` (regenerable HTTP cache, not source data).
+`databricks fs cp -r` has no exclude/filter flag (confirmed empirically), so `.DS_Store`, `.gitkeep`, and `.openmeteo_cache.sqlite` (regenerable HTTP cache, not source data) get uploaded along with everything else. Clean them up right after the upload — do not leave them in the Volume:
+```
+databricks fs rm dbfs:/Volumes/workspace/default/chec-simulador/data/.DS_Store -p <profile>
+databricks fs rm dbfs:/Volumes/workspace/default/chec-simulador/data/.gitkeep -p <profile>
+databricks fs rm dbfs:/Volumes/workspace/default/chec-simulador/data/.openmeteo_cache.sqlite -p <profile>
+databricks fs rm dbfs:/Volumes/workspace/default/chec-simulador/data/models/.DS_Store -p <profile>
+```
+Check `find data -name ".DS_Store" -o -name ".gitkeep" -o -name ".openmeteo_cache.sqlite"` locally first — the exact set of `.DS_Store` files present varies (macOS creates one per subfolder that's been opened in Finder), so treat the list above as a starting point, not exhaustive.
 
 Document the hybrid nature of this upload to the user:
 
