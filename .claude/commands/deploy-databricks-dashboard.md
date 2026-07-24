@@ -114,7 +114,7 @@ Only do this for tables/views actually missing from step 3.
    ```
    Poll `databricks jobs get-run <run_id> -p <profile>` until terminal state; if it fails, surface the notebook's error output to the user rather than retrying blindly.
 
-6. Create the two views (only the ones missing). Both now depend only on `indicadores_vano`, so both are always creatable once step 5 succeeds. Nested nested-quote nesting for `--json` breaks in some shells (confirmed empirically) — write the payload to a temp file first, then pass it with `--json @file`:
+6. Create the two views (only the ones missing). Both now depend only on `indicadores_vano`, so both are always creatable once step 5 succeeds. Run the `CREATE OR REPLACE VIEW` directly — it is DDL, not a data mutation, and is not blocked the way an `UPDATE` against a live table is (confirmed empirically: both views were created this way without needing user confirmation via `!`). Nested `$(python3 -c "...")` inside a double-quoted `--json` string breaks in some shells (confirmed empirically: "parse error near `)'`") — write the payload to a temp file first, then pass it with `--json @file`:
    ```
    python3 -c "
    import json

@@ -192,7 +192,7 @@
     <h2><span class="num">§1</span> Panorama</h2>
     <p class="section-lede">El proyecto sostiene dos flujos que comparten la misma fuente de verdad (el CSV <code>Indicadores_vano_v3.csv</code> y la función real <code>compute_circuit_criticality_groups</code>), pero terminan en destinos distintos.</p>
     <p><strong>Flujo A — pipeline local de reportes.</strong> Un circuito y una ventana de fechas entran a <code>report_pipeline.py</code>, que es determinista y no llama a ningún LLM por sí mismo. Alrededor de sus tres funciones (<code>prepare</code>, <code>prepare_expert_alignment</code>, <code>render</code>) la Skill <code>report</code> orquesta cuatro agentes (historical, inference, auto-simulator, expert-alignment) que sí razonan con LLM, cada uno validando su propio JSON. El resultado es un HTML local que opcionalmente se proyecta a <code>reports/vault/</code> y se indexa con graphify.</p>
-    <p><strong>Flujo B — despliegue a Databricks.</strong> El mismo dominio (circuitos, vanos, clustering de criticidad, evolución diaria) se replica como un dashboard AI/BI de Databricks Lakeview, respaldado por tablas/vistas Delta. El comando <code>/deploy-databricks-dashboard</code> automatiza ese despliegue completo en cualquier workspace destino, preguntando solo el nombre del dashboard y la URL del workspace.</p>
+    <p><strong>Flujo B — despliegue a Databricks.</strong> El mismo dominio (circuitos, vanos, clustering de criticidad, evolución diaria) se replica como un dashboard AI/BI de Databricks Lakeview, respaldado por tablas/vistas Delta. El comando <code>/deploy-databricks-dashboard</code> automatiza ese despliegue en cualquier workspace destino, preguntando solo el nombre del dashboard y la URL del workspace; tres comandos hermanos (<code>/subir-datos-databricks</code>, <code>/subir-notebooks-databricks</code>, <code>/subir-a-databricks</code>) migran además los datos crudos, los paquetes fuente, los 9 cuadernos de <code>project_flow</code> y los reportes de interpretabilidad — nunca la página web del proyecto, que solo se regenera localmente.</p>
     <div class="callout">
       <span class="label">Relación entre ambos flujos</span>
       No comparten runtime ni credenciales: el Flujo B lee del mismo CSV fuente pero a través de tablas Delta independientes en Unity Catalog, nunca del pipeline Python local. Un cambio en <code>plotting.py</code> no se refleja en Databricks hasta que se re-ejecuta el notebook <code>uiti_vano_tables.py</code>.
@@ -230,7 +230,7 @@ flowchart TD
     subgraph DBX["Flujo B — despliegue Databricks"]
         direction TB
         DD["/deploy-databricks-dashboard/"]
-        CHK{"¿Existen los<br/>6 objetos de datos?"}
+        CHK{"¿Existen los<br/>5 objetos de datos?"}
         BUILD["Construir tablas/vistas<br/>faltantes (notebook + SQL)"]
         PUB[["Lakeview create + publish"]]
         DASH[("Dashboard AI/BI<br/>publicado")]
@@ -280,28 +280,34 @@ flowchart TD
 
   <section id="databricks">
     <h2><span class="num">§4</span> Despliegue a Databricks</h2>
-    <p class="section-lede">El comando <code>/deploy-databricks-dashboard</code> reconstruye 6 objetos de datos y publica el dashboard Lakeview, todo desde dos preguntas al usuario.</p>
+    <p class="section-lede">Cuatro comandos cooperan: <code>/deploy-databricks-dashboard</code> reconstruye 5 objetos de datos y publica el dashboard Lakeview; <code>/subir-datos-databricks</code>, <code>/subir-notebooks-databricks</code> y su orquestador <code>/subir-a-databricks</code> migran el resto de los activos locales (datos crudos, paquetes fuente, los 9 cuadernos de <code>project_flow</code>, reportes). Los cuatro reutilizan la misma resolución de perfil/warehouse por referencia cruzada, nunca duplicada.</p>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Objeto</th><th>Tipo</th><th>Origen</th><th></th></tr></thead>
         <tbody>
-          <tr><td><code>indicadores_vano</code></td><td>Tabla Delta</td><td>CSV tipado, construido por <code>uiti_vano_tables.py</code></td><td><span class="pill repro">reproducible</span></td></tr>
+          <tr><td><code>indicadores_vano</code></td><td>Tabla Delta</td><td>CSV tipado (TODAS las columnas, incluida geometría X1/Y1/X2/Y2), construido por <code>uiti_vano_tables.py</code></td><td><span class="pill repro">reproducible</span></td></tr>
           <tr><td><code>circuit_clustering</code></td><td>Tabla Delta</td><td>Llama <em>verbatim</em> a <code>plotting.compute_circuit_criticality_groups</code></td><td><span class="pill repro">reproducible</span></td></tr>
           <tr><td><code>circuit_geo</code></td><td>Tabla Delta</td><td>Shapefile <code>MVLINSEC.shp</code> vía geopandas</td><td><span class="pill repro">reproducible</span></td></tr>
-          <tr><td><code>indicadores_vano_v_3</code></td><td>Tabla ancha (clima + circuito)</td><td>Sin ETL en este repo</td><td><span class="pill ext">prerrequisito externo</span></td></tr>
-          <tr><td><code>circuit_map_lines_equipment</code></td><td>Vista</td><td>UNION de vanos/transformadores/switches sobre <code>indicadores_vano_v_3</code></td><td><span class="pill repro">reproducible*</span></td></tr>
+          <tr><td><code>circuit_map_lines_equipment</code></td><td>Vista</td><td>UNION de vanos/transformadores/switches sobre <code>indicadores_vano</code></td><td><span class="pill repro">reproducible</span></td></tr>
           <tr><td><code>circuit_daily_evolution</code></td><td>Vista</td><td>Serie diaria con ceros, sobre <code>indicadores_vano</code></td><td><span class="pill repro">reproducible</span></td></tr>
         </tbody>
       </table>
     </div>
-    <p style="font-size:0.85rem;color:var(--ink-soft)">* depende de que <code>indicadores_vano_v_3</code> ya exista — si falta, el comando se detiene y avisa antes de continuar.</p>
+    <p style="font-size:0.85rem;color:var(--ink-soft)">Corrección 2026-07-24: una versión anterior de este documento listaba una sexta tabla, <code>indicadores_vano_v_3</code>, como "prerrequisito externo sin ETL en este repo". Era falso — <code>indicadores_vano</code> ya trae esas mismas columnas de geometría; la vista <code>circuit_map_lines_equipment</code> solo apuntaba al nombre de tabla equivocado. Los 5 objetos de arriba son 100% reproducibles desde este repo.</p>
 
     <h3>Widgets del dashboard publicado</h3>
-    <p><code>clustering_scatter</code> (dispersión log-log por criticidad) · <code>circuit_detail_table</code> (detalle del circuito seleccionado) · <code>daily_line</code> (combo: eventos diarios + UITI_VANO) · <code>events_map</code> / <code>uiti_map</code> (mapas Vega-Lite en capas, sin basemap) · filtros de circuito y rango de fechas compartidos entre widgets.</p>
+    <p><code>clustering_scatter</code> (dispersión log-log por criticidad) · <code>circuit_detail_table</code> (detalle del circuito seleccionado) · <code>daily_line</code> (combo: eventos diarios + UITI_VANO) · <code>events_map</code> / <code>uiti_map</code> (mapas Vega-Lite en capas, sin basemap — limitación real y vigente de Lakeview, no relacionada con el fix de <code>indicadores_vano_v_3</code>) · filtros de circuito y rango de fechas compartidos entre widgets.</p>
+
+    <h3>Los otros tres comandos: <code>/subir-datos-databricks</code>, <code>/subir-notebooks-databricks</code>, <code>/subir-a-databricks</code></h3>
+    <p><code>/subir-datos-databricks</code> espeja <code>data/</code> completo (más <code>site/data/variables.json</code>) al Volume. <code>/subir-notebooks-databricks</code> sube ambos paquetes fuente y los 9 cuadernos de <code>notebooks/project_flow/</code> como copias modificadas — nunca los originales del repo — reescribiendo solo la celda de resolución de rutas de cada cuaderno (alias, no reemplazo total) y anteponiendo una celda <code>%pip install -q -r requirements.txt</code> (necesaria porque Databricks no hereda el entorno Python local). <code>/subir-a-databricks</code> orquesta ambos por referencia, sin duplicar su lógica.</p>
+    <div class="callout warn">
+      <span class="label">Restricción dura — nada de <code>site/</code> en Databricks</span>
+      Ninguno de los tres comandos puede crear una ruta con nombre <code>site/</code> dentro del Volume. Los cuadernos <code>04</code> y <code>07</code> son los únicos que originalmente escriben ahí (figuras PNG y grafos HTML respectivamente); sus copias subidas redirigen esa salida a carpetas del Volume sin la palabra "site". La página web del proyecto solo se regenera con una corrida local contra las rutas reales del repo.
+    </div>
 
     <div class="callout evidence">
-      <span class="label">Evidencia — corrida real de esta sesión</span>
-      <code>/deploy-databricks-dashboard</code> se ejecutó de punta a punta contra el workspace <code>dbc-24ddce05-76d1.cloud.databricks.com</code>: los 6 objetos ya existían, así que saltó directo a publicar. Resultado verificado vía <code>databricks lakeview get</code>: <code>dashboard_id 01f18567bd7e10c7bc200e190abedd31</code>, <code>lifecycle_state: ACTIVE</code>, <code>warehouse_id 9ff827fa83282a1a</code>.
+      <span class="label">Evidencia — corrida real 2026-07-24</span>
+      Los cuatro comandos se ejecutaron de punta a punta contra un workspace que resultó estar completamente vacío (0 tablas, sin Volume) pese a que una sesión previa lo daba por poblado — lección: el estado de un workspace no es duradero entre sesiones, siempre se verifica en vivo. Se creó el Volume, se subieron datos/paquetes/9 cuadernos, se reconstruyeron las 3 tablas base (distribución de criticidad 16/16/29/41/106, coincide con <code>/agrupamiento-circuitos</code> local), se crearon ambas vistas, y se publicó el dashboard: <code>dashboard_id 01f187015bb614359358dd4d7ebd9372</code>, <code>lifecycle_state: ACTIVE</code>, <code>warehouse_id 9ff827fa83282a1a</code>.
     </div>
   </section>
 
@@ -351,7 +357,7 @@ flowchart TD
         D2["Resolver perfil CLI<br/>+ warehouse"]
         D3{"¿Perfil / warehouse<br/>disponibles?"}
         D4["Pedir al usuario<br/>databricks auth login"]
-        D5{"¿Existen los<br/>6 objetos?"}
+        D5{"¿Existen los<br/>5 objetos?"}
         D6["Subir código real +<br/>correr notebook como job"]
         D7["Crear vistas SQL<br/>faltantes"]
         D8["lakeview create<br/>+ publish"]
@@ -399,7 +405,7 @@ flowchart TD
         <span><i class="swatch" style="background:#F3E4D3;border:1px dashed #A85A20"></i> Agente LLM (razona)</span>
         <span><i class="swatch" style="background:#CFE3E2;border:1px solid #2B6E71"></i> Comando Databricks</span>
       </div>
-      <figcaption>Rombos = puntos de decisión reales del código (gateways); el hexágono marca el único despacho verdaderamente paralelo (historical + inference + auto-simulator).</figcaption>
+      <figcaption>Rombos = puntos de decisión reales del código (gateways); el hexágono marca el único despacho verdaderamente paralelo (historical + inference + auto-simulator). El carril Databricks solo diagrama <code>/deploy-databricks-dashboard</code> — los tres comandos de migración (<code>/subir-datos-databricks</code>, <code>/subir-notebooks-databricks</code>, <code>/subir-a-databricks</code>), añadidos 2026-07-24, no están representados aquí; ver §4 para su flujo en prosa.</figcaption>
     </figure>
   </section>
 
@@ -415,12 +421,15 @@ flowchart TD
           <tr><td><code>/agrupamiento-circuitos</code></td><td><code>/agrupamiento-circuitos</code></td><td>Solo el scatter de clustering, sin reporte</td></tr>
           <tr><td><code>/limpiar-corridas</code></td><td><code>/limpiar-corridas</code> (dry-run primero, confirmación explícita)</td><td>Borra artefactos desechables de corridas previas</td></tr>
           <tr><td><code>/deploy-databricks-dashboard</code></td><td><code>/deploy-databricks-dashboard</code> → pide nombre + URL del workspace</td><td>Dashboard AI/BI publicado en Databricks</td></tr>
+          <tr><td><code>/subir-datos-databricks</code></td><td><code>/subir-datos-databricks</code> → pide URL del workspace</td><td><code>data/</code> completo espejado al Volume</td></tr>
+          <tr><td><code>/subir-notebooks-databricks</code></td><td><code>/subir-notebooks-databricks</code> → pide URL del workspace</td><td>Paquetes fuente + 9 cuadernos de <code>project_flow</code> subidos como copias adaptadas (originales intactos)</td></tr>
+          <tr><td><code>/subir-a-databricks</code></td><td><code>/subir-a-databricks</code> → pide URL del workspace</td><td>Orquesta datos + notebooks + tablas + reportes + dashboard en una sola corrida</td></tr>
         </tbody>
       </table>
     </div>
   </section>
 
   <footer>
-    Generado a partir de una exploración estructural del repo (report_pipeline.py, .claude/skills, .claude/agents, .claude/commands, notebooks/databricks). El prerrequisito externo <code>indicadores_vano_v_3</code> y la ausencia de basemap en los mapas geo de Databricks son limitaciones conocidas, no pendientes de este documento.
+    Generado a partir de una exploración estructural del repo (report_pipeline.py, .claude/skills, .claude/agents, .claude/commands, notebooks/databricks). Actualizado 2026-07-24 tras corregir el falso prerrequisito externo <code>indicadores_vano_v_3</code> (era <code>indicadores_vano</code> con el nombre de tabla equivocado en la vista) y documentar los tres comandos de migración añadidos ese día. La ausencia de basemap en los mapas geo de Databricks sigue siendo una limitación real y vigente de Lakeview, no relacionada con ese fix.
   </footer>
 </main>

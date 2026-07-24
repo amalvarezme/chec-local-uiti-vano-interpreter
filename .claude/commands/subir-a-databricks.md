@@ -46,7 +46,7 @@ If `<tables_status>` from step 2 is fresh (or all 5 prerequisite objects already
 
 Otherwise, reuse `.claude/commands/deploy-databricks-dashboard.md` **section 4**'s job-submit/poll pattern verbatim (upload `uiti_vano_tables.py` if not already present from a prior run, `databricks jobs submit` with the same `notebook_task` shape, poll `databricks jobs get-run <run_id> -p <profile>` until terminal). Confirm with the user before submitting — it provisions compute.
 
-If that section's view-creation sub-step turns out to be needed (a required view is missing after the job), do NOT auto-execute the `CREATE VIEW` statement. Present the exact SQL and ask the user to run it themselves via the `!` prefix, same deferral `/deploy-databricks-dashboard` section 4.6 uses.
+If that section's view-creation sub-step turns out to be needed (a required view is missing after the job), reuse it directly the same way — `CREATE OR REPLACE VIEW` is DDL, not a data mutation, and does not need user confirmation via `!` (confirmed empirically, unlike an `UPDATE` against a live table).
 
 ## 6. Upload interpretability reports (runtime discovery)
 

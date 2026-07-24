@@ -36,6 +36,11 @@ Needs at minimum `Indicadores_vano_v3.csv`, `GEO/MVLINSEC.shp`, and `variables.j
 
 ## 3. Verbatim import of both source packages
 
+Create the parent Workspace folder first — defensive, since `import-dir` has been observed to create its own destination tree on its own, but that behavior isn't documented API contract, only an empirical observation from one run; `mkdirs` is idempotent (no error if the folder already exists), so there's no cost to being explicit:
+```
+databricks workspace mkdirs /Workspace/Users/<userName>/databricks-integration -p <profile>
+```
+
 Same `import-dir --overwrite` pattern `/deploy-databricks-dashboard` section 4.3 already uses for `chec_local_interpreter` — repeat it here for that package AND add `chec_impacto` (which that command does not upload):
 
 ```
@@ -52,9 +57,11 @@ databricks workspace delete --recursive /Workspace/Users/<userName>/databricks-i
 ```
 Both packages have `__pycache__` nested under multiple subpackages, not just at the root — find every one locally first (`find src/chec_local_interpreter src/chec_impacto -type d -name __pycache__`) and repeat the delete for each match; deleting only the top-level `__pycache__` leaves the nested ones behind.
 
-Also upload the shared `requirements.txt` next to the two package roots, so the notebooks in step 4 can `%pip install -r` it from the Volume-relative bootstrap:
+Also upload `requirements.txt` next to the two package roots, so the notebooks in step 4 can `%pip install -r` it from the Volume-relative bootstrap — but upload a **trimmed copy**, not the repo file verbatim. Verified by statically diffing every third-party top-level import across `src/chec_impacto` and `src/chec_local_interpreter` against `requirements.txt`: the local-dev/test-only entries `jupyter`, `ipykernel`, `pytest`, `python-dotenv`, `pydantic` are never imported by either package or by any of the 9 notebooks (Databricks already provides its own notebook kernel, so `jupyter`/`ipykernel` would be actively redundant there; `pytest` only runs the test suite, never imported at runtime; `python-dotenv`/`pydantic` have zero references anywhere in this repo). Everything else in `requirements.txt` IS reachable from `src/` (confirmed via AST import-graph audit, 2026-07-24) — do not trim further than this without re-running that audit, since guessing which packages a given notebook "probably" doesn't need is exactly the kind of assumption that caused the `optuna` `ModuleNotFoundError` in the first place.
 ```
-databricks workspace import /Workspace/Users/<userName>/databricks-integration/requirements.txt --file requirements.txt --language PYTHON --format RAW --overwrite -p <profile>
+grep -vE '^(jupyter|ipykernel|pytest|python-dotenv|pydantic)$' requirements.txt > /tmp/requirements-databricks.txt
+databricks workspace import /Workspace/Users/<userName>/databricks-integration/requirements.txt --file /tmp/requirements-databricks.txt --language PYTHON --format RAW --overwrite -p <profile>
+rm -f /tmp/requirements-databricks.txt
 ```
 
 ## 4. Notebook bootstrap shim (staged copies only — never touch the originals)
