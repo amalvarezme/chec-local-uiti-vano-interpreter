@@ -47,15 +47,12 @@ databricks api post /api/2.0/sql/statements -p <profile> --json '{
   "wait_timeout": "30s"
 }'
 ```
-Check for these six objects in the result:
-- `indicadores_vano` (base table — reproducible, see step 4)
-- `indicadores_vano_v_3` (wide weather-enriched table — **external prerequisite, NOT reproducible from this repo**; it backs the geo maps' vano/transformer/switch geometry and has no known upstream ETL committed here)
+Check for these five objects in the result:
+- `indicadores_vano` (base table — reproducible, see step 4; built with ALL raw columns from `Indicadores_vano_v3.csv`, including the `X1/Y1/X2/Y2`/`FID_VANO`/`FID_TRAFO`/`FID_SW` geometry columns that back the geo maps — confirmed empirically 2026-07-24, 100% non-null `X1`/`FID_VANO`/`FID_SW`, real Caldas-region lon/lat values)
 - `circuit_clustering` (reproducible, see step 4)
 - `circuit_geo` (reproducible, see step 4 — currently unused by the dashboard's own widgets but built by the same notebook, keep parity)
-- `circuit_map_lines_equipment` (view, reproducible via `notebooks/databricks/circuit_map_lines_equipment_view.sql`, depends on `indicadores_vano_v_3`)
+- `circuit_map_lines_equipment` (view, reproducible via `notebooks/databricks/circuit_map_lines_equipment_view.sql`, depends on `indicadores_vano` — **not** a separate `indicadores_vano_v_3` table; an earlier iteration used that name and got documented as an "external, unreproducible prerequisite," but that was never true once `uiti_vano_tables.py` started writing all raw columns to `indicadores_vano`. Corrected 2026-07-24.)
 - `circuit_daily_evolution` (view, reproducible via `notebooks/databricks/circuit_daily_evolution_view.sql`, depends on `indicadores_vano`)
-
-**If `indicadores_vano_v_3` is missing**, stop here. Explain to the user that this table is an external data-engineering prerequisite outside this repo's scope (no ETL for it exists in the repo) and must be provisioned in the target workspace before the dashboard's geo maps can work. Offer to continue building everything else (clustering/daily-evolution widgets will work; maps will show query errors) only if the user explicitly agrees to proceed without maps.
 
 **If `circuit_clustering` already exists**, do not skip it silently — its `criticidad` values can go stale relative to the repo's current label scheme even though the table itself is present (this happened once: an earlier deploy's uploaded `chec_local_interpreter` source went stale relative to a later `plotting.py` rename, so the notebook kept computing the old label set even on a "verbatim" re-run). Check the live label set against the repo's current source of truth before trusting the table:
 ```
@@ -117,11 +114,16 @@ Only do this for tables/views actually missing from step 3.
    ```
    Poll `databricks jobs get-run <run_id> -p <profile>` until terminal state; if it fails, surface the notebook's error output to the user rather than retrying blindly.
 
-6. Create the two views (only the ones missing / only if their base table now exists):
+6. Create the two views (only the ones missing). Both now depend only on `indicadores_vano`, so both are always creatable once step 5 succeeds. Nested nested-quote nesting for `--json` breaks in some shells (confirmed empirically) — write the payload to a temp file first, then pass it with `--json @file`:
    ```
-   databricks api post /api/2.0/sql/statements -p <profile> --json "{\"warehouse_id\": \"<warehouse_id>\", \"statement\": $(python3 -c "import json;print(json.dumps(open('notebooks/databricks/circuit_daily_evolution_view.sql').read()))"), \"wait_timeout\": \"30s\"}"
+   python3 -c "
+   import json
+   sql = open('notebooks/databricks/circuit_daily_evolution_view.sql').read()
+   json.dump({'warehouse_id': '<warehouse_id>', 'statement': sql, 'wait_timeout': '30s'}, open('/tmp/circuit_daily_evolution_view.json', 'w'))
+   "
+   databricks api post /api/2.0/sql/statements -p <profile> --json @/tmp/circuit_daily_evolution_view.json
    ```
-   and the same for `circuit_map_lines_equipment_view.sql` (only if `indicadores_vano_v_3` exists — see step 3).
+   Repeat the same pattern for `circuit_map_lines_equipment_view.sql`. Delete both temp files once confirmed.
 
 ## 5. Create and publish the Lakeview dashboard
 
@@ -159,5 +161,4 @@ Only do this for tables/views actually missing from step 3.
 Tell the user, in their language:
 - The new `dashboard_id` and which profile/workspace it was created in.
 - That it's reachable from that workspace's Databricks UI under Dashboards (do not fabricate a direct URL — none was confirmed from the CLI's output).
-- Which of the 6 prerequisite objects were already present vs. freshly built in this run.
-- If `indicadores_vano_v_3` was missing and the user chose to proceed anyway: remind them the geo maps will show query errors until that table is provisioned.
+- Which of the 5 prerequisite objects were already present vs. freshly built in this run.

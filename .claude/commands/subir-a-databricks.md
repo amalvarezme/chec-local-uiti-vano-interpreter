@@ -42,7 +42,7 @@ Cross-reference `.claude/commands/subir-notebooks-databricks.md` **sections 1-4*
 
 ## 5. Conditional tables job
 
-If `<tables_status>` from step 2 is fresh (or all 6 prerequisite objects already exist and match), skip this step entirely and go to step 6.
+If `<tables_status>` from step 2 is fresh (or all 5 prerequisite objects already exist and match), skip this step entirely and go to step 6.
 
 Otherwise, reuse `.claude/commands/deploy-databricks-dashboard.md` **section 4**'s job-submit/poll pattern verbatim (upload `uiti_vano_tables.py` if not already present from a prior run, `databricks jobs submit` with the same `notebook_task` shape, poll `databricks jobs get-run <run_id> -p <profile>` until terminal). Confirm with the user before submitting — it provisions compute.
 
@@ -72,7 +72,7 @@ Cross-reference `.claude/commands/deploy-databricks-dashboard.md` **section 5** 
 
 Tell the user, in their language:
 - The profile and workspace this run used.
-- Which of the 6 prerequisite data objects (from step 2 / `/deploy-databricks-dashboard` section 3) were already fresh vs. rebuilt by step 5.
+- Which of the 5 prerequisite data objects (from step 2 / `/deploy-databricks-dashboard` section 3) were already fresh vs. rebuilt by step 5.
 - How many report files were found and uploaded in step 6 (including "0, no-op" if none).
 - The `dashboard_id` from step 7 and whether it was newly created or republished.
 - Confirmation that `git status --porcelain notebooks/project_flow/` was empty at the end of step 4 — i.e., no local repo file was modified by this command.
