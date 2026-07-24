@@ -8,6 +8,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+import chec_local_interpreter.circuit_meta_graph as circuit_meta_graph
+import chec_local_interpreter.graph_view_builder as graph_view_builder
 import chec_local_interpreter.informe_gerencial_contract as informe_contract
 from chec_local_interpreter.informe_gerencial_contract import (
     detect_missing_runs,
@@ -1583,3 +1585,178 @@ def test_cli_render_accepts_graph_circular_arg(monkeypatch, capsys, tmp_path):
     written = Path(payload["output_html"]).read_text(encoding="utf-8")
     assert written.count("srcdoc=") == 2
     assert "graph-toggle-btn" in written
+
+
+# ---------------------------------------------------------------------------
+# Phase 7: integration check -- SKILL step 2.5.5 -> 2.5.6/2.5.7 -> step 3
+# real pipeline functions chained together (no mocked graph-patterns/graph-
+# circular/graph-view HTML strings), confirming the wiring the SKILL.md
+# sub-step 2.5.7 runbook prose describes actually holds end to end.
+# ---------------------------------------------------------------------------
+
+
+def test_e2e_real_circuit_meta_graph_output_threads_into_render_and_write(monkeypatch, tmp_path):
+    """The SKILL runbook's 2.5.5 -> 2.5.7 -> step 3 chain, exercised for
+    real: a real `graph-patterns.<grupo>.<win>.json` file is fed to the REAL
+    `circuit_meta_graph.build_circuit_meta_graph` (production code, not a
+    hand-typed HTML stub), and that real output file is then loaded by
+    `render_and_write(..., graph_circular_path=...)` via the reused
+    `load_graph_view`. Only the circular graph is available this run (no
+    `graph_view_path`), so this also exercises the "only one graph
+    available -> single embed, no toggle" degrade state (spec "Dual-Graph
+    Toggle") using a REAL circular-graph payload instead of a stub string.
+    """
+    frame = _four_tier_raw_df(per_tier=2)
+    monkeypatch.setattr(informe_contract, "load_dataset", lambda path: frame)
+    df_coords = _known_tier_df_coords_full()
+    monkeypatch.setattr(informe_contract, "resolve_group_dataframe", lambda *a, **k: df_coords)
+    monkeypatch.setattr(
+        informe_contract,
+        "load_circuit_content",
+        lambda circuito, **kwargs: {"circuito": circuito, "source": "vault_note", "content": f"Narrativa {circuito}"},
+    )
+    sampled = ["MUYALTA_0", "MUYALTA_1", "MUYALTA_2"]
+
+    # Sub-step 2.5.5: the graph-patterns JSON the SKILL's own graphify-query
+    # parsing step would have written.
+    graph_patterns_path = tmp_path / "graph-patterns.muy-alta.2026-01-01_2026-01-02.json"
+    _write_graph_patterns_json(
+        graph_patterns_path,
+        [
+            {"tema": "fauna en vanos cercanos", "circuitos": sampled, "soporte": 3},
+            {"tema": "vegetacion recurrente", "circuitos": ["MUYALTA_0", "MUYALTA_1"], "soporte": 2},
+        ],
+    )
+
+    # Sub-step 2.5.7: the REAL circuit_meta_graph CLI/builder, run exactly as
+    # the SKILL.md runbook prose describes (module import, not a subprocess
+    # -- same production entry point `build_circuit_meta_graph`).
+    graph_circular_path = tmp_path / "graph-circular.muy-alta.2026-01-01_2026-01-02.html"
+    circular_outcome = circuit_meta_graph.build_circuit_meta_graph(
+        graph_patterns_path, sampled, graph_circular_path
+    )
+    assert circular_outcome.status == "success"
+    assert circular_outcome.node_count > 0
+    assert graph_circular_path.is_file()
+
+    request = informe_contract.normalize_request("muy-alta", "2026-01-01", "2026-01-02")
+    outcome = informe_contract.render_and_write(
+        request,
+        data_path="data.csv",
+        output_root=tmp_path / "html",
+        graph_patterns_path=graph_patterns_path,
+        graph_circular_path=graph_circular_path,
+    )
+
+    assert outcome.status == "success"
+    written = Path(outcome.output_html).read_text(encoding="utf-8")
+    # The real circular-graph HTML (produced by production code, never a
+    # stub) is embedded verbatim inside the report's iframe srcdoc.
+    real_circular_html = graph_circular_path.read_text(encoding="utf-8")
+    assert html_lib.escape(real_circular_html) in written
+    # A real node label from the meta-graph (a sampled circuit id) is
+    # present, proving the layout/render actually ran rather than the
+    # embed short-circuiting on an empty graph.
+    assert "MUYALTA_0" in real_circular_html
+    # Only one figure is available this run -> no toggle control, per the
+    # 3-way degrade contract.
+    assert written.count("srcdoc=") == 1
+    assert "graph-toggle-btn" not in written
+    assert "fauna en vanos cercanos" in written
+
+
+def test_e2e_real_circular_and_community_graphs_toggle_and_community_unaffected(monkeypatch, tmp_path):
+    """Both figures built for real this time: `circuit_meta_graph` (fully
+    real, no external dependency) AND `graph_view_builder.build_graph_view`
+    (real seed/bridge filtering; only its own `graphify.export.to_html` leaf
+    call is monkeypatched, exactly the same convention
+    `tests/test_graph_view_builder.py` already uses to keep this test
+    hermetic/fast without a live graphify invocation). Confirms: (1) both
+    real outputs thread through `render_and_write` into a toggle with the
+    circular graph visible by default, and (2) the community graph's own
+    embedded content is BYTE-IDENTICAL to what `build_graph_view` produced
+    standalone -- i.e. adding the circular graph never mutates or degrades
+    the existing community graph (task 7.2's "existing community graph
+    unaffected" acceptance criterion).
+    """
+    frame = _four_tier_raw_df(per_tier=2)
+    monkeypatch.setattr(informe_contract, "load_dataset", lambda path: frame)
+    df_coords = _known_tier_df_coords_full()
+    monkeypatch.setattr(informe_contract, "resolve_group_dataframe", lambda *a, **k: df_coords)
+    monkeypatch.setattr(
+        informe_contract,
+        "load_circuit_content",
+        lambda circuito, **kwargs: {"circuito": circuito, "source": "vault_note", "content": f"Narrativa {circuito}"},
+    )
+    sampled = ["MUYALTA_0", "MUYALTA_1", "MUYALTA_2"]
+
+    graph_patterns_path = tmp_path / "graph-patterns.muy-alta.2026-01-01_2026-01-02.json"
+    _write_graph_patterns_json(
+        graph_patterns_path,
+        [{"tema": "fauna en vanos cercanos", "circuitos": sampled, "soporte": 3}],
+    )
+
+    graph_circular_path = tmp_path / "graph-circular.muy-alta.2026-01-01_2026-01-02.html"
+    circular_outcome = circuit_meta_graph.build_circuit_meta_graph(
+        graph_patterns_path, sampled, graph_circular_path
+    )
+    assert circular_outcome.status == "success"
+
+    def _fake_to_html(G, communities, output, **kwargs):
+        Path(output).write_text(
+            f"<html><body>vista de comunidad ({len(list(G.nodes()))} nodos)</body></html>",
+            encoding="utf-8",
+        )
+
+    monkeypatch.setattr(graph_view_builder, "to_html", _fake_to_html)
+
+    graph_json_path = tmp_path / "graph.json"
+    nodes = [
+        {
+            "id": f"{canonical_circuit_identity(c)}_node",
+            "label": c,
+            "source_file": f"reports/vault/{canonical_circuit_identity(c)}.md",
+            "community": index,
+        }
+        for index, c in enumerate(sampled)
+    ]
+    links = [
+        {"source": f"{canonical_circuit_identity(sampled[0])}_node", "target": f"{canonical_circuit_identity(sampled[1])}_node"}
+    ]
+    graph_json_path.write_text(
+        json.dumps({"directed": False, "multigraph": False, "graph": {}, "nodes": nodes, "links": links}),
+        encoding="utf-8",
+    )
+
+    graph_view_path = tmp_path / "graph-view.muy-alta.2026-01-01_2026-01-02.html"
+    view_outcome = graph_view_builder.build_graph_view(graph_json_path, sampled, graph_view_path)
+    assert view_outcome.status == "success"
+    standalone_view_html = graph_view_path.read_text(encoding="utf-8")
+
+    request = informe_contract.normalize_request("muy-alta", "2026-01-01", "2026-01-02")
+    outcome = informe_contract.render_and_write(
+        request,
+        data_path="data.csv",
+        output_root=tmp_path / "html",
+        graph_patterns_path=graph_patterns_path,
+        graph_view_path=graph_view_path,
+        graph_circular_path=graph_circular_path,
+    )
+
+    assert outcome.status == "success"
+    written = Path(outcome.output_html).read_text(encoding="utf-8")
+
+    # Both real figures embedded, toggle control present.
+    assert written.count("srcdoc=") == 2
+    assert "graph-toggle-btn" in written
+
+    # Circular graph is visible by default, community graph starts hidden.
+    circular_panel = re.search(r'<div id="graph-toggle-circular"[^>]*>', written)
+    community_panel = re.search(r'<div id="graph-toggle-community"[^>]*>', written)
+    assert circular_panel is not None and "display:none" not in circular_panel.group(0)
+    assert community_panel is not None and "display:none" in community_panel.group(0)
+
+    # The community graph's embedded content is UNCHANGED by the circular
+    # graph's presence -- the same bytes `build_graph_view` wrote standalone
+    # are what ends up escaped inside the report's srcdoc.
+    assert html_lib.escape(standalone_view_html) in written
