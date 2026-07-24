@@ -2,6 +2,8 @@
 
 > Branch: `sdd_agentes` · Baseline commit: `fdd67fc` · Date: 2026-07-08
 > Scope: full-repo functional analysis to seed the SDD (Spec-Driven Development) work on agent orchestration.
+>
+> **Historical snapshot — do not treat as current-state documentation.** Several paths referenced below (`src/assets/site/`, `llm/skills/`, `core/01_pdf_discussion`, TabNet) have since moved or been removed. For the current project flow, see [`flujo-detallado.md`](./flujo-detallado.md) (technical) or [`flujo-resumen.md`](./flujo-resumen.md) (non-technical summary), updated 2026-07-24.
 
 ## 1. Purpose
 

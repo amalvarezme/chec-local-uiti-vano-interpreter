@@ -236,6 +236,19 @@ Estos adaptadores traducen la sintaxis del runtime al contrato local compartido 
 
 ## Diagramas del workflow
 
+### Guías de flujo (punto de entrada recomendado)
+
+Antes de los diagramas fuente de abajo, dos documentos narrativos actualizados 2026-07-24 —
+ambos cubren el pipeline local de reportes **y** el despliegue a Databricks:
+
+- **[`docs/flujo-detallado.md`](docs/flujo-detallado.md)** (o su versión HTML con diagramas interactivos,
+  [`docs/project-flow-review.html`](docs/project-flow-review.html)) — flujo técnico completo: comandos,
+  agentes, los 9 notebooks, los 4 comandos de Databricks, objetos de datos, restricciones y limitaciones
+  conocidas de la plataforma.
+- **[`docs/flujo-resumen.md`](docs/flujo-resumen.md)** (o su versión visual,
+  [`docs/flujo-resumen.html`](docs/flujo-resumen.html)) — misma historia sin jerga técnica, para
+  perfiles no técnicos.
+
 ### Diagrama Mermaid
 
 Diagrama actual end-to-end:

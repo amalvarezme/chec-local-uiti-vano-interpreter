@@ -1,0 +1,228 @@
+<title>¿Cómo funciona el proyecto? — Guía sencilla</title>
+<style>
+  :root {
+    --paper: #EDEEE9;
+    --paper-raised: #F7F7F3;
+    --ink: #1B1F1D;
+    --ink-soft: #4B524D;
+    --line: #D6D8D1;
+    --copper: #A85A20;
+    --copper-soft: #E8D2BC;
+    --teal: #2B6E71;
+    --teal-soft: #CFE3E2;
+    --slate: #545C61;
+    --slate-soft: #DEE2E4;
+    --good: #3F7F52;
+    --good-soft: #DCEBDF;
+    --warn: #A9791F;
+    --warn-soft: #F1E6C9;
+    --shadow: 0 1px 2px rgba(27,31,29,0.06), 0 8px 24px -12px rgba(27,31,29,0.18);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #15181A; --paper-raised: #1C2023; --ink: #E7E6E0; --ink-soft: #A8ADA6;
+      --line: #30363A; --copper: #E0954E; --copper-soft: #3A2A1B; --teal: #6FBFC0;
+      --teal-soft: #1C3436; --slate: #9BA3A8; --slate-soft: #262C2F;
+      --good: #6FBF87; --good-soft: #1E332A; --warn: #D9AE55; --warn-soft: #362D18;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 28px -12px rgba(0,0,0,0.55);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #15181A; --paper-raised: #1C2023; --ink: #E7E6E0; --ink-soft: #A8ADA6;
+    --line: #30363A; --copper: #E0954E; --copper-soft: #3A2A1B; --teal: #6FBFC0;
+    --teal-soft: #1C3436; --slate: #9BA3A8; --slate-soft: #262C2F;
+    --good: #6FBF87; --good-soft: #1E332A; --warn: #D9AE55; --warn-soft: #362D18;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 28px -12px rgba(0,0,0,0.55);
+  }
+  :root[data-theme="light"] {
+    --paper: #EDEEE9; --paper-raised: #F7F7F3; --ink: #1B1F1D; --ink-soft: #4B524D;
+    --line: #D6D8D1; --copper: #A85A20; --copper-soft: #E8D2BC; --teal: #2B6E71;
+    --teal-soft: #CFE3E2; --slate: #545C61; --slate-soft: #DEE2E4;
+    --good: #3F7F52; --good-soft: #DCEBDF; --warn: #A9791F; --warn-soft: #F1E6C9;
+    --shadow: 0 1px 2px rgba(27,31,29,0.06), 0 8px 24px -12px rgba(27,31,29,0.18);
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: var(--paper); color: var(--ink);
+    font-family: Charter, "Iowan Old Style", Georgia, "Times New Roman", serif;
+    font-size: 17px; line-height: 1.65;
+  }
+  body { overflow-x: hidden; }
+  main { max-width: 780px; margin: 0 auto; padding: 3rem 1.5rem 5rem; }
+
+  h1, h2, .eyebrow, .chip, th, .step-num, .glossary dt {
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+
+  header.masthead { border-bottom: 3px solid var(--ink); padding-bottom: 1.5rem; margin-bottom: 2.4rem; }
+  .eyebrow {
+    text-transform: uppercase; letter-spacing: 0.14em; font-size: 0.72rem; font-weight: 700;
+    color: var(--copper); margin: 0 0 0.6rem;
+  }
+  h1 { font-size: clamp(1.6rem, 4vw, 2.3rem); line-height: 1.15; margin: 0 0 0.6rem; font-weight: 700; text-wrap: balance; }
+  .subtitle { color: var(--ink-soft); font-size: 1.05rem; margin: 0; max-width: 60ch; text-wrap: balance; }
+
+  section { margin: 3rem 0; }
+  h2 { font-size: 1.35rem; margin: 0 0 0.9rem; font-family: ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+  p { margin: 0 0 1rem; max-width: 68ch; }
+  strong { color: var(--ink); }
+  a { color: var(--teal); }
+
+  .steps { display: flex; flex-direction: column; gap: 0; }
+  .step {
+    display: flex; gap: 1rem; padding: 1rem 0; position: relative;
+  }
+  .step:not(:last-child)::before {
+    content: ""; position: absolute; left: 1.05rem; top: 2.6rem; bottom: -0.4rem;
+    width: 2px; background: var(--line);
+  }
+  .step-num {
+    flex: 0 0 auto; width: 2.1rem; height: 2.1rem; border-radius: 50%;
+    background: var(--copper-soft); color: var(--copper); font-weight: 700; font-size: 0.95rem;
+    display: flex; align-items: center; justify-content: center; z-index: 1;
+  }
+  .step-body { padding-top: 0.15rem; }
+  .step-body p { margin: 0; }
+  .step-title { font-weight: 700; color: var(--ink); display: block; margin-bottom: 0.15rem; }
+
+  .flow-card {
+    background: var(--paper-raised); border: 1px solid var(--line); border-radius: 12px;
+    padding: 1.4rem 1.6rem; box-shadow: var(--shadow); margin-bottom: 1.6rem;
+  }
+  .flow-card h3 { margin: 0 0 0.2rem; font-size: 1.05rem; font-family: ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+  .flow-card .flow-dest { color: var(--ink-soft); font-size: 0.85rem; margin: 0 0 1.2rem; }
+
+  .callout {
+    border-left: 3px solid var(--teal); background: var(--teal-soft);
+    padding: 1rem 1.2rem; border-radius: 0 8px 8px 0; margin: 1.2rem 0; font-size: 0.97rem;
+  }
+  .callout.warn { border-color: var(--warn); background: var(--warn-soft); }
+  .callout .label { font-weight: 700; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.08em; display: block; margin-bottom: 0.4rem; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  .glossary { display: grid; grid-template-columns: minmax(0,1fr); gap: 0.9rem; }
+  .glossary-item {
+    border: 1px solid var(--line); border-radius: 10px; padding: 0.9rem 1.1rem; background: var(--paper-raised);
+  }
+  .glossary dt { font-weight: 700; color: var(--copper); font-size: 0.85rem; margin-bottom: 0.25rem; }
+  .glossary dd { margin: 0; color: var(--ink-soft); font-size: 0.92rem; }
+
+  .lanes { display: grid; grid-template-columns: 1fr; gap: 1.2rem; margin: 1.4rem 0 0.4rem; }
+  @media (min-width: 640px) { .lanes { grid-template-columns: 1fr 1fr; } }
+  .lane {
+    border-radius: 12px; padding: 1.1rem 1.2rem; font-size: 0.9rem;
+  }
+  .lane.a { background: var(--teal-soft); border: 1px solid color-mix(in srgb, var(--teal) 40%, var(--line)); }
+  .lane.b { background: var(--copper-soft); border: 1px solid color-mix(in srgb, var(--copper) 40%, var(--line)); }
+  .lane .lane-title { font-weight: 700; font-family: ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; margin-bottom: 0.5rem; display: block; }
+  .lane ol { margin: 0; padding-left: 1.1rem; }
+  .lane li { margin-bottom: 0.35rem; }
+
+  footer { margin-top: 3.5rem; padding-top: 1.3rem; border-top: 1px solid var(--line); font-size: 0.82rem; color: var(--ink-soft); }
+</style>
+
+<main>
+  <header class="masthead">
+    <p class="eyebrow">Guía para perfiles no técnicos</p>
+    <h1>¿Cómo funciona el proyecto CHEC UITI_VANO?</h1>
+    <p class="subtitle">Una explicación sin nombres de archivos ni comandos, pensada para quien quiere entender el "qué" y el "por qué", no el "cómo" técnico. Para el detalle completo, ver <a href="./flujo-detallado.md">flujo-detallado.md</a>.</p>
+  </header>
+
+  <section>
+    <h2>¿Para qué sirve esto?</h2>
+    <p>CHEC opera líneas eléctricas de distribución divididas en <strong>circuitos</strong>. Cada circuito tiene muchos tramos pequeños llamados <strong>vanos</strong>. Cuando algo falla, el sistema registra ese evento y lo asocia a un indicador llamado <strong>UITI_VANO</strong>, que mide qué tan grave fue el impacto de esa falla para los usuarios conectados.</p>
+    <p>Este proyecto toma ese historial de eventos y responde dos preguntas: <strong>qué tan crítico es cada circuito</strong> comparado con los demás, y <strong>qué variables influyen más</strong> en que una falla sea grave. Dos caminos, con el mismo punto de partida, llegan a destinos distintos.</p>
+    <div class="lanes">
+      <div class="lane a">
+        <span class="lane-title">Camino 1 — Reporte por circuito</span>
+        Una página web local, redactada con ayuda de inteligencia artificial, lista para leer en cualquier navegador.
+      </div>
+      <div class="lane b">
+        <span class="lane-title">Camino 2 — Panel visual en la nube</span>
+        Un dashboard interactivo en Databricks, con mapas y gráficos filtrables.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="flow-card">
+      <h3>Camino 1 — El reporte de un circuito</h3>
+      <p class="flow-dest">Se puede pedir para un circuito, un grupo de circuitos, o como informe gerencial resumido.</p>
+      <div class="steps">
+        <div class="step">
+          <span class="step-num">1</span>
+          <div class="step-body"><span class="step-title">Selección de datos</span><p>Se eligen el circuito y el periodo de tiempo a analizar.</p></div>
+        </div>
+        <div class="step">
+          <span class="step-num">2</span>
+          <div class="step-body"><span class="step-title">Detección automática</span><p>Un sistema (no una persona) revisa los datos y encuentra los puntos donde el impacto fue más alto.</p></div>
+        </div>
+        <div class="step">
+          <span class="step-num">3</span>
+          <div class="step-body"><span class="step-title">Tres asistentes de IA en paralelo</span><p>Uno explica qué pasó; otro explica qué variables pesaron más en un modelo estadístico entrenado antes; un tercero prueba "qué pasaría si" cambiara una variable.</p></div>
+        </div>
+        <div class="step">
+          <span class="step-num">4</span>
+          <div class="step-body"><span class="step-title">Comparación contra expertos</span><p>Un cuarto asistente compara ese análisis contra documentos técnicos de expertos humanos, señalando coincidencias o diferencias.</p></div>
+        </div>
+        <div class="step">
+          <span class="step-num">5</span>
+          <div class="step-body"><span class="step-title">Reporte web</span><p>Todo se arma en una página HTML lista para abrir en el navegador, sin instalar nada.</p></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-card">
+      <h3>Camino 2 — El panel visual en Databricks</h3>
+      <p class="flow-dest">Una copia independiente del análisis, publicada como dashboard interactivo en la nube.</p>
+      <div class="steps">
+        <div class="step">
+          <span class="step-num">1</span>
+          <div class="step-body"><span class="step-title">Copia de los datos</span><p>El mismo historial de eventos se copia a un almacenamiento en la nube.</p></div>
+        </div>
+        <div class="step">
+          <span class="step-num">2</span>
+          <div class="step-body"><span class="step-title">Copia del código real</span><p>No una versión reescrita a mano — exactamente el mismo código que corre localmente, para que los números siempre coincidan.</p></div>
+        </div>
+        <div class="step">
+          <span class="step-num">3</span>
+          <div class="step-body"><span class="step-title">Reconstrucción de tablas</span><p>Se reconstruyen en la nube las mismas tablas de datos que respaldan el análisis.</p></div>
+        </div>
+        <div class="step">
+          <span class="step-num">4</span>
+          <div class="step-body"><span class="step-title">Publicación del panel</span><p>El dashboard queda disponible con mapas y gráficos conectados a esas tablas.</p></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout warn">
+      <span class="label">Importante</span>
+      <p>El panel en la nube es una <strong>copia independiente</strong>. Si alguien cambia el análisis local, la copia en Databricks no se actualiza sola — hay que repetir el proceso de copiado para que refleje el cambio.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Lo que nunca se mezcla</h2>
+    <div class="callout">
+      <p>La página web pública del proyecto (la que muestra los resultados de forma general) <strong>solo se genera y actualiza desde un computador local</strong>, nunca desde la nube. Esto evita que se acumulen archivos innecesarios o desactualizados en Databricks, y mantiene un único lugar responsable de esa publicación.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Glosario rápido</h2>
+    <dl class="glossary">
+      <div class="glossary-item"><dt>Circuito</dt><dd>Una línea eléctrica de distribución completa, con muchos tramos.</dd></div>
+      <div class="glossary-item"><dt>Vano</dt><dd>Un tramo pequeño dentro de un circuito, entre dos postes.</dd></div>
+      <div class="glossary-item"><dt>UITI_VANO</dt><dd>Un número que mide qué tan grave fue el impacto de una falla en un vano específico.</dd></div>
+      <div class="glossary-item"><dt>Criticidad</dt><dd>Qué tan grave es, en general, un circuito comparado con los demás — de "muy alto riesgo" a "riesgo bajo".</dd></div>
+      <div class="glossary-item"><dt>Agente de IA</dt><dd>Un asistente automático que lee datos y redacta una explicación en lenguaje natural, siguiendo reglas estrictas de validación.</dd></div>
+      <div class="glossary-item"><dt>Dashboard</dt><dd>Un panel visual interactivo en la nube, con gráficos y mapas que se pueden filtrar.</dd></div>
+      <div class="glossary-item"><dt>Databricks</dt><dd>La plataforma en la nube donde vive ese panel visual.</dd></div>
+    </dl>
+  </section>
+
+  <footer>
+    Versión ilustrativa — ver <a href="./flujo-detallado.md">flujo-detallado.md</a> o <a href="./project-flow-review.html">project-flow-review.html</a> para el detalle técnico completo. Actualizado 2026-07-24.
+  </footer>
+</main>

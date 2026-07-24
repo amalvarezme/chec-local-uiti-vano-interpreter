@@ -1,0 +1,269 @@
+<title>Flujo detallado del proyecto — CHEC UITI_VANO Interpreter</title>
+<style>
+  :root {
+    --paper: #EDEEE9;
+    --paper-raised: #F7F7F3;
+    --ink: #1B1F1D;
+    --ink-soft: #4B524D;
+    --line: #D6D8D1;
+    --copper: #A85A20;
+    --copper-soft: #E8D2BC;
+    --teal: #2B6E71;
+    --teal-soft: #CFE3E2;
+    --slate: #545C61;
+    --slate-soft: #DEE2E4;
+    --good: #3F7F52;
+    --good-soft: #DCEBDF;
+    --warn: #A9791F;
+    --warn-soft: #F1E6C9;
+    --bad: #B0473C;
+    --code-bg: #E2E4DD;
+    --shadow: 0 1px 2px rgba(27,31,29,0.06), 0 8px 24px -12px rgba(27,31,29,0.18);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #15181A; --paper-raised: #1C2023; --ink: #E7E6E0; --ink-soft: #A8ADA6;
+      --line: #30363A; --copper: #E0954E; --copper-soft: #3A2A1B; --teal: #6FBFC0;
+      --teal-soft: #1C3436; --slate: #9BA3A8; --slate-soft: #262C2F;
+      --good: #6FBF87; --good-soft: #1E332A; --warn: #D9AE55; --warn-soft: #362D18;
+      --bad: #E08277; --code-bg: #1F2427;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 28px -12px rgba(0,0,0,0.55);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #15181A; --paper-raised: #1C2023; --ink: #E7E6E0; --ink-soft: #A8ADA6;
+    --line: #30363A; --copper: #E0954E; --copper-soft: #3A2A1B; --teal: #6FBFC0;
+    --teal-soft: #1C3436; --slate: #9BA3A8; --slate-soft: #262C2F;
+    --good: #6FBF87; --good-soft: #1E332A; --warn: #D9AE55; --warn-soft: #362D18;
+    --bad: #E08277; --code-bg: #1F2427;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 28px -12px rgba(0,0,0,0.55);
+  }
+  :root[data-theme="light"] {
+    --paper: #EDEEE9; --paper-raised: #F7F7F3; --ink: #1B1F1D; --ink-soft: #4B524D;
+    --line: #D6D8D1; --copper: #A85A20; --copper-soft: #E8D2BC; --teal: #2B6E71;
+    --teal-soft: #CFE3E2; --slate: #545C61; --slate-soft: #DEE2E4;
+    --good: #3F7F52; --good-soft: #DCEBDF; --warn: #A9791F; --warn-soft: #F1E6C9;
+    --bad: #B0473C; --code-bg: #E2E4DD;
+    --shadow: 0 1px 2px rgba(27,31,29,0.06), 0 8px 24px -12px rgba(27,31,29,0.18);
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: var(--paper); color: var(--ink);
+    font-family: Charter, "Iowan Old Style", Georgia, "Times New Roman", serif;
+    font-size: 16.5px; line-height: 1.62;
+  }
+  body { overflow-x: hidden; }
+  main { max-width: 880px; margin: 0 auto; padding: 3.2rem 1.5rem 6rem; }
+
+  h1, h2, h3, .eyebrow, .chip, th, .mono, code, pre {
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+
+  header.masthead { border-bottom: 3px solid var(--ink); padding-bottom: 1.6rem; margin-bottom: 2.6rem; }
+  .eyebrow { text-transform: uppercase; letter-spacing: 0.14em; font-size: 0.72rem; font-weight: 700; color: var(--copper); margin: 0 0 0.6rem; }
+  h1 { font-size: clamp(1.7rem, 4vw, 2.5rem); line-height: 1.12; margin: 0 0 0.5rem; letter-spacing: -0.01em; text-wrap: balance; font-weight: 700; }
+  .subtitle { color: var(--ink-soft); font-size: 1.05rem; margin: 0 0 1.2rem; max-width: 66ch; text-wrap: balance; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .chip { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.03em; padding: 0.3rem 0.65rem; border-radius: 999px; background: var(--paper-raised); border: 1px solid var(--line); color: var(--ink-soft); }
+  .chip b { color: var(--ink); font-weight: 700; }
+
+  section { margin: 3rem 0; }
+  h2 { font-size: 1.4rem; margin: 0 0 0.3rem; letter-spacing: -0.005em; display: flex; align-items: baseline; gap: 0.6rem; }
+  h2 .num { color: var(--slate); font-weight: 400; font-size: 1.1rem; }
+  .section-lede { color: var(--ink-soft); font-size: 0.98rem; margin: 0 0 1.4rem; max-width: 68ch; }
+  h3 { font-size: 1.05rem; margin: 1.6rem 0 0.6rem; color: var(--ink); }
+
+  p, ul, ol { margin: 0 0 1rem; max-width: 72ch; }
+  li { margin-bottom: 0.3rem; }
+  a { color: var(--teal); }
+  strong { color: var(--ink); }
+
+  code { background: var(--code-bg); padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.85em; }
+  pre.cmd {
+    background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 0.9rem 1.1rem; overflow-x: auto; font-size: 0.82rem; line-height: 1.5;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--ink);
+  }
+
+  .callout { border-left: 3px solid var(--teal); background: var(--teal-soft); padding: 0.9rem 1.1rem; border-radius: 0 8px 8px 0; margin: 1.2rem 0; font-size: 0.94rem; }
+  .callout.warn { border-color: var(--warn); background: var(--warn-soft); }
+  .callout.evidence { border-color: var(--good); background: var(--good-soft); }
+  .callout p:last-child, .callout ul:last-child { margin-bottom: 0; }
+  .callout .label { font-weight: 700; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.08em; display: block; margin-bottom: 0.35rem; }
+
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; margin: 1.2rem 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.86rem; min-width: 480px; }
+  thead th { text-align: left; background: var(--paper-raised); color: var(--ink-soft); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--line); }
+  tbody td { padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody code { white-space: nowrap; }
+
+  .pill { display: inline-block; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.03em; padding: 0.12rem 0.5rem; border-radius: 999px; }
+  .pill.repro { background: color-mix(in srgb, var(--good) 20%, transparent); color: var(--good); }
+
+  .pipeline {
+    background: var(--paper-raised); border: 1px solid var(--line); border-radius: 10px;
+    padding: 1rem 1.2rem; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.8rem; line-height: 1.7; white-space: pre; margin: 1.2rem 0;
+  }
+
+  footer { margin-top: 4rem; padding-top: 1.4rem; border-top: 1px solid var(--line); font-size: 0.82rem; color: var(--ink-soft); }
+</style>
+
+<main>
+  <header class="masthead">
+    <p class="eyebrow">Flujo técnico completo &middot; chec-local-uiti-vano-interpreter</p>
+    <h1>Flujo detallado del proyecto</h1>
+    <p class="subtitle">Contraparte HTML de <a href="./flujo-detallado.md"><code>flujo-detallado.md</code></a> — mismo contenido. Para diagramas Mermaid interactivos y el historial de correcciones en vivo, ver <a href="./project-flow-review.html"><code>project-flow-review.html</code></a>. Para una versión sin jerga técnica, ver <a href="./flujo-resumen.html"><code>flujo-resumen.html</code></a>.</p>
+    <div class="meta-row">
+      <span class="chip">Rama: <b>databricks-integration</b></span>
+      <span class="chip">Actualizado: <b>2026-07-24</b></span>
+      <span class="chip">Audiencia: <b>ingeniería / mantenimiento</b></span>
+    </div>
+  </header>
+
+  <section>
+    <h2><span class="num">§1</span> Panorama</h2>
+    <p>El proyecto sostiene <strong>dos flujos</strong> que comparten la misma fuente de verdad — el CSV <code>Indicadores_vano_v3.csv</code> y la función real <code>compute_circuit_criticality_groups</code> — pero terminan en destinos distintos y <strong>no comparten runtime ni credenciales</strong>:</p>
+    <ul>
+      <li><strong>Flujo A — pipeline local de reportes.</strong> Genera HTML por circuito (o por lote) usando agentes LLM de Claude Code, publicado opcionalmente a un vault Obsidian indexado con <code>graphify</code>.</li>
+      <li><strong>Flujo B — despliegue a Databricks.</strong> Replica el mismo dominio (circuitos, vanos, clustering de criticidad, evolución diaria) como un dashboard AI/BI de Databricks Lakeview respaldado por tablas/vistas Delta, y opcionalmente migra datos crudos, paquetes fuente, los 9 notebooks de investigación y los reportes de interpretabilidad.</li>
+    </ul>
+    <div class="callout">
+      Un cambio en <code>plotting.py</code> no se refleja en Databricks hasta que se re-ejecuta <code>uiti_vano_tables.py</code> — son copias de datos independientes, no una vista en vivo del mismo backend.
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">§2</span> Flujo A — pipeline local de reportes</h2>
+
+    <h3>Comandos</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Comando</th><th>Uso</th><th>Qué produce</th></tr></thead>
+        <tbody>
+          <tr><td><code>/report</code></td><td><code>/report CIRCUITO [fecha_inicio fecha_fin]</code></td><td>HTML de un circuito, 9 pasos completos</td></tr>
+          <tr><td><code>/reporte-lote</code></td><td><code>/reporte-lote grupo=alta</code></td><td>Un reporte por circuito del grupo + scatter de clustering</td></tr>
+          <tr><td><code>/informe-gerencial</code></td><td><code>/informe-gerencial grupo=media</code></td><td>Un HTML gerencial cross-circuito (12 representativos)</td></tr>
+          <tr><td><code>/agrupamiento-circuitos</code></td><td><code>/agrupamiento-circuitos</code></td><td>Solo el scatter de clustering, sin reporte</td></tr>
+          <tr><td><code>/limpiar-corridas</code></td><td><code>/limpiar-corridas</code> (dry-run primero)</td><td>Borra artefactos desechables de corridas previas</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Los cuatro agentes que hacen el razonamiento LLM (<code>historical</code>, <code>inference</code>, <code>auto-simulator</code>, <code>expert-alignment</code>) son los mismos en los tres comandos de reporte — <code>reporte-lote</code> e <code>informe-gerencial</code> nunca los reimplementan, solo re-invocan <code>.claude/skills/report/SKILL.md</code> por referencia.</p>
+
+    <h3>Orquestación de <code>/report</code> (motor: <code>report_pipeline.py</code>)</h3>
+    <ol>
+      <li><code>prepare()</code> — detección de puntos críticos + contexto estructurado + simulador MGCECDL-SHAP + escaneo automático min/max.</li>
+      <li>Despacho paralelo obligatorio: <code>historical</code> e <code>inference</code> corren en paralelo, no dependen entre sí. <code>auto-simulator</code> corre junto pero degrada solo si falta <code>bc.json</code>.</li>
+      <li>Join — cuando <code>historical</code> + <code>inference</code> terminan: <code>prepare_expert_alignment()</code> → agente <code>expert-alignment</code> (compara contra la discusión experta en PDF).</li>
+      <li><code>render()</code> → HTML del circuito.</li>
+      <li>Paso 9 (alert-and-continue): skill <code>vault-circuito</code> proyecta 3 JSON validados, luego <code>graphify --update</code> indexa — siempre aislado.</li>
+    </ol>
+    <div class="callout warn">
+      <span class="label">Lección aprendida — aislamiento de graphify</span>
+      El paso 2.5 de <code>informe-gerencial</code> reconstruye el grafo del vault de forma completamente aislada después de un incidente de producción donde una actualización con alcance mal delimitado podó ~271 archivos no relacionados. <code>vault-circuito</code> sigue el mismo principio.
+    </div>
+
+    <h3>Los 9 notebooks de investigación (<code>notebooks/project_flow/</code>)</h3>
+    <p>No son el punto de entrada del proyecto — son el pipeline offline de entrenamiento/investigación que produce el modelo MGCECDL, consumido en modo solo-lectura por <code>report_pipeline.py</code>. Ver <a href="./notebooks-project-flow.md"><code>notebooks-project-flow.md</code></a> para el detalle celda por celda.</p>
+    <div class="pipeline">01_climate (enriquece CSV) → 02_optuna (búsqueda HP) → 03_training (modelo final)
+                                                              ├→ 04_performance (métricas + SHAP)
+                                                              ├→ 05_circuit_analysis (SHAP por circuito, ancestro de report_pipeline.py)
+                                                              ├→ 06_document_replication (export CSV masivo)
+                                                              └→ 09_simulador (interactivo, ipywidgets)
+07_graph_preserved_connections (grafo experto, cache opcional para 03, no bloqueante)
+08_geo_network_exploration (standalone, solo shapefiles + CSV)</div>
+  </section>
+
+  <section>
+    <h2><span class="num">§3</span> Flujo B — despliegue a Databricks</h2>
+    <p class="section-lede">Cuatro comandos cooperan, todos en <code>.claude/commands/</code>, reutilizando por referencia cruzada la misma resolución de perfil CLI / SQL warehouse.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Comando</th><th>Qué migra</th><th>Toca tablas/dashboard</th></tr></thead>
+        <tbody>
+          <tr><td><code>/deploy-databricks-dashboard</code></td><td>Nada de <code>data/</code>/notebooks — solo construye/reconstruye tablas + vistas + publica el dashboard</td><td>Sí</td></tr>
+          <tr><td><code>/subir-datos-databricks</code></td><td><code>data/</code> completo + <code>site/data/variables.json</code> al Volume</td><td>No</td></tr>
+          <tr><td><code>/subir-notebooks-databricks</code></td><td>Ambos paquetes fuente + los 9 notebooks (copias adaptadas)</td><td>No</td></tr>
+          <tr><td><code>/subir-a-databricks</code></td><td>Orquesta los tres anteriores + tablas + reportes + dashboard en una sola corrida</td><td>Sí</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Objetos de datos (5, todos reproducibles desde este repo)</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Objeto</th><th>Tipo</th><th>Origen</th><th></th></tr></thead>
+        <tbody>
+          <tr><td><code>indicadores_vano</code></td><td>Tabla Delta</td><td>CSV tipado con TODAS las columnas (incluida geometría X1/Y1/X2/Y2/FID_VANO/FID_TRAFO/FID_SW), vía <code>uiti_vano_tables.py</code></td><td><span class="pill repro">reproducible</span></td></tr>
+          <tr><td><code>circuit_clustering</code></td><td>Tabla Delta</td><td>Llama <em>verbatim</em> a <code>plotting.compute_circuit_criticality_groups</code></td><td><span class="pill repro">reproducible</span></td></tr>
+          <tr><td><code>circuit_geo</code></td><td>Tabla Delta</td><td>Shapefile <code>MVLINSEC.shp</code> vía geopandas</td><td><span class="pill repro">reproducible</span></td></tr>
+          <tr><td><code>circuit_map_lines_equipment</code></td><td>Vista</td><td>UNION de vanos/transformadores/switches sobre <code>indicadores_vano</code></td><td><span class="pill repro">reproducible</span></td></tr>
+          <tr><td><code>circuit_daily_evolution</code></td><td>Vista</td><td>Serie diaria con ceros, sobre <code>indicadores_vano</code></td><td><span class="pill repro">reproducible</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout evidence">
+      <span class="label">Corrección 2026-07-24</span>
+      Una versión anterior de estos documentos listaba una sexta tabla, <code>indicadores_vano_v_3</code>, como "prerrequisito externo sin ETL en este repo". Era falso — la vista solo apuntaba al nombre de tabla equivocado; <code>indicadores_vano</code> ya trae esas columnas.
+    </div>
+
+    <h3>Restricción dura: nada de <code>site/</code> en Databricks</h3>
+    <p>Ninguno de los cuatro comandos puede crear una ruta con nombre <code>site/</code> dentro del Volume de Databricks. La página web del proyecto (<code>site/</code>, publicada vía GitHub Actions/Pages) <strong>solo se regenera con una corrida local</strong>. De los 9 notebooks, solo <code>04</code> y <code>07</code> originalmente escriben ahí; sus copias subidas a Databricks redirigen esa salida a carpetas del Volume sin la palabra "site" (<code>SITE_RESULTS_DIR = RESULTS_DIR</code> en <code>04</code>; <code>outputs/graphs/</code> en <code>07</code>).</p>
+
+    <h3>Notebooks en Databricks — shims y gotchas reales</h3>
+    <p><code>/subir-notebooks-databricks</code> sube cada notebook como una <strong>copia modificada</strong> (nunca el original), con solo su celda de resolución de rutas reescrita. Hallazgos empíricos de corridas en vivo, no teóricos:</p>
+    <ul>
+      <li><strong>Cada copia necesita su propia celda <code>%pip install -q -r requirements.txt</code></strong> como primera celda — el entorno local no existe en Databricks. Confirmado con un <code>ModuleNotFoundError: optuna</code> en <code>09</code>, transitivo vía <code>chec_impacto.training</code>. El archivo subido excluye <code>jupyter</code>/<code>ipykernel</code>/<code>pytest</code>/<code>python-dotenv</code>/<code>pydantic</code> (0 referencias verificadas por auditoría AST).</li>
+      <li><strong><code>workspace import</code>/<code>import-dir</code> no crean carpetas padre</strong> — hace falta <code>databricks workspace mkdirs</code> explícito.</li>
+      <li><strong><code>--format JUPYTER</code> tiene un límite de 10MB</strong> — notebooks con salidas locales embebidas (mapas folium de <code>08</code>) pueden superarlo; hay que limpiar <code>outputs</code>/<code>execution_count</code> antes de subir.</li>
+      <li><strong>Los SQL Warehouse no pueden ejecutar notebooks</strong> — solo celdas SQL. Adjuntar siempre a un cluster o Serverless, nunca a un Warehouse.</li>
+      <li><strong><code>09_simulador.ipynb</code> necesita un cluster clásico, no Serverless</strong> — su interfaz final usa <code>ipywidgets</code>, y Databricks documenta explícitamente que Serverless queda excluido. Los otros 8 notebooks sí funcionan en Serverless.</li>
+      <li><strong>El Volume no persiste garantizado entre sesiones</strong> — un workspace verificado como poblado un día apareció vacío al día siguiente. Siempre verificar en vivo antes de asumir estado previo.</li>
+    </ul>
+
+    <h3>Widgets del dashboard y limitaciones conocidas de Lakeview</h3>
+    <p><code>clustering_scatter</code> · <code>circuit_detail_table</code> · <code>daily_line</code> · <code>events_map</code> / <code>uiti_map</code> (mapas Vega-Lite en capas). Limitaciones permanentes de la plataforma:</p>
+    <ul>
+      <li><strong>Sin basemap</strong> en los mapas geo — <code>custom-vega-viz</code> solo soporta Vega-Lite, no Vega crudo.</li>
+      <li><strong>Sin controles <code>bind</code> (sliders)</strong> — Lakeview no los renderiza pese a aceptar el spec sin error.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="num">§4</span> Referencia rápida — todos los comandos</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Comando</th><th>Flujo</th><th>Uso</th></tr></thead>
+        <tbody>
+          <tr><td><code>/report</code></td><td>A</td><td><code>/report CIRCUITO [fecha_inicio fecha_fin]</code></td></tr>
+          <tr><td><code>/reporte-lote</code></td><td>A</td><td><code>/reporte-lote grupo=alta</code></td></tr>
+          <tr><td><code>/informe-gerencial</code></td><td>A</td><td><code>/informe-gerencial grupo=media</code></td></tr>
+          <tr><td><code>/agrupamiento-circuitos</code></td><td>A</td><td><code>/agrupamiento-circuitos</code></td></tr>
+          <tr><td><code>/limpiar-corridas</code></td><td>A</td><td><code>/limpiar-corridas</code></td></tr>
+          <tr><td><code>/deploy-databricks-dashboard</code></td><td>B</td><td>pide nombre + URL del workspace</td></tr>
+          <tr><td><code>/subir-datos-databricks</code></td><td>B</td><td>pide URL del workspace</td></tr>
+          <tr><td><code>/subir-notebooks-databricks</code></td><td>B</td><td>pide URL del workspace</td></tr>
+          <tr><td><code>/subir-a-databricks</code></td><td>B</td><td>pide URL del workspace</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">§5</span> Más detalle</h2>
+    <ul>
+      <li><a href="./notebooks-project-flow.md"><code>notebooks-project-flow.md</code></a> — detalle celda por celda de los 9 notebooks.</li>
+      <li><a href="./agents-guide.md"><code>agents-guide.md</code></a> — arquitectura de 4 capas del framework de agentes.</li>
+      <li><a href="./report-runtime-contract.md"><code>report-runtime-contract.md</code></a> — contrato de invocación de <code>/report</code> entre runtimes.</li>
+      <li><a href="./project-flow-review.html"><code>project-flow-review.html</code></a> — misma información con diagramas Mermaid interactivos y el historial de correcciones en vivo.</li>
+      <li><a href="./project-workflow.mmd"><code>project-workflow.mmd</code></a> / <a href="./report-family-workflow.mmd"><code>report-family-workflow.mmd</code></a> — diagramas fuente de detalle.</li>
+    </ul>
+  </section>
+
+  <footer>
+    Contraparte HTML de <code>flujo-detallado.md</code>. Actualizado 2026-07-24, rama <code>databricks-integration</code>.
+  </footer>
+</main>
