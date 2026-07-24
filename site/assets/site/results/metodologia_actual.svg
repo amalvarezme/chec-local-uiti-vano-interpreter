@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 442" font-family="Inter, ui-sans-serif, system-ui, -apple-system, sans-serif">
+  <rect x="0" y="0" width="1400" height="442" rx="16" fill="#f8fbfa" stroke="#dce7e4" stroke-width="1.5"/>
+
+  <!-- Arrows between pipeline stages -->
+  <g stroke="#5f6f77" stroke-width="2" fill="none">
+    <line x1="276" y1="127" x2="293" y2="127"/>
+    <polygon points="293,127 285,122 285,132" fill="#5f6f77" stroke="none"/>
+    <line x1="553" y1="127" x2="570" y2="127"/>
+    <polygon points="570,127 562,122 562,132" fill="#5f6f77" stroke="none"/>
+    <line x1="830" y1="127" x2="847" y2="127"/>
+    <polygon points="847,127 839,122 839,132" fill="#5f6f77" stroke="none"/>
+    <line x1="1107" y1="127" x2="1124" y2="127"/>
+    <polygon points="1124,127 1116,122 1116,132" fill="#5f6f77" stroke="none"/>
+  </g>
+
+  <!-- Box 1: Datos -->
+  <g>
+    <rect x="20" y="32" width="252" height="190" rx="10" fill="#fff9e8" stroke="#e2c878" stroke-width="2"/>
+    <text x="36" y="58" font-size="11" font-weight="900" letter-spacing="0.5" fill="#5f6f77">01 · DATOS</text>
+    <text x="36" y="80" font-size="17" font-weight="800" fill="#102129">Datos</text>
+    <text x="36" y="106" font-size="12.5" fill="#5f6f77">CSV indicadores_vano_v3</text>
+    <text x="36" y="124" font-size="12.5" fill="#5f6f77">Tabla PDFs técnicos</text>
+    <text x="36" y="142" font-size="12.5" fill="#5f6f77">Clima + geo (API)</text>
+  </g>
+
+  <!-- Box 2: Preparación -->
+  <g>
+    <rect x="297" y="32" width="252" height="190" rx="10" fill="#fff9e8" stroke="#e2c878" stroke-width="2"/>
+    <text x="313" y="58" font-size="11" font-weight="900" letter-spacing="0.5" fill="#5f6f77">02 · PREPARE()</text>
+    <text x="313" y="80" font-size="17" font-weight="800" fill="#102129">Preparación</text>
+    <text x="313" y="106" font-size="12.5" fill="#5f6f77">Selección de circuito</text>
+    <text x="313" y="124" font-size="12.5" fill="#5f6f77">Puntos críticos (determinista)</text>
+    <text x="313" y="142" font-size="12.5" fill="#5f6f77">Escaneo automático mín/máx</text>
+  </g>
+
+  <!-- Box 3: Agentes en paralelo -->
+  <g>
+    <rect x="574" y="32" width="252" height="190" rx="10" fill="white" stroke="#dce7e4" stroke-width="2"/>
+    <text x="590" y="58" font-size="11" font-weight="900" letter-spacing="0.5" fill="#5f6f77">03 · DESPACHO PARALELO</text>
+    <text x="590" y="80" font-size="17" font-weight="800" fill="#102129">Agentes</text>
+
+    <rect x="590" y="104" width="220" height="34" rx="7" fill="#edf8ec" stroke="#9cc99b" stroke-width="1.5"/>
+    <text x="600" y="118" font-size="11" font-weight="800" fill="#102129">historical</text>
+    <text x="600" y="132" font-size="10.5" fill="#5f6f77">diagnóstico base UITI_VANO</text>
+
+    <rect x="590" y="144" width="220" height="34" rx="7" fill="#f1f1f6" stroke="#b7b7c5" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <text x="600" y="158" font-size="11" font-weight="800" fill="#102129">inference</text>
+    <text x="600" y="172" font-size="10.5" fill="#5f6f77">MGCECDL / SHAP</text>
+
+    <rect x="590" y="184" width="220" height="34" rx="7" fill="#edf8fc" stroke="#9dc7d7" stroke-width="1.5"/>
+    <text x="600" y="198" font-size="11" font-weight="800" fill="#102129">auto-simulator</text>
+    <text x="600" y="212" font-size="10.5" fill="#5f6f77">opcional, se omite sin bc.json</text>
+  </g>
+
+  <!-- Box 4: Alineación experta -->
+  <g>
+    <rect x="851" y="32" width="252" height="190" rx="10" fill="#edf8ec" stroke="#9cc99b" stroke-width="2"/>
+    <text x="867" y="58" font-size="11" font-weight="900" letter-spacing="0.5" fill="#5f6f77">04 · JOIN</text>
+    <text x="867" y="80" font-size="17" font-weight="800" fill="#102129">Alineación experta</text>
+    <text x="867" y="106" font-size="12.5" fill="#5f6f77">expert-alignment</text>
+    <text x="867" y="124" font-size="12.5" fill="#5f6f77">Contrasta historical + inference</text>
+    <text x="867" y="142" font-size="12.5" fill="#5f6f77">vs. discusión experta en PDF</text>
+  </g>
+
+  <!-- Box 5: Reporte + Vault -->
+  <g>
+    <rect x="1128" y="32" width="252" height="190" rx="10" fill="#eef7e9" stroke="#a6ce96" stroke-width="2"/>
+    <text x="1144" y="58" font-size="11" font-weight="900" letter-spacing="0.5" fill="#5f6f77">05 · RENDER()</text>
+    <text x="1144" y="80" font-size="17" font-weight="800" fill="#102129">Reporte + Vault</text>
+    <text x="1144" y="106" font-size="12.5" fill="#5f6f77">HTML final del circuito</text>
+    <text x="1144" y="124" font-size="12.5" fill="#5f6f77">vault-circuito → reports/vault</text>
+    <text x="1144" y="142" font-size="12.5" fill="#5f6f77">graphify --update (aislado)</text>
+  </g>
+
+  <!-- Connector: auto-simulator pill down to the What-if callout -->
+  <g stroke="#c98a12" stroke-width="2" fill="none">
+    <line x1="700" y1="218" x2="700" y2="243"/>
+    <polygon points="700,243 694,233 706,233" fill="#c98a12" stroke="none"/>
+  </g>
+
+  <!-- Callout: role of the simulator, ¿Qué pasa si? -->
+  <g>
+    <rect x="20" y="246" width="1360" height="96" rx="12" fill="#fff7e6" stroke="#f4b23a" stroke-width="2.5"/>
+    <circle cx="76" cy="294" r="32" fill="#f4b23a"/>
+    <text x="76" y="306" font-size="36" font-weight="900" fill="white" text-anchor="middle">?</text>
+    <text x="126" y="270" font-size="11" font-weight="900" letter-spacing="0.5" fill="#7c5a0d">PAPEL DEL SIMULADOR · AUTO-SIMULATOR</text>
+    <text x="126" y="296" font-size="21" font-weight="900" fill="#102129">¿Qué pasa si...?</text>
+    <text x="126" y="318" font-size="12.5" fill="#5f6f77">Recorre valores de las variables priorizadas por la alineación experta hasta encontrar la menor</text>
+    <text x="126" y="335" font-size="12.5" fill="#5f6f77">clase de riesgo posible, y compara el mapa de UITI_VANO observado contra la clase simulada, vano por vano.</text>
+  </g>
+
+  <!-- Footer: usage chips -->
+  <g>
+    <rect x="20" y="362" width="280" height="60" rx="8" fill="white" stroke="#9dc7d7" stroke-width="1.5"/>
+    <text x="34" y="383" font-size="12" font-weight="900" fill="#0b5f8a">/report</text>
+    <text x="34" y="401" font-size="11.5" fill="#5f6f77">1 circuito, 9 pasos</text>
+    <text x="34" y="415" font-size="11.5" fill="#5f6f77">(flujo de arriba)</text>
+
+    <rect x="324" y="362" width="500" height="60" rx="8" fill="white" stroke="#9cc99b" stroke-width="1.5"/>
+    <text x="338" y="383" font-size="12" font-weight="900" fill="#005c45">/reporte-lote + /informe-gerencial</text>
+    <text x="338" y="401" font-size="11.5" fill="#5f6f77">Síntesis multi-circuito sobre el mismo pipeline: batch por</text>
+    <text x="338" y="415" font-size="11.5" fill="#5f6f77">grupo de criticidad + informe cruzado con grafo circular</text>
+
+    <rect x="848" y="362" width="532" height="60" rx="8" fill="white" stroke="#e2c878" stroke-width="1.5"/>
+    <text x="862" y="383" font-size="12" font-weight="900" fill="#7c5a0d">Flujo B · Databricks Lakeview</text>
+    <text x="862" y="401" font-size="11.5" fill="#5f6f77">Copia independiente vía /subir-a-databricks: mismas tablas,</text>
+    <text x="862" y="415" font-size="11.5" fill="#5f6f77">no comparte runtime ni corre en vivo con este pipeline</text>
+  </g>
+</svg>

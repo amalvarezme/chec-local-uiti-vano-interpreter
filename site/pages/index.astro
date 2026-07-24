@@ -2,13 +2,11 @@
 import logoLab from "../assets/site/logos/logo_labIA.png";
 import logoChec from "../assets/site/logos/checlogo.png";
 import logoUnal from "../assets/site/logos/logo_unal_transparente.png";
-import metodologia from "../assets/site/results/metodolgia.png";
+import metodologia from "../assets/site/results/metodologia_actual.svg";
 import dataIntelligenceEngine from "../assets/site/results/data_intelligence_engine.png";
 import databricksLogo from "../assets/site/results/databricks.png";
-import pdfData from "../assets/site/results/pdfData.jpeg";
-import georeferencia from "../assets/site/results/georeferencia.jpeg";
-import historicoOutput from "../assets/site/results/hisoticoOutput.jpeg";
-import agente from "../assets/site/results/agente.jpeg";
+import dashboardDatabricks1 from "../assets/site/results/dashboard_databricks_1.png";
+import dashboardDatabricks2 from "../assets/site/results/dashboard_databricks_2.png";
 import mgcecdlConfusionMatrix from "../assets/site/results/mgcecdl_confusion_matrix.png";
 import mgcecdlRocCurve from "../assets/site/results/mgcecdl_roc_curve.png";
 import mgcecdlModeImportance from "../assets/site/results/mgcecdl_mode_importance.png";
@@ -99,10 +97,10 @@ const pdfDiscussionRows = [
 ];
 const pdfDiscussionColumns = ["Circuito", "Fecha inicio", "Fecha fin", "Análisis técnico"];
 const llmNotebookFlow = [
-  ["Agente base descriptor-histórico", "Interpreta el contexto estructurado del circuito: selección, serie diaria, puntos críticos, variables disponibles, causas observadas, metadatos faltantes y grafos de relación técnica."],
-  ["RAG del modelo predictivo", "Interpreta las inferencias M-GCECDL: relevancias por escenario, modos climático/estructural, variables de entrada del modelo y conexiones del grafo para priorizar variables explicativas."],
-  ["RAG de contraste experto", "Contrasta el modelo de datos históricos y el modelo predictivo con la tabla de discusiones técnicas extraída de PDFs; reporta coincidencias, diferencias y variables priorizadas sin usar la variable objetivo como predictor."],
-  ["Agente automático de simulación softmax", "Toma las variables priorizadas, busca valores donde domine la menor clase de riesgo posible y compara mapas por vano entre UITI_VANO observado y predicción simulada."]
+  ["historical", "Interpreta el contexto estructurado del circuito: selección, serie diaria, puntos críticos, variables disponibles, causas observadas, metadatos faltantes y grafos de relación técnica."],
+  ["inference", "Interpreta con cautela las señales predictivas M-GCECDL/SHAP: relevancias por escenario, modos climático/estructural, variables de entrada del modelo y coherencia del grafo."],
+  ["auto-simulator", "Interpreta la tabla automática de sensibilidad mínimo/máximo (escenario base vs. mínimo/máximo observado por variable). Corre junto a historical e inference y se omite sin bloquear el reporte si falta bc.json."],
+  ["expert-alignment", "Contrasta el diagnóstico histórico y la interpretación predictiva con la tabla de discusiones técnicas extraída de PDFs; reporta coincidencias, diferencias y variables priorizadas."]
 ];
 const pdfExtractionSteps = [
   ["1. Lectura documental", "Carga PDFs técnicos desde el repositorio documental y extrae texto por página con PyMuPDF o pdfplumber."],
@@ -118,6 +116,51 @@ const databricksNotebookRows = [
   ["GPU mayor", "LLM local 32B tipo DeepSeek-R1-Distill-Qwen-32B, deepseek-r1:32b, QwQ-32B o similar.", "Alto / crítico", "No debe asumirse T4 como suficiente salvo evidencia de cuantización agresiva, contexto bajo, baja concurrencia y rendimiento aceptable."],
   ["API externa", "Agentes LLM de extracción documental, análisis histórico, interpretación predictiva y cotejo experto cuando usan Google u OpenAI.", "Bajo / medio", "Conviene para reportes bajo demanda; el costo depende de tokens, reintentos y número de circuitos procesados."],
   ["Serving", "Endpoints persistentes para M-GCECDL o para un LLM local disponible como servicio.", "Alto / crítico", "No está implementado en el repositorio; si se activa 24/7, el costo cambia de batch a alojamiento continuo."]
+];
+
+const databricksCommandRows = [
+  ["/deploy-databricks-dashboard", "Nada de data/ ni notebooks", "Construye/reconstruye tablas + vistas y publica el dashboard Lakeview"],
+  ["/subir-datos-databricks", "data/ completo + site/data/variables.json", "Sube al Volume; no toca tablas ni dashboard"],
+  ["/subir-notebooks-databricks", "Ambos paquetes fuente + los 9 notebooks (copias adaptadas)", "Sube al Workspace; no toca tablas ni dashboard"],
+  ["/subir-a-databricks", "Orquesta los tres comandos anteriores", "Tablas + reportes de interpretabilidad + dashboard, en una sola corrida"]
+];
+
+const databricksDataObjectRows = [
+  ["indicadores_vano", "Tabla Delta", "CSV tipado con todas las columnas (incluida geometría X1/Y1/X2/Y2/FID_VANO/FID_TRAFO/FID_SW), vía uiti_vano_tables.py"],
+  ["circuit_clustering", "Tabla Delta", "Llama verbatim a plotting.compute_circuit_criticality_groups — mismos números que /agrupamiento-circuitos local"],
+  ["circuit_geo", "Tabla Delta", "Shapefile MVLINSEC.shp vía geopandas (construida, aún no usada por los widgets actuales del dashboard)"],
+  ["circuit_map_lines_equipment", "Vista", "UNION de vanos, transformadores y switches sobre indicadores_vano"],
+  ["circuit_daily_evolution", "Vista", "Serie diaria con ceros, sobre indicadores_vano"]
+];
+
+const databricksWidgetRows = [
+  ["clustering_scatter", "Dispersión log-log por criticidad, mismos números que circuit_clustering / /agrupamiento-circuitos."],
+  ["circuit_detail_table", "Tabla de detalle del circuito seleccionado."],
+  ["daily_line", "Combo de eventos diarios y UITI_VANO sobre circuit_daily_evolution."],
+  ["events_map / uiti_map", "Mapas Vega-Lite en capas sobre circuit_map_lines_equipment."]
+];
+
+const databricksMigrationSteps = [
+  ["0", "Preguntar al usuario", "Único input que pide el orquestador: la URL del workspace de Databricks destino."],
+  ["1", "Resolver perfil CLI + SQL warehouse", "Se resuelve una sola vez; los pasos siguientes lo reutilizan, nunca lo vuelven a derivar."],
+  ["2", "Reutilizar el gate de frescura de circuit_clustering", "Mismo chequeo de frescura que usa /deploy-databricks-dashboard cuando corre de forma independiente."],
+  ["3", "Reutilizar /subir-datos-databricks", "Delega la subida de data/ completo al Volume; no duplica su lógica."],
+  ["4", "Reutilizar /subir-notebooks-databricks", "Delega la subida de ambos paquetes fuente y los 9 notebooks al Workspace; no duplica su lógica."],
+  ["5", "Job condicional de tablas", "Construye o reconstruye tablas Delta + vistas: el mismo trabajo que hace /deploy-databricks-dashboard."],
+  ["6", "Subir reportes de interpretabilidad", "Descubrimiento en tiempo de ejecución, no una lista fija de archivos."],
+  ["7", "Publicar el dashboard Lakeview", "Último paso, después de que tablas y datos ya quedaron frescos."],
+  ["8", "Reportar al usuario", "Cierre de la corrida con el resumen de lo migrado."]
+];
+
+const databricksVolumeNotes = [
+  ["Solo 04 y 07 escriben salidas visuales", "De los 9 notebooks, solo el 04 (PNG) y el 07 (grafos HTML) generan resultados visuales originalmente. Sus copias subidas redirigen esa salida a carpetas del Volume sin la palabra \"site\": SITE_RESULTS_DIR = RESULTS_DIR en el 04; outputs/graphs/ en el 07."],
+  ["Copia modificada, nunca el original", "/subir-notebooks-databricks sube cada uno de los 9 notebooks como copia modificada, reescribiendo solo su celda de resolución de rutas (alias a variables del Volume, no reemplazo total)."],
+  ["pip install propio por notebook", "Cada copia necesita su propia celda %pip install -q -r requirements.txt como primera celda: el entorno local preconfigurado no existe en Databricks. Sin esto, un notebook que importe chec_impacto/chec_local_interpreter puede fallar con ModuleNotFoundError (confirmado con optuna en el 09)."],
+  ["requirements.txt recortado", "El requirements.txt subido excluye jupyter, ipykernel, pytest, python-dotenv y pydantic: 0 referencias verificadas en src/ o en los notebooks."],
+  ["mkdirs explícito antes de subir", "workspace import / import-dir no crean carpetas padre; hace falta databricks workspace mkdirs explícito antes de subir archivos sueltos o notebooks."],
+  ["Límite de 10MB en formato JUPYTER", "--format JUPYTER tiene un límite de 10MB; un notebook con salidas locales embebidas (ej. mapas folium del 08) puede superarlo aunque su código sea pequeño. Hay que limpiar outputs y execution_count de las 9 copias antes de subir."],
+  ["Warehouse, cluster o Serverless, no cualquiera", "Los SQL Warehouse solo ejecutan celdas SQL, nunca notebooks completos: hace falta un cluster o Serverless (compute Python). El 09_simulador.ipynb necesita un cluster clásico porque su interfaz usa ipywidgets, que Databricks excluye de Serverless; los otros 8 notebooks sí corren en Serverless."],
+  ["El Volume no persiste garantizado", "chec-simulador no persiste entre sesiones de forma garantizada: un workspace verificado como completamente poblado un día apareció vacío (0 tablas, sin Volume) al día siguiente. Conviene verificar siempre en vivo (SHOW TABLES, databricks fs ls) antes de asumir estado previo."]
 ];
 
 const azureFlowTimingRows = [
@@ -244,8 +287,10 @@ const cronograma = [
       <nav aria-label="Navegación principal">
         <a href="#acta">Acta</a>
         <a href="#cronograma">Cronograma</a>
-        <a href="#resultados">Resultados</a>
+        <a href="#resultados">Metodología</a>
+        <a href="#migracion-databricks">Migración</a>
         <a href="#arquitectura">Arquitectura</a>
+        <a href="#modelo-matematica">Modelo</a>
         <a href="#costos-items-contratos">Costos ítems</a>
         <a href="#costos-databricks">Costos</a>
       </nav>
@@ -467,18 +512,20 @@ const cronograma = [
           </p>
         </div>
         <figure>
-          <img src={metodologia.src} alt="Metodología actual del simulador de criticidad CHEC" />
-          <figcaption>Figura de avance: metodología del simulador de criticidad CHEC.</figcaption>
+          <img src={metodologia.src} alt="Metodología actual del simulador de criticidad CHEC: datos, preparación determinista, despacho paralelo de agentes (historical, inference, auto-simulator), alineación experta, render del reporte y vault; con /reporte-lote + /informe-gerencial como síntesis multi-circuito y Flujo B hacia Databricks Lakeview" />
+          <figcaption>Figura de avance: metodología del simulador de criticidad CHEC, según el flujo actual del pipeline <code>/report</code>.</figcaption>
         </figure>
       </section>
 
       <section id="despliegue" class="section cloud">
         <div class="section-heading">
-          <p class="eyebrow">Despliegue en nube - CHEC</p>
-          <h2>Databricks como plataforma de analítica e IA</h2>
+          <p class="eyebrow">Flujo B - Despliegue en nube CHEC</p>
+          <h2>Databricks como copia independiente, no en vivo</h2>
           <p>
-            Databricks permite integrar datos, modelos y aplicaciones analíticas en un entorno gobernado,
-            escalable y preparado para operación empresarial.
+            Databricks replica el mismo dominio (circuitos, vanos, clustering de criticidad, evolución diaria)
+            como un dashboard AI/BI de Lakeview respaldado por tablas y vistas Delta. No comparte runtime ni
+            credenciales con el pipeline local de reportes: un cambio en <code>plotting.py</code> no se refleja
+            en Databricks hasta que se re-ejecuta <code>uiti_vano_tables.py</code>.
           </p>
         </div>
 
@@ -492,16 +539,16 @@ const cronograma = [
             </a>
             <div class="cloud-items">
               <article>
-                <h3>Plataforma lakehouse</h3>
-                <p>Unifica almacenamiento, procesamiento y analítica para trabajar con datos estructurados y no estructurados.</p>
+                <h3>4 comandos cooperan</h3>
+                <p>Todos en <code>.claude/commands/</code>, reutilizando por referencia cruzada la misma resolución de perfil CLI / SQL warehouse, nunca duplicada. Detalle completo en <a href="#migracion-databricks">#migracion-databricks</a>.</p>
               </article>
               <article>
-                <h3>IA y datos gobernados</h3>
-                <p>Facilita construir, entrenar y desplegar modelos con trazabilidad, seguridad y control de acceso.</p>
+                <h3>5 objetos de datos reproducibles</h3>
+                <p>3 tablas Delta + 2 vistas, todas reconstruibles desde este repo: sin prerrequisito externo sin ETL.</p>
               </article>
               <article>
-                <h3>Escalabilidad en nube</h3>
-                <p>Permite ejecutar cargas de trabajo de datos e inteligencia artificial ajustando recursos según la demanda.</p>
+                <h3>Regla dura: nada de site/</h3>
+                <p>Ninguno de los 4 comandos crea una ruta <code>site/</code> en el Volume. La web del proyecto solo se regenera con una corrida local.</p>
               </article>
             </div>
           </div>
@@ -514,55 +561,139 @@ const cronograma = [
             />
           </div>
         </div>
+
+        <div class="table-wrap compact-table">
+          <table>
+            <thead><tr><th>Objeto</th><th>Tipo</th><th>Origen</th></tr></thead>
+            <tbody>
+              {databricksDataObjectRows.map(([objeto, tipo, origen]) => (
+                <tr><td><code>{objeto}</code></td><td>{tipo}</td><td>{origen}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section id="prototipo-databricks" class="section prototype">
         <div class="section-heading">
-          <p class="eyebrow">Prototipo 1 - Ajustado en Databricks</p>
-          <h2>Funcionalidades migradas y fortalecidas</h2>
+          <p class="eyebrow">Dashboard Lakeview</p>
+          <h2>Explorador de circuito UITI_VANO</h2>
           <p>
-            Se migraron sobre Databricks las funcionalidades principales del Prototipo 1, incorporando
-            mejoras de visualización, organización de salidas y un agente para apoyar recomendaciones de
-            criticidad sobre los activos analizados.
+            Dashboard AI/BI publicado por <code>/deploy-databricks-dashboard</code>, con 4 widgets respaldados
+            por las tablas y vistas Delta anteriores. Sin controles <code>bind</code> (sliders) y sin basemap en
+            los mapas geo son limitaciones permanentes de la plataforma Lakeview, no de este repositorio.
           </p>
         </div>
 
-        <div class="prototype-showcase">
-          <article class="feature-shot">
-            <div>
-              <span>Visualización territorial</span>
-              <h3>Georreferenciación de activos y criticidad</h3>
-              <p>
-                Vista espacial para explorar zonas, activos y concentración de criticidad dentro del flujo
-                analítico desplegado en nube.
-              </p>
-            </div>
-            <img src={georeferencia.src} alt="Vista georreferenciada del prototipo en Databricks" />
-          </article>
+        <div class="process-grid">
+          {databricksWidgetRows.map(([widget, descripcion]) => (
+            <article><strong>{widget}</strong><p>{descripcion}</p></article>
+          ))}
+        </div>
 
-          <div class="prototype-gallery">
-            <article>
-              <img src={pdfData.src} alt="Extracción y consulta de datos desde documentos PDF" />
-              <div>
-                <h3>Datos desde PDF</h3>
-                <p>Consulta estructurada de información técnica para alimentar análisis y reportes.</p>
-              </div>
-            </article>
-            <article>
-              <img src={historicoOutput.src} alt="Salida histórica del prototipo ajustado" />
-              <div>
-                <h3>Salidas históricas</h3>
-                <p>Mejor lectura de resultados previos y trazabilidad de los indicadores generados.</p>
-              </div>
-            </article>
-            <article>
-              <img src={agente.src} alt="Agente de recomendaciones de criticidad" />
-              <div>
-                <h3>Agente de criticidad</h3>
-                <p>Asistente para recomendaciones orientadas a priorización y soporte operativo.</p>
-              </div>
-            </article>
+        <div class="dashboard-shots">
+          <figure>
+            <img
+              src={dashboardDatabricks1.src}
+              alt="Dashboard Lakeview Explorador de circuito UITI_VANO: filtros de circuito y rango de fechas, dispersión de clustering de todos los circuitos y tabla de detalle del circuito seleccionado"
+            />
+            <figcaption>
+              <strong>Filtros + <code>clustering_scatter</code> + <code>circuit_detail_table</code>.</strong>
+              El panel de clustering refleja el snapshot histórico completo y no reacciona al filtro de fechas
+              (solo la línea diaria y los mapas lo hacen); la tabla de la derecha muestra criticidad, conteo de
+              eventos y suma de UITI_VANO del circuito seleccionado.
+            </figcaption>
+          </figure>
+          <figure>
+            <img
+              src={dashboardDatabricks2.src}
+              alt="Dashboard Lakeview Explorador de circuito UITI_VANO: evolución diaria de eventos y UITI_VANO, y mapas de vanos y equipos por eventos y por UITI_VANO"
+            />
+            <figcaption>
+              <strong><code>daily_line</code> + <code>events_map</code> / <code>uiti_map</code>.</strong>
+              Arriba, el combo de eventos diarios y UITI_VANO diario para el circuito y fechas seleccionados;
+              abajo, los mapas en capas de vanos y equipos (transformador/switch) coloreados por eventos y por
+              UITI_VANO sobre <code>circuit_map_lines_equipment</code>.
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="migracion-databricks" class="section cloud">
+        <div class="section-heading">
+          <p class="eyebrow">Flujo B - Mecánica de la migración</p>
+          <h2>Cómo funciona la migración, paso a paso</h2>
+          <p>
+            <a href="#despliegue">#despliegue</a> explica qué es Databricks como copia independiente y
+            <a href="#prototipo-databricks">#prototipo-databricks</a> el dashboard resultante. Esta sección
+            reúne los 4 comandos con su detalle de uso, el orden real de <code>/subir-a-databricks</code> y
+            cómo cada paso interactúa con el Volume de Databricks.
+          </p>
+        </div>
+
+        <div class="flow-diagram" aria-label="Secuencia real de /subir-a-databricks">
+          <div class="flow-title">
+            <h3>Orquestación real de <code>/subir-a-databricks</code></h3>
+            <p>
+              Nueve pasos: un solo input al usuario, resolución compartida de perfil CLI y SQL warehouse,
+              delegación por referencia a los tres comandos independientes, tablas condicionales, reportes de
+              interpretabilidad y publicación del dashboard al final.
+            </p>
           </div>
+          <ol class="migration-steps">
+            {databricksMigrationSteps.map(([numero, titulo, detalle]) => (
+              <li>
+                <span class="step-num">{numero}</span>
+                <div>
+                  <strong>{titulo}</strong>
+                  <p>{detalle}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        <div class="note-callout">
+          <strong>Los otros 3 comandos también corren solos.</strong>
+          <code>/subir-datos-databricks</code>, <code>/subir-notebooks-databricks</code> y
+          <code>/deploy-databricks-dashboard</code> no dependen de <code>/subir-a-databricks</code>: cada uno
+          resuelve por su cuenta el mismo perfil CLI / SQL warehouse y solo pide la URL del workspace destino
+          cuando se invoca de forma independiente, útil para una migración parcial.
+        </div>
+
+        <div class="connection-intro">
+          <h3>Los 4 comandos, uno por uno</h3>
+          <p>
+            Mismo perfil CLI / SQL warehouse reutilizado por referencia, nunca duplicado. Los tres primeros
+            sirven para una migración parcial; <code>/subir-a-databricks</code> es el orquestador de los 9 pasos
+            anteriores.
+          </p>
+        </div>
+
+        <div class="table-wrap compact-table">
+          <table>
+            <thead><tr><th>Comando</th><th>Qué migra</th><th>Toca tablas/dashboard</th></tr></thead>
+            <tbody>
+              {databricksCommandRows.map(([comando, migra, toca]) => (
+                <tr><td><code>{comando}</code></td><td>{migra}</td><td>{toca}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="connection-intro">
+          <h3>Interacción con el Volume de Databricks</h3>
+          <p>
+            Ninguno de los 4 comandos crea una ruta <code>site/</code> en el Volume (regla ya cubierta en
+            <a href="#despliegue">#despliegue</a>). Lo que sigue son las restricciones y gotchas reales de subir
+            notebooks y datos a un Volume/Workspace compartido, no cubiertas antes:
+          </p>
+        </div>
+
+        <div class="process-grid">
+          {databricksVolumeNotes.map(([titulo, detalle]) => (
+            <article><strong>{titulo}</strong><p>{detalle}</p></article>
+          ))}
         </div>
       </section>
 
@@ -658,11 +789,11 @@ const cronograma = [
             <p>Selección de circuito o vano, eventos, protecciones, UiTi, UiTi ponderado y variables de activos.</p>
             <strong>Explorar datos y grafos →</strong>
           </a>
-          <a class="pillar-card" href="#historial-rag" aria-label="Abrir detalle de historial y RAG">
+          <a class="pillar-card" href="#historial-rag" aria-label="Abrir detalle de historial y discusión experta">
             <span>02</span>
-            <h3>Historial y RAG</h3>
-            <p>Extracción de discusiones expertas desde PDFs y contraste con los agentes de generación de reportes.</p>
-            <strong>Ver tabla y flujo LLM →</strong>
+            <h3>Historial y discusión experta</h3>
+            <p>Extracción de discusiones expertas desde PDFs y contraste con los agentes del flujo de reporte.</p>
+            <strong>Ver tabla y flujo de agentes →</strong>
           </a>
           <a class="pillar-card" href="#modelo-mgcecdl" aria-label="Abrir detalle del modelo M-GCECDL">
             <span>03</span>
@@ -679,169 +810,164 @@ const cronograma = [
         </div>
 
         <div class="agent-grid">
-          <a class="agent-card" href="#agente-base" aria-label="Abrir detalle del agente base descriptor e histórico">
+          <a class="agent-card" href="#agente-rag" aria-label="Abrir detalle del rol pdf-discussion-extraction">
+            <span class="agent-type high">High / Batch</span>
+            <h3>pdf-discussion-extraction</h3>
+            <p>Decide, PDF por PDF, qué secciones candidatas se convierten en filas de la tabla base de discusiones (circuito, fecha, análisis, evidencia).</p>
+          </a>
+          <a class="agent-card" href="#agente-base" aria-label="Abrir detalle del rol historical">
             <span class="agent-type high">High / Context</span>
-            <h3>Agente base: descriptor e histórico</h3>
-            <p>Construye el contexto histórico del circuito, detecta puntos críticos y genera el análisis base validado.</p>
+            <h3>historical</h3>
+            <p>Produce el diagnóstico descriptivo/base del comportamiento de <code>UITI_VANO</code> del circuito, citando solo el contexto estructurado ya seleccionado.</p>
           </a>
-          <a class="agent-card" href="#agente-rag" aria-label="Abrir detalle del agente extractor documental">
-            <span class="agent-type high">High / Context</span>
-            <h3>Agente extractor documental</h3>
-            <p>Transforma PDFs expertos en una tabla validada de discusiones técnicas trazables.</p>
+          <a class="agent-card" href="#orquestador-mgcecdl" aria-label="Abrir detalle del rol inference">
+            <span class="agent-type model">MGCECDL / SHAP</span>
+            <h3>inference</h3>
+            <p>Interpreta con cautela las señales predictivas de MGCECDL/SHAP: importancia por variable/modo y coherencia del grafo, sin ejecutar el modelo.</p>
           </a>
-          <a class="agent-card" href="#orquestador-mgcecdl" aria-label="Abrir detalle del agente predictivo M-GCECDL">
-            <span class="agent-type model">API / ML</span>
-            <h3>Agente predictivo M-GCECDL</h3>
-            <p>Ejecuta el modelo predictivo, estima criticidad y prepara explicaciones con SHAP, Borda, radar y grafos.</p>
+          <a class="agent-card" href="#agente-simulacion" aria-label="Abrir detalle del rol auto-simulator">
+            <span class="agent-type low">Low / Opcional</span>
+            <h3>auto-simulator</h3>
+            <p>Interpreta la tabla automática de sensibilidad mínimo/máximo (base vs. escenario mínimo/máximo observado por variable). Única etapa que puede degradarse y omitirse sin romper el reporte, si falta <code>bc.json</code>.</p>
           </a>
-          <a class="agent-card" href="#agente-causalidad" aria-label="Abrir detalle del agente de alineación experta">
+          <a class="agent-card" href="#agente-causalidad" aria-label="Abrir detalle del rol expert-alignment">
             <span class="agent-type high">High / Reasoning</span>
-            <h3>Agente de alineación experta</h3>
-            <p>Contrasta análisis histórico, modelo predictivo y reportes expertos para priorizar variables revisables.</p>
-          </a>
-          <a class="agent-card" href="#agente-simulacion" aria-label="Abrir detalle conceptual del agente de simulación">
-            <span class="agent-type low">Low / Fast</span>
-            <h3>Agente automático: simulación softmax</h3>
-            <p>Propone valores por menor clase dominante y compara dos mapas por vano: riesgo observado y clase predicha simulada.</p>
-          </a>
-          <a class="agent-card" href="#agente-informes" aria-label="Abrir detalle del agente de informes">
-            <span class="agent-type high">High / Generative</span>
-            <h3>Agente 6: Informes</h3>
-            <p>Compila argumentos, evidencias, citas y resultados de simulación en un reporte técnico final.</p>
+            <h3>expert-alignment</h3>
+            <p>Compara histórico e inferencia contra la discusión experta en PDF, y prioriza variables revisables con evidencia citada.</p>
           </a>
         </div>
 
-        <div class="flow-diagram detailed-flow" aria-label="Diagrama de bloques con conexiones del simulador">
+        <div class="flow-diagram detailed-flow" aria-label="Diagrama de bloques con conexiones del pipeline /report">
           <div class="flow-title">
-            <h3>Diagrama de bloques y conexiones operativas</h3>
-            <p>El flujo muestra selección del activo, puntos de interés, análisis paralelo, cotejo de diagnósticos y salida de evidencia.</p>
+            <h3>Orquestación real de <code>/report</code> (motor <code>report_pipeline.py</code>)</h3>
+            <p>Nueve pasos: preparación determinista, despacho paralelo obligatorio de tres agentes, join hacia el contraste experto, render del HTML y proyección aislada al vault.</p>
           </div>
 
           <div class="flow-lane">
-            <span class="lane-label">Entrada y contexto</span>
+            <span class="lane-label">1-2. Selección y prepare()</span>
             <article class="flow-node user-node">
-              <span>Usuario / Operador</span>
-              <strong>Selecciona circuito o vano</strong>
+              <span>Runtime del agente</span>
+              <strong>Confirma circuito + ventana de fechas, una sola vez</strong>
             </article>
             <div class="flow-connector">
               <strong>1</strong>
-              <span>Activo de interés</span>
+              <span>Circuito + fechas</span>
             </div>
             <article class="flow-node data-node">
-              <span>Base tabular</span>
-              <strong>Identifica puntos de interés</strong>
+              <span>CSV Indicadores_vano_v3</span>
+              <strong>Detección determinista de puntos críticos</strong>
             </article>
             <div class="flow-connector">
               <strong>2</strong>
-              <span>Circuito + fechas + eventos</span>
-            </div>
-            <article class="flow-node agent-low-node">
-              <span>Agente base</span>
-              <strong>Selección, puntos críticos y diagnóstico base</strong>
-            </article>
-            <div class="flow-connector dashed">
-              <strong>KB</strong>
-              <span>Variables, modos y causas</span>
+              <span>Puntos críticos</span>
             </div>
             <article class="flow-node context-node">
-              <span>Contexto.md</span>
-              <strong>Reglas y modos del sistema</strong>
+              <span>prepare()</span>
+              <strong>Contexto estructurado + simulador MGCECDL-SHAP + escaneo automático mínimo/máximo</strong>
+            </article>
+            <div class="flow-connector dashed">
+              <strong>opc.</strong>
+              <span>bc.json, si existe</span>
+            </div>
+            <article class="flow-node data-node">
+              <span>bc.json</span>
+              <strong>Insumo opcional; alimenta solo a auto-simulator</strong>
             </article>
           </div>
 
           <div class="flow-lane">
-            <span class="lane-label">Análisis paralelo</span>
-            <article class="flow-node data-node">
-              <span>Serie diaria</span>
-              <strong>Evolución histórica de indicadores</strong>
+            <span class="lane-label">3. Despacho paralelo obligatorio</span>
+            <article class="flow-node agent-high-node">
+              <span>historical</span>
+              <strong>Diagnóstico descriptivo/base de UITI_VANO</strong>
             </article>
             <div class="flow-connector bidirectional">
-              <strong>3</strong>
-              <span>Eventos por vano/circuito</span>
-            </div>
-            <article class="flow-node data-node">
-              <span>Base tabular</span>
-              <strong>SAIDI, SAIFI, UiTi y eventos</strong>
-            </article>
-            <div class="flow-connector">
-              <strong>4</strong>
-              <span>RAG</span>
+              <strong>3a</strong>
+              <span>Independientes entre sí</span>
             </div>
             <article class="flow-node agent-high-node">
-              <span>Agente 3 High</span>
-              <strong>Analista documental</strong>
+              <span>inference</span>
+              <strong>Interpretación MGCECDL/SHAP</strong>
             </article>
-            <div class="flow-connector bidirectional">
-              <strong>Docs</strong>
-              <span>Normas y bitácoras</span>
+            <div class="flow-connector">
+              <strong>3b</strong>
+              <span>Corre junto, degrada solo</span>
             </div>
-            <article class="flow-node doc-node">
-              <span>Repositorio documental</span>
-              <strong>PDFs, reportes, normas</strong>
+            <article class="flow-node agent-low-node">
+              <span>auto-simulator</span>
+              <strong>Sensibilidad mínimo/máximo; se omite si falta bc.json, sin romper el reporte</strong>
+            </article>
+            <div class="flow-connector merge">
+              <strong>4</strong>
+              <span>Join: espera historical + inference</span>
+            </div>
+            <article class="flow-node context-node">
+              <span>join</span>
+              <strong>auto-simulator no bloquea el join</strong>
             </article>
           </div>
 
           <div class="flow-lane">
-            <span class="lane-label">Inferencia y cotejo causal</span>
-            <article class="flow-node agent-low-node">
-              <span>Diagnóstico 3</span>
-              <strong>Descriptivo por punto de interés</strong>
+            <span class="lane-label">5-6. Alineación experta</span>
+            <article class="flow-node doc-node">
+              <span>tabla_pdfs_intervalo_*.xlsx</span>
+              <strong>Discusión experta extraída de PDFs (skill pdf-discussion-extraction)</strong>
             </article>
             <div class="flow-connector">
               <strong>5</strong>
-              <span>Historial + RAG</span>
+              <span>prepare_expert_alignment()</span>
             </div>
-            <article class="flow-node agent-high-node">
-              <span>Diagnóstico 5</span>
-              <strong>Mejorado con bitácoras y normativa</strong>
+            <article class="flow-node context-node">
+              <span>prepare_expert_alignment()</span>
+              <strong>Arma el contexto de contraste</strong>
             </article>
             <div class="flow-connector">
               <strong>6</strong>
-              <span>Variables tabulares</span>
-            </div>
-            <article class="flow-node model-node">
-              <span>Modelo M-GCECDL</span>
-              <strong>Criticidad UITI_VANO y relevancias</strong>
-            </article>
-            <div class="flow-connector merge">
-              <strong>7</strong>
-              <span>Cotejo diagnósticos 3, 5 y 6</span>
+              <span>historical + inference + PDF</span>
             </div>
             <article class="flow-node agent-high-node emphasis-node">
-              <span>Agente 4 High</span>
-              <strong>Alineación experta y priorización</strong>
+              <span>expert-alignment</span>
+              <strong>Contrasta y prioriza variables revisables</strong>
+            </article>
+            <div class="flow-connector">
+              <strong>7</strong>
+              <span>3 JSON validados</span>
+            </div>
+            <article class="flow-node output-node">
+              <span>render()</span>
+              <strong>Fusiona las salidas validadas en el HTML del circuito</strong>
             </article>
           </div>
 
           <div class="flow-lane">
-            <span class="lane-label">Simulación y reporte</span>
-            <article class="flow-node agent-high-node">
-              <span>Agente 4</span>
-              <strong>Opciones de intervención</strong>
+            <span class="lane-label">8-9. Publicación y vault</span>
+            <article class="flow-node output-node">
+              <span>Reporte HTML</span>
+              <strong>reports/interpretability/html/</strong>
             </article>
             <div class="flow-connector">
               <strong>8</strong>
-              <span>Variables candidatas</span>
+              <span>Paso 9, alert-and-continue</span>
+            </div>
+            <article class="flow-node data-node">
+              <span>vault-circuito</span>
+              <strong>Proyecta los 3 JSON validados a reports/vault/*.md</strong>
+            </article>
+            <div class="flow-connector dashed">
+              <strong>9</strong>
+              <span>Aislado, nunca el manifiesto amplio</span>
             </div>
             <article class="flow-node agent-low-node">
-              <span>Agente automático</span>
-              <strong>Softmax, valores sugeridos y mapas</strong>
+              <span>graphify --update</span>
+              <strong>Indexa solo reports/vault/graphify-out/graph.json</strong>
             </article>
             <div class="flow-connector cycle">
-              <strong>9-10</strong>
-              <span>Curvas + mapas por vano</span>
+              <strong>→</strong>
+              <span>Reutilizable entre circuitos</span>
             </div>
-            <article class="flow-node agent-high-node">
-              <span>Agente 6 High</span>
-              <strong>Redactor de informes</strong>
-            </article>
-            <div class="flow-connector">
-              <strong>11</strong>
-              <span>Evidencias</span>
-            </div>
-            <article class="flow-node output-node">
-              <span>Reporte final</span>
-              <strong>Razonamientos y soporte técnico</strong>
+            <article class="flow-node context-node">
+              <span>Vault Obsidian</span>
+              <strong>Consultable entre circuitos, aislado del grafo raíz del proyecto</strong>
             </article>
           </div>
         </div>
@@ -866,6 +992,121 @@ const cronograma = [
           <article>
             <strong>Documentar</strong>
             <p>Reporte final automatizado para soporte técnico y directivo.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="modelo-matematica" class="section">
+        <div class="section-heading">
+          <p class="eyebrow">Resumen técnico del modelo</p>
+          <h2>Diagrama de bloques y matemática del M-GCECDL</h2>
+          <p>
+            Síntesis de <a href="#modelo-mgcecdl">#modelo-mgcecdl</a> para el bloque de cómputo puro: los 5
+            componentes del modelo, las 4 ecuaciones que gobiernan su fusión y su regularización, y el grafo
+            conceptual de variables que actúa como prior experto durante el entrenamiento.
+          </p>
+        </div>
+
+        <div class="process-grid">
+          {mgcecdlComponents.map(([componente, descripcion]) => (
+            <article><strong>{componente}</strong><p>{descripcion}</p></article>
+          ))}
+        </div>
+
+        <div class="connection-intro">
+          <h3>Las 4 ecuaciones más relevantes</h3>
+          <p>
+            Notación: <code>x</code> variables de entrada de un modo, <code>z</code> su embedding, <code>x̂</code>{" "}
+            su reconstrucción, <code>p</code> probabilidad por clase, <code>α</code> pesos de confiabilidad
+            entre modos.
+          </p>
+        </div>
+
+        <div class="equation-grid">
+          <article class="equation-card">
+            <span>1. Atención por variable (dentro de cada modo)</span>
+            <pre>{`s = W_a · LayerNorm(x)
+a = softmax(s)
+x' = x ⊙ a · d`}</pre>
+            <p><code>d</code> es el número de variables del modo: reescala la ponderación softmax para no aplanar la magnitud de entrada antes del codificador.</p>
+          </article>
+          <article class="equation-card">
+            <span>2. Fusión ponderada por confiabilidad</span>
+            <pre>{`α = softmax(r / τ),  r_m = Linear(z_m)
+p_fused = softmax( Σ_m α_m · log p_m )`}</pre>
+            <p>Cada modo aporta su propia distribución de clase <code>p_m</code>; la mezcla es un pool logarítmico de opiniones ponderado por confiabilidad, no un promedio simple.</p>
+          </article>
+          <article class="equation-card">
+            <span>3. Regularización con el grafo experto</span>
+            <pre>{`K_g[i,j]  = exp(−‖g_i − g_j‖² / 2σ_g²)
+K_x̂[i,j] = exp(−‖x̂_i − x̂_j‖² / 2σ²)
+I_α(K_x̂, K_g) = H(K_x̂) + H(K_g) − H(K_x̂ ⊙ K_g)`}</pre>
+            <p><code>g_i</code> es la fila <code>i</code> de la matriz de adyacencia del grafo experto, en el mismo orden que las columnas del modelo. <code>H</code> es la entropía cuadrática de Rényi; maximizar <code>I_α</code> acerca la similitud entre variables reconstruidas por el modelo a la similitud definida por el grafo de dominio.</p>
+          </article>
+          <article class="equation-card">
+            <span>4. Pérdida total de entrenamiento</span>
+            <pre>{`L = L_fusión + γ_sup·L_modal + γ_agr·L_acuerdo
+  + γ_reg·L_reg + λ_rec·L_reconstr + λ_mi·(1 − I_α / log n)`}</pre>
+            <p>Seis términos independientes: ajuste supervisado fusionado, supervisión por modo, acuerdo entre modos (divergencia GJS), regularización de confiabilidad (KL + entropía), reconstrucción MSE y el término de información mutua del grafo.</p>
+          </article>
+        </div>
+
+        <div class="connection-intro">
+          <h3>Grafo conceptual base usado como regularización</h3>
+          <p>
+            La matriz de adyacencia <code>g</code> de la ecuación 3 es el grafo de variables seleccionadas —mismo
+            orden de columnas que alimenta al modelo—, construido a partir de las relaciones físico/lógicas de
+            dominio descritas en <a href="#criticidad-fisica">#criticidad-fisica</a>. El entrenamiento no ve
+            etiquetas del grafo: solo alinea, vía kernel RBF e información mutua de Rényi, la forma en que el
+            modelo reconstruye cada variable con la forma en que el experto dice que esas variables se
+            relacionan entre sí.
+          </p>
+        </div>
+
+        <div class="detail-block">
+          <h3>Grafo base embebido</h3>
+          <iframe class="graph-frame" src={grafoRedNivel2Seleccionadas} title="Grafo experto de variables seleccionadas, usado como regularización del M-GCECDL"></iframe>
+        </div>
+      </section>
+
+      <section id="comandos" class="section">
+        <div class="section-heading">
+          <p class="eyebrow">Puntos de entrada reales</p>
+          <h2>Familia de comandos de reporte</h2>
+          <p>
+            Cinco comandos nativos del runtime operan sobre el mismo pipeline determinista. <code>/report</code> es
+            el único orquestador de un circuito; <code>/reporte-lote</code> e <code>/informe-gerencial</code> lo
+            invocan por referencia (nunca copian su lógica) y reutilizan el mismo contrato de clustering que
+            <code>/agrupamiento-circuitos</code> expone como comando standalone; <code>/limpiar-corridas</code> es
+            el único que no invoca ningún agente.
+          </p>
+        </div>
+
+        <div class="agent-grid">
+          <article class="agent-card">
+            <span class="agent-type high">Orquestador</span>
+            <h3>/report</h3>
+            <p><code>/report CIRCUITO [fecha_inicio fecha_fin]</code> — reporte HTML de un circuito, los 9 pasos completos: agentes <code>historical</code>, <code>inference</code>, <code>auto-simulator</code> y <code>expert-alignment</code>, más la proyección al vault (paso 9).</p>
+          </article>
+          <article class="agent-card">
+            <span class="agent-type high">Lote</span>
+            <h3>/reporte-lote</h3>
+            <p><code>/reporte-lote grupo=alta</code> — invoca <code>/report</code> (pasos 2-9 completos) para cada circuito de un grupo de criticidad, precedido por el scatter de clustering del paso 1.5.</p>
+          </article>
+          <article class="agent-card">
+            <span class="agent-type high">Síntesis</span>
+            <h3>/informe-gerencial</h3>
+            <p><code>/informe-gerencial grupo=media</code> — informe gerencial cross-circuito sobre hasta 12 circuitos representativos del grupo, con el scatter de clustering de toda la flota y el grafo circular de patrones cross-circuito (toggle junto al grafo por comunidades).</p>
+          </article>
+          <article class="agent-card">
+            <span class="agent-type model">Standalone</span>
+            <h3>/agrupamiento-circuitos</h3>
+            <p>Solo el scatter interactivo de clustering de criticidad, sin generar reporte. Expone el contrato que reutilizan <code>/reporte-lote</code> e <code>/informe-gerencial</code>.</p>
+          </article>
+          <article class="agent-card">
+            <span class="agent-type low">Mantenimiento</span>
+            <h3>/limpiar-corridas</h3>
+            <p>Dry-run con resumen por categoría, seguido de confirmación explícita e irreversible para borrar artefactos desechables de corridas previas (runs, HTML, vault). No invoca ningún agente ni skill.</p>
           </article>
         </div>
       </section>
@@ -987,11 +1228,11 @@ const cronograma = [
           <a class="back-link" href="#arquitectura">← Volver al simulador multimodal</a>
           <div class="section-heading">
             <p class="eyebrow">Componente 02</p>
-            <h2 id="historial-title">Historial y RAG</h2>
+            <h2 id="historial-title">Historial y discusión experta en PDF</h2>
             <p>
               Construcción de una memoria técnica verificable a partir de reportes expertos en PDF y su uso
-              posterior como contexto documental para comparar el análisis histórico, el modelo predictivo y
-              la evidencia operacional disponible.
+              posterior como contexto documental para comparar el análisis histórico, la interpretación
+              predictiva y la evidencia operacional disponible.
             </p>
           </div>
 
@@ -999,7 +1240,7 @@ const cronograma = [
             <article><strong>8</strong><span>PDFs técnicos de entrada</span></article>
             <article><strong>14</strong><span>discusiones expertas validadas</span></article>
             <article><strong>5</strong><span>columnas del Excel base</span></article>
-            <article><strong>3</strong><span>agentes LLM en el flujo v3</span></article>
+            <article><strong>4</strong><span>agentes del flujo de reporte</span></article>
           </div>
 
           <div class="detail-block">
@@ -1040,9 +1281,9 @@ const cronograma = [
           <div class="detail-block">
             <h3>Flujo de generación de reportes</h3>
             <p>
-              La generación del reporte coordina tres salidas complementarias: primero explica los datos
-              históricos, luego interpreta la inferencia del modelo M-GCECDL y finalmente compara ambos
-              resultados contra la memoria experta de los PDFs.
+              El despacho paralelo obligatorio de <code>/report</code> corre <code>historical</code>,
+              <code>inference</code> y <code>auto-simulator</code> juntos; cuando los dos primeros terminan,
+              <code>expert-alignment</code> compara sus resultados contra la memoria experta de los PDFs.
             </p>
             <div class="process-grid model-process">
               {llmNotebookFlow.map(([agente, descripcion]) => (
@@ -1050,9 +1291,10 @@ const cronograma = [
               ))}
             </div>
             <p class="note-callout">
-              Los dos primeros RAG producen diagnósticos independientes. El RAG de contraste experto no reemplaza
-              esos análisis: los compara con las discusiones expertas para marcar coincidencias, diferencias y
-              variables a priorizar.
+              <code>historical</code> e <code>inference</code> producen diagnósticos independientes;
+              <code>auto-simulator</code> corre junto y puede omitirse sin bloquear el reporte.
+              <code>expert-alignment</code> no reemplaza esos análisis: los compara con las discusiones
+              expertas para marcar coincidencias, diferencias y variables a priorizar.
             </p>
           </div>
           <a class="back-link bottom" href="#arquitectura">← Volver al simulador multimodal</a>
@@ -1775,6 +2017,12 @@ const cronograma = [
 
           <div class="detail-block">
             <h3>Tiempos actualizados del flujo</h3>
+            <p>
+              Tabla acotada a los 6 notebooks de la cadena secuencial con GPU: <code>01 → 02 → 03</code>, que
+              a su vez alimenta a <code>04</code>, <code>05</code> y <code>06</code>. Los otros 3 notebooks
+              reales del repositorio (<code>07</code>, <code>08</code>, <code>09</code>) no forman parte de esta
+              cadena de tiempos GPU y se listan aparte debajo.
+            </p>
             <div class="table-wrap compact-table">
               <table>
                 <thead>
@@ -1785,14 +2033,12 @@ const cronograma = [
                 </thead>
                 <tbody>
                   <tr><td><code>01_climate.ipynb</code></td><td>36.5 min</td></tr>
-                  <tr><td><code>01_pdf_discussion_table_from_pdfs.ipynb</code></td><td>2 min</td></tr>
-                  <tr><td><code>02_local_uiti_vano_interpretability_v3.ipynb</code></td><td>5 min</td></tr>
                   <tr><td><code>02_mgcecdl_optuna_classification_search.ipynb</code></td><td>2 h para 20 trials</td></tr>
                   <tr><td><code>03_mgcecdl_training.ipynb</code></td><td>10 min para 100 épocas</td></tr>
                   <tr><td><code>04_mgcecdl_performance.ipynb</code></td><td>1 min</td></tr>
                   <tr><td><code>05_mgcecdl_circuit_analysis.ipynb</code></td><td>5 min</td></tr>
                   <tr><td><code>06_mgcecdl_document_replication.ipynb</code></td><td>2 h 30 min</td></tr>
-                  <tr><td><strong>Total aproximado</strong></td><td><strong>5.49 h</strong></td></tr>
+                  <tr><td><strong>Total aproximado</strong></td><td><strong>5.38 h</strong></td></tr>
                 </tbody>
               </table>
             </div>
@@ -1800,6 +2046,20 @@ const cronograma = [
               El cambio fuerte está en <code>06_mgcecdl_document_replication.ipynb</code>, porque agrega
               <strong>2.5 h de T4</strong> al flujo completo.
             </p>
+            <div class="process-grid">
+              <article>
+                <strong>07_graph_preserved_connections_uiti_vano.ipynb</strong>
+                <p>Cache opcional para <code>03</code>, no bloqueante. Sin GPU: construye el grafo experto a mano desde Excel, sin entrenar ningún modelo.</p>
+              </article>
+              <article>
+                <strong>08_geo_network_exploration.ipynb</strong>
+                <p>Standalone: solo shapefiles + CSV, no lo consume ningún otro notebook. Sin GPU.</p>
+              </article>
+              <article>
+                <strong>09_simulador.ipynb</strong>
+                <p>Simulador manual interactivo (ipywidgets) sobre el modelo de <code>03</code>. Necesita un clúster clásico ("all-purpose"), no Serverless: Databricks documenta que un notebook con ipywidgets debe adjuntarse a un clúster en ejecución.</p>
+              </article>
+            </div>
           </div>
 
           <div class="detail-block">
@@ -2699,81 +2959,35 @@ const cronograma = [
     border-top: 1px solid var(--line);
   }
 
-  .prototype-showcase {
+  .dashboard-shots {
     display: grid;
-    gap: 1rem;
+    gap: 1.2rem;
   }
 
-  .feature-shot {
-    display: grid;
-    grid-template-columns: minmax(280px, 0.45fr) minmax(0, 0.55fr);
-    gap: clamp(1rem, 3vw, 1.6rem);
-    align-items: center;
-    padding: clamp(1rem, 3vw, 1.4rem);
-    color: white;
-    background: linear-gradient(135deg, #10352e 0%, #0b5f8a 100%);
+  .dashboard-shots figure {
+    margin: 0;
+    padding: clamp(0.7rem, 2vw, 1rem);
+    background: white;
+    border: 1px solid var(--line);
     border-radius: 8px;
     box-shadow: var(--shadow);
   }
 
-  .feature-shot span {
-    display: inline-flex;
-    margin-bottom: 0.7rem;
-    color: #ffe2a6;
-    font-size: 0.78rem;
-    font-weight: 900;
-    text-transform: uppercase;
-  }
-
-  .feature-shot h3 {
-    max-width: 420px;
-    margin-bottom: 0.7rem;
-    font-size: clamp(1.5rem, 3vw, 2.35rem);
-    line-height: 1.05;
-  }
-
-  .feature-shot p {
-    margin-bottom: 0;
-    color: rgb(255 255 255 / 82%);
-    line-height: 1.6;
-  }
-
-  .feature-shot img {
+  .dashboard-shots img {
     width: 100%;
-    border: 1px solid rgb(255 255 255 / 20%);
-    border-radius: 6px;
-    box-shadow: 0 18px 44px rgb(0 0 0 / 20%);
-  }
-
-  .prototype-gallery {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 1rem;
-  }
-
-  .prototype-gallery article {
-    overflow: hidden;
-    background: white;
     border: 1px solid var(--line);
-    border-radius: 8px;
-    box-shadow: 0 12px 32px rgb(16 33 41 / 8%);
+    border-radius: 6px;
   }
 
-  .prototype-gallery img {
-    width: 100%;
-    aspect-ratio: 16 / 10;
-    object-fit: cover;
-    border-bottom: 1px solid var(--line);
-  }
-
-  .prototype-gallery div {
-    padding: 1rem;
-  }
-
-  .prototype-gallery p {
-    margin-bottom: 0;
+  .dashboard-shots figcaption {
+    margin-top: 0.8rem;
     color: var(--muted);
+    font-size: 0.95rem;
     line-height: 1.55;
+  }
+
+  .dashboard-shots figcaption strong {
+    color: var(--ink);
   }
 
   .physics {
@@ -2826,6 +3040,50 @@ const cronograma = [
 
   .connections-table table {
     min-width: 980px;
+  }
+
+  .equation-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+
+  .equation-card {
+    padding: clamp(0.9rem, 2vw, 1.2rem);
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+  }
+
+  .equation-card span {
+    display: block;
+    margin-bottom: 0.6rem;
+    color: var(--green-dark);
+    font-size: 0.78rem;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .equation-card pre {
+    margin: 0 0 0.7rem;
+    padding: 0.7rem 0.8rem;
+    overflow-x: auto;
+    background: #f8fbfa;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    color: var(--ink);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.82rem;
+    line-height: 1.5;
+  }
+
+  .equation-card p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.92rem;
+    line-height: 1.55;
   }
 
   .graph-banner {
@@ -3023,18 +3281,18 @@ const cronograma = [
     position: relative;
     display: grid;
     grid-template-columns:
-      minmax(120px, 0.55fr)
-      minmax(170px, 1fr)
-      minmax(90px, 0.42fr)
-      minmax(170px, 1fr)
-      minmax(90px, 0.42fr)
-      minmax(170px, 1fr)
-      minmax(90px, 0.42fr)
-      minmax(170px, 1fr);
-    gap: 0.75rem;
+      minmax(90px, 0.55fr)
+      minmax(108px, 1fr)
+      minmax(40px, 0.32fr)
+      minmax(108px, 1fr)
+      minmax(40px, 0.32fr)
+      minmax(108px, 1fr)
+      minmax(40px, 0.32fr)
+      minmax(108px, 1fr);
+    gap: 0.5rem;
     align-items: stretch;
-    min-width: 1160px;
-    padding: 0.8rem;
+    width: 100%;
+    padding: 0.6rem;
     background: #f8fbfa;
     border: 1px solid var(--line);
     border-radius: 8px;
@@ -3057,24 +3315,29 @@ const cronograma = [
 
   .flow-node {
     min-height: 112px;
-    padding: 0.9rem;
+    padding: 0.55rem;
     border: 2px solid var(--line);
     border-radius: 8px;
     background: #f8fbfa;
+    overflow-wrap: anywhere;
   }
 
   .flow-node span {
     display: block;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.4rem;
     color: var(--muted);
-    font-size: 0.75rem;
+    font-size: 0.66rem;
     font-weight: 900;
     text-transform: uppercase;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
   }
 
   .flow-node strong {
     display: block;
-    line-height: 1.2;
+    font-size: 0.82rem;
+    line-height: 1.28;
+    overflow-wrap: anywhere;
   }
 
   .flow-connector {
@@ -3118,25 +3381,26 @@ const cronograma = [
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 32px;
-    min-height: 32px;
-    margin: 0.35rem 0;
+    min-width: 26px;
+    min-height: 26px;
+    margin: 0.3rem 0;
     z-index: 1;
     color: white;
     background: var(--green);
     border-radius: 999px;
-    font-size: 0.78rem;
+    font-size: 0.68rem;
   }
 
   .flow-connector span {
-    max-width: 120px;
+    max-width: 100%;
     z-index: 1;
-    padding: 0.12rem 0.28rem;
+    padding: 0.12rem 0.2rem;
     color: var(--muted);
     background: #f8fbfa;
-    font-size: 0.76rem;
+    font-size: 0.64rem;
     font-weight: 800;
     line-height: 1.2;
+    overflow-wrap: anywhere;
   }
 
   .flow-connector.dashed::before {
@@ -3204,6 +3468,52 @@ const cronograma = [
   .emphasis-node {
     border-width: 3px;
     box-shadow: 0 14px 34px rgb(0 122 83 / 14%);
+  }
+
+  .migration-steps {
+    display: grid;
+    gap: 0.65rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .migration-steps li {
+    display: grid;
+    grid-template-columns: 2.3rem minmax(0, 1fr);
+    gap: 0.8rem;
+    align-items: start;
+    padding: 0.7rem 1rem;
+    background: #f8fbfa;
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--green);
+    border-radius: 8px;
+  }
+
+  .migration-steps .step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.1rem;
+    height: 2.1rem;
+    color: white;
+    background: var(--green);
+    border-radius: 999px;
+    font-weight: 900;
+    font-size: 0.92rem;
+  }
+
+  .migration-steps strong {
+    display: block;
+    margin-bottom: 0.3rem;
+    overflow-wrap: anywhere;
+  }
+
+  .migration-steps p {
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.5;
+    overflow-wrap: anywhere;
   }
 
   .value-cycle {
@@ -3448,12 +3758,14 @@ const cronograma = [
   .process-grid strong {
     display: block;
     margin-bottom: 0.45rem;
+    overflow-wrap: anywhere;
   }
 
   .process-grid p {
     margin-bottom: 0;
     color: var(--muted);
     line-height: 1.5;
+    overflow-wrap: anywhere;
   }
 
   .mode-count {
@@ -3840,8 +4152,7 @@ const cronograma = [
     .timeline,
     .deliverable-grid,
     .cloud-layout,
-    .feature-shot,
-    .prototype-gallery,
+    .equation-grid,
     .physics-summary,
     .graph-banner,
     .architecture-pillars,
