@@ -1088,9 +1088,52 @@ def _report_reference_html(report_html: str | None) -> str:
     return _escape(Path(report_html).name)
 
 
+def _graph_toggle_html(graph_view_html: str | None, graph_circular_html: str | None) -> str:
+    """Embed the circular (`graph_circular_html`) and community
+    (`graph_view_html`) graph figures, per spec "Dual-Graph Toggle" / design
+    D4:
+    - both available -> both embed as sibling `<iframe srcdoc>` blocks
+      behind a plain client-side button pair + a small inline `<script>`
+      (no new JS framework -- static-HTML-report philosophy); switching
+      only mutates `style.display`, never reloads the page. The circular
+      graph is the one visible on load (design D4/spec: it answers the
+      manager's cross-circuit question at a glance); the community graph
+      starts hidden.
+    - exactly one available -> that one embeds alone, no toggle control.
+    - neither available -> the SAME muted "figure not available this run"
+      indicator this module already used before the toggle existed
+      (independent degradation from the patterns list itself).
+    """
+    if graph_circular_html and graph_view_html:
+        circular_frame = _iframe_srcdoc(graph_circular_html)
+        community_frame = _iframe_srcdoc(graph_view_html)
+        return f"""
+<div class="graph-toggle-controls">
+<button type="button" id="graph-toggle-circular-btn" class="graph-toggle-btn graph-toggle-btn-active" onclick="mostrarGrafoCircuitos('circular')">Grafo circular</button>
+<button type="button" id="graph-toggle-community-btn" class="graph-toggle-btn" onclick="mostrarGrafoCircuitos('comunidad')">Grafo de comunidades</button>
+</div>
+<div id="graph-toggle-circular" class="graph-toggle-panel">{circular_frame}</div>
+<div id="graph-toggle-community" class="graph-toggle-panel" style="display:none;">{community_frame}</div>
+<script>
+function mostrarGrafoCircuitos(nombre) {{
+  document.getElementById('graph-toggle-circular').style.display = nombre === 'circular' ? '' : 'none';
+  document.getElementById('graph-toggle-community').style.display = nombre === 'comunidad' ? '' : 'none';
+  document.getElementById('graph-toggle-circular-btn').classList.toggle('graph-toggle-btn-active', nombre === 'circular');
+  document.getElementById('graph-toggle-community-btn').classList.toggle('graph-toggle-btn-active', nombre === 'comunidad');
+}}
+</script>
+"""
+    if graph_circular_html:
+        return _iframe_srcdoc(graph_circular_html)
+    if graph_view_html:
+        return _iframe_srcdoc(graph_view_html)
+    return "<p class='muted'>figura de grafo no disponible en esta corrida.</p>"
+
+
 def _graph_patterns_html(
     graph_patterns: list[dict[str, Any]] | None,
     graph_view_html: str | None,
+    graph_circular_html: str | None = None,
     *,
     n_sampled: int,
 ) -> str:
@@ -1103,10 +1146,14 @@ def _graph_patterns_html(
     min-support (`graph_patterns == []`); otherwise the populated itemized
     pattern list, always carrying the visible LLM-assisted provenance badge
     (spec: "Provenance labeling of the graph subsection") -- PLUS, only when
-    the itemized list itself is populated, the embedded `graph_view_html`
-    figure (`_iframe_srcdoc`) when available, or a muted "figure not
-    available this run" indicator when it is not (independent degradation
-    from the patterns list, design D5/spec "Graceful degradation").
+    the itemized list itself is populated, the embedded graph figure(s) via
+    `_graph_toggle_html` (spec: "Dual-Graph Toggle", design D4): both the
+    community (`graph_view_html`) and circular (`graph_circular_html`)
+    graphs when both are available, behind a client-side toggle defaulting
+    to the circular graph; a single figure with no toggle when only one is
+    available; the existing muted "figure not available this run" indicator
+    when neither is (independent degradation from the patterns list,
+    design D5/spec "Graceful degradation").
     """
     if n_sampled < 2:
         return ""
@@ -1125,10 +1172,7 @@ def _graph_patterns_html(
             for pattern in graph_patterns
         )
         body = f"<ul>{rows}</ul>"
-        if graph_view_html:
-            body += _iframe_srcdoc(graph_view_html)
-        else:
-            body += "<p class='muted'>figura de grafo no disponible en esta corrida.</p>"
+        body += _graph_toggle_html(graph_view_html, graph_circular_html)
 
     return f"""
 <section class="report-section">
@@ -1199,6 +1243,7 @@ def render_managerial_report(
     sampled: Sequence[str],
     graph_patterns: list[dict[str, Any]] | None = None,
     graph_view_html: str | None = None,
+    graph_circular_html: str | None = None,
 ) -> str:
     """Render the single standalone HTML report (spec: "Single HTML output
     per invocation") -- resumen/patrones/outliers/riesgo/acciones sections
@@ -1222,7 +1267,9 @@ def render_managerial_report(
 
     label = group.get("label") or group.get("slug") or "grupo"
     circuit_count = group.get("circuit_count", len(sampled))
-    graph_section_html = _graph_patterns_html(graph_patterns, graph_view_html, n_sampled=len(sampled))
+    graph_section_html = _graph_patterns_html(
+        graph_patterns, graph_view_html, graph_circular_html, n_sampled=len(sampled)
+    )
 
     return f"""<!DOCTYPE html>
 <html lang="es">
@@ -1285,11 +1332,18 @@ def render_and_write(
     output_root: str | Path | None = None,
     graph_patterns_path: str | Path | None = None,
     graph_view_path: str | Path | None = None,
+    graph_circular_path: str | Path | None = None,
 ) -> InformeGerencialOutcome:
     """Full render pipeline: re-resolve the SAME deterministic group/window/
     sampling as `resolve()` (K-Means is seeded, so the sampled set is
     reproducible), load each sampled circuit's content, synthesize, render,
     and persist the HTML report.
+
+    `graph_circular_path` (the `circuit_meta_graph build` export, PR1) is
+    loaded via the SAME `load_graph_view` reused for `graph_view_path` --
+    both are raw, pre-rendered HTML text with an identical never-raise
+    degrade contract (design: "reuse `load_graph_view` for both files"), so
+    no new loader is needed.
 
     Called by the SKILL runbook's final step, AFTER the confirmation gate has
     cleared and any missing `/report` runs have already been auto-triggered
@@ -1345,6 +1399,7 @@ def render_and_write(
     ]
     graph_patterns = load_graph_patterns(graph_patterns_path, sampled)
     graph_view_html = load_graph_view(graph_view_path)
+    graph_circular_html = load_graph_view(graph_circular_path)
 
     synthesis = synthesize(sampled_records, loaded_content, group)
     html = render_managerial_report(
@@ -1355,6 +1410,7 @@ def render_and_write(
         sampled=sampled,
         graph_patterns=graph_patterns,
         graph_view_html=graph_view_html,
+        graph_circular_html=graph_circular_html,
     )
 
     try:
@@ -1414,6 +1470,7 @@ def _build_parser() -> argparse.ArgumentParser:
     render_command.add_argument("--output-root")
     render_command.add_argument("--graph-patterns")
     render_command.add_argument("--graph-view")
+    render_command.add_argument("--graph-circular")
 
     return parser
 
@@ -1465,6 +1522,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             output_root=args.output_root,
             graph_patterns_path=args.graph_patterns,
             graph_view_path=args.graph_view,
+            graph_circular_path=args.graph_circular,
         )
         print(outcome.to_json_text())
         return 0 if outcome.status == "success" else 2

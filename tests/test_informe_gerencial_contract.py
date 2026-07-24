@@ -1378,3 +1378,208 @@ def test_cli_render_accepts_graph_view_arg(monkeypatch, capsys, tmp_path):
     assert payload["status"] == "success"
     written = Path(payload["output_html"]).read_text(encoding="utf-8")
     assert "srcdoc=" in written
+
+
+# ---------------------------------------------------------------------------
+# Dual-graph toggle: circular graph embed + CLI flag (Phase 4-5, PR2)
+# ---------------------------------------------------------------------------
+
+
+_PATTERNS_FOR_TOGGLE = [{"tema": "fauna en vanos", "circuitos": ["MUYALTA_0", "MUYALTA_1"], "soporte": 2}]
+
+
+def test_graph_patterns_html_both_graphs_available_renders_toggle_circular_default_visible():
+    """Spec 'Dual-Graph Toggle', scenario 'Both graphs available': both
+    iframe srcdoc blocks embed, a client-side toggle control + inline script
+    are present, and the circular graph is the one visible on load (design
+    D4 -- circular answers the manager's cross-circuit question at a
+    glance; community graph starts hidden, reachable via the toggle).
+    """
+    view_html = "<html><body>vista de comunidad</body></html>"
+    circular_html = "<html><body>vista circular</body></html>"
+
+    html = informe_contract._graph_patterns_html(
+        _PATTERNS_FOR_TOGGLE, view_html, circular_html, n_sampled=2
+    )
+
+    assert html.count("srcdoc=") == 2
+    assert "<script>" in html
+    # A visible client-side control (button/tab pair) to switch graphs.
+    assert "graph-toggle" in html
+    # Circular panel has no inline "display:none" (visible by default);
+    # community panel does (hidden until the reader toggles it).
+    circular_panel = re.search(r'<div id="graph-toggle-circular"[^>]*>', html)
+    community_panel = re.search(r'<div id="graph-toggle-community"[^>]*>', html)
+    assert circular_panel is not None and community_panel is not None
+    assert "display:none" not in circular_panel.group(0)
+    assert "display:none" in community_panel.group(0)
+
+
+def test_graph_patterns_html_switch_does_not_reload_page():
+    """Toggle script mutates DOM (`style.display`) only -- no `location`/
+    `href`/form-submit reload anywhere in the emitted script.
+    """
+    html = informe_contract._graph_patterns_html(
+        _PATTERNS_FOR_TOGGLE,
+        "<html><body>vista de comunidad</body></html>",
+        "<html><body>vista circular</body></html>",
+        n_sampled=2,
+    )
+
+    assert "location.href" not in html
+    assert "location.reload" not in html
+    assert "<form" not in html
+
+
+def test_graph_patterns_html_only_circular_available_single_graph_no_toggle():
+    """Spec 'Only one graph available': only the available figure embeds,
+    no toggle control shown.
+    """
+    html = informe_contract._graph_patterns_html(
+        _PATTERNS_FOR_TOGGLE, None, "<html><body>vista circular</body></html>", n_sampled=2
+    )
+
+    assert html.count("srcdoc=") == 1
+    assert "vista circular" in html
+    assert "graph-toggle-btn" not in html
+    assert "figura de grafo no disponible en esta corrida" not in html
+
+
+def test_graph_patterns_html_only_community_available_single_graph_no_toggle():
+    html = informe_contract._graph_patterns_html(
+        _PATTERNS_FOR_TOGGLE, "<html><body>vista de comunidad</body></html>", None, n_sampled=2
+    )
+
+    assert html.count("srcdoc=") == 1
+    assert "vista de comunidad" in html
+    assert "graph-toggle-btn" not in html
+
+
+def test_graph_patterns_html_neither_graph_available_muted_state_unaffected():
+    """Spec 'Neither graph available': same existing muted indicator as
+    before this change -- unaffected by the new toggle wiring.
+    """
+    html = informe_contract._graph_patterns_html(_PATTERNS_FOR_TOGGLE, None, None, n_sampled=2)
+
+    assert "figura de grafo no disponible en esta corrida" in html
+    assert "srcdoc=" not in html
+    assert "graph-toggle-btn" not in html
+
+
+def test_render_managerial_report_threads_graph_circular_html():
+    """`render_managerial_report` accepts `graph_circular_html` and threads
+    it into the assembled graph section alongside the existing
+    `graph_view_html`.
+    """
+    html = _render_report_html(
+        sampled=["MUYALTA_0", "MUYALTA_1"], graph_patterns=_PATTERNS_FOR_TOGGLE
+    )
+    # Baseline (no circular graph passed through the helper): single graph,
+    # no toggle -- confirms the parameter is genuinely optional/additive.
+    assert "graph-toggle-btn" not in html
+
+    raw_df = _four_tier_raw_df(per_tier=2)
+    sampled_records = _sampled_records([("MUYALTA_0", 40, 50000.0, "Muy Alta"), ("MUYALTA_1", 41, 51000.0, "Muy Alta")])
+    loaded_content = [None, None]
+    group = {"slug": "muy-alta", "label": "Muy Alta", "circuit_count": 2}
+    synthesis = synthesize(sampled_records, loaded_content, group)
+
+    html_with_both = render_managerial_report(
+        raw_df,
+        synthesis=synthesis,
+        group=group,
+        resolved_window={"fecha_inicio": "2026-01-01", "fecha_fin": "2026-12-31"},
+        sampled=["MUYALTA_0", "MUYALTA_1"],
+        graph_patterns=_PATTERNS_FOR_TOGGLE,
+        graph_view_html="<html><body>vista de comunidad</body></html>",
+        graph_circular_html="<html><body>vista circular</body></html>",
+    )
+
+    assert html_with_both.count("srcdoc=") == 2
+    assert "graph-toggle-btn" in html_with_both
+
+
+def test_render_and_write_loads_graph_circular_path_and_embeds(monkeypatch, tmp_path):
+    """`render_and_write(..., graph_circular_path=...)` loads the circular
+    HTML via the reused `load_graph_view` (never a new parser) and threads
+    it into the final report.
+    """
+    frame = _four_tier_raw_df(per_tier=2)
+    monkeypatch.setattr(informe_contract, "load_dataset", lambda path: frame)
+    df_coords = _known_tier_df_coords_full()
+    monkeypatch.setattr(informe_contract, "resolve_group_dataframe", lambda *a, **k: df_coords)
+    monkeypatch.setattr(
+        informe_contract,
+        "load_circuit_content",
+        lambda circuito, **kwargs: {"circuito": circuito, "source": "vault_note", "content": f"Narrativa {circuito}"},
+    )
+    output_root = tmp_path / "html"
+    graph_patterns_path = tmp_path / "graph-patterns.json"
+    _write_graph_patterns_json(
+        graph_patterns_path,
+        [{"tema": "fauna en vanos", "circuitos": ["MUYALTA_0", "MUYALTA_1", "MUYALTA_2"], "soporte": 3}],
+    )
+    graph_circular_path = tmp_path / "graph-circular.html"
+    graph_circular_path.write_text("<html><body>vista circular</body></html>", encoding="utf-8")
+
+    request = informe_contract.normalize_request("muy-alta", "2026-01-01", "2026-01-02")
+    outcome = informe_contract.render_and_write(
+        request,
+        data_path="data.csv",
+        output_root=output_root,
+        graph_patterns_path=graph_patterns_path,
+        graph_circular_path=graph_circular_path,
+    )
+
+    assert outcome.status == "success"
+    written = Path(outcome.output_html).read_text(encoding="utf-8")
+    assert "vista circular" in written
+    assert "srcdoc=" in written
+
+
+def test_cli_render_accepts_graph_circular_arg(monkeypatch, capsys, tmp_path):
+    frame = _four_tier_raw_df(per_tier=2)
+    monkeypatch.setattr(informe_contract, "load_dataset", lambda path: frame)
+    df_coords = _known_tier_df_coords_full()
+    monkeypatch.setattr(informe_contract, "resolve_group_dataframe", lambda *a, **k: df_coords)
+    monkeypatch.setattr(
+        informe_contract,
+        "load_circuit_content",
+        lambda circuito, **kwargs: {"circuito": circuito, "source": "vault_note", "content": f"Narrativa {circuito}"},
+    )
+    output_root = tmp_path / "html"
+    graph_patterns_path = tmp_path / "graph-patterns.json"
+    _write_graph_patterns_json(
+        graph_patterns_path,
+        [{"tema": "fauna en vanos", "circuitos": ["MUYALTA_0", "MUYALTA_1", "MUYALTA_2"], "soporte": 3}],
+    )
+    graph_view_path = tmp_path / "graph-view.html"
+    graph_view_path.write_text("<html><body>vista de comunidad</body></html>", encoding="utf-8")
+    graph_circular_path = tmp_path / "graph-circular.html"
+    graph_circular_path.write_text("<html><body>vista circular</body></html>", encoding="utf-8")
+
+    exit_code = informe_contract.main(
+        [
+            "render",
+            "muy-alta",
+            "2026-01-01",
+            "2026-01-02",
+            "--data-path",
+            "data.csv",
+            "--output-root",
+            str(output_root),
+            "--graph-patterns",
+            str(graph_patterns_path),
+            "--graph-view",
+            str(graph_view_path),
+            "--graph-circular",
+            str(graph_circular_path),
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "success"
+    written = Path(payload["output_html"]).read_text(encoding="utf-8")
+    assert written.count("srcdoc=") == 2
+    assert "graph-toggle-btn" in written
