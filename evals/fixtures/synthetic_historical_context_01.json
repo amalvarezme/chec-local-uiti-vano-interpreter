@@ -50,6 +50,5 @@
       }
     },
     "relationship_rules": []
-  },
-  "graph_knowledge": "Grafo no disponible en el eval offline."
+  }
 }

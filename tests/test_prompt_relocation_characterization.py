@@ -91,7 +91,6 @@ def _historical_basic_context() -> dict:
             },
             "relationship_rules": [],
         },
-        "graph_knowledge": "Grafo no disponible en pruebas.",
     }
 
 

@@ -172,10 +172,11 @@ def test_prepare_happy_path_no_dates_uses_full_circuit_range(tmp_path):
     assert state["critical_points"], "expected at least one critical point from the spike day"
 
     historical_context = _read_json(run_dir / "historical.bc.json")
-    # Graphify has no backend configured in the test environment; confirm the
-    # existing context_builder degradation path produced a string instead of
-    # raising (task 6.8 — orchestrator must not catch this earlier/later).
-    assert isinstance(historical_context["graph_knowledge"], str)
+    # graph_knowledge is retired at the source (informe-gerencial-graph-noise-
+    # cleanup, Prong B): `build_context_package` never invokes
+    # `graph_extractor.build_graphify_context`/any graphify subprocess/PyVis
+    # fallback, so the persisted context artifact must never carry the key.
+    assert "graph_knowledge" not in historical_context
 
     inference_context = _read_json(run_dir / "inference.bc.json")
     assert inference_context["circuito_interes"] == "C1"

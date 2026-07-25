@@ -36,6 +36,36 @@ SCHEMA_VERSION = "informe-gerencial-graph-view/v1"
 
 GraphViewStatus = Literal["success", "skipped_empty", "execution_error"]
 
+# Process-noise exclusion predicate (informe-gerencial-graph-noise-cleanup,
+# spec: "Scoped graph-view embed" -- process/execution-failure and
+# file-reference nodes must never enter `seed`, `bridge`, or any community).
+# Belt-and-suspenders: the id suffix is exact-today (graphify's own
+# synthesized fallback-error concept node id, e.g. `cha23l14_graph_fallback_error`);
+# the content-token signature generalizes to any future node -- with or
+# without that id shape -- that carries BOTH a graph-knowledge token AND a
+# failure token in its label/rationale/norm_label text. A single token family
+# alone (e.g. "fallback" in an unrelated ensayo-manual note) is NOT enough --
+# this is a heuristic, accepted, documented limit (no domain/process
+# taxonomy exists on vault-graph nodes): a false negative is possible if
+# graphify rewords its fallback text, but that is not treated as a defect.
+_PROCESS_NOISE_ID_SUFFIX = "_graph_fallback_error"
+_GRAPH_KNOWLEDGE_TOKENS = ("grafo de conocimiento", "graphify")
+_FAILURE_TOKENS = ("no pudo generarse", "no se pudo generar", "fallback")
+
+
+def _is_process_noise(node_data: dict[str, Any]) -> bool:
+    node_id = str(node_data.get("id") or "")
+    if node_id.endswith(_PROCESS_NOISE_ID_SUFFIX):
+        return True
+
+    text = " ".join(
+        str(node_data.get(field_name) or "")
+        for field_name in ("label", "rationale", "norm_label")
+    ).lower()
+    has_graph_token = any(token in text for token in _GRAPH_KNOWLEDGE_TOKENS)
+    has_failure_token = any(token in text for token in _FAILURE_TOKENS)
+    return has_graph_token and has_failure_token
+
 
 @dataclass(frozen=True)
 class GraphViewOutcome:
@@ -151,6 +181,11 @@ def build_graph_view(
         return GraphViewOutcome(status="execution_error", errors=[str(exc)])
 
     try:
+        noise_nodes = [
+            node_id for node_id, node_data in graph.nodes(data=True) if _is_process_noise(node_data)
+        ]
+        graph.remove_nodes_from(noise_nodes)
+
         canonical_targets = {f"{canonical_circuit_identity(c)}.md" for c in sampled_list}
 
         seed = {

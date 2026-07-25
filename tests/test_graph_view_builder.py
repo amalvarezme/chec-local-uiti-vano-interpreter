@@ -29,6 +29,7 @@ def _node(
     source_location: str | None = None,
     community: int | None,
     label: str = "node",
+    rationale: str = "",
 ) -> dict[str, Any]:
     return {
         "id": node_id,
@@ -45,6 +46,7 @@ def _node(
         "owner": "unowned",
         "community": community,
         "norm_label": label,
+        "rationale": rationale,
     }
 
 
@@ -339,6 +341,171 @@ def test_build_graph_view_node_limit_passed_through(tmp_path, monkeypatch):
 
     assert outcome.status == "success"
     assert captured["node_limit"] == 5
+
+
+# ---------------------------------------------------------------------------
+# Process-noise exclusion (informe-gerencial-graph-noise-cleanup, tasks 1.1-1.4)
+# ---------------------------------------------------------------------------
+
+
+def test_build_graph_view_excludes_id_suffix_noise_node_from_seed(tmp_path, monkeypatch):
+    """A node whose id ends in `_graph_fallback_error` and whose provenance
+    matches a sampled circuit's vault note must never enter `seed` -- even
+    though its provenance alone would otherwise qualify it (design D2:
+    "Process-noise node excluded from the seed set").
+    """
+    fixture = realistic_graph_json_fixture()
+    fixture["nodes"].append(
+        _node(
+            "cha23l14_graph_fallback_error",
+            source_file="reports/vault/CHA23L14.md",
+            community=1,
+            label="Error de fallback del grafo de conocimiento -- CHA23L14",
+            rationale=(
+                "El resumen de grafo de conocimiento (Graphify) no pudo "
+                "generarse para esta corrida (fallback nativo con error)."
+            ),
+        )
+    )
+    graph_json_path = tmp_path / "graph.json"
+    _write_graph_json(graph_json_path, fixture)
+    output_path = tmp_path / "graph-view.html"
+
+    captured: dict[str, Any] = {}
+
+    def _fake_to_html(G, communities, output, **kwargs):
+        captured["nodes"] = set(G.nodes())
+        Path(output).write_text("<html></html>", encoding="utf-8")
+
+    monkeypatch.setattr(graph_view_builder, "to_html", _fake_to_html)
+
+    outcome = build_graph_view(graph_json_path, SAMPLED, output_path)
+
+    assert outcome.status == "success"
+    assert "cha23l14_graph_fallback_error" not in captured["nodes"]
+    # The rest of the seed set is unaffected.
+    assert {"cha_seed_1", "cha_seed_2"} <= captured["nodes"]
+
+
+def test_build_graph_view_excludes_noise_node_even_as_bridge_candidate(tmp_path, monkeypatch):
+    """A process-noise node with `>= 2` seed neighbors must still be excluded
+    -- pruning runs before bridge derivation, not only against `seed` (design
+    D2: "Process-noise node excluded even as a bridge candidate").
+    """
+    fixture = realistic_graph_json_fixture()
+    fixture["nodes"].append(
+        _node(
+            "shared_graph_fallback_error",
+            source_file="llm/evals/unrelated_module.py",
+            community=5,
+            label="Error de fallback del grafo de conocimiento",
+            rationale=(
+                "El resumen de grafo de conocimiento (Graphify) no pudo "
+                "generarse para esta corrida (fallback nativo con error)."
+            ),
+        )
+    )
+    fixture["links"].extend(
+        [
+            _link("cha_seed_1", "shared_graph_fallback_error"),
+            _link("don_seed_1", "shared_graph_fallback_error"),
+        ]
+    )
+    graph_json_path = tmp_path / "graph.json"
+    _write_graph_json(graph_json_path, fixture)
+    output_path = tmp_path / "graph-view.html"
+
+    captured: dict[str, Any] = {}
+
+    def _fake_to_html(G, communities, output, **kwargs):
+        captured["nodes"] = set(G.nodes())
+        Path(output).write_text("<html></html>", encoding="utf-8")
+
+    monkeypatch.setattr(graph_view_builder, "to_html", _fake_to_html)
+
+    outcome = build_graph_view(graph_json_path, SAMPLED, output_path)
+
+    assert outcome.status == "success"
+    # Two distinct seed neighbors would otherwise qualify this as a bridge --
+    # the noise prune must still exclude it.
+    assert "shared_graph_fallback_error" not in captured["nodes"]
+
+
+def test_build_graph_view_excludes_content_signature_noise_without_id_suffix(tmp_path, monkeypatch):
+    """Future-proofing case (task 1.3): a node with NO `_graph_fallback_error`
+    id suffix, but whose label/rationale content carries the paired
+    graph-knowledge + failure token signature, is still excluded -- the
+    predicate is not solely id-based (design: "content-token signature ...
+    combined with an id ending in `_graph_fallback_error`" is belt-and-
+    suspenders, either signal alone triggers exclusion for content).
+    """
+    fixture = realistic_graph_json_fixture()
+    fixture["nodes"].append(
+        _node(
+            "cha_content_noise_no_suffix",
+            source_file="reports/vault/CHA23L14.md",
+            community=1,
+            label="Nota de contexto adicional",
+            rationale=(
+                "El resumen de grafo de conocimiento no pudo generarse para "
+                "esta corrida por un error de fallback nativo."
+            ),
+        )
+    )
+    graph_json_path = tmp_path / "graph.json"
+    _write_graph_json(graph_json_path, fixture)
+    output_path = tmp_path / "graph-view.html"
+
+    captured: dict[str, Any] = {}
+
+    def _fake_to_html(G, communities, output, **kwargs):
+        captured["nodes"] = set(G.nodes())
+        Path(output).write_text("<html></html>", encoding="utf-8")
+
+    monkeypatch.setattr(graph_view_builder, "to_html", _fake_to_html)
+
+    outcome = build_graph_view(graph_json_path, SAMPLED, output_path)
+
+    assert outcome.status == "success"
+    assert "cha_content_noise_no_suffix" not in captured["nodes"]
+
+
+def test_build_graph_view_keeps_legit_node_with_partial_token_overlap(tmp_path, monkeypatch):
+    """False-positive guard (task 1.4): a legit domain-concept node that
+    shares only ONE of the two required token families (e.g. "fallback"
+    appears in an unrelated ensayo-manual note, with no graph-knowledge
+    token) must be kept -- the predicate requires BOTH a graph-knowledge
+    token AND a failure token together, never either alone.
+    """
+    fixture = realistic_graph_json_fixture()
+    fixture["nodes"].append(
+        _node(
+            "cha_legit_ensayo_manual",
+            source_file="reports/vault/CHA23L14.md",
+            community=1,
+            label="Ensayo Manual",
+            rationale=(
+                "Evento etiquetado como ensayo manual; se excluye de la "
+                "hipotesis de falla ambiental como fallback de analisis."
+            ),
+        )
+    )
+    graph_json_path = tmp_path / "graph.json"
+    _write_graph_json(graph_json_path, fixture)
+    output_path = tmp_path / "graph-view.html"
+
+    captured: dict[str, Any] = {}
+
+    def _fake_to_html(G, communities, output, **kwargs):
+        captured["nodes"] = set(G.nodes())
+        Path(output).write_text("<html></html>", encoding="utf-8")
+
+    monkeypatch.setattr(graph_view_builder, "to_html", _fake_to_html)
+
+    outcome = build_graph_view(graph_json_path, SAMPLED, output_path)
+
+    assert outcome.status == "success"
+    assert "cha_legit_ensayo_manual" in captured["nodes"]
 
 
 # ---------------------------------------------------------------------------

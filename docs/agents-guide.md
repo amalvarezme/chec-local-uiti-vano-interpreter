@@ -437,9 +437,11 @@ sequencing:
 
 - **(a) `llm_client.py` multi-provider retirement** (google/openai/ollama branches) — blocked on
   (b); do not start this before the characterization tests below exist.
-- **(b) Characterization tests for `web_export.py` and `graph_extractor.py`** (golden-file on
-  `interpretabilidad.json` / `src/assets/site/results/*` shape) — required BEFORE any
-  `llm_client.py` removal, since both currently have zero tests and must not regress silently.
+- **(b) Characterization tests for `web_export.py`** (golden-file on `interpretabilidad.json` /
+  `src/assets/site/results/*` shape) — required BEFORE any `llm_client.py` removal, since it
+  currently has zero tests and must not regress silently. (`graph_extractor.py`, previously listed
+  alongside `web_export.py` here, was retired as dead code by `informe-gerencial-graph-noise-cleanup`
+  — it had a single always-broken caller and no test debt to carry forward.)
 - **(c) Agent2 (inference/SHAP) port** to the agent-role pattern established for `expert-alignment`
   and `historical` — stub only in the Agent roles table above. Its validator MUST reach
   expert-alignment-grade rigor (full 9-key coverage, dedicated test files) before it can be called

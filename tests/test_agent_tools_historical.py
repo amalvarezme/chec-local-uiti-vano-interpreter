@@ -62,7 +62,6 @@ def _sample_context(unavailable: list[str] | None = None) -> dict:
             },
             "relationship_rules": [],
         },
-        "graph_knowledge": "Grafo no disponible en pruebas.",
     }
 
 

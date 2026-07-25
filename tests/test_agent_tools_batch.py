@@ -846,7 +846,6 @@ def _sample_historical_context(circuito: str = "DON23L13") -> dict:
             },
             "relationship_rules": [],
         },
-        "graph_knowledge": "Grafo no disponible en pruebas.",
     }
 
 
