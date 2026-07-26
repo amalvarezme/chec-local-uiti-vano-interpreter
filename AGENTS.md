@@ -23,6 +23,11 @@ itself, never a Python call to Gemini/OpenAI.
   effect.
 - Use structured tabular data, variable descriptions, variable modes, and relationship rules.
 - Keep the workflow local and lightweight.
+- `/experimento-kaggle <descripción>` (`.claude/skills/experimento-kaggle/SKILL.md`) is a
+  standalone code/model-experiment workflow: propose a Mermaid block diagram, build a
+  `smoke`/`full` notebook, gate on explicit user approval, then push/poll/pull it on Kaggle via
+  the official `kaggle` CLI. It never runs unattended and never touches the 5 LLM agent roles or
+  `report_pipeline.py`.
 
 ## Agent-native architecture
 
