@@ -1,6 +1,6 @@
 # Flujo detallado del proyecto — CHEC UITI_VANO Interpreter
 
-> Versión HTML: [`flujo-detallado.html`](./flujo-detallado.html) (mismo contenido). Para diagramas Mermaid interactivos y el historial de correcciones en vivo, ver [`project-flow-review.html`](./project-flow-review.html). Actualizado 2026-07-24, rama `databricks-integration`.
+> Versión HTML: [`flujo-detallado.html`](./flujo-detallado.html) (mismo contenido). Para diagramas Mermaid interactivos y el historial de correcciones en vivo, ver [`project-flow-review.html`](./project-flow-review.html). Actualizado 2026-07-25, rama `main` (única rama del proyecto desde la consolidación de ramas de esa fecha).
 >
 > Audiencia: ingeniería / mantenimiento del repo. Para una versión sin jerga técnica, ver [`flujo-resumen.md`](./flujo-resumen.md) / [`flujo-resumen.html`](./flujo-resumen.html).
 
