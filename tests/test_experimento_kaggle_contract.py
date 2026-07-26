@@ -1,11 +1,16 @@
 """Static + guard contract tests for the `/experimento-kaggle` skill.
 
-Covers PR1 of `kaggle-notebook-builder-agent`: the skill contract (Hard Rule
-+ Experiment Families dispatch + baseline reference), the import-based
-precondition guard, and `.pi` adapter integrity. Pattern follows
-`tests/test_llm_skills.py` (static assertions over authored skill text) plus
-one real subprocess check for the guard, since prose alone cannot prove the
-guard actually trips.
+Covers PR1 and PR2 of `kaggle-notebook-builder-agent`:
+- PR1: the skill contract (Hard Rule + Experiment Families dispatch +
+  baseline reference), the import-based precondition guard, and `.pi`
+  adapter integrity.
+- PR2: the data/model dataset-transport gate, `src/` dataset packaging
+  documentation, and the `dataset_sources` format documented for the
+  future (PR3) `kernel-metadata.json`.
+
+Pattern follows `tests/test_llm_skills.py` (static assertions over authored
+skill text) plus one real subprocess check for the guard, since prose alone
+cannot prove the guard actually trips.
 """
 
 from __future__ import annotations
@@ -20,6 +25,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SKILL_DIR = PROJECT_ROOT / ".claude" / "skills" / "experimento-kaggle"
 SKILL_MD = SKILL_DIR / "SKILL.md"
 BASELINE_REF = SKILL_DIR / "references" / "uiti-vano-regression-baseline.md"
+CLI_NOTES = SKILL_DIR / "references" / "kaggle-cli-notes.md"
 PI_SKILL_MD = PROJECT_ROOT / ".pi" / "skills" / "experimento-kaggle" / "SKILL.md"
 
 GUARD_IMPORT_PROBE = "from chec_impacto.models.mgcecdl import MGCECDLRegressor, MGCECDLRegressionLoss"
@@ -124,3 +130,60 @@ def test_pi_adapter_is_thin_pointer():
     assert re.search(r"reimplement", text, re.IGNORECASE)
     # Never re-embeds the Experiment Families table rows.
     assert "chec_impacto.models.mgcecdl" not in text
+
+
+def test_dataset_transport_gate_documented():
+    """SKILL.md must state a second, explicit upload-approval gate for
+    private Kaggle datasets (code + data), separate from the notebook-
+    approval gate, and must record the user's already-granted approval for
+    the full `Indicadores_vano_v3.csv` upload as a decision, not a question."""
+    text = _read(SKILL_MD)
+
+    assert re.search(r"private dataset", text, re.IGNORECASE)
+    assert re.search(r"second.{0,40}explicit.{0,40}approval|explicit.{0,40}approval.{0,40}separate", text, re.IGNORECASE | re.DOTALL)
+    assert "Indicadores_vano_v3.csv" in text
+    assert re.search(r"already approved|already-approved|recorded decision", text, re.IGNORECASE)
+
+
+def test_src_dataset_packaging_documented():
+    """SKILL.md must document packaging `src/chec_impacto/` as a whole
+    subtree (never a single-file vendor) into a private code dataset, and
+    name the cross-import reason for whole-subtree packaging."""
+    text = _read(SKILL_MD)
+
+    assert "Dataset Transport" in text
+    assert "src/chec_impacto" in text
+    assert re.search(r"whole subtree|entire subtree", text, re.IGNORECASE)
+    assert "chec_impacto.training.mgcecdl" in text
+
+
+def test_kernel_metadata_dataset_sources_format_documented():
+    """references/kaggle-cli-notes.md must document the `dataset_sources`
+    array format that the PR3 `kernel-metadata.json` will use, including
+    both pinned dataset slugs for this family."""
+    assert CLI_NOTES.exists()
+    text = _read(CLI_NOTES)
+
+    assert "dataset_sources" in text
+    assert "chec-impacto-src" in text
+    assert "uiti-vano-indicadores-v3" in text
+
+
+def test_dataset_commands_documented_in_cli_notes():
+    """references/kaggle-cli-notes.md must document the official dataset
+    create/version commands and the `dataset-metadata.json` schema —
+    separate from the existing kernel push/status/output commands."""
+    text = _read(CLI_NOTES)
+
+    assert "kaggle datasets create" in text
+    assert "kaggle datasets version" in text
+    assert "dataset-metadata.json" in text
+
+
+def test_pi_adapter_thin_after_dataset_transport_addition():
+    """.pi adapter may reference the new dataset-transport gate by name,
+    but must not duplicate the pinned dataset slugs or packaging details."""
+    text = _read(PI_SKILL_MD)
+
+    for needle in ("chec-impacto-src", "uiti-vano-indicadores-v3", "Indicadores_vano_v3.csv"):
+        assert needle not in text, f"'.pi' adapter must not duplicate dataset-transport detail {needle!r}"

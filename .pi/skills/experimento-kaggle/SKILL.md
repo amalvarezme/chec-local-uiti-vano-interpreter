@@ -29,4 +29,8 @@ directly; do not duplicate its logic here.
   The no-reimplementation rule, its precondition guard, and the Experiment Families
   dispatch table it feeds live only in the canonical skill — do not copy their text or
   baseline digits here.
+- Uploading any local file to Kaggle as a private dataset needs its own second, explicit
+  approval — separate from the notebook-approval gate. See the canonical skill's Dataset
+  Transport section for which datasets each family needs; do not duplicate slugs or file
+  lists here.
 - CLI command reference: `.claude/skills/experimento-kaggle/references/kaggle-cli-notes.md`.
