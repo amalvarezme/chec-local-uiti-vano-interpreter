@@ -323,12 +323,12 @@ flowchart TD
             G1 -- sí --> JOIN{{join}}
             G3 -- sí --> JOIN
             SKIP3 --> JOIN
-            JOIN --> RP1[prepare_expert_alignment()]
+            JOIN --> RP1["prepare_expert_alignment()"]
             XLSX --> RP1
             RP1 --> A3[Agente: expert-alignment]
             A3 --> G2{"¿Schema + provenance válidos?"}
             G2 -- "no, reintentos agotados" --> STOP2([Detener la ejecución de este circuito])
-            G2 -- sí --> RP2[render()]
+            G2 -- sí --> RP2["render()"]
         end
         RP2 --> HTML1[(Reporte HTML)]
     end
