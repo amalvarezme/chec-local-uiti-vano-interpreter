@@ -41,13 +41,22 @@ El repositorio cubre el flujo completo de interpretabilidad local para el análi
 
 ### Explícitamente fuera de alcance
 
-- Databricks
 - Dash
 - FastAPI
 - RAG
 - bases vectoriales
 - llamadas Python a Gemini, OpenAI u otros proveedores LLM hospedados
 - publicación automática como efecto colateral de generar un reporte
+- Databricks **dentro de** `src/chec_local_interpreter` o de los 5 roles LLM (`historical`,
+  `inference`, `expert-alignment`, `auto-simulator`, `pdf-discussion-extraction`) — nunca se
+  agrega lógica de negocio ahí
+
+**Excepción sancionada — despliegue a Databricks:** el proyecto sí incluye una migración manual,
+bajo demanda, del dashboard AI/BI y de los activos locales hacia un workspace Databricks, vía 4
+comandos de Claude Code (`/deploy-databricks-dashboard`, `/subir-datos-databricks`,
+`/subir-notebooks-databricks`, `/subir-a-databricks`) y el PoC en `notebooks/databricks/`. Es un
+árbol de comandos aislado, sin equivalente en Pi, que nunca modifica `report_pipeline.py` ni los
+roles LLM. Detalle completo en [`docs/flujo-detallado.md`](docs/flujo-detallado.md#3-flujo-b--despliegue-a-databricks).
 
 ## Estructura del repositorio
 
@@ -60,9 +69,11 @@ El repositorio cubre el flujo completo de interpretabilidad local para el análi
 | `.pi/skills/` | Wrappers de skills para Pi sobre los skills canónicos de Claude |
 | `.pi/agents/` | Mirrors de roles para Pi sobre los roles canónicos de Claude |
 | `docs/` | Arquitectura, workflow, contrato de runtime, BPMN y documentación de soporte |
-| `reports/` | Artefactos locales de ejecución, reportes generados, insumos PDF |
+| `.claude/commands/` | Comandos de mantenimiento y despliegue a Databricks (fuera de la familia de skills de reporte) |
+| `reports/` | Artefactos locales de ejecución, reportes generados, insumos PDF, notas de `reports/vault/` |
 | `tests/` | Tests automatizados de contratos, pipelines y render |
-| `notebooks/` | Notebooks de soporte para modelado, exploración y simulaciones |
+| `notebooks/project_flow/` | Pipeline real de investigación/entrenamiento MGCECDL + exploraciones de soporte |
+| `notebooks/databricks/` | PoC manual, bajo demanda, del dashboard AI/BI en Databricks (excepción sancionada, ver alcance) |
 
 ## Instalación
 
@@ -121,6 +132,18 @@ Ejemplos:
 | Extracción de discusiones PDF | flujo canónico `pdf-discussion-extraction` de Claude | `/skill:pdf-discussion-extraction` + `.pi/agents/pdf-discussion-extraction.md` |
 | Reporte por lote | `/reporte-lote <grupo> [fecha_inicio fecha_fin]` | `/skill:reporte-lote <grupo> [fecha_inicio fecha_fin]` |
 | Informe gerencial | `/informe-gerencial <grupo> [fecha_inicio fecha_fin]` | `/skill:informe-gerencial <grupo> [fecha_inicio fecha_fin]` |
+| Mantenimiento de runs locales | `/limpiar-corridas` | — |
+
+### Comandos de despliegue a Databricks (solo Claude Code, sin equivalente en Pi)
+
+| Comando | Qué migra/reconstruye |
+|---|---|
+| `/deploy-databricks-dashboard` | Tablas base + vistas + dashboard Lakeview "Explorador de circuito UITI_VANO" |
+| `/subir-datos-databricks` | `data/` completo + `site/data/variables.json` al Volume |
+| `/subir-notebooks-databricks` | Ambos paquetes fuente + los notebooks de `project_flow/` (copias adaptadas) |
+| `/subir-a-databricks` | Orquesta los tres anteriores en una sola corrida |
+
+Ver [`docs/flujo-detallado.md`](docs/flujo-detallado.md#3-flujo-b--despliegue-a-databricks) para el flujo completo, objetos de datos y limitaciones conocidas.
 
 ### Modelo de compatibilidad en Pi
 
@@ -446,8 +469,8 @@ Artefactos de referencia:
 
 - repositorio público: `amalvarezme/chec-local-uiti-vano-interpreter`
 - sitio público: https://amalvarezme.github.io/chec-local-uiti-vano-interpreter/
-- rama publicada para el sitio: `main`
-- rama activa de desarrollo para este trabajo de compatibilidad Claude/Pi: `sdd-claude-agents`
+- `main` es la única rama del proyecto: rama por defecto, publicada para el sitio y de desarrollo activo
+  (consolidada 2026-07-25; la antigua rama de trabajo `sdd-claude-agents` se fusionó a `main` y se eliminó)
 
 ### Comportamiento de GitHub Pages
 
@@ -530,7 +553,12 @@ Estos notebooks soportan exploración, modelado o replicación. **No** son el pu
 - `notebooks/project_flow/08_geo_network_exploration.ipynb`
 - `notebooks/project_flow/09_simulador.ipynb`
 
-Resumen detallado de propósito, entradas/salidas, orden real de dependencias (con una corrección al orden lineal implícito arriba) y hallazgos por notebook: **[`docs/notebooks-project-flow.md`](docs/notebooks-project-flow.md)**.
+Resumen detallado de propósito, entradas/salidas, orden real de dependencias (con una corrección al orden lineal implícito arriba) y hallazgos por notebook: **[`docs/notebooks-project-flow.md`](docs/notebooks-project-flow.md)** (cubre los notebooks 01-09).
+
+Además, `notebooks/project_flow/10_uiti_vano_kmeans.ipynb` es un notebook exploratorio independiente
+(no forma parte de la cadena de dependencias 01-09 ni alimenta `/report`): agrupa vanos por UITI
+acumulado y número de eventos con KMeans en espacio log (4 grupos, preprocesamiento MinMax), con KDE
+por variable y un scatter interactivo en Plotly etiquetado por vano/circuito/grupo.
 
 ## Pruebas
 

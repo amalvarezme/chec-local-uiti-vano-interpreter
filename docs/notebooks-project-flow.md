@@ -72,7 +72,7 @@ construye el grafo de adyacencia, hace split estratificado por cuartiles de `UIT
 MinMax, y corre el estudio Optuna contra `MGCECDLClassifier`/`MGCECDLClassificationLoss`.
 
 **Gotcha:** está pensado para correr fuera del repo local (Kaggle/Colab), clonando desde un fork
-**hardcodeado** (`amalvarezme/...`, rama `sdd-claude-agents`) — puede divergir silenciosamente de la
+**hardcodeado** (`amalvarezme/...`, rama `main`) — puede divergir silenciosamente de la
 rama que se esté trabajando localmente.
 
 ### `03_mgcecdl_training.ipynb`
@@ -149,7 +149,7 @@ el agente `auto-simulator`.
 ## Hallazgos consolidados (riesgos a tener en cuenta)
 
 - **Fork/rama hardcodeados** en `02` y notebooks que clonan el repo para correr en Kaggle/Colab
-  (`amalvarezme/...`, rama `sdd-claude-agents`) — pueden divergir silenciosamente de la rama de
+  (`amalvarezme/...`, rama `main`) — pueden divergir silenciosamente de la rama de
   trabajo real.
 - **Detección de rate-limit por substring** en `01` — frágil ante cambios de wording en la API de
   Open-Meteo.
