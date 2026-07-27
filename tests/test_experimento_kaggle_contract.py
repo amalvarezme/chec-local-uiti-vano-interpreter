@@ -87,11 +87,13 @@ def test_guard_documented_in_skill():
     assert MISSING_CODE_WORKTREE in text
 
 
-def test_guard_import_probe_trips_from_main_checkout():
+def test_guard_import_probe_succeeds_from_main_checkout():
     """The documented import probe, run with only this checkout's `src` on
-    the path (no worktree src), must fail — proving the guard is a real,
-    exercisable check and not just prose. `MGCECDLRegressor` is only
-    present in the untracked worktree carrying this change's dependency."""
+    the path (no worktree src), must now succeed — `MGCECDLRegressor` etc.
+    were landed into `src/chec_impacto/models/mgcecdl.py` on `main`. The
+    guard's remaining job on Kaggle is catching a stale/missing attached
+    `chec-impacto-src` dataset, not local code absence, so from this
+    checkout the probe itself must import cleanly."""
     env = dict(os.environ)
     env["PYTHONPATH"] = str(PROJECT_ROOT / "src")
 
@@ -104,11 +106,10 @@ def test_guard_import_probe_trips_from_main_checkout():
         timeout=60,
     )
 
-    assert result.returncode != 0, (
-        "Guard probe unexpectedly succeeded from the main checkout — "
-        "MGCECDLRegressor should not be importable here yet"
+    assert result.returncode == 0, (
+        "Guard probe unexpectedly failed from the main checkout — "
+        f"MGCECDLRegressor should be importable here now.\nstderr:\n{result.stderr}"
     )
-    assert "ImportError" in result.stderr or "ModuleNotFoundError" in result.stderr
 
 
 def test_baseline_reference_file_has_pinned_metrics():
@@ -231,24 +232,23 @@ def test_notebook_file_exists_and_is_valid():
 
 def test_notebook_guard_mirror_present():
     """The notebook's bootstrap must mirror the skill's precondition guard:
-    the exact import probe, failing with an actionable message naming the
-    missing-code worktree — matching references/uiti-vano-regression-baseline.md's
-    'In-Notebook Mirror' section."""
+    the exact import probe, failing with an actionable message pointing at a
+    stale/missing `chec-impacto-src` Kaggle dataset attach — matching
+    references/uiti-vano-regression-baseline.md's 'In-Notebook Mirror'
+    section. `MGCECDLRegressor` now lives on `main`, so the guard's role on
+    Kaggle is catching a stale dataset attach, not missing local code."""
     import nbformat
 
     nb = nbformat.read(NOTEBOOK_FILE, as_version=4)
     full_source = "\n".join(c["source"] for c in nb.cells if c["cell_type"] == "code")
 
-    assert GUARD_IMPORT_PROBE.replace(
-        "from chec_impacto.models.mgcecdl import MGCECDLRegressor, MGCECDLRegressionLoss",
-        "MGCECDLRegressor",
-    ) or "MGCECDLRegressor" in full_source
     assert "from chec_impacto.models.mgcecdl import" in full_source
     assert "MGCECDLRegressor" in full_source
     assert "MGCECDLRegressionLoss" in full_source
     assert "KernelDensityWeightedMSELoss" in full_source
-    assert MISSING_CODE_WORKTREE in full_source
+    assert "chec-impacto-src" in full_source
     assert "ImportError" in full_source
+    assert re.search(r"out of date|stale|missing or", full_source, re.IGNORECASE)
 
 
 def test_notebook_reuses_no_redefinition():
