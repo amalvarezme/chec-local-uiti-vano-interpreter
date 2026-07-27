@@ -24,8 +24,12 @@ Invocation: `/experimento-kaggle <descripción del experimento>`
   `python -c "from chec_impacto.models.mgcecdl import MGCECDLRegressor, MGCECDLRegressionLoss"`
   (swap the import for whatever model is in scope for the experiment). If it raises
   `ImportError`, STOP before writing any model/loss code, name the branch/worktree that
-  carries the missing code (e.g. `worktree-agent-a4051edb7e841e0f9` for `MGCECDLRegressor`),
-  and wait — never fall back to a substitute implementation.
+  carries the missing code, and wait — never fall back to a substitute implementation.
+  (Historical example: `MGCECDLRegressor` previously lived only in worktree
+  `worktree-agent-a4051edb7e841e0f9` before landing on `main` at
+  `src/chec_impacto/models/mgcecdl.py`; it is importable from `main` now, so a guard trip
+  today for this class most likely means a stale/missing Kaggle `chec-impacto-src` dataset
+  attach, not missing local code.)
 - Never push or run anything on Kaggle before the user explicitly approves both the block
   diagram and the notebook. This is a hard gate — do not infer approval from silence or from
   an earlier unrelated confirmation.
