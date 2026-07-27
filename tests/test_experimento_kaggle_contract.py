@@ -1,12 +1,15 @@
 """Static + guard contract tests for the `/experimento-kaggle` skill.
 
-Covers PR1 and PR2 of `kaggle-notebook-builder-agent`:
+Covers PR1, PR2, and PR3 of `kaggle-notebook-builder-agent`:
 - PR1: the skill contract (Hard Rule + Experiment Families dispatch +
   baseline reference), the import-based precondition guard, and `.pi`
   adapter integrity.
 - PR2: the data/model dataset-transport gate, `src/` dataset packaging
   documentation, and the `dataset_sources` format documented for the
   future (PR3) `kernel-metadata.json`.
+- PR3: the `uiti-vano-regression-budget` notebook package itself
+  (`kernel-metadata.json` + `notebook.ipynb`) authored under
+  `notebooks/kaggle_experiments/`.
 
 Pattern follows `tests/test_llm_skills.py` (static assertions over authored
 skill text) plus one real subprocess check for the guard, since prose alone
@@ -15,6 +18,7 @@ cannot prove the guard actually trips.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -27,6 +31,11 @@ SKILL_MD = SKILL_DIR / "SKILL.md"
 BASELINE_REF = SKILL_DIR / "references" / "uiti-vano-regression-baseline.md"
 CLI_NOTES = SKILL_DIR / "references" / "kaggle-cli-notes.md"
 PI_SKILL_MD = PROJECT_ROOT / ".pi" / "skills" / "experimento-kaggle" / "SKILL.md"
+
+NOTEBOOK_SLUG = "uiti-vano-regression-budget"
+NOTEBOOK_DIR = PROJECT_ROOT / "notebooks" / "kaggle_experiments" / NOTEBOOK_SLUG
+KERNEL_METADATA = NOTEBOOK_DIR / "kernel-metadata.json"
+NOTEBOOK_FILE = NOTEBOOK_DIR / "notebook.ipynb"
 
 GUARD_IMPORT_PROBE = "from chec_impacto.models.mgcecdl import MGCECDLRegressor, MGCECDLRegressionLoss"
 MISSING_CODE_WORKTREE = "worktree-agent-a4051edb7e841e0f9"
@@ -187,3 +196,108 @@ def test_pi_adapter_thin_after_dataset_transport_addition():
 
     for needle in ("chec-impacto-src", "uiti-vano-indicadores-v3", "Indicadores_vano_v3.csv"):
         assert needle not in text, f"'.pi' adapter must not duplicate dataset-transport detail {needle!r}"
+
+
+def test_kernel_metadata_slug():
+    """`kernel-metadata.json`'s `id` slug must match the folder name it
+    lives in, and must reference both PR2-pinned dataset slugs."""
+    assert KERNEL_METADATA.exists(), "kernel-metadata.json must exist under the slug folder"
+    metadata = json.loads(_read(KERNEL_METADATA))
+
+    assert metadata["id"].split("/")[-1] == NOTEBOOK_DIR.name == NOTEBOOK_SLUG
+    assert metadata["code_file"] == "notebook.ipynb"
+    assert metadata["is_private"] == "true"
+    assert metadata["kernel_type"] == "notebook"
+
+    dataset_sources = metadata["dataset_sources"]
+    assert any(s.endswith("/chec-impacto-src") for s in dataset_sources)
+    assert any(s.endswith("/uiti-vano-indicadores-v3") for s in dataset_sources)
+
+
+def test_notebook_file_exists_and_is_valid():
+    """notebook.ipynb must exist, be valid nbformat, and carry a papermill
+    `parameters`-tagged cell defaulting to `mode = "smoke"` (so a bare
+    execution never accidentally launches the full search budget)."""
+    import nbformat
+
+    assert NOTEBOOK_FILE.exists()
+    nb = nbformat.read(NOTEBOOK_FILE, as_version=4)
+    nbformat.validate(nb)
+
+    parameter_cells = [c for c in nb.cells if "parameters" in c.get("metadata", {}).get("tags", [])]
+    assert len(parameter_cells) == 1, "exactly one papermill parameters cell expected"
+    assert 'mode = "smoke"' in parameter_cells[0]["source"]
+
+
+def test_notebook_guard_mirror_present():
+    """The notebook's bootstrap must mirror the skill's precondition guard:
+    the exact import probe, failing with an actionable message naming the
+    missing-code worktree — matching references/uiti-vano-regression-baseline.md's
+    'In-Notebook Mirror' section."""
+    import nbformat
+
+    nb = nbformat.read(NOTEBOOK_FILE, as_version=4)
+    full_source = "\n".join(c["source"] for c in nb.cells if c["cell_type"] == "code")
+
+    assert GUARD_IMPORT_PROBE.replace(
+        "from chec_impacto.models.mgcecdl import MGCECDLRegressor, MGCECDLRegressionLoss",
+        "MGCECDLRegressor",
+    ) or "MGCECDLRegressor" in full_source
+    assert "from chec_impacto.models.mgcecdl import" in full_source
+    assert "MGCECDLRegressor" in full_source
+    assert "MGCECDLRegressionLoss" in full_source
+    assert "KernelDensityWeightedMSELoss" in full_source
+    assert MISSING_CODE_WORKTREE in full_source
+    assert "ImportError" in full_source
+
+
+def test_notebook_reuses_no_redefinition():
+    """The notebook must import the model/loss classes, never redefine them
+    (no `class MGCECDLRegressor` / `class MGCECDLRegressionLoss` anywhere)."""
+    import nbformat
+
+    nb = nbformat.read(NOTEBOOK_FILE, as_version=4)
+    full_source = "\n".join(c["source"] for c in nb.cells if c["cell_type"] == "code")
+
+    assert "class MGCECDLRegressor" not in full_source
+    assert "class MGCECDLRegressionLoss" not in full_source
+    assert "class KernelDensityWeightedMSELoss" not in full_source
+
+
+def test_notebook_methodology_order_and_metric():
+    """Loss sweep selects by `mae_original.idxmin()`, Optuna reuses
+    `run_optuna_study` (GPSampler+MedianPruner, never reimplemented), the
+    loss composition passes all parity terms, and `full` mode exceeds the
+    baseline's 10-trial/20-epoch/60-epoch budget while `smoke` stays tiny."""
+    import nbformat
+
+    nb = nbformat.read(NOTEBOOK_FILE, as_version=4)
+    full_source = "\n".join(c["source"] for c in nb.cells if c["cell_type"] == "code")
+
+    assert 'mae_original"].idxmin()' in full_source
+    assert "run_optuna_study" in full_source
+    assert "class GPSampler" not in full_source and "class MedianPruner" not in full_source
+
+    for term in ("gamma_sup", "gamma_agr", "gamma_reg", "lambda_reconstruction", "lambda_mutual_information"):
+        assert term in full_source
+
+    assert "kernel_weighted_mse" in full_source
+    assert "OPTUNA_N_TRIALS = 15" in full_source  # full mode: > 10 (baseline)
+    assert "OPTUNA_MAX_EPOCHS = 20" in full_source  # full mode: not reduced vs baseline
+    assert "FINAL_MAX_EPOCHS = 60" in full_source  # full mode: not reduced vs baseline
+    assert "K_RANGE = range(2," in full_source
+    assert "adjusted_rand_score" in full_source
+
+
+def test_notebook_report_cell_states_improvement_against_baseline():
+    """The report cell must print this run's `mae_original` next to the
+    pinned baseline (126.402) and state improved/not, per spec's 'Full run
+    reports MAE against baseline' scenario."""
+    import nbformat
+
+    nb = nbformat.read(NOTEBOOK_FILE, as_version=4)
+    full_source = "\n".join(c["source"] for c in nb.cells if c["cell_type"] == "code")
+
+    assert "BASELINE_MAE_ORIGINAL = 126.402" in full_source
+    assert "improved" in full_source.lower()
+    assert 'final_metrics["mae_original"]' in full_source

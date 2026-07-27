@@ -40,6 +40,7 @@ jsonschema
 ipython
 jupyter
 ipykernel
+papermill  # parametrized notebook execution -- used by /experimento-kaggle's smoke/full harness
 
 # === Testing ===
 pytest
