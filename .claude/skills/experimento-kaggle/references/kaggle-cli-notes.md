@@ -64,3 +64,60 @@ kaggle kernels pull username/kernel-slug -p <path> -m
 `kernels status` is the only trustworthy signal of completion — poll it after every push
 rather than assuming success from the push command's own exit code, and always read the
 actual pulled output/metrics before reporting a run as passing.
+
+## Datasets (private, code/data transport)
+
+Used to transport `src/` code and data files to Kaggle without vendoring code into the
+notebook or making the repo pip-installable (it has no `pyproject.toml`/`setup.py`). Same
+official `kaggle-api`, different sub-command family (`kaggle datasets ...`, not
+`kaggle kernels ...`). Never upload a dataset without the second explicit approval required by
+the Dataset Transport Hard Rule in `SKILL.md`.
+
+### `dataset-metadata.json` (lives alongside the packaged folder)
+
+```json
+{
+  "title": "chec-impacto-src",
+  "id": "<kaggle-username>/chec-impacto-src",
+  "licenses": [{"name": "CC0-1.0"}]
+}
+```
+
+- Generate the scaffold with `kaggle datasets init -p <folder>`, then edit `title`/`id`.
+- `id` slug must be lowercase, dashes only, unique per account — keep it in sync with `title`.
+
+### Commands
+
+```bash
+# First-time upload (folder must contain dataset-metadata.json)
+kaggle datasets create -p <folder> --private
+
+# Update an existing dataset with a new version (same folder structure)
+kaggle datasets version -p <folder> -m "<version message>" --private
+```
+
+Never run `create` on a dataset that already exists — use `version` instead (same append-only
+discipline as reusing an existing `kernel-metadata.json` `id`).
+
+### Pinned dataset slugs (`uiti-vano-regression` family)
+
+| Dataset | Packages | Staged from |
+|---|---|---|
+| `<kaggle-username>/chec-impacto-src` | `src/chec_impacto/` (whole subtree) | `kaggle datasets create -p src/chec_impacto --private` (first time), then `version` |
+| `<kaggle-username>/uiti-vano-indicadores-v3` | `data/Indicadores_vano_v3.csv` + `data/Variables_seleccion.xlsx` | Stage both files into one folder (e.g. `notebooks/kaggle_experiments/<slug>/dataset_staging/`) alongside `dataset-metadata.json` before `create`/`version` — never point the command at the whole `data/` tree, which also holds unrelated GEO/model/optuna artifacts |
+
+### `dataset_sources` in `kernel-metadata.json`
+
+The notebook's `kernel-metadata.json` (see `## kernel-metadata.json` above) references both
+dataset slugs by their full `username/slug` form:
+
+```json
+"dataset_sources": [
+  "<kaggle-username>/chec-impacto-src",
+  "<kaggle-username>/uiti-vano-indicadores-v3"
+]
+```
+
+Kaggle mounts each at `/kaggle/input/<dataset-slug>/` — the notebook's bootstrap cell does
+`sys.path.insert(0, "/kaggle/input/chec-impacto-src/src")` and reads the CSV/xlsx from
+`/kaggle/input/uiti-vano-indicadores-v3/`.

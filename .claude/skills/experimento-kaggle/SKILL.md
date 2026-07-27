@@ -29,6 +29,13 @@ Invocation: `/experimento-kaggle <descripción del experimento>`
 - Never push or run anything on Kaggle before the user explicitly approves both the block
   diagram and the notebook. This is a hard gate — do not infer approval from silence or from
   an earlier unrelated confirmation.
+- Never upload local files to Kaggle as a private dataset without a second, explicit user
+  approval — separate from the notebook-approval gate in Execution Step 3. This covers both
+  `src/` code transport and any data file transport (see Dataset Transport below). For the
+  `uiti-vano-regression` family, the user has already approved uploading the full
+  `data/Indicadores_vano_v3.csv` (no subsampling or anonymization) as a private dataset —
+  treat that as a recorded decision for this family, not an open question. Any other data
+  file, or any other family, still needs its own explicit approval before upload.
 - Always propose the workflow first as a Mermaid block diagram (data → config → smoke run →
   full run → outputs) before writing any notebook code.
 - Build the notebook with two explicit, parametrized modes: `smoke` (tiny — few epochs/trials,
@@ -55,9 +62,10 @@ Full CLI commands, `kernel-metadata.json` schema, and accelerator options are in
 2. Once approved, check the **Experiment Families** table below. If the experiment matches a
    listed family, run the precondition guard for its reuse module first, then import (never
    rewrite) the listed classes and compare results against the family's baseline reference
-   file using its named primary metric. Then build the notebook under
-   `notebooks/kaggle_experiments/<slug>/` with the `smoke`/`full` split, plus its
-   `kernel-metadata.json`.
+   file using its named primary metric. Package the family's required datasets (see Dataset
+   Transport below) if not already present on Kaggle — under its own explicit approval, per
+   the Hard Rule above. Then build the notebook under `notebooks/kaggle_experiments/<slug>/`
+   with the `smoke`/`full` split, plus its `kernel-metadata.json` referencing those datasets.
 3. STOP again: present the notebook path and what it does; require explicit approval before
    any push. Revise and re-present on any requested change — never proceed on unclear approval.
 4. Verify Kaggle auth is configured; if missing, stop and instruct the user.
@@ -77,6 +85,22 @@ rewriting it, and are judged against the listed baseline reference file's primar
 | Family | Reuse from (module) | Baseline ref | Primary metric |
 |---|---|---|---|
 | `uiti-vano-regression` | `chec_impacto.models.mgcecdl` | `references/uiti-vano-regression-baseline.md` | `mae_original` (lower is better) |
+
+### Dataset Transport
+
+Reusable code and data are transported to Kaggle as **private datasets**, never copied into
+the notebook or vendored cell-by-cell. The notebook reads them from
+`/kaggle/input/<dataset-slug>/...`, mirroring the local `sys.path` bootstrap notebooks already
+use (`sys.path.insert(0, PROJECT_ROOT/"src")`). Exact `kaggle datasets` commands and the
+`dataset-metadata.json`/`dataset_sources` schema are in `references/kaggle-cli-notes.md`.
+
+| Family | Code dataset (slug) | Packages | Data dataset (slug) | Packages |
+|---|---|---|---|---|
+| `uiti-vano-regression` | `chec-impacto-src` | `src/chec_impacto/` — **whole subtree**, not a single-file vendor: `mgcecdl.py` imports `_reduce_modality_supervision_loss` and related helpers from `chec_impacto.training.mgcecdl`, so a single-file copy breaks | `uiti-vano-indicadores-v3` | `data/Indicadores_vano_v3.csv` (full file, user-approved, no subsample/anonymization) + `data/Variables_seleccion.xlsx` (required default input to `procesar_dataset_completo`); `data/graphs/` is an optional rebuild cache, not a required input — safe to omit |
+
+Both datasets are **private**. Create them the first time with `kaggle datasets create`, then
+update with `kaggle datasets version` on subsequent syncs — never re-run `create` on a dataset
+that already exists.
 
 ## Output Contract
 
