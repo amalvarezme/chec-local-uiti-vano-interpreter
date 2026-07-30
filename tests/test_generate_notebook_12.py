@@ -316,3 +316,51 @@ def test_generator_umap_figure_reuses_notebook11_helpers(notebook):
 def test_generator_output_path_targets_notebook_12_only():
     assert NOTEBOOK_12_PATH.name.startswith("12_")
     assert NOTEBOOK_12_PATH.parent == NOTEBOOK_11_PATH.parent
+
+
+# ---------------------------------------------------------------------------
+# The verdict must be per-claim, not a single boolean. Criteria 1-3 answer
+# "does the gate mechanism carry graph signal?"; criterion 4 answers "does the
+# pipeline beat the no-graph baseline?". Those are separable, and collapsing
+# them lets a run where the graph beat its own permutation control still get
+# labelled decorative.
+# ---------------------------------------------------------------------------
+
+
+def test_verdict_separates_graph_signal_from_beating_the_baseline(notebook) -> None:
+    code = _all_code_source(notebook)
+
+    assert "GRAPH_SIGNAL" in code, "the verdict must expose a graph-signal claim of its own"
+    assert "BEATS_BASELINE" in code, "the verdict must expose a beats-baseline claim of its own"
+    # Criteria 1-3 are the graph-signal claim; criterion 4 must not be folded in.
+    assert "GATE_PASS = all(acceptance_criteria.values())" not in code, (
+        "a single all() over the four criteria is exactly the collapse this test forbids"
+    )
+
+
+def test_decorative_wording_is_reserved_for_no_graph_signal(notebook) -> None:
+    code = _all_code_source(notebook)
+    assert "DECORATIV" in code, "the decorative verdict must still exist for the case that earns it"
+
+    # Every branch that prints DECORATIV must be guarded by the graph-signal
+    # claim being false -- never by criterion 4 alone.
+    for chunk in code.split("DECORATIV")[:-1]:
+        tail = chunk[-600:]
+        assert "not GRAPH_SIGNAL" in tail or "GRAPH_SIGNAL is False" in tail, (
+            "a DECORATIVE message appeared outside a 'not GRAPH_SIGNAL' branch -- losing to "
+            "the baseline while beating the permutation control is not decorative"
+        )
+
+
+def test_verdict_reports_every_criterion_individually(notebook) -> None:
+    code = _all_code_source(notebook)
+    for criterion in (
+        "1_no_colapsado",
+        "2_ari_estable",
+        "3_supera_control_permutacion",
+        "4_supera_baseline_sin_grafo",
+    ):
+        assert criterion in code, f"criterion {criterion} must be reported by name"
+    assert "for _criterio, _ok in acceptance_criteria.items()" in code, (
+        "the notebook must print a per-criterion line, not only the dict and a single verdict"
+    )

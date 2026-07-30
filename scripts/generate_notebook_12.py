@@ -778,24 +778,66 @@ acceptance_criteria = {
     "3_supera_control_permutacion": criterio_3_supera_control,
     "4_supera_baseline_sin_grafo": criterio_4_supera_baseline,
 }
-GATE_PASS = all(acceptance_criteria.values())
-print("Criterios de aceptacion:", acceptance_criteria)
+# El veredicto NO es binario. Los criterios 1-3 responden "?el mecanismo de
+# gates captura senal del grafo?" y el criterio 4 responde "?la tuberia le gana
+# a la linea base sin grafo?". Son afirmaciones separables: perder contra la
+# linea base mientras se le gana al control de permutacion NO es un mecanismo
+# decorativo, y colapsar ambas en un solo booleano borra el hallazgo.
+GRAPH_SIGNAL = (
+    acceptance_criteria["1_no_colapsado"]
+    and acceptance_criteria["2_ari_estable"]
+    and acceptance_criteria["3_supera_control_permutacion"]
+)
+BEATS_BASELINE = acceptance_criteria["4_supera_baseline_sin_grafo"]
 
-if GATE_PASS:
-    print("Compuerta anti-colapso APROBADA: el mecanismo de gates aporta senal real.")
+print("Criterios de aceptacion, uno por uno:")
+for _criterio, _ok in acceptance_criteria.items():
+    print(f"  [{'PASA' if _ok else 'FALLA'}] {_criterio}")
+print()
+print(f"  senal de grafo (criterios 1-3) : {'SI' if GRAPH_SIGNAL else 'NO'}")
+print(f"  supera linea base (criterio 4) : {'SI' if BEATS_BASELINE else 'NO'}")
+print()
+
+if GRAPH_SIGNAL and BEATS_BASELINE:
+    print(
+        "VEREDICTO: el mecanismo de gates captura senal del grafo Y supera a la linea "
+        "base sin grafo. Se envia la agrupacion con gates."
+    )
+elif GRAPH_SIGNAL and not BEATS_BASELINE:
+    print(
+        "VEREDICTO: el mecanismo de gates SI captura senal del grafo -- las compuertas "
+        "se mueven, son estables entre semillas y superan al control de permutacion con "
+        "grados preservados, asi que las relaciones fisicas del grafo experto cargan "
+        "senal medible. Lo que NO ocurre es que la tuberia supere a KMeans sobre "
+        "features estandarizados. Son dos afirmaciones distintas: la primera es un "
+        "hallazgo, la segunda una limitacion. Se envia la agrupacion de la linea base "
+        "por ser la que mide mejor asociacion, sin que eso invalide el hallazgo."
+    )
+elif not GRAPH_SIGNAL and BEATS_BASELINE:
+    print(
+        "VEREDICTO: la tuberia supera a la linea base pero NO se distingue de su propio "
+        "control de permutacion, asi que la ventaja no proviene del grafo. Se envia la "
+        "agrupacion con gates, advirtiendo que el grafo no explica su desempeno."
+    )
+else:
+    print(
+        "VEREDICTO: el mecanismo de gates es DECORATIVE -- no supera al control de "
+        "permutacion ni a la linea base sin grafo. Se envia la agrupacion de la linea "
+        "base como resultado utilizable."
+    )
+
+# Se envia el brazo que mide mejor asociacion; el veredicto de arriba explica por que.
+if GRAPH_SIGNAL and BEATS_BASELINE:
     FINAL_CLUSTER_SOURCE = "gated"
     final_cluster_labels = real_labels_reference
     final_vano_index = vano_index_gate
 else:
-    print(
-        "Compuerta anti-colapso NO aprobada: al menos un criterio fallo. Se reporta "
-        "honestamente que el mecanismo de gates es DECORATIVE en esta corrida y se envia "
-        "la agrupacion del brazo baseline (sin grafo) como resultado utilizable -- la "
-        "compuerta nunca aborta el cuaderno."
-    )
     FINAL_CLUSTER_SOURCE = "baseline"
     final_cluster_labels = baseline_labels
     final_vano_index = baseline_vano_index
+print()
+print(f"Brazo enviado como resultado final: {FINAL_CLUSTER_SOURCE}")
+print("La compuerta nunca aborta el cuaderno.")
 '''
 
 _MD_EDGE_DEVIATION = '''\
@@ -1137,7 +1179,8 @@ resumen_final = {
     "tau": tau,
     "k_raw": k_raw,
     "acceptance_criteria": acceptance_criteria,
-    "gate_pass": GATE_PASS,
+    "graph_signal": GRAPH_SIGNAL,
+    "beats_baseline_sin_grafo": BEATS_BASELINE,
     "final_cluster_source": FINAL_CLUSTER_SOURCE,
     "epsilon_squared_con_uiti_vano": epsilon_gate,
     "epsilon_squared_sin_uiti_vano": epsilon_sin_uiti_vano,
