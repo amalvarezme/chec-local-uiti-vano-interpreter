@@ -15,6 +15,23 @@ from .circuit_analysis import (
     radar_atribucion_degradado,
     radar_atribucion_degradado_modelos,
 )
+from .mgcecdl_graph import (
+    agrupar_gates_por_vano,
+    asociacion_criticidad,
+    corregir_benjamini_hochberg,
+    assert_fecha_excluded_from_features,
+    control_permutacion_grados,
+    diagnostico_persistencia,
+    ejecutar_control_permutacion_grados,
+    estadistico_colapso,
+    guardia_proxy_univariante,
+    linea_base_sin_grafo,
+    seleccionar_k_datos,
+    split_cronologico_p70,
+    tabla_desviacion_aristas,
+    tabla_grado_features,
+    uiti_futuro_por_vano,
+)
 
 __all__ = [
     "build_classification_expected_class_outputs",
@@ -28,4 +45,19 @@ __all__ = [
     "radar_atribucion_degradado_modelos",
     "summarize_classification_modality_support",
     "summarize_modality_reliability_by_class",
+    "agrupar_gates_por_vano",
+    "asociacion_criticidad",
+    "corregir_benjamini_hochberg",
+    "assert_fecha_excluded_from_features",
+    "control_permutacion_grados",
+    "diagnostico_persistencia",
+    "ejecutar_control_permutacion_grados",
+    "estadistico_colapso",
+    "guardia_proxy_univariante",
+    "linea_base_sin_grafo",
+    "seleccionar_k_datos",
+    "split_cronologico_p70",
+    "tabla_desviacion_aristas",
+    "tabla_grado_features",
+    "uiti_futuro_por_vano",
 ]
