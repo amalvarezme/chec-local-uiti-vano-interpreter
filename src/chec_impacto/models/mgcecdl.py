@@ -485,6 +485,7 @@ class MGCECDLRegressionLoss(nn.Module):
         huber_delta: float = 1.0,
         kernel_loss_module: "KernelDensityWeightedMSELoss | None" = None,
         weight_modality_loss_by_reliability: bool = True,
+        reconstruction_normalization: str = "clip",
         feature_mean: np.ndarray | torch.Tensor | None = None,
         feature_std: np.ndarray | torch.Tensor | None = None,
         adjacency_matrix: np.ndarray | torch.Tensor | None = None,
@@ -502,6 +503,11 @@ class MGCECDLRegressionLoss(nn.Module):
                 "base_loss='kernel_weighted_mse' requiere kernel_loss_module "
                 "(KernelDensityWeightedMSELoss.from_targets(y_train))."
             )
+        if reconstruction_normalization not in {"clip", "soft"}:
+            raise ValueError(
+                f"reconstruction_normalization no soportado: {reconstruction_normalization!r}. "
+                "Usa 'clip' o 'soft'."
+            )
         if feature_mean is None or feature_std is None or adjacency_matrix is None:
             raise ValueError(
                 "feature_mean, feature_std, and adjacency_matrix are required."
@@ -518,6 +524,7 @@ class MGCECDLRegressionLoss(nn.Module):
         self.base_loss = base_loss
         self.huber_delta = float(huber_delta)
         self.kernel_loss_module = kernel_loss_module
+        self.reconstruction_normalization = reconstruction_normalization
         self.gamma_sup = float(gamma_sup)
         self.gamma_agr = float(gamma_agr)
         self.gamma_reg = float(gamma_reg)
@@ -587,6 +594,30 @@ class MGCECDLRegressionLoss(nn.Module):
         graph_components = self._graph_reconstruction._compute_graph_reconstruction_components(
             model_output, inputs
         )
+
+        if self.reconstruction_normalization == "soft":
+            # `_MGCECDLGraphReconstructionLoss` normalizes reconstruction as
+            # `clip(MSE, 0, 1)`. That is a DEAD FIXED POINT for regression: the inputs are
+            # standardized, so an untrained decoder already sits at MSE ~= 1 (measured at
+            # 1.3124 on the real dataset at initialization). Above the ceiling `clamp` has
+            # exactly zero gradient, so the term can never be taught to come down -- it just
+            # contributes a constant. A full run of 11_mgcecdl_regression_budget.ipynb spent
+            # 60% of its loss value on this constant while the supervised term got 14%.
+            #
+            # `MSE / (1 + MSE)` keeps every property the clip was there for -- range [0, 1),
+            # monotone increasing, 0 still means a perfect reconstruction, comparable scale
+            # for Optuna -- but its derivative `1 / (1 + MSE)^2` is strictly positive
+            # everywhere, so the term keeps teaching instead of saturating.
+            #
+            # Applied HERE and not in `_MGCECDLGraphReconstructionLoss` on purpose: that class
+            # is shared with the production `MGCECDLClassificationLoss` and lives under an
+            # explicit `Edit` deny (`src/chec_impacto/training/**`). Classification's terms are
+            # naturally bounded on a probability simplex and do not suffer this saturation,
+            # so the fix belongs to the regression path only.
+            raw_reconstruction = graph_components["reconstruction_loss_raw"]
+            graph_components["reconstruction_loss"] = raw_reconstruction / (
+                1.0 + raw_reconstruction
+            )
 
         total_loss = (
             fused_loss

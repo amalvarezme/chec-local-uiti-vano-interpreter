@@ -231,3 +231,92 @@ def test_classification_loss_import_still_works_unaffected() -> None:
     from chec_impacto.training.mgcecdl import MGCECDLClassificationLoss
 
     assert MGCECDLClassificationLoss is not None
+
+
+# ---------------------------------------------------------------------------
+# reconstruction_normalization: the hard clip is a dead fixed point
+# ---------------------------------------------------------------------------
+
+
+def _inputs_forcing_raw_reconstruction_above_one() -> tuple[MGCECDLRegressor, torch.Tensor, torch.Tensor]:
+    """Build a state whose raw reconstruction MSE exceeds the clip ceiling of 1.
+
+    This is not a contrived corner: standardized predictors have unit variance,
+    so an untrained decoder already sits at MSE ~= 1, and a real run of
+    `11_mgcecdl_regression_budget.ipynb` measured 1.3124 at initialization.
+    """
+    torch.manual_seed(11)
+    model = _build_model()
+    inputs = torch.randn(32, 5) * 3.0  # inflate the standardized scale -> MSE well above 1
+    targets = torch.rand(32)
+    return model, inputs, targets
+
+
+def test_clip_normalization_kills_the_reconstruction_gradient_above_the_ceiling() -> None:
+    """Documents the defect: with the hard clip the term is a zero-gradient constant."""
+    model, inputs, targets = _inputs_forcing_raw_reconstruction_above_one()
+    loss_fn = _build_loss(reconstruction_normalization="clip")
+
+    components = loss_fn.compute_components(model(inputs), targets, inputs)
+
+    assert float(components["reconstruction_loss_raw"]) > 1.0
+    assert float(components["reconstruction_loss"]) == 1.0
+
+    components["reconstruction_loss"].backward()
+    decoder_grads = [
+        p.grad for p in model.parameters() if p.grad is not None and p.grad.abs().sum() > 0
+    ]
+    assert not decoder_grads, (
+        "clip normalization is expected to produce exactly zero gradient above the ceiling"
+    )
+
+
+def test_soft_normalization_keeps_a_live_gradient_above_the_ceiling() -> None:
+    """The fix: a saturating-but-smooth map keeps [0, 1] AND a usable gradient."""
+    model, inputs, targets = _inputs_forcing_raw_reconstruction_above_one()
+    loss_fn = _build_loss(reconstruction_normalization="soft")
+
+    components = loss_fn.compute_components(model(inputs), targets, inputs)
+    raw = float(components["reconstruction_loss_raw"])
+    normalized = float(components["reconstruction_loss"])
+
+    assert raw > 1.0
+    assert 0.0 < normalized < 1.0, "soft normalization must stay inside (0, 1), never pin at 1"
+    # float32 tensor math vs float64 Python arithmetic: compare within tolerance, not exactly.
+    assert abs(normalized - raw / (1.0 + raw)) < 1e-6
+
+    components["reconstruction_loss"].backward()
+    total_grad = sum(
+        float(p.grad.abs().sum()) for p in model.parameters() if p.grad is not None
+    )
+    assert total_grad > 0.0, "soft normalization must propagate a non-zero gradient"
+
+
+def test_soft_normalization_is_monotone_and_bounded() -> None:
+    """0 stays the best value and the map never leaves [0, 1)."""
+    model, inputs, targets = _inputs_forcing_raw_reconstruction_above_one()
+    loss_fn = _build_loss(reconstruction_normalization="soft")
+
+    with torch.no_grad():
+        components = loss_fn.compute_components(model(inputs), targets, inputs)
+
+    raw = torch.tensor([0.0, 0.25, 1.0, 1.3124, 10.0, 1e6])
+    mapped = raw / (1.0 + raw)
+    assert torch.all(mapped >= 0.0) and torch.all(mapped < 1.0)
+    assert torch.all(mapped[1:] > mapped[:-1]), "must be strictly increasing"
+    assert float(mapped[0]) == 0.0, "a perfect reconstruction must still score 0"
+    assert torch.isfinite(components["total_loss"])
+
+
+def test_clip_remains_the_default_so_existing_runs_are_unchanged() -> None:
+    loss_fn = _build_loss()
+    assert loss_fn.reconstruction_normalization == "clip"
+
+
+def test_invalid_reconstruction_normalization_raises_value_error() -> None:
+    try:
+        _build_loss(reconstruction_normalization="bogus")
+    except ValueError as exc:
+        assert "reconstruction_normalization" in str(exc)
+    else:
+        raise AssertionError("expected ValueError for an unsupported normalization")
