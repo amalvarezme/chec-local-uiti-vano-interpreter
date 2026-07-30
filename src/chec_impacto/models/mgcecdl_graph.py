@@ -337,6 +337,11 @@ _TRACKED_HISTORY_KEYS = (
     "reconstruction_loss",
     "reconstruction_loss_raw",
     "mutual_information_loss",
+    # The ACHIEVED normalized mutual information, not just its loss share.
+    # `resumen_barrido_lambda_mi` reads this key unconditionally, because a
+    # higher lambda mechanically raises the term's share of the loss without
+    # necessarily raising what the model actually captures.
+    "mutual_information_normalized",
     "gate_deviation_loss",
 )
 

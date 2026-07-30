@@ -269,3 +269,54 @@ def test_mean_pairwise_ari_helper() -> None:
 
     single = [np.array([0, 0, 1, 1])]
     assert np.isnan(mean_pairwise_ari(single))
+
+
+# ---------------------------------------------------------------------------
+# PR1 <-> PR2 integration seam. The sweep-summary tests above stub `entrenar_fn`,
+# which is exactly why the real contract between `entrenar_gated_autoencoder`'s
+# result dict and what `resumen_barrido_lambda_mi` reads from it went unchecked
+# and shipped broken. This exercises the seam with real training.
+# ---------------------------------------------------------------------------
+
+
+def test_real_training_result_satisfies_the_lambda_mi_sweep_contract() -> None:
+    import numpy as np
+
+    from chec_impacto.models.mgcecdl_graph import entrenar_gated_autoencoder
+
+    from tests.test_mgcecdl_graph_gates import (  # noqa: PLC0415
+        _tiny_gated_model,
+        _tiny_loss,
+    )
+
+    gated = _tiny_gated_model(alpha=0.3)
+    loss_fn = _tiny_loss(lambda_gate_deviation=0.01)
+    n_features = int(gated.adjacency.shape[0])
+    X_past = np.random.default_rng(7).normal(size=(32, n_features)).astype(np.float32)
+
+    result = entrenar_gated_autoencoder(
+        gated,
+        loss_fn,
+        X_past,
+        epochs=1,
+        batch_size=8,
+        lr=1e-3,
+        weight_decay=1e-5,
+        optimizer_name="adamw",
+        seed=7,
+        device="cpu",
+    )
+
+    # Every key `resumen_barrido_lambda_mi` dereferences without a default must
+    # actually be produced by a real run, not only by the test stubs.
+    for required_key in ("mutual_information_normalized", "mutual_information_loss"):
+        assert required_key in result, (
+            f"entrenar_gated_autoencoder did not return '{required_key}', which "
+            "resumen_barrido_lambda_mi reads unconditionally -- the sweep would raise KeyError"
+        )
+
+    summary = resumen_barrido_lambda_mi({0.01: result})
+    assert len(summary) == 1
+    assert np.isfinite(summary["mutual_information_normalized"].iloc[0])
+    # The achieved value is a normalized quantity and must stay in its range.
+    assert 0.0 <= summary["mutual_information_normalized"].iloc[0] <= 1.0
