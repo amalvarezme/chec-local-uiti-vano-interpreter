@@ -1692,6 +1692,15 @@ diferencia entre ellas es justamente el punto:
 
 Leer solo el coseno seria concluir "los cuatro grupos son identicos" cuando
 lo que dice es "los cuatro respetan el grafo experto", que es otra cosa.
+
+Sobre la figura: los tres paneles NO comparten escala de color. Cada uno
+declara la suya en su titulo, tomada del rango fuera de la diagonal. Una
+escala comun `[-1, 1]` seria comparable entre paneles, pero las tres
+matrices viven entre ~0.96 y 1.0, asi que el eje compartido las pinta de un
+rojo plano y esconde exactamente la estructura que la figura debe mostrar.
+La consecuencia hay que tenerla presente al leer: los COLORES no son
+comparables entre paneles; lo comparable son los rangos declarados y los
+numeros anotados.
 '''
 
 _CODE_GROUP_GRAPHS = '''\
@@ -1782,12 +1791,20 @@ paneles_afinidad = [
     (afinidad_correlacion, "Correlacion sobre pesos (aun con el perfil experto)"),
     (afinidad_desviacion, "Correlacion sobre la desviacion del gate"),
 ]
-fig, axes = plt.subplots(1, len(paneles_afinidad), figsize=(6.2 * len(paneles_afinidad), 5.4))
+fig, axes = plt.subplots(1, len(paneles_afinidad), figsize=(6.2 * len(paneles_afinidad), 5.6))
 for ax, (frame, titulo) in zip(axes, paneles_afinidad):
     valores = frame.to_numpy(dtype=float)
-    # Escala fija [-1, 1]: comparar los tres paneles exige el mismo eje de color,
-    # y un vmin/vmax por panel haria parecer que hay contraste donde no lo hay.
-    imagen = ax.imshow(valores, cmap="coolwarm", vmin=-1.0, vmax=1.0)
+    # Cada panel lleva su PROPIA escala, tomada del rango FUERA de la diagonal, y la
+    # declara en el titulo. Una escala compartida [-1, 1] seria comparable entre
+    # paneles pero pinta los tres de un rojo plano: las tres matrices viven entre
+    # 0.96 y 1.0, asi que el eje comun esconde justamente la estructura que el
+    # panel existe para mostrar. Se comparan los RANGOS declarados, no los colores.
+    fuera_diagonal = valores[~np.eye(valores.shape[0], dtype=bool)]
+    escala_min, escala_max = float(fuera_diagonal.min()), float(fuera_diagonal.max())
+    if np.isclose(escala_min, escala_max):
+        escala_min, escala_max = escala_min - 1e-6, escala_max + 1e-6
+    imagen = ax.imshow(valores, cmap="coolwarm", vmin=escala_min, vmax=escala_max)
+    titulo = f"{titulo}\\nescala propia fuera de diagonal: [{escala_min:.4f}, {escala_max:.4f}]"
     ax.set_xticks(range(len(frame.columns)))
     ax.set_yticks(range(len(frame.index)))
     ax.set_xticklabels(frame.columns, rotation=45, ha="right", fontsize=9)
@@ -1795,10 +1812,21 @@ for ax, (frame, titulo) in zip(axes, paneles_afinidad):
     ax.set_title(titulo, fontsize=11)
     for i in range(valores.shape[0]):
         for j in range(valores.shape[1]):
-            ax.text(j, i, f"{valores[i, j]:.3f}", ha="center", va="center", fontsize=8,
-                    color="black" if abs(valores[i, j]) < 0.6 else "white")
-    fig.colorbar(imagen, ax=ax, fraction=0.046, pad=0.04)
-fig.suptitle("Afinidad entre los grafos de cada grupo y contra el grafo experto fijo", fontsize=12)
+            # Cuatro decimales: con tres, todo lo que pasa entre 0.999 y 1.0 se
+            # imprime igual y la tabla dejaria de distinguir lo que el panel muestra.
+            centro = 0.5 * (escala_min + escala_max)
+            ax.text(j, i, f"{valores[i, j]:.4f}", ha="center", va="center", fontsize=8,
+                    color="white" if valores[i, j] >= centro else "black")
+    barra = fig.colorbar(imagen, ax=ax, fraction=0.046, pad=0.04)
+    # Sin offset cientifico: con un rango como [0.9999, 1.0000] matplotlib factoriza
+    # un "+9.999e-1" que se dibuja encima del titulo y deja las marcas ilegibles.
+    barra.formatter.set_useOffset(False)
+    barra.formatter.set_scientific(False)
+    barra.update_ticks()
+fig.suptitle(
+    "Afinidad entre los grafos de cada grupo y contra el grafo experto fijo "
+    "(cada panel con su propia escala -- comparar rangos, no colores)", fontsize=12
+)
 fig.tight_layout()
 AFFINITY_FIGURE_PATH = FIGURES_DIR / f"mgcecdl_graphgated_nb12_{mode}_afinidad_grafos.png"
 fig.savefig(AFFINITY_FIGURE_PATH, dpi=150, bbox_inches="tight")
@@ -1819,6 +1847,15 @@ Ambos ejes van en `log10` porque las dos variables son de cola muy larga;
 en escala lineal todas las curvas colapsarian contra el cero. Los vanos sin
 eventos quedan fuera del KDE (no tienen `log10` definido) y se reportan
 aparte como conteo, en vez de imputarlos y ensuciar la densidad.
+
+ADVERTENCIA DE LECTURA sobre el panel derecho: el numero de eventos es una
+variable DISCRETA, y un KDE gaussiano sobre ella suaviza algo que no es
+continuo. Los bultos que aparecen alrededor de `log10(2) = 0.30` y
+`log10(3) = 0.48` no son modas de una densidad subyacente: son los atomos
+enteros 2 y 3 untados por el ancho del kernel. Por eso, debajo de la figura
+se imprime tambien la distribucion CRUDA de conteos por grupo -- esa tabla,
+y no la curva, es la lectura correcta cuando la mayoria de los vanos tienen
+uno o dos eventos.
 '''
 
 _CODE_KDE = '''\
@@ -1859,6 +1896,17 @@ fig.savefig(KDE_FIGURE_PATH, dpi=150, bbox_inches="tight")
 print("Figura:", KDE_FIGURE_PATH)
 plt.show()
 
+print()
+print("Distribucion CRUDA del numero de eventos por grupo (lectura correcta del panel derecho:")
+print("el KDE suaviza estos atomos enteros, no una densidad continua):")
+conteo_crudo = (
+    perfil_vanos.assign(
+        eventos=perfil_vanos["n_eventos"].fillna(0).astype(int).clip(upper=5).astype(str)
+    )
+    .replace({"eventos": {"5": "5+"}})
+    .pivot_table(index="riesgo", columns="eventos", values="grupo", aggfunc="size", fill_value=0)
+)
+print(conteo_crudo.to_string())
 print()
 print("Resumen numerico por grupo de riesgo (caracterizacion descriptiva, ver seccion 22):")
 resumen_final = perfil_vanos.groupby(["grupo", "riesgo"]).agg(

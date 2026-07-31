@@ -648,9 +648,26 @@ def test_affinity_reports_a_third_view_that_is_not_saturated_by_construction(not
     assert "np.corrcoef(desviaciones)" in code
 
 
-def test_affinity_panels_share_one_colour_scale(notebook) -> None:
+def test_affinity_panels_declare_their_own_colour_scale(notebook) -> None:
+    """A shared [-1, 1] scale is comparable across panels but paints all three
+    a flat red, because every affinity here lives between ~0.96 and 1.0 -- it
+    hides the structure the figure exists to show. Each panel therefore takes
+    its own limits from the off-diagonal range AND states them, so nobody
+    compares colours across panels."""
     code = _all_code_source(notebook)
-    assert code.count("vmin=-1.0, vmax=1.0") >= 1, (
-        "per-panel colour limits would manufacture apparent contrast between "
-        "three matrices that are all near 1"
+    assert "vmin=-1.0, vmax=1.0" not in code, "a shared [-1, 1] scale renders every panel flat"
+    assert "vmin=escala_min, vmax=escala_max" in code
+    assert "escala propia fuera de diagonal" in code, (
+        "a per-panel scale is only honest if the panel says what its scale is"
+    )
+    markdown = _all_markdown_source(notebook)
+    assert re.search(r"NO comparten escala", markdown), (
+        "the reader must be told colours are not comparable across panels"
+    )
+
+
+def test_affinity_annotations_keep_enough_decimals_to_separate_values(notebook) -> None:
+    code = _all_code_source(notebook)
+    assert 'f"{valores[i, j]:.4f}"' in code, (
+        "three decimals print 0.9991 and 0.9998 identically, erasing the distinction"
     )
