@@ -1021,3 +1021,330 @@ def perfil_por_cluster(
         .astype(int)
     )
     return result.sort_values(["cluster", "rank"]).reset_index(drop=True)
+
+
+# ---------------------------------------------------------------------------
+# PR4 (cont.) -- the per-group RECONSTRUCTED graph and the descriptive
+# vocabulary built on top of it: graph-vs-graph affinity, UITI-ordered risk
+# naming, and fine-vs-coarse partition nesting.
+# ---------------------------------------------------------------------------
+
+
+def grafo_reconstruido_por_grupo(
+    gate_means: np.ndarray,
+    edge_index: GraphEdgeIndex,
+    labels: np.ndarray,
+    n_features: int,
+) -> dict[int, dict]:
+    """Rebuild each group's mean expert graph from its per-vano edge gates.
+
+    A group's reconstructed edge weight is `mean_vano(g_bar_e) *
+    fixed_weight_e` -- the fixed expert graph as that family of vanos
+    actually uses it. Returns, per group in ASCENDING label order,
+    `{"gate_mean", "edge_weights", "matrix", "n_vanos"}`.
+
+    `matrix` is a dense `(n_features, n_features)` array filled STRICTLY
+    through `edge_index.pairs`; edge `i` never goes anywhere its
+    `(source_position, target_position)` pair does not say, so the result
+    stays correct regardless of the order `edge_index` happens to be in.
+    Every cell outside the edge index's support stays exactly zero.
+    """
+    gate_means = np.asarray(gate_means, dtype=np.float64)
+    if gate_means.ndim != 2:
+        raise ValueError(
+            f"gate_means must be 2-D (n_vanos, n_edges); got shape {gate_means.shape}."
+        )
+
+    labels = np.asarray(labels).reshape(-1)
+    if labels.shape[0] != gate_means.shape[0]:
+        raise ValueError(
+            f"labels has {labels.shape[0]} entries but gate_means has "
+            f"{gate_means.shape[0]} rows (vanos); they must match."
+        )
+    if gate_means.shape[1] != edge_index.n_edges:
+        raise ValueError(
+            f"gate_means has {gate_means.shape[1]} columns but edge_index.n_edges is "
+            f"{edge_index.n_edges}; they must match."
+        )
+
+    pairs = np.asarray(edge_index.pairs, dtype=np.int64)
+    max_position = int(pairs.max())
+    n_features = int(n_features)
+    if n_features <= max_position:
+        raise ValueError(
+            f"n_features ({n_features}) cannot hold edge_index's maximum feature position "
+            f"({max_position}); it must be at least {max_position + 1}."
+        )
+
+    fixed_weights = np.asarray(edge_index.weights, dtype=np.float64)
+
+    reconstruido: dict[int, dict] = {}
+    for group in sorted(np.unique(labels)):
+        group_mask = labels == group
+        gate_mean = gate_means[group_mask].mean(axis=0)
+        edge_weights = gate_mean * fixed_weights
+
+        matrix = np.zeros((n_features, n_features), dtype=np.float64)
+        matrix[pairs[:, 0], pairs[:, 1]] = edge_weights
+
+        reconstruido[_como_escalar_python(group)] = {
+            "gate_mean": gate_mean,
+            "edge_weights": edge_weights,
+            "matrix": matrix,
+            "n_vanos": int(np.count_nonzero(group_mask)),
+        }
+    return reconstruido
+
+
+_METRICAS_AFINIDAD = ("coseno", "correlacion")
+
+
+def afinidad_entre_grafos(
+    edge_weights_por_grupo: Mapping[int, np.ndarray],
+    edge_weights_fijo: np.ndarray,
+    metrica: str = "coseno",
+) -> pd.DataFrame:
+    """Square symmetric affinity between every reconstructed graph and the
+    fixed expert graph, indexed `["FIJO", *sorted(groups)]` (labels
+    stringified). `frame.attrs["metrica"]` records which metric was used.
+
+    Which metric, and why it matters:
+
+    - `"coseno"` -- plain cosine similarity over the `E` edge weights. Read
+      it with care: every reconstructed graph is `gate * fixed_weight` with
+      gates centred near 1, so a cosine of 0.999 against `FIJO` (or against
+      another group) is what this construction produces BY DEFAULT. It says
+      "these vectors share the expert graph's magnitude profile", which they
+      cannot help but do. It does NOT say the groups are identical, and a
+      reader who treats a high cosine as evidence of agreement is reading a
+      property of the parameterization, not a property of the data.
+    - `"correlacion"` -- Pearson over the same `E` edges. Centring each
+      vector removes the shared offset that pins cosine near 1, leaving only
+      the per-edge DEVIATION pattern. Two groups that gate the same edges in
+      opposite directions land at a negative correlation while their cosine
+      still reads ~1.0, which is exactly the discriminating power the caller
+      needs. Its own caveat: when the fixed weights themselves vary widely,
+      that shared ramp survives centring and correlation saturates too --
+      neither metric is a substitute for the per-edge deviation table.
+
+    Any other `metrica` raises `ValueError`. The diagonal is exactly `1.0`.
+    """
+    if metrica not in _METRICAS_AFINIDAD:
+        raise ValueError(
+            f"metrica must be one of {_METRICAS_AFINIDAD}; got {metrica!r}."
+        )
+
+    fijo = np.asarray(edge_weights_fijo, dtype=np.float64).reshape(-1)
+    etiquetas = ["FIJO"]
+    vectores = [fijo]
+    for group in sorted(edge_weights_por_grupo):
+        vector = np.asarray(edge_weights_por_grupo[group], dtype=np.float64).reshape(-1)
+        if vector.shape != fijo.shape:
+            raise ValueError(
+                f"group {group!r} has {vector.shape[0]} edge weights but edge_weights_fijo "
+                f"has {fijo.shape[0]}; every graph must span the same edge set."
+            )
+        etiquetas.append(str(group))
+        vectores.append(vector)
+
+    matriz = np.vstack(vectores)
+    if metrica == "correlacion":
+        # Pearson IS cosine on the centred vectors -- centring is the only
+        # difference, so both metrics share one code path from here on.
+        matriz = matriz - matriz.mean(axis=1, keepdims=True)
+
+    norms = np.linalg.norm(matriz, axis=1)
+    # A zero-norm row (a constant graph under "correlacion") has no direction:
+    # its off-diagonal affinity is undefined, reported as 0.0 rather than nan.
+    normalizada = np.zeros_like(matriz)
+    nonzero = norms > 0.0
+    normalizada[nonzero] = matriz[nonzero] / norms[nonzero, None]
+
+    afinidad = np.clip(normalizada @ normalizada.T, -1.0, 1.0)
+    np.fill_diagonal(afinidad, 1.0)
+
+    frame = pd.DataFrame(afinidad, index=etiquetas, columns=etiquetas)
+    frame.attrs["metrica"] = metrica
+    return frame
+
+
+def _como_escalar_python(value: Any) -> Any:
+    """Numpy scalars out of `np.unique` become plain Python scalars, so the
+    returned dict keys compare and print like the caller's own labels."""
+    return value.item() if hasattr(value, "item") else value
+
+
+def asignar_nombres_de_riesgo(
+    labels: np.ndarray,
+    valores: np.ndarray,
+    nombres: Sequence[str] = ("Bajo", "Medio", "Medio-Alto", "Alto"),
+) -> dict:
+    """Re-label groups by ASCENDING group-mean `valores` (per-vano accumulated
+    UITI), so group `0` is always the lowest-criticality family.
+
+    KMeans label ids are arbitrary: cluster `0` carries no ordinal meaning at
+    all. This function replaces them with an ORDERED vocabulary, which is what
+    lets a downstream reader treat "Alto" as a claim about criticality rather
+    than about an arbitrary centroid index.
+
+    Returns `{"labels", "mapeo", "nombres", "resumen"}`, where `resumen` is
+    one row per NEW group -- `grupo | nombre | n_vanos | uiti_media |
+    uiti_mediana` -- sorted by `grupo`.
+
+    `valores` may hold NaN (a vano with no events in the future window).
+    Group statistics are NaN-aware; a group that is ENTIRELY NaN has no
+    measurable criticality, so it sorts to the bottom (as if `-inf`) instead
+    of crashing, and its `uiti_media`/`uiti_mediana` stay NaN in `resumen`
+    rather than being silently reported as a real number.
+
+    Fewer groups than `nombres` is fine (the first `n` names are used); MORE
+    groups than names raises, because there is no honest name left to give.
+    """
+    labels = np.asarray(labels).reshape(-1)
+    valores = np.asarray(valores, dtype=np.float64).reshape(-1)
+    if labels.shape[0] != valores.shape[0]:
+        raise ValueError(
+            f"labels has {labels.shape[0]} entries but valores has {valores.shape[0]}; "
+            "they must be per-vano aligned."
+        )
+
+    nombres_disponibles = [str(name) for name in nombres]
+    etiquetas_originales = list(np.unique(labels))
+    if len(etiquetas_originales) > len(nombres_disponibles):
+        raise ValueError(
+            f"{len(etiquetas_originales)} distinct labels do not fit the "
+            f"{len(nombres_disponibles)} available nombres {tuple(nombres_disponibles)}; "
+            "supply a longer `nombres` sequence."
+        )
+
+    def _estadisticos(original: Any) -> tuple[np.ndarray, bool]:
+        group_values = valores[labels == original]
+        todo_nan = group_values.size == 0 or bool(np.all(np.isnan(group_values)))
+        return group_values, todo_nan
+
+    claves_de_orden: list[float] = []
+    for original in etiquetas_originales:
+        group_values, todo_nan = _estadisticos(original)
+        claves_de_orden.append(
+            float("-inf") if todo_nan else float(np.nanmean(group_values))
+        )
+
+    orden_ascendente = np.argsort(np.asarray(claves_de_orden), kind="stable")
+    mapeo: dict[Any, int] = {}
+    original_por_nuevo: list[Any] = []
+    for nuevo_label, position in enumerate(orden_ascendente):
+        original = etiquetas_originales[int(position)]
+        mapeo[_como_escalar_python(original)] = nuevo_label
+        original_por_nuevo.append(original)
+
+    labels_remapeados = np.array(
+        [mapeo[_como_escalar_python(value)] for value in labels], dtype=int
+    )
+    nombres_por_grupo = {
+        nuevo_label: nombres_disponibles[nuevo_label]
+        for nuevo_label in range(len(etiquetas_originales))
+    }
+
+    filas: list[dict[str, Any]] = []
+    for nuevo_label, original in enumerate(original_por_nuevo):
+        group_values, todo_nan = _estadisticos(original)
+        filas.append(
+            {
+                "grupo": nuevo_label,
+                "nombre": nombres_por_grupo[nuevo_label],
+                "n_vanos": int(group_values.size),
+                "uiti_media": float("nan") if todo_nan else float(np.nanmean(group_values)),
+                "uiti_mediana": (
+                    float("nan") if todo_nan else float(np.nanmedian(group_values))
+                ),
+            }
+        )
+
+    resumen = pd.DataFrame(
+        filas, columns=["grupo", "nombre", "n_vanos", "uiti_media", "uiti_mediana"]
+    ).sort_values("grupo").reset_index(drop=True)
+
+    return {
+        "labels": labels_remapeados,
+        "mapeo": mapeo,
+        "nombres": nombres_por_grupo,
+        "resumen": resumen,
+    }
+
+
+def anidamiento_entre_particiones(
+    labels_finas: np.ndarray,
+    labels_gruesas: np.ndarray,
+    umbral_pureza: float = 0.99,
+) -> pd.DataFrame:
+    """Does the FINE partition nest inside the coarse one? Reported PER FINE
+    FAMILY, never as one global boolean.
+
+    One row per fine family: `familia_fina | n_vanos |
+    familia_gruesa_dominante | pureza | anida`, where `pureza` is the
+    fraction of that family sitting in its dominant coarse family and `anida`
+    is `pureza >= umbral_pureza`.
+
+    `frame.attrs` carries `"contingencia"` (the fine-by-coarse crosstab),
+    `"pureza_minima"`, `"pureza_media"`, `"ari"` (adjusted Rand index) and
+    `"fraccion_vanos_anidados"` -- the share of ALL vanos living in families
+    that nest.
+
+    Why there is deliberately NO overall verdict: an earlier version of this
+    analysis collapsed the answer into a single boolean driven by MINIMUM
+    purity, and reported a flat "does not nest" for a real case where three
+    of four families were 100% pure and one small family (4% of the vanos)
+    straddled the boundary. That boolean erased the actual finding.
+    `pureza_minima` and `fraccion_vanos_anidados` are BOTH reported here
+    precisely because they can tell different stories (0.5 and 0.96 in that
+    case), and describing the resulting structure is the caller's job.
+    """
+    finas = np.asarray(labels_finas).reshape(-1)
+    gruesas = np.asarray(labels_gruesas).reshape(-1)
+    if finas.shape[0] != gruesas.shape[0]:
+        raise ValueError(
+            f"labels_finas has {finas.shape[0]} entries but labels_gruesas has "
+            f"{gruesas.shape[0]}; both must be per-vano aligned."
+        )
+    if finas.shape[0] == 0:
+        raise ValueError("anidamiento_entre_particiones needs at least one vano.")
+
+    contingencia = pd.crosstab(
+        pd.Series(finas, name="familia_fina"),
+        pd.Series(gruesas, name="familia_gruesa"),
+    )
+
+    filas: list[dict[str, Any]] = []
+    for familia_fina, conteos in contingencia.iterrows():
+        n_vanos = int(conteos.sum())
+        dominante = conteos.idxmax()
+        pureza = float(conteos.max()) / n_vanos
+        filas.append(
+            {
+                "familia_fina": _como_escalar_python(familia_fina),
+                "n_vanos": n_vanos,
+                "familia_gruesa_dominante": _como_escalar_python(dominante),
+                "pureza": pureza,
+                "anida": bool(pureza >= umbral_pureza),
+            }
+        )
+
+    frame = pd.DataFrame(
+        filas,
+        columns=[
+            "familia_fina",
+            "n_vanos",
+            "familia_gruesa_dominante",
+            "pureza",
+            "anida",
+        ],
+    )
+
+    n_total = int(finas.shape[0])
+    n_anidados = int(frame.loc[frame["anida"], "n_vanos"].sum())
+    frame.attrs["contingencia"] = contingencia
+    frame.attrs["pureza_minima"] = float(frame["pureza"].min())
+    frame.attrs["pureza_media"] = float(frame["pureza"].mean())
+    frame.attrs["ari"] = float(adjusted_rand_score(finas, gruesas))
+    frame.attrs["fraccion_vanos_anidados"] = n_anidados / n_total
+    return frame

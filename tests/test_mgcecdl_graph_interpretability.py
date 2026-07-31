@@ -29,9 +29,13 @@ from chec_impacto.models.mgcecdl_graph import GraphEdgeIndex, construir_edge_ind
 
 from chec_impacto.interpretability.mgcecdl_graph import (
     _ari_sobre_filas_compartidas,
+    afinidad_entre_grafos,
     agrupar_gates_por_vano,
+    anidamiento_entre_particiones,
+    asignar_nombres_de_riesgo,
     asociacion_criticidad,
     assert_fecha_excluded_from_features,
+    grafo_reconstruido_por_grupo,
     control_permutacion_grados,
     corregir_benjamini_hochberg,
     diagnostico_persistencia,
@@ -810,3 +814,326 @@ def test_ari_sobre_filas_compartidas_reports_zero_overlap() -> None:
     )
     assert n_shared == 0
     assert np.isnan(ari), "no shared rows means no measurable agreement, not a score of 0.0"
+
+
+# ---------------------------------------------------------------------------
+# PR4 (cont.) -- reconstructed per-group graph, graph-vs-graph affinity,
+# UITI-ordered risk naming, and fine-vs-coarse partition nesting.
+# ---------------------------------------------------------------------------
+
+
+_GATE_MEANS_TRES_VANOS = np.array(
+    [
+        [1.10, 0.90, 1.05, 0.95],
+        [0.80, 1.20, 0.85, 1.15],
+        [1.40, 0.60, 1.25, 0.75],
+    ]
+)
+
+
+def test_grafo_reconstruido_grupo_de_un_vano_reproduce_sus_gates() -> None:
+    """A group holding exactly one vano must reproduce that vano's gate vector
+    unchanged -- no smoothing, no renormalization."""
+    edge_index = _tiny_edge_index()
+    labels = np.array([0, 1, 1])
+
+    resultado = grafo_reconstruido_por_grupo(
+        _GATE_MEANS_TRES_VANOS, edge_index, labels, len(_FEATURES)
+    )
+
+    assert sorted(resultado) == [0, 1]
+    assert list(resultado) == [0, 1], "groups must be returned in ascending order"
+
+    solo = resultado[0]
+    assert solo["n_vanos"] == 1
+    np.testing.assert_allclose(solo["gate_mean"], _GATE_MEANS_TRES_VANOS[0])
+    np.testing.assert_allclose(
+        solo["edge_weights"],
+        _GATE_MEANS_TRES_VANOS[0] * edge_index.weights.astype(np.float64),
+        rtol=1e-6,
+    )
+
+    par = resultado[1]
+    assert par["n_vanos"] == 2
+    np.testing.assert_allclose(par["gate_mean"], _GATE_MEANS_TRES_VANOS[1:].mean(axis=0))
+
+
+def test_grafo_reconstruido_coloca_pesos_en_las_posiciones_del_edge_index() -> None:
+    """`matrix` must be filled through `edge_index.pairs`, never by assuming
+    edge `i` lives at cell `(i, i+1)` or any other positional shortcut."""
+    edge_index = _tiny_edge_index()
+    labels = np.array([0, 0, 1])
+
+    resultado = grafo_reconstruido_por_grupo(
+        _GATE_MEANS_TRES_VANOS, edge_index, labels, len(_FEATURES)
+    )
+
+    for payload in resultado.values():
+        matrix = payload["matrix"]
+        assert matrix.shape == (len(_FEATURES), len(_FEATURES))
+        for position, (row, col) in enumerate(edge_index.pairs):
+            assert matrix[row, col] == pytest.approx(payload["edge_weights"][position])
+        # nothing may be written outside the edge index's support
+        assert np.count_nonzero(matrix) == edge_index.n_edges
+
+
+def test_grafo_reconstruido_sigue_el_orden_de_features_no_el_de_las_aristas() -> None:
+    """Reversing the feature order moves every cell -- if the matrix were built
+    positionally instead of from `pairs`, it would come out identical."""
+    edge_index = _tiny_edge_index()
+
+    reversed_features = list(reversed(_FEATURES))
+    positions = {name: index for index, name in enumerate(reversed_features)}
+    reversed_adjacency = np.zeros(
+        (len(reversed_features), len(reversed_features)), dtype=np.float32
+    )
+    for edge in _EDGES:
+        reversed_adjacency[positions[edge["source"]], positions[edge["target"]]] = edge["weight"]
+    reversed_edge_index = construir_edge_index(reversed_adjacency, reversed_features, _EDGES)
+
+    labels = np.array([0, 0, 0])
+    directo = grafo_reconstruido_por_grupo(
+        _GATE_MEANS_TRES_VANOS, edge_index, labels, len(_FEATURES)
+    )[0]["matrix"]
+    invertido = grafo_reconstruido_por_grupo(
+        _GATE_MEANS_TRES_VANOS, reversed_edge_index, labels, len(reversed_features)
+    )[0]["matrix"]
+
+    assert not np.array_equal(directo, invertido)
+    for position, (row, col) in enumerate(reversed_edge_index.pairs):
+        assert invertido[row, col] == pytest.approx(
+            _GATE_MEANS_TRES_VANOS[:, position].mean()
+            * float(reversed_edge_index.weights[position])
+        )
+
+
+def test_grafo_reconstruido_valida_dimensiones() -> None:
+    edge_index = _tiny_edge_index()
+
+    with pytest.raises(ValueError, match="labels"):
+        grafo_reconstruido_por_grupo(
+            _GATE_MEANS_TRES_VANOS, edge_index, np.array([0, 1]), len(_FEATURES)
+        )
+
+    with pytest.raises(ValueError, match="n_edges"):
+        grafo_reconstruido_por_grupo(
+            _GATE_MEANS_TRES_VANOS[:, :-1], edge_index, np.array([0, 1, 1]), len(_FEATURES)
+        )
+
+    max_position = int(edge_index.pairs.max())
+    with pytest.raises(ValueError, match="n_features"):
+        grafo_reconstruido_por_grupo(
+            _GATE_MEANS_TRES_VANOS, edge_index, np.array([0, 1, 1]), max_position
+        )
+
+
+# --- afinidad_entre_grafos -------------------------------------------------
+
+
+def _grafos_anticorrelados() -> tuple[np.ndarray, dict[int, np.ndarray]]:
+    """Two groups whose gates deviate from 1 in OPPOSITE directions over expert
+    weights of similar magnitude -- the regime where cosine saturates."""
+    fijo = np.array([0.50, 0.52, 0.48, 0.51])
+    desviacion = np.array([0.05, -0.05, 0.05, -0.05])
+    return fijo, {0: fijo * (1.0 + desviacion), 1: fijo * (1.0 - desviacion)}
+
+
+@pytest.mark.parametrize("metrica", ["coseno", "correlacion"])
+def test_afinidad_diagonal_exacta_y_simetrica(metrica: str) -> None:
+    fijo, grupos = _grafos_anticorrelados()
+
+    frame = afinidad_entre_grafos(grupos, fijo, metrica=metrica)
+
+    assert list(frame.index) == ["FIJO", "0", "1"]
+    assert list(frame.columns) == ["FIJO", "0", "1"]
+    assert frame.attrs["metrica"] == metrica
+    for label in frame.index:
+        assert frame.loc[label, label] == 1.0
+    np.testing.assert_allclose(frame.to_numpy(), frame.to_numpy().T)
+
+
+@pytest.mark.parametrize("metrica", ["coseno", "correlacion"])
+def test_afinidad_vectores_identicos_valen_uno(metrica: str) -> None:
+    fijo, _ = _grafos_anticorrelados()
+    grupos = {7: fijo.copy()}
+
+    frame = afinidad_entre_grafos(grupos, fijo, metrica=metrica)
+
+    assert frame.loc["FIJO", "7"] == pytest.approx(1.0, abs=1e-12)
+
+
+def test_afinidad_metrica_desconocida() -> None:
+    fijo, grupos = _grafos_anticorrelados()
+
+    with pytest.raises(ValueError, match="metrica"):
+        afinidad_entre_grafos(grupos, fijo, metrica="euclidiana")
+
+
+def test_correlacion_separa_lo_que_el_coseno_no_separa() -> None:
+    """The design note this function exists to honour, pinned as a test.
+
+    Every reconstructed graph is `gate * fixed_weight` with gates centred near
+    1, so cosine against anything sits at ~0.99+ BY CONSTRUCTION -- it is not
+    evidence that the groups agree. Pearson removes the shared offset and
+    exposes that the two groups deviate in opposite directions.
+    """
+    fijo, grupos = _grafos_anticorrelados()
+
+    coseno = afinidad_entre_grafos(grupos, fijo, metrica="coseno")
+    correlacion = afinidad_entre_grafos(grupos, fijo, metrica="correlacion")
+
+    assert coseno.loc["0", "1"] > 0.99
+    assert coseno.loc["FIJO", "0"] > 0.99
+    assert coseno.loc["FIJO", "1"] > 0.99
+
+    assert correlacion.loc["0", "1"] < 0.0, (
+        "correlacion must separate two groups whose deviations point in opposite "
+        "directions, precisely where cosine reports ~1.0"
+    )
+
+
+# --- asignar_nombres_de_riesgo ---------------------------------------------
+
+
+def test_asignar_nombres_reordena_por_uiti_ascendente() -> None:
+    """Raw label order is deliberately the REVERSE of the UITI order here."""
+    labels = np.array([0, 0, 1, 1, 2, 2])
+    valores = np.array([100.0, 110.0, 50.0, 60.0, 1.0, 2.0])
+
+    resultado = asignar_nombres_de_riesgo(labels, valores)
+
+    assert resultado["mapeo"] == {2: 0, 1: 1, 0: 2}
+    assert list(resultado["labels"]) == [2, 2, 1, 1, 0, 0]
+    assert resultado["nombres"] == {0: "Bajo", 1: "Medio", 2: "Medio-Alto"}
+
+    resumen = resultado["resumen"]
+    assert list(resumen.columns) == [
+        "grupo",
+        "nombre",
+        "n_vanos",
+        "uiti_media",
+        "uiti_mediana",
+    ]
+    assert list(resumen["grupo"]) == [0, 1, 2]
+    assert list(resumen["nombre"]) == ["Bajo", "Medio", "Medio-Alto"]
+    assert list(resumen["n_vanos"]) == [2, 2, 2]
+    assert resumen.loc[resumen["grupo"] == 0, "uiti_media"].iloc[0] == pytest.approx(1.5)
+    assert resumen.loc[resumen["grupo"] == 2, "uiti_media"].iloc[0] == pytest.approx(105.0)
+
+
+def test_asignar_nombres_grupo_completamente_nan_no_revienta() -> None:
+    """A vano with no future events carries NaN; a whole NaN group must sort to
+    the bottom instead of crashing `np.nanmean`."""
+    labels = np.array([0, 0, 1, 1, 2, 2])
+    valores = np.array([np.nan, np.nan, 50.0, 60.0, 1.0, 2.0])
+
+    resultado = asignar_nombres_de_riesgo(labels, valores)
+
+    assert resultado["mapeo"][0] == 0, "the all-NaN group must sort to the bottom"
+    assert resultado["nombres"][0] == "Bajo"
+    assert resultado["mapeo"][2] == 1
+    assert resultado["mapeo"][1] == 2
+
+    resumen = resultado["resumen"]
+    assert np.isnan(resumen.loc[resumen["grupo"] == 0, "uiti_media"].iloc[0])
+    assert resumen.loc[resumen["grupo"] == 0, "n_vanos"].iloc[0] == 2
+
+
+def test_asignar_nombres_admite_menos_grupos_que_nombres() -> None:
+    labels = np.array([5, 5, 9, 9])
+    valores = np.array([10.0, 12.0, 1.0, 2.0])
+
+    resultado = asignar_nombres_de_riesgo(labels, valores)
+
+    assert resultado["nombres"] == {0: "Bajo", 1: "Medio"}
+    assert list(resultado["labels"]) == [1, 1, 0, 0]
+
+
+def test_asignar_nombres_mas_grupos_que_nombres_falla() -> None:
+    labels = np.arange(5)
+    valores = np.arange(5, dtype=float)
+
+    with pytest.raises(ValueError, match="nombres"):
+        asignar_nombres_de_riesgo(labels, valores)
+
+
+# --- anidamiento_entre_particiones -----------------------------------------
+
+
+def test_anidamiento_particion_perfectamente_anidada() -> None:
+    labels_finas = np.array([0] * 10 + [1] * 10 + [2] * 10 + [3] * 10)
+    labels_gruesas = np.array([0] * 20 + [1] * 20)
+
+    frame = anidamiento_entre_particiones(labels_finas, labels_gruesas)
+
+    assert list(frame.columns) == [
+        "familia_fina",
+        "n_vanos",
+        "familia_gruesa_dominante",
+        "pureza",
+        "anida",
+    ]
+    assert frame["anida"].all()
+    assert frame.attrs["fraccion_vanos_anidados"] == 1.0
+    assert frame.attrs["pureza_minima"] == pytest.approx(1.0)
+    assert frame.attrs["pureza_media"] == pytest.approx(1.0)
+    assert isinstance(frame.attrs["contingencia"], pd.DataFrame)
+    assert frame.attrs["ari"] == pytest.approx(
+        adjusted_rand_score(labels_finas, labels_gruesas)
+    )
+
+
+def test_anidamiento_tres_familias_puras_y_una_que_cruza() -> None:
+    """The real shape this function exists to describe honestly.
+
+    Three fine families are 100% pure and one small family (4% of vanos)
+    straddles the coarse boundary. `pureza_minima` is 0.5 and
+    `fraccion_vanos_anidados` is 0.96 -- the two numbers tell DIFFERENT
+    stories, and collapsing them into one boolean erases the finding.
+    """
+    labels_finas = np.array([0] * 32 + [1] * 32 + [2] * 32 + [3] * 4)
+    labels_gruesas = np.array([0] * 32 + [0] * 32 + [1] * 32 + [0, 0, 1, 1])
+
+    frame = anidamiento_entre_particiones(labels_finas, labels_gruesas)
+
+    assert len(frame) == 4
+    assert int(frame["anida"].sum()) == 3
+    assert not frame["anida"].all()
+
+    cruzada = frame.loc[frame["familia_fina"] == 3].iloc[0]
+    assert cruzada["n_vanos"] == 4
+    assert cruzada["pureza"] == pytest.approx(0.5)
+    assert not bool(cruzada["anida"])
+
+    assert frame.attrs["pureza_minima"] == pytest.approx(0.5)
+    assert frame.attrs["fraccion_vanos_anidados"] == pytest.approx(0.96)
+
+
+def test_anidamiento_no_devuelve_veredicto_booleano_global() -> None:
+    """Guard against the regression this function replaces: a single MIN-purity
+    boolean that reported a flat 'does not nest' for a mostly-nested case."""
+    labels_finas = np.array([0] * 32 + [1] * 32 + [2] * 32 + [3] * 4)
+    labels_gruesas = np.array([0] * 32 + [0] * 32 + [1] * 32 + [0, 0, 1, 1])
+
+    frame = anidamiento_entre_particiones(labels_finas, labels_gruesas)
+
+    assert isinstance(frame, pd.DataFrame)
+    for forbidden in ("anida", "anida_global", "veredicto", "nested"):
+        assert forbidden not in frame.attrs, (
+            "a global boolean verdict erases the per-family structure this function "
+            "exists to report"
+        )
+
+
+def test_anidamiento_umbral_configurable() -> None:
+    labels_finas = np.array([0] * 10 + [1] * 10)
+    # family 1 is 90% pure: above 0.85, below the 0.99 default
+    labels_gruesas = np.array([0] * 10 + [1] * 9 + [0])
+
+    estricto = anidamiento_entre_particiones(labels_finas, labels_gruesas)
+    laxo = anidamiento_entre_particiones(labels_finas, labels_gruesas, umbral_pureza=0.85)
+
+    assert int(estricto["anida"].sum()) == 1
+    assert int(laxo["anida"].sum()) == 2
+    assert estricto.attrs["fraccion_vanos_anidados"] == pytest.approx(0.5)
+    assert laxo.attrs["fraccion_vanos_anidados"] == pytest.approx(1.0)

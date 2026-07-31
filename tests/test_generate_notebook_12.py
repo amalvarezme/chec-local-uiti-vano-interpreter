@@ -480,3 +480,177 @@ def test_characterization_section_appears_after_verdict_and_edge_deviation(noteb
     )
     assert characterization_index > verdict_index
     assert characterization_index > edge_deviation_index
+
+
+# --- Delivery sections 21-25: nesting verdict, refit-on-all, risk naming, profiling ---
+
+
+def test_nesting_verdict_is_per_family_not_a_single_boolean(notebook) -> None:
+    """The earlier nesting analysis collapsed a structured result into one
+    min-purity boolean, which reported a flat "does not nest" for a case where
+    3 of 4 families were perfectly pure. The notebook must report per family
+    AND report how many vanos live in nesting families."""
+    code = _all_code_source(notebook)
+    assert "anidamiento_entre_particiones" in code
+    assert "fraccion_vanos_anidados" in code, (
+        "the share of vanos in nesting families is what a min-purity boolean erases"
+    )
+    assert "pureza_minima" in code and "pureza_media" in code
+    # A boundary family must be described as a finding, not only as a failure.
+    assert re.search(r"frontera", code, re.IGNORECASE)
+
+
+def test_delivery_k_is_separate_from_data_driven_k(notebook) -> None:
+    code = _all_code_source(notebook)
+    assert "K_ENTREGA" in code and "K_ESTABLE" in code
+    assert "K_ENTREGA = len(NOMBRES_RIESGO)" in code, (
+        "K_ENTREGA must derive from the risk-name list, never a bare literal"
+    )
+    # The notebook must not silently overwrite the data-driven K with the ask.
+    assert "K_ESTABLE = K_ENTREGA" not in code
+    markdown = _all_markdown_source(notebook)
+    assert re.search(r"operaci[oó]n", markdown, re.IGNORECASE)
+
+
+def test_final_refit_uses_all_rows_not_only_the_past_window(notebook) -> None:
+    refit_cell = next(
+        cell.source for cell in notebook.cells
+        if cell.cell_type == "code" and "gate_means_final" in cell.source
+    )
+    assert "X_past_arr=X_with_target" in refit_cell, (
+        "the delivery model must be refit on every row, not on the past window only"
+    )
+    assert "circuito_arr=circuito_all" in refit_cell
+    assert "fid_vano_arr=fid_vano_all" in refit_cell
+
+
+def test_refit_section_declares_it_is_no_longer_out_of_sample(notebook) -> None:
+    markdown = _all_markdown_source(notebook)
+    assert re.search(r"YA\s+VIO\s+la\s+ventana\s+futura", markdown), (
+        "refitting on all data makes the downstream UITI profile descriptive, "
+        "not out-of-sample -- the notebook must say so instead of implying validation"
+    )
+
+
+def test_model_checkpoint_is_saved_and_round_trip_verified(notebook) -> None:
+    code = _all_code_source(notebook)
+    assert "guardar_modelo_gated" in code
+    assert "cargar_modelo_gated" in code, "saving without reloading proves nothing"
+    assert re.search(r"np\.allclose\(_gates_original,\s*_gates_recargado", code), (
+        "the checkpoint must be proven to reproduce the trained model's gates"
+    )
+    assert "MODELS_DIR" in code
+
+
+def test_checkpoint_metadata_carries_everything_another_notebook_needs(notebook) -> None:
+    code = _all_code_source(notebook)
+    for key in (
+        '"nombres_riesgo"',
+        '"centroides_kmeans"',
+        '"feature_mean"',
+        '"feature_std"',
+        '"K_ENTREGA"',
+    ):
+        assert key in code, f"checkpoint metadata is missing {key}"
+
+
+def test_risk_names_are_assigned_by_mean_uiti_not_by_kmeans_id(notebook) -> None:
+    code = _all_code_source(notebook)
+    assert "asignar_nombres_de_riesgo" in code
+    assert 'NOMBRES_RIESGO = ("Bajo", "Medio", "Medio-Alto", "Alto")' in code
+    # KMeans ids are arbitrary; the checkpoint must store the REORDERED centroids.
+    # Asserting the variable merely exists is not enough -- it has to be the one
+    # that actually reaches the metadata, or a reloaded model would assign
+    # different risk levels than this notebook reports.
+    assert '"centroides_kmeans": centroides_ordenados' in code, (
+        "the checkpoint must store centroids reordered by risk, not raw KMeans centroids"
+    )
+
+
+def test_group_graph_profiling_reports_both_affinities(notebook) -> None:
+    code = _all_code_source(notebook)
+    assert "grafo_reconstruido_por_grupo" in code
+    assert 'metrica="coseno"' in code and 'metrica="correlacion"' in code
+    markdown = _all_markdown_source(notebook)
+    assert re.search(r"cerca de 1", markdown, re.IGNORECASE), (
+        "the notebook must warn that cosine sits near 1 by construction, so a "
+        "reader does not misread it as 'the groups are identical'"
+    )
+
+
+def test_kde_and_graph_figures_are_both_shown_and_written_to_png(notebook) -> None:
+    code = _all_code_source(notebook)
+    for path_var in ("GRAPHS_FIGURE_PATH", "AFFINITY_FIGURE_PATH", "KDE_FIGURE_PATH"):
+        assert path_var in code, f"{path_var} is missing"
+        assert f"fig.savefig({path_var}" in code, f"{path_var} is never written to disk"
+    assert "gaussian_kde" in code
+    # Every figure must also render into the notebook's own output cells.
+    assert code.count("plt.show()") >= 4
+
+
+def test_delivery_sections_come_after_the_characterization(notebook) -> None:
+    sources = [cell.source for cell in notebook.cells]
+    # Match the CALL, not the bare name: the bootstrap import-guard cell lists
+    # every helper by name near the top and would otherwise win every `next()`.
+    characterization_index = next(i for i, s in enumerate(sources) if "stability_by_seed" in s)
+    nesting_index = next(i for i, s in enumerate(sources) if "anidamiento_entre_particiones(" in s)
+    refit_index = next(i for i, s in enumerate(sources) if "gate_means_final," in s)
+    naming_index = next(i for i, s in enumerate(sources) if "asignar_nombres_de_riesgo(" in s)
+    kde_index = next(i for i, s in enumerate(sources) if "gaussian_kde(" in s)
+    assert characterization_index < nesting_index < refit_index < naming_index < kde_index
+
+
+def test_gate_inference_is_chunked_not_one_full_batch(notebook) -> None:
+    """`gated_adjacency` is (B, p, p) -- one full adjacency matrix per sample.
+    A single full-dataset batch asks for gigabytes in one tensor, and the
+    section-22 refit sees every row, not just the past window."""
+    code = _all_code_source(notebook)
+    assert "def extraer_gates(" in code
+    assert "GATE_INFERENCE_CHUNK" in code
+    # No cell may run a whole feature matrix through the model in one go.
+    for forbidden in (
+        'trained_model(torch.as_tensor(np.asarray(X_past_arr)',
+        'permuted_model(permuted_input)',
+    ):
+        assert forbidden not in code, f"full-batch inference survives: {forbidden}"
+    helpers_cell = next(
+        cell.source for cell in notebook.cells
+        if cell.cell_type == "code" and "def entrenar_y_agrupar(" in cell.source
+    )
+    assert "extraer_gates(trained_model" in helpers_cell
+
+
+def test_chunked_extraction_is_defined_before_its_first_call(notebook) -> None:
+    sources = [cell.source for cell in notebook.cells]
+    definition_index = next(i for i, s in enumerate(sources) if "def extraer_gates(" in s)
+    # The `def` line itself contains "extraer_gates(trained_model", so match the
+    # assignment at the call site instead of the bare name.
+    first_call_index = next(
+        i for i, s in enumerate(sources) if "gates = extraer_gates(trained_model" in s
+    )
+    assert definition_index < first_call_index
+
+
+def test_affinity_reports_a_third_view_that_is_not_saturated_by_construction(notebook) -> None:
+    """Cosine over weights is ~1 by construction. Correlation over weights was
+    ALSO ~0.999 in the smoke run, because the expert graph's magnitude profile
+    survives centring -- so claiming it "discriminates" would overclaim. The
+    deviation view (gate - 1.0) is the one that starts unsaturated."""
+    code = _all_code_source(notebook)
+    assert "afinidad_desviacion" in code
+    assert 'gate_mean"] - 1.0' in code, "the third view must subtract the neutral gate"
+    markdown = _all_markdown_source(notebook)
+    assert re.search(r"satura", markdown, re.IGNORECASE), (
+        "the notebook must say correlation over weights saturates, not that it discriminates"
+    )
+    # And it must not include a FIJO row it cannot define.
+    assert "afinidad_desviacion = pd.DataFrame(" in code
+    assert "np.corrcoef(desviaciones)" in code
+
+
+def test_affinity_panels_share_one_colour_scale(notebook) -> None:
+    code = _all_code_source(notebook)
+    assert code.count("vmin=-1.0, vmax=1.0") >= 1, (
+        "per-panel colour limits would manufacture apparent contrast between "
+        "three matrices that are all near 1"
+    )

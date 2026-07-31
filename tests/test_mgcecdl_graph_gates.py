@@ -31,8 +31,10 @@ from chec_impacto.models.mgcecdl_graph import (
     GraphEdgeIndex,
     GraphGatedMGCECDLRegressor,
     PerSampleEdgeGateDecoder,
+    cargar_modelo_gated,
     construir_edge_index,
     entrenar_gated_autoencoder,
+    guardar_modelo_gated,
     reinyectar_target_como_feature,
 )
 
@@ -515,3 +517,166 @@ def test_training_loop_scores_against_the_original_batch_not_the_propagated_one(
         "original batches -- it most likely passed model_output['propagated_inputs'], "
         "which lets the gate lower the loss by simplifying its own target"
     )
+
+
+# ---------------------------------------------------------------------------
+# Checkpoint persistence -- guardar_modelo_gated / cargar_modelo_gated
+# ---------------------------------------------------------------------------
+
+
+_HIDDEN_DIM = 16
+_EMBED_DIM = 4
+_ALPHA = 0.3
+
+
+def _configuracion_valida() -> dict[str, object]:
+    return {
+        "modality_feature_indices": _MODALITY_FEATURE_INDICES,
+        "hidden_dim": _HIDDEN_DIM,
+        "embed_dim": _EMBED_DIM,
+        "dropout": 0.0,
+        "temperature": 1.0,
+        "alpha": _ALPHA,
+    }
+
+
+def _modelo_con_gates_no_triviales() -> GraphGatedMGCECDLRegressor:
+    """A freshly built gate head is zero-initialised, so every gate is exactly
+    1.0 -- a round trip over THAT would pass even if nothing were persisted.
+    Perturb the head first so the saved gates actually carry information."""
+    model = _tiny_gated_model(alpha=_ALPHA)
+    generator = torch.Generator().manual_seed(7)
+    with torch.no_grad():
+        model.gate_decoder.linear.weight.normal_(0.0, 0.5, generator=generator)
+        model.gate_decoder.linear.bias.normal_(0.0, 0.5, generator=generator)
+    model.eval()
+    return model
+
+
+def test_guardar_y_cargar_modelo_gated_round_trip(tmp_path) -> None:
+    model = _modelo_con_gates_no_triviales()
+    batch = _tiny_batch()
+    with torch.no_grad():
+        original = model(batch)
+    assert not torch.allclose(original["edge_gates"], torch.ones_like(original["edge_gates"])), (
+        "the fixture must produce non-trivial gates, otherwise the round trip is vacuous"
+    )
+
+    destino = tmp_path / "checkpoints" / "gated.pt"
+    escrito = guardar_modelo_gated(
+        destino,
+        model,
+        features=_FEATURES,
+        configuracion=_configuracion_valida(),
+        metadata={"nota": "round trip"},
+    )
+
+    assert escrito == destino.resolve()
+    assert escrito.exists()
+
+    cargado = cargar_modelo_gated(escrito)
+    recargado = cargado["model"]
+    assert isinstance(recargado, GraphGatedMGCECDLRegressor)
+    assert not recargado.training, "cargar_modelo_gated must leave the model in eval mode"
+
+    with torch.no_grad():
+        recuperado = recargado(batch)
+
+    assert torch.allclose(original["edge_gates"], recuperado["edge_gates"], atol=1e-7, rtol=0.0)
+    assert torch.allclose(
+        original["gated_adjacency"], recuperado["gated_adjacency"], atol=1e-7, rtol=0.0
+    )
+
+    assert cargado["edge_index"].names == model.edge_index.names
+    np.testing.assert_array_equal(cargado["edge_index"].pairs, model.edge_index.pairs)
+    np.testing.assert_allclose(cargado["edge_index"].weights, model.edge_index.weights)
+    assert cargado["features"] == list(_FEATURES)
+    assert cargado["metadata"]["nota"] == "round trip"
+    np.testing.assert_allclose(cargado["adjacency"], _tiny_adjacency())
+    assert cargado["configuracion"]["hidden_dim"] == _HIDDEN_DIM
+    assert recargado.alpha == pytest.approx(_ALPHA)
+
+
+def test_guardar_modelo_gated_escribe_las_claves_del_contrato(tmp_path) -> None:
+    model = _modelo_con_gates_no_triviales()
+    destino = guardar_modelo_gated(
+        tmp_path / "gated.pt",
+        model,
+        features=_FEATURES,
+        configuracion=_configuracion_valida(),
+    )
+
+    checkpoint = torch.load(destino, map_location="cpu", weights_only=False)
+    required = {
+        "state_dict",
+        "features",
+        "configuracion",
+        "adjacency",
+        "edge_index_pairs",
+        "edge_index_names",
+        "edge_index_weights",
+        "alpha",
+        "metadata",
+    }
+    assert required <= set(checkpoint)
+    assert checkpoint["features"] == list(_FEATURES)
+    assert isinstance(checkpoint["adjacency"], np.ndarray)
+
+
+def test_guardar_modelo_gated_exige_configuracion_completa(tmp_path) -> None:
+    model = _modelo_con_gates_no_triviales()
+    incompleta = {"hidden_dim": _HIDDEN_DIM}
+
+    with pytest.raises(ValueError) as excinfo:
+        guardar_modelo_gated(
+            tmp_path / "gated.pt",
+            model,
+            features=_FEATURES,
+            configuracion=incompleta,
+        )
+
+    mensaje = str(excinfo.value)
+    for missing_key in ("modality_feature_indices", "embed_dim", "dropout"):
+        assert missing_key in mensaje
+    assert not (tmp_path / "gated.pt").exists(), (
+        "a rejected configuration must not leave a half-written checkpoint behind"
+    )
+
+
+def test_gated_regressor_rejects_edge_index_weights_that_contradict_the_adjacency():
+    """The forward pass multiplies gates by `adjacency[row, col]`, but
+    `grafo_reconstruido_por_grupo` multiplies them by `edge_index.weights`.
+    Those are two independent sources for one quantity. If they ever diverge,
+    the per-group graph a reader inspects is NOT the graph the model used --
+    and nothing would say so. Fail loudly at construction instead."""
+    features = ["a", "b", "c"]
+    adjacency = np.zeros((3, 3), dtype=np.float32)
+    adjacency[0, 1] = 0.9
+    adjacency[1, 2] = 0.5
+
+    honest = GraphEdgeIndex(
+        pairs=np.array([[0, 1], [1, 2]], dtype=np.int64),
+        names=(("a", "b"), ("b", "c")),
+        weights=np.array([0.9, 0.5], dtype=np.float32),
+    )
+    lying = GraphEdgeIndex(
+        pairs=np.array([[0, 1], [1, 2]], dtype=np.int64),
+        names=(("a", "b"), ("b", "c")),
+        weights=np.array([0.9, 0.5000001 + 0.25], dtype=np.float32),
+    )
+
+    def _base():
+        return MGCECDLRegressor(
+            modality_feature_indices={"m0": [0, 1], "m1": [2]},
+            hidden_dim=4, embed_dim=4, dropout=0.0,
+        )
+
+    # The consistent pair must still build.
+    GraphGatedMGCECDLRegressor(
+        base=_base(), adjacency=adjacency, edge_index=honest, alpha=0.1
+    )
+
+    with pytest.raises(ValueError, match="edge_index.weights"):
+        GraphGatedMGCECDLRegressor(
+            base=_base(), adjacency=adjacency, edge_index=lying, alpha=0.1
+        )

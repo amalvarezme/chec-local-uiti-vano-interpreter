@@ -25,6 +25,7 @@ to `__init__`), never at module top level, to avoid a `models` <->
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 import numpy as np
@@ -201,6 +202,26 @@ class GraphGatedMGCECDLRegressor(nn.Module):
         self.register_buffer("edge_rows", edge_pairs[:, 0].contiguous())
         self.register_buffer("edge_cols", edge_pairs[:, 1].contiguous())
         edge_values = adjacency_tensor[self.edge_rows, self.edge_cols]
+
+        # The forward pass scales each gate by `adjacency[row, col]`, but every
+        # downstream reader of a per-group reconstructed graph
+        # (`grafo_reconstruido_por_grupo`) scales it by `edge_index.weights`.
+        # Those are two independent carriers of one quantity. Today they always
+        # agree, because `construir_edge_index` and `_edge_index_from_adjacency`
+        # both derive from the same matrix -- but nothing enforced it, so a
+        # future caller could hand over an edge index whose weights contradict
+        # the adjacency and the interpretability layer would describe a graph
+        # the model never actually used, silently. Refuse to build instead.
+        declared_weights = torch.as_tensor(edge_index.weights, dtype=torch.float32)
+        if declared_weights.shape != edge_values.shape or not torch.allclose(
+            edge_values, declared_weights, atol=1e-5
+        ):
+            raise ValueError(
+                "edge_index.weights contradicts the adjacency it indexes into: the forward "
+                "pass would use adjacency[row, col] while the interpretability layer would "
+                "report edge_index.weights. Build the edge index from this same adjacency."
+            )
+
         self.register_buffer("edge_values", edge_values)
 
         latent_dim = base.n_modalities * base.embed_dim
@@ -423,4 +444,134 @@ def entrenar_gated_autoencoder(
         "model": model,
         "history": history,
         **{key: value for key, value in final.items() if key != "epoch"},
+    }
+
+
+# ---------------------------------------------------------------------------
+# Checkpoint persistence
+#
+# A gated model is NOT reconstructible from its `state_dict` alone: the base
+# `MGCECDLRegressor`'s shape comes from `modality_feature_indices`, and the
+# gated wrapper additionally needs the fixed adjacency, the edge index (with
+# its NAMES -- positions alone would silently re-bind every edge to a
+# different feature pair) and `alpha`. All of it travels in one file.
+# ---------------------------------------------------------------------------
+
+
+_CONFIGURACION_REQUERIDA = (
+    "modality_feature_indices",
+    "hidden_dim",
+    "embed_dim",
+    "dropout",
+)
+
+
+def _validar_configuracion(configuracion: Mapping[str, object]) -> None:
+    faltantes = [key for key in _CONFIGURACION_REQUERIDA if key not in configuracion]
+    if faltantes:
+        raise ValueError(
+            "configuracion is missing the key(s) required to rebuild the base model: "
+            f"{', '.join(faltantes)}. Required keys: {', '.join(_CONFIGURACION_REQUERIDA)}."
+        )
+
+
+def guardar_modelo_gated(
+    path: str | Path,
+    model: GraphGatedMGCECDLRegressor,
+    *,
+    features: Sequence[str],
+    configuracion: Mapping[str, object],
+    metadata: Mapping[str, object] | None = None,
+) -> Path:
+    """Write a self-contained `torch.save` checkpoint of a gated model.
+
+    `configuracion` must carry everything `cargar_modelo_gated` needs to
+    rebuild the base `MGCECDLRegressor` -- validation happens BEFORE anything
+    touches the filesystem, so a rejected configuration never leaves a
+    half-written checkpoint behind. Parent directories are created as needed;
+    the resolved destination is returned.
+    """
+    _validar_configuracion(configuracion)
+
+    destino = Path(path).resolve()
+    destino.parent.mkdir(parents=True, exist_ok=True)
+
+    edge_index = model.edge_index
+    checkpoint: dict[str, Any] = {
+        "state_dict": model.state_dict(),
+        "features": [str(name) for name in features],
+        "configuracion": dict(configuracion),
+        "adjacency": model.adjacency.detach().cpu().numpy(),
+        "edge_index_pairs": np.asarray(edge_index.pairs, dtype=np.int64),
+        "edge_index_names": tuple(
+            (str(source), str(target)) for source, target in edge_index.names
+        ),
+        "edge_index_weights": np.asarray(edge_index.weights, dtype=np.float32),
+        "alpha": float(model.alpha),
+        "metadata": dict(metadata) if metadata is not None else {},
+    }
+    torch.save(checkpoint, destino)
+    return destino
+
+
+def cargar_modelo_gated(
+    path: str | Path,
+    *,
+    device: str | torch.device = "cpu",
+) -> dict:
+    """Rebuild a `GraphGatedMGCECDLRegressor` from a `guardar_modelo_gated`
+    checkpoint, in `eval()` mode on `device`.
+
+    `load_state_dict` runs STRICTLY: a checkpoint whose architecture does not
+    match the stored `configuracion` fails loudly here rather than silently
+    loading a partially-initialized model whose gates would be meaningless.
+
+    Returns `{"model", "features", "edge_index", "adjacency", "configuracion",
+    "metadata"}`.
+    """
+    origen = Path(path).resolve()
+    resolved_device = torch.device(device)
+
+    # `weights_only=False`: this checkpoint deliberately carries the numpy
+    # adjacency/edge arrays and the configuration mapping needed to rebuild
+    # the architecture, not just tensors.
+    checkpoint = torch.load(origen, map_location=resolved_device, weights_only=False)
+
+    configuracion = dict(checkpoint["configuracion"])
+    _validar_configuracion(configuracion)
+
+    base = MGCECDLRegressor(
+        modality_feature_indices=configuracion["modality_feature_indices"],
+        hidden_dim=int(configuracion["hidden_dim"]),
+        embed_dim=int(configuracion["embed_dim"]),
+        dropout=float(configuracion["dropout"]),
+        temperature=float(configuracion.get("temperature", 1.0)),
+    )
+
+    edge_index = GraphEdgeIndex(
+        pairs=np.asarray(checkpoint["edge_index_pairs"], dtype=np.int64),
+        names=tuple(
+            (str(source), str(target)) for source, target in checkpoint["edge_index_names"]
+        ),
+        weights=np.asarray(checkpoint["edge_index_weights"], dtype=np.float32),
+    )
+    adjacency = np.asarray(checkpoint["adjacency"])
+
+    model = GraphGatedMGCECDLRegressor(
+        base=base,
+        adjacency=adjacency,
+        edge_index=edge_index,
+        alpha=float(checkpoint["alpha"]),
+    )
+    model.load_state_dict(checkpoint["state_dict"], strict=True)
+    model.eval()
+    model = model.to(resolved_device)
+
+    return {
+        "model": model,
+        "features": [str(name) for name in checkpoint["features"]],
+        "edge_index": edge_index,
+        "adjacency": adjacency,
+        "configuracion": configuracion,
+        "metadata": dict(checkpoint["metadata"]),
     }

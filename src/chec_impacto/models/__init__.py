@@ -11,8 +11,10 @@ from .mgcecdl_graph import (
     GraphEdgeIndex,
     GraphGatedMGCECDLRegressor,
     PerSampleEdgeGateDecoder,
+    cargar_modelo_gated,
     construir_edge_index,
     entrenar_gated_autoencoder,
+    guardar_modelo_gated,
     reinyectar_target_como_feature,
 )
 from .mgcecdl_graph_search import (
@@ -34,8 +36,10 @@ __all__ = [
     "GraphEdgeIndex",
     "GraphGatedMGCECDLRegressor",
     "PerSampleEdgeGateDecoder",
+    "cargar_modelo_gated",
     "construir_edge_index",
     "entrenar_gated_autoencoder",
+    "guardar_modelo_gated",
     "reinyectar_target_como_feature",
     "LAMBDA_DEV_CHOICES",
     "LAMBDA_MI_CHOICES",

@@ -140,27 +140,35 @@ PROJECT_ROOT = resolve_project_root()
 SRC_DIR = PROJECT_ROOT / "src"
 DATA_DIR = PROJECT_ROOT / "data"
 FIGURES_DIR = PROJECT_ROOT / "reports" / "interpretability" / "figures"
+MODELS_DIR = DATA_DIR / "models"
 
 for path_to_add in (PROJECT_ROOT, SRC_DIR):
     if str(path_to_add) not in sys.path:
         sys.path.insert(0, str(path_to_add))
 FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
 print("PROJECT_ROOT:", PROJECT_ROOT)
 print("DATA_DIR:    ", DATA_DIR)
 print("FIGURES_DIR: ", FIGURES_DIR)
+print("MODELS_DIR:  ", MODELS_DIR)
 
 # --- Guarda de precondiciones: sonda de import, nunca una implementacion sustituta ---
 try:
     from chec_impacto.models import (
         GatedSelfSupervisedLoss,
         GraphGatedMGCECDLRegressor,
+        cargar_modelo_gated,
         construir_edge_index,
         entrenar_gated_autoencoder,
+        guardar_modelo_gated,
         reinyectar_target_como_feature,
     )
     from chec_impacto.interpretability import (
+        afinidad_entre_grafos,
         agrupar_gates_por_vano,
+        anidamiento_entre_particiones,
+        asignar_nombres_de_riesgo,
         asociacion_criticidad,
         assert_fecha_excluded_from_features,
         control_permutacion_grados,
@@ -168,6 +176,7 @@ try:
         ejecutar_control_permutacion_grados,
         estabilidad_por_submuestreo,
         estadistico_colapso,
+        grafo_reconstruido_por_grupo,
         guardia_proxy_univariante,
         linea_base_sin_grafo,
         perfil_por_cluster,
@@ -273,8 +282,14 @@ else:
 
 ARI_STABILITY_THRESHOLD = 0.3
 
+# Niveles de riesgo que se ENTREGAN (pedido operativo). K_ENTREGA se deriva de
+# esta lista, nunca de un literal suelto, y el orden define el significado
+# ordinal que la seccion 23 asigna por UITI_VANO acumulado medio ascendente.
+NOMBRES_RIESGO = ("Bajo", "Medio", "Medio-Alto", "Alto")
+
 print(f"mode={mode!r} | SEEDS_SEARCH={SEEDS_SEARCH} | SEEDS_GATE={SEEDS_GATE} | K_SEARCH={K_SEARCH}")
 print(f"COST_CEILING_SECONDS={COST_CEILING_SECONDS}")
+print(f"NOMBRES_RIESGO={NOMBRES_RIESGO} -> K_ENTREGA={len(NOMBRES_RIESGO)}")
 '''
 
 _MD_DATA_LOAD = '''\
@@ -463,16 +478,41 @@ def entrenar_y_agrupar(*, features, adjacency, edge_index, feature_mean, feature
         weight_decay=weight_decay, optimizer_name=optimizer_name, device=DEVICE,
     )
     trained_model = result["model"]
-    trained_model.eval()
-    with torch.no_grad():
-        X_tensor = torch.as_tensor(np.asarray(X_past_arr), dtype=torch.float32).to(DEVICE)
-        model_output = trained_model(X_tensor)
-        # The full-batch pass is needed for the per-sample gates; the achieved
-        # `mutual_information_normalized` comes straight from `result`, which
-        # `entrenar_gated_autoencoder` tracks per epoch.
-        gates = model_output["edge_gates"].cpu().numpy()
+    gates = extraer_gates(trained_model, X_past_arr)
     gate_means, vano_index = agrupar_gates_por_vano(gates, circuito_arr, fid_vano_arr)
     return result, gate_means, vano_index
+'''
+
+_MD_GATE_EXTRACTION = '''\
+### 4.1 Extraccion de gates POR TROZOS (no en un solo lote)
+
+El forward de `GraphGatedMGCECDLRegressor` materializa una `gated_adjacency`
+de `(B, p, p)`: una matriz de adyacencia COMPLETA por muestra. Con `p`
+features y todas las filas del dataset, un unico lote pide del orden de
+gigabytes en un solo tensor, y en la seccion 22 (reajuste sobre TODAS las
+filas) es aun mayor que en las secciones que solo ven la ventana pasada.
+
+`extraer_gates` recorre las filas por trozos. En `eval()` y bajo `no_grad`
+el resultado es IDENTICO al de un lote unico -- no hay dropout activo ni
+estadisticas de lote que dependan del tamano del trozo -- asi que esto baja
+el pico de memoria sin tocar los numeros que reporta el cuaderno.
+'''
+
+_CODE_GATE_EXTRACTION = '''\
+GATE_INFERENCE_CHUNK = 8192
+
+
+def extraer_gates(trained_model, X_arr, chunk=GATE_INFERENCE_CHUNK):
+    # Solo se conserva `edge_gates` (B, E); `gated_adjacency` (B, p, p) se descarta
+    # al salir de cada trozo, que es justamente el tensor que hace explotar la memoria.
+    trained_model.eval()
+    X_arr = np.asarray(X_arr)
+    trozos = []
+    with torch.no_grad():
+        for inicio in range(0, X_arr.shape[0], chunk):
+            lote = torch.as_tensor(X_arr[inicio:inicio + chunk], dtype=torch.float32).to(DEVICE)
+            trozos.append(trained_model(lote)["edge_gates"].cpu().numpy())
+    return np.concatenate(trozos, axis=0)
 '''
 
 _MD_TAU = '''\
@@ -732,11 +772,7 @@ for seed in SEEDS_GATE:
         weight_decay=best_params["weight_decay"], optimizer_name=best_params["optimizer_name"],
         device=DEVICE,
     )
-    permuted_model = permutation_result["model"]
-    permuted_model.eval()
-    with torch.no_grad():
-        permuted_input = torch.as_tensor(X_past_with_target, dtype=torch.float32).to(DEVICE)
-        permuted_gates = permuted_model(permuted_input)["edge_gates"].cpu().numpy()
+    permuted_gates = extraer_gates(permutation_result["model"], X_past_with_target)
     permuted_gate_means, _ = agrupar_gates_por_vano(permuted_gates, circuito_past, fid_vano_past)
     if k_raw > 1:
         permuted_labels = KMeans(n_clusters=k_raw, n_init=10, random_state=seed).fit(permuted_gate_means).labels_
@@ -1412,6 +1448,431 @@ print(char_history.groupby("familia")["n_eventos_futuro"].agg(["count", "mean", 
 '''
 
 
+_MD_NESTING = '''\
+## 21. `K_ENTREGA` operativo y anidamiento contra `K_ESTABLE`
+
+`K_ESTABLE` (seccion 20.1) es lo que eligen los DATOS por consistencia.
+`K_ENTREGA` es lo que pide la OPERACION: cuatro niveles de riesgo. Son cosas
+distintas y el cuaderno no las mezcla ni finge que los datos pidieron cuatro.
+
+La pregunta que decide si esa diferencia importa es de ANIDAMIENTO: cuando
+`K_ENTREGA > K_ESTABLE`, la particion de entrega es un refinamiento legitimo
+solo si cada familia fina vive dentro de UNA sola familia estable. Si una
+familia fina cruza la frontera, el nivel grueso no la representa y la parte
+de forma esencialmente arbitraria.
+
+El reporte es POR FAMILIA, nunca un booleano global. Una version previa de
+este analisis colapsaba el resultado usando la pureza MINIMA y devolvia un
+"no anida" plano para un caso donde tres de cuatro familias eran 100% puras
+y una familia pequena (4% de los vanos) quedaba a caballo. Ese booleano
+borraba el hallazgo en vez de reportarlo: una familia de frontera es
+justamente el argumento a favor de los cuatro niveles, porque muestra el
+cohorte que la particion gruesa no puede describir.
+'''
+
+_CODE_NESTING = '''\
+# Pedido operativo explicito: cuatro niveles de riesgo.
+K_ENTREGA = len(NOMBRES_RIESGO)
+
+labels_estable = KMeans(
+    n_clusters=K_ESTABLE, n_init=10, random_state=SEEDS_GATE[0]
+).fit(gate_means_by_seed[SEEDS_GATE[0]]).labels_
+labels_entrega = KMeans(
+    n_clusters=K_ENTREGA, n_init=10, random_state=SEEDS_GATE[0]
+).fit(gate_means_by_seed[SEEDS_GATE[0]]).labels_
+
+print(f"K_ESTABLE (elegido por los datos)   = {K_ESTABLE}")
+print(f"K_ENTREGA (pedido por la operacion) = {K_ENTREGA}")
+print(f"  ARI de estabilidad en K_ESTABLE  = {stability_curve[K_ESTABLE]['mean_ari']:.4f}")
+if K_ENTREGA in stability_curve:
+    print(f"  ARI de estabilidad en K_ENTREGA  = {stability_curve[K_ENTREGA]['mean_ari']:.4f}")
+print()
+
+nesting_table = anidamiento_entre_particiones(labels_entrega, labels_estable)
+print("Anidamiento de cada familia de entrega dentro de las familias estables:")
+print(nesting_table.to_string(index=False))
+print()
+print(f"  pureza minima          = {nesting_table.attrs['pureza_minima']:.4f}")
+print(f"  pureza media           = {nesting_table.attrs['pureza_media']:.4f}")
+print(f"  ARI(K_ESTABLE, K_ENTREGA) = {nesting_table.attrs['ari']:.4f}")
+print(f"  fraccion de vanos en familias que SI anidan = "
+      f"{nesting_table.attrs['fraccion_vanos_anidados']:.4f}")
+print()
+
+familias_que_anidan = nesting_table[nesting_table["anida"]]
+familias_frontera = nesting_table[~nesting_table["anida"]]
+print(f"LECTURA (por afirmacion, no por booleano unico):")
+print(f"  - {len(familias_que_anidan)} de {len(nesting_table)} familias de entrega anidan "
+      f"limpiamente y cubren el {100 * nesting_table.attrs['fraccion_vanos_anidados']:.1f}% de los vanos: "
+      "para esos, K_ENTREGA es un refinamiento de K_ESTABLE y se puede colapsar sin contradiccion.")
+if len(familias_frontera) > 0:
+    n_frontera = int(familias_frontera["n_vanos"].sum())
+    print(f"  - {len(familias_frontera)} familia(s) de FRONTERA ({n_frontera} vanos, "
+          f"{100 * n_frontera / len(labels_entrega):.1f}%) cruzan el limite de K_ESTABLE. "
+          "No es ruido: es un cohorte que la particion gruesa no puede representar y "
+          "por eso lo reparte de forma arbitraria. Es el argumento operativo a favor "
+          "de entregar K_ENTREGA niveles en vez de K_ESTABLE.")
+else:
+    print("  - Ninguna familia de frontera: el anidamiento es completo.")
+'''
+
+_MD_REFIT_ALL = '''\
+## 22. Reajuste final con TODOS los datos (modelo de entrega)
+
+Todo lo anterior se valido sobre la ventana PASADA, reservando la ventana
+FUTURA como objetivo independiente. Esa fue la evidencia. El modelo que se
+ENTREGA se reajusta sobre el conjunto completo (`X_with_target`, pasado +
+futuro) porque en produccion no hay razon para tirar el 30% mas reciente de
+la historia.
+
+ALCANCE, dicho sin ambiguedad: a partir de aqui el modelo YA VIO la ventana
+futura. Por eso los perfiles de `UITI_VANO` de las secciones 23-25 son
+CARACTERIZACION DESCRIPTIVA de los grupos, no validacion fuera de muestra.
+La validacion fuera de muestra es la de las secciones 10-19 y no se
+re-litiga aqui. Confundir ambas seria circular.
+'''
+
+_CODE_REFIT_ALL = '''\
+circuito_all = df_identidad["CIRCUITO"].to_numpy()
+fid_vano_all = df_identidad["FID_VANO"].to_numpy()
+
+feature_mean_all, feature_std_all = calcular_estadisticas_reconstruccion_mgcecdl(X_with_target)
+
+refit_start = time.perf_counter()
+final_result, gate_means_final, vano_index_final = entrenar_y_agrupar(
+    features=features_with_target, adjacency=A_with, edge_index=edge_index_with,
+    feature_mean=feature_mean_all, feature_std=feature_std_all,
+    X_past_arr=X_with_target, circuito_arr=circuito_all, fid_vano_arr=fid_vano_all,
+    alpha=best_params["alpha"], dropout=best_params["dropout"],
+    lambda_reconstruction=best_params["lambda_reconstruction"],
+    lambda_mutual_information=best_params["lambda_mutual_information"],
+    lambda_gate_deviation=best_params["lambda_gate_deviation"],
+    epochs=GATE_EPOCHS, seed=SEEDS_GATE[0], lr=best_params["lr"],
+    weight_decay=best_params["weight_decay"], optimizer_name=best_params["optimizer_name"],
+)
+final_model = final_result["model"]
+
+print(f"Reajuste final sobre TODAS las filas: {X_with_target.shape[0]} eventos, "
+      f"{gate_means_final.shape[0]} vanos, {gate_means_final.shape[1]} aristas.")
+print(f"Duracion del reajuste: {format_duration(time.perf_counter() - refit_start)}")
+print(f"Perdida de reconstruccion cruda final: {final_result['reconstruction_loss_raw']:.6f} "
+      f"(tau = {tau:.6f})")
+
+final_kmeans = KMeans(n_clusters=K_ENTREGA, n_init=10, random_state=SEEDS_GATE[0]).fit(gate_means_final)
+labels_final_raw = final_kmeans.labels_
+print("Tamano de cada grupo antes de renombrar por riesgo:",
+      dict(zip(*np.unique(labels_final_raw, return_counts=True))))
+'''
+
+_MD_RISK_NAMES = '''\
+## 23. Nombres de riesgo por `UITI_VANO` medio, y guardado del modelo
+
+Los ids que devuelve `KMeans` son arbitrarios: el grupo 0 de una corrida no
+tiene nada que ver con el grupo 0 de otra. `asignar_nombres_de_riesgo`
+reordena los grupos por `UITI_VANO` acumulado MEDIO ascendente, de modo que
+el id pasa a ser ordinal y significa algo: 0 = Bajo, ..., 3 = Alto.
+
+El acumulado se toma aqui sobre TODAS las filas (no solo la ventana futura),
+coherente con el modelo de entrega de la seccion 22.
+
+El checkpoint guarda pesos, features, adyacencia, indice de aristas,
+hiperparametros, centroides de KMeans y el mapeo de nombres de riesgo, de
+modo que otro cuaderno pueda cargarlo y asignar el nivel de riesgo de un
+vano nuevo sin repetir nada de este cuaderno.
+'''
+
+_CODE_RISK_NAMES = '''\
+todas_las_filas = np.ones(len(df_identidad), dtype=bool)
+uiti_acumulado = uiti_futuro_por_vano(df_identidad, todas_las_filas).rename(
+    columns={
+        "UITI_VANO_futuro_acumulado": "UITI_VANO_acumulado",
+        "n_eventos_futuro": "n_eventos",
+    }
+)
+
+# Merge LEFT sobre el indice de vanos para conservar el orden fila-a-fila de
+# `gate_means_final`: un merge interno reordenaria y desalinearia las etiquetas.
+perfil_vanos = vano_index_final.merge(uiti_acumulado, on=["CIRCUITO", "FID_VANO"], how="left")
+assert len(perfil_vanos) == len(labels_final_raw), (
+    "el merge de identidad cambio el numero de filas: las etiquetas quedarian desalineadas."
+)
+
+riesgo = asignar_nombres_de_riesgo(
+    labels_final_raw,
+    perfil_vanos["UITI_VANO_acumulado"].to_numpy(),
+    nombres=NOMBRES_RIESGO,
+)
+labels_final = riesgo["labels"]
+nombres_por_grupo = riesgo["nombres"]
+perfil_vanos["grupo"] = labels_final
+perfil_vanos["riesgo"] = [nombres_por_grupo[g] for g in labels_final]
+
+print("Grupos renombrados por UITI_VANO acumulado medio (ascendente):")
+print(riesgo["resumen"].to_string(index=False))
+print()
+print("Mapeo de ids crudos de KMeans -> id ordinal de riesgo:", riesgo["mapeo"])
+
+# El centroide tambien se reordena, para que el checkpoint asigne el mismo
+# nivel de riesgo que este cuaderno al aplicarse en otro lado.
+centroides_ordenados = np.zeros_like(final_kmeans.cluster_centers_)
+for crudo, nuevo in riesgo["mapeo"].items():
+    centroides_ordenados[nuevo] = final_kmeans.cluster_centers_[crudo]
+
+MODEL_PATH = MODELS_DIR / f"mgcecdl_graphgated_nb12_{mode}.pt"
+guardar_modelo_gated(
+    MODEL_PATH,
+    final_model,
+    features=features_with_target,
+    configuracion={
+        "modality_feature_indices": construir_modalidades_mgcecdl(list(features_with_target)),
+        "hidden_dim": FIXED_HIDDEN_DIM,
+        "embed_dim": FIXED_EMBED_DIM,
+        "dropout": best_params["dropout"],
+    },
+    metadata={
+        "mode": mode,
+        "fecha_corte_validacion": str(fecha_corte),
+        "entrenado_sobre": "todas las filas (pasado + futuro)",
+        "n_eventos": int(X_with_target.shape[0]),
+        "n_vanos": int(gate_means_final.shape[0]),
+        "best_params": best_params,
+        "epochs": GATE_EPOCHS,
+        "seed": SEEDS_GATE[0],
+        "K_ENTREGA": K_ENTREGA,
+        "K_ESTABLE": K_ESTABLE,
+        "nombres_riesgo": nombres_por_grupo,
+        "centroides_kmeans": centroides_ordenados,
+        "feature_mean": feature_mean_all,
+        "feature_std": feature_std_all,
+        "reconstruction_normalization": RECONSTRUCTION_NORMALIZATION,
+    },
+)
+print()
+print("Modelo de entrega guardado en:", MODEL_PATH)
+
+# Prueba de humo del checkpoint: se recarga y se exige que reproduzca los mismos gates.
+_reloaded = cargar_modelo_gated(MODEL_PATH, device=DEVICE)
+with torch.no_grad():
+    _probe = torch.as_tensor(X_with_target[:8], dtype=torch.float32).to(DEVICE)
+    _gates_original = final_model(_probe)["edge_gates"].cpu().numpy()
+    _gates_recargado = _reloaded["model"](_probe)["edge_gates"].cpu().numpy()
+assert np.allclose(_gates_original, _gates_recargado, atol=1e-6), (
+    "el checkpoint recargado no reproduce los gates del modelo entrenado."
+)
+print("Verificacion de ida y vuelta del checkpoint: los gates recargados coinciden.")
+'''
+
+_MD_GROUP_GRAPHS = '''\
+## 24. Grafo reconstruido por grupo y afinidades
+
+Cada vano tiene su propio grafo reconstruido: la arista `(i, j)` del grafo
+experto vale `gate * peso_fijo`, con `gate` en (0, 2). Un gate de 1.0
+significa "esta arista queda exactamente como la dicta el grafo experto";
+por debajo de 1 el grupo ATENUA esa relacion fisica, por encima la AMPLIFICA.
+El grafo de un GRUPO es el promedio de los grafos de sus vanos.
+
+Se reportan TRES afinidades, en orden creciente de poder discriminante. La
+diferencia entre ellas es justamente el punto:
+
+- **Coseno sobre pesos**: quedara muy cerca de 1.0 para todos los pares. Eso
+  NO significa que los grupos sean iguales; es aritmetica. Todo grafo
+  reconstruido es `gate * peso_fijo` con gates centrados cerca de 1, asi que
+  todos comparten la misma escala dominante del grafo fijo.
+- **Correlacion sobre pesos** (Pearson sobre las aristas): quita el nivel
+  medio compartido, pero NO quita el perfil de magnitudes del grafo experto.
+  Cuando los pesos fijos abarcan un rango amplio (aqui: cadenas climaticas a
+  0.90 junto a acoplamientos a 1.0), esa rampa sobrevive al centrado y la
+  correlacion tambien se satura cerca de 1. Se reporta igual, para que se vea
+  que se satura en vez de afirmar que discrimina.
+- **Correlacion sobre la DESVIACION del gate** (`gate_medio - 1.0`): esta es
+  la senal propia de cada grupo, con el grafo experto restado. Es la unica de
+  las tres que no arranca saturada. No incluye una fila `FIJO` porque la
+  desviacion del grafo fijo es cero por definicion y correlacionar contra el
+  vector nulo no esta definido.
+
+Leer solo el coseno seria concluir "los cuatro grupos son identicos" cuando
+lo que dice es "los cuatro respetan el grafo experto", que es otra cosa.
+'''
+
+_CODE_GROUP_GRAPHS = '''\
+grafos_por_grupo = grafo_reconstruido_por_grupo(
+    gate_means_final, edge_index_with, labels_final, n_features=len(features_with_target),
+)
+edge_weights_por_grupo = {g: info["edge_weights"] for g, info in grafos_por_grupo.items()}
+edge_weights_fijo = np.asarray(edge_index_with.weights, dtype=np.float64)
+
+afinidad_coseno = afinidad_entre_grafos(edge_weights_por_grupo, edge_weights_fijo, metrica="coseno")
+afinidad_correlacion = afinidad_entre_grafos(
+    edge_weights_por_grupo, edge_weights_fijo, metrica="correlacion"
+)
+
+etiquetas_grupo = {g: f"{g} {nombres_por_grupo[g]}" for g in grafos_por_grupo}
+renombrar = {"FIJO": "FIJO", **{str(g): etiquetas_grupo[g] for g in grafos_por_grupo}}
+afinidad_coseno = afinidad_coseno.rename(index=renombrar, columns=renombrar)
+afinidad_correlacion = afinidad_correlacion.rename(index=renombrar, columns=renombrar)
+
+print("Gate medio por grupo (1.0 = arista igual al grafo experto):")
+for g, info in grafos_por_grupo.items():
+    gm = info["gate_mean"]
+    print(f"  {g} {nombres_por_grupo[g]:<11} n={info['n_vanos']:6d}  "
+          f"gate medio={gm.mean():.4f}  min={gm.min():.4f}  max={gm.max():.4f}  "
+          f"aristas atenuadas (<1)={int((gm < 1.0).sum())}/{gm.size}")
+print()
+# Tercera vista: la desviacion del gate respecto a 1.0, es decir la senal
+# propia del grupo con el grafo experto restado. Sin fila FIJO: su desviacion
+# es cero por definicion y la correlacion contra el vector nulo no existe.
+grupos_ordenados = sorted(grafos_por_grupo)
+desviaciones = np.vstack([grafos_por_grupo[g]["gate_mean"] - 1.0 for g in grupos_ordenados])
+afinidad_desviacion = pd.DataFrame(
+    np.corrcoef(desviaciones),
+    index=[etiquetas_grupo[g] for g in grupos_ordenados],
+    columns=[etiquetas_grupo[g] for g in grupos_ordenados],
+)
+
+print("Afinidad COSENO sobre pesos (cerca de 1 por construccion -- no discrimina):")
+print(afinidad_coseno.round(6).to_string())
+print()
+print("Afinidad CORRELACION sobre pesos (quita el nivel medio, no el perfil del grafo experto):")
+print(afinidad_correlacion.round(4).to_string())
+print()
+print("Afinidad CORRELACION sobre la DESVIACION del gate (senal propia de cada grupo):")
+print(afinidad_desviacion.round(4).to_string())
+print()
+_fuera_diagonal = afinidad_desviacion.to_numpy()[~np.eye(len(grupos_ordenados), dtype=bool)]
+print(f"  rango fuera de la diagonal: [{_fuera_diagonal.min():.4f}, {_fuera_diagonal.max():.4f}]")
+print("  Cuanto mas lejos de 1 este ese rango, mas distinta es la forma en que cada grupo "
+      "usa el grafo experto. Si tambien saliera saturado, la lectura honesta seria que los "
+      "grupos se separan por INTENSIDAD y no por que aristas privilegian.")
+'''
+
+_CODE_GROUP_GRAPHS_FIGURE = '''\
+import matplotlib.pyplot as plt
+
+n_paneles = len(grafos_por_grupo) + 1
+fig, axes = plt.subplots(1, n_paneles, figsize=(3.6 * n_paneles, 4.2))
+matriz_fija = np.zeros((len(features_with_target), len(features_with_target)))
+for (fila, columna), peso in zip(edge_index_with.pairs, edge_index_with.weights):
+    matriz_fija[fila, columna] = peso
+
+vmax_grafos = max(
+    [matriz_fija.max()] + [info["matrix"].max() for info in grafos_por_grupo.values()]
+)
+im = axes[0].imshow(matriz_fija, cmap="viridis", vmin=0.0, vmax=vmax_grafos, interpolation="nearest")
+axes[0].set_title("Grafo experto FIJO", fontsize=10)
+for eje_idx, (g, info) in enumerate(grafos_por_grupo.items(), start=1):
+    im = axes[eje_idx].imshow(
+        info["matrix"], cmap="viridis", vmin=0.0, vmax=vmax_grafos, interpolation="nearest"
+    )
+    axes[eje_idx].set_title(f"{g} {nombres_por_grupo[g]} (n={info['n_vanos']})", fontsize=10)
+for ax in axes:
+    ax.set_xticks([])
+    ax.set_yticks([])
+fig.suptitle(
+    "Grafo reconstruido por grupo de riesgo (peso de arista = gate x peso experto)", fontsize=12
+)
+fig.colorbar(im, ax=axes, orientation="horizontal", fraction=0.05, pad=0.06, label="Peso de arista")
+GRAPHS_FIGURE_PATH = FIGURES_DIR / f"mgcecdl_graphgated_nb12_{mode}_grafos_por_grupo.png"
+fig.savefig(GRAPHS_FIGURE_PATH, dpi=150, bbox_inches="tight")
+print("Figura:", GRAPHS_FIGURE_PATH)
+plt.show()
+
+
+paneles_afinidad = [
+    (afinidad_coseno, "Coseno sobre pesos (saturado por construccion)"),
+    (afinidad_correlacion, "Correlacion sobre pesos (aun con el perfil experto)"),
+    (afinidad_desviacion, "Correlacion sobre la desviacion del gate"),
+]
+fig, axes = plt.subplots(1, len(paneles_afinidad), figsize=(6.2 * len(paneles_afinidad), 5.4))
+for ax, (frame, titulo) in zip(axes, paneles_afinidad):
+    valores = frame.to_numpy(dtype=float)
+    # Escala fija [-1, 1]: comparar los tres paneles exige el mismo eje de color,
+    # y un vmin/vmax por panel haria parecer que hay contraste donde no lo hay.
+    imagen = ax.imshow(valores, cmap="coolwarm", vmin=-1.0, vmax=1.0)
+    ax.set_xticks(range(len(frame.columns)))
+    ax.set_yticks(range(len(frame.index)))
+    ax.set_xticklabels(frame.columns, rotation=45, ha="right", fontsize=9)
+    ax.set_yticklabels(frame.index, fontsize=9)
+    ax.set_title(titulo, fontsize=11)
+    for i in range(valores.shape[0]):
+        for j in range(valores.shape[1]):
+            ax.text(j, i, f"{valores[i, j]:.3f}", ha="center", va="center", fontsize=8,
+                    color="black" if abs(valores[i, j]) < 0.6 else "white")
+    fig.colorbar(imagen, ax=ax, fraction=0.046, pad=0.04)
+fig.suptitle("Afinidad entre los grafos de cada grupo y contra el grafo experto fijo", fontsize=12)
+fig.tight_layout()
+AFFINITY_FIGURE_PATH = FIGURES_DIR / f"mgcecdl_graphgated_nb12_{mode}_afinidad_grafos.png"
+fig.savefig(AFFINITY_FIGURE_PATH, dpi=150, bbox_inches="tight")
+print("Figura:", AFFINITY_FIGURE_PATH)
+plt.show()
+'''
+
+_MD_KDE = '''\
+## 25. KDE de `UITI_VANO` acumulado y numero de eventos por grupo
+
+Densidad (KDE gaussiano) de las dos cantidades que definen criticidad,
+una curva por grupo de riesgo. Si los nombres asignados en la seccion 23
+significan algo, las curvas deben ordenarse: `Bajo` concentrado a la
+izquierda, `Alto` desplazado a la derecha, y el solapamiento entre curvas
+dice cuanto se pisan los niveles.
+
+Ambos ejes van en `log10` porque las dos variables son de cola muy larga;
+en escala lineal todas las curvas colapsarian contra el cero. Los vanos sin
+eventos quedan fuera del KDE (no tienen `log10` definido) y se reportan
+aparte como conteo, en vez de imputarlos y ensuciar la densidad.
+'''
+
+_CODE_KDE = '''\
+from scipy.stats import gaussian_kde
+
+cantidades = [
+    ("UITI_VANO_acumulado", "UITI_VANO acumulado por vano", "viridis"),
+    ("n_eventos", "Numero de eventos por vano", "magma"),
+]
+colores = plt.get_cmap("RdYlGn_r")(np.linspace(0.15, 0.9, len(nombres_por_grupo)))
+
+fig, axes = plt.subplots(1, 2, figsize=(14.0, 5.4))
+for ax, (columna, titulo, _cmap) in zip(axes, cantidades):
+    for g in sorted(nombres_por_grupo):
+        serie = perfil_vanos.loc[perfil_vanos["grupo"] == g, columna].to_numpy(dtype=float)
+        positivos = serie[np.isfinite(serie) & (serie > 0)]
+        n_sin_dato = int(serie.size - positivos.size)
+        if positivos.size < 2 or np.allclose(positivos, positivos[0]):
+            print(f"  {titulo}: grupo {g} ({nombres_por_grupo[g]}) sin variacion suficiente "
+                  "para un KDE; se omite su curva.")
+            continue
+        muestras_log = np.log10(positivos)
+        densidad = gaussian_kde(muestras_log)
+        rejilla = np.linspace(muestras_log.min(), muestras_log.max(), 400)
+        ax.plot(rejilla, densidad(rejilla), color=colores[g], linewidth=2.0,
+                label=f"{g} {nombres_por_grupo[g]} (n={positivos.size}, sin dato={n_sin_dato})")
+        ax.fill_between(rejilla, densidad(rejilla), color=colores[g], alpha=0.15)
+    ax.set_title(titulo, fontsize=11)
+    ax.set_xlabel("log10(valor)")
+    ax.set_ylabel("Densidad")
+    ax.legend(fontsize=8, loc="best")
+fig.suptitle(
+    f"Densidad de criticidad por grupo de riesgo (K_ENTREGA={K_ENTREGA}, mode={mode})", fontsize=12
+)
+fig.tight_layout()
+KDE_FIGURE_PATH = FIGURES_DIR / f"mgcecdl_graphgated_nb12_{mode}_kde_criticidad.png"
+fig.savefig(KDE_FIGURE_PATH, dpi=150, bbox_inches="tight")
+print("Figura:", KDE_FIGURE_PATH)
+plt.show()
+
+print()
+print("Resumen numerico por grupo de riesgo (caracterizacion descriptiva, ver seccion 22):")
+resumen_final = perfil_vanos.groupby(["grupo", "riesgo"]).agg(
+    n_vanos=("UITI_VANO_acumulado", "size"),
+    uiti_media=("UITI_VANO_acumulado", "mean"),
+    uiti_mediana=("UITI_VANO_acumulado", "median"),
+    uiti_p90=("UITI_VANO_acumulado", lambda s: s.quantile(0.9)),
+    eventos_media=("n_eventos", "mean"),
+    eventos_mediana=("n_eventos", "median"),
+)
+print(resumen_final.to_string())
+'''
+
+
 def _cell(kind: str, source: str, *, tags: list[str] | None = None) -> nbformat.NotebookNode:
     if kind == "markdown":
         return new_markdown_cell(source)
@@ -1438,6 +1899,8 @@ def build_notebook() -> nbformat.NotebookNode:
         _cell("code", _CODE_GRAPH),
         _cell("markdown", _MD_SPLIT),
         _cell("code", _CODE_SPLIT),
+        _cell("markdown", _MD_GATE_EXTRACTION),
+        _cell("code", _CODE_GATE_EXTRACTION),
         _cell("markdown", _MD_HELPERS),
         _cell("code", _CODE_HELPERS),
         _cell("markdown", _MD_TAU),
@@ -1483,6 +1946,17 @@ def build_notebook() -> nbformat.NotebookNode:
         _cell("code", _CODE_CHARACTERIZATION_PROFILE),
         _cell("markdown", _MD_CHARACTERIZATION_HISTORICAL),
         _cell("code", _CODE_CHARACTERIZATION_HISTORICAL),
+        _cell("markdown", _MD_NESTING),
+        _cell("code", _CODE_NESTING),
+        _cell("markdown", _MD_REFIT_ALL),
+        _cell("code", _CODE_REFIT_ALL),
+        _cell("markdown", _MD_RISK_NAMES),
+        _cell("code", _CODE_RISK_NAMES),
+        _cell("markdown", _MD_GROUP_GRAPHS),
+        _cell("code", _CODE_GROUP_GRAPHS),
+        _cell("code", _CODE_GROUP_GRAPHS_FIGURE),
+        _cell("markdown", _MD_KDE),
+        _cell("code", _CODE_KDE),
     ]
     notebook = new_notebook(cells=cells)
     notebook["metadata"]["kernelspec"] = _KERNELSPEC
