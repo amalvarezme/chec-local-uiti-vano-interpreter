@@ -364,3 +364,119 @@ def test_verdict_reports_every_criterion_individually(notebook) -> None:
     assert "for _criterio, _ok in acceptance_criteria.items()" in code, (
         "the notebook must print a per-criterion line, not only the dict and a single verdict"
     )
+
+
+# ---------------------------------------------------------------------------
+# PR4 -- characterization section (redirects notebook 12 from PREDICTION to
+# CHARACTERIZATION: the full run's ablation showed 54x of the apparent
+# cluster/UITI association is persistence, and UITI/UITI_VANO are input
+# features, so no predictive claim is defensible without a temporal holdout.
+# ---------------------------------------------------------------------------
+
+
+def test_characterization_section_states_descriptive_not_predictive(notebook) -> None:
+    markdown = _all_markdown_source(notebook)
+    assert re.search(r"caracteriza", markdown, re.IGNORECASE)
+    assert re.search(r"NO\s+predic", markdown, re.IGNORECASE) or re.search(
+        r"no es una predicci[oó]n", markdown, re.IGNORECASE
+    )
+    # The reasoning must be present, not just the disclaimer: input-feature circularity.
+    assert re.search(r"UITI", markdown)
+    assert re.search(r"feature", markdown, re.IGNORECASE) or re.search(
+        r"variable de entrada", markdown, re.IGNORECASE
+    )
+
+
+def test_characterization_never_writes_the_word_predice(notebook) -> None:
+    full_text = _all_markdown_source(notebook) + "\n" + _all_code_source(notebook)
+    assert "predice" not in full_text.lower(), (
+        "the launch contract's hard rule: if you find yourself writing 'predice', stop"
+    )
+
+
+def test_characterization_runs_stability_protocol_and_does_not_reuse_k_raw(notebook) -> None:
+    code = _all_code_source(notebook)
+    assert "estabilidad_por_submuestreo" in code
+    assert re.search(r"K_ESTABLE", code), "the chosen K must be a distinctly-named variable"
+    # It must not simply reuse k_raw as the characterization K.
+    assert "K_ESTABLE = k_raw" not in code
+
+
+def test_characterization_reports_stability_curve_over_k_2_to_8(notebook) -> None:
+    code = _all_code_source(notebook)
+    assert "CHAR_K_VALUES" in code
+    assert re.search(r"range\(2,\s*9\)", code), "the full-mode K sweep must cover 2..8"
+
+
+def test_characterization_warns_when_stable_k_outside_3_4(notebook) -> None:
+    code = _all_code_source(notebook)
+    assert re.search(r"3\s*<=\s*K_ESTABLE\s*<=\s*4", code) or re.search(
+        r"K_ESTABLE\s+in\s+\(3,\s*4\)", code
+    )
+
+
+def test_characterization_runs_separability_with_shuffled_floor(notebook) -> None:
+    code = _all_code_source(notebook)
+    assert "separabilidad_fuera_de_pliegue" in code
+    assert re.search(r"shuffl|barajad", code, re.IGNORECASE)
+    assert "balanced_accuracy" in code
+
+
+def test_characterization_reuses_edge_deviation_table(notebook) -> None:
+    code = _all_code_source(notebook)
+    # tabla_desviacion_aristas must be called again for the characterization clusters
+    # (a second, distinctly-named call site), not only the existing acceptance-gate one.
+    assert code.count("tabla_desviacion_aristas(") >= 2
+
+
+def test_characterization_runs_perfil_por_cluster(notebook) -> None:
+    code = _all_code_source(notebook)
+    assert "perfil_por_cluster" in code
+    assert "efecto_estandarizado" in code
+
+
+def test_characterization_reports_historical_uiti_and_event_profiles_labelled_descriptive(
+    notebook,
+) -> None:
+    code = _all_code_source(notebook)
+    markdown = _all_markdown_source(notebook)
+    assert "UITI_VANO_futuro_acumulado" in code
+    assert "n_eventos_futuro" in code
+    assert re.search(r"HIST[OÓ]RIC", code) or re.search(r"HIST[OÓ]RIC", markdown)
+    assert re.search(r"DESCRIPTIV", code) or re.search(r"DESCRIPTIV", markdown)
+
+
+def test_characterization_imports_are_present_in_bootstrap_guard(notebook) -> None:
+    code = _all_code_source(notebook)
+    for name in (
+        "estabilidad_por_submuestreo",
+        "separabilidad_fuera_de_pliegue",
+        "perfil_por_cluster",
+    ):
+        assert name in code
+
+    # The bootstrap import-guard cell specifically must carry all three names,
+    # not just some later cell that happens to mention them.
+    bootstrap_cell = next(
+        cell for cell in notebook.cells
+        if cell.cell_type == "code" and "chec_impacto.interpretability" in cell.source
+    )
+    for name in (
+        "estabilidad_por_submuestreo",
+        "separabilidad_fuera_de_pliegue",
+        "perfil_por_cluster",
+    ):
+        assert name in bootstrap_cell.source
+
+
+def test_characterization_section_appears_after_verdict_and_edge_deviation(notebook) -> None:
+    sources = [cell.source for cell in notebook.cells]
+    verdict_index = next(i for i, s in enumerate(sources) if "GRAPH_SIGNAL" in s)
+    edge_deviation_index = next(
+        i for i, s in enumerate(sources) if "tabla_desviacion_aristas(" in s
+    )
+    characterization_index = next(
+        i for i, s in enumerate(sources) if "stability_by_seed" in s
+    )
+    assert characterization_index > verdict_index
+    assert characterization_index > edge_deviation_index

@@ -22,6 +22,12 @@ that clustering honest:
   (`uiti_futuro_por_vano`) and the persistence diagnostic
   (`diagnostico_persistencia`, D8).
 
+PR4 adds the CHARACTERIZATION protocol (notebook 12 pivots from a predictive
+to a descriptive/taxonomic question): the Ben-Hur-style cluster-stability
+protocol (`estabilidad_por_submuestreo`), out-of-fold classifier
+separability with feature importances (`separabilidad_fuera_de_pliegue`),
+and the per-cluster standardized-effect profile (`perfil_por_cluster`).
+
 See:
   - spec: sdd/notebook-12-criticality-representation/spec (capabilities
     `notebook-local-variable-selection`, `criticality-evidence-protocol`,
@@ -44,6 +50,10 @@ from scipy.stats import kruskal, norm, rankdata
 from sklearn.cluster import KMeans
 from sklearn.metrics import adjusted_rand_score, silhouette_score
 from sklearn.preprocessing import StandardScaler
+
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import balanced_accuracy_score, confusion_matrix
+from sklearn.model_selection import StratifiedKFold
 
 from chec_impacto.data.graph import CLIMATE_FAMILIES
 from chec_impacto.models.mgcecdl_graph import GraphEdgeIndex
@@ -783,3 +793,231 @@ def asociacion_criticidad(
         "k": int(n_clusters),
         "pairwise": pairwise,
     }
+
+
+# ---------------------------------------------------------------------------
+# PR4 -- characterization protocol: cluster stability, out-of-fold
+# separability, and per-cluster standardized-effect profiles.
+#
+# These answer "is this partition real structure or a fitting artifact?"
+# (`estabilidad_por_submuestreo`), "does a classifier recover the partition
+# out of fold, and on what does it rely?" (`separabilidad_fuera_de_pliegue`),
+# and "how does a family differ from the population, per dimension?"
+# (`perfil_por_cluster`). See sdd/notebook-12-criticality-representation
+# apply-progress (PR4) and the decision that redirects notebook 12 from
+# PREDICTION to CHARACTERIZATION.
+# ---------------------------------------------------------------------------
+
+
+def _ari_sobre_filas_compartidas(
+    idx_a: np.ndarray,
+    labels_a: np.ndarray,
+    idx_b: np.ndarray,
+    labels_b: np.ndarray,
+) -> tuple[float, int]:
+    """ARI between `labels_a`/`labels_b` restricted to the GLOBAL row indices
+    present in BOTH `idx_a` and `idx_b`, aligned by identity (never by
+    within-subsample position). Returns `(ari, n_shared)`.
+    """
+    idx_a = np.asarray(idx_a)
+    idx_b = np.asarray(idx_b)
+    labels_a = np.asarray(labels_a)
+    labels_b = np.asarray(labels_b)
+
+    shared = np.intersect1d(idx_a, idx_b)
+    if shared.size == 0:
+        return float("nan"), 0
+
+    position_in_a = {global_index: position for position, global_index in enumerate(idx_a)}
+    position_in_b = {global_index: position for position, global_index in enumerate(idx_b)}
+    aligned_labels_a = np.array([labels_a[position_in_a[g]] for g in shared])
+    aligned_labels_b = np.array([labels_b[position_in_b[g]] for g in shared])
+
+    return float(adjusted_rand_score(aligned_labels_a, aligned_labels_b)), int(shared.size)
+
+
+def estabilidad_por_submuestreo(
+    values: np.ndarray,
+    k_values: Sequence[int],
+    n_repeticiones: int = 10,
+    fraccion: float = 0.8,
+    seed: int = 42,
+) -> dict[str, Any]:
+    """Ben-Hur-style cluster-stability protocol.
+
+    For each `K` in `k_values` and each of `n_repeticiones` repetitions, draw
+    TWO independent overlapping subsamples of `fraccion` of the rows, cluster
+    each subsample INDEPENDENTLY with `KMeans(K)`, and compute the ARI over
+    ONLY the vanos present in both subsamples (`_ari_sobre_filas_compartidas`
+    -- aligned by global row identity, never by within-subsample position).
+
+    This is the operational meaning of "the partition is consistent": a
+    partition that is a fitting artifact does not reproduce across
+    independent subsamples of the same data, so its cross-subsample ARI
+    collapses toward 0; real structure reproduces, so its ARI stays high.
+
+    Returns `k_values`, `mean_ari_by_k`, `std_ari_by_k` (per-K mean/std over
+    repetitions), and `raw_ari_by_k` (the per-repetition values).
+    """
+    values = np.asarray(values, dtype=np.float64)
+    n_rows = values.shape[0]
+    n_sub = max(int(round(fraccion * n_rows)), 2)
+    rng = np.random.default_rng(seed)
+
+    k_values = list(k_values)
+    mean_ari_by_k: dict[int, float] = {}
+    std_ari_by_k: dict[int, float] = {}
+    raw_ari_by_k: dict[int, list[float]] = {}
+
+    for k in k_values:
+        repetition_aris: list[float] = []
+        for repetition_index in range(n_repeticiones):
+            idx_a = rng.choice(n_rows, size=n_sub, replace=False)
+            idx_b = rng.choice(n_rows, size=n_sub, replace=False)
+
+            kmeans_seed = seed + 1000 * (k + 1) + repetition_index
+            labels_a = (
+                KMeans(n_clusters=k, n_init=10, random_state=kmeans_seed).fit(values[idx_a]).labels_
+            )
+            labels_b = (
+                KMeans(n_clusters=k, n_init=10, random_state=kmeans_seed).fit(values[idx_b]).labels_
+            )
+
+            ari, n_shared = _ari_sobre_filas_compartidas(idx_a, labels_a, idx_b, labels_b)
+            repetition_aris.append(ari if n_shared >= 2 else float("nan"))
+
+        raw_ari_by_k[k] = repetition_aris
+        valid_aris = [value for value in repetition_aris if np.isfinite(value)]
+        mean_ari_by_k[k] = float(np.mean(valid_aris)) if valid_aris else float("nan")
+        std_ari_by_k[k] = float(np.std(valid_aris)) if valid_aris else float("nan")
+
+    return {
+        "k_values": k_values,
+        "mean_ari_by_k": mean_ari_by_k,
+        "std_ari_by_k": std_ari_by_k,
+        "raw_ari_by_k": raw_ari_by_k,
+    }
+
+
+def separabilidad_fuera_de_pliegue(
+    features: np.ndarray,
+    labels: np.ndarray,
+    n_splits: int = 5,
+    seed: int = 42,
+    feature_names: Sequence[str] | None = None,
+    n_estimators: int = 200,
+) -> dict[str, Any]:
+    """Out-of-fold classifier separability of a cluster partition.
+
+    `StratifiedKFold(n_splits)` over `labels` with a fresh
+    `RandomForestClassifier` per fold -- its feature importances are the
+    interpretability payload, since every dimension is a NAMED expert edge
+    when this is called on the gate means. Returns out-of-fold BALANCED
+    accuracy (never raw accuracy -- clusters are usually imbalanced, and raw
+    accuracy silently rewards predicting the majority cluster), the per-fold
+    values, the confusion matrix, and feature importances ranked descending
+    (mean across folds, each fold's importances already sum to 1, so the
+    mean does too).
+    """
+    X = np.asarray(features, dtype=np.float64)
+    y = np.asarray(labels)
+    if X.shape[0] != y.shape[0]:
+        raise ValueError("features and labels must have the same number of rows.")
+
+    n_features = X.shape[1]
+    names = list(feature_names) if feature_names is not None else [f"dim_{i}" for i in range(n_features)]
+    if len(names) != n_features:
+        raise ValueError("feature_names length must match features' column count.")
+
+    splitter = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=seed)
+    out_of_fold_predictions = np.empty_like(y)
+    fold_balanced_accuracies: list[float] = []
+    importances_per_fold: list[np.ndarray] = []
+
+    for fold_index, (train_index, test_index) in enumerate(splitter.split(X, y)):
+        classifier = RandomForestClassifier(n_estimators=n_estimators, random_state=seed + fold_index)
+        classifier.fit(X[train_index], y[train_index])
+        fold_predictions = classifier.predict(X[test_index])
+        out_of_fold_predictions[test_index] = fold_predictions
+        fold_balanced_accuracies.append(
+            float(balanced_accuracy_score(y[test_index], fold_predictions))
+        )
+        importances_per_fold.append(classifier.feature_importances_)
+
+    overall_balanced_accuracy = float(balanced_accuracy_score(y, out_of_fold_predictions))
+    mean_importances = np.mean(importances_per_fold, axis=0)
+    descending_order = np.argsort(mean_importances)[::-1]
+    feature_importances = pd.DataFrame(
+        {
+            "feature": [names[i] for i in descending_order],
+            "importance": mean_importances[descending_order],
+        }
+    )
+
+    return {
+        "balanced_accuracy": overall_balanced_accuracy,
+        "balanced_accuracy_by_fold": fold_balanced_accuracies,
+        "confusion_matrix": confusion_matrix(y, out_of_fold_predictions, labels=np.unique(y)),
+        "feature_importances": feature_importances,
+        "out_of_fold_predictions": out_of_fold_predictions,
+        "n_splits": n_splits,
+    }
+
+
+def perfil_por_cluster(
+    values: np.ndarray,
+    nombres: Sequence[str],
+    labels: np.ndarray,
+) -> pd.DataFrame:
+    """Per-cluster vs population profile with standardized effect size.
+
+    `efecto_estandarizado = (media_cluster - media_poblacion) / desv_poblacion`
+    per dimension, ranked by descending absolute effect WITHIN each cluster.
+    A population standard deviation of (near) zero would make that ratio
+    `inf`/`nan`; such a dimension carries no discriminating information by
+    construction (every value is identical), so its effect is reported as
+    exactly `0.0` instead of a silently propagated `inf`/`nan`.
+
+    Returns a tidy DataFrame: `cluster | nombre | media_cluster |
+    media_poblacion | efecto_estandarizado | rank`.
+    """
+    values = np.asarray(values, dtype=np.float64)
+    if values.ndim != 2:
+        raise ValueError(f"values must be 2-D (n_samples, n_dims); got shape {values.shape}.")
+    names = list(nombres)
+    if values.shape[1] != len(names):
+        raise ValueError("values column count must match len(nombres).")
+    labels = np.asarray(labels)
+    if labels.shape[0] != values.shape[0]:
+        raise ValueError("labels must have the same length as values' first axis.")
+
+    population_mean = values.mean(axis=0)
+    population_std = values.std(axis=0, ddof=0)
+    _ZERO_STD_THRESHOLD = 1e-12
+
+    rows: list[dict[str, Any]] = []
+    for cluster in sorted(np.unique(labels)):
+        cluster_mean = values[labels == cluster].mean(axis=0)
+        for dim_index, name in enumerate(names):
+            std = population_std[dim_index]
+            if not np.isfinite(std) or std < _ZERO_STD_THRESHOLD:
+                effect = 0.0
+            else:
+                effect = float((cluster_mean[dim_index] - population_mean[dim_index]) / std)
+            rows.append(
+                {
+                    "cluster": cluster,
+                    "nombre": name,
+                    "media_cluster": float(cluster_mean[dim_index]),
+                    "media_poblacion": float(population_mean[dim_index]),
+                    "efecto_estandarizado": effect,
+                }
+            )
+
+    result = pd.DataFrame(rows)
+    result["rank"] = (
+        result.groupby("cluster")["efecto_estandarizado"]
+        .transform(lambda column: column.abs().rank(ascending=False, method="first"))
+        .astype(int)
+    )
+    return result.sort_values(["cluster", "rank"]).reset_index(drop=True)

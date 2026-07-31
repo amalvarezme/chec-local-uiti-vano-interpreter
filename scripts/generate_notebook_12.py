@@ -166,9 +166,12 @@ try:
         control_permutacion_grados,
         diagnostico_persistencia,
         ejecutar_control_permutacion_grados,
+        estabilidad_por_submuestreo,
         estadistico_colapso,
         guardia_proxy_univariante,
         linea_base_sin_grafo,
+        perfil_por_cluster,
+        separabilidad_fuera_de_pliegue,
         seleccionar_k_datos,
         split_cronologico_p70,
         tabla_desviacion_aristas,
@@ -1193,6 +1196,222 @@ for key, value in resumen_final.items():
 '''
 
 
+_MD_CHARACTERIZATION_SCOPE = '''\
+## 20. Caracterizacion de familias de vanos (SOLO descriptiva, NUNCA predictiva)
+
+**Esta seccion caracteriza -- NO es una prediccion.** La corrida completa (ver
+`sdd/notebook-12-criticality-representation` apply-progress) mostro que el
+ablation con vs. sin `UITI_VANO` reinyectada deja epsilon^2 en 0.0127 con la
+variable y en 0.00023 sin ella -- un factor de ~54x, es decir, casi toda la
+asociacion aparente entre clusters y `UITI_VANO` futuro es PERSISTENCIA
+estadistica, no una senal nueva aprendida por el mecanismo de gates.
+
+Ademas, `UITI` y `UITI_VANO` son ellas mismas features de ENTRADA del modelo
+(seccion 1, reinyeccion). Si esta seccion abandonara la particion cronologica
+para usar remuestreo/validacion cruzada estratificada -- que es exactamente
+lo que hace a continuacion, sobre TODO el conjunto -- cualquier asociacion
+entre clusters y UITI acumulada medida SIN separacion temporal seria
+circular: la variable ya esta dentro del vector que se agrupa.
+
+Por eso ningun resultado de esta seccion se reporta como poder predictivo.
+Todo descriptor de `UITI`/`UITI_VANO` o de conteo de eventos aqui abajo se
+marca explicitamente HISTORICO/DESCRIPTIVO. El objetivo es una taxonomia
+estable e interpretable de familias de vanos -- no un pronostico.
+'''
+
+_CODE_CHARACTERIZATION_CONFIG = '''\
+if mode == "smoke":
+    CHAR_K_VALUES = tuple(range(2, 5))
+    CHAR_STABILITY_N_REPETICIONES = 3
+    CHAR_SEPARABILITY_N_SPLITS = 3
+else:
+    # Diseno: la curva de estabilidad barre K en 2..8.
+    CHAR_K_VALUES = tuple(range(2, 9))
+    CHAR_STABILITY_N_REPETICIONES = 20
+    CHAR_SEPARABILITY_N_SPLITS = 5
+CHAR_STABILITY_FRACCION = 0.8
+
+print(f"mode={mode!r} | CHAR_K_VALUES={CHAR_K_VALUES} | "
+      f"CHAR_STABILITY_N_REPETICIONES={CHAR_STABILITY_N_REPETICIONES} | "
+      f"CHAR_SEPARABILITY_N_SPLITS={CHAR_SEPARABILITY_N_SPLITS}")
+'''
+
+_MD_CHARACTERIZATION_STABILITY = '''\
+### 20.1 Estabilidad por submuestreo (el K se elige por consistencia, no por `k_raw`)
+
+`estabilidad_por_submuestreo` mide si una particion sobrevive a remuestreo
+independiente -- esa es la definicion operativa de "consistente" en esta
+seccion. Se corre sobre CADA semilla de `SEEDS_GATE` (multi-semilla, con
+barras de error entre semillas -- MPS no es determinista) para elegir
+`K_ESTABLE`, deliberadamente SIN mirar `k_raw` (seccion 15) ni el pedido
+original de 3-4 niveles.
+'''
+
+_CODE_CHARACTERIZATION_STABILITY = '''\
+stability_by_seed = {}
+for seed in SEEDS_GATE:
+    stability_by_seed[seed] = estabilidad_por_submuestreo(
+        gate_means_by_seed[seed], k_values=CHAR_K_VALUES,
+        n_repeticiones=CHAR_STABILITY_N_REPETICIONES, fraccion=CHAR_STABILITY_FRACCION, seed=seed,
+    )
+
+stability_curve = {
+    k: {
+        "mean_ari": float(np.mean([stability_by_seed[s]["mean_ari_by_k"][k] for s in SEEDS_GATE])),
+        "std_ari": float(np.std([stability_by_seed[s]["mean_ari_by_k"][k] for s in SEEDS_GATE])),
+    }
+    for k in CHAR_K_VALUES
+}
+
+print("Curva de estabilidad (ARI medio +/- desviacion ENTRE semillas de la compuerta):")
+for k, stats in stability_curve.items():
+    print(f"  K={k}: ARI={stats['mean_ari']:.4f} +/- {stats['std_ari']:.4f}")
+
+K_ESTABLE = max(stability_curve, key=lambda k: stability_curve[k]["mean_ari"])
+print()
+print(f"K elegido por estabilidad (NUNCA por k_raw={k_raw}, ni por el pedido original de 3-4): "
+      f"K_ESTABLE={K_ESTABLE}")
+if not (3 <= K_ESTABLE <= 4):
+    print(f"AVISO: el K mas estable ({K_ESTABLE}) NO cae en el rango 3-4 solicitado originalmente "
+          "-- se reporta honestamente sin forzarlo.")
+
+char_cluster_labels = KMeans(
+    n_clusters=K_ESTABLE, n_init=10, random_state=SEEDS_GATE[0]
+).fit(gate_means_by_seed[SEEDS_GATE[0]]).labels_
+'''
+
+_MD_CHARACTERIZATION_SEPARABILITY = '''\
+### 20.2 Separabilidad fuera de pliegue (clasificador vs. control de etiquetas barajadas)
+
+`separabilidad_fuera_de_pliegue` entrena un `RandomForestClassifier` por
+pliegue estratificado y reporta precision balanceada OUT-OF-FOLD -- si las
+familias son estructura real, un clasificador las recupera sin haberlas
+visto en entrenamiento. El control de piso barajado (etiquetas
+aleatoriamente permutadas) da el nivel de azar esperado (`~1/K_ESTABLE`).
+Corrido multi-semilla (`SEEDS_GATE`) con barras de error.
+'''
+
+_CODE_CHARACTERIZATION_SEPARABILITY = '''\
+char_edge_names = [f"{source}->{target}" for source, target in edge_index_with.names]
+
+separability_by_seed = {}
+shuffled_by_seed = {}
+for seed in SEEDS_GATE:
+    seed_gate_means = gate_means_by_seed[seed]
+    if K_ESTABLE > 1:
+        seed_char_labels = KMeans(
+            n_clusters=K_ESTABLE, n_init=10, random_state=seed
+        ).fit(seed_gate_means).labels_
+    else:
+        seed_char_labels = np.zeros(seed_gate_means.shape[0], dtype=int)
+
+    cluster_sizes = np.bincount(seed_char_labels)
+    min_cluster_size = int(cluster_sizes.min()) if cluster_sizes.size > 0 else 0
+    effective_n_splits = min(CHAR_SEPARABILITY_N_SPLITS, min_cluster_size)
+    if len(np.unique(seed_char_labels)) < 2 or effective_n_splits < 2:
+        print(f"  semilla {seed}: cluster minimo con {min_cluster_size} vano(s) -- "
+              "insuficiente para StratifiedKFold, se omite esta semilla.")
+        continue
+
+    separability_by_seed[seed] = separabilidad_fuera_de_pliegue(
+        seed_gate_means, seed_char_labels, n_splits=effective_n_splits, seed=RANDOM_STATE,
+        feature_names=char_edge_names,
+    )
+    rng_shuffle_seed = np.random.default_rng(seed)
+    shuffled_seed_labels = rng_shuffle_seed.permutation(seed_char_labels)
+    shuffled_by_seed[seed] = separabilidad_fuera_de_pliegue(
+        seed_gate_means, shuffled_seed_labels, n_splits=effective_n_splits, seed=RANDOM_STATE,
+    )
+
+if separability_by_seed:
+    real_balanced_accuracies = [r["balanced_accuracy"] for r in separability_by_seed.values()]
+    shuffled_balanced_accuracies = [r["balanced_accuracy"] for r in shuffled_by_seed.values()]
+    print(f"Precision balanceada fuera de pliegue (entre semillas de la compuerta): "
+          f"{np.mean(real_balanced_accuracies):.4f} +/- {np.std(real_balanced_accuracies):.4f}")
+    print(f"Control de piso (etiquetas barajadas, entre semillas): "
+          f"{np.mean(shuffled_balanced_accuracies):.4f} +/- {np.std(shuffled_balanced_accuracies):.4f} "
+          f"(esperado ~ 1/K_ESTABLE = {1.0 / K_ESTABLE:.4f})")
+
+    separability_reference = separability_by_seed[SEEDS_GATE[0]]
+    print(f"Precision balanceada (semilla de referencia {SEEDS_GATE[0]}): "
+          f"{separability_reference['balanced_accuracy']:.4f} "
+          f"(por pliegue: {separability_reference['balanced_accuracy_by_fold']})")
+    print("Importancias de features (aristas del grafo experto) mas relevantes para distinguir familias:")
+    print(separability_reference["feature_importances"].head(10))
+else:
+    separability_reference = None
+    print("Ningun cluster tiene suficientes vanos por clase para StratifiedKFold en ninguna "
+          "semilla de la compuerta: se omite la separabilidad fuera de pliegue en esta corrida.")
+'''
+
+_MD_CHARACTERIZATION_EDGE_DEVIATION = '''\
+### 20.3 Aristas expertas mas desviadas por familia
+
+Reutiliza `tabla_desviacion_aristas` (seccion 11) sobre `char_cluster_labels`
+-- cada familia es describible como "corre mas caliente/frio que la
+poblacion" sobre aristas NOMBRADAS del grafo experto.
+'''
+
+_CODE_CHARACTERIZATION_EDGE_DEVIATION = '''\
+char_edge_deviation_table = tabla_desviacion_aristas(
+    gate_means_by_seed[SEEDS_GATE[0]], edge_index_with, char_cluster_labels, colapsar_familias=True,
+)
+print("Aristas expertas (o cadenas de familia climatica) que mas se desvian de la poblacion, por familia:")
+for cluster in sorted(np.unique(char_cluster_labels)):
+    top_rows = char_edge_deviation_table[char_edge_deviation_table["cluster"] == cluster].head(3)
+    print(f"Familia {cluster}:")
+    print(top_rows[["source", "target", "delta", "abs_delta_rank"]])
+'''
+
+_MD_CHARACTERIZATION_PROFILE = '''\
+### 20.4 Perfil por familia (`perfil_por_cluster`) en lenguaje de ingenieria
+
+`perfil_por_cluster` da el efecto ESTANDARIZADO de cada familia frente a la
+poblacion, por arista -- se traduce a una frase de ingenieria por familia
+usando las 3 aristas de mayor efecto.
+'''
+
+_CODE_CHARACTERIZATION_PROFILE = '''\
+char_profile_table = perfil_por_cluster(
+    gate_means_by_seed[SEEDS_GATE[0]], char_edge_names, char_cluster_labels,
+)
+
+for cluster in sorted(np.unique(char_cluster_labels)):
+    top_effects = char_profile_table[char_profile_table["cluster"] == cluster].head(3)
+    n_members = int(np.sum(char_cluster_labels == cluster))
+    descriptions = []
+    for _, row in top_effects.iterrows():
+        direction = "mas caliente" if row["efecto_estandarizado"] > 0 else "mas fria"
+        descriptions.append(
+            f"corre {row['nombre']} {direction} que la poblacion "
+            f"(efecto={row['efecto_estandarizado']:.2f})"
+        )
+    print(f"Familia {cluster} (n={n_members} vanos): " + "; ".join(descriptions))
+'''
+
+_MD_CHARACTERIZATION_HISTORICAL = '''\
+### 20.5 Perfiles HISTORICOS/DESCRIPTIVOS de `UITI_VANO` y conteo de eventos por familia
+
+Las dos cantidades de abajo (`UITI_VANO_futuro_acumulado`, `n_eventos_futuro`,
+seccion 3) se reportan aqui como caracterizacion HISTORICA/DESCRIPTIVA de
+cada familia -- NUNCA como una prediccion. Ver la nota de alcance al inicio
+de esta seccion (20) para la razon: sin particion cronologica, cualquier
+lectura predictiva seria circular.
+'''
+
+_CODE_CHARACTERIZATION_HISTORICAL = '''\
+char_vano_index = vano_index_gate.copy()
+char_vano_index["familia"] = char_cluster_labels
+char_history = char_vano_index.merge(future_uiti, on=["CIRCUITO", "FID_VANO"], how="left")
+
+print("Perfil HISTORICO/DESCRIPTIVO de UITI_VANO futuro acumulado por familia (NO es una prediccion):")
+print(char_history.groupby("familia")["UITI_VANO_futuro_acumulado"].agg(["count", "mean", "median", "std"]))
+print()
+print("Perfil HISTORICO/DESCRIPTIVO de conteo de eventos futuros por familia (NO es una prediccion):")
+print(char_history.groupby("familia")["n_eventos_futuro"].agg(["count", "mean", "median", "std"]))
+'''
+
+
 def _cell(kind: str, source: str, *, tags: list[str] | None = None) -> nbformat.NotebookNode:
     if kind == "markdown":
         return new_markdown_cell(source)
@@ -1252,6 +1471,18 @@ def build_notebook() -> nbformat.NotebookNode:
         _cell("markdown", _MD_SEASONAL_LIMITATION),
         _cell("markdown", _MD_SUMMARY),
         _cell("code", _CODE_SUMMARY),
+        _cell("markdown", _MD_CHARACTERIZATION_SCOPE),
+        _cell("code", _CODE_CHARACTERIZATION_CONFIG),
+        _cell("markdown", _MD_CHARACTERIZATION_STABILITY),
+        _cell("code", _CODE_CHARACTERIZATION_STABILITY),
+        _cell("markdown", _MD_CHARACTERIZATION_SEPARABILITY),
+        _cell("code", _CODE_CHARACTERIZATION_SEPARABILITY),
+        _cell("markdown", _MD_CHARACTERIZATION_EDGE_DEVIATION),
+        _cell("code", _CODE_CHARACTERIZATION_EDGE_DEVIATION),
+        _cell("markdown", _MD_CHARACTERIZATION_PROFILE),
+        _cell("code", _CODE_CHARACTERIZATION_PROFILE),
+        _cell("markdown", _MD_CHARACTERIZATION_HISTORICAL),
+        _cell("code", _CODE_CHARACTERIZATION_HISTORICAL),
     ]
     notebook = new_notebook(cells=cells)
     notebook["metadata"]["kernelspec"] = _KERNELSPEC

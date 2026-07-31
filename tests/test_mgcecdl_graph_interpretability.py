@@ -23,10 +23,12 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.metrics import adjusted_rand_score
 
 from chec_impacto.models.mgcecdl_graph import GraphEdgeIndex, construir_edge_index
 
 from chec_impacto.interpretability.mgcecdl_graph import (
+    _ari_sobre_filas_compartidas,
     agrupar_gates_por_vano,
     asociacion_criticidad,
     assert_fecha_excluded_from_features,
@@ -34,15 +36,19 @@ from chec_impacto.interpretability.mgcecdl_graph import (
     corregir_benjamini_hochberg,
     diagnostico_persistencia,
     ejecutar_control_permutacion_grados,
+    estabilidad_por_submuestreo,
     estadistico_colapso,
     guardia_proxy_univariante,
     linea_base_sin_grafo,
+    perfil_por_cluster,
+    separabilidad_fuera_de_pliegue,
     seleccionar_k_datos,
     split_cronologico_p70,
     tabla_desviacion_aristas,
     tabla_grado_features,
     uiti_futuro_por_vano,
 )
+from chec_impacto.interpretability.mgcecdl_graph import _ari_sobre_filas_compartidas
 
 INTERPRETABILITY_MODULE_PATH = Path(
     "src/chec_impacto/interpretability/mgcecdl_graph.py"
@@ -564,3 +570,243 @@ def test_benjamini_hochberg_is_monotone_and_bounded() -> None:
 def test_asociacion_criticidad_rejects_single_cluster() -> None:
     with pytest.raises(ValueError, match="at least two"):
         asociacion_criticidad(np.zeros(20, dtype=int), np.arange(20, dtype=float))
+
+
+# ---------------------------------------------------------------------------
+# PR4 -- estabilidad_por_submuestreo (Ben-Hur-style cluster-stability protocol)
+# ---------------------------------------------------------------------------
+
+
+def test_ari_sobre_filas_compartidas_uses_global_identity_not_position() -> None:
+    """Regression guard for the exact bug the launch contract warns against: a
+    naive implementation that truncates both label arrays to their common
+    LENGTH and compares them POSITIONALLY -- instead of aligning by the
+    shared GLOBAL row index -- would silently compare unrelated vanos.
+
+    `idx_a`/`idx_b` share the global rows {2, 5, 8} but at DIFFERENT
+    positions within each subsample array. `labels_a`/`labels_b` are built so
+    the correct (identity-based) pairing on those 3 shared rows is a perfect
+    match (ARI == 1.0), while naively comparing `labels_a[:3]` against
+    `labels_b[:3]` (first-N positional truncation, ignoring identity) is NOT
+    a perfect match. If the implementation only used disjoint/positional
+    slicing, this assertion would fail.
+    """
+    idx_a = np.array([2, 0, 5, 8, 1])
+    idx_b = np.array([9, 5, 2, 3, 8])
+    labels_a = np.array([0, 1, 1, 0, 0])  # aligned to idx_a's own order
+    labels_b = np.array([1, 1, 0, 1, 0])  # aligned to idx_b's own order
+
+    ari, n_shared = _ari_sobre_filas_compartidas(idx_a, labels_a, idx_b, labels_b)
+
+    assert n_shared == 3
+    assert ari == pytest.approx(1.0)
+
+    naive_positional_ari = adjusted_rand_score(labels_a[:3], labels_b[:3])
+    assert naive_positional_ari != pytest.approx(1.0), (
+        "the naive positional-truncation comparison must differ from the correct "
+        "identity-based pairing for this fixture, or the test proves nothing"
+    )
+
+
+def test_estabilidad_por_submuestreo_well_separated_blobs_score_high_at_true_k() -> None:
+    rng = np.random.default_rng(10)
+    centers = np.array(
+        [[0, 0, 0, 0], [20, 20, 0, 0], [0, 0, 20, 20], [20, 0, 20, 0]], dtype=float
+    )
+    blocks = [center + rng.normal(scale=0.4, size=(40, 4)) for center in centers]
+    values = np.vstack(blocks)
+
+    result = estabilidad_por_submuestreo(
+        values, k_values=range(2, 7), n_repeticiones=8, fraccion=0.8, seed=0
+    )
+
+    assert result["mean_ari_by_k"][4] > 0.8
+    assert result["mean_ari_by_k"][4] == max(result["mean_ari_by_k"].values())
+
+
+def test_estabilidad_por_submuestreo_uniform_noise_scores_near_zero_at_every_k() -> None:
+    # High-dimensional uniform noise (dim=50 >> n=150) avoids the low-dimensional
+    # bounded-support artifact where KMeans finds a spuriously reproducible
+    # corner/edge partition of a hypercube even without real cluster structure --
+    # in high dimensions distance concentration makes KMeans partitions of pure
+    # noise genuinely unstable across independent subsamples.
+    rng = np.random.default_rng(11)
+    values = rng.uniform(size=(150, 50))
+
+    result = estabilidad_por_submuestreo(
+        values, k_values=range(2, 6), n_repeticiones=8, fraccion=0.8, seed=0
+    )
+
+    for k in range(2, 6):
+        assert result["mean_ari_by_k"][k] < 0.3
+
+
+def test_estabilidad_por_submuestreo_shape_and_keys_are_stable() -> None:
+    rng = np.random.default_rng(12)
+    values = rng.normal(size=(80, 3))
+
+    k_values = list(range(2, 5))
+    result = estabilidad_por_submuestreo(
+        values, k_values=k_values, n_repeticiones=4, fraccion=0.7, seed=1
+    )
+
+    assert set(result) >= {"k_values", "mean_ari_by_k", "std_ari_by_k", "raw_ari_by_k"}
+    assert result["k_values"] == k_values
+    assert set(result["mean_ari_by_k"]) == set(k_values)
+    assert set(result["std_ari_by_k"]) == set(k_values)
+    assert set(result["raw_ari_by_k"]) == set(k_values)
+    for k in k_values:
+        assert len(result["raw_ari_by_k"][k]) == 4
+
+
+# ---------------------------------------------------------------------------
+# PR4 -- separabilidad_fuera_de_pliegue (out-of-fold classifier separability)
+# ---------------------------------------------------------------------------
+
+
+def _separable_cluster_features(rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
+    centers = np.array([[0, 0], [15, 15], [0, 15]], dtype=float)
+    blocks = [center + rng.normal(scale=0.5, size=(50, 2)) for center in centers]
+    X = np.vstack(blocks)
+    y = np.repeat([0, 1, 2], 50)
+    return X, y
+
+
+def test_separabilidad_fuera_de_pliegue_separable_labels_score_high() -> None:
+    rng = np.random.default_rng(20)
+    X, y = _separable_cluster_features(rng)
+
+    result = separabilidad_fuera_de_pliegue(X, y, n_splits=5, seed=0)
+
+    assert result["balanced_accuracy"] > 0.9
+    assert len(result["balanced_accuracy_by_fold"]) == 5
+
+
+def test_separabilidad_fuera_de_pliegue_shuffled_labels_near_chance_floor() -> None:
+    rng = np.random.default_rng(21)
+    n_samples, n_classes = 150, 3
+    X = rng.normal(size=(n_samples, 4))  # noise, unrelated to any label
+    y = rng.integers(0, n_classes, size=n_samples)
+
+    result = separabilidad_fuera_de_pliegue(X, y, n_splits=5, seed=0)
+
+    chance_floor = 1.0 / n_classes
+    assert result["balanced_accuracy"] == pytest.approx(chance_floor, abs=0.2)
+
+
+def test_separabilidad_fuera_de_pliegue_uses_stratified_kfold(monkeypatch) -> None:
+    import chec_impacto.interpretability.mgcecdl_graph as module
+
+    real_cls = module.StratifiedKFold
+    calls: list[tuple] = []
+
+    class _SpyStratifiedKFold(real_cls):
+        def __init__(self, *args, **kwargs):
+            calls.append((args, kwargs))
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(module, "StratifiedKFold", _SpyStratifiedKFold)
+
+    rng = np.random.default_rng(22)
+    X, y = _separable_cluster_features(rng)
+    separabilidad_fuera_de_pliegue(X, y, n_splits=5, seed=0)
+
+    assert len(calls) == 1, "exactly one StratifiedKFold instance must be built"
+
+
+def test_separabilidad_fuera_de_pliegue_importances_sum_to_one_descending_named() -> None:
+    rng = np.random.default_rng(23)
+    X, y = _separable_cluster_features(rng)
+    names = ["feat_a", "feat_b"]
+
+    result = separabilidad_fuera_de_pliegue(X, y, n_splits=5, seed=0, feature_names=names)
+
+    table = result["feature_importances"]
+    assert {"feature", "importance"} <= set(table.columns)
+    assert set(table["feature"]) == set(names)
+    assert table["importance"].sum() == pytest.approx(1.0, abs=1e-6)
+    assert (table["importance"].diff().dropna() <= 1e-12).all(), "must be descending"
+
+
+def test_separabilidad_fuera_de_pliegue_returns_confusion_matrix() -> None:
+    rng = np.random.default_rng(24)
+    X, y = _separable_cluster_features(rng)
+
+    result = separabilidad_fuera_de_pliegue(X, y, n_splits=5, seed=0)
+
+    confusion = result["confusion_matrix"]
+    assert confusion.shape == (3, 3)
+    assert confusion.sum() == len(y)
+
+
+# ---------------------------------------------------------------------------
+# PR4 -- perfil_por_cluster (per-cluster standardized-effect profile)
+# ---------------------------------------------------------------------------
+
+
+def test_perfil_por_cluster_constant_dimension_has_near_zero_effect() -> None:
+    rng = np.random.default_rng(30)
+    n = 100
+    constant_dim = np.full(n, 3.0)
+    noise_dim = rng.normal(size=n)
+    values = np.column_stack([constant_dim, noise_dim])
+    labels = np.array([0] * 50 + [1] * 50)
+
+    result = perfil_por_cluster(values, ["constante", "ruido"], labels)
+
+    constant_rows = result[result["nombre"] == "constante"]
+    assert (constant_rows["efecto_estandarizado"].abs() < 1e-9).all()
+
+
+def test_perfil_por_cluster_separating_dimension_has_large_correct_sign_effect() -> None:
+    rng = np.random.default_rng(31)
+    n_per_cluster = 60
+    low = rng.normal(0.0, 1.0, n_per_cluster)
+    high = rng.normal(20.0, 1.0, n_per_cluster)
+    values = np.concatenate([low, high]).reshape(-1, 1)
+    labels = np.array([0] * n_per_cluster + [1] * n_per_cluster)
+
+    result = perfil_por_cluster(values, ["separador"], labels)
+
+    row_0 = result[(result["cluster"] == 0) & (result["nombre"] == "separador")].iloc[0]
+    row_1 = result[(result["cluster"] == 1) & (result["nombre"] == "separador")].iloc[0]
+    assert row_0["efecto_estandarizado"] < -0.9
+    assert row_1["efecto_estandarizado"] > 0.9
+
+
+def test_perfil_por_cluster_zero_population_std_no_inf_or_nan() -> None:
+    n = 40
+    constant_values = np.full((n, 1), 5.0)
+    labels = np.array([0] * 20 + [1] * 20)
+
+    result = perfil_por_cluster(constant_values, ["constante_absoluta"], labels)
+
+    assert np.isfinite(result["efecto_estandarizado"]).all()
+    assert (result["efecto_estandarizado"] == 0.0).all()
+
+
+def test_perfil_por_cluster_tidy_columns_and_rank() -> None:
+    rng = np.random.default_rng(32)
+    values = rng.normal(size=(60, 3))
+    labels = np.array([0] * 30 + [1] * 30)
+    names = ["a", "b", "c"]
+
+    result = perfil_por_cluster(values, names, labels)
+
+    required = {"cluster", "nombre", "media_cluster", "media_poblacion", "efecto_estandarizado", "rank"}
+    assert required <= set(result.columns)
+    for cluster in (0, 1):
+        cluster_rows = result[result["cluster"] == cluster].sort_values("rank")
+        ranks = cluster_rows["rank"].tolist()
+        assert ranks == list(range(1, len(names) + 1))
+        # rank must be sorted by DESCENDING absolute effect
+        abs_effects = cluster_rows["efecto_estandarizado"].abs().tolist()
+        assert abs_effects == sorted(abs_effects, reverse=True)
+
+
+def test_ari_sobre_filas_compartidas_reports_zero_overlap() -> None:
+    ari, n_shared = _ari_sobre_filas_compartidas(
+        np.array([0, 1]), np.array([0, 1]), np.array([7, 8]), np.array([0, 1])
+    )
+    assert n_shared == 0
+    assert np.isnan(ari), "no shared rows means no measurable agreement, not a score of 0.0"
