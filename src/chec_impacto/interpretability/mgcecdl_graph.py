@@ -46,7 +46,7 @@ from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 import pandas as pd
-from scipy.stats import kruskal, norm, rankdata
+from scipy.stats import kendalltau, kruskal, norm, rankdata
 from sklearn.cluster import KMeans
 from sklearn.metrics import adjusted_rand_score, silhouette_score
 from sklearn.preprocessing import StandardScaler
@@ -1174,13 +1174,42 @@ def _como_escalar_python(value: Any) -> Any:
     return value.item() if hasattr(value, "item") else value
 
 
+_AGREGADORES: dict[str, Any] = {
+    "media": np.nanmean,
+    "mediana": np.nanmedian,
+    "p90": lambda values: np.nanpercentile(values, 90),
+}
+
+
+def _agregar(values: np.ndarray, agregador: str) -> float:
+    if agregador not in _AGREGADORES:
+        raise ValueError(
+            f"agregador desconocido {agregador!r}; se esperaba uno de "
+            f"{tuple(_AGREGADORES)}."
+        )
+    if values.size == 0 or bool(np.all(np.isnan(values))):
+        return float("nan")
+    return float(_AGREGADORES[agregador](values))
+
+
 def asignar_nombres_de_riesgo(
     labels: np.ndarray,
     valores: np.ndarray,
     nombres: Sequence[str] = ("Bajo", "Medio", "Medio-Alto", "Alto"),
+    estadistico: str = "mediana",
 ) -> dict:
-    """Re-label groups by ASCENDING group-mean `valores` (per-vano accumulated
-    UITI), so group `0` is always the lowest-criticality family.
+    """Re-label groups by ASCENDING group `estadistico` of `valores` (per-vano
+    accumulated UITI), so group `0` is always the lowest-criticality family.
+
+    `estadistico` defaults to `"mediana"`, NOT `"media"`, and the difference
+    is not cosmetic on this data. Accumulated UITI is heavy-tailed -- group
+    means run several times their own medians -- so ranking by the mean ranks
+    families by whoever suffered the single worst event, not by who is
+    persistently critical. Ranking by the median resists that. `"media"` and
+    `"p90"` remain available for callers who want to compare orderings, which
+    is exactly what `verificar_orden_de_riesgo` is for: a tier vocabulary is
+    only honest if the order survives more than the one statistic that
+    produced it.
 
     KMeans label ids are arbitrary: cluster `0` carries no ordinal meaning at
     all. This function replaces them with an ORDERED vocabulary, which is what
@@ -1222,11 +1251,17 @@ def asignar_nombres_de_riesgo(
         todo_nan = group_values.size == 0 or bool(np.all(np.isnan(group_values)))
         return group_values, todo_nan
 
+    if estadistico not in _AGREGADORES:
+        raise ValueError(
+            f"estadistico desconocido {estadistico!r}; se esperaba uno de "
+            f"{tuple(_AGREGADORES)}."
+        )
+
     claves_de_orden: list[float] = []
     for original in etiquetas_originales:
         group_values, todo_nan = _estadisticos(original)
         claves_de_orden.append(
-            float("-inf") if todo_nan else float(np.nanmean(group_values))
+            float("-inf") if todo_nan else _agregar(group_values, estadistico)
         )
 
     orden_ascendente = np.argsort(np.asarray(claves_de_orden), kind="stable")
@@ -1270,6 +1305,99 @@ def asignar_nombres_de_riesgo(
         "nombres": nombres_por_grupo,
         "resumen": resumen,
     }
+
+
+def verificar_orden_de_riesgo(
+    labels: np.ndarray,
+    criterios: Mapping[str, tuple[np.ndarray, str]],
+) -> pd.DataFrame:
+    """Does the delivered tier order survive criteria OTHER than the one that
+    produced it?
+
+    `labels` are the ALREADY-ORDERED tier ids (0 = lowest), as returned by
+    `asignar_nombres_de_riesgo`. Each entry of `criterios` maps a display name
+    to `(per-vano values, aggregator)`, with the aggregator one of
+    `"media"`, `"mediana"`, `"p90"`.
+
+    One row per criterion: `criterio | agregador | valores_por_grupo |
+    orden_inducido | monotono | kendall_tau`. `monotono` is True when the
+    criterion's per-group aggregate is non-decreasing across tiers 0..K-1 --
+    that is, when the criterion AGREES that the tiers are ordered.
+    `frame.attrs["todos_monotonos"]` is True only when every criterion agrees.
+
+    Why a single dissenting criterion is allowed to sink the verdict: naming
+    tiers "Bajo".."Alto" asserts an ordinal claim about criticality. If mean
+    accumulated UITI rises across the tiers but median UITI or event count
+    does not, then the vocabulary is an artifact of the ranking key rather
+    than a property of the families, and reporting it as a stratification
+    would mislead whoever acts on it. This function exists to make that
+    failure visible instead of leaving it for a reader to notice in a table.
+    """
+    labels = np.asarray(labels).reshape(-1)
+    if labels.size == 0:
+        raise ValueError("labels is empty; there is no tier order to verify.")
+    if not criterios:
+        raise ValueError("criterios is empty; there is nothing to verify the order against.")
+
+    grupos = [int(g) for g in np.unique(labels)]
+
+    filas: list[dict[str, Any]] = []
+    for nombre, (valores, agregador) in criterios.items():
+        valores_arr = np.asarray(valores, dtype=np.float64).reshape(-1)
+        if valores_arr.shape[0] != labels.shape[0]:
+            raise ValueError(
+                f"criterio {nombre!r} has {valores_arr.shape[0]} values but labels has "
+                f"{labels.shape[0]}; they must be per-vano aligned."
+            )
+        agregados = np.asarray(
+            [_agregar(valores_arr[labels == g], agregador) for g in grupos], dtype=np.float64
+        )
+        finitos = np.isfinite(agregados)
+        # Non-decreasing across the delivered tier order 0..K-1.
+        monotono = bool(finitos.all()) and bool(np.all(np.diff(agregados) >= 0.0))
+        orden_inducido = tuple(int(grupos[i]) for i in np.argsort(agregados, kind="stable"))
+        # A criterion whose aggregate is identical across every tier does not
+        # contradict the order, but it does not support it either -- counting it
+        # as agreement would inflate the apparent evidence. It is a blank, and
+        # it is reported as one.
+        informativo = bool(finitos.all()) and not bool(
+            np.allclose(agregados[finitos], agregados[finitos][0])
+        )
+        if finitos.sum() < 2 or not informativo:
+            tau = float("nan")
+        else:
+            tau_result = kendalltau(
+                np.arange(len(grupos))[finitos], agregados[finitos]
+            )
+            tau = float(tau_result.statistic)
+        filas.append(
+            {
+                "criterio": nombre,
+                "agregador": agregador,
+                "valores_por_grupo": tuple(float(v) for v in agregados),
+                "orden_inducido": orden_inducido,
+                "monotono": monotono,
+                "informativo": informativo,
+                "kendall_tau": tau,
+            }
+        )
+
+    frame = pd.DataFrame(
+        filas,
+        columns=[
+            "criterio", "agregador", "valores_por_grupo",
+            "orden_inducido", "monotono", "informativo", "kendall_tau",
+        ],
+    )
+    frame.attrs["todos_monotonos"] = bool(frame["monotono"].all())
+    frame.attrs["orden_entregado"] = tuple(grupos)
+    frame.attrs["criterios_disidentes"] = tuple(
+        frame.loc[~frame["monotono"], "criterio"].tolist()
+    )
+    frame.attrs["criterios_sin_informacion"] = tuple(
+        frame.loc[~frame["informativo"], "criterio"].tolist()
+    )
+    return frame
 
 
 def anidamiento_entre_particiones(

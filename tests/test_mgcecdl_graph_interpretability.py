@@ -51,6 +51,7 @@ from chec_impacto.interpretability.mgcecdl_graph import (
     tabla_desviacion_aristas,
     tabla_grado_features,
     uiti_futuro_por_vano,
+    verificar_orden_de_riesgo,
 )
 from chec_impacto.interpretability.mgcecdl_graph import _ari_sobre_filas_compartidas
 
@@ -1137,3 +1138,142 @@ def test_anidamiento_umbral_configurable() -> None:
     assert int(laxo["anida"].sum()) == 2
     assert estricto.attrs["fraccion_vanos_anidados"] == pytest.approx(0.5)
     assert laxo.attrs["fraccion_vanos_anidados"] == pytest.approx(1.0)
+
+
+# --- Ranking by a robust statistic, and proving the order survives the others ---
+
+
+def _heavy_tailed_groups():
+    """Two groups where MEAN and MEDIAN disagree, because one group carries a
+    few extreme vanos. This is the real shape of the notebook-12 data: mean
+    accumulated UITI ~534 against a median of ~130."""
+    rng = np.random.default_rng(0)
+    # Group A: consistently moderate.
+    a = rng.uniform(90.0, 110.0, size=200)
+    # Group B: mostly small, plus a handful of enormous vanos.
+    b = np.concatenate([rng.uniform(10.0, 30.0, size=195), np.full(5, 50_000.0)])
+    labels = np.array([0] * 200 + [1] * 200)
+    valores = np.concatenate([a, b])
+    return labels, valores
+
+
+def test_asignar_nombres_por_mediana_difiere_de_por_media_en_cola_pesada():
+    labels, valores = _heavy_tailed_groups()
+
+    por_media = asignar_nombres_de_riesgo(labels, valores, nombres=("Bajo", "Alto"),
+                                          estadistico="media")
+    por_mediana = asignar_nombres_de_riesgo(labels, valores, nombres=("Bajo", "Alto"),
+                                            estadistico="mediana")
+
+    # By mean, the spiky group wins; by median, it is clearly the lower one.
+    assert por_media["mapeo"][1] == 1, "mean ranking must be dominated by the extreme tail"
+    assert por_mediana["mapeo"][1] == 0, "median ranking must resist the extreme tail"
+    assert por_media["mapeo"] != por_mediana["mapeo"]
+
+
+def test_asignar_nombres_usa_mediana_por_defecto():
+    labels, valores = _heavy_tailed_groups()
+    por_defecto = asignar_nombres_de_riesgo(labels, valores, nombres=("Bajo", "Alto"))
+    explicito = asignar_nombres_de_riesgo(labels, valores, nombres=("Bajo", "Alto"),
+                                          estadistico="mediana")
+    assert por_defecto["mapeo"] == explicito["mapeo"]
+
+
+def test_asignar_nombres_rechaza_estadistico_desconocido():
+    labels, valores = _heavy_tailed_groups()
+    with pytest.raises(ValueError, match="estadistico"):
+        asignar_nombres_de_riesgo(labels, valores, nombres=("Bajo", "Alto"), estadistico="moda")
+
+
+def test_verificar_orden_detecta_un_criterio_que_contradice_el_orden():
+    """The delivered tiers are only meaningful if EVERY criterion agrees. In
+    the real full run they did not: mean event count put 'Bajo' above 'Alto'."""
+    labels = np.array([0, 0, 1, 1, 2, 2])
+    uiti = np.array([10.0, 12.0, 20.0, 22.0, 30.0, 32.0])       # rises with the label
+    eventos = np.array([9.0, 9.0, 1.0, 1.0, 5.0, 5.0])           # does NOT rise
+
+    tabla = verificar_orden_de_riesgo(
+        labels,
+        {
+            "UITI mediana": (uiti, "mediana"),
+            "UITI media": (uiti, "media"),
+            "eventos media": (eventos, "media"),
+        },
+    )
+
+    por_criterio = tabla.set_index("criterio")["monotono"].to_dict()
+    assert por_criterio["UITI mediana"] is np.True_ or por_criterio["UITI mediana"] is True
+    assert por_criterio["UITI media"] is np.True_ or por_criterio["UITI media"] is True
+    assert not por_criterio["eventos media"]
+    assert tabla.attrs["todos_monotonos"] is False, (
+        "one dissenting criterion must sink the overall verdict -- that is the point"
+    )
+
+
+def test_verificar_orden_acepta_cuando_los_tres_criterios_coinciden():
+    labels = np.array([0, 0, 1, 1, 2, 2])
+    uiti = np.array([10.0, 12.0, 20.0, 22.0, 30.0, 32.0])
+    eventos = np.array([1.0, 1.0, 4.0, 4.0, 9.0, 9.0])
+
+    tabla = verificar_orden_de_riesgo(
+        labels,
+        {
+            "UITI mediana": (uiti, "mediana"),
+            "UITI media": (uiti, "media"),
+            "eventos media": (eventos, "media"),
+        },
+    )
+    assert tabla.attrs["todos_monotonos"] is True
+    assert (tabla["kendall_tau"] == 1.0).all()
+    assert len(tabla) == 3
+
+
+def test_verificar_orden_reporta_el_orden_inducido_por_cada_criterio():
+    labels = np.array([0, 0, 1, 1, 2, 2])
+    invertido = np.array([30.0, 32.0, 20.0, 22.0, 10.0, 12.0])
+    tabla = verificar_orden_de_riesgo(labels, {"invertido": (invertido, "mediana")})
+    fila = tabla.iloc[0]
+    assert tuple(fila["orden_inducido"]) == (2, 1, 0)
+    assert fila["kendall_tau"] == pytest.approx(-1.0)
+    assert not fila["monotono"]
+
+
+def test_verificar_orden_soporta_p90_y_rechaza_agregador_desconocido():
+    labels = np.array([0, 0, 0, 1, 1, 1])
+    valores = np.array([1.0, 1.0, 100.0, 2.0, 2.0, 200.0])
+    tabla = verificar_orden_de_riesgo(labels, {"cola": (valores, "p90")})
+    assert tabla.iloc[0]["monotono"]
+
+    with pytest.raises(ValueError, match="agregador"):
+        verificar_orden_de_riesgo(labels, {"malo": (valores, "moda")})
+
+
+def test_verificar_orden_marca_como_no_informativo_un_criterio_constante():
+    """A criterion whose per-group aggregate is identical everywhere does not
+    contradict the order -- but it does not SUPPORT it either. Counting it as
+    agreement inflates the apparent evidence: three criteria where one is
+    constant is really two criteria and a blank."""
+    labels = np.array([0, 0, 1, 1, 2, 2])
+    uiti = np.array([10.0, 12.0, 20.0, 22.0, 30.0, 32.0])
+    constante = np.ones(6)
+
+    tabla = verificar_orden_de_riesgo(
+        labels,
+        {"UITI mediana": (uiti, "mediana"), "constante": (constante, "mediana")},
+    )
+    por_criterio = tabla.set_index("criterio")
+
+    assert bool(por_criterio.loc["UITI mediana", "informativo"]) is True
+    assert bool(por_criterio.loc["constante", "informativo"]) is False
+    # It must not be counted as a dissenter either -- it is neither.
+    assert bool(por_criterio.loc["constante", "monotono"]) is True
+    assert tabla.attrs["criterios_sin_informacion"] == ("constante",)
+    assert tabla.attrs["criterios_disidentes"] == ()
+
+
+def test_verificar_orden_sin_criterios_constantes_no_reporta_ninguno():
+    labels = np.array([0, 0, 1, 1])
+    uiti = np.array([1.0, 2.0, 30.0, 40.0])
+    tabla = verificar_orden_de_riesgo(labels, {"UITI": (uiti, "mediana")})
+    assert tabla.attrs["criterios_sin_informacion"] == ()
+    assert bool(tabla.iloc[0]["informativo"]) is True

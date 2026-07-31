@@ -38,6 +38,7 @@ from .mgcecdl_graph import (
     tabla_desviacion_aristas,
     tabla_grado_features,
     uiti_futuro_por_vano,
+    verificar_orden_de_riesgo,
 )
 
 __all__ = [
@@ -74,4 +75,5 @@ __all__ = [
     "tabla_desviacion_aristas",
     "tabla_grado_features",
     "uiti_futuro_por_vano",
+    "verificar_orden_de_riesgo",
 ]

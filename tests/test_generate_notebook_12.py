@@ -554,7 +554,7 @@ def test_checkpoint_metadata_carries_everything_another_notebook_needs(notebook)
         assert key in code, f"checkpoint metadata is missing {key}"
 
 
-def test_risk_names_are_assigned_by_mean_uiti_not_by_kmeans_id(notebook) -> None:
+def test_risk_names_are_assigned_by_uiti_not_by_kmeans_id(notebook) -> None:
     code = _all_code_source(notebook)
     assert "asignar_nombres_de_riesgo" in code
     assert 'NOMBRES_RIESGO = ("Bajo", "Medio", "Medio-Alto", "Alto")' in code
@@ -670,4 +670,81 @@ def test_affinity_annotations_keep_enough_decimals_to_separate_values(notebook) 
     code = _all_code_source(notebook)
     assert 'f"{valores[i, j]:.4f}"' in code, (
         "three decimals print 0.9991 and 0.9998 identically, erasing the distinction"
+    )
+
+
+def test_risk_ranking_uses_the_median_not_the_mean(notebook) -> None:
+    """Accumulated UITI is heavy-tailed: group means run several times their
+    own medians. Ranking by the mean ranks families by whoever suffered the
+    single worst event. The previous full run showed exactly that -- the three
+    lower tiers landed within 6.5% of each other and the median ordered them
+    differently."""
+    code = _all_code_source(notebook)
+    assert 'ESTADISTICO_DE_RIESGO = "mediana"' in code
+    assert "estadistico=ESTADISTICO_DE_RIESGO" in code
+    markdown = _all_markdown_source(notebook)
+    assert re.search(r"cola (muy )?pesada|cola pesada", markdown, re.IGNORECASE) or re.search(
+        r"pesada", markdown, re.IGNORECASE
+    ), "the notebook must justify the median, not just use it"
+
+
+def test_delivered_order_is_verified_against_three_independent_criteria(notebook) -> None:
+    code = _all_code_source(notebook)
+    assert "verificar_orden_de_riesgo(" in code
+    check_cell = next(
+        cell.source for cell in notebook.cells
+        if cell.cell_type == "code" and "verificar_orden_de_riesgo(" in cell.source
+    )
+    # Ranking by one statistic and checking against only that statistic proves nothing.
+    assert '"UITI acumulado (mediana)"' in check_cell
+    assert '"UITI acumulado (media)"' in check_cell
+    assert '"numero de eventos (mediana)"' in check_cell
+    assert "ORDEN_VERIFICADO" in code
+
+
+def test_unverified_order_is_reported_as_such_not_as_a_stratification(notebook) -> None:
+    check_cell = next(
+        cell.source for cell in notebook.cells
+        if cell.cell_type == "code" and "verificar_orden_de_riesgo(" in cell.source
+    )
+    assert re.search(r"NO se sostiene", check_cell), (
+        "a failed order check must say so plainly"
+    )
+    assert re.search(r"criterios_disidentes", check_cell), (
+        "it must name WHICH criterion contradicted the order"
+    )
+    # And a tier holding most of the fleet is not a stratification either.
+    assert "_fraccion_mayor" in check_cell
+    assert re.search(r"mas de la mitad", check_cell)
+
+
+def test_checkpoint_records_whether_the_order_was_verified(notebook) -> None:
+    code = _all_code_source(notebook)
+    for key in ('"orden_verificado"', '"estadistico_de_riesgo"', '"criterios_disidentes"'):
+        assert key in code, (
+            f"{key} must reach the checkpoint: another notebook loading these tiers has "
+            "to know whether the ordering claim survived verification"
+        )
+
+
+def test_order_check_runs_before_the_model_is_saved(notebook) -> None:
+    sources = [cell.source for cell in notebook.cells]
+    check_index = next(i for i, s in enumerate(sources) if "verificar_orden_de_riesgo(" in s)
+    save_index = next(i for i, s in enumerate(sources) if "guardar_modelo_gated(" in s)
+    assert check_index < save_index, (
+        "the checkpoint stores the verdict, so the verdict must exist first"
+    )
+
+
+def test_a_constant_criterion_cannot_count_as_support_for_the_order(notebook) -> None:
+    """The smoke run exposed this: event count was 1.00 in every tier and the
+    check reported COINCIDE, which reads as evidence when it is a blank."""
+    check_cell = next(
+        cell.source for cell in notebook.cells
+        if cell.cell_type == "code" and "verificar_orden_de_riesgo(" in cell.source
+    )
+    assert "criterios_sin_informacion" in check_cell
+    assert '"SIN INFO"' in check_cell
+    assert 'not verificacion_orden.attrs["criterios_sin_informacion"]' in check_cell, (
+        "a criterion carrying no information must not be able to make the order verified"
     )

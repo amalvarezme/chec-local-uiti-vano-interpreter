@@ -186,6 +186,7 @@ try:
         tabla_desviacion_aristas,
         tabla_grado_features,
         uiti_futuro_por_vano,
+        verificar_orden_de_riesgo,
     )
     from chec_impacto.models import (
         LAMBDA_DEV_CHOICES,
@@ -286,10 +287,17 @@ ARI_STABILITY_THRESHOLD = 0.3
 # esta lista, nunca de un literal suelto, y el orden define el significado
 # ordinal que la seccion 23 asigna por UITI_VANO acumulado medio ascendente.
 NOMBRES_RIESGO = ("Bajo", "Medio", "Medio-Alto", "Alto")
+# Clave de ordenamiento de los niveles. MEDIANA, no media: UITI_VANO acumulado es de
+# cola muy pesada (la media de un grupo corre varias veces su propia mediana), asi que
+# ordenar por media ordena por quien sufrio el peor evento y no por quien es
+# persistentemente critico. La corrida completa anterior lo mostro: por media, los tres
+# niveles inferiores quedaron dentro del 6.5% y la mediana los ordenaba al reves.
+ESTADISTICO_DE_RIESGO = "mediana"
 
 print(f"mode={mode!r} | SEEDS_SEARCH={SEEDS_SEARCH} | SEEDS_GATE={SEEDS_GATE} | K_SEARCH={K_SEARCH}")
 print(f"COST_CEILING_SECONDS={COST_CEILING_SECONDS}")
 print(f"NOMBRES_RIESGO={NOMBRES_RIESGO} -> K_ENTREGA={len(NOMBRES_RIESGO)}")
+print(f"ESTADISTICO_DE_RIESGO={ESTADISTICO_DE_RIESGO!r}")
 '''
 
 _MD_DATA_LOAD = '''\
@@ -1569,8 +1577,17 @@ _MD_RISK_NAMES = '''\
 
 Los ids que devuelve `KMeans` son arbitrarios: el grupo 0 de una corrida no
 tiene nada que ver con el grupo 0 de otra. `asignar_nombres_de_riesgo`
-reordena los grupos por `UITI_VANO` acumulado MEDIO ascendente, de modo que
-el id pasa a ser ordinal y significa algo: 0 = Bajo, ..., 3 = Alto.
+reordena los grupos por `UITI_VANO` acumulado ascendente, de modo que el id
+pasa a ser ordinal y significa algo: 0 = Bajo, ..., 3 = Alto.
+
+La clave de ordenamiento es la MEDIANA, no la media, y la diferencia no es
+cosmetica. `UITI_VANO` acumulado es de cola muy pesada: la media de un grupo
+corre varias veces su propia mediana, asi que ordenar por media ordena las
+familias por quien sufrio el peor evento y no por quien es persistentemente
+critico. La corrida completa anterior, ordenada por media, dejo los tres
+niveles inferiores dentro del 6.5% entre si mientras la mediana los ordenaba
+al reves -- prueba directa de que la media no soportaba la afirmacion
+ordinal. La seccion 23.1 verifica que el orden nuevo si la soporte.
 
 El acumulado se toma aqui sobre TODAS las filas (no solo la ventana futura),
 coherente con el modelo de entrega de la seccion 22.
@@ -1601,17 +1618,110 @@ riesgo = asignar_nombres_de_riesgo(
     labels_final_raw,
     perfil_vanos["UITI_VANO_acumulado"].to_numpy(),
     nombres=NOMBRES_RIESGO,
+    estadistico=ESTADISTICO_DE_RIESGO,
 )
 labels_final = riesgo["labels"]
 nombres_por_grupo = riesgo["nombres"]
 perfil_vanos["grupo"] = labels_final
 perfil_vanos["riesgo"] = [nombres_por_grupo[g] for g in labels_final]
 
-print("Grupos renombrados por UITI_VANO acumulado medio (ascendente):")
+print(f"Grupos renombrados por UITI_VANO acumulado ({ESTADISTICO_DE_RIESGO}, ascendente):")
 print(riesgo["resumen"].to_string(index=False))
 print()
 print("Mapeo de ids crudos de KMeans -> id ordinal de riesgo:", riesgo["mapeo"])
+'''
 
+_MD_ORDER_CHECK = '''\
+### 23.1 El orden entregado se VERIFICA, no se asume
+
+Nombrar los niveles `Bajo..Alto` es una afirmacion ordinal sobre criticidad.
+Esa afirmacion la produjo UNA estadistica (la mediana de `UITI_VANO`
+acumulado). Si el orden solo existe bajo esa estadistica y se cae bajo la
+media o bajo el numero de eventos, entonces el vocabulario es un artefacto
+de la clave de ordenamiento y no una propiedad de las familias -- y quien
+actue sobre el estaria priorizando mal.
+
+`verificar_orden_de_riesgo` contrasta el orden entregado contra tres
+criterios independientes y marca `monotono` cuando el criterio COINCIDE en
+que los niveles estan ordenados. Un solo criterio disidente hunde el
+veredicto global, a proposito.
+
+Esto no es hipotetico: en la corrida completa anterior, ordenada por MEDIA,
+los tres niveles inferiores quedaron dentro del 6.5% entre si, la mediana
+los ordenaba al reves y el conteo de eventos ponia `Bajo` por encima de
+`Alto`. Por eso el orden ahora se calcula por mediana y se somete a esta
+verificacion antes de guardar nada.
+'''
+
+_CODE_ORDER_CHECK = '''\
+verificacion_orden = verificar_orden_de_riesgo(
+    labels_final,
+    {
+        "UITI acumulado (mediana)": (perfil_vanos["UITI_VANO_acumulado"].to_numpy(), "mediana"),
+        "UITI acumulado (media)": (perfil_vanos["UITI_VANO_acumulado"].to_numpy(), "media"),
+        "numero de eventos (mediana)": (perfil_vanos["n_eventos"].to_numpy(), "mediana"),
+    },
+)
+# Un criterio constante no contradice el orden, pero tampoco lo respalda: contarlo
+# como apoyo inflaria la evidencia. Se exige que los tres COINCIDAN y que los tres
+# aporten informacion.
+ORDEN_VERIFICADO = bool(
+    verificacion_orden.attrs["todos_monotonos"]
+    and not verificacion_orden.attrs["criterios_sin_informacion"]
+)
+
+print("Verificacion del orden de riesgo entregado, criterio por criterio:")
+for _, fila in verificacion_orden.iterrows():
+    if not fila["informativo"]:
+        marca = "SIN INFO"
+    elif fila["monotono"]:
+        marca = "COINCIDE"
+    else:
+        marca = "CONTRADICE"
+    valores = ", ".join(f"{v:.2f}" for v in fila["valores_por_grupo"])
+    print(f"  [{marca:>10}] {fila['criterio']:<28} valores por nivel = [{valores}]")
+    print(f"               orden inducido = {fila['orden_inducido']}  "
+          f"kendall_tau = {fila['kendall_tau']:.4f}")
+print()
+
+if ORDEN_VERIFICADO:
+    print("VEREDICTO DEL ORDEN: los tres criterios coinciden en que los niveles estan "
+          "ordenados. El vocabulario Bajo..Alto es una propiedad de las familias, no de "
+          "la clave de ordenamiento, y se puede entregar como estratificacion.")
+else:
+    disidentes = verificacion_orden.attrs["criterios_disidentes"]
+    sin_info = verificacion_orden.attrs["criterios_sin_informacion"]
+    print(f"VEREDICTO DEL ORDEN: NO se sostiene. Criterio(s) que contradicen el orden: "
+          f"{disidentes}. Criterio(s) sin informacion (constantes entre niveles, no "
+          f"respaldan nada): {sin_info}.")
+    print("Lectura honesta: el orden existe bajo la clave con la que se construyo, pero no "
+          "sobrevive a los demas criterios, asi que los nombres NO describen una "
+          "estratificacion de criticidad. Se reportan igual, marcados como no verificados, "
+          "en vez de presentarlos como niveles accionables.")
+
+# Tamano de cada nivel: una estratificacion donde un nivel concentra a la mayoria
+# de la flota no es accionable aunque el orden se sostenga.
+_tamanos = riesgo["resumen"].set_index("nombre")["n_vanos"]
+_fraccion_mayor = float(_tamanos.max()) / float(_tamanos.sum())
+print()
+print("Tamano por nivel:", {k: int(v) for k, v in _tamanos.items()})
+print(f"  el nivel mas grande concentra el {100 * _fraccion_mayor:.1f}% de los vanos")
+if _fraccion_mayor > 0.5:
+    print("  AVISO: un solo nivel concentra mas de la mitad de la flota -- aunque el orden "
+          "se sostenga, eso estratifica poco en la practica.")
+'''
+
+_MD_SAVE_MODEL = '''\
+### 23.2 Guardado del modelo de entrega
+
+El checkpoint guarda pesos, features, adyacencia, indice de aristas,
+hiperparametros, centroides de KMeans YA REORDENADOS por riesgo, el mapeo de
+nombres y el resultado de la verificacion de orden -- de modo que otro
+cuaderno pueda cargarlo, asignar el nivel de un vano nuevo, y saber si ese
+nivel esta verificado o no, sin repetir nada de este cuaderno.
+'''
+
+_CODE_SAVE_MODEL = '''\
 # El centroide tambien se reordena, para que el checkpoint asigne el mismo
 # nivel de riesgo que este cuaderno al aplicarse en otro lado.
 centroides_ordenados = np.zeros_like(final_kmeans.cluster_centers_)
@@ -1641,6 +1751,9 @@ guardar_modelo_gated(
         "K_ENTREGA": K_ENTREGA,
         "K_ESTABLE": K_ESTABLE,
         "nombres_riesgo": nombres_por_grupo,
+        "estadistico_de_riesgo": ESTADISTICO_DE_RIESGO,
+        "orden_verificado": ORDEN_VERIFICADO,
+        "criterios_disidentes": list(verificacion_orden.attrs["criterios_disidentes"]),
         "centroides_kmeans": centroides_ordenados,
         "feature_mean": feature_mean_all,
         "feature_std": feature_std_all,
@@ -2000,6 +2113,10 @@ def build_notebook() -> nbformat.NotebookNode:
         _cell("code", _CODE_REFIT_ALL),
         _cell("markdown", _MD_RISK_NAMES),
         _cell("code", _CODE_RISK_NAMES),
+        _cell("markdown", _MD_ORDER_CHECK),
+        _cell("code", _CODE_ORDER_CHECK),
+        _cell("markdown", _MD_SAVE_MODEL),
+        _cell("code", _CODE_SAVE_MODEL),
         _cell("markdown", _MD_GROUP_GRAPHS),
         _cell("code", _CODE_GROUP_GRAPHS),
         _cell("code", _CODE_GROUP_GRAPHS_FIGURE),
