@@ -46,6 +46,9 @@ papermill  # parametrized notebook execution -- used by /experimento-kaggle's sm
 # === Testing ===
 pytest
 
+# === Kaggle experiment CLI ===
+kaggle  # used by /experimento-kaggle's auth/config + push/status/output commands
+
 # === Graph Visualization ===
 networkx
 pyvis

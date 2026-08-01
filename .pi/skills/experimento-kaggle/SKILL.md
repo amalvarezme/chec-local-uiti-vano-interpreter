@@ -33,4 +33,9 @@ directly; do not duplicate its logic here.
   approval — separate from the notebook-approval gate. See the canonical skill's Dataset
   Transport section for which datasets each family needs; do not duplicate slugs or file
   lists here.
+- Kaggle package install, credential presence check, the interactive Auth & Config flow
+  (token placement instructions, resolving the real account username from the CLI's own
+  config, the auth liveness check, and the full-mode accelerator prompt) live only in the
+  canonical skill's Execution Step 4 — read and follow it there; do not duplicate its
+  commands here.
 - CLI command reference: `.claude/skills/experimento-kaggle/references/kaggle-cli-notes.md`.

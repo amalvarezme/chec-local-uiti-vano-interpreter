@@ -289,6 +289,144 @@ def test_notebook_methodology_order_and_metric():
     assert "adjusted_rand_score" in full_source
 
 
+def test_credentials_hard_rule_still_strict():
+    """The credential Hard Rule must not be weakened by the new interactive
+    auth/config flow: it must still forbid touching/requesting/storing
+    credentials, plus explicitly forbid pasting the key in chat, printing/
+    reading kaggle.json directly, and running a command that takes the
+    secret as a shell argument."""
+    text = _read(SKILL_MD)
+
+    assert re.search(r"never touch, request, or store the user.s kaggle credentials", text, re.IGNORECASE)
+    assert re.search(r"never ask the user to paste", text, re.IGNORECASE)
+    assert re.search(r"never (print|read).{0,60}kaggle\.json", text, re.IGNORECASE)
+    assert re.search(r"shell (argument|history)", text, re.IGNORECASE)
+
+
+def test_env_var_credential_check_is_presence_only():
+    """KAGGLE_KEY must only ever be presence-checked (e.g. `[ -n "$KAGGLE_KEY" ]`),
+    never echoed/printed — a gap the security-focused verify pass flagged as a
+    real leak vector distinct from the kaggle.json-reading prohibition."""
+    text = _read(SKILL_MD)
+
+    assert re.search(r"never.{0,10}(echo|printenv)", text, re.IGNORECASE)
+    assert "KAGGLE_KEY" in text
+    assert re.search(r"\[\s*-n\s*\"?\$KAGGLE_KEY\"?\s*\]", text), (
+        "SKILL.md must give a concrete presence-only example for KAGGLE_KEY"
+    )
+
+
+def test_auth_config_interactive_flow_documented():
+    """SKILL.md must document the interactive auth/config flow: how to get
+    a token from kaggle.com, a `!`-prefixed user-run placement command, and
+    an explicit stop-and-wait for confirmation."""
+    text = _read(SKILL_MD)
+
+    assert "kaggle.com/settings" in text
+    assert "Create New Token" in text
+    assert re.search(r"! mkdir -p ~/\.kaggle", text)
+    assert "chmod 600" in text
+    assert re.search(r"stop.{0,60}wait|wait.{0,60}confirmation", text, re.IGNORECASE | re.DOTALL)
+
+
+def test_username_resolution_via_config_view_documented():
+    """SKILL.md must document resolving the real Kaggle username from
+    `kaggle config view` (never asking the user, never reading kaggle.json
+    directly), and using it to replace kernel-metadata.json placeholders."""
+    text = _read(SKILL_MD)
+
+    assert "kaggle config view" in text
+    assert re.search(r"never (ask|prompt).{0,60}username", text, re.IGNORECASE)
+    assert re.search(r"never read.{0,45}kaggle\.json.{0,5}directly", text, re.IGNORECASE)
+    assert "REPLACE_WITH_KAGGLE_USERNAME" in text
+
+
+def test_auth_liveness_check_documented():
+    """SKILL.md must document a lightweight liveness check that the token
+    actually authenticates, run before any real push."""
+    text = _read(SKILL_MD)
+
+    assert "kaggle datasets list -m" in text
+    assert re.search(r"invalid|expired", text, re.IGNORECASE)
+
+
+def test_accelerator_choice_is_interactive():
+    """SKILL.md must document asking the user (a real question, not CLI-
+    derived) which accelerator to use for full-mode runs."""
+    text = _read(SKILL_MD)
+
+    assert re.search(r"ask the user.{0,80}accelerator", text, re.IGNORECASE | re.DOTALL)
+    assert "kaggle-cli-notes.md" in text
+
+
+def test_pip_install_kaggle_step_documented():
+    """SKILL.md must document that the agent installs the `kaggle` package
+    itself (software, not a secret) when missing."""
+    text = _read(SKILL_MD)
+
+    assert "pip install kaggle" in text
+    assert re.search(r"software.{0,20}not.{0,20}secret|not a secret", text, re.IGNORECASE)
+
+
+def test_placeholder_username_substitution_documented():
+    """SKILL.md must document replacing REPLACE_WITH_KAGGLE_USERNAME with
+    the resolved username before any push, as an explicit step."""
+    text = _read(SKILL_MD)
+
+    assert "REPLACE_WITH_KAGGLE_USERNAME" in text
+    assert re.search(
+        r"replace.{0,120}REPLACE_WITH_KAGGLE_USERNAME.{0,160}(kaggle config view|resolved username)",
+        text,
+        re.IGNORECASE | re.DOTALL,
+    )
+
+
+def test_kaggle_config_view_documented_in_cli_notes():
+    """references/kaggle-cli-notes.md must document `kaggle config view`
+    and the liveness check command, separate from SKILL.md's step summary."""
+    text = _read(CLI_NOTES)
+
+    assert "kaggle config view" in text
+    assert "kaggle datasets list -m" in text
+
+
+def test_requirements_includes_kaggle_package():
+    """requirements.txt must list the `kaggle` package (missing today)."""
+    req_path = PROJECT_ROOT / "requirements.txt"
+    text = _read(req_path)
+
+    assert re.search(r"(?m)^kaggle(\s|$|#)", text), "requirements.txt must list 'kaggle' as its own entry"
+
+
+def test_kaggle_package_import_succeeds():
+    """The `kaggle` package must actually be installed and importable in
+    this environment (not just documented) — real subprocess check,
+    mirroring the existing guard-probe pattern."""
+    result = subprocess.run(
+        [sys.executable, "-c", "import kaggle"],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+
+    assert result.returncode == 0, (
+        "`kaggle` package must be importable after /experimento-kaggle's auth/config "
+        f"step installs it.\nstderr:\n{result.stderr}"
+    )
+
+
+def test_pi_adapter_thin_after_auth_config_addition():
+    """.pi adapter may reference the new Auth & Config step by name, but
+    must not duplicate its concrete commands."""
+    text = _read(PI_SKILL_MD)
+
+    for needle in ("mkdir -p ~/.kaggle", "kaggle config view", "kaggle datasets list -m"):
+        assert needle not in text, f"'.pi' adapter must not duplicate auth/config command {needle!r}"
+
+    assert re.search(r"execution step 4|auth.{0,10}config", text, re.IGNORECASE)
+
+
 def test_notebook_report_cell_states_improvement_against_baseline():
     """The report cell must print this run's `mae_original` next to the
     pinned baseline (126.402) and state improved/not, per spec's 'Full run

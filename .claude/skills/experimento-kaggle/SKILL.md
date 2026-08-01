@@ -45,9 +45,19 @@ Invocation: `/experimento-kaggle <descripción del experimento>`
 - Build the notebook with two explicit, parametrized modes: `smoke` (tiny — few epochs/trials,
   small data subsample, must finish in well under a minute) and `full`. Never trust a bare exit
   code as success; read the actual printed output/metrics.
-- Never touch, request, or store the user's Kaggle credentials. Only check whether
-  `~/.kaggle/kaggle.json` or `KAGGLE_USERNAME`/`KAGGLE_KEY` exist; if not, stop and tell the
-  user exactly how to place their own token, then wait.
+- Never touch, request, or store the user's Kaggle credentials. Never ask the user to paste
+  their API key/token into the chat. Never print or read the contents of `~/.kaggle/kaggle.json`
+  directly — the account username is resolved only via `kaggle config view` (Execution Step 4),
+  which reports the non-secret `username` and never the key. Never execute, on the user's
+  behalf, any command that receives the secret as a shell argument — that would leak it into
+  shell history; token placement (`mkdir`/`mv`/`chmod`) is always run by the user themselves,
+  with this harness's `!` prefix. Only check whether `~/.kaggle/kaggle.json` or
+  `KAGGLE_USERNAME`/`KAGGLE_KEY` exist; if not, stop and tell the user exactly how to place
+  their own token (Execution Step 4), then wait. When checking env vars, test presence only —
+  e.g. `[ -n "$KAGGLE_KEY" ]` or Python's `"KAGGLE_KEY" in os.environ` — and never `echo`,
+  `printenv`, or otherwise print `$KAGGLE_KEY`'s value; that would leak the secret into the
+  transcript exactly like reading `kaggle.json` would. `KAGGLE_USERNAME` alone is not secret
+  and may be read/printed if useful.
 - Prefer an already-connected Kaggle MCP tool in this session (`ToolSearch("kaggle")`) if one
   exists. Otherwise use the official `kaggle` CLI/Python package. Never install or recommend an
   unverified third-party MCP server without telling the user it's third-party and getting
@@ -72,12 +82,39 @@ Full CLI commands, `kernel-metadata.json` schema, and accelerator options are in
    with the `smoke`/`full` split, plus its `kernel-metadata.json` referencing those datasets.
 3. STOP again: present the notebook path and what it does; require explicit approval before
    any push. Revise and re-present on any requested change — never proceed on unclear approval.
-4. Verify Kaggle auth is configured; if missing, stop and instruct the user.
+4. **Auth & Config** — resolve credentials and run preferences before any push:
+   a. Ensure the `kaggle` package is importable: `python -c "import kaggle"`. If it fails,
+      install it yourself with `pip install kaggle` — this installs software, not a secret, so
+      the agent may run it directly — and make sure `kaggle` is listed in `requirements.txt`.
+   b. Check whether `~/.kaggle/kaggle.json` exists, or `KAGGLE_USERNAME`/`KAGGLE_KEY` are set
+      (presence only — see the Hard Rule above for the safe way to test `KAGGLE_KEY` without
+      printing it). If it does **not**: explain, step by step, how the user gets their own
+      token —
+      `kaggle.com/settings` → API → "Create New Token" — then suggest (never run yourself) a
+      user-run command such as `! mkdir -p ~/.kaggle && mv ~/Downloads/kaggle.json
+      ~/.kaggle/kaggle.json && chmod 600 ~/.kaggle/kaggle.json`, using this harness's `!` prefix
+      so the *user* runs it. STOP and wait for the user's confirmation before continuing.
+   c. If credentials exist: run `kaggle config view` (never read `~/.kaggle/kaggle.json` directly
+      — that command never prints the key, only the non-secret `username`) to (i) confirm the
+      config is readable and (ii) extract the real `username`. Use that resolved
+      username to replace every `REPLACE_WITH_KAGGLE_USERNAME` placeholder in this experiment's
+      `kernel-metadata.json`/`dataset-metadata.json` before any push, reusing exactly the
+      `kaggle config view` output — never ask the user for their username if the CLI already
+      has it configured, and never leave the placeholder in a pushed file.
+   d. Run a lightweight liveness check that the token actually authenticates — e.g.
+      `kaggle datasets list -m 2>&1 | head -3` — before attempting any real push. An auth error
+      here means an invalid or expired token; if it fails, report the raw error verbatim (never
+      guess the cause) and ask the user to verify or regenerate their token at
+      `kaggle.com/settings` — do not proceed to push.
+   e. For `full` mode, ask the user (a real question — an accelerator preference, not something
+      the CLI already knows) which accelerator to request, from the options listed in
+      `references/kaggle-cli-notes.md` (`NvidiaTeslaT4`, `NvidiaTeslaP100`, `NvidiaTeslaA100`,
+      `NvidiaL4`, `NvidiaH100`, or none), then wait for the answer.
 5. `kaggle kernels push -p <folder>` in `smoke` mode; poll `kaggle kernels status <kernel>`
    until terminal; pull with `kaggle kernels output <kernel> -p <dir> -o`; verify the real
    smoke output before ever pushing `full`.
-6. Only after a verified-passing smoke run, push `full` (optionally `--accelerator`/`-t`);
-   poll status; pull outputs.
+6. Only after a verified-passing smoke run, push `full` with the accelerator chosen in Step 4e
+   (optionally `-t` for a timeout); poll status; pull outputs.
 7. Report the diagram, notebook path, kernel slug, every status transition observed, and the
    final outputs location.
 

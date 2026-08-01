@@ -15,6 +15,28 @@ Auth: user places their own API token at `~/.kaggle/kaggle.json` (downloaded fro
 kaggle.com/settings → API → "Create New Token"), or sets `KAGGLE_USERNAME`/`KAGGLE_KEY` env
 vars. Never generate, request, or store this token on the user's behalf.
 
+### Verifying config & resolving username
+
+```bash
+kaggle config view
+```
+
+Prints only the non-secret parts of the active config (notably `- username: <name>`) — it
+never prints the API key. Use its `username` value to fill any `REPLACE_WITH_KAGGLE_USERNAME`
+placeholder in `kernel-metadata.json`/`dataset-metadata.json` before pushing. Never read
+`~/.kaggle/kaggle.json` directly to get this value.
+
+A lightweight liveness check that the token actually authenticates (not just that the file
+exists):
+
+```bash
+kaggle datasets list -m 2>&1 | head -3
+```
+
+Run this once before the first real push in a session; an auth error here (invalid/expired
+token) means push will fail too — report it verbatim and ask the user to regenerate their
+token, rather than guessing the cause.
+
 ## `kernel-metadata.json` (lives alongside the notebook file)
 
 ```json
