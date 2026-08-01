@@ -17,7 +17,7 @@ optuna
 
 # === Visualization ===
 plotly
-umap-learn  # 2D projection of MGCECDL embeddings -- notebooks/project_flow/11_mgcecdl_regression_budget.ipynb
+umap-learn  # 2D projection of MGCECDL embeddings -- no in-repo consumer since notebooks 11/12 were removed
 
 # === Data I/O ===
 openpyxl

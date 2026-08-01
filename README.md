@@ -555,7 +555,7 @@ Estos notebooks soportan exploración, modelado o replicación. **No** son el pu
 
 Resumen detallado de propósito, entradas/salidas, orden real de dependencias (con una corrección al orden lineal implícito arriba) y hallazgos por notebook: **[`docs/notebooks-project-flow.md`](docs/notebooks-project-flow.md)** (cubre los notebooks 01-09).
 
-Además, `notebooks/project_flow/10_uiti_vano_kmeans.ipynb` es un notebook exploratorio independiente
+Además, `notebooks/project_flow/01.2_uiti_vano_kmeans.ipynb` es un notebook exploratorio independiente
 (no forma parte de la cadena de dependencias 01-09 ni alimenta `/report`): agrupa vanos por UITI
 acumulado y número de eventos con KMeans en espacio log (4 grupos, preprocesamiento MinMax), con KDE
 por variable y un scatter interactivo en Plotly etiquetado por vano/circuito/grupo.

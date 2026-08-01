@@ -1,7 +1,8 @@
 # UITI_VANO Regression Baseline — `uiti-vano-regression` Experiment Family
 
 Pinned comparison floor for any Kaggle run of this family. Source: local notebooks
-`02.1_mgcecdl_regression_embeddings.ipynb` and `10_uiti_vano_kmeans.ipynb`. `MGCECDLRegressor`,
+`02.1_mgcecdl_regression_embeddings.ipynb` (removed from `notebooks/project_flow/`; recoverable from
+git history) and `01.2_uiti_vano_kmeans.ipynb` (formerly `10_uiti_vano_kmeans.ipynb`). `MGCECDLRegressor`,
 `MGCECDLRegressionLoss`, and `KernelDensityWeightedMSELoss` live on `main` at
 `src/chec_impacto/models/mgcecdl.py` (originally authored in worktree
 `worktree-agent-a4051edb7e841e0f9`, now landed).
