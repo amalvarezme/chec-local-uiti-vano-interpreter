@@ -164,7 +164,7 @@ databricks workspace mkdirs /Workspace/Users/<userName>/databricks-integration/p
 databricks workspace import /Workspace/Users/<userName>/databricks-integration/project_flow/01.2_uiti_vano_kmeans --file <staged_copy> --format JUPYTER --overwrite -p <profile>
 ```
 
-Then check the invariant. **Scope the hard assertion to `01.2` itself**, and treat anything else in the folder as informational — the user may well be editing a sibling notebook in Jupyter while this command runs, and a whole-folder check reports that as if this command had caused it (confirmed empirically: a run tripped on ` M 01.3_uiti_vano_trayectorias.ipynb`, which was the user's own concurrent work):
+Then check the invariant. **Scope the hard assertion to `01.2` itself**, and treat anything else in the folder as informational — the user may well be editing a sibling notebook in Jupyter while this command runs, and a whole-folder check reports that as if this command had caused it (confirmed empirically: a run tripped on ` M 01.3_uiti_vano_trayectorias_circuitos.ipynb`, which was the user's own concurrent work):
 ```
 test -z "$(git status --porcelain notebooks/project_flow/01.2_uiti_vano_kmeans.ipynb)" && echo LIMPIO || echo MODIFICADO
 git status --porcelain notebooks/project_flow/
