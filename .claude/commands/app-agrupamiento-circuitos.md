@@ -4,7 +4,7 @@ description: Publica el cuaderno 01.2 (agrupamiento de circuitos y de vanos) com
 
 Follow this exact sequence when `/app-agrupamiento-circuitos` is invoked. It publishes `notebooks/project_flow/01.2_uiti_vano_kmeans.ipynb` as a browsable dashboard at a stable URL, and it is **self-healing**: it inspects the target workspace first and creates whatever is missing, so it works against a workspace that has never been touched as well as against one that already has everything.
 
-**Why this is not a Lakeview dashboard.** `/deploy-databricks-dashboard` publishes `circuit_explorer_dashboard.lvdash.json`: SQL datasets plus declarative widgets. `01.2` is a different animal — it fits K-Means with scikit-learn (8 coordinate spaces, frozen over the full window), builds 22 Plotly traces per board, and drives them from a hand-written HTML+JS panel (cells 6 and 13). Lakeview executes neither Python nor arbitrary JS, so porting `01.2` would mean rewriting the analysis and losing the Voronoi partition contours, the marginal KDEs, the violins and the panel. This command therefore uses **Databricks Apps**, which hosts arbitrary Python web servers, and serves the notebook's own HTML verbatim.
+**Why this is not a Lakeview dashboard.** `/deploy-databricks-dashboard` publishes `circuit_explorer_dashboard.lvdash.json`: SQL datasets plus declarative widgets. `01.2` is a different animal — it fits K-Means with scikit-learn (8 coordinate spaces, frozen over the full window), builds 23 Plotly traces on the circuit board and 18 on the vano board, and drives them from a hand-written HTML+JS panel (cells 6 and 13). Lakeview executes neither Python nor arbitrary JS, so porting `01.2` would mean rewriting the analysis and losing the Voronoi partition contours, the marginal KDEs, the violins and the panel. This command therefore uses **Databricks Apps**, which hosts arbitrary Python web servers, and serves the notebook's own HTML verbatim.
 
 **What this command does NOT need.** Verified by reading the notebook: `01.2` reads exactly one file, `data/Indicadores_vano_v3.csv`, and imports neither `chec_impacto` nor `chec_local_interpreter`. It needs **no** Delta table, **no** view, **no** Lakeview dashboard, **no** shapefile, **no** model checkpoint, and **no** source package. Do not create or check any of those here — if they are absent, that is not this command's problem. `/deploy-databricks-dashboard` owns them.
 
@@ -90,7 +90,7 @@ If it is tiny, run `git lfs pull` first.
 
 **Hard invariant**: the modified notebook is a COPY in the scratch directory. `git status --porcelain notebooks/project_flow/` MUST be empty when this step ends.
 
-**Strip every code cell's `outputs` and `execution_count` first.** The repo file is 9.0 MB on disk, almost all of it embedded `text/html` from the last local run; stripped, the staged copy is **0.07 MB** (measured). `databricks workspace import --format JUPYTER` enforces a 10 MB limit, so this is not optional hygiene — it is what keeps the import under the ceiling.
+**Strip every code cell's `outputs` and `execution_count` first.** The repo file is 9.4 MB on disk, almost all of it embedded `text/html` from the last local run; stripped, the staged copy is **0.07 MB** (measured). `databricks workspace import --format JUPYTER` enforces a 10 MB limit, so this is not optional hygiene — it is what keeps the import under the ceiling.
 
 Four edits, everything else byte-identical. Assert each match is unique and fail loudly if not — a silently-skipped edit produces a notebook that fails deep inside the job.
 

@@ -6,7 +6,7 @@ Follow this exact sequence when `/app-trayectorias-circuitos` is invoked. It pub
 
 This is the sibling of `/app-agrupamiento-circuitos`, which does the same for `01.2`. The two are **independent apps** with independent HTML artifacts — deploying one never touches the other. Read that command when something here is unclear about the shared mechanics; only the differences are spelled out below.
 
-**Why Databricks Apps and not Lakeview.** Same reason as `01.2`: `01.3` fits K-Means with scikit-learn over 8 coordinate spaces, builds 18 Plotly traces including a geographic map, and drives everything from a hand-written HTML+JS panel (cell 7). Lakeview executes neither Python nor arbitrary JS.
+**Why Databricks Apps and not Lakeview.** Same reason as `01.2`: `01.3` fits K-Means with scikit-learn over 8 coordinate spaces, builds 25 Plotly traces including a geographic map, and drives everything from a hand-written HTML+JS panel (cell 7). Lakeview executes neither Python nor arbitrary JS.
 
 ## What `01.3` needs that `01.2` did NOT
 
