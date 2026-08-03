@@ -266,16 +266,32 @@ def test_generator_runs_temporal_block_diagnostic_a6_as_secondary(notebook):
 # ---------------------------------------------------------------------------
 
 
-def test_generator_labels_exposure_severity_columns_adjacent_to_value(notebook):
+def test_generator_delegates_exposure_severity_labelling_to_tested_library(notebook):
+    """The exposure/severity family lives in the library, not in cell text.
+
+    This test used to assert that the literal "CAPACIDAD_NOMINAL" appeared
+    somewhere in the notebook source. It stayed green while the annotation
+    never reached a single output row, because the cell hung the label off a
+    `_var` column `agregar_borda` does not emit. Presence of a string in a
+    cell is not evidence that the behaviour works; the behaviour is now
+    covered by tests/test_mil_ranking_borda.py against the real functions.
+    """
+    from chec_impacto.interpretability.mil_vano_ventana import (
+        COLUMNAS_EXPOSICION_SEVERIDAD,
+        construir_ranking_borda,
+    )
+
     source = _all_code_source(notebook)
-    assert "CAPACIDAD_NOMINAL" in source
-    assert "PROMEDIO_KWH_TRF" in source
-    assert re.search(r"exposici[oó]n.*severidad|severidad.*exposici[oó]n", source, re.IGNORECASE)
-    # CNT_VN is exempt from the exposure/severity family: the tuple of columns that
-    # DOES carry the label must not include it.
-    tuple_match = re.search(r"COLUMNAS_EXPOSICION_SEVERIDAD\s*=\s*\(([^)]*)\)", source)
-    assert tuple_match, "expected a COLUMNAS_EXPOSICION_SEVERIDAD tuple defining the family"
-    assert "CNT_VN" not in tuple_match.group(1)
+    assert "construir_ranking_borda" in source, (
+        "the notebook must delegate the SHAP -> Borda glue to the tested library function"
+    )
+    assert "nota_exposicion_severidad" in source, (
+        "the notebook must surface the exposure/severity annotation in its output"
+    )
+    # CNT_VN is exempt from the family (D6): it answers to COD_EQ_PROTEGE.
+    assert "CNT_VN" not in COLUMNAS_EXPOSICION_SEVERIDAD
+    assert {"CAPACIDAD_NOMINAL", "PROMEDIO_KWH_TRF"} == set(COLUMNAS_EXPOSICION_SEVERIDAD)
+    assert callable(construir_ranking_borda)
 
 
 def test_generator_states_observed_n_predicted_u_boundary(notebook):

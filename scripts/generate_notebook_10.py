@@ -842,17 +842,14 @@ puntaje, nunca como pie de pagina. `CNT_VN` NO pertenece a esa familia.
 '''
 
 _CODE_SHAP = '''\
-from chec_impacto.interpretability.circuit_analysis import KernelShapTopVarsExtractor, agregar_borda
+from chec_impacto.interpretability.circuit_analysis import KernelShapTopVarsExtractor
+from chec_impacto.interpretability.mil_vano_ventana import construir_ranking_borda
 
-COLUMNAS_EXPOSICION_SEVERIDAD = ("CAPACIDAD_NOMINAL", "PROMEDIO_KWH_TRF")
-NOTA_EXPOSICION_SEVERIDAD = "exposicion/severidad por construccion, no causa accionable"
-
-
-def etiqueta_exposicion_severidad(nombre_variable):
-    # CNT_VN queda deliberadamente fuera de esta familia (D6, spec
-    # criticality-assignment-from-014): responde a COD_EQ_PROTEGE, no a exposicion.
-    return NOTA_EXPOSICION_SEVERIDAD if nombre_variable in COLUMNAS_EXPOSICION_SEVERIDAD else ""
-
+# La cola SHAP -> Borda vive en la libreria, con tests
+# (tests/test_mil_ranking_borda.py). Estuvo aqui como codigo suelto de celda y
+# acumulo dos defectos que solo se ejecutaban con mode='full': tratar la lista
+# que devuelve `calcular_top_vars` como si fuera un dict, y colgar la nota de
+# exposicion/severidad de una columna `_var` que `agregar_borda` no emite.
 
 TOP_N_VANOS = 97
 
@@ -879,17 +876,12 @@ if PROCEDER_CON_ENTRENAMIENTO_COMPLETO and mode == "full":
     extractor = KernelShapTopVarsExtractor(predictor_final, X_bag_completo, features_inst)
     top_vars_por_bolsa = extractor.calcular_top_vars(indices_muestra)
 
-    borda_frame = pd.DataFrame({
-        "CIRCUITO": bag_index.keys["CIRCUITO"].to_numpy()[indices_muestra],
-        "FID_VANO": bag_index.keys["FID_VANO"].to_numpy()[indices_muestra],
-        "VENTANA": bag_index.keys["VENTANA"].to_numpy()[indices_muestra],
-        "_TOP_VARS": [top_vars_por_bolsa.get(int(i), {}) for i in indices_muestra],
-    })
-    ranking_borda = agregar_borda(borda_frame, group_cols=["CIRCUITO", "FID_VANO", "VENTANA"])
-    ranking_borda["nota_exposicion_severidad"] = ranking_borda.get("_var", pd.Series(dtype=object)).map(
-        etiqueta_exposicion_severidad
-    )
+    ranking_borda = construir_ranking_borda(bag_index.keys, indices_muestra, top_vars_por_bolsa)
+    print(f"Ranking Borda: {len(ranking_borda)} filas (grupo x variable) "
+          f"sobre {len(indices_muestra)} bolsas muestreadas.")
     print(ranking_borda.head(15))
+    n_anotadas = int((ranking_borda["nota_exposicion_severidad"] != "").sum())
+    print(f"Filas marcadas como exposicion/severidad por construccion: {n_anotadas}")
 else:
     print("SHAP OMITIDO -- solo corre con mode='full' y la compuerta de costo en GO.")
 '''

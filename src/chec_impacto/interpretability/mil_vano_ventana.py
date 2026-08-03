@@ -51,6 +51,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import f1_score
 from sklearn.model_selection import StratifiedGroupKFold
 
+from chec_impacto.interpretability.circuit_analysis import agregar_borda
 from chec_impacto.interpretability.mgcecdl_graph import (
     estadistico_colapso,
     grafo_reconstruido_por_grupo,
@@ -586,3 +587,89 @@ def predict_fn(
     fused_probs = distribucion_suave(n_obs, u, model.geometria)  # (n, 4)
     predicted_classes, _ = asignar_clase(n_obs, u, model.geometria)
     return {"fused_probs": fused_probs, "predicted_classes": predicted_classes}
+
+
+# ---------------------------------------------------------------------------
+# Kernel SHAP -> Borda ranking (D7)
+# ---------------------------------------------------------------------------
+
+# Variables that are exposure/severity BY CONSTRUCTION: a high relevance on
+# them describes how much load sits behind the vano, not an actionable cause.
+# CNT_VN is deliberately excluded (D6, spec `criticality-assignment-from-014`):
+# it answers to COD_EQ_PROTEGE, not to exposure.
+COLUMNAS_EXPOSICION_SEVERIDAD: tuple[str, ...] = ("CAPACIDAD_NOMINAL", "PROMEDIO_KWH_TRF")
+NOTA_EXPOSICION_SEVERIDAD = "exposicion/severidad por construccion, no causa accionable"
+
+_COLUMNAS_RANKING_BORDA = ("_var", "_borda", "nota_exposicion_severidad")
+
+
+def nota_exposicion_severidad(nombre_variable: str) -> str:
+    """Empty string for actionable variables, the standing caveat otherwise."""
+    return NOTA_EXPOSICION_SEVERIDAD if nombre_variable in COLUMNAS_EXPOSICION_SEVERIDAD else ""
+
+
+def construir_ranking_borda(
+    keys: pd.DataFrame,
+    indices_muestra: Sequence[int] | np.ndarray,
+    top_vars_por_bolsa: Sequence[Mapping[str, float]],
+    *,
+    group_cols: Sequence[str] = ("CIRCUITO", "FID_VANO", "VENTANA"),
+    top_k: int = 20,
+) -> pd.DataFrame:
+    """Borda ranking in LONG format, one row per (group, variable).
+
+    `top_vars_por_bolsa` is what `KernelShapTopVarsExtractor.calcular_top_vars`
+    returns: a SEQUENCE aligned positionally with `indices_muestra`, never a
+    mapping keyed by bag index. The length guard below turns that confusion
+    into an immediate error instead of an `AttributeError` deep in a
+    comprehension.
+
+    Long format is deliberate. `agregar_borda` collapses each group into a
+    single `RELEVANCIA_VARS` dict with no `_var` column, which leaves nowhere
+    to hang a per-variable annotation -- the exact reason the exposure/severity
+    note used to come out empty.
+    """
+    indices_muestra = np.asarray(indices_muestra, dtype=int)
+    top_vars_por_bolsa = list(top_vars_por_bolsa)
+    if len(top_vars_por_bolsa) != len(indices_muestra):
+        raise ValueError(
+            "top_vars_por_bolsa debe ser una secuencia alineada posicionalmente con "
+            f"indices_muestra: {len(top_vars_por_bolsa)} relevancias para "
+            f"{len(indices_muestra)} bolsas."
+        )
+
+    group_cols = list(group_cols)
+    faltantes = [c for c in group_cols if c not in keys.columns]
+    if faltantes:
+        raise ValueError(f"keys no tiene las columnas de agrupacion {faltantes}.")
+
+    marco = pd.DataFrame({c: keys[c].to_numpy()[indices_muestra] for c in group_cols})
+    marco["_TOP_VARS"] = top_vars_por_bolsa
+
+    borda = agregar_borda(marco, group_cols=group_cols, top_k=top_k)
+    if borda.empty or "RELEVANCIA_VARS" not in borda.columns:
+        return pd.DataFrame(columns=group_cols + list(_COLUMNAS_RANKING_BORDA))
+
+    filas = []
+    for registro in borda.to_dict("records"):
+        relevancias = registro.get("RELEVANCIA_VARS") or {}
+        grupo = {c: registro[c] for c in group_cols}
+        for var, puntaje in relevancias.items():
+            filas.append(
+                {
+                    **grupo,
+                    "_var": var,
+                    "_borda": float(puntaje),
+                    "nota_exposicion_severidad": nota_exposicion_severidad(var),
+                }
+            )
+
+    if not filas:
+        return pd.DataFrame(columns=group_cols + list(_COLUMNAS_RANKING_BORDA))
+
+    ranking = pd.DataFrame(filas)
+    return ranking.sort_values(
+        group_cols + ["_borda"],
+        ascending=[True] * len(group_cols) + [False],
+        kind="stable",
+    ).reset_index(drop=True)
