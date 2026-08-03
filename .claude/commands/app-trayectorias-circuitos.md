@@ -89,7 +89,7 @@ Uncomment it **and complete it** — that list is wrong for Databricks twice ove
 ValueError: Unsupported subplot type: 'map'
   in /databricks/python/lib/python3.11/site-packages/plotly/_subplots.py
 ```
-Cell 6 builds the map with `specs=[[{}, {'type': 'map'}], ...]` and `go.Scattermap`, the MapLibre trace family that only exists in modern Plotly. Databricks Runtime preinstalls an older Plotly, and a bare `plotly` requirement is **already satisfied** by it, so pip prints nothing and upgrades nothing — note the traceback path is the *system* site-packages, not the pip-installed one. A version floor forces the upgrade. Prefer the floor over `--upgrade`, which would also pull newer pandas/numpy/geopandas and risk breaking something that currently works.
+Cell 6 builds the map with a `{'type': 'map'}` entry in its `specs` grid and `go.Scattermap`, the MapLibre trace family that only exists in modern Plotly. Databricks Runtime preinstalls an older Plotly, and a bare `plotly` requirement is **already satisfied** by it, so pip prints nothing and upgrades nothing — note the traceback path is the *system* site-packages, not the pip-installed one. A version floor forces the upgrade. Prefer the floor over `--upgrade`, which would also pull newer pandas/numpy/geopandas and risk breaking something that currently works.
 
 The repo's own `requirements.txt` pins `plotly` with no floor either, so it cannot be leaned on here.
 
@@ -162,7 +162,7 @@ Submit a serverless job exactly as `/app-agrupamiento-circuitos` section 4 does,
 
 Expect this leg to be slower than `01.2`'s: the job also reads three shapefiles from the Volume through the FUSE mount.
 
-**Verify by content, not by exit code.** Expect **10.47 MB** (measured: 10,978,073 bytes — larger than `01.2`'s 7.4 MB, mostly `GEO_POR_CIRCUITO` at 2.85 MB plus `UITI_VENTANA_VANO` at 2.33 MB on top of plotly.js). Download it and assert (all verified against cell 7, not guessed):
+**Verify by content, not by exit code.** Expect **~10.9 MB** (cell 7's stored output measures 10.98 MB; the app document runs slightly under it because it drops Jupyter's wrapper — the previous 10.47 MB figure predates the two-row layout and the sample counts in the titles). It is larger than `01.2`'s ~7.8 MB, and the split is roughly plotly.js 4.9 MB plus a 6.1 MB `CTX`, of which `geo` is 3.0 MB and `uitiVentana` 2.4 MB. Download it and assert (all verified against cell 7, not guessed):
 - exactly one `id="trayectorias-circuitos"` — that is `DIV_FIGURA`'s value, and it is **not** the same string as the `01.2` app's `agrupamiento-circuitos` div, so a copy-paste of that check would silently pass on the wrong artifact,
 - the panel controls `tr-circuito`, `tr-ventana`, `tr-logx`, `tr-logy`, `tr-prep`, `tr-csv`,
 - `Plotly.newPlot` present,
