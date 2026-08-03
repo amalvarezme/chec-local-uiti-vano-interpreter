@@ -251,13 +251,16 @@ def test_generator_output_path_targets_notebook_10_only():
 
 def test_generator_never_edits_upstream_notebooks_or_variable_selection(tmp_path):
     watched_paths = [
-        "notebooks/project_flow/01.2_uiti_vano_trayectorias_circuitos.ipynb",
+        "notebooks/project_flow/01.2_uiti_vano_kmeans.ipynb",
         "notebooks/project_flow/01.3_uiti_vano_trayectorias_circuitos.ipynb",
         "notebooks/project_flow/01.4_uiti_vano_trayectorias_vano.ipynb",
         "data/Variables_seleccion.xlsx",
     ]
-    existing = [p for p in watched_paths if (REPO_ROOT / p).exists()]
-    assert existing, "expected at least the 01.3/01.4 notebooks to exist in this checkout"
+    # Every watched path must exist: a rename upstream has to fail this test loudly
+    # rather than silently shrink the watch list and leave the file unguarded.
+    missing = [p for p in watched_paths if not (REPO_ROOT / p).exists()]
+    assert not missing, f"watched paths missing from this checkout: {missing}"
+    existing = watched_paths
 
     before = subprocess.run(
         ["git", "diff", "--stat", "--", *existing],
