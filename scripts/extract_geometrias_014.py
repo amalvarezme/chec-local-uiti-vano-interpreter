@@ -30,6 +30,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+from typing import Mapping
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_NOTEBOOK_PATH = (
@@ -71,6 +72,19 @@ def _extraer_bloque_json(html: str, clave: str) -> str:
     raise ValueError(f"No se encontró el cierre del bloque JSON para '{clave}'.")
 
 
+def _sha1_de_geometrias(geometrias: Mapping[str, object]) -> str:
+    """Canonical sha1 over ONLY the `geometrias` block (sorted keys, no
+    whitespace) -- pins the KMeans geometry VALUES themselves, not just that
+    the source notebook stayed unwritten (the sha256-before/after check
+    above already guarantees that, but says nothing about whether a
+    DIFFERENT edit to 01.4 moved the centroids between two extractions).
+    See `chec_impacto.models.criticality_assignment.verificar_sha1_geometrias`,
+    which reads this back and compares it against a pinned expected value.
+    """
+    canonical = json.dumps(geometrias, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha1(canonical.encode("utf-8")).hexdigest()
+
+
 def extraer_geometrias_014(
     notebook_path: str | Path = DEFAULT_NOTEBOOK_PATH,
     output_path: str | Path = DEFAULT_OUTPUT_PATH,
@@ -106,7 +120,11 @@ def extraer_geometrias_014(
     geometrias = json.loads(_extraer_bloque_json(html, "geometrias"))
     grupos = json.loads(_extraer_bloque_json(html, "grupos"))
 
-    payload = {"grupos": grupos, "geometrias": geometrias}
+    payload = {
+        "grupos": grupos,
+        "geometrias": geometrias,
+        "geometrias_sha1": _sha1_de_geometrias(geometrias),
+    }
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(payload), encoding="utf-8")
