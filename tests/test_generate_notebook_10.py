@@ -14,6 +14,7 @@ the apply run that wrote it; that is a manual, user-authorized step.
 from __future__ import annotations
 
 import ast
+import hashlib
 import re
 import subprocess
 import sys
@@ -262,11 +263,15 @@ def test_generator_never_edits_upstream_notebooks_or_variable_selection(tmp_path
     assert not missing, f"watched paths missing from this checkout: {missing}"
     existing = watched_paths
 
-    before = subprocess.run(
-        ["git", "diff", "--stat", "--", *existing],
-        cwd=REPO_ROOT, capture_output=True, text=True, check=True,
-    ).stdout
-    assert before == "", "watched files must already be byte-identical before this test runs"
+    # Compare the files' own bytes before and after, NOT `git diff` against HEAD.
+    # The claim under test is "the generator does not modify these files", which is a
+    # before/after delta. Asserting a clean working tree instead made this test fail
+    # whenever someone had legitimate uncommitted edits to 01.3/01.4 -- observed once
+    # for real, when a concurrent session was editing 01.4 while the suite ran.
+    def _digests() -> dict[str, str]:
+        return {p: hashlib.sha256((REPO_ROOT / p).read_bytes()).hexdigest() for p in existing}
+
+    before = _digests()
 
     out_path = tmp_path / "10_generated_for_test.ipynb"
     subprocess.run(
@@ -275,11 +280,12 @@ def test_generator_never_edits_upstream_notebooks_or_variable_selection(tmp_path
     )
     assert out_path.exists()
 
-    after = subprocess.run(
-        ["git", "diff", "--stat", "--", *existing],
-        cwd=REPO_ROOT, capture_output=True, text=True, check=True,
-    ).stdout
-    assert after == "", "generating notebook 10 must never modify 01.2/01.3/01.4 or the variable selection"
+    after = _digests()
+    changed = sorted(p for p in existing if before[p] != after[p])
+    assert not changed, (
+        "generating notebook 10 must never modify 01.2/01.3/01.4 or the variable "
+        f"selection, but these changed: {changed}"
+    )
 
 
 def test_generator_touches_no_training_package_files():
