@@ -36,7 +36,8 @@ mirroring `MGCECDLRegressionLoss` (`models/mgcecdl.py:516-522`) and
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+import time
+from typing import Any, Callable, Mapping
 
 import numpy as np
 import torch
@@ -347,6 +348,13 @@ def _lote_de_instancias(bag_index: Any, bag_ids: np.ndarray) -> tuple[np.ndarray
     return np.concatenate(filas), np.concatenate(bolsa_local)
 
 
+def _formatear_mmss(segundos: float) -> str:
+    """Render a duration in `mm:ss`, rounded to the nearest whole second."""
+    total_segundos = max(0, int(round(segundos)))
+    minutos, restantes = divmod(total_segundos, 60)
+    return f"{minutos:02d}:{restantes:02d}"
+
+
 def entrenar_mil(
     model: MILBagRegressor,
     loss_fn: MILBagLoss,
@@ -360,12 +368,22 @@ def entrenar_mil(
     optimizer_name: str = "adamw",
     seed: int = 42,
     device: str | torch.device = "cpu",
+    verbose: bool = False,
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Fit `model` bag-supervised (D5) over a `BagIndex`'s CSR layout.
 
     `loss_fn.kernel_loss` must already be fitted on the TRAINING FOLD's
     `log1p(y)` only (fold hygiene, D5) -- this function never touches
     `loss_fn.kernel_loss`'s grid, and performs no fold splitting itself.
+
+    When `verbose` or `progress_callback` is set, one monitoring record is
+    produced per epoch (`epoca`, `epocas_totales`, `perdida_media`,
+    `segundos_epoca`, `segundos_acumulados`, `segundos_restantes_estimados`),
+    collected in the returned `"historial_epocas"` list. Timestamps come
+    from `time.perf_counter()` taken around the batch loop only -- this
+    cannot perturb `torch`/`numpy` RNG state or gradient flow, so training
+    numerics are identical whether or not monitoring is enabled.
     """
     optimizer_name = optimizer_name.lower()
     if optimizer_name not in _SUPPORTED_OPTIMIZERS:
@@ -390,8 +408,11 @@ def entrenar_mil(
         optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
 
     history: list[dict[str, float]] = []
+    historial_epocas: list[dict[str, Any]] = []
+    segundos_acumulados = 0.0
     model.train()
     for epoch in range(1, epochs + 1):
+        _epoca_t0 = time.perf_counter()
         orden_bolsas = rng.permutation(n_bags)
         sumas = np.zeros(len(_TRACKED_HISTORY_KEYS), dtype=np.float64)
         n_lotes = 0
@@ -423,10 +444,34 @@ def entrenar_mil(
         promedios = dict(zip(_TRACKED_HISTORY_KEYS, sumas / max(n_lotes, 1)))
         history.append({"epoch": epoch, **promedios})
 
+        segundos_epoca = time.perf_counter() - _epoca_t0
+        segundos_acumulados += segundos_epoca
+        segundos_restantes_estimados = (
+            (epochs - epoch) * (segundos_acumulados / epoch) if epoch < epochs else 0.0
+        )
+        registro_epoca: dict[str, Any] = {
+            "epoca": epoch,
+            "epocas_totales": epochs,
+            "perdida_media": float(promedios["total_loss"]),
+            "segundos_epoca": float(segundos_epoca),
+            "segundos_acumulados": float(segundos_acumulados),
+            "segundos_restantes_estimados": float(segundos_restantes_estimados),
+        }
+        historial_epocas.append(registro_epoca)
+        if progress_callback is not None:
+            progress_callback(registro_epoca)
+        if verbose:
+            print(
+                f"Epoca {epoch}/{epochs} | perdida_media={registro_epoca['perdida_media']:.4f} | "
+                f"tiempo_epoca={_formatear_mmss(segundos_epoca)} | "
+                f"ETA={_formatear_mmss(segundos_restantes_estimados)}"
+            )
+
     model.eval()
     final = history[-1] if history else {key: float("nan") for key in _TRACKED_HISTORY_KEYS}
     return {
         "model": model,
         "history": history,
+        "historial_epocas": historial_epocas,
         **{key: value for key, value in final.items() if key != "epoch"},
     }

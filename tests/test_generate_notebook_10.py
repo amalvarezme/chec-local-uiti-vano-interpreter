@@ -182,6 +182,55 @@ def test_generator_reports_desglose_por_circuito(notebook):
     assert "desglose_por_circuito" in source
 
 
+# ---------------------------------------------------------------------------
+# Per-epoch / per-fold progress monitoring wiring
+# ---------------------------------------------------------------------------
+
+
+def _extract_balanced_calls(source: str, call_prefix: str) -> list[str]:
+    """Extract each `call_prefix(...)` call's full source, matching parens to
+    arbitrary nesting depth (a single-level regex undercounts calls whose
+    arguments themselves contain nested calls)."""
+    calls = []
+    start = 0
+    while True:
+        idx = source.find(call_prefix, start)
+        if idx == -1:
+            break
+        depth = 0
+        i = idx + len(call_prefix) - 1  # position of the opening '('
+        for i in range(i, len(source)):
+            if source[i] == "(":
+                depth += 1
+            elif source[i] == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+        calls.append(source[idx : i + 1])
+        start = i + 1
+    return calls
+
+
+def test_generator_wires_verbose_into_every_entrenar_mil_call(notebook):
+    source = _all_code_source(notebook)
+    calls = _extract_balanced_calls(source, "entrenar_mil(")
+    assert len(calls) >= 2, "expected entrenar_mil to be called at least twice (fold fit + full fit)"
+    for call in calls:
+        assert "verbose=True" in call, f"entrenar_mil call missing verbose=True: {call}"
+
+
+def test_generator_cv_loop_prints_per_fold_progress_and_eta(notebook):
+    code_cells = [cell.source for cell in notebook.cells if cell.cell_type == "code"]
+    cv_loop_source = next(
+        src for src in code_cells if "for fold_i, (train_idx, test_idx)" in src
+    )
+    assert "perf_counter()" in cv_loop_source or "time.time()" in cv_loop_source
+    assert re.search(r"N_SPLITS", cv_loop_source)
+    assert re.search(r"format_duration", cv_loop_source)
+    # Fold-level ETA must be derived from the mean fold time observed so far.
+    assert re.search(r"segundos_acumulados_pliegues\s*/\s*pliegues_completados", cv_loop_source)
+
+
 def test_generator_states_negative_result_path_explicitly(notebook):
     source = _all_code_source(notebook)
     assert "veredicto" in source

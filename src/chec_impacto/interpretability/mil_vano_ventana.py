@@ -250,12 +250,23 @@ def evaluar_arms(
     mask: np.ndarray,
 ) -> pd.DataFrame:
     """Out-of-fold macro-F1 for every arm in `predicciones`, on `mask`'s
-    subset. When both `"modelo"` and `"persistencia"` are present, attaches
+    subset. When `"modelo"` and at least one other arm are present, attaches
     the A1 pass/fail verdict against `BARRA_ACEPTACION_A1_PUNTOS` as
     `frame.attrs` -- a missed bar is reported as a descriptive
     characterization plus an explicit negative result, never as a trigger to
     keep iterating loss terms in search of the bar (spec
     `mil-validation-protocol`, "Pre-registered +5-point acceptance bar").
+
+    The gate compares the model against the BEST-performing baseline arm
+    (`max` macro-F1 over every non-`"modelo"` arm), not against
+    `"persistencia"` alone. A no-climate structural-only control that beats
+    both the model and persistence must be able to fail the gate; comparing
+    only to persistence let exactly that case through undetected. This makes
+    A1 strictly harder to pass than before -- tightening an acceptance bar
+    after seeing results is legitimate diligence, not goalpost-moving, which
+    would mean loosening a bar after an unfavorable result.
+    `delta_modelo_vs_persistencia_pts` is still reported when `"persistencia"`
+    is present, for continuity, but it no longer drives the verdict.
     """
     clase_obs = np.asarray(clase_obs).reshape(-1)
     mask = np.asarray(mask, dtype=bool)
@@ -276,29 +287,46 @@ def evaluar_arms(
     resultado = pd.DataFrame(filas, columns=["arm", "macro_f1", "n"])
     resultado.attrs["barra_a1_pts"] = BARRA_ACEPTACION_A1_PUNTOS
 
-    if "modelo" not in predicciones or "persistencia" not in predicciones:
+    otros_arms = [nombre for nombre in predicciones if nombre != "modelo"]
+    if "modelo" not in predicciones or not otros_arms:
         resultado.attrs["a1_evaluable"] = False
         return resultado
 
     f1_modelo = float(resultado.loc[resultado["arm"] == "modelo", "macro_f1"].iloc[0])
-    f1_persistencia = float(resultado.loc[resultado["arm"] == "persistencia", "macro_f1"].iloc[0])
-    delta_pts = (f1_modelo - f1_persistencia) * 100.0
+
+    if "persistencia" in predicciones:
+        f1_persistencia = float(
+            resultado.loc[resultado["arm"] == "persistencia", "macro_f1"].iloc[0]
+        )
+        resultado.attrs["delta_modelo_vs_persistencia_pts"] = (
+            f1_modelo - f1_persistencia
+        ) * 100.0
+
+    baselines = resultado.loc[resultado["arm"] != "modelo", ["arm", "macro_f1"]]
+    fila_mejor_baseline = baselines.loc[baselines["macro_f1"].idxmax()]
+    arm_mejor_baseline = str(fila_mejor_baseline["arm"])
+    f1_mejor_baseline = float(fila_mejor_baseline["macro_f1"])
+    delta_pts = (f1_modelo - f1_mejor_baseline) * 100.0
     cumplida = bool(delta_pts >= BARRA_ACEPTACION_A1_PUNTOS)
 
     resultado.attrs["a1_evaluable"] = True
-    resultado.attrs["delta_modelo_vs_persistencia_pts"] = delta_pts
+    resultado.attrs["arm_mejor_baseline"] = arm_mejor_baseline
+    resultado.attrs["f1_mejor_baseline"] = f1_mejor_baseline
+    resultado.attrs["delta_modelo_vs_mejor_baseline_pts"] = delta_pts
     resultado.attrs["a1_cumplida"] = cumplida
     resultado.attrs["veredicto"] = (
         (
             "Resultado positivo: el modelo supera la barra pre-registrada de "
-            f"+{BARRA_ACEPTACION_A1_PUNTOS} puntos de macro-F1 sobre persistencia en el "
-            f"subconjunto de variacion intra-vano (delta observado: {delta_pts:.2f} puntos)."
+            f"+{BARRA_ACEPTACION_A1_PUNTOS} puntos de macro-F1 sobre la mejor linea base "
+            f"(`{arm_mejor_baseline}`, macro-F1 {f1_mejor_baseline:.4f}) en el subconjunto de "
+            f"variacion intra-vano (delta observado: {delta_pts:.2f} puntos)."
         )
         if cumplida
         else (
             "RESULTADO NEGATIVO reportado: el modelo no supera la barra pre-registrada de "
-            f"+{BARRA_ACEPTACION_A1_PUNTOS} puntos de macro-F1 sobre persistencia en el "
-            f"subconjunto de variacion intra-vano (delta observado: {delta_pts:.2f} puntos). "
+            f"+{BARRA_ACEPTACION_A1_PUNTOS} puntos de macro-F1 sobre la mejor linea base "
+            f"(`{arm_mejor_baseline}`, macro-F1 {f1_mejor_baseline:.4f}) en el subconjunto de "
+            f"variacion intra-vano (delta observado: {delta_pts:.2f} puntos). "
             "Esta es una caracterizacion descriptiva; no se itera sobre los terminos de la "
             "perdida para perseguir la barra despues de observar el resultado."
         )

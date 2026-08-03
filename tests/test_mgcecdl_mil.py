@@ -490,3 +490,204 @@ def test_entrenar_mil_rejects_unsupported_optimizer() -> None:
             epochs=1,
             optimizer_name="sgd",
         )
+
+
+# ---------------------------------------------------------------------------
+# Per-epoch monitoring: `historial_epocas`, `verbose`, `progress_callback`
+# ---------------------------------------------------------------------------
+
+
+def test_entrenar_mil_historial_epocas_has_one_record_per_epoch() -> None:
+    torch.manual_seed(11)
+    bag_index = _bag_index_sintetica_de_prueba()
+    X_inst = np.random.default_rng(11).normal(size=(_N_INST, len(_FEATURES))).astype(np.float32)
+    model = _tiny_mil_model(alpha=0.3)
+    loss_fn = _tiny_loss()
+
+    resultado = entrenar_mil(
+        model,
+        loss_fn,
+        X_inst,
+        bag_index,
+        epochs=3,
+        bag_batch_size=5,
+        lr=5e-2,
+        weight_decay=1e-5,
+        optimizer_name="adamw",
+        seed=11,
+        device="cpu",
+    )
+
+    historial = resultado["historial_epocas"]
+    assert len(historial) == 3
+    assert [registro["epoca"] for registro in historial] == [1, 2, 3]
+    assert {registro["epocas_totales"] for registro in historial} == {3}
+
+
+def test_entrenar_mil_historial_epocas_records_carry_all_keys_with_right_types() -> None:
+    torch.manual_seed(12)
+    bag_index = _bag_index_sintetica_de_prueba()
+    X_inst = np.random.default_rng(12).normal(size=(_N_INST, len(_FEATURES))).astype(np.float32)
+    model = _tiny_mil_model(alpha=0.3)
+    loss_fn = _tiny_loss()
+
+    resultado = entrenar_mil(
+        model,
+        loss_fn,
+        X_inst,
+        bag_index,
+        epochs=3,
+        bag_batch_size=5,
+        lr=5e-2,
+        weight_decay=1e-5,
+        optimizer_name="adamw",
+        seed=12,
+        device="cpu",
+    )
+
+    claves_esperadas = {
+        "epoca",
+        "epocas_totales",
+        "perdida_media",
+        "segundos_epoca",
+        "segundos_acumulados",
+        "segundos_restantes_estimados",
+    }
+    acumulado_previo = -1.0
+    for registro in resultado["historial_epocas"]:
+        assert set(registro) == claves_esperadas
+        assert isinstance(registro["epoca"], int)
+        assert isinstance(registro["epocas_totales"], int)
+        assert isinstance(registro["perdida_media"], float)
+        assert isinstance(registro["segundos_epoca"], float)
+        assert isinstance(registro["segundos_acumulados"], float)
+        assert isinstance(registro["segundos_restantes_estimados"], float)
+        assert registro["segundos_epoca"] >= 0.0
+        assert registro["segundos_acumulados"] >= acumulado_previo
+        acumulado_previo = registro["segundos_acumulados"]
+
+
+def test_entrenar_mil_historial_epocas_final_eta_is_zero() -> None:
+    torch.manual_seed(14)
+    bag_index = _bag_index_sintetica_de_prueba()
+    X_inst = np.random.default_rng(14).normal(size=(_N_INST, len(_FEATURES))).astype(np.float32)
+    model = _tiny_mil_model(alpha=0.3)
+    loss_fn = _tiny_loss()
+
+    resultado = entrenar_mil(
+        model,
+        loss_fn,
+        X_inst,
+        bag_index,
+        epochs=3,
+        bag_batch_size=5,
+        lr=5e-2,
+        weight_decay=1e-5,
+        optimizer_name="adamw",
+        seed=14,
+        device="cpu",
+    )
+
+    assert resultado["historial_epocas"][-1]["segundos_restantes_estimados"] == pytest.approx(
+        0.0, abs=1e-9
+    )
+
+
+def test_entrenar_mil_progress_callback_invoked_once_per_epoch_with_same_records() -> None:
+    torch.manual_seed(13)
+    bag_index = _bag_index_sintetica_de_prueba()
+    X_inst = np.random.default_rng(13).normal(size=(_N_INST, len(_FEATURES))).astype(np.float32)
+    model = _tiny_mil_model(alpha=0.3)
+    loss_fn = _tiny_loss()
+
+    recibidos: list[dict] = []
+    resultado = entrenar_mil(
+        model,
+        loss_fn,
+        X_inst,
+        bag_index,
+        epochs=4,
+        bag_batch_size=5,
+        lr=5e-2,
+        weight_decay=1e-5,
+        optimizer_name="adamw",
+        seed=13,
+        device="cpu",
+        progress_callback=recibidos.append,
+    )
+
+    assert len(recibidos) == 4
+    assert recibidos == resultado["historial_epocas"]
+
+
+def test_entrenar_mil_verbose_prints_one_line_per_epoch_with_eta(capsys) -> None:
+    torch.manual_seed(19)
+    bag_index = _bag_index_sintetica_de_prueba()
+    X_inst = np.random.default_rng(19).normal(size=(_N_INST, len(_FEATURES))).astype(np.float32)
+    model = _tiny_mil_model(alpha=0.3)
+    loss_fn = _tiny_loss()
+
+    entrenar_mil(
+        model,
+        loss_fn,
+        X_inst,
+        bag_index,
+        epochs=2,
+        bag_batch_size=5,
+        lr=5e-2,
+        weight_decay=1e-5,
+        optimizer_name="adamw",
+        seed=19,
+        device="cpu",
+        verbose=True,
+    )
+
+    salida = capsys.readouterr().out
+    lineas = [linea for linea in salida.splitlines() if linea.strip()]
+    assert len(lineas) == 2
+    for linea in lineas:
+        assert re.search(r"\d{2}:\d{2}", linea)
+
+
+def _entrenar_mil_run(seed: int, *, verbose: bool, con_callback: bool):
+    torch.manual_seed(seed)
+    bag_index = _bag_index_sintetica_de_prueba()
+    X_inst = np.random.default_rng(seed).normal(size=(_N_INST, len(_FEATURES))).astype(np.float32)
+    model = _tiny_mil_model(alpha=0.3)
+    loss_fn = _tiny_loss()
+
+    callback = (lambda registro: None) if con_callback else None
+    resultado = entrenar_mil(
+        model,
+        loss_fn,
+        X_inst,
+        bag_index,
+        epochs=3,
+        bag_batch_size=5,
+        lr=5e-2,
+        weight_decay=1e-5,
+        optimizer_name="adamw",
+        seed=seed,
+        device="cpu",
+        verbose=verbose,
+        progress_callback=callback,
+    )
+    return resultado["model"]
+
+
+def test_entrenar_mil_monitoring_does_not_perturb_training_determinism() -> None:
+    """The whole point of `historial_epocas`/`verbose`/`progress_callback`:
+    wall-clock timestamps and printing must never perturb RNG state or
+    gradient flow. Two runs with the same seed -- one silent, one fully
+    monitored -- must produce bit-identical final parameters."""
+    modelo_silencioso = _entrenar_mil_run(17, verbose=False, con_callback=False)
+    modelo_monitoreado = _entrenar_mil_run(17, verbose=True, con_callback=True)
+
+    parametros_silencioso = list(modelo_silencioso.parameters())
+    parametros_monitoreado = list(modelo_monitoreado.parameters())
+    assert len(parametros_silencioso) == len(parametros_monitoreado)
+    assert len(parametros_silencioso) > 0
+    for parametro_silencioso, parametro_monitoreado in zip(
+        parametros_silencioso, parametros_monitoreado
+    ):
+        assert torch.equal(parametro_silencioso, parametro_monitoreado)

@@ -558,6 +558,7 @@ def ajustar_y_evaluar_pliegue(train_idx, test_idx, *, epochs, seed):
     resultado_fit = entrenar_mil(
         modelo, perdida, X_train_bag, bag_index_train, epochs=epochs,
         bag_batch_size=BAG_BATCH_SIZE, lr=LR, weight_decay=WEIGHT_DECAY, seed=seed, device=DEVICE,
+        verbose=True,
     )
     modelo_ajustado = resultado_fit["model"]
 
@@ -632,11 +633,23 @@ oof_tiene_persistencia = np.zeros(n_bags, dtype=bool)
 X_bag_estructural = promedio_por_bolsa(X_inst_bolsas, bag_index, modality_indices["estructurales"])
 
 if PROCEDER_CON_ENTRENAMIENTO_COMPLETO:
+    segundos_acumulados_pliegues = 0.0
     for fold_i, (train_idx, test_idx) in enumerate(folds):
         print(f"--- pliegue {fold_i + 1}/{N_SPLITS} ---")
+        _pliegue_t0 = time.perf_counter()
         _, u_hat_test, clase_test, gates_test = ajustar_y_evaluar_pliegue(
             train_idx, test_idx, epochs=EPOCHS, seed=RANDOM_STATE + fold_i,
         )
+        segundos_pliegue = time.perf_counter() - _pliegue_t0
+        segundos_acumulados_pliegues += segundos_pliegue
+        pliegues_completados = fold_i + 1
+        pliegues_restantes = N_SPLITS - pliegues_completados
+        segundos_restantes_pliegues = pliegues_restantes * (
+            segundos_acumulados_pliegues / pliegues_completados
+        )
+        print(f"    pliegue {pliegues_completados}/{N_SPLITS} completado en "
+              f"{format_duration(segundos_pliegue)} | ETA pliegues restantes: "
+              f"{format_duration(segundos_restantes_pliegues)}")
         oof_clase_modelo[test_idx] = clase_test
         oof_u_hat[test_idx] = u_hat_test
         oof_gates[test_idx] = gates_test
@@ -670,10 +683,18 @@ _MD_A1_BASELINES = '''\
 informacion**: la validacion cruzada agrupada mantiene todas las bolsas de
 un vano en un mismo pliegue, asi que persistencia ve los desenlaces
 OBSERVADOS reales de las otras ventanas del mismo vano -- algo que el modelo
-nunca recibe. Eso es lo que hace exigente la barra: `BARRA_ACEPTACION_A1_PUNTOS`
-son 5.0 puntos de macro-F1 sobre persistencia, fijados ANTES de ver
-resultados y ausentes de toda firma de funcion (no se pueden renegociar
-despues).
+nunca recibe.
+
+`BARRA_ACEPTACION_A1_PUNTOS` son 5.0 puntos de macro-F1 sobre la MEJOR linea
+base -- el maximo macro-F1 entre TODAS las lineas base no-modelo, no solo
+persistencia -- fijados ANTES de ver resultados y ausentes de toda firma de
+funcion (no se pueden renegociar despues). Comparar solo contra persistencia
+dejaba pasar sin deteccion el caso en que una linea base estructural (sin
+clima) supera tanto al modelo como a persistencia; exigir la mejor linea
+base cierra ese hueco y hace la barra mas estricta que antes -- endurecer un
+criterio de aceptacion despues de ver resultados es diligencia legitima,
+nunca mover la porteria (que seria RELAJAR un criterio tras un resultado
+desfavorable).
 
 Si la barra no se supera, este cuaderno lo dice sin suavizar: reporta un
 RESULTADO NEGATIVO y una caracterizacion descriptiva, exactamente como lo
@@ -849,6 +870,7 @@ if PROCEDER_CON_ENTRENAMIENTO_COMPLETO and mode == "full":
             lambda_gate_deviation=LAMBDA_GATE_DEVIATION, reconstruction_normalization="soft",
         ), X_inst_bolsas, bag_index, epochs=EPOCHS, bag_batch_size=BAG_BATCH_SIZE,
         lr=LR, weight_decay=WEIGHT_DECAY, seed=RANDOM_STATE, device=DEVICE,
+        verbose=True,
     )
     predictor_final = BagPredictor(resultado_final["model"], features_inst, geometria, device=str(DEVICE))
 

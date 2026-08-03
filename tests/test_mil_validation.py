@@ -319,6 +319,10 @@ def test_a1_bar_is_a_module_constant_never_a_caller_parameter() -> None:
 
 
 def test_evaluar_arms_reports_all_arms_and_a1_pass_path() -> None:
+    """Model beats every baseline (including the strongest, `persistencia`)
+    by more than the bar -> A1 passes, and the verdict names the runner-up
+    baseline it had to clear (spec change: A1 must clear the BEST baseline,
+    not persistence alone)."""
     y_true = np.array([0, 0, 1, 1, 2, 2, 3, 3])
     mask = np.ones(8, dtype=bool)
 
@@ -337,16 +341,28 @@ def test_evaluar_arms_reports_all_arms_and_a1_pass_path() -> None:
 
     f1_modelo_esperado = sklearn_f1_score(y_true, modelo_perfecto, average="macro")
     f1_persistencia_esperada = sklearn_f1_score(y_true, persistencia_mediocre, average="macro")
-    delta_esperado_pts = (f1_modelo_esperado - f1_persistencia_esperada) * 100.0
-    assert delta_esperado_pts >= BARRA_ACEPTACION_A1_PUNTOS, "fixture must be built to pass A1"
+    delta_persistencia_esperado_pts = (f1_modelo_esperado - f1_persistencia_esperada) * 100.0
+    assert delta_persistencia_esperado_pts >= BARRA_ACEPTACION_A1_PUNTOS, (
+        "fixture must be built to pass A1"
+    )
 
+    # `persistencia` is the strongest non-model arm in this fixture -> it is
+    # the best baseline, and the verdict delta equals the persistence delta.
     np.testing.assert_allclose(
         resultado.loc[resultado["arm"] == "modelo", "macro_f1"].iloc[0], f1_modelo_esperado
     )
     assert resultado.attrs["barra_a1_pts"] == BARRA_ACEPTACION_A1_PUNTOS
-    assert resultado.attrs["delta_modelo_vs_persistencia_pts"] == pytest.approx(delta_esperado_pts)
+    assert resultado.attrs["delta_modelo_vs_persistencia_pts"] == pytest.approx(
+        delta_persistencia_esperado_pts
+    )
+    assert resultado.attrs["arm_mejor_baseline"] == "persistencia"
+    assert resultado.attrs["f1_mejor_baseline"] == pytest.approx(f1_persistencia_esperada)
+    assert resultado.attrs["delta_modelo_vs_mejor_baseline_pts"] == pytest.approx(
+        delta_persistencia_esperado_pts
+    )
     assert resultado.attrs["a1_cumplida"] is True
     assert "positivo" in resultado.attrs["veredicto"].lower()
+    assert "persistencia" in resultado.attrs["veredicto"]
 
 
 def test_evaluar_arms_a1_bar_missed_triggers_negative_result_path() -> None:
@@ -363,9 +379,130 @@ def test_evaluar_arms_a1_bar_missed_triggers_negative_result_path() -> None:
 
     assert resultado.attrs["a1_cumplida"] is False
     assert resultado.attrs["delta_modelo_vs_persistencia_pts"] == pytest.approx(0.0)
+    assert resultado.attrs["arm_mejor_baseline"] == "persistencia"
+    assert resultado.attrs["delta_modelo_vs_mejor_baseline_pts"] == pytest.approx(0.0)
     veredicto = resultado.attrs["veredicto"].lower()
     assert "negativo" in veredicto
     assert "no se itera" in veredicto
+
+
+def test_evaluar_arms_a1_gate_uses_best_baseline_not_just_persistence() -> None:
+    """The exact hole this change closes: model clears persistence by a wide
+    margin but a structural (no-climate) arm beats the model outright -> A1
+    must FAIL and name `estructural` as the baseline it lost to."""
+    y_true = np.array([0, 0, 1, 1, 2, 2, 3, 3])
+    mask = np.ones(8, dtype=bool)
+
+    modelo = np.array([0, 0, 1, 1, 2, 3, 3, 3])
+    persistencia = np.array([0, 1, 1, 0, 2, 3, 3, 2])
+    estructural = np.array([0, 0, 1, 1, 2, 2, 3, 3])  # perfect -> beats modelo
+    mayoritaria = np.zeros(8, dtype=int)
+
+    predicciones = {
+        "modelo": modelo,
+        "persistencia": persistencia,
+        "estructural": estructural,
+        "mayoritaria": mayoritaria,
+    }
+    resultado = evaluar_arms(y_true, predicciones, mask)
+
+    f1_modelo = sklearn_f1_score(y_true, modelo, average="macro")
+    f1_persistencia = sklearn_f1_score(y_true, persistencia, average="macro")
+    f1_estructural = sklearn_f1_score(y_true, estructural, average="macro")
+    assert (f1_modelo - f1_persistencia) * 100.0 >= BARRA_ACEPTACION_A1_PUNTOS, (
+        "fixture must beat persistence comfortably"
+    )
+    assert f1_estructural > f1_modelo, "fixture must have the structural arm beat the model"
+
+    assert resultado.attrs["arm_mejor_baseline"] == "estructural"
+    assert resultado.attrs["f1_mejor_baseline"] == pytest.approx(f1_estructural)
+    assert resultado.attrs["a1_cumplida"] is False
+    delta_mejor = resultado.attrs["delta_modelo_vs_mejor_baseline_pts"]
+    assert delta_mejor == pytest.approx((f1_modelo - f1_estructural) * 100.0)
+    assert delta_mejor < 0
+
+    # Continuity: the persistence-only delta is still reported, and it
+    # differs from the delta that actually drives the verdict.
+    delta_persistencia = resultado.attrs["delta_modelo_vs_persistencia_pts"]
+    assert delta_persistencia == pytest.approx((f1_modelo - f1_persistencia) * 100.0)
+    assert delta_persistencia != pytest.approx(delta_mejor)
+
+    veredicto = resultado.attrs["veredicto"].lower()
+    assert "negativo" in veredicto
+    assert "estructural" in veredicto
+
+
+def test_evaluar_arms_a1_bar_met_names_runner_up_baseline_in_verdict() -> None:
+    """Model beats every baseline by more than the bar -> A1 passes, and the
+    positive verdict names the strongest (runner-up) baseline it cleared."""
+    y_true = np.array([0, 0, 1, 1, 2, 2, 3, 3])
+    mask = np.ones(8, dtype=bool)
+
+    modelo = y_true.copy()  # perfect
+    persistencia = np.array([0, 1, 1, 0, 2, 3, 3, 2])
+    estructural = np.array([1, 1, 1, 1, 2, 2, 2, 2])
+    mayoritaria = np.zeros(8, dtype=int)
+
+    predicciones = {
+        "modelo": modelo,
+        "persistencia": persistencia,
+        "estructural": estructural,
+        "mayoritaria": mayoritaria,
+    }
+    resultado = evaluar_arms(y_true, predicciones, mask)
+
+    f1_persistencia = sklearn_f1_score(y_true, persistencia, average="macro")
+    f1_estructural = sklearn_f1_score(y_true, estructural, average="macro")
+    f1_mayoritaria = sklearn_f1_score(y_true, mayoritaria, average="macro")
+    mejor_esperado = max(
+        ("persistencia", f1_persistencia),
+        ("estructural", f1_estructural),
+        ("mayoritaria", f1_mayoritaria),
+        key=lambda par: par[1],
+    )
+
+    assert resultado.attrs["a1_cumplida"] is True
+    assert resultado.attrs["arm_mejor_baseline"] == mejor_esperado[0]
+    assert resultado.attrs["f1_mejor_baseline"] == pytest.approx(mejor_esperado[1])
+    assert mejor_esperado[0] in resultado.attrs["veredicto"]
+
+
+def test_evaluar_arms_evaluable_without_persistence_arm() -> None:
+    """A1 no longer requires `persistencia` specifically -- `modelo` plus any
+    one other arm is enough to evaluate the gate."""
+    y_true = np.array([0, 0, 1, 1, 2, 2, 3, 3])
+    mask = np.ones(8, dtype=bool)
+
+    modelo = y_true.copy()
+    mayoritaria = np.zeros(8, dtype=int)
+
+    predicciones = {"modelo": modelo, "mayoritaria": mayoritaria}
+    resultado = evaluar_arms(y_true, predicciones, mask)
+
+    f1_modelo = sklearn_f1_score(y_true, modelo, average="macro")
+    f1_mayoritaria = sklearn_f1_score(y_true, mayoritaria, average="macro")
+
+    assert resultado.attrs["a1_evaluable"] is True
+    assert resultado.attrs["arm_mejor_baseline"] == "mayoritaria"
+    assert resultado.attrs["f1_mejor_baseline"] == pytest.approx(f1_mayoritaria)
+    assert resultado.attrs["a1_cumplida"] is bool(
+        (f1_modelo - f1_mayoritaria) * 100.0 >= BARRA_ACEPTACION_A1_PUNTOS
+    )
+    assert "delta_modelo_vs_persistencia_pts" not in resultado.attrs
+
+
+def test_evaluar_arms_not_evaluable_with_only_modelo_arm() -> None:
+    """`modelo` alone (no baseline at all) cannot evaluate A1 -- there is
+    nothing to compare against."""
+    y_true = np.array([0, 0, 1, 1, 2, 2, 3, 3])
+    mask = np.ones(8, dtype=bool)
+
+    predicciones = {"modelo": y_true.copy()}
+    resultado = evaluar_arms(y_true, predicciones, mask)
+
+    assert resultado.attrs["a1_evaluable"] is False
+    assert "a1_cumplida" not in resultado.attrs
+    assert "arm_mejor_baseline" not in resultado.attrs
 
 
 def test_evaluar_arms_rejects_length_mismatch() -> None:
