@@ -1,12 +1,12 @@
 ---
-description: Publica el cuaderno 01.2 (agrupamiento de circuitos y de vanos) como una Databricks App en una URL fija, detectando y reparando por su cuenta todo lo que falte — si no hay datos en el Volume encadena /subir-datos-databricks, y configura el permiso de lectura de la app sin intervención manual. Pregunta solo el nombre de la app y la URL del workspace destino.
+description: Publica el cuaderno 02 (agrupamiento de circuitos y de vanos) como una Databricks App en una URL fija, detectando y reparando por su cuenta todo lo que falte — si no hay datos en el Volume encadena /subir-datos-databricks, y configura el permiso de lectura de la app sin intervención manual. Pregunta solo el nombre de la app y la URL del workspace destino.
 ---
 
-Follow this exact sequence when `/app-agrupamiento-circuitos` is invoked. It publishes `notebooks/project_flow/01.2_uiti_vano_kmeans.ipynb` as a browsable dashboard at a stable URL, and it is **self-healing**: it inspects the target workspace first and creates whatever is missing, so it works against a workspace that has never been touched as well as against one that already has everything.
+Follow this exact sequence when `/app-agrupamiento-circuitos` is invoked. It publishes `notebooks/project_flow/02_uiti_vano_kmeans.ipynb` as a browsable dashboard at a stable URL, and it is **self-healing**: it inspects the target workspace first and creates whatever is missing, so it works against a workspace that has never been touched as well as against one that already has everything.
 
-**Why this is not a Lakeview dashboard.** `/deploy-databricks-dashboard` publishes `circuit_explorer_dashboard.lvdash.json`: SQL datasets plus declarative widgets. `01.2` is a different animal — it fits K-Means with scikit-learn (8 coordinate spaces, frozen over the full window), builds 23 Plotly traces on the circuit board and 19 on the vano board, and drives them from a hand-written HTML+JS panel (cells 6 and 13). Lakeview executes neither Python nor arbitrary JS, so porting `01.2` would mean rewriting the analysis and losing the Voronoi partition contours, the marginal KDEs, the violins and the panel. This command therefore uses **Databricks Apps**, which hosts arbitrary Python web servers, and serves the notebook's own HTML verbatim.
+**Why this is not a Lakeview dashboard.** `/deploy-databricks-dashboard` publishes `circuit_explorer_dashboard.lvdash.json`: SQL datasets plus declarative widgets. `02` is a different animal — it fits K-Means with scikit-learn (8 coordinate spaces, frozen over the full window), builds 23 Plotly traces on the circuit board and 19 on the vano board, and drives them from a hand-written HTML+JS panel (cells 6 and 13). Lakeview executes neither Python nor arbitrary JS, so porting `02` would mean rewriting the analysis and losing the Voronoi partition contours, the marginal KDEs, the violins and the panel. This command therefore uses **Databricks Apps**, which hosts arbitrary Python web servers, and serves the notebook's own HTML verbatim.
 
-**What this command does NOT need.** Verified by reading the notebook: `01.2` reads exactly one file, `data/Indicadores_vano_v3.csv`, and imports neither `chec_impacto` nor `chec_local_interpreter`. It needs **no** Delta table, **no** view, **no** Lakeview dashboard, **no** shapefile, **no** model checkpoint, and **no** source package. Do not create or check any of those here — if they are absent, that is not this command's problem. `/deploy-databricks-dashboard` owns them.
+**What this command does NOT need.** Verified by reading the notebook: `02` reads exactly one file, `data/Indicadores_vano_v3.csv`, and imports neither `chec_impacto` nor `chec_local_interpreter`. It needs **no** Delta table, **no** view, **no** Lakeview dashboard, **no** shapefile, **no** model checkpoint, and **no** source package. Do not create or check any of those here — if they are absent, that is not this command's problem. `/deploy-databricks-dashboard` owns them.
 
 **Scope.** MUST NOT create or refresh any Delta table or view, MUST NOT touch the Lakeview dashboard, MUST NOT modify the file under `notebooks/project_flow/`, and MUST NOT create any `site`-named path inside the Volume.
 
@@ -86,7 +86,7 @@ ls -l data/Indicadores_vano_v3.csv
 ```
 If it is tiny, run `git lfs pull` first.
 
-## 3. Stage and upload the shimmed copy of `01.2`
+## 3. Stage and upload the shimmed copy of `02`
 
 **Hard invariant**: the modified notebook is a COPY in the scratch directory. `git status --porcelain notebooks/project_flow/` MUST be empty when this step ends.
 
@@ -100,7 +100,7 @@ Four edits, everything else byte-identical. Assert each match is unique and fail
 ```
 → `%pip install pandas numpy scipy scikit-learn plotly`
 
-Do **not** substitute the repo-wide `requirements.txt` install that `/subir-notebooks-databricks` applies to the 9 `project_flow` notebooks: `01.2` imports neither local package, so that would pull `torch`/`shap`/`geopandas`/`optuna` for nothing. Keep it as cell index 1 — `%pip install` restarts the interpreter, so no state-bearing cell may precede it.
+Do **not** substitute the repo-wide `requirements.txt` install that `/subir-notebooks-databricks` applies to the 9 `project_flow` notebooks: `02` imports neither local package, so that would pull `torch`/`shap`/`geopandas`/`optuna` for nothing. Keep it as cell index 1 — `%pip install` restarts the interpreter, so no state-bearing cell may precede it.
 
 **Edit 2 — cell 2**: replace the `find_repo_root()` definition **and** its call
 ```python
@@ -143,7 +143,7 @@ DOCUMENTO = f'''<!DOCTYPE html>
 </head>
 <body>
 <h1>Agrupamiento de circuitos y vanos por UITI acumulado</h1>
-<p class="meta">Generado desde <code>01.2_uiti_vano_kmeans.ipynb</code> el {pd.Timestamp.now():%Y-%m-%d %H:%M} &mdash;
+<p class="meta">Generado desde <code>02_uiti_vano_kmeans.ipynb</code> el {pd.Timestamp.now():%Y-%m-%d %H:%M} &mdash;
 {len(df):,} eventos, {df["CIRCUITO"].nunique()} circuitos, {len(VANOS):,} vanos,
 periodo {df["FECHA"].min():%Y-%m-%d} a {df["FECHA"].max():%Y-%m-%d}.</p>
 <h2>Circuitos</h2>
@@ -161,12 +161,12 @@ print(f'{SALIDA} -> {SALIDA.stat().st_size / 1024 / 1024:.2f} MB')
 Upload:
 ```
 databricks workspace mkdirs /Workspace/Users/<userName>/databricks-integration/project_flow -p <profile>
-databricks workspace import /Workspace/Users/<userName>/databricks-integration/project_flow/01.2_uiti_vano_kmeans --file <staged_copy> --format JUPYTER --overwrite -p <profile>
+databricks workspace import /Workspace/Users/<userName>/databricks-integration/project_flow/02_uiti_vano_kmeans --file <staged_copy> --format JUPYTER --overwrite -p <profile>
 ```
 
-Then check the invariant. **Scope the hard assertion to `01.2` itself**, and treat anything else in the folder as informational — the user may well be editing a sibling notebook in Jupyter while this command runs, and a whole-folder check reports that as if this command had caused it (confirmed empirically: a run tripped on ` M 01.3_uiti_vano_trayectorias_circuitos.ipynb`, which was the user's own concurrent work):
+Then check the invariant. **Scope the hard assertion to `02` itself**, and treat anything else in the folder as informational — the user may well be editing a sibling notebook in Jupyter while this command runs, and a whole-folder check reports that as if this command had caused it (confirmed empirically: a run tripped on ` M 03_uiti_vano_trayectorias_circuitos.ipynb`, which was the user's own concurrent work):
 ```
-test -z "$(git status --porcelain notebooks/project_flow/01.2_uiti_vano_kmeans.ipynb)" && echo LIMPIO || echo MODIFICADO
+test -z "$(git status --porcelain notebooks/project_flow/02_uiti_vano_kmeans.ipynb)" && echo LIMPIO || echo MODIFICADO
 git status --porcelain notebooks/project_flow/
 ```
 The first line MUST print `LIMPIO`; if it prints `MODIFICADO`, stop — something wrote to the repo copy. Report any other modified notebook from the second line as an observation, and do not touch it.
@@ -184,11 +184,11 @@ with
   "run_name": "agrupamiento-circuitos-html",
   "tasks": [{
     "task_key": "build_html",
-    "notebook_task": {"notebook_path": "/Workspace/Users/<userName>/databricks-integration/project_flow/01.2_uiti_vano_kmeans"}
+    "notebook_task": {"notebook_path": "/Workspace/Users/<userName>/databricks-integration/project_flow/02_uiti_vano_kmeans"}
   }]
 }
 ```
-No cluster spec — the task runs on serverless. That is fine here: `01.2` uses no `ipywidgets` (that constraint belongs to `09_simulador`). Poll `databricks jobs get-run <run_id> -p <profile>` until terminal. On failure, surface the notebook's own error rather than retrying blindly.
+No cluster spec — the task runs on serverless. That is fine here: `02` uses no `ipywidgets` (that constraint belongs to `09_simulador`). Poll `databricks jobs get-run <run_id> -p <profile>` until terminal. On failure, surface the notebook's own error rather than retrying blindly.
 
 **Verify the artifact by content, not by exit code.** Expect **~7.4 MB** (measured: 7,793,434 bytes). An earlier estimate of 8.5–9 MB was wrong — it came from summing the notebook's stored outputs, which carry Jupyter's own wrapper around the same HTML. Download it and assert both boards survived:
 ```
@@ -215,7 +215,7 @@ databricks-sdk
 
 `app.py`:
 ```python
-"""Serves the agrupamiento HTML that 01.2_uiti_vano_kmeans generates into the Volume.
+"""Serves the agrupamiento HTML that 02_uiti_vano_kmeans generates into the Volume.
 
 ~7.4 MB, so it is read once and cached in memory rather than re-downloaded per request,
 and always sent gzipped. GET /?refresh=1 drops the cache, which is how a re-run of the
@@ -275,10 +275,10 @@ This is the step that makes the deploy hands-off. Create the app with a `uc_secu
 ```
 databricks apps create --json '{
   "name": "<app-name>",
-  "description": "Agrupamiento de circuitos y vanos por UITI acumulado (cuaderno 01.2)",
+  "description": "Agrupamiento de circuitos y vanos por UITI acumulado (cuaderno 02)",
   "resources": [{
     "name": "volumen-chec-simulador",
-    "description": "Volume con el HTML generado por el cuaderno 01.2",
+    "description": "Volume con el HTML generado por el cuaderno 02",
     "uc_securable": {
       "securable_type": "VOLUME",
       "securable_full_name": "workspace.default.chec-simulador",

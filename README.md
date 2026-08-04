@@ -290,15 +290,15 @@ flowchart TD
     end
 
     subgraph LANE2[Modelado ML, M-GCECDL]
-        P1 --> P2[Búsqueda de hiperparámetros con Optuna<br/>project_flow/02_mgcecdl_optuna_classification_search.ipynb]
-        VARS[(variables.json /<br/>Variables_seleccion.xlsx)] --> P7[Construcción de grafo experto<br/>project_flow/07_graph_preserved_connections_uiti_vano.ipynb]
+        P1 --> P2[Búsqueda de hiperparámetros con Optuna<br/>project_flow/old_version/02_mgcecdl_optuna_classification_search.ipynb]
+        VARS[(variables.json /<br/>Variables_seleccion.xlsx)] --> P7[Construcción de grafo experto<br/>project_flow/old_version/07_graph_preserved_connections_uiti_vano.ipynb]
         P7 --> ADJ[(matriz de adyacencia + edges)]
-        P2 --> P3[Entrenamiento en Colab GPU<br/>project_flow/03_mgcecdl_training.ipynb]
+        P2 --> P3[Entrenamiento en Colab GPU<br/>project_flow/old_version/03_mgcecdl_training.ipynb]
         ADJ --> P3
         P3 --> MODEL[(mgcecdl_classifier_best.zip)]
-        MODEL --> P4[Evaluación de desempeño<br/>project_flow/04_mgcecdl_performance.ipynb]
-        MODEL --> P5[Análisis SHAP por circuito<br/>project_flow/05_mgcecdl_circuit_analysis.ipynb]
-        MODEL --> P6[Replicación documental<br/>project_flow/06_mgcecdl_document_replication.ipynb]
+        MODEL --> P4[Evaluación de desempeño<br/>project_flow/old_version/04_mgcecdl_performance.ipynb]
+        MODEL --> P5[Análisis SHAP por circuito<br/>project_flow/old_version/05_mgcecdl_circuit_analysis.ipynb]
+        MODEL --> P6[Replicación documental<br/>project_flow/old_version/06_mgcecdl_document_replication.ipynb]
     end
 
     subgraph LANE3[Interpretación local, agentes]
@@ -544,18 +544,18 @@ Las salidas LLM inválidas se guardan por separado con sus errores de validació
 Estos notebooks soportan exploración, modelado o replicación. **No** son el punto de entrada canónico del flujo de reporte, pero son el pipeline real que entrena el modelo MGCECDL y produce los artefactos que el agente `inference` carga en cada corrida de `/report`:
 
 - `notebooks/project_flow/01_climate.ipynb`
-- `notebooks/project_flow/02_mgcecdl_optuna_classification_search.ipynb`
-- `notebooks/project_flow/03_mgcecdl_training.ipynb`
-- `notebooks/project_flow/04_mgcecdl_performance.ipynb`
-- `notebooks/project_flow/05_mgcecdl_circuit_analysis.ipynb`
-- `notebooks/project_flow/06_mgcecdl_document_replication.ipynb`
-- `notebooks/project_flow/07_graph_preserved_connections_uiti_vano.ipynb`
-- `notebooks/project_flow/08_geo_network_exploration.ipynb`
-- `notebooks/project_flow/09_simulador.ipynb`
+- `notebooks/project_flow/old_version/02_mgcecdl_optuna_classification_search.ipynb`
+- `notebooks/project_flow/old_version/03_mgcecdl_training.ipynb`
+- `notebooks/project_flow/old_version/04_mgcecdl_performance.ipynb`
+- `notebooks/project_flow/old_version/05_mgcecdl_circuit_analysis.ipynb`
+- `notebooks/project_flow/old_version/06_mgcecdl_document_replication.ipynb`
+- `notebooks/project_flow/old_version/07_graph_preserved_connections_uiti_vano.ipynb`
+- `notebooks/project_flow/old_version/08_geo_network_exploration.ipynb`
+- `notebooks/project_flow/old_version/09_simulador.ipynb`
 
 Resumen detallado de propósito, entradas/salidas, orden real de dependencias (con una corrección al orden lineal implícito arriba) y hallazgos por notebook: **[`docs/notebooks-project-flow.md`](docs/notebooks-project-flow.md)** (cubre los notebooks 01-09).
 
-Además, `notebooks/project_flow/01.2_uiti_vano_kmeans.ipynb` es un notebook exploratorio independiente
+Además, `notebooks/project_flow/02_uiti_vano_kmeans.ipynb` es un notebook exploratorio independiente
 (no forma parte de la cadena de dependencias 01-09 ni alimenta `/report`): agrupa vanos por UITI
 acumulado y número de eventos con KMeans en espacio log (4 grupos, preprocesamiento MinMax), con KDE
 por variable y un scatter interactivo en Plotly etiquetado por vano/circuito/grupo.

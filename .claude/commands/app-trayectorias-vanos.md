@@ -1,12 +1,12 @@
 ---
-description: Publica el cuaderno 01.4 (agrupamiento y evolucion a nivel de vano por ventanas deslizantes, con mapa geografico y seleccion de vanos) como una Databricks App en una URL fija, detectando y reparando por su cuenta todo lo que falte — si no estan el CSV o los shapefiles en el Volume encadena /subir-datos-databricks, y configura el permiso de lectura de la app sin intervencion manual. Pregunta solo el nombre de la app y la URL del workspace destino.
+description: Publica el cuaderno 04 (agrupamiento y evolucion a nivel de vano por ventanas deslizantes, con mapa geografico y seleccion de vanos) como una Databricks App en una URL fija, detectando y reparando por su cuenta todo lo que falte — si no estan el CSV o los shapefiles en el Volume encadena /subir-datos-databricks, y configura el permiso de lectura de la app sin intervencion manual. Pregunta solo el nombre de la app y la URL del workspace destino.
 ---
 
-Follow this exact sequence when `/app-trayectorias-vanos` is invoked. It publishes `notebooks/project_flow/01.4_uiti_vano_trayectorias_vano.ipynb` as a browsable dashboard at a stable URL, and it is **self-healing**: it inspects the target workspace first and creates whatever is missing, so it works against a workspace that has never been touched as well as against one that already has everything.
+Follow this exact sequence when `/app-trayectorias-vanos` is invoked. It publishes `notebooks/project_flow/04_uiti_vano_trayectorias_vano.ipynb` as a browsable dashboard at a stable URL, and it is **self-healing**: it inspects the target workspace first and creates whatever is missing, so it works against a workspace that has never been touched as well as against one that already has everything.
 
-This is the third member of the app family, after `/app-agrupamiento-circuitos` (`01.2`) and `/app-trayectorias-circuitos` (`01.3`). Everything it does that is not specific to `01.4` is deliberately identical to those two, so read them as the reference when something here is terse.
+This is the third member of the app family, after `/app-agrupamiento-circuitos` (`02`) and `/app-trayectorias-circuitos` (`03`). Everything it does that is not specific to `04` is deliberately identical to those two, so read them as the reference when something here is terse.
 
-**Why Databricks Apps and not Lakeview.** Same reason as its two siblings: `01.4` fits K-Means with scikit-learn over 8 coordinate spaces, builds **56 Plotly traces** including a geographic map, and drives all of it from a hand-written HTML+JS panel (cell 7) that also handles clicking a vano on the map to select it. Lakeview executes neither Python nor arbitrary JS, so porting it would mean rewriting the analysis and losing the Voronoi contours, the trajectories with their arrows, the map and the whole selection model.
+**Why Databricks Apps and not Lakeview.** Same reason as its two siblings: `04` fits K-Means with scikit-learn over 8 coordinate spaces, builds **56 Plotly traces** including a geographic map, and drives all of it from a hand-written HTML+JS panel (cell 7) that also handles clicking a vano on the map to select it. Lakeview executes neither Python nor arbitrary JS, so porting it would mean rewriting the analysis and losing the Voronoi contours, the trajectories with their arrows, the map and the whole selection model.
 
 **Scope.** MUST NOT create or refresh any Delta table or view, MUST NOT touch the Lakeview dashboard, MUST NOT modify the file under `notebooks/project_flow/`, and MUST NOT create any `site`-named path inside the Volume.
 
@@ -34,7 +34,7 @@ Confirm the Apps surface exists:
 databricks apps list -p <profile>
 ```
 
-## 2. What `01.4` actually needs
+## 2. What `04` actually needs
 
 Verified by reading the notebook — do not re-derive it:
 
@@ -43,7 +43,7 @@ Verified by reading the notebook — do not re-derive it:
 | `pandas`, `numpy`, `scipy` | yes | yes |
 | `plotly` | yes, but **too old** | **`>=6`**, see step 3 |
 | `geopandas`, `scikit-learn` | no / yes | **both** |
-| `chec_impacto`, `chec_local_interpreter` | — | **NO**, `01.4` imports neither |
+| `chec_impacto`, `chec_local_interpreter` | — | **NO**, `04` imports neither |
 
 It reads exactly two things from the Volume: `data/Indicadores_vano_v3.csv` and the three shapefiles under `data/GEO/`. It needs **no** Delta table, **no** view, **no** Lakeview dashboard, **no** model checkpoint and **no** source package.
 
@@ -85,9 +85,9 @@ If the CSV **or** any shapefile is missing, run `/subir-datos-databricks` agains
 
 Warn first: `data/Indicadores_vano_v3.csv` is **566 MB** (Git-LFS tracked) and dominates a cold run. Confirm it is a real payload and not an unfetched pointer (`ls -l data/Indicadores_vano_v3.csv`; ~130 bytes means run `git lfs pull`). The GEO tree is LFS-tracked too — check it the same way.
 
-## 3. Stage and upload the shimmed copy of `01.4`
+## 3. Stage and upload the shimmed copy of `04`
 
-**Hard invariant**: the modified notebook is a COPY in the scratch directory. `git status --porcelain notebooks/project_flow/01.4_uiti_vano_trayectorias_vano.ipynb` MUST be empty when this step ends.
+**Hard invariant**: the modified notebook is a COPY in the scratch directory. `git status --porcelain notebooks/project_flow/04_uiti_vano_trayectorias_vano.ipynb` MUST be empty when this step ends.
 
 **Strip every code cell's `outputs` and `execution_count` first.** The repo file is 12.3 MB on disk, almost all of it cell 7's embedded `text/html`; stripped it is **0.08 MB** (measured). `databricks workspace import --format JUPYTER` enforces a 10 MB limit, so an unstripped copy is over the ceiling outright — this is the difference between the upload working and failing, not hygiene.
 
@@ -101,7 +101,7 @@ Uncomment it **and pin plotly**:
 ```python
 %pip install -q pandas numpy scipy "plotly>=6" geopandas scikit-learn
 ```
-Unlike `01.3`'s, this list is already complete — the only thing wrong with it is the bare `plotly`. Cell 6 builds the map with a `{'type': 'map'}` entry in its `specs` grid and `go.Scattermap`, the MapLibre trace family that only exists in modern Plotly. Databricks Runtime preinstalls an older Plotly, and a bare `plotly` requirement is **already satisfied** by it, so pip prints nothing and upgrades nothing; the failure then surfaces as `ValueError: Unsupported subplot type: 'map'` with a traceback pointing at the *system* site-packages. A version floor forces the upgrade. Prefer the floor over `--upgrade`, which would also pull newer pandas/numpy/geopandas.
+Unlike `03`'s, this list is already complete — the only thing wrong with it is the bare `plotly`. Cell 6 builds the map with a `{'type': 'map'}` entry in its `specs` grid and `go.Scattermap`, the MapLibre trace family that only exists in modern Plotly. Databricks Runtime preinstalls an older Plotly, and a bare `plotly` requirement is **already satisfied** by it, so pip prints nothing and upgrades nothing; the failure then surfaces as `ValueError: Unsupported subplot type: 'map'` with a traceback pointing at the *system* site-packages. A version floor forces the upgrade. Prefer the floor over `--upgrade`, which would also pull newer pandas/numpy/geopandas.
 
 Keep this as cell index 1: `%pip install` restarts the interpreter, so no state-bearing cell may precede it.
 
@@ -115,7 +115,7 @@ REPO_ROOT = Path('/Volumes/workspace/default/chec-simulador')
 ```
 Aliasing the same name keeps every downstream path resolving untouched: cell 2's CSV read, cell 5's three `REPO_ROOT / 'data' / 'GEO' / ...` shapefile reads, and cell 8's `reports/interpretability/artifacts/` write. Leave every import and constant alone.
 
-Note cell 2 reads with `engine='pyarrow'`, the same as `01.3`. Keep it: pyarrow ships with the Databricks Runtime and it cuts that read from 2.47 s to 1.65 s locally on this file, with the resulting data identical byte for byte.
+Note cell 2 reads with `engine='pyarrow'`, the same as `03`. Keep it: pyarrow ships with the Databricks Runtime and it cuts that read from 2.47 s to 1.65 s locally on this file, with the resulting data identical byte for byte.
 
 **Edit 3 — cell 7, capture the HTML instead of rendering it.** Replace the last line:
 ```python
@@ -125,7 +125,7 @@ with
 ```python
 BLOQUE_VANOS = PANEL_HTML + FIGURA_HTML + PANEL_JS
 ```
-Cell 7 builds its figure with `include_plotlyjs=True`, so this single block already carries plotly.js — there is no second board to order it against, unlike `01.2`.
+Cell 7 builds its figure with `include_plotlyjs=True`, so this single block already carries plotly.js — there is no second board to order it against, unlike `02`.
 
 **Edit 4 — append a final cell** that assembles and writes the document:
 ```python
@@ -149,7 +149,7 @@ DOCUMENTO = f'''<!DOCTYPE html>
 </head>
 <body>
 <h1>Agrupamiento y evolucion de vanos por ventana deslizante</h1>
-<p class="meta">Generado desde <code>01.4_uiti_vano_trayectorias_vano.ipynb</code> el {pd.Timestamp.now():%Y-%m-%d %H:%M} &mdash;
+<p class="meta">Generado desde <code>04_uiti_vano_trayectorias_vano.ipynb</code> el {pd.Timestamp.now():%Y-%m-%d %H:%M} &mdash;
 {len(df):,} eventos, {len(CIRCUITOS)} circuitos, {len(VENTANAS)} ventanas,
 {len(TABLA):,} celdas vano x ventana con eventos.</p>
 {BLOQUE_VANOS}
@@ -166,12 +166,12 @@ The four names the template uses (`df`, `CIRCUITOS`, `VENTANAS`, `TABLA`) all ex
 Upload:
 ```
 databricks workspace mkdirs /Workspace/Users/<userName>/databricks-integration/project_flow -p <profile>
-databricks workspace import /Workspace/Users/<userName>/databricks-integration/project_flow/01.4_uiti_vano_trayectorias_vano --file <staged_copy> --format JUPYTER --overwrite -p <profile>
+databricks workspace import /Workspace/Users/<userName>/databricks-integration/project_flow/04_uiti_vano_trayectorias_vano --file <staged_copy> --format JUPYTER --overwrite -p <profile>
 ```
 
-Then check the invariant. **Scope the hard assertion to `01.4` itself** and treat anything else in the folder as informational — a sibling notebook may well be open in Jupyter while this runs:
+Then check the invariant. **Scope the hard assertion to `04` itself** and treat anything else in the folder as informational — a sibling notebook may well be open in Jupyter while this runs:
 ```
-test -z "$(git status --porcelain notebooks/project_flow/01.4_uiti_vano_trayectorias_vano.ipynb)" && echo LIMPIO || echo MODIFICADO
+test -z "$(git status --porcelain notebooks/project_flow/04_uiti_vano_trayectorias_vano.ipynb)" && echo LIMPIO || echo MODIFICADO
 git status --porcelain notebooks/project_flow/
 ```
 The first line MUST print `LIMPIO`. Do **not** write the check as `git status --porcelain <path> && echo ok`: `git status` exits 0 whether or not it printed anything.
@@ -187,17 +187,17 @@ with
   "run_name": "trayectorias-vanos-html",
   "tasks": [{
     "task_key": "build_html",
-    "notebook_task": {"notebook_path": "/Workspace/Users/<userName>/databricks-integration/project_flow/01.4_uiti_vano_trayectorias_vano"}
+    "notebook_task": {"notebook_path": "/Workspace/Users/<userName>/databricks-integration/project_flow/04_uiti_vano_trayectorias_vano"}
   }]
 }
 ```
-No cluster spec — serverless is fine, `01.4` uses no `ipywidgets`. Poll `databricks jobs get-run <run_id> -p <profile>` until terminal. On failure, surface the notebook's own error rather than retrying blindly. Expect this leg to be slower than `01.2`'s: the job also reads three shapefiles from the Volume through the FUSE mount, which is settled as working — confirmed on `01.3`'s real runs.
+No cluster spec — serverless is fine, `04` uses no `ipywidgets`. Poll `databricks jobs get-run <run_id> -p <profile>` until terminal. On failure, surface the notebook's own error rather than retrying blindly. Expect this leg to be slower than `02`'s: the job also reads three shapefiles from the Volume through the FUSE mount, which is settled as working — confirmed on `03`'s real runs.
 
 **Verify by content, not by exit code.** Expect **~11.6 MB** (cell 7's stored output measures 11.64 MB locally; the app document runs slightly under it because it drops Jupyter's wrapper). It is the largest of the three apps: plotly.js is ~4.9 MB and `CTX` is ~6.7 MB, of which `geo` is 3.0 MB and `celdas` 2.8 MB. Download it and assert:
 ```
 databricks fs cp dbfs:/Volumes/workspace/default/chec-simulador/dashboards/trayectorias_vanos.html <scratch>/verif.html --overwrite -p <profile>
 ```
-- exactly one `id="vano-ventana"` — that is `DIV`'s value, and it is **not** `01.2`'s `agrupamiento-vanos` nor `01.3`'s `trayectorias-circuitos`, so a copy-pasted check from a sibling command would silently pass on the wrong artifact;
+- exactly one `id="vano-ventana"` — that is `DIV`'s value, and it is **not** `02`'s `agrupamiento-vanos` nor `03`'s `trayectorias-circuitos`, so a copy-pasted check from a sibling command would silently pass on the wrong artifact;
 - **the map layer non-empty**: count `"fids"`, which must equal the number of circuits with geometry (measured: **208**). With the shapefiles missing or unreadable the notebook still succeeds and still writes an HTML of roughly the right size, just with no map — a size check alone will not catch that;
 - `scattermap` present, which doubles as proof the Plotly floor took effect;
 - `plotly_click` present, which is the map's click-to-select handler; if it is missing the panel loads but a vano can only be selected from the checkbox list.
@@ -220,7 +220,7 @@ databricks-sdk
 
 `app.py` — identical to the other two apps except for the path and the docstring:
 ```python
-"""Serves the vano trajectory HTML that 01.4_uiti_vano_trayectorias_vano generates into the Volume.
+"""Serves the vano trajectory HTML that 04_uiti_vano_trayectorias_vano generates into the Volume.
 
 ~11.6 MB, so it is read once and cached in memory rather than re-downloaded per request,
 and always sent gzipped. GET /?refresh=1 drops the cache, which is how a re-run of the
@@ -280,10 +280,10 @@ Create it with a `uc_securable` resource so **Databricks applies the volume gran
 ```
 databricks apps create --json '{
   "name": "<app-name>",
-  "description": "Agrupamiento y evolucion de vanos por ventana deslizante (cuaderno 01.4)",
+  "description": "Agrupamiento y evolucion de vanos por ventana deslizante (cuaderno 04)",
   "resources": [{
     "name": "volumen-chec-simulador",
-    "description": "Volume con el HTML generado por el cuaderno 01.4",
+    "description": "Volume con el HTML generado por el cuaderno 04",
     "uc_securable": {
       "securable_type": "VOLUME",
       "securable_full_name": "workspace.default.chec-simulador",

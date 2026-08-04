@@ -1,18 +1,18 @@
 ---
-description: Publica el cuaderno 01.3 (trayectorias de circuito por ventanas deslizantes, con mapa geografico) como una Databricks App en una URL fija, detectando y reparando por su cuenta todo lo que falte — si no estan el CSV o los shapefiles en el Volume encadena /subir-datos-databricks, y configura el permiso de lectura de la app sin intervencion manual. Pregunta solo el nombre de la app y la URL del workspace destino.
+description: Publica el cuaderno 03 (trayectorias de circuito por ventanas deslizantes, con mapa geografico) como una Databricks App en una URL fija, detectando y reparando por su cuenta todo lo que falte — si no estan el CSV o los shapefiles en el Volume encadena /subir-datos-databricks, y configura el permiso de lectura de la app sin intervencion manual. Pregunta solo el nombre de la app y la URL del workspace destino.
 ---
 
-Follow this exact sequence when `/app-trayectorias-circuitos` is invoked. It publishes `notebooks/project_flow/01.3_uiti_vano_trayectorias_circuitos.ipynb` as a browsable dashboard at a stable URL, and it is **self-healing**: it inspects the target workspace first and creates whatever is missing.
+Follow this exact sequence when `/app-trayectorias-circuitos` is invoked. It publishes `notebooks/project_flow/03_uiti_vano_trayectorias_circuitos.ipynb` as a browsable dashboard at a stable URL, and it is **self-healing**: it inspects the target workspace first and creates whatever is missing.
 
-This is the sibling of `/app-agrupamiento-circuitos`, which does the same for `01.2`. The two are **independent apps** with independent HTML artifacts — deploying one never touches the other. Read that command when something here is unclear about the shared mechanics; only the differences are spelled out below.
+This is the sibling of `/app-agrupamiento-circuitos`, which does the same for `02`. The two are **independent apps** with independent HTML artifacts — deploying one never touches the other. Read that command when something here is unclear about the shared mechanics; only the differences are spelled out below.
 
-**Why Databricks Apps and not Lakeview.** Same reason as `01.2`: `01.3` fits K-Means with scikit-learn over 8 coordinate spaces, builds 25 Plotly traces including a geographic map, and drives everything from a hand-written HTML+JS panel (cell 7). Lakeview executes neither Python nor arbitrary JS.
+**Why Databricks Apps and not Lakeview.** Same reason as `02`: `03` fits K-Means with scikit-learn over 8 coordinate spaces, builds 25 Plotly traces including a geographic map, and drives everything from a hand-written HTML+JS panel (cell 7). Lakeview executes neither Python nor arbitrary JS.
 
-## What `01.3` needs that `01.2` did NOT
+## What `03` needs that `02` did NOT
 
 This is the single most important difference and the reason the preflight below is bigger. Verified by reading the notebook:
 
-| Input | `01.2` | `01.3` |
+| Input | `02` | `03` |
 |---|---|---|
 | `data/Indicadores_vano_v3.csv` | yes | yes |
 | `data/GEO/MVLINSEC.shp` (+ sidecars) | no | **yes** — the circuit map's line segments |
@@ -22,14 +22,14 @@ This is the single most important difference and the reason the preflight below 
 
 A shapefile is not one file. `MVLINSEC.shp` is useless without at least `.shx` and `.dbf`, and without `.prj` geopandas cannot resolve the CRS for the `to_crs('EPSG:4326')` call. `/subir-datos-databricks` mirrors the whole `data/` tree, so all sidecars travel — which is exactly why this command delegates to it rather than copying single files.
 
-Still **not** needed: no Delta table, no view, no Lakeview dashboard, no model checkpoint, no source package. `01.3` imports neither `chec_impacto` nor `chec_local_interpreter`.
+Still **not** needed: no Delta table, no view, no Lakeview dashboard, no model checkpoint, no source package. `03` imports neither `chec_impacto` nor `chec_local_interpreter`.
 
-**Scope.** MUST NOT create or refresh any Delta table or view, MUST NOT touch the Lakeview dashboard, MUST NOT modify the file under `notebooks/project_flow/`, MUST NOT touch the `01.2` app or its HTML, and MUST NOT create any `site`-named path inside the Volume.
+**Scope.** MUST NOT create or refresh any Delta table or view, MUST NOT touch the Lakeview dashboard, MUST NOT modify the file under `notebooks/project_flow/`, MUST NOT touch the `02` app or its HTML, and MUST NOT create any `site`-named path inside the Volume.
 
 ## 0. Ask the user for the two required inputs
 
 Ask, one at a time, and wait:
-1. The app name. The API constrains it to **2–30 characters, lowercase alphanumerics and hyphens**, unique in the workspace. Propose `trayectorias-circuitos` as the default. It MUST differ from the `01.2` app's name.
+1. The app name. The API constrains it to **2–30 characters, lowercase alphanumerics and hyphens**, unique in the workspace. Propose `trayectorias-circuitos` as the default. It MUST differ from the `02` app's name.
 2. The Databricks workspace URL.
 
 If a step finds a missing prerequisite, **do not ask whether to create it**. Only pause for an expired OAuth token or a privilege the profile cannot grant.
@@ -63,15 +63,15 @@ If the CSV **or** any shapefile is missing, run `/subir-datos-databricks` agains
 
 Warn first that `data/Indicadores_vano_v3.csv` is **566 MB** (Git-LFS tracked) and dominates a cold run. Confirm the local file is a real payload and not an unfetched LFS pointer (`ls -l data/Indicadores_vano_v3.csv`; a pointer is ~130 bytes → `git lfs pull`). The GEO tree is also LFS-tracked — check it the same way.
 
-## 3. Stage and upload the shimmed copy of `01.3`
+## 3. Stage and upload the shimmed copy of `03`
 
-**Hard invariant**: the modified notebook is a COPY in the scratch directory. Assert on `01.3` itself and report other modified notebooks as observations only:
+**Hard invariant**: the modified notebook is a COPY in the scratch directory. Assert on `03` itself and report other modified notebooks as observations only:
 ```
-test -z "$(git status --porcelain notebooks/project_flow/01.3_uiti_vano_trayectorias_circuitos.ipynb)" && echo LIMPIO || echo MODIFICADO
+test -z "$(git status --porcelain notebooks/project_flow/03_uiti_vano_trayectorias_circuitos.ipynb)" && echo LIMPIO || echo MODIFICADO
 ```
 Never write it as `git status --porcelain <path> && echo ok` — git exits 0 on a dirty tree.
 
-**Strip every code cell's `outputs` and `execution_count`.** `01.3` carries ~10.5 MB of embedded `text/html` in cell 7 from the last local run; the `--format JUPYTER` import limit is 10 MB, so an unstripped copy is over the ceiling outright. This is not hygiene here, it is the difference between the upload working and failing.
+**Strip every code cell's `outputs` and `execution_count`.** `03` carries ~10.5 MB of embedded `text/html` in cell 7 from the last local run; the `--format JUPYTER` import limit is 10 MB, so an unstripped copy is over the ceiling outright. This is not hygiene here, it is the difference between the upload working and failing.
 
 Four edits; everything else byte-identical.
 
@@ -79,7 +79,7 @@ Four edits; everything else byte-identical.
 ```python
 # %pip install pandas numpy plotly
 ```
-Uncomment it **and complete it** — that list is wrong for Databricks twice over. `01.3` also imports `geopandas` (cell 5) and `sklearn` (cell 4), and the bare `plotly` is actively insufficient:
+Uncomment it **and complete it** — that list is wrong for Databricks twice over. `03` also imports `geopandas` (cell 5) and `sklearn` (cell 4), and the bare `plotly` is actively insufficient:
 ```python
 %pip install -q pandas numpy "plotly>=6" geopandas scikit-learn
 ```
@@ -115,7 +115,7 @@ with
 ```python
 BLOQUE_TRAYECTORIAS = PANEL_HTML + FIGURA_HTML + PANEL_JS
 ```
-Unlike `01.2`, `01.3` has a **single** board, so there is no concatenation order to get wrong. Its figure uses `include_plotlyjs=True`, so plotly.js is already inside this block.
+Unlike `02`, `03` has a **single** board, so there is no concatenation order to get wrong. Its figure uses `include_plotlyjs=True`, so plotly.js is already inside this block.
 
 **Edit 4 — append a final cell** that writes the document:
 ```python
@@ -139,7 +139,7 @@ DOCUMENTO = f'''<!DOCTYPE html>
 </head>
 <body>
 <h1>Trayectorias de circuito por ventanas deslizantes</h1>
-<p class="meta">Generado desde <code>01.3_uiti_vano_trayectorias_circuitos.ipynb</code> el {pd.Timestamp.now():%Y-%m-%d %H:%M} &mdash;
+<p class="meta">Generado desde <code>03_uiti_vano_trayectorias_circuitos.ipynb</code> el {pd.Timestamp.now():%Y-%m-%d %H:%M} &mdash;
 {len(df):,} eventos, {len(CIRCUITOS)} circuitos, {len(VENTANAS)} ventanas, {len(CELDAS):,} celdas con eventos,
 periodo {df["FECHA"].min():%Y-%m-%d} a {df["FECHA"].max():%Y-%m-%d}.</p>
 {BLOQUE_TRAYECTORIAS}
@@ -153,17 +153,17 @@ print(f'{SALIDA} -> {SALIDA.stat().st_size / 1024 / 1024:.2f} MB')
 Upload:
 ```
 databricks workspace mkdirs /Workspace/Users/<userName>/databricks-integration/project_flow -p <profile>
-databricks workspace import /Workspace/Users/<userName>/databricks-integration/project_flow/01.3_uiti_vano_trayectorias_circuitos --file <staged_copy> --format JUPYTER --overwrite -p <profile>
+databricks workspace import /Workspace/Users/<userName>/databricks-integration/project_flow/03_uiti_vano_trayectorias_circuitos --file <staged_copy> --format JUPYTER --overwrite -p <profile>
 ```
 
 ## 4. Run the notebook once to generate the HTML
 
-Submit a serverless job exactly as `/app-agrupamiento-circuitos` section 4 does, pointing at `.../project_flow/01.3_uiti_vano_trayectorias_circuitos`, with `run_name: "trayectorias-circuitos-html"`. `01.3` uses no `ipywidgets`, so serverless is fine. Poll `databricks jobs get-run` until terminal; on failure surface the notebook's own error.
+Submit a serverless job exactly as `/app-agrupamiento-circuitos` section 4 does, pointing at `.../project_flow/03_uiti_vano_trayectorias_circuitos`, with `run_name: "trayectorias-circuitos-html"`. `03` uses no `ipywidgets`, so serverless is fine. Poll `databricks jobs get-run` until terminal; on failure surface the notebook's own error.
 
-Expect this leg to be slower than `01.2`'s: the job also reads three shapefiles from the Volume through the FUSE mount.
+Expect this leg to be slower than `02`'s: the job also reads three shapefiles from the Volume through the FUSE mount.
 
-**Verify by content, not by exit code.** Expect **~10.9 MB** (cell 7's stored output measures 10.98 MB; the app document runs slightly under it because it drops Jupyter's wrapper — the previous 10.47 MB figure predates the two-row layout and the sample counts in the titles). It is larger than `01.2`'s ~7.8 MB, and the split is roughly plotly.js 4.9 MB plus a 6.1 MB `CTX`, of which `geo` is 3.0 MB and `uitiVentana` 2.4 MB. Download it and assert (all verified against cell 7, not guessed):
-- exactly one `id="trayectorias-circuitos"` — that is `DIV_FIGURA`'s value, and it is **not** the same string as the `01.2` app's `agrupamiento-circuitos` div, so a copy-paste of that check would silently pass on the wrong artifact,
+**Verify by content, not by exit code.** Expect **~10.9 MB** (cell 7's stored output measures 10.98 MB; the app document runs slightly under it because it drops Jupyter's wrapper — the previous 10.47 MB figure predates the two-row layout and the sample counts in the titles). It is larger than `02`'s ~7.8 MB, and the split is roughly plotly.js 4.9 MB plus a 6.1 MB `CTX`, of which `geo` is 3.0 MB and `uitiVentana` 2.4 MB. Download it and assert (all verified against cell 7, not guessed):
+- exactly one `id="trayectorias-circuitos"` — that is `DIV_FIGURA`'s value, and it is **not** the same string as the `02` app's `agrupamiento-circuitos` div, so a copy-paste of that check would silently pass on the wrong artifact,
 - the panel controls `tr-circuito`, `tr-ventana`, `tr-logx`, `tr-logy`, `tr-prep`, `tr-csv`,
 - `Plotly.newPlot` present,
 - **the map layer non-empty** — count `"fids"` and `"centro"` in the document; both must equal the number of circuits with geometry (measured: **208 each**). This is the check that matters here: with the shapefiles missing or unreadable the notebook still succeeds and still writes an HTML of roughly the right size, just with no map. A size check alone will not catch it. `scattermap` should also appear, which doubles as proof the Plotly floor above took effect.
@@ -179,11 +179,11 @@ RUTA_HTML = os.environ.get(
     "/Volumes/workspace/default/chec-simulador/dashboards/trayectorias_circuitos.html",
 )
 ```
-Upload the three files with `--format RAW` into `/Workspace/Users/<userName>/databricks-integration/apps/<app-name>/`, a folder distinct from the `01.2` app's.
+Upload the three files with `--format RAW` into `/Workspace/Users/<userName>/databricks-integration/apps/<app-name>/`, a folder distinct from the `02` app's.
 
 ## 6. Create the App with the Volume as a resource
 
-Same `uc_securable` body as `/app-agrupamiento-circuitos` section 6 — Databricks applies `READ VOLUME` itself during service-principal provisioning, so no manual `GRANT` is needed. Verify it landed with `SHOW GRANTS` rather than assuming, and read `service_principal_client_id` from **this** app: it is new per app and per re-creation, so the `01.2` app's grant does nothing for this one.
+Same `uc_securable` body as `/app-agrupamiento-circuitos` section 6 — Databricks applies `READ VOLUME` itself during service-principal provisioning, so no manual `GRANT` is needed. Verify it landed with `SHOW GRANTS` rather than assuming, and read `service_principal_client_id` from **this** app: it is new per app and per re-creation, so the `02` app's grant does nothing for this one.
 
 Fallback to the manual grant only if that fails — see section 6a there, including the note that the auto-mode classifier denies `GRANT` through `databricks api post` and the user must run it with `!`.
 
@@ -203,5 +203,5 @@ Tell the user, in their language:
 - **How to refresh**: re-run the step 4 job, then hit `/?refresh=1`. No redeploy.
 - That the first load is slow (~10.5 MB gzipped) and later ones are cached, and that `/salud` answers without touching the Volume so it separates an app failure from a permission failure.
 - That `uiti_ventanas_deslizantes.csv` also landed under `.../chec-simulador/reports/interpretability/artifacts/` as a side effect of cell 8.
-- That the `01.2` app, if deployed, was untouched — the two are independent.
+- That the `02` app, if deployed, was untouched — the two are independent.
 - That no Delta table, view or Lakeview dashboard was created or touched.
