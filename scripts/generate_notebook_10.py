@@ -135,6 +135,225 @@ flowchart TD
 _MD_PERDIDA = '''\
 ## Funcion de costo
 
+### Termino general
+
+Sobre un lote de $B$ bolsas, con $\\hat{p}_b$ la prediccion de la bolsa $b$ y
+$t_b = \\log(1 + u_b)$ su objetivo:
+
+$$
+\\mathcal{L}
+= \\lambda_{\\mathrm{sup}}\\,\\mathcal{L}_{\\mathrm{sup}}
++ \\lambda_{\\mathrm{rec}}\\,\\tilde{\\mathcal{L}}_{\\mathrm{rec}}
++ \\lambda_{\\mathrm{MI}}\\,\\mathcal{L}_{\\mathrm{MI}}
++ \\lambda_{g}\\,\\mathcal{L}_{g}
++ \\lambda_{\\mathrm{mod}}\\,\\mathcal{L}_{\\mathrm{mod}}
++ \\lambda_{\\mathrm{cl}}\\,\\mathcal{L}_{\\mathrm{cl}}
+$$
+
+Los valores con los que se entreno el artefacto guardado son
+$\\lambda_{\\mathrm{sup}} = 1$, $\\lambda_{\\mathrm{rec}} = \\lambda_{\\mathrm{MI}} = 0.01$,
+$\\lambda_{g} = 0$, $\\lambda_{\\mathrm{mod}} = 0$ (inerte fuera de
+`fusion="reliability"`) y $\\lambda_{\\mathrm{cl}} = 1$.
+
+### Donde entra el grafo fijo predefinido
+
+El grafo experto $A$ es **fijo**: se registra como buffer, no como parametro, asi
+que ninguna arista se aprende. `alpha` tambien es un escalar fijo. Lo unico
+aprendible en todo el camino del grafo es la compuerta $g_b$, que ESCALA por
+bolsa las aristas que ya existen -- nunca crea ni borra ninguna.
+
+Los seis terminos no lo usan igual, y la diferencia importa al leer resultados:
+
+| termino | usa el grafo fijo | como |
+|---|---|---|
+| supervisado | **indirecto** | no aparece en la formula; entra porque $\hat{p}_b$ se calcula sobre $x'$, y $x'$ es $x$ propagado por $A$ |
+| reconstruccion | **no** | a proposito: el objetivo es el $x$ ORIGINAL, no $x'$ |
+| informacion mutua | **si, como REFERENCIA** | $K_g$ se construye una sola vez desde $[A \;\\lvert\; A^{\\top}]$ y es el patron contra el que se compara la representacion aprendida |
+| desviacion de compuertas | **si, como SOPORTE** | el vector $g_b$ tiene una entrada por arista de $A$; $g = 1$ significa "el grafo tal cual" |
+| supervision por modalidad | **no** | opera sobre predicciones por modalidad |
+| clase | **no** | usa la GEOMETRIA KMeans de 04, otro artefacto fijo distinto del grafo |
+
+La confusion facil es la ultima fila: en este cuaderno conviven dos objetos
+congelados -- el **grafo** experto de variables y la **geometria** de centroides
+de 04 -- y solo el primero es "el grafo".
+
+### De la bolsa a la prediccion
+
+Antes de los terminos hace falta $\\hat{p}_b$. Se arma en dos pasadas sobre la
+MISMA base, con atencion por segmento (una distribucion por bolsa, no por lote):
+
+$$
+e_i = w^{\\top} \\tanh(V z_i), \\qquad
+a_i = \\frac{\\exp(e_i)}{\\sum_{j \\in b(i)} \\exp(e_j)}, \\qquad
+z_b = \\sum_{i \\in b} a_i\\, z_i
+$$
+
+La compuerta por bolsa $g_b = 2\\,\\sigma(W z_b) \\in (0,2)^E$ modula el grafo fijo
+y propaga sobre las instancias, escribiendo SOLO en las columnas destino de las
+$E$ aristas:
+
+$$
+x'_i = x_i + \\alpha \\sum_{(r \\to c) \\in \\mathcal{E}} g_{b(i),\\,rc}\\; A_{rc}\\; x_{i,r}\\; \\mathbf{e}_c
+$$
+
+La segunda pasada re-codifica $x'$, re-agrupa con la misma atencion y produce
+$z_b^{(2)}$. Bajo `fusion="film"` (la del artefacto) la modalidad climatica
+RE-ESCALA a la estructural en vez de concatenarse con ella:
+
+$$
+z^{\\mathrm{film}}_b = z^{\\mathrm{est}}_b \\odot (1 + \\gamma(z^{\\mathrm{clim}}_b)) + \\beta(z^{\\mathrm{clim}}_b),
+\\qquad \\hat{p}_b = \\mathrm{head}(z^{\\mathrm{film}}_b)
+$$
+
+### Cada termino
+
+**1. Supervisado** — MSE ponderado por densidad inversa del objetivo:
+
+$$
+\\mathcal{L}_{\\mathrm{sup}} = \\frac{1}{B}\\sum_{b} \\tilde{w}(t_b)\\,(\\hat{p}_b - t_b)^2,
+\\qquad
+w(t) = \\frac{1}{\\max(\\hat{f}_{\\mathrm{KDE}}(t),\\, \\varepsilon)},
+\\qquad
+\\tilde{w} = \\frac{w}{\\bar{w}}
+$$
+
+*Grafo fijo: **indirecto**.* La formula no lo menciona, pero $\\hat{p}_b$ ya viene
+de la segunda pasada, es decir de $x'$ -- y $x'$ es $x$ propagado por $A$. Si se
+apagara la propagacion ($\\alpha = 0$), este termino seguiria siendo calculable y
+el grafo desapareceria por completo del gradiente.
+
+$\\hat{f}_{\\mathrm{KDE}}$ es una gaussiana ajustada UNA vez sobre los $t$ del
+pliegue de ENTRENAMIENTO, evaluada en una grilla e interpolada por lote (no hay
+evaluacion kernel de $O(B \\times n_{\\mathrm{train}})$ por paso). La
+renormalizacion $\\tilde{w} = w/\\bar{w}$ deja la media de pesos en 1 por lote,
+asi que la escala es comparable con un MSE plano.
+
+**2. Reconstruccion** — sobre la entrada ESTANDARIZADA $z = (x - \\mu)/\\sigma$:
+
+$$
+\\mathcal{L}^{\\mathrm{raw}}_{\\mathrm{rec}} = \\frac{1}{n\\,p}\\sum_{i,j} (\\hat{x}_{ij} - z_{ij})^2,
+\\qquad
+\\tilde{\\mathcal{L}}_{\\mathrm{rec}} = \\frac{\\mathcal{L}^{\\mathrm{raw}}_{\\mathrm{rec}}}{1 + \\mathcal{L}^{\\mathrm{raw}}_{\\mathrm{rec}}} \\in [0, 1)
+$$
+
+*Grafo fijo: **no lo usa**, y es deliberado.* El objetivo es el $x$ ORIGINAL, no
+$x'$: si fuera $x'$, la compuerta -- lo unico aprendible del camino del grafo --
+controlaria su propio objetivo. Es el unico termino que se define EXPLICITAMENTE
+por fuera del grafo.
+
+El objetivo es el $x$ ORIGINAL, nunca $x'$: con $x'$ la compuerta controlaria su
+propio objetivo y podria bajar la perdida simplificandolo. La forma
+$\\mathrm{raw}/(1+\\mathrm{raw})$ acota sin matar el gradiente, a diferencia de un
+recorte duro, que arriba de 1 tiene derivada exactamente cero.
+
+**3. Informacion mutua** — entropia cuadratica de Renyi entre dos kernels sobre
+variables (no sobre muestras):
+
+$$
+H_2(K) = -\\log \\sum_{i,j} \\left(\\frac{K}{\\mathrm{tr}\\,K}\\right)^2_{ij},
+\\qquad
+I_2(K_r, K_g) = H_2(K_r) + H_2(K_g) - H_2(K_r \\odot K_g)
+$$
+
+$$
+\\mathcal{L}_{\\mathrm{MI}} = 1 - \\mathrm{clip}\\!\\left(\\frac{I_2(K_r, K_g)}{\\log p},\\, 0,\\, 1\\right)
+$$
+
+*Grafo fijo: **si, y aca es la REFERENCIA del termino**.* $K_g$ se calcula una
+sola vez al construir la perdida, desde los perfiles $[A \\;\\lvert\\; A^{\\top}]$
+(cada variable descrita por sus aristas de salida y de entrada) con ancho igual a
+la mediana de las distancias entre perfiles, y queda como buffer constante. El
+gradiente NO llega a $A$: el termino empuja la representacion aprendida hacia la
+estructura experta, jamas al reves.
+
+$K_r$ es un RBF sobre los perfiles de variable reconstruidos (las COLUMNAS de
+$\\hat{X}$, con la distancia dividida por la dimension del perfil) y $K_g$ un RBF
+sobre los perfiles del grafo $[A \\;|\\; A^{\\top}]$ con ancho igual a la mediana de
+las distancias. Es el unico termino que ata la representacion a la estructura
+experta.
+
+**$K_g$ no se estima de los datos: son las relaciones conceptuales
+predefinidas.** Vale la pena decirlo sin rodeos porque "kernel" suena a algo
+ajustado. La matriz $A$ se reconstruye identica usando SOLO la lista de nombres
+de las features -- sin CSV, sin $y$, sin modelo -- y sus pesos
+($0.60, 0.70, 0.75, 0.80, 0.85, 0.90$) son literales escritos a mano en
+`chec_impacto/data/graph.py`, del tipo `("ALTURA", "NR_T", 0.75)`: juicio
+experto, no correlaciones medidas. Ademas $K_g$ se calcula en el CONSTRUCTOR de
+la perdida, no en el `forward`, y se guarda como buffer -- es una constante de
+todo el entrenamiento, no se recalcula por lote y no recibe gradiente.
+
+Lo unico que los datos deciden es **cuales nodos existen**: si un codigo de causa
+no alcanza el 1%, su columna no esta y las aristas que lo tocaban no se
+proyectan. Los datos eligen el conjunto de nodos; nunca las aristas ni sus pesos.
+
+| | $K_g$ | $K_r$ |
+|---|---|---|
+| origen | aristas conceptuales del experto | features reconstruidas del lote |
+| depende de los datos | no | si |
+| depende de los pesos del modelo | no | si |
+| recibe gradiente | no | si |
+
+Ese contraste es lo que le da sentido al termino: el lado experto es inmovil por
+construccion, asi que $1 - \\bar{I}_2(K_r, K_g)$ solo puede empujar la
+representacion aprendida hacia la estructura del grafo, nunca el grafo hacia los
+datos.
+
+**4. Desviacion de compuertas** — ancla al grafo sin compuerta:
+
+$$
+\\mathcal{L}_{g} = \\frac{1}{B\\,E}\\sum_{b,e} \\lvert g_{be} - 1 \\rvert
+$$
+
+*Grafo fijo: **si, como soporte y como ancla**.* El vector $g_b$ tiene
+exactamente una entrada por arista de $A$ -- el grafo fija la dimension $E$ del
+decodificador de compuertas -- y el valor 1 al que este termino ancla ES el grafo
+predefinido sin modificar. Lo que penaliza es apartarse de $A$ tal cual fue
+declarado; no mira los pesos $A_{rc}$, solo su conjunto de aristas.
+
+Con $g = 2\\,\\sigma(\\cdot)$, la identidad $g = 1$ se alcanza en el cero del
+logit, que es la inicializacion. Apagado ($\\lambda_g = 0$).
+
+**5. Supervision por modalidad** — el mismo MSE ponderado, aplicado a la
+prediccion propia de cada modalidad:
+
+$$
+\\mathcal{L}_{\\mathrm{mod}} = \\frac{1}{M}\\sum_{m=1}^{M} \\mathcal{L}_{\\mathrm{sup}}(\\hat{p}^{(m)}, t)
+$$
+
+*Grafo fijo: **no lo usa**.*
+
+Es lo que mantiene LEGIBLES las confiabilidades $r_m$ bajo
+`fusion="reliability"`: sin el, $r_m$ y $\\hat{p}^{(m)}$ se coadaptan y una
+modalidad puede predecir ruido mientras su confiabilidad colapsa a cero para
+compensar. Bajo `concat`/`film` no hay predicciones por modalidad que
+supervisar: el termino es inerte, no un error.
+
+**6. Clase** — entropia cruzada sobre las fronteras de 04, diferenciable a
+traves de $\\hat{p}_b$:
+
+$$
+c^{*}_b = \\arg\\min_k d^2_k(n^{\\mathrm{obs}}_b,\\, u^{\\mathrm{obs}}_b),
+\\qquad
+\\hat{u}_b = \\mathrm{softplus}\\!\\left(\\mathrm{expm1}(\\hat{p}_b)\\right)
+$$
+
+$$
+\\mathcal{L}_{\\mathrm{cl}} = \\mathrm{CE}\\!\\left(-\\frac{d^2(n^{\\mathrm{obs}}_b,\\, \\hat{u}_b)}{T},\\; c^{*}_b\\right)
+$$
+
+*Grafo fijo: **no lo usa**.* Lo fijo que aparece aca es la GEOMETRIA de
+centroides de 04 (verificada por sha1), un artefacto distinto del grafo de
+variables. Ningun $A$ interviene.
+
+La clase objetivo se DERIVA aca de lo observado con la misma geometria, nunca se
+recibe por parametro: asi es imposible pasar por accidente un objetivo
+inconsistente con `asignar_clase`. El piso sobre la rama predicha es `softplus`
+y no un `clamp`: en la inicializacion $\\hat{p}_b \\approx 0$, y un recorte duro
+ahi tiene gradiente exactamente cero -- el termino estaria muerto justo cuando
+mas importa.
+
+### Resumen operativo
+
 ```
 total = 1.00 * supervisado
       + 0.01 * reconstruccion_suave
@@ -162,6 +381,49 @@ total = 1.00 * supervisado
   los dos pueden mover el total como maximo 0.02, contra un termino supervisado
   que se movio entre 0.35 y 6.8. Con estos lambda, el grafo casi no participa
   del gradiente.
+'''
+
+_MD_BOLSAS_DOC = '''\
+## Como se construyen las bolsas
+
+La unidad de aprendizaje no es el evento: es la celda **(circuito, vano,
+ventana)**. Cada bolsa es el conjunto de eventos de UN vano dentro de UNA
+ventana, y el modelo predice el UITI acumulado de esa celda.
+
+- **Ventanas.** Las mismas 11 de 04, reconstruidas aqui con el mismo corte: cada
+  mes calendario mas su cruce del 15 al 15 del mes siguiente, ordenados. No son
+  meses, asi que no se pueden sumar entre si.
+- **Solapamiento a proposito.** Las ventanas se pisan. Un evento que cae en dos
+  ventanas del mismo vano genera DOS instancias, una en cada bolsa. Es la
+  duplicacion ~1.81x del diseno: se documenta, no se filtra. Filtrarla cambiaria
+  el soporte de las ventanas y romperia la comparabilidad con 04.
+- **Solo celdas con eventos.** Una celda sin eventos nunca se convierte en
+  bolsa. El numero de bolsas es exactamente el de celdas pobladas: no hay bolsas
+  vacias que el modelo tenga que aprender a ignorar.
+- **Instancia = fila de evento.** Cada instancia es una fila del CSV, con sus
+  $p$ features de instancia; la bolsa no promedia nada antes de entrar.
+- **Etiqueta de la bolsa.** $u_b = \\sum_{i \\in b} \\mathrm{UITI\\_VANO}_i$ --
+  SUMA, no promedio. El objetivo optimizado es $t_b = \\log(1 + u_b)$.
+- **Disposicion CSR, no tensor rellenado.** Una matriz plana `(n_inst, p)` mas
+  un indice de segmento `instance_bag` y sus `offsets`/`counts`. Un tensor
+  `(n_bags, max, p)` era la alternativa obvia y se descarto con numeros: 52,7%
+  de las bolsas son de un solo evento y el maximo es 46, asi que rellenar
+  desperdiciaria mas de 40x en computo y memoria sobre mas de la mitad de los
+  datos.
+- **Agrupacion para validacion cruzada.** Cada bolsa lleva `group =
+  CIRCUITO|FID_VANO`. Los pliegues se arman por grupo, de modo que un mismo vano
+  jamas queda partido entre entrenamiento y prueba -- sin eso, la persistencia
+  del vano se filtraria como si fuera capacidad predictiva.
+- **Lo que NO puede ser feature de instancia.** Dos exclusiones, ambas
+  verificadas al construir la matriz y no por convencion: fuga algebraica
+  (`DURACION`, `TOT_USUS`, `UITI`, `PORC_APORTE_VANO`, `UITI_VANO` -- el
+  objetivo se reconstruye a partir de ellas) y senal de cardinalidad
+  (`num_eventos`, `counts` -- cuentan cuantas instancias tiene la bolsa, que es
+  justamente lo que la bolsa no debe poder mirar).
+
+Los tamanos medidos sobre el dataset actual se imprimen en la celda de
+construccion, y estan fijados con asserts para que un cambio silencioso de datos
+falle en vez de deslizarse.
 '''
 
 _MD_VISOR = '''\
@@ -204,11 +466,45 @@ else:
 _MD_VARIABLES = '''\
 ## Variables de entrada
 
-Una fila por variable: su modalidad y su papel en el grafo experto fijo.
-`grado_entrada` es lo que la propagacion puede CAMBIAR de esa variable, asi que
-grado de entrada 0 significa que pasa por el grafo intacta.
-`aristas_cruzadas` cuenta las aristas que unen las dos modalidades -- el unico
-camino cruzado que el grafo aporta.
+Una fila por variable: su **modo** tematico, su **definicion**, su **origen**, su
+modalidad y su papel en el grafo experto fijo.
+
+- **Modo** es la clasificacion tematica experta (A-F) de `variables.json`, la
+  misma que colorea el grafo de variables. **Modalidad** es otra cosa: la
+  particion en dos ramas -- estructural y climatica -- que el modelo usa para
+  codificar por separado. Un modo no implica una modalidad.
+- **Origen** distingue las tres procedencias: `base` (columna del CSV
+  seleccionada en `Variables_seleccion.xlsx`), `rezago climatico` (expansion
+  horaria `_0.._11` de una familia) y `derivada de COD_CAUSA` (ver abajo).
+- `grado_entrada` es lo que la propagacion puede CAMBIAR de esa variable, asi que
+  grado de entrada 0 significa que pasa por el grafo intacta.
+  `aristas_cruzadas` cuenta las aristas que unen las dos modalidades -- el unico
+  camino cruzado que el grafo aporta.
+
+### Las derivadas de COD_CAUSA
+
+`COD_CAUSA` es un codigo categorico y entra por dos caminos a la vez, no por
+uno:
+
+1. **`COD_CAUSA` (frecuencia relativa).** El codigo crudo se reemplaza por su
+   frecuencia relativa en el dataset COMPLETO, calculada solo a partir de la
+   propia columna: nunca mira el objetivo. Conserva EXACTAMENTE ese nombre
+   porque es el nodo del grafo experto -- renombrarla borra sus aristas de
+   entrada.
+2. **Indicadores con colapso de raras.** Un `COD_CAUSA_<codigo>` binario por
+   cada codigo con frecuencia $\\geq$ 1%, mas un `COD_CAUSA_OTRAS` que absorbe
+   toda la cola. Ninguno tiene aristas: pasan por el grafo intactos.
+
+La frecuencia sola perderia la identidad del codigo (dos causas distintas con la
+misma frecuencia serian indistinguibles); los indicadores solos perderian el
+orden de magnitud. Por eso van los dos.
+
+### Variables descartadas
+
+La segunda tabla lista lo que NO entra, con su razon. Son tres grupos: las que
+el experto no selecciono en `Variables_seleccion.xlsx`, las que se excluyen por
+**fuga algebraica** (el objetivo se reconstruye a partir de ellas) y las que se
+excluyen por **senal de cardinalidad** (cuentan las instancias de la bolsa).
 '''
 
 _CODE_VARIABLES = '''\
@@ -231,7 +527,245 @@ if not ENTRENAR:
     _sin = tabla_vars.loc[tabla_vars["grado_entrada"] == 0, "variable"].tolist()
     print(f"  {len(_sin)} de {len(tabla_vars)}: {_sin}")
     print()
+
+    # --- modo tematico + definicion + origen -------------------------------------
+    # El modo sale de variables.json (la clasificacion experta A-F que colorea el
+    # grafo de variables); la definicion, de Variables_seleccion.xlsx. Se buscan en
+    # las dos ubicaciones posibles -- el checkout local y el Volume de Databricks --
+    # y si falta alguna la columna queda vacia en vez de romper la celda.
+    import json as _json
+    import re as _re
+
+    def _primero_que_exista(*rutas):
+        for _r in rutas:
+            if _r.exists():
+                return _r
+        return None
+
+    _ruta_modos = _primero_que_exista(
+        PROJECT_ROOT / "site" / "data" / "variables.json", DATA_DIR / "variables.json"
+    )
+    _modo_de, _nombre_modo = {}, {}
+    if _ruta_modos is not None:
+        _catalogo = _json.loads(_ruta_modos.read_text(encoding="utf-8"))
+        for _m in _catalogo["modos"]:
+            _nombre_modo[_m["id"]] = _m["nombre"]
+            for _clave in ("variables", "variablesEstaticas", "familiasClimaticas"):
+                for _v in _m.get(_clave, []):
+                    _modo_de[_v] = _m["id"]
+
+    _ruta_defs = _primero_que_exista(DATA_DIR / "Variables_seleccion.xlsx")
+    _definicion_de, _seleccion_de = {}, {}
+    if _ruta_defs is not None:
+        _sel = pd.read_excel(_ruta_defs)
+        _definicion_de = dict(zip(_sel["COLUMNA"], _sel["DESCRIPCIÓN_COLUMNA"]))
+        _seleccion_de = dict(zip(_sel["COLUMNA"], _sel["SELECCIÓN"]))
+
+    def _raiz(nombre):
+        """Familia climatica de un rezago (`prep_7` -> `prep`), o el nombre tal cual."""
+        return _re.sub(r"_\\d+$", "", nombre)
+
+    def _origen(nombre):
+        if nombre.startswith("COD_CAUSA_"):
+            return "derivada de COD_CAUSA (indicador)"
+        if nombre == "COD_CAUSA":
+            return "derivada de COD_CAUSA (frecuencia)"
+        # Un sufijo `_<digitos>` solo aparece en los rezagos horarios: las columnas
+        # base que terminan en digito no llevan guion bajo (`X2`, `Y2`), asi que el
+        # `_` de la expresion las excluye. Comparar contra el xlsx NO sirve aca: la
+        # familia (`prep`, `temp`, ...) SI esta en el xlsx, y eso clasificaria sus
+        # 12 rezagos como base.
+        if _re.search(r"_\\d+$", nombre):
+            return "rezago climatico"
+        return "base"
+
+    def _modo(nombre):
+        # Los indicadores heredan el modo de COD_CAUSA: son la misma variable
+        # expandida, no variables nuevas.
+        if nombre.startswith("COD_CAUSA"):
+            return _modo_de.get("COD_CAUSA", "")
+        return _modo_de.get(nombre, _modo_de.get(_raiz(nombre), ""))
+
+    def _definicion(nombre):
+        if nombre == "COD_CAUSA":
+            return "Frecuencia relativa del codigo de causa (target-free, nodo del grafo)"
+        if nombre == "COD_CAUSA_OTRAS":
+            return "Indicador: el codigo de causa cae en la cola de baja frecuencia"
+        if nombre.startswith("COD_CAUSA_"):
+            return f"Indicador: el codigo de causa es {nombre.rsplit('_', 1)[1]}"
+        if _origen(nombre) == "rezago climatico":
+            _fam, _h = _raiz(nombre), nombre.rsplit("_", 1)[1]
+            _base = _definicion_de.get(_fam, f"Variable climatica {_fam}")
+            return f"{_base} -- rezago de {_h} h antes del evento"
+        return _definicion_de.get(nombre, "")
+
+    tabla_vars.insert(1, "modo", [_modo(v) for v in tabla_vars["variable"]])
+    tabla_vars.insert(2, "nombre_modo", [_nombre_modo.get(m, "") for m in tabla_vars["modo"]])
+    tabla_vars.insert(3, "origen", [_origen(v) for v in tabla_vars["variable"]])
+    tabla_vars.insert(4, "definicion", [_definicion(v) for v in tabla_vars["variable"]])
+
+    resumen_modo = (
+        tabla_vars.assign(_n=1)
+        .groupby(["modo", "nombre_modo"], dropna=False)
+        .agg(variables=("_n", "sum"),
+             estructurales=("modalidad", lambda s: int((s == "estructurales").sum())),
+             climaticas=("modalidad", lambda s: int((s == "climaticos").sum())),
+             en_grafo=("en_grafo", "sum"))
+        .reset_index()
+        .sort_values("modo")
+    )
+    print("Modos tematicos (A-F de variables.json) sobre las features de instancia:")
+    print(resumen_modo.to_string(index=False))
+    print()
+    print("Origen de las features:")
+    print(tabla_vars["origen"].value_counts().to_string())
+    print()
     display(tabla_vars)
+
+    # --- lo que NO entra, con su razon -------------------------------------------
+    FUGA_ALGEBRAICA = ("DURACION", "TOT_USUS", "UITI", "PORC_APORTE_VANO", "UITI_VANO")
+    CARDINALIDAD = ("num_eventos", "counts")
+    _usadas = set(tabla_vars["variable"]) | {_raiz(v) for v in tabla_vars["variable"]}
+
+    _filas_descartes = []
+    for _v in FUGA_ALGEBRAICA:
+        _filas_descartes.append({
+            "variable": _v, "modo": _modo_de.get(_v, ""),
+            "definicion": _definicion_de.get(_v, ""),
+            "razon": "fuga algebraica: el objetivo se reconstruye a partir de ella",
+        })
+    for _v in CARDINALIDAD:
+        _filas_descartes.append({
+            "variable": _v, "modo": _modo_de.get(_v, ""),
+            "definicion": "Numero de eventos de la celda vano x ventana",
+            "razon": "senal de cardinalidad: cuenta las instancias de la bolsa",
+        })
+    for _v, _s in sorted(_seleccion_de.items()):
+        if _v in _usadas or _v in FUGA_ALGEBRAICA or _v in CARDINALIDAD:
+            continue
+        _filas_descartes.append({
+            "variable": _v, "modo": _modo_de.get(_v, ""),
+            "definicion": _definicion_de.get(_v, ""),
+            "razon": ("no seleccionada por el experto (SELECCION=0)" if _s != 1
+                      else "seleccionada pero no disponible como feature de instancia"),
+        })
+    tabla_descartes = pd.DataFrame(_filas_descartes)
+    print(f"{len(tabla_descartes)} variables descartadas:")
+    print(tabla_descartes["razon"].value_counts().to_string())
+    display(tabla_descartes)
+'''
+
+_MD_GRAFO_INTERACTIVO = '''\
+### El grafo experto fijo, interactivo
+
+El MISMO grafo con el que se entreno el artefacto: se lee del `.pt`, no se
+reconstruye, asi que lo que se ve es lo que el modelo uso. Es fijo -- el
+entrenamiento no aprende aristas, solo la compuerta $g_b$ que las escala por
+bolsa.
+
+Como leerlo: el color es la modalidad, el tamano es el grado total, y el hover
+trae modo, definicion y grados. Los nodos aislados a un costado son las
+variables de grado 0, las que la propagacion no toca. `COD_CAUSA` es el sumidero
+-- solo aristas de entrada -- y por eso concentra el flujo.
+'''
+
+_CODE_GRAFO_INTERACTIVO = '''\
+if not ENTRENAR:
+    import networkx as nx
+    import plotly.graph_objects as go
+
+    # Se recarga el artefacto en vez de depender de `_payload`: asi la celda
+    # corre sola aunque la de variables no se haya ejecutado en esta sesion.
+    _art = torch.load(RUTA_MODELO, map_location="cpu", weights_only=False)
+    _A = np.asarray(_art["adjacency"])
+    _feats = list(_art["features"])
+    _mod_de = {f: "estructurales" for f in _feats}
+    for _i in _art["modalidades"]["climaticos"]:
+        _mod_de[_feats[_i]] = "climaticos"
+
+    # Modo y definicion vienen de la celda anterior; si no corrio, el hover se
+    # degrada a solo grados en vez de romper.
+    _modo_txt = globals().get("_modo", lambda _n: "")
+    _nombres_modo = globals().get("_nombre_modo", {})
+    _def_txt = globals().get("_definicion", lambda _n: "")
+
+    G = nx.DiGraph()
+    for _i, _f in enumerate(_feats):
+        G.add_node(_f, modalidad=_mod_de[_f])
+    _filas, _cols = np.nonzero(_A)
+    for _r, _c in zip(_filas, _cols):
+        G.add_edge(_feats[_r], _feats[_c], peso=float(_A[_r, _c]))
+
+    _grado_ent = dict(G.in_degree())
+    _grado_sal = dict(G.out_degree())
+    _con_aristas = [n for n in G.nodes if _grado_ent[n] + _grado_sal[n] > 0]
+    _aislados = [n for n in G.nodes if _grado_ent[n] + _grado_sal[n] == 0]
+
+    # Layout solo sobre el subgrafo conectado: mezclar los aislados en el mismo
+    # spring los empuja al borde y comprime la parte que interesa. Van despues, en
+    # una columna aparte, que ademas es como se leen: "estas no las toca el grafo".
+    _pos = nx.spring_layout(G.subgraph(_con_aristas).to_undirected(), seed=RANDOM_STATE, k=0.9)
+    _x_borde = max(p[0] for p in _pos.values()) + 0.35
+    for _k, _n in enumerate(sorted(_aislados)):
+        _pos[_n] = (_x_borde + 0.16 * (_k % 3), -1.0 + 0.14 * (_k // 3))
+
+    _ejes_x, _ejes_y = [], []
+    for _u, _v in G.edges():
+        _ejes_x += [_pos[_u][0], _pos[_v][0], None]
+        _ejes_y += [_pos[_u][1], _pos[_v][1], None]
+
+    # Punto medio de cada arista: Plotly no da hover sobre una linea, asi que el
+    # peso viaja en un marcador invisible en el medio.
+    _mx, _my, _mtxt = [], [], []
+    for _u, _v, _d in G.edges(data=True):
+        _mx.append((_pos[_u][0] + _pos[_v][0]) / 2)
+        _my.append((_pos[_u][1] + _pos[_v][1]) / 2)
+        _mtxt.append(f"{_u} &#8594; {_v}<br>peso {_d['peso']:.2f}")
+
+    COLOR_MODALIDAD = {"estructurales": "#b45309", "climaticos": "#2b6e71"}
+    _trazas = [
+        go.Scatter(x=_ejes_x, y=_ejes_y, mode="lines", hoverinfo="skip",
+                   line=dict(width=0.9, color="#b8bcb6"), showlegend=False),
+        go.Scatter(x=_mx, y=_my, mode="markers", hovertext=_mtxt, hoverinfo="text",
+                   marker=dict(size=7, color="rgba(0,0,0,0)"), showlegend=False),
+    ]
+    for _modalidad, _color in COLOR_MODALIDAD.items():
+        _ns = [n for n in G.nodes if _mod_de[n] == _modalidad]
+        if not _ns:
+            continue
+        _trazas.append(go.Scatter(
+            x=[_pos[n][0] for n in _ns], y=[_pos[n][1] for n in _ns],
+            mode="markers+text", name=_modalidad,
+            text=[n if _grado_ent[n] + _grado_sal[n] > 0 else "" for n in _ns],
+            textposition="top center", textfont=dict(size=8),
+            marker=dict(
+                size=[9 + 2.6 * (_grado_ent[n] + _grado_sal[n]) for n in _ns],
+                color=_color, line=dict(width=1, color="white"), opacity=0.9,
+            ),
+            hovertext=[
+                f"<b>{n}</b><br>modalidad: {_modalidad}"
+                f"<br>modo: {_modo_txt(n)} {_nombres_modo.get(_modo_txt(n), '')}"
+                f"<br>grado entrada: {_grado_ent[n]} | salida: {_grado_sal[n]}"
+                f"<br>{_def_txt(n)}"
+                for n in _ns
+            ],
+            hoverinfo="text",
+        ))
+
+    fig_grafo = go.Figure(_trazas)
+    fig_grafo.update_layout(
+        title=(f"Grafo experto fijo del artefacto -- {G.number_of_nodes()} variables, "
+               f"{G.number_of_edges()} aristas "
+               f"({len(_aislados)} de grado 0, a la derecha)"),
+        template="plotly_white", height=760, width=1180,
+        xaxis=dict(visible=False), yaxis=dict(visible=False),
+        legend=dict(title="modalidad", orientation="h", y=1.02, x=0),
+        margin=dict(l=20, r=20, t=70, b=20),
+    )
+    _pos_cc = _feats.index("COD_CAUSA")
+    print(f"COD_CAUSA: {int((_A[:, _pos_cc] != 0).sum())} aristas de entrada, "
+          f"{int((_A[_pos_cc, :] != 0).sum())} de salida (sumidero)")
+    fig_grafo.show()
 '''
 
 _MD_DESEMPENO = '''\
@@ -1308,12 +1842,15 @@ def build_notebook() -> nbformat.NotebookNode:
         _cell("code", _CODE_CONFIG),
         # ---- documentacion: siempre visible, no depende de EJECUCION ----
         _cell("markdown", _MD_ARQUITECTURA),
+        _cell("markdown", _MD_BOLSAS_DOC),
         _cell("markdown", _MD_PERDIDA),
         # ---- visor: lee el modelo guardado ----
         _cell("markdown", _MD_VISOR),
         _cell("code", _CODE_VISOR),
         _cell("markdown", _MD_VARIABLES),
         _cell("code", _CODE_VARIABLES),
+        _cell("markdown", _MD_GRAFO_INTERACTIVO),
+        _cell("code", _CODE_GRAFO_INTERACTIVO),
         _cell("markdown", _MD_DESEMPENO),
         _cell("code", _CODE_DESEMPENO),
         # ---- entrenamiento: solo con EJECUCION="entrenamiento" ----
