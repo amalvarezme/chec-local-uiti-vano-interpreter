@@ -121,6 +121,21 @@ _CODE_PARAMETERS = '''\
 # Celda de parametros (papermill). Sobrescribir con `-p mode full` para la corrida real.
 # El default es "smoke" a proposito, mismo patron que la libreta 12.
 mode = "smoke"
+
+# Diales de BRAZO. Viven aqui, y no en la celda de configuracion, para que
+# papermill pueda fijarlos con -p: atribuir un cambio exige una corrida por
+# brazo, y tres cuadernos generados por separado se desincronizan solos.
+#   "concat"      -> head lineal sobre el latente concatenado (brazo original)
+#   "film"        -> el clima MODULA la representacion estructural
+#   "reliability" -> fusion ponderada por confiabilidad a grano de bolsa
+FUSION = "film"
+FILM_MODULATED_MODALITY = "estructurales"
+# Peso de la entropia cruzada sobre las clases de 01.4. 0.0 la apaga.
+LAMBDA_CLASE = 1.0
+# NO se hereda el 1.0 de distribucion_suave: con d^2 de mediana 0.038 esa
+# temperatura deja la softmax 99,9% uniforme (entropia 1.3850 contra
+# ln(4) = 1.3863) y el termino queda en su piso desde la primera epoca.
+TEMPERATURA_CLASE = 0.01
 '''
 
 _MD_BOOTSTRAP = '''\
@@ -240,6 +255,8 @@ Optuna definido en el diseno).
 '''
 
 _CODE_CONFIG = '''\
+if FUSION not in ("concat", "film", "reliability"):
+    raise ValueError(f"FUSION desconocida: {FUSION!r}")
 if mode not in ("smoke", "full"):
     raise ValueError(f"mode desconocido: {mode!r} -- se esperaba 'smoke' o 'full'.")
 
@@ -255,26 +272,9 @@ LAMBDA_GATE_DEVIATION = 0.0
 # "reliability": la fusion ocurre a grano de BOLSA y revive
 # base.modality_regressors / base.modality_reliability_heads, que bajo
 # "concat" reciben gradiente cero. Expone `reliabilities` por bolsa.
-# "film": el clima MODULA la representacion estructural en vez de sumarse.
-# Medido sobre las bolsas singleton (52,7% del total), "concat" es
-# exactamente aditivo entre modalidades: no representa ningun producto
-# estructura x clima. FiLM actua sobre el embedding agrupado, asi que
-# funciona a cualquier tamano de bolsa.
-FUSION = "film"
-FILM_MODULATED_MODALITY = "estructurales"
 # Supervisa la prediccion de cada modalidad por separado; es lo que
 # mantiene legibles las confiabilidades (ver MILBagLoss.compute_components).
 LAMBDA_MODALITY_SUPERVISED = 0.0
-# Entropia cruzada sobre la distribucion suave de clases de 01.4,
-# diferenciable a traves de u_hat. Sin esto la perdida no sabe donde
-# estan las fronteras entre centroides, que es exactamente lo que
-# `evaluar_arms` mide.
-LAMBDA_CLASE = 1.0
-# Temperatura de la softmax del termino de clase. NO se hereda el 1.0 de
-# distribucion_suave: con d^2 de mediana 0.038 esa temperatura deja la
-# distribucion 99,9% uniforme (entropia 1.3850 contra ln(4)=1.3863) y el
-# termino queda en su propio piso desde la primera epoca, sin gradiente.
-TEMPERATURA_CLASE = 0.01
 LR = 1e-3
 WEIGHT_DECAY = 1e-5
 BAG_BATCH_SIZE = 256

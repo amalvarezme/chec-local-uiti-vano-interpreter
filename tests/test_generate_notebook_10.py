@@ -359,3 +359,37 @@ def test_generator_touches_no_training_package_files():
         cwd=REPO_ROOT, capture_output=True, text=True, check=True,
     ).stdout
     assert diff == ""
+
+
+def test_arm_selecting_parameters_are_papermill_overridable(notebook):
+    """The arm knobs must live in the `parameters` cell, not in the config cell.
+
+    Attribution needs one run per arm (fusion on/off x class term on/off).
+    With FUSION and LAMBDA_CLASE buried in a plain code cell, papermill's
+    `-p` cannot reach them and every arm would need its own generated
+    notebook -- three artifacts that can silently drift apart.
+    """
+    parameter_cells = [
+        cell.source
+        for cell in notebook.cells
+        if cell.cell_type == "code" and "parameters" in cell.get("metadata", {}).get("tags", [])
+    ]
+    assert len(parameter_cells) == 1, "exactly one papermill parameters cell is expected"
+    fuente = parameter_cells[0]
+
+    for nombre in ("mode", "FUSION", "LAMBDA_CLASE", "TEMPERATURA_CLASE"):
+        assert re.search(rf"^{nombre}\s*=", fuente, re.MULTILINE), (
+            f"{nombre} debe definirse en la celda `parameters` para ser sobrescribible con -p"
+        )
+
+    # ...y NO redefinirse despues, o el override de papermill quedaria pisado.
+    otras = "\n".join(
+        cell.source
+        for cell in notebook.cells
+        if cell.cell_type == "code"
+        and "parameters" not in cell.get("metadata", {}).get("tags", [])
+    )
+    for nombre in ("FUSION", "LAMBDA_CLASE", "TEMPERATURA_CLASE"):
+        assert not re.search(rf"^{nombre}\s*=", otras, re.MULTILINE), (
+            f"{nombre} se redefine fuera de la celda `parameters`: pisaria el -p de papermill"
+        )
