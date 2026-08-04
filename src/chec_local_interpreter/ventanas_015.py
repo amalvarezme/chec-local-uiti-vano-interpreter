@@ -203,7 +203,13 @@ def construir_hist_class_cache(
         n_obs = tabla.loc[mask, "num_eventos"].to_numpy(dtype=float)
         u = tabla.loc[mask, "uiti_acumulado"].to_numpy(dtype=float)
         clase, _n_clamped = cargar_clases(n_obs, u, **cargar_clases_kwargs)
-        return dict(zip(fids[mask].tolist(), clase.tolist()))
+        # `str(fid)` y no el valor crudo: en el cuaderno `TABLA['FID_VANO']` es int64
+        # (sale de agregar el CSV) mientras que los fids del mapa son STRINGS (vienen
+        # del shapefile via `str()`). `capas_mapa_historico` busca cada fid geografico
+        # en este diccionario, asi que con llaves int no coincide NINGUNO y el mapa
+        # historico entero se pinta de "Sin dato". Es la misma coercion que ya hace
+        # `clases_por_fid_desde_resultado` para la fila 2.
+        return {str(fid): int(c) for fid, c in zip(fids[mask].tolist(), clase.tolist())}
 
     return clases_para
 

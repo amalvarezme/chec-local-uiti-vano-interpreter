@@ -364,6 +364,30 @@ def test_construir_hist_class_cache_maps_fid_to_class_via_injected_classifier():
     assert len(llamadas) == 1
 
 
+def test_construir_hist_class_cache_keys_by_str_even_when_fid_vano_is_numeric():
+    """The REAL `TABLA` has `FID_VANO` as int64 (it is aggregated straight off
+    the CSV), while the map's `GEO_POR_CIRCUITO['fids']` are strings -- the
+    shapefile ids go through `str()`. `capas_mapa_historico` looks each geo fid
+    up in this dict, so int keys mean EVERY vano misses its class and the whole
+    historical map paints "Sin dato". Both this function's annotation and its
+    docstring already promise `dict[str, int]`; the fixtures above only ever
+    used string fids, so nothing enforced it."""
+    tabla = pd.DataFrame({
+        "CIRCUITO": ["C1", "C1"], "FID_VANO": [20130434, 20130436], "ventana_i": [0, 0],
+        "num_eventos": [1, 5], "uiti_acumulado": [1.0, 9.0],
+    })
+    assert tabla["FID_VANO"].dtype == "int64"  # como en el cuaderno
+    mask_para = construir_mask_cache(tabla)
+
+    clases_para = construir_hist_class_cache(
+        tabla, mask_para, cargar_clases=lambda n_obs, u, **kw: (np.where(np.asarray(u) > 5, 3, 0), 0)
+    )
+    clases = clases_para("C1", 0)
+
+    assert clases == {"20130434": 0, "20130436": 3}
+    assert all(isinstance(k, str) for k in clases)
+
+
 # --- row 1 col 1: capas_mapa_historico --------------------------------------
 
 
