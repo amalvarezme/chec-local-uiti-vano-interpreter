@@ -169,6 +169,25 @@ def test_selector_vanos_repopulating_clears_the_previous_selection():
     assert list(selector.casillas) == ["VX", "VY"]
 
 
+def test_selector_vanos_exposes_its_inner_box_as_a_public_attribute():
+    """`caja` is the seam notebook 01.5's panel cell reaches for
+    (`vano_widget.caja.add_class('lista-vanos')`). It was renamed once from
+    `_caja` and nothing in this suite noticed -- the breakage only surfaced in a
+    live kernel, twice. Pinning it here turns a rename into a RED test."""
+    import ipywidgets as widgets
+
+    from chec_local_interpreter.vano_widgets import construir_selector_vanos
+
+    selector = construir_selector_vanos(["VA", "VB"])
+
+    assert isinstance(selector.caja, widgets.Box)
+    assert selector.caja in selector.children
+    assert tuple(selector.caja.children) == tuple(selector.casillas.values())
+
+    selector.caja.add_class("lista-vanos")  # exactly what the notebook cell does
+    assert "lista-vanos" in selector.caja._dom_classes
+
+
 def test_selector_vanos_ignores_a_click_on_an_unknown_fid():
     """Un clic puede caer sobre un tramo cuyo fid no esta en la lista (el
     mapa dibuja la geometria del circuito, que no siempre coincide con los
