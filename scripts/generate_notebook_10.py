@@ -200,6 +200,8 @@ try:
         baseline_persistencia,
         construir_folds_agrupados,
         desglose_por_circuito,
+        desglose_por_clase,
+        formatear_desglose_por_clase,
         evaluar_arms,
         evaluar_diagnostico_temporal,
         grafo_por_grupo_si_no_colapsado,
@@ -757,6 +759,61 @@ else:
     print("Evaluacion A1 OMITIDA -- requiere las predicciones out-of-fold de la celda 8.")
 '''
 
+_MD_POR_CLASE = '''\
+## 9.1 Desglose por clase (matriz de confusion, precision/recall/F1, accuracy)
+
+macro-F1 no distingue "mediocre parejo" de "abandono una clase", y aqui esa
+es la pregunta: `Alto` es el 10,21%% del subconjunto de variacion intra-vano
+(6.342 de 62.114 bolsas) y es la clase que le importa a CHEC. Un brazo que
+acierte perfecto las otras tres y NUNCA prediga `Alto` saca 89,8%% de
+accuracy y 0,75 de macro-F1 -- y el modelo observado saca 0,7704, lo bastante
+cerca de 3/4 como para que la pregunta no se pueda esquivar.
+
+`accuracy` se reporta al lado, nunca como titular: la linea base mayoritaria
+ya saca 0,4384 de accuracy contra 0,1524 de macro-F1.
+
+Esta celda ademas PERSISTE las predicciones fuera de pliegue. Sin eso, de una
+corrida de 40 minutos solo sobrevive un escalar y texto impreso, y cualquier
+diagnostico posterior obliga a reentrenar.
+'''
+
+_CODE_POR_CLASE = '''\
+if PROCEDER_CON_ENTRENAMIENTO_COMPLETO:
+    desglose_clases = desglose_por_clase(
+        clase_observada, {
+            "modelo": oof_clase_modelo[subconjunto_con_persistencia],
+            "estructural": oof_clase_estructural[subconjunto_con_persistencia],
+            "persistencia": oof_clase_persistencia[subconjunto_con_persistencia],
+            "mayoritaria": oof_clase_mayoritaria[subconjunto_con_persistencia],
+        },
+        subconjunto_con_persistencia,
+    )
+    print(formatear_desglose_por_clase(desglose_clases))
+
+    # Las predicciones fuera de pliegue son el unico artefacto reutilizable de
+    # la corrida: sin ellas, re-leer el resultado con otra metrica cuesta otro
+    # entrenamiento completo. El nombre lleva el brazo para que dos corridas
+    # con distinta configuracion no se pisen.
+    ruta_oof = DERIVED_DIR / f"oof_mil_{mode}_{FUSION}_clase{LAMBDA_CLASE}.npz"
+    np.savez_compressed(
+        ruta_oof,
+        clase_observada=clase_observada,
+        oof_clase_modelo=oof_clase_modelo,
+        oof_u_hat=oof_u_hat,
+        oof_clase_estructural=oof_clase_estructural,
+        oof_clase_persistencia=oof_clase_persistencia,
+        oof_clase_mayoritaria=oof_clase_mayoritaria,
+        oof_tiene_persistencia=oof_tiene_persistencia,
+        subconjunto_variacion=subconjunto_variacion,
+        subconjunto_con_persistencia=subconjunto_con_persistencia,
+        n_obs=bag_index.counts,
+        y_uiti=bag_index.y,
+    )
+    print(f"Predicciones fuera de pliegue guardadas en: {ruta_oof}")
+else:
+    print("Desglose por clase OMITIDO -- requiere las predicciones out-of-fold.")
+'''
+
 _MD_DESGLOSE = '''\
 ## 10. Desglose por circuito (reporte, nunca un piso de aceptacion)
 
@@ -1011,6 +1068,8 @@ def build_notebook() -> nbformat.NotebookNode:
         _cell("code", _CODE_CV_LOOP),
         _cell("markdown", _MD_A1_BASELINES),
         _cell("code", _CODE_A1_BASELINES),
+        _cell("markdown", _MD_POR_CLASE),
+        _cell("code", _CODE_POR_CLASE),
         _cell("markdown", _MD_DESGLOSE),
         _cell("code", _CODE_DESGLOSE),
         _cell("markdown", _MD_A3),

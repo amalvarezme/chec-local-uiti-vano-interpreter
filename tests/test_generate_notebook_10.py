@@ -393,3 +393,29 @@ def test_arm_selecting_parameters_are_papermill_overridable(notebook):
         assert not re.search(rf"^{nombre}\s*=", otras, re.MULTILINE), (
             f"{nombre} se redefine fuera de la celda `parameters`: pisaria el -p de papermill"
         )
+
+
+def test_generator_reports_the_per_class_breakdown_and_persists_oof(notebook):
+    """A 40-minute run must leave more than a scalar and printed text.
+
+    The out-of-fold predictions lived only in memory, so re-reading a
+    finished run with any other metric -- a confusion matrix, per-class F1,
+    a different threshold -- cost a full retrain. They are now written to
+    `DERIVED_DIR`, keyed by arm so two configurations cannot overwrite each
+    other's evidence.
+    """
+    source = _all_code_source(notebook)
+    assert "desglose_por_clase" in source
+    assert "formatear_desglose_por_clase" in source
+    assert "np.savez_compressed" in source
+    assert "oof_clase_modelo=oof_clase_modelo" in source
+    # el nombre del artefacto debe distinguir el brazo
+    assert re.search(r"oof_mil_\{mode\}_\{FUSION\}_clase\{LAMBDA_CLASE\}", source)
+
+
+def test_per_class_breakdown_runs_after_the_a1_verdict(notebook):
+    """It is a diagnostic OF the verdict, so it must not precede it."""
+    code = [c.source for c in notebook.cells if c.cell_type == "code"]
+    i_a1 = next(i for i, s in enumerate(code) if 'tabla_arms.attrs["veredicto"]' in s)
+    i_clase = next(i for i, s in enumerate(code) if "desglose_por_clase(" in s)
+    assert i_a1 < i_clase

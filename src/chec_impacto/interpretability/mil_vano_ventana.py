@@ -48,7 +48,7 @@ import numpy as np
 import pandas as pd
 import torch
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import f1_score
+from sklearn.metrics import confusion_matrix, f1_score, precision_recall_fscore_support
 from sklearn.model_selection import StratifiedGroupKFold
 
 from chec_impacto.interpretability.circuit_analysis import agregar_borda
@@ -57,7 +57,12 @@ from chec_impacto.interpretability.mgcecdl_graph import (
     grafo_reconstruido_por_grupo,
     guardia_proxy_univariante,
 )
-from chec_impacto.models.criticality_assignment import Geometria, asignar_clase, distribucion_suave
+from chec_impacto.models.criticality_assignment import (
+    GRUPOS,
+    Geometria,
+    asignar_clase,
+    distribucion_suave,
+)
 
 # Pre-registered, non-renegotiable (spec `mil-validation-protocol`, A1): the model must
 # beat the persistence baseline by AT LEAST this many points of macro-F1 on the
@@ -673,3 +678,100 @@ def construir_ranking_borda(
         ascending=[True] * len(group_cols) + [False],
         kind="stable",
     ).reset_index(drop=True)
+
+
+# ---------------------------------------------------------------------------
+# Per-class breakdown (confusion matrix + per-class F1)
+# ---------------------------------------------------------------------------
+
+N_CLASES_CRITICIDAD = 4
+
+
+def desglose_por_clase(
+    clase_obs: np.ndarray,
+    predicciones: Mapping[str, np.ndarray],
+    mask: np.ndarray,
+) -> dict[str, dict[str, Any]]:
+    """Confusion matrix + per-class precision/recall/F1 + accuracy, per arm.
+
+    macro-F1 cannot distinguish "uniformly mediocre" from "abandoned one
+    class", and on this dataset that IS the question: `Alto` is 10.21% of
+    the within-vano-variation subset, an arm that predicts the other three
+    perfectly and never predicts `Alto` scores 0.75 macro-F1 and 89.8%
+    accuracy, and the observed model scores 0.7704.
+
+    `accuracy` is reported but is never the headline -- the majority
+    baseline already scores 0.4384 accuracy against 0.1524 macro-F1.
+    `clases_abandonadas` names the tiers an arm never predicts at all, which
+    is the single fact the scalar metrics hide.
+
+    The matrix is ALWAYS `(4, 4)` with rows = observed and columns =
+    predicted, even when an arm never emits some tier -- a matrix whose
+    shape depends on the predictions cannot be compared across arms.
+    """
+    clase_obs = np.asarray(clase_obs).reshape(-1)
+    mask = np.asarray(mask, dtype=bool)
+    y_true = clase_obs[mask]
+    n_subset = int(mask.sum())
+    etiquetas = list(range(N_CLASES_CRITICIDAD))
+
+    salida: dict[str, dict[str, Any]] = {}
+    for nombre, y_pred in predicciones.items():
+        y_pred = np.asarray(y_pred).reshape(-1)
+        if y_pred.shape[0] != n_subset:
+            raise ValueError(
+                f"predicciones[{nombre!r}] tiene {y_pred.shape[0]} entradas pero la mask "
+                f"selecciona {n_subset} bolsas; la longitud debe coincidir."
+            )
+
+        matriz = confusion_matrix(y_true, y_pred, labels=etiquetas)
+        precision, recall, f1, soporte = precision_recall_fscore_support(
+            y_true, y_pred, labels=etiquetas, zero_division=0
+        )
+        predichas = set(np.unique(y_pred).tolist())
+
+        salida[nombre] = {
+            "n": n_subset,
+            "accuracy": float(np.mean(y_true == y_pred)),
+            "macro_f1": float(f1_score(y_true, y_pred, average="macro", labels=etiquetas)),
+            "matriz_confusion": matriz,
+            "por_clase": [
+                {
+                    "clase": k,
+                    "grupo": GRUPOS[k],
+                    "precision": float(precision[k]),
+                    "recall": float(recall[k]),
+                    "f1": float(f1[k]),
+                    "soporte": int(soporte[k]),
+                }
+                for k in etiquetas
+            ],
+            "clases_abandonadas": [k for k in etiquetas if k not in predichas],
+        }
+    return salida
+
+
+def formatear_desglose_por_clase(desglose: Mapping[str, Mapping[str, Any]]) -> str:
+    """Render `desglose_por_clase` for a notebook cell."""
+    lineas: list[str] = []
+    for nombre, d in desglose.items():
+        lineas.append(
+            f"=== {nombre} === n={d['n']:,}  accuracy={d['accuracy']:.4f}  "
+            f"macro-F1={d['macro_f1']:.4f}"
+        )
+        lineas.append("  matriz de confusion (fila = OBSERVADA, columna = PREDICHA)")
+        encabezado = "      " + "".join(f"{GRUPOS[k]:>12}" for k in range(N_CLASES_CRITICIDAD))
+        lineas.append(encabezado)
+        for k, fila in enumerate(d["matriz_confusion"]):
+            lineas.append(f"  {GRUPOS[k]:<10}" + "".join(f"{int(v):>12,}" for v in fila))
+        lineas.append(f"  {'grupo':<12}{'prec':>8}{'recall':>8}{'F1':>8}{'soporte':>10}")
+        for f in d["por_clase"]:
+            lineas.append(
+                f"  {f['grupo']:<12}{f['precision']:>8.4f}{f['recall']:>8.4f}"
+                f"{f['f1']:>8.4f}{f['soporte']:>10,}"
+            )
+        if d["clases_abandonadas"]:
+            nombres = ", ".join(GRUPOS[k] for k in d["clases_abandonadas"])
+            lineas.append(f"  AVISO: nunca predice {nombres} -- macro-F1 solo no lo mostraria.")
+        lineas.append("")
+    return "\n".join(lineas)
