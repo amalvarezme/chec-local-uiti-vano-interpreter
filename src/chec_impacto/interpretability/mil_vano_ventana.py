@@ -49,6 +49,7 @@ import pandas as pd
 import torch
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import confusion_matrix, f1_score, precision_recall_fscore_support
+from scipy.stats import spearmanr
 from sklearn.model_selection import StratifiedGroupKFold
 
 from chec_impacto.interpretability.circuit_analysis import agregar_borda
@@ -190,14 +191,83 @@ def baseline_estructural(
     if X_train.shape[0] != y_train.shape[0]:
         raise ValueError("X_train and y_train must have the same number of rows.")
 
-    modelo = RandomForestRegressor(n_estimators=200, random_state=seed)
-    modelo.fit(X_train, np.log1p(y_train))
-    log_u_pred = modelo.predict(X_test)
-    u_pred = np.expm1(log_u_pred)
-
+    u_pred = predecir_u_estructural(X_train, y_train, X_test, seed=seed)
     n_obs_test = np.asarray(n_obs_test, dtype=np.float64)
     clase_pred, _ = asignar_clase(n_obs_test, u_pred, geometria)
     return clase_pred
+
+
+def predecir_u_estructural(
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    X_test: np.ndarray,
+    *,
+    seed: int = 42,
+) -> np.ndarray:
+    """The structural baseline's `û`, before it becomes a class.
+
+    Extracted so the baseline's regression is OBSERVABLE.
+    `baseline_estructural` returned the class and discarded `û`, which made
+    it impossible to ask where a macro-F1 gap lives: both arms regress the
+    same `u` and both pass through the same frozen nearest-centroid rule, so
+    the gap is either in the regression or in the mapping -- and comparing
+    classes alone cannot separate them.
+    """
+    X_train = np.asarray(X_train, dtype=np.float64)
+    X_test = np.asarray(X_test, dtype=np.float64)
+    y_train = np.asarray(y_train, dtype=np.float64).reshape(-1)
+    if X_train.shape[0] != y_train.shape[0]:
+        raise ValueError("X_train and y_train must have the same number of rows.")
+
+    modelo = RandomForestRegressor(n_estimators=200, random_state=seed)
+    modelo.fit(X_train, np.log1p(y_train))
+    return np.expm1(modelo.predict(X_test))
+
+
+def contraste_u(
+    y_obs: np.ndarray,
+    u_hats: Mapping[str, np.ndarray],
+    mask: np.ndarray,
+) -> pd.DataFrame:
+    """Compare arms in `u` space instead of class space.
+
+    Reported in `log1p` -- the space the model is actually trained on. Raw-`u`
+    error would be dominated by the tail and would say almost nothing about
+    the bags that decide macro-F1.
+
+    `spearman` separates two failures that class metrics fuse: ranking the
+    bags correctly but at the wrong level (high spearman, high MAE) versus
+    getting the level roughly right while ordering them badly.
+    """
+    y_obs = np.asarray(y_obs, dtype=np.float64).reshape(-1)
+    mask = np.asarray(mask, dtype=bool)
+    objetivo = np.log1p(y_obs[mask])
+    n_subset = int(mask.sum())
+
+    filas: list[dict[str, Any]] = []
+    for nombre, u_hat in u_hats.items():
+        u_hat = np.asarray(u_hat, dtype=np.float64).reshape(-1)
+        if u_hat.shape[0] != n_subset:
+            raise ValueError(
+                f"u_hats[{nombre!r}] tiene {u_hat.shape[0]} entradas pero la mask selecciona "
+                f"{n_subset} bolsas; la longitud debe coincidir."
+            )
+        # log1p no esta definido bajo -1; una prediccion no positiva es un
+        # error del modelo, no un motivo para propagar NaN a toda la tabla.
+        prediccion = np.log1p(np.maximum(u_hat, 0.0))
+        residuo = prediccion - objetivo
+        rho = spearmanr(prediccion, objetivo).statistic if n_subset > 1 else float("nan")
+        filas.append(
+            {
+                "arm": nombre,
+                "n": n_subset,
+                "spearman": float(rho),
+                "mae_log1p": float(np.mean(np.abs(residuo))),
+                "rmse_log1p": float(np.sqrt(np.mean(residuo**2))),
+                "sesgo_log1p": float(np.mean(residuo)),
+            }
+        )
+    return pd.DataFrame(filas)
 
 
 def baseline_persistencia(

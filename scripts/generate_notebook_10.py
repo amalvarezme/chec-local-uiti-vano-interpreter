@@ -201,6 +201,8 @@ try:
         construir_folds_agrupados,
         desglose_por_circuito,
         desglose_por_clase,
+        contraste_u,
+        predecir_u_estructural,
         formatear_desglose_por_clase,
         evaluar_arms,
         evaluar_diagnostico_temporal,
@@ -660,6 +662,7 @@ oof_u_hat = np.full(n_bags, np.nan, dtype=np.float64)
 oof_gates = np.full((n_bags, edge_index.n_edges), np.nan, dtype=np.float64)
 oof_clase_mayoritaria = np.full(n_bags, -1, dtype=int)
 oof_clase_estructural = np.full(n_bags, -1, dtype=int)
+oof_u_estructural = np.full(n_bags, np.nan, dtype=np.float64)
 oof_clase_persistencia = np.full(n_bags, -1, dtype=int)
 oof_tiene_persistencia = np.zeros(n_bags, dtype=bool)
 
@@ -690,9 +693,16 @@ if PROCEDER_CON_ENTRENAMIENTO_COMPLETO:
         oof_clase_mayoritaria[test_idx] = baseline_mayoritaria(
             clase_observada[train_idx], len(test_idx),
         )
-        oof_clase_estructural[test_idx] = baseline_estructural(
+        # UN solo ajuste del RandomForest, dos salidas: la clase que publica la
+        # linea base y la `u` con que la calcula. Llamar a baseline_estructural
+        # ademas de esto lo ajustaria dos veces por pliegue.
+        u_est_test = predecir_u_estructural(
             X_bag_estructural[train_idx], bag_index.y[train_idx], X_bag_estructural[test_idx],
-            bag_index.counts[test_idx].astype(np.float64), geometria, seed=RANDOM_STATE,
+            seed=RANDOM_STATE,
+        )
+        oof_u_estructural[test_idx] = u_est_test
+        oof_clase_estructural[test_idx], _ = asignar_clase(
+            bag_index.counts[test_idx].astype(np.float64), u_est_test, geometria,
         )
 
         test_mask_fold = np.zeros(n_bags, dtype=bool)
@@ -794,6 +804,19 @@ if PROCEDER_CON_ENTRENAMIENTO_COMPLETO:
     # la corrida: sin ellas, re-leer el resultado con otra metrica cuesta otro
     # entrenamiento completo. El nombre lleva el brazo para que dos corridas
     # con distinta configuracion no se pisen.
+    # Contraste en espacio de `u`: los dos brazos regresan la MISMA cantidad y
+    # pasan por la MISMA regla de centroide mas cercano, asi que una brecha de
+    # macro-F1 vive en la regresion o en el mapeo. Comparar clases no los separa.
+    print(contraste_u(
+        bag_index.y,
+        {
+            "modelo": oof_u_hat[subconjunto_con_persistencia],
+            "estructural": oof_u_estructural[subconjunto_con_persistencia],
+        },
+        subconjunto_con_persistencia,
+    ).to_string(index=False))
+    print()
+
     ruta_oof = DERIVED_DIR / f"oof_mil_{mode}_{FUSION}_clase{LAMBDA_CLASE}.npz"
     np.savez_compressed(
         ruta_oof,
@@ -801,6 +824,7 @@ if PROCEDER_CON_ENTRENAMIENTO_COMPLETO:
         oof_clase_modelo=oof_clase_modelo,
         oof_u_hat=oof_u_hat,
         oof_clase_estructural=oof_clase_estructural,
+        oof_u_estructural=oof_u_estructural,
         oof_clase_persistencia=oof_clase_persistencia,
         oof_clase_mayoritaria=oof_clase_mayoritaria,
         oof_tiene_persistencia=oof_tiene_persistencia,

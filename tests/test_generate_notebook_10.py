@@ -419,3 +419,31 @@ def test_per_class_breakdown_runs_after_the_a1_verdict(notebook):
     i_a1 = next(i for i, s in enumerate(code) if 'tabla_arms.attrs["veredicto"]' in s)
     i_clase = next(i for i, s in enumerate(code) if "desglose_por_clase(" in s)
     assert i_a1 < i_clase
+
+
+def test_generator_contrasts_the_model_against_the_forest_in_u_space(notebook):
+    """Class metrics alone cannot say WHERE the gap lives.
+
+    Both arms regress the same `u` and both pass through the same frozen
+    nearest-centroid rule, so a macro-F1 gap sits either in the regression
+    or in the mapping. The notebook must report the u-space comparison and
+    persist the forest's own `û`, or answering that costs a retrain.
+    """
+    source = _all_code_source(notebook)
+    assert "contraste_u(" in source
+    assert "predecir_u_estructural(" in source
+    assert "oof_u_estructural=oof_u_estructural" in source
+
+
+def test_generator_fits_the_forest_once_per_fold(notebook):
+    """Capturing û must not double the baseline's cost.
+
+    `baseline_estructural` fits its own RandomForest, so calling it AND
+    `predecir_u_estructural` in the same fold would fit 200 trees twice per
+    fold for one extra array.
+    """
+    source = _all_code_source(notebook)
+    assert "baseline_estructural(" not in source, (
+        "el bucle debe derivar la clase de predecir_u_estructural, no reajustar el bosque"
+    )
+    assert source.count("predecir_u_estructural(") == 1
