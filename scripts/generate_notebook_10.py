@@ -255,10 +255,21 @@ LAMBDA_GATE_DEVIATION = 0.0
 # "reliability": la fusion ocurre a grano de BOLSA y revive
 # base.modality_regressors / base.modality_reliability_heads, que bajo
 # "concat" reciben gradiente cero. Expone `reliabilities` por bolsa.
-FUSION = "reliability"
+# "film": el clima MODULA la representacion estructural en vez de sumarse.
+# Medido sobre las bolsas singleton (52,7% del total), "concat" es
+# exactamente aditivo entre modalidades: no representa ningun producto
+# estructura x clima. FiLM actua sobre el embedding agrupado, asi que
+# funciona a cualquier tamano de bolsa.
+FUSION = "film"
+FILM_MODULATED_MODALITY = "estructurales"
 # Supervisa la prediccion de cada modalidad por separado; es lo que
 # mantiene legibles las confiabilidades (ver MILBagLoss.compute_components).
 LAMBDA_MODALITY_SUPERVISED = 0.0
+# Entropia cruzada sobre la distribucion suave de clases de 01.4,
+# diferenciable a traves de u_hat. Sin esto la perdida no sabe donde
+# estan las fronteras entre centroides, que es exactamente lo que
+# `evaluar_arms` mide.
+LAMBDA_CLASE = 1.0
 LR = 1e-3
 WEIGHT_DECAY = 1e-5
 BAG_BATCH_SIZE = 256
@@ -275,7 +286,8 @@ else:
 
 print(f"mode={mode!r} | N_SPLITS={N_SPLITS} | EPOCHS={EPOCHS} | "
       f"COST_CEILING_SECONDS={COST_CEILING_SECONDS}")
-print(f"fusion={FUSION!r} | LAMBDA_MODALITY_SUPERVISED={LAMBDA_MODALITY_SUPERVISED}")
+print(f"fusion={FUSION!r} | LAMBDA_MODALITY_SUPERVISED={LAMBDA_MODALITY_SUPERVISED} | "
+      f"LAMBDA_CLASE={LAMBDA_CLASE}")
 '''
 
 _MD_DATA_LOAD = '''\
@@ -532,6 +544,7 @@ def construir_modelo_y_perdida(feature_mean, feature_std, kernel_loss):
     modelo = MILBagRegressor(
         base=base, adjacency=A_adyacencia, edge_index=edge_index, alpha=ALPHA, attn_dim=ATTN_DIM,
         fusion=FUSION,
+        film_modulated_modality=FILM_MODULATED_MODALITY if FUSION == "film" else None,
     ).to(DEVICE)
     perdida = MILBagLoss(
         feature_mean=feature_mean, feature_std=feature_std, adjacency_matrix=A_adyacencia,
@@ -539,6 +552,7 @@ def construir_modelo_y_perdida(feature_mean, feature_std, kernel_loss):
         lambda_mutual_information=LAMBDA_MUTUAL_INFORMATION,
         lambda_gate_deviation=LAMBDA_GATE_DEVIATION,
         lambda_modality_supervised=LAMBDA_MODALITY_SUPERVISED,
+        lambda_clase=LAMBDA_CLASE, geometria=geometria,
         reconstruction_normalization="soft",
     ).to(DEVICE)
     return modelo, perdida

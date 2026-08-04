@@ -188,3 +188,46 @@ def distribucion_suave(
     logits = logits - logits.max(axis=-1, keepdims=True)
     exp = np.exp(logits)
     return exp / exp.sum(axis=-1, keepdims=True)
+
+
+def distancias_cuadradas_torch(
+    n_obs: "torch.Tensor",
+    u: "torch.Tensor",
+    geometria: Geometria,
+    *,
+    eps: float = EPS_UITI,
+) -> "torch.Tensor":
+    """Differentiable mirror of `_distancias_cuadradas`, returning `(n, K)`.
+
+    Exists so a loss can reach the criticality classes THROUGH `u` -- the
+    numpy path above is the reporting path and stays authoritative. The two
+    are pinned to agree numerically in
+    `tests/test_mil_perdida_clase.py::test_torch_distances_match_the_numpy_implementation`;
+    any future change to the standardization must move both.
+
+    `torch` is imported lazily: this module is imported by notebook and
+    reporting code paths that have no reason to pay for torch.
+    """
+    import torch
+
+    n_obs = torch.as_tensor(n_obs)
+    u = torch.as_tensor(u, dtype=n_obs.dtype if u is None else None)
+    if n_obs.shape != u.shape:
+        raise ValueError("n_obs y u deben tener la misma forma.")
+
+    log_x, log_y = geometria.logs
+    # `clamp` keeps the gradient finite at u <= 0 (it is zero there, which is
+    # the right answer: below the clamp the standardized coordinate is
+    # constant, so it genuinely does not respond to u).
+    x0 = torch.log10(n_obs.clamp(min=eps)) if log_x else n_obs
+    x1 = torch.log10(u.clamp(min=eps)) if log_y else u
+
+    offset = torch.as_tensor(geometria.offset, dtype=x0.dtype, device=x0.device)
+    scale = torch.as_tensor(geometria.scale, dtype=x0.dtype, device=x0.device)
+    centroides = torch.as_tensor(
+        geometria.centroides, dtype=x0.dtype, device=x0.device
+    )
+
+    z = torch.stack([(x0 - offset[0]) / scale[0], (x1 - offset[1]) / scale[1]], dim=-1)
+    diffs = z.unsqueeze(-2) - centroides.unsqueeze(0)
+    return torch.sum(diffs**2, dim=-1)

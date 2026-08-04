@@ -42,6 +42,7 @@ from typing import Any, Callable, Mapping
 import numpy as np
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 from chec_impacto.models.mgcecdl import KernelDensityWeightedMSELoss, MGCECDLRegressor
 from chec_impacto.models.mgcecdl_graph import GraphEdgeIndex, PerSampleEdgeGateDecoder
@@ -133,12 +134,27 @@ class MILBagRegressor(nn.Module):
         alpha: float,
         attn_dim: int = 64,
         fusion: str = "concat",
+        film_modulated_modality: str | None = None,
     ) -> None:
         super().__init__()
-        if fusion not in ("concat", "reliability"):
+        if fusion not in ("concat", "reliability", "film"):
             raise ValueError(
-                f"fusion must be 'concat' or 'reliability' (received: {fusion!r})."
+                f"fusion must be 'concat', 'reliability' or 'film' (received: {fusion!r})."
             )
+        if fusion == "film":
+            if film_modulated_modality is None:
+                raise ValueError(
+                    "fusion='film' requiere `film_modulated_modality`: cual modalidad "
+                    "MODULA a cual es una afirmacion fisica (el clima modula la "
+                    "vulnerabilidad estructural, no al reves) y debe quedar escrita."
+                )
+            if film_modulated_modality not in base.modality_names:
+                raise ValueError(
+                    f"la modalidad {film_modulated_modality!r} no existe en el modelo base "
+                    f"(disponibles: {list(base.modality_names)})."
+                )
+            if base.n_modalities < 2:
+                raise ValueError("fusion='film' necesita al menos 2 modalidades.")
         adjacency_tensor = torch.as_tensor(adjacency, dtype=torch.float32)
         n_features = adjacency_tensor.shape[0]
         if adjacency_tensor.shape != (n_features, n_features):
@@ -181,10 +197,26 @@ class MILBagRegressor(nn.Module):
         self.gate_decoder = PerSampleEdgeGateDecoder(
             latent_dim=latent_dim, n_edges=edge_index.n_edges
         )
-        # Under "reliability" the bag head IS `base.modality_regressors` +
-        # `base.modality_reliability_heads`; creating an unused `self.head`
-        # would just move the dead path instead of removing it.
+        # Under "reliability"/"film" the bag head is elsewhere; creating an
+        # unused `self.head` would just move the dead path instead of
+        # removing it.
         self.head = nn.Linear(latent_dim, 1) if fusion == "concat" else None
+
+        self.film_modulated_modality = film_modulated_modality
+        if fusion == "film":
+            self.film_modulated_index = base.modality_names.index(film_modulated_modality)
+            contexto_dim = (base.n_modalities - 1) * base.embed_dim
+            self.film_gamma = nn.Linear(contexto_dim, base.embed_dim)
+            self.film_beta = nn.Linear(contexto_dim, base.embed_dim)
+            # Zero-init: at step 0 FiLM is the IDENTITY on the modulated
+            # modality, so training starts from the structural-only path --
+            # which is exactly what the winning RandomForest baseline uses --
+            # and adds modulation from there, instead of starting from noise.
+            # Same discipline as `PerSampleEdgeGateDecoder`'s `g == 1` start.
+            for capa in (self.film_gamma, self.film_beta):
+                nn.init.zeros_(capa.weight)
+                nn.init.zeros_(capa.bias)
+            self.film_head = nn.Linear(base.embed_dim, 1)
 
     def forward(
         self,
@@ -232,7 +264,31 @@ class MILBagRegressor(nn.Module):
             "embeddings": modality_embeddings_2,
         }
 
-        if self.fusion == "reliability":
+        if self.fusion == "film":
+            # `w_est . z_est + w_clim . z_clim` (concat) is EXACTLY additive
+            # across modalities: it cannot represent a product between a
+            # structural and a climatic feature. Measured, the only
+            # cross-modality path in this model was the graph -- 10 of 64
+            # edges, scaled by alpha and gated. FiLM makes the context
+            # modality RESCALE the modulated one, which is also the domain
+            # claim: a gust matters more on a tall, old, degraded pole.
+            embed_dim = self.base.embed_dim
+            rebanadas = [
+                z_bag_2[:, i * embed_dim : (i + 1) * embed_dim]
+                for i in range(self.base.n_modalities)
+            ]
+            z_modulada = rebanadas[self.film_modulated_index]
+            z_contexto = torch.cat(
+                [r for i, r in enumerate(rebanadas) if i != self.film_modulated_index],
+                dim=1,
+            )
+            gamma = self.film_gamma(z_contexto)
+            beta = self.film_beta(z_contexto)
+            z_film = z_modulada * (1.0 + gamma) + beta
+            salida["p_bag"] = self.film_head(z_film).squeeze(-1)
+            salida["film_gamma"] = gamma
+            salida["film_beta"] = beta
+        elif self.fusion == "reliability":
             # Bag-grain reliability fusion. `z_bag_2` is a sum over instances of
             # concatenated per-modality embeddings weighted by a SINGLE attention
             # distribution, and pooling is linear in `z` for fixed `a`, so column
@@ -301,6 +357,9 @@ class MILBagLoss(nn.Module):
         lambda_mutual_information: float = 0.01,
         lambda_gate_deviation: float = 0.0,
         lambda_modality_supervised: float = 0.0,
+        lambda_clase: float = 0.0,
+        geometria: Any = None,
+        temperatura_clase: float = 1.0,
         reconstruction_normalization: str = "soft",
     ) -> None:
         super().__init__()
@@ -337,12 +396,62 @@ class MILBagLoss(nn.Module):
         self.lambda_supervised = float(lambda_supervised)
         self.lambda_gate_deviation = float(lambda_gate_deviation)
         self.lambda_modality_supervised = float(lambda_modality_supervised)
+        self.lambda_clase = float(lambda_clase)
+        self.geometria = geometria
+        if temperatura_clase <= 0.0:
+            raise ValueError("temperatura_clase debe ser > 0.")
+        self.temperatura_clase = float(temperatura_clase)
+        if self.lambda_clase > 0.0 and geometria is None:
+            raise ValueError(
+                "lambda_clase > 0 requiere `geometria` (la Geometria congelada de 01.4): "
+                "sin ella no hay fronteras de clase que optimizar."
+            )
+
+    def _perdida_de_clase(
+        self, p_bag: torch.Tensor, y_bag: torch.Tensor, n_obs: torch.Tensor
+    ) -> torch.Tensor:
+        """Cross-entropy over 01.4's own soft class distribution, differentiable
+        through `p_bag`.
+
+        The target class is DERIVED here from the OBSERVED `(n_obs, y_bag)`
+        with the same geometry, never passed in: that makes a target
+        inconsistent with `asignar_clase` impossible to supply by accident.
+        `n_obs` is observed, not predicted -- `asignar_clase` already reads it
+        as a coordinate, so using it here introduces no information the
+        evaluation did not already have.
+        """
+        from chec_impacto.models.criticality_assignment import distancias_cuadradas_torch
+
+        n_obs = n_obs.to(dtype=p_bag.dtype, device=p_bag.device).reshape(-1)
+        y_bag = y_bag.to(dtype=p_bag.dtype, device=p_bag.device).reshape(-1)
+
+        with torch.no_grad():
+            clase_objetivo = distancias_cuadradas_torch(
+                n_obs, y_bag, self.geometria
+            ).argmin(dim=-1)
+
+        # `p_bag` predicts log1p(u); the geometry standardizes u itself.
+        #
+        # `softplus` (not `clamp`) is the floor on the PREDICTED branch. At
+        # initialization `p_bag ~ 0`, so `expm1(p_bag) <= EPS_UITI`, and a hard
+        # clamp there has EXACTLY zero gradient -- the term would be inert
+        # precisely when training starts, which is when it matters most.
+        # `softplus` is strictly positive and smooth everywhere, and in the
+        # range the geometry's centroids actually occupy (u in ~[12, 3400], the
+        # log10 span of `offset[1]`/`scale[1]`) it equals `u` to float
+        # precision, so it distorts nothing where the model is not already
+        # predicting nonsense. The OBSERVED branch keeps the hard clamp, so
+        # `distancias_cuadradas_torch` stays bit-comparable with numpy.
+        u_hat = F.softplus(torch.expm1(p_bag))
+        d2 = distancias_cuadradas_torch(n_obs, u_hat, self.geometria)
+        return F.cross_entropy(-d2 / self.temperatura_clase, clase_objetivo)
 
     def compute_components(
         self,
         model_output: Mapping[str, torch.Tensor],
         inputs: torch.Tensor,
         y_bag: torch.Tensor,
+        n_obs: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
         p_bag = model_output["p_bag"]
         targets = torch.log1p(y_bag.reshape(-1).to(dtype=p_bag.dtype))
@@ -379,6 +488,21 @@ class MILBagLoss(nn.Module):
         else:
             modality_supervised_loss = supervised_loss.new_zeros(())
 
+        # Class-aware term: the model is SCORED on a 4-class nearest-centroid
+        # map but was trained only on a weighted MSE over log1p(u), so nothing
+        # in the objective knew where the centroid boundaries were. Raising
+        # instead of quietly contributing 0 -- a term that silently does
+        # nothing is the failure mode that let the SHAP annotation ship broken.
+        if self.lambda_clase > 0.0:
+            if n_obs is None:
+                raise ValueError(
+                    "lambda_clase > 0 requiere `n_obs` (la cardinalidad OBSERVADA por bolsa) "
+                    "en compute_components; sin ella el termino de clase no es calculable."
+                )
+            class_loss = self.lambda_clase * self._perdida_de_clase(p_bag, y_bag, n_obs)
+        else:
+            class_loss = supervised_loss.new_zeros(())
+
         total_loss = (
             self.lambda_supervised * supervised_loss
             + self._graph_reconstruction.lambda_reconstruction * soft_reconstruction
@@ -386,12 +510,14 @@ class MILBagLoss(nn.Module):
             * graph_components["mutual_information_loss"]
             + gate_deviation_loss
             + modality_supervised_loss
+            + class_loss
         )
 
         return {
             "total_loss": total_loss,
             "supervised_loss": supervised_loss,
             "modality_supervised_loss": modality_supervised_loss,
+            "class_loss": class_loss,
             "reconstruction_loss": soft_reconstruction,
             "reconstruction_loss_raw": raw_reconstruction,
             "mutual_information": graph_components["mutual_information"],
@@ -405,8 +531,9 @@ class MILBagLoss(nn.Module):
         model_output: Mapping[str, torch.Tensor],
         inputs: torch.Tensor,
         y_bag: torch.Tensor,
+        n_obs: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        return self.compute_components(model_output, inputs, y_bag)["total_loss"]
+        return self.compute_components(model_output, inputs, y_bag, n_obs)["total_loss"]
 
 
 _TRACKED_HISTORY_KEYS = (
@@ -418,6 +545,7 @@ _TRACKED_HISTORY_KEYS = (
     "mutual_information_normalized",
     "gate_deviation_loss",
     "modality_supervised_loss",
+    "class_loss",
 )
 
 
@@ -488,6 +616,13 @@ def entrenar_mil(
 
     X_tensor = torch.as_tensor(np.asarray(X_inst), dtype=torch.float32)
     y_tensor = torch.as_tensor(np.asarray(bag_index.y), dtype=torch.float32)
+    # OBSERVED bag cardinality -- the coordinate `asignar_clase` already reads.
+    # Only materialized when the class-aware term is actually enabled.
+    n_obs_tensor = (
+        torch.as_tensor(np.asarray(bag_index.counts), dtype=torch.float32)
+        if getattr(loss_fn, "lambda_clase", 0.0) > 0.0
+        else None
+    )
     n_bags = len(bag_index.offsets) - 1
 
     if optimizer_name == "adamw":
@@ -513,11 +648,18 @@ def entrenar_mil(
                 bolsa_local, dtype=torch.long, device=resolved_device
             )
             y_lote = y_tensor[lote_bags].to(resolved_device)
+            n_obs_lote = (
+                n_obs_tensor[lote_bags].to(resolved_device)
+                if n_obs_tensor is not None
+                else None
+            )
 
             optimizer.zero_grad()
             model_output = model(x_lote, instance_bag_lote, len(lote_bags))
             # D5/D2: always score reconstruction against the ORIGINAL instance batch.
-            componentes = loss_fn.compute_components(model_output, x_lote, y_lote)
+            componentes = loss_fn.compute_components(
+                model_output, x_lote, y_lote, n_obs_lote
+            )
             componentes["total_loss"].backward()
             optimizer.step()
 
