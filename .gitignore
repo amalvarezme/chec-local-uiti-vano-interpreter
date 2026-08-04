@@ -65,3 +65,11 @@ dist/
 .atl/
 .pi/gentle-ai/
 openspec/
+
+# Climate skill runtime cache
+.clima_cache/
+
+# Never track compiled Python caches, even under the re-included .claude/skills/**
+.claude/skills/**/__pycache__/
+**/__pycache__/
+*.pyc
