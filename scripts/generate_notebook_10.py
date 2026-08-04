@@ -4,7 +4,7 @@ over 01.4's vano x window bags.
 Follows the convention recovered from commit `28e8dfe`
 (`scripts/generate_notebook_12.py`, since deleted alongside notebooks
 02.1/11/12): this module is the single source of truth for
-`notebooks/project_flow/10_*.ipynb`. The notebook itself is GENERATED
+`notebooks/project_flow/05_*.ipynb`. The notebook itself is GENERATED
 OUTPUT, never hand-edited.
 
 Pipeline (`main`): build the in-memory notebook -> assign deterministic cell
@@ -36,7 +36,7 @@ import nbformat
 from nbformat.v4 import new_code_cell, new_markdown_cell, new_notebook
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOK_10_PATH = REPO_ROOT / "notebooks" / "project_flow" / "10_mil_vano_ventana.ipynb"
+NOTEBOOK_10_PATH = REPO_ROOT / "notebooks" / "project_flow" / "05_mil_vano_ventana.ipynb"
 
 # `p` (instance feature count) must never be hardcoded -- it is always
 # derived at runtime from `CodCausaEncoding`/`X_inst_bolsas.shape[1]` (obs
@@ -1405,7 +1405,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--out", type=Path, default=NOTEBOOK_10_PATH,
-        help="Output path for the generated notebook (defaults to notebooks/project_flow/10_*.ipynb).",
+        help="Output path for the generated notebook (defaults to notebooks/project_flow/05_*.ipynb).",
     )
     args = parser.parse_args()
 

@@ -311,15 +311,15 @@ def test_generator_notes_persistence_information_advantage(notebook):
 
 
 def test_generator_output_path_targets_notebook_10_only():
-    assert NOTEBOOK_10_PATH.name.startswith("10_")
+    assert NOTEBOOK_10_PATH.name.startswith("05_")
     assert NOTEBOOK_10_PATH.parent.name == "project_flow"
 
 
 def test_generator_never_edits_upstream_notebooks_or_variable_selection(tmp_path):
     watched_paths = [
-        "notebooks/project_flow/01.2_uiti_vano_kmeans.ipynb",
-        "notebooks/project_flow/01.3_uiti_vano_trayectorias_circuitos.ipynb",
-        "notebooks/project_flow/01.4_uiti_vano_trayectorias_vano.ipynb",
+        "notebooks/project_flow/02_uiti_vano_kmeans.ipynb",
+        "notebooks/project_flow/03_uiti_vano_trayectorias_circuitos.ipynb",
+        "notebooks/project_flow/04_uiti_vano_trayectorias_vano.ipynb",
         "data/Variables_seleccion.xlsx",
     ]
     # Every watched path must exist: a rename upstream has to fail this test loudly
