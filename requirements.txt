@@ -42,6 +42,8 @@ ipython
 jupyter
 ipykernel
 papermill  # parametrized notebook execution -- used by /experimento-kaggle's smoke/full harness
+ipywidgets  # 01.5's live-kernel controls (D3); requires anywidget for plotly's go.FigureWidget
+anywidget  # backs plotly>=6's go.FigureWidget -- without it FigureWidget() raises ImportError
 
 # === Testing ===
 pytest
