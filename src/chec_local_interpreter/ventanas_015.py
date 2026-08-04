@@ -240,20 +240,102 @@ def capas_mapa_historico(
     measure exactly what lat/lon measure or Plotly misaligns the rest of the
     trace. That column is what turns a map click into a vano -- resolving it
     by point index would be fragile, because the index moves with the window.
+
+    Marked vanos additionally land in three places (01.4 parity): `marcados`
+    (every marked vano -- the white halo drawn UNDER the rest), plus either
+    `marcados_por_clase[clase]` or `marcados_sin_dato` for the coloured line
+    on top. Splitting them is what keeps a marked vano readable: painting the
+    selection in one flat colour on top of the class colour freezes what the
+    eye sees, so moving the window changes the class underneath and the marked
+    vano looks identical. `marcados_sin_dato` is the marked vano with NO cell
+    in the active window, which the notebook paints black -- absence of data,
+    not the lowest class.
     """
     etiquetas_por_fid = etiquetas_por_fid or {}
     capas: dict[int, dict[str, list]] = {clase: _capa_vacia() for clase in range(4)}
     sin_dato = _capa_vacia()
     marcados_capa = _capa_vacia()
+    marcados_por_clase: dict[int, dict[str, list]] = {
+        clase: _capa_vacia() for clase in range(4)
+    }
+    marcados_sin_dato = _capa_vacia()
     marcados = set(marcados)
 
     for fid, lat, lon in zip(geo_circuito["fids"], geo_circuito["lat"], geo_circuito["lon"]):
-        destino = capas.get(clases_por_fid.get(fid), sin_dato)
-        _agregar_tramo(destino, fid, lat, lon, etiquetas_por_fid.get(fid, ""))
+        clase = clases_por_fid.get(fid)
+        etiqueta = etiquetas_por_fid.get(fid, "")
+        _agregar_tramo(capas.get(clase, sin_dato), fid, lat, lon, etiqueta)
         if fid in marcados:
-            _agregar_tramo(marcados_capa, fid, lat, lon, etiquetas_por_fid.get(fid, ""))
+            _agregar_tramo(marcados_capa, fid, lat, lon, etiqueta)
+            _agregar_tramo(
+                marcados_por_clase.get(clase, marcados_sin_dato), fid, lat, lon, etiqueta
+            )
 
-    return {"clases": capas, "sin_dato": sin_dato, "marcados": marcados_capa}
+    return {
+        "clases": capas,
+        "sin_dato": sin_dato,
+        "marcados": marcados_capa,
+        "marcados_por_clase": marcados_por_clase,
+        "marcados_sin_dato": marcados_sin_dato,
+    }
+
+
+def nube_fondo(
+    tabla: pd.DataFrame, clase_por_fila: np.ndarray
+) -> list[dict[str, list[float]]]:
+    """01.4's KMeans cloud background (its row-1 col-3 panel): EVERY
+    (vano, ventana) cell of `tabla` as a point `(num_eventos,
+    uiti_acumulado)`, grouped into the 4 class layers by `clase_por_fila`
+    (one class per row of `tabla`, in row order).
+
+    It never depends on the selection: 01.4 fits KMeans once over all cells,
+    so choosing a circuit or marking vanos only changes what is highlighted,
+    never where the boundaries fall. Computing it once and only restyling the
+    highlight is what keeps the panel free at interaction time.
+    """
+    clase_por_fila = np.asarray(clase_por_fila)
+    x = tabla["num_eventos"].to_numpy()
+    y = tabla["uiti_acumulado"].to_numpy()
+    capas = []
+    for clase in range(4):
+        mask = clase_por_fila == clase
+        capas.append({"x": x[mask].tolist(), "y": y[mask].tolist()})
+    return capas
+
+
+def nube_seleccion(
+    tabla: pd.DataFrame,
+    clase_por_fila: np.ndarray,
+    *,
+    mask_ventana: np.ndarray,
+    marcados: Iterable[str] = (),
+) -> dict[str, list]:
+    """The highlighted points over `nube_fondo`: the cells of the marked
+    vanos inside `mask_ventana` (a `construir_mask_cache` result, so the
+    circuit+window filter is already cached). An EMPTY `marcados` highlights
+    every vano of that circuit+window -- the same grain the simulated map and
+    the relevance ranking fall back to, rather than an empty panel.
+
+    A marked vano with no cell in the window contributes NO point: the row
+    does not exist. Its signal is the black line on the map, never an
+    invented point at the origin, which would read as "zero events, zero
+    UITI" -- a measurement that was never taken.
+
+    Returns column-parallel `x`/`y`/`clase`/`fid` lists; the caller maps
+    `clase` to its colour (the palette lives in the notebook, next to the
+    map's).
+    """
+    mask = np.asarray(mask_ventana, dtype=bool)
+    fids = tabla["FID_VANO"].astype(str).to_numpy()
+    marcados = {str(m) for m in marcados}
+    if marcados:
+        mask = mask & np.isin(fids, list(marcados))
+    return {
+        "x": tabla["num_eventos"].to_numpy()[mask].tolist(),
+        "y": tabla["uiti_acumulado"].to_numpy()[mask].tolist(),
+        "clase": np.asarray(clase_por_fila)[mask].astype(int).tolist(),
+        "fid": fids[mask].tolist(),
+    }
 
 
 def _capa_vacia() -> dict[str, list]:

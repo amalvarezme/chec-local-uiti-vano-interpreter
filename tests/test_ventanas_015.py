@@ -47,6 +47,8 @@ from chec_local_interpreter.ventanas_015 import (
     construir_mask_cache,
     construir_tabla_vano_ventana,
     construir_ventanas,
+    nube_fondo,
+    nube_seleccion,
 )
 from scripts.extract_geometrias_014 import _extraer_bloque_json
 
@@ -413,6 +415,93 @@ def test_capas_mapa_historico_groups_by_class_marks_sin_dato_and_halo():
     assert capas["clases"][1] == {"lat": [], "lon": [], "hovertext": [], "customdata": []}
     assert capas["sin_dato"]["lat"] == [3.0, 3.1, None]
     assert capas["marcados"]["lon"] == [-76.0, -76.1, None]
+
+
+def test_capas_mapa_historico_splits_marked_vanos_by_class_and_paints_the_classless_black():
+    """Paridad 01.4: un vano MARCADO se dibuja con el color de su clase KMeans, no
+    con un color plano de "seleccionado". Un color plano encima de la clase congela
+    lo que se ve: mover la ventana cambia la clase por debajo y el vano marcado sigue
+    igual en pantalla. El marcado que NO tiene celda en la ventana (sin eventos, o
+    ausente de la tabla) va a su propia capa, que el cuaderno pinta de NEGRO -- la
+    ausencia de dato no es la clase mas baja."""
+    geo_circuito = {
+        "fids": ["VA", "VB", "VC"],
+        "lat": [[1.0, 1.1], [2.0, 2.1], [3.0, 3.1]],
+        "lon": [[-75.0, -75.1], [-76.0, -76.1], [-77.0, -77.1]],
+    }
+    clases_por_fid = {"VA": 0, "VB": 3}  # VC no tiene celda en la ventana
+
+    capas = capas_mapa_historico(geo_circuito, clases_por_fid, marcados=["VB", "VC"])
+
+    assert capas["marcados_por_clase"][3]["lat"] == [2.0, 2.1, None]
+    assert capas["marcados_por_clase"][0]["lat"] == []  # VA tiene clase 0 pero no esta marcado
+    assert capas["marcados_sin_dato"]["lat"] == [3.0, 3.1, None]
+    # El halo sigue llevando TODOS los marcados: es lo que va debajo, en blanco.
+    assert capas["marcados"]["lat"] == [2.0, 2.1, None, 3.0, 3.1, None]
+    assert capas["marcados_por_clase"][3]["customdata"] == ["VB", "VB", "VB"]
+
+
+# --- Nube KMeans (fila 1 col 3 en 01.4): celdas vano x ventana ---------------
+
+
+def _tabla_nube():
+    return pd.DataFrame(
+        {
+            "CIRCUITO": ["C1", "C1", "C1", "C2"],
+            "FID_VANO": ["VA", "VB", "VA", "VZ"],
+            "ventana_i": [0, 0, 1, 0],
+            "num_eventos": [1, 5, 9, 3],
+            "uiti_acumulado": [0.5, 2.5, 7.5, 1.0],
+        }
+    )
+
+
+def test_nube_fondo_groups_every_cell_by_its_class():
+    """El fondo de la nube es TODO el dataset y no depende de la seleccion: en 01.4
+    el KMeans se ajusta una sola vez y elegir circuito o vanos solo cambia que se
+    resalta, nunca donde caen las fronteras."""
+    tabla = _tabla_nube()
+
+    capas = nube_fondo(tabla, np.array([0, 2, 3, 0]))
+
+    assert len(capas) == 4
+    assert capas[0]["x"] == [1, 3] and capas[0]["y"] == [0.5, 1.0]
+    assert capas[2]["x"] == [5] and capas[2]["y"] == [2.5]
+    assert capas[1] == {"x": [], "y": []}
+
+
+def test_nube_seleccion_takes_only_the_marked_cells_of_the_active_window():
+    tabla = _tabla_nube()
+    mask_ventana = (tabla["CIRCUITO"] == "C1").to_numpy() & (tabla["ventana_i"] == 0).to_numpy()
+
+    punto = nube_seleccion(tabla, np.array([0, 2, 3, 0]), mask_ventana=mask_ventana,
+                           marcados=["VB"])
+
+    assert punto == {"x": [5], "y": [2.5], "clase": [2], "fid": ["VB"]}
+
+
+def test_nube_seleccion_without_marked_vanos_takes_the_whole_circuit_window():
+    """Mismo criterio que el mapa simulado y el ranking: sin vanos marcados, el grano
+    es el circuito completo en esa ventana, no un panel vacio."""
+    tabla = _tabla_nube()
+    mask_ventana = (tabla["CIRCUITO"] == "C1").to_numpy() & (tabla["ventana_i"] == 0).to_numpy()
+
+    punto = nube_seleccion(tabla, np.array([0, 2, 3, 0]), mask_ventana=mask_ventana)
+
+    assert punto["fid"] == ["VA", "VB"]
+    assert punto["clase"] == [0, 2]
+
+
+def test_nube_seleccion_ignores_a_marked_vano_with_no_cell_in_the_window():
+    """El vano marcado sin celda en la ventana no tiene punto que dibujar en la nube
+    (no existe la fila). Su señal es el NEGRO del mapa, no un punto inventado."""
+    tabla = _tabla_nube()
+    mask_ventana = (tabla["CIRCUITO"] == "C1").to_numpy() & (tabla["ventana_i"] == 0).to_numpy()
+
+    punto = nube_seleccion(tabla, np.array([0, 2, 3, 0]), mask_ventana=mask_ventana,
+                           marcados=["VB", "FANTASMA"])
+
+    assert punto["fid"] == ["VB"]
 
 
 # --- PR6: hover/customdata, recentrado y seleccion por clic -----------------

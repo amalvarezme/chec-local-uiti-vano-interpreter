@@ -188,6 +188,84 @@ def test_selector_vanos_exposes_its_inner_box_as_a_public_attribute():
     assert "lista-vanos" in selector.caja._dom_classes
 
 
+def test_selector_marcar_todos_ticks_everything_with_a_single_value_event():
+    """"Marcar todos" (paridad 01.4) tiene que emitir UN solo cambio de `value`.
+    Dejar que cada casilla notifique por su cuenta significaria un repintado del
+    mapa por vano -- cientos en un circuito grande."""
+    from chec_local_interpreter.vano_widgets import construir_selector_vanos
+
+    selector = construir_selector_vanos(["VA", "VB", "VC"])
+    eventos = []
+    selector.observe(lambda cambio: eventos.append(cambio["new"]), names="value")
+
+    selector.marcar_todos()
+
+    assert selector.value == ("VA", "VB", "VC")
+    assert all(caja.value is True for caja in selector.casillas.values())
+    assert eventos == [("VA", "VB", "VC")]
+
+
+def test_selector_desmarcar_todos_clears_everything_with_a_single_value_event():
+    from chec_local_interpreter.vano_widgets import construir_selector_vanos
+
+    selector = construir_selector_vanos(["VA", "VB", "VC"])
+    selector.marcar_todos()
+    eventos = []
+    selector.observe(lambda cambio: eventos.append(cambio["new"]), names="value")
+
+    selector.desmarcar_todos()
+
+    assert selector.value == ()
+    assert all(caja.value is False for caja in selector.casillas.values())
+    assert eventos == [()]
+
+
+def test_selector_casillas_accepts_label_value_pairs():
+    """El selector de variables del simulador necesita rotulo != clave: la casilla
+    muestra "Precipitacion (12 lags)" y `value` devuelve el knob id `clima:prep`.
+    El selector de vanos no lo necesitaba porque ahi el rotulo ES el fid."""
+    from chec_local_interpreter.vano_widgets import construir_selector_casillas
+
+    selector = construir_selector_casillas(
+        [("Precipitacion (12 lags)", "clima:prep"), ("CNT_TRF", "CNT_TRF")],
+        titulo="Variables",
+    )
+
+    assert list(selector.casillas) == ["clima:prep", "CNT_TRF"]
+    assert selector.casillas["clima:prep"].description == "Precipitacion (12 lags)"
+
+    selector.casillas["clima:prep"].value = True
+    selector.casillas["CNT_TRF"].value = True
+
+    assert selector.value == ("clima:prep", "CNT_TRF")  # varias a la vez, en orden de opcion
+
+
+def test_selector_casillas_unticking_leaves_the_other_selections_alone():
+    """Es la razon de ser del cambio: con un `SelectMultiple` marcar una variable
+    sin ctrl borraba las demas. Con casillas, cada una es independiente."""
+    from chec_local_interpreter.vano_widgets import construir_selector_casillas
+
+    selector = construir_selector_casillas([("A", "a"), ("B", "b"), ("C", "c")])
+    for clave in ("a", "b", "c"):
+        selector.casillas[clave].value = True
+    assert selector.value == ("a", "b", "c")
+
+    selector.casillas["b"].value = False
+
+    assert selector.value == ("a", "c")
+
+
+def test_selector_vanos_keeps_scalar_options_labelled_by_their_own_fid():
+    """Regresion: generalizar el selector a pares (rotulo, clave) no debe romper la
+    forma escalar que usa el selector de vanos."""
+    from chec_local_interpreter.vano_widgets import construir_selector_vanos
+
+    selector = construir_selector_vanos([20130434, "VB"])
+
+    assert list(selector.casillas) == ["20130434", "VB"]
+    assert selector.casillas["20130434"].description == "20130434"
+
+
 def test_selector_vanos_ignores_a_click_on_an_unknown_fid():
     """Un clic puede caer sobre un tramo cuyo fid no esta en la lista (el
     mapa dibuja la geometria del circuito, que no siempre coincide con los

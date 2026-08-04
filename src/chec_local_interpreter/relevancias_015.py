@@ -62,6 +62,7 @@ KNOB_CATALOG_VERSION = 1
 DEFAULT_CACHE_DIR = Path(__file__).resolve().parents[2] / "data" / "derived" / "relevancias_015"
 MENSAJE_SIN_MARCADOS = "Marca uno o mas vanos en el mapa para calcular la sensibilidad min-max."
 MENSAJE_SIN_FILAS = "No hay filas de evento para los vanos marcados en esta ventana."
+TEMPERATURA_SOFTMAX = 1.0
 
 
 def _slug(circuito: str) -> str:
@@ -76,13 +77,23 @@ def _slug(circuito: str) -> str:
 
 def marked_key(marcados: Iterable[str], todos_en_ventana: Iterable[str]) -> str | tuple[str, ...]:
     """`relevance_cache`'s third key component (design section A):
-    `"__TODOS__"` when the marked set equals the window's full vano set,
-    else the sorted tuple of marked FIDs. An empty marked set is never
-    `"__TODOS__"` (the caller handles the empty case before reaching the
-    cache at all)."""
+    `"__TODOS__"` when the marked set COVERS the window's full vano set, else
+    the sorted tuple of marked FIDs.
+
+    Covers, not equals: the ranking mask is `ventana & isin(fids, marcados)`,
+    so any marked set that contains every vano of the window produces exactly
+    the window's own mask. That is the normal outcome of "Marcar todos",
+    which ticks every vano of the CIRCUIT -- including the ones with no event
+    in the active window. Keying that as a subset would recompute a ranking
+    the disk cache already holds, under a key hundreds of FIDs long that is
+    never hit twice.
+
+    An empty window is never `"__TODOS__"` (every set trivially covers it, but
+    there is nothing to rank), and neither is an empty marked set -- the
+    caller handles that case before reaching the cache at all."""
     marcados_set = {str(m) for m in marcados}
     todos_set = {str(t) for t in todos_en_ventana}
-    if marcados_set and marcados_set == todos_set:
+    if todos_set and marcados_set >= todos_set:
         return MARCADOS_TODOS
     return tuple(sorted(marcados_set))
 
@@ -177,6 +188,38 @@ def _filas_desde_tabla(
         )
     filas.sort(key=lambda fila: fila["magnitud_max_cambio_abs"], reverse=True)
     return filas
+
+
+def normalizar_softmax(
+    filas: Sequence[Mapping[str, Any]],
+    *,
+    temperatura: float = TEMPERATURA_SOFTMAX,
+    campo: str = "magnitud_max_cambio_abs",
+    destino: str = "relevancia",
+) -> list[dict[str, Any]]:
+    """Add a softmax-normalised `relevancia` (summing to 1) alongside each row's
+    raw `magnitud_max_cambio_abs`, so the panel shows a comparable share per
+    variable instead of an absolute magnitude whose units mean nothing to a
+    reader.
+
+    The max is subtracted before exponentiating -- the standard numerically
+    stable form; without it a large magnitude overflows to `inf` and every share
+    comes back `nan`. Row ORDER is untouched (the caller's ranking order is the
+    raw magnitudes' own) and the input rows are never mutated: the LRU and disk
+    caches keep raw magnitudes, so normalisation stays a read-time projection
+    and a cached ranking is never re-normalised twice.
+
+    Note the flattening property inherent to softmax: when every magnitude is
+    nearly equal the shares approach uniform, which is the honest reading
+    ("no variable dominates"), not a defect.
+    """
+    if not filas:
+        return []
+    valores = np.asarray([float(fila[campo]) for fila in filas], dtype=float)
+    escala = float(temperatura) or 1.0
+    exponentes = np.exp((valores - valores.max()) / escala)
+    pesos = exponentes / exponentes.sum()
+    return [{**fila, destino: float(peso)} for fila, peso in zip(filas, pesos)]
 
 
 def _construir_evento_mask_cache(
@@ -289,24 +332,34 @@ def construir_relevance_cache(
 
         return tuple(filas), int(metadata["n_filas_base"]), len(set(fids[mask].tolist()))
 
-    def rankear(circuito: str, ventana_i: int, marcados: Iterable[str]) -> dict[str, Any]:
-        marcados_set = {str(m) for m in marcados}
-        if not marcados_set:
-            return {
-                "vacio": True,
-                "filas": [],
-                "n_vanos": 0,
-                "n_filas": 0,
-                "mensaje": MENSAJE_SIN_MARCADOS,
-            }
-        mask_ventana = mask_ventana_para(circuito, ventana_i)
-        todos_en_ventana = set(fids[mask_ventana].tolist())
-        clave = marked_key(marcados_set, todos_en_ventana)
+    def rankear(
+        circuito: str, ventana_i: int, marcados: Iterable[str] | None
+    ) -> dict[str, Any]:
+        """`marcados=None` is NOT the empty set: it means "every vano of this
+        circuit in this window" -- the same row set the simulated map paints --
+        and takes the `__TODOS__` key, so it shares the disk cache. An EMPTY
+        iterable still means "the user marked nothing to rank" and returns the
+        explicit empty state without a single forward pass."""
+        if marcados is None:
+            clave = MARCADOS_TODOS
+        else:
+            marcados_set = {str(m) for m in marcados}
+            if not marcados_set:
+                return {
+                    "vacio": True,
+                    "filas": [],
+                    "n_vanos": 0,
+                    "n_filas": 0,
+                    "mensaje": MENSAJE_SIN_MARCADOS,
+                }
+            mask_ventana = mask_ventana_para(circuito, ventana_i)
+            todos_en_ventana = set(fids[mask_ventana].tolist())
+            clave = marked_key(marcados_set, todos_en_ventana)
         filas, n_filas, n_vanos = _rankear_cacheado(circuito, ventana_i, clave)
         vacio = len(filas) == 0
         return {
             "vacio": vacio,
-            "filas": [dict(fila) for fila in filas],
+            "filas": normalizar_softmax([dict(fila) for fila in filas]),
             "n_vanos": n_vanos,
             "n_filas": n_filas,
             "mensaje": MENSAJE_SIN_FILAS if vacio else None,

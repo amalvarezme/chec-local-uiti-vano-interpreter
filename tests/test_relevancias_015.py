@@ -30,6 +30,7 @@ from chec_local_interpreter.relevancias_015 import (
     construir_relevance_cache,
     fingerprint,
     marked_key,
+    normalizar_softmax,
 )
 from chec_local_interpreter.vano_controls import Knob
 
@@ -70,6 +71,21 @@ def test_marked_key_is_todos_sentinel_when_marked_equals_full_window_set():
 
 def test_marked_key_is_sorted_tuple_for_a_strict_subset():
     assert marked_key(["b"], ["a", "b", "c"]) == ("b",)
+
+
+def test_marked_key_is_todos_sentinel_when_marked_is_a_superset_of_the_window():
+    """"Marcar todos" marca todos los vanos del CIRCUITO, y un circuito tiene vanos
+    sin ningun evento en la ventana activa. La mascara que sale de ese conjunto es
+    IDENTICA a la de la ventana completa, asi que tiene que compartir su clave (y su
+    cache en disco) en vez de fabricar una clave gigante de un solo uso."""
+    assert marked_key(["a", "b", "c"], ["a", "b"]) == MARCADOS_TODOS
+
+
+def test_marked_key_never_claims_todos_for_a_window_with_no_vanos():
+    """Ventana sin filas: cualquier conjunto marcado es superconjunto del vacio, pero
+    llamarlo "todos" seria decir que se ranquea el circuito entero cuando no hay nada
+    que ranquear."""
+    assert marked_key(["a"], []) == ("a",)
 
 
 # --- fingerprint --------------------------------------------------------------------------
@@ -255,6 +271,70 @@ def test_ranking_is_labelled_by_knob_not_by_raw_feature(tmp_path):
     knob_ids = {fila["knob_id"] for fila in resultado["filas"]}
     assert knob_ids <= {"CNT_TRF", "CNT_VN"}
     assert all("shap" not in fila["label"].lower() for fila in resultado["filas"])
+
+
+# --- Softmax-normalised relevance ("Importancia Variables" panel) -------------------------
+
+
+def test_normalizar_softmax_sums_to_one_and_keeps_the_input_order():
+    filas = [
+        {"knob_id": "a", "magnitud_max_cambio_abs": 2.0},
+        {"knob_id": "b", "magnitud_max_cambio_abs": 1.0},
+        {"knob_id": "c", "magnitud_max_cambio_abs": 0.0},
+    ]
+
+    salida = normalizar_softmax(filas)
+
+    assert [fila["knob_id"] for fila in salida] == ["a", "b", "c"]
+    assert sum(fila["relevancia"] for fila in salida) == pytest.approx(1.0)
+    assert salida[0]["relevancia"] > salida[1]["relevancia"] > salida[2]["relevancia"]
+    # the input rows are never mutated: the disk/LRU caches hold raw magnitudes
+    assert all("relevancia" not in fila for fila in filas)
+
+
+def test_normalizar_softmax_is_uniform_when_every_magnitude_is_equal():
+    salida = normalizar_softmax([{"magnitud_max_cambio_abs": 0.4} for _ in range(4)])
+
+    assert [fila["relevancia"] for fila in salida] == pytest.approx([0.25] * 4)
+
+
+def test_normalizar_softmax_does_not_overflow_on_large_magnitudes():
+    salida = normalizar_softmax(
+        [{"magnitud_max_cambio_abs": 1e6}, {"magnitud_max_cambio_abs": 0.0}]
+    )
+
+    assert np.isfinite([fila["relevancia"] for fila in salida]).all()
+    assert salida[0]["relevancia"] == pytest.approx(1.0)
+
+
+def test_normalizar_softmax_handles_an_empty_ranking():
+    assert normalizar_softmax([]) == []
+
+
+def test_rankear_carries_a_softmax_relevance_that_sums_to_one(tmp_path):
+    call_counter = [0]
+    cache, _fp, _cache_dir = _build_context(tmp_path, call_counter)
+
+    resultado = cache("C1", 0, ["v1", "v2", "v3"])
+
+    assert resultado["filas"]
+    assert sum(fila["relevancia"] for fila in resultado["filas"]) == pytest.approx(1.0)
+    # raw magnitudes survive alongside the normalised value -- the ranking order is theirs
+    assert all("magnitud_max_cambio_abs" in fila for fila in resultado["filas"])
+
+
+def test_marcados_none_ranks_every_vano_in_the_window(tmp_path):
+    """`None` is NOT the empty set: no marked vano means "the whole circuit in
+    this window", which is exactly the row set the simulated map paints. It must
+    take the `__TODOS__` key (and therefore the disk cache), not a subset key."""
+    call_counter = [0]
+    cache, _fp, cache_dir = _build_context(tmp_path, call_counter)
+
+    resultado = cache("C1", 0, None)
+
+    assert resultado["vacio"] is False
+    assert resultado["n_vanos"] == 3
+    assert (cache_dir / "C1" / "0.json").exists()
 
 
 def test_int64_fid_vano_column_matches_string_marcados(tmp_path):

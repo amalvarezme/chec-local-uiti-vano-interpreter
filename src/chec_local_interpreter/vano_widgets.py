@@ -49,15 +49,31 @@ def widget_for_knob(knob: "Knob"):
     return widgets.FloatText(value=float(value), description=knob.label, disabled=True)
 
 
-# --- PR6: selector de vanos por casilla ------------------------------------
+# --- Selector por casillas (vanos, y variables del simulador) ---------------
 # 01.4 marks vanos with CHECKBOXES and lets a map click toggle the very same
 # checkbox. A `SelectMultiple` cannot do that: it has no per-item handle to
 # flip from a click callback, and ctrl-clicking to keep a selection is a
-# well-known way to lose it. The class is built lazily, inside a function,
-# for the same reason `widget_for_knob` imports ipywidgets lazily: importing
-# this module must never require ipywidgets to be installed.
+# well-known way to lose it -- one plain click wipes everything already
+# picked. That second reason applies just as much to the simulator's variable
+# list, so ONE parameterised class serves both; only the option shape differs
+# (a fid is its own label, a knob shows "Precipitacion (12 lags)" and yields
+# `clima:prep`). The class is built lazily, inside a function, for the same
+# reason `widget_for_knob` imports ipywidgets lazily: importing this module
+# must never require ipywidgets to be installed.
 
 _CLASE_SELECTOR = None
+
+
+def _pares_de_opciones(opciones):
+    """`(etiqueta, clave)` per option. A 2-tuple is taken as the pair itself;
+    anything else is a scalar that labels itself (the vano case, where the
+    label IS the fid)."""
+    for opcion in opciones:
+        if isinstance(opcion, tuple) and len(opcion) == 2:
+            etiqueta, clave = opcion
+        else:
+            etiqueta = clave = opcion
+        yield str(etiqueta), str(clave)
 
 
 def _clase_selector():
@@ -68,17 +84,19 @@ def _clase_selector():
     import ipywidgets as widgets
     import traitlets
 
-    class SelectorVanos(widgets.VBox):
+    class SelectorCasillas(widgets.VBox):
         """A scrollable checkbox list whose `value` trait is the tuple of
-        ticked fids. Downstream cells keep using `observe(names='value')`
+        ticked keys. Downstream cells keep using `observe(names='value')`
         and never learn there are checkboxes behind it."""
 
         value = traitlets.Tuple()
 
-        def __init__(self, opciones=(), *, alto="132px", **kwargs):
+        def __init__(self, opciones=(), *, titulo="", alto="132px",
+                     ancho_casilla="96px", **kwargs):
             super().__init__(**kwargs)
             self.casillas = {}
             self._silencio = False
+            self._ancho_casilla = ancho_casilla
             self.caja = widgets.Box(
                 layout=widgets.Layout(
                     # `overflow` y no `overflow_y`: ipywidgets 8 saco los ejes
@@ -88,25 +106,28 @@ def _clase_selector():
                     border="1px solid #e4c4c0", padding="4px 6px",
                 ),
             )
-            self.children = [widgets.HTML("<b>Vanos</b>"), self.caja]
+            encabezado = [widgets.HTML(f"<b>{titulo}</b>")] if titulo else []
+            self.children = [*encabezado, self.caja]
             self.poblar(opciones)
 
         def poblar(self, opciones):
-            """Rebuilds the list for a new circuit. The previous selection is
-            DROPPED on purpose: keeping it would leave fids ticked that the
-            new circuit's map never draws."""
+            """Rebuilds the list for a new option set (a new circuit, in the
+            vano case). The previous selection is DROPPED on purpose: keeping
+            it would leave keys ticked that the new option set does not have."""
             self._silencio = True
             try:
                 self.casillas = {
-                    str(fid): widgets.Checkbox(
-                        value=False, description=str(fid), indent=False,
+                    clave: widgets.Checkbox(
+                        value=False, description=etiqueta, indent=False,
                         # Ancho explicito y no via CSS: el `layout` viaja como estilo
                         # inline y le gana a cualquier hoja de estilos sin `!important`,
                         # asi que mezclar los dos deja columnas impredecibles. 96 px es
-                        # el fid de 8 digitos a 12 px mas su casilla, como en 01.4.
-                        layout=widgets.Layout(width="96px", margin="0 8px 0 0"),
+                        # el fid de 8 digitos a 12 px mas su casilla, como en 01.4; una
+                        # variable con nombre largo pide su propio ancho.
+                        layout=widgets.Layout(width=self._ancho_casilla,
+                                              margin="0 8px 0 0"),
                     )
-                    for fid in opciones
+                    for etiqueta, clave in _pares_de_opciones(opciones)
                 }
                 for caja in self.casillas.values():
                     caja.observe(self._al_cambiar_casilla, names="value")
@@ -115,12 +136,35 @@ def _clase_selector():
                 self._silencio = False
             self.value = ()
 
-        def alternar(self, fid):
+        def marcar_todos(self):
+            """01.4's "Marcar todos" button."""
+            self._fijar_todas(True)
+
+        def desmarcar_todos(self):
+            """01.4's "Desmarcar" button."""
+            self._fijar_todas(False)
+
+        def _fijar_todas(self, marcado):
+            """Flips every checkbox behind `_silencio` and emits ONE `value`
+            change at the end. Letting each checkbox notify on its own would
+            fire one map repaint per vano -- hundreds on a real circuit, each
+            one re-grouping the whole geometry."""
+            self._silencio = True
+            try:
+                for caja in self.casillas.values():
+                    caja.value = marcado
+            finally:
+                self._silencio = False
+            self.value = tuple(
+                clave for clave, caja in self.casillas.items() if caja.value
+            )
+
+        def alternar(self, clave):
             """The map-click entry point. Flips the checkbox and lets its own
             handler recompute `value`, so a click and a tick cannot diverge.
-            An unknown fid -- the circuit's geometry has tramos that never had
+            An unknown key -- the circuit's geometry has tramos that never had
             an event -- is ignored, never turned into a phantom checkbox."""
-            caja = self.casillas.get(str(fid))
+            caja = self.casillas.get(str(clave))
             if caja is None:
                 return
             caja.value = not caja.value
@@ -131,13 +175,25 @@ def _clase_selector():
             # Derived from the checkboxes, never accumulated separately: the
             # checkboxes ARE the state. Order follows the option list so the
             # legend and the ranking do not reshuffle between repaints.
-            self.value = tuple(fid for fid, caja in self.casillas.items() if caja.value)
+            self.value = tuple(
+                clave for clave, caja in self.casillas.items() if caja.value
+            )
 
-    _CLASE_SELECTOR = SelectorVanos
+    _CLASE_SELECTOR = SelectorCasillas
     return _CLASE_SELECTOR
 
 
-def construir_selector_vanos(opciones=(), **kwargs):
-    """Builds the checkbox-based vano selector (01.4 parity: checkbox OR map
-    click, one shared state)."""
+def construir_selector_casillas(opciones=(), **kwargs):
+    """Builds a checkbox list from `opciones`, each either a scalar (it labels
+    itself) or an `(etiqueta, clave)` pair. `value` is the tuple of ticked
+    keys, in option order."""
     return _clase_selector()(opciones, **kwargs)
+
+
+def construir_selector_vanos(opciones=(), **kwargs):
+    """The vano selector (01.4 parity: checkbox OR map click, one shared
+    state) -- `construir_selector_casillas` with the vano's own heading and
+    the 8-digit-fid column width."""
+    kwargs.setdefault("titulo", "Vanos")
+    kwargs.setdefault("ancho_casilla", "96px")
+    return construir_selector_casillas(opciones, **kwargs)
