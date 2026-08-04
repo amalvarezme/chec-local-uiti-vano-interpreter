@@ -589,3 +589,142 @@ def test_fid_de_punto_reads_customdata_not_the_index():
     assert fid_de_punto(["VA"], []) is None
     assert fid_de_punto(None, [0]) is None
     assert fid_de_punto(["VA"], [7]) is None
+
+
+# --- Frontera KMeans (Voronoi), evolucion temporal y reparto por grupo -------
+
+
+def test_frontera_kmeans_partitions_the_plane_by_nearest_centroid():
+    """La frontera es el diagrama de Voronoi de los centroides: cada celda de la
+    malla toma la clase del centroide mas cercano, con la MISMA funcion que
+    clasifica a los vanos. Si se dibujara con otra regla, el contorno diria una
+    cosa y los puntos encima otra."""
+    from chec_impacto.models.criticality_assignment import Geometria
+    from chec_local_interpreter.ventanas_015 import frontera_kmeans
+
+    geometria = Geometria(
+        logs=(False, False),
+        offset=np.array([0.0, 0.0]),
+        scale=np.array([1.0, 1.0]),
+        centroides=np.array([[0.0, 0.0], [10.0, 10.0], [20.0, 20.0], [30.0, 30.0]]),
+    )
+
+    frontera = frontera_kmeans(geometria, x_min=0.0, x_max=30.0, y_min=0.0, y_max=30.0, n=4)
+
+    assert len(frontera["x"]) == 4 and len(frontera["y"]) == 4
+    assert np.asarray(frontera["z"]).shape == (4, 4)  # z[fila_y][columna_x]
+    assert frontera["z"][0][0] == 0  # esquina (0,0) -> centroide 0
+    assert frontera["z"][-1][-1] == 3  # esquina (30,30) -> centroide 3
+
+
+def test_frontera_kmeans_spaces_a_logged_axis_geometrically():
+    """Un eje logaritmico con malla lineal deja casi todos los puntos apretados en
+    la ultima decada y la frontera sale escalonada donde mas se mira."""
+    from chec_impacto.models.criticality_assignment import Geometria
+    from chec_local_interpreter.ventanas_015 import frontera_kmeans
+
+    geometria = Geometria(
+        logs=(False, True),
+        offset=np.array([0.0, 0.0]),
+        scale=np.array([1.0, 1.0]),
+        centroides=np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0], [3.0, 3.0]]),
+    )
+
+    frontera = frontera_kmeans(geometria, x_min=1.0, x_max=4.0, y_min=1.0, y_max=1000.0, n=4)
+
+    assert frontera["y"] == pytest.approx([1.0, 10.0, 100.0, 1000.0])
+    assert frontera["x"] == pytest.approx([1.0, 2.0, 3.0, 4.0])  # el eje lineal no
+
+
+def _tabla_series():
+    return pd.DataFrame(
+        {
+            "CIRCUITO": ["C1", "C1", "C1", "C2"],
+            "FID_VANO": ["VA", "VA", "VB", "VZ"],
+            "ventana_i": [0, 2, 0, 0],
+            "num_eventos": [1, 5, 9, 3],
+            "uiti_acumulado": [0.5, 2.5, 7.5, 1.0],
+        }
+    )
+
+
+def test_series_temporal_vanos_leaves_a_gap_on_windows_without_a_cell():
+    """El vano VA no tiene celda en la ventana 1. Ese hueco va como None y no como
+    cero: un cero dice "no hubo UITI", y lo que pasa es que no hubo medicion."""
+    from chec_local_interpreter.ventanas_015 import series_temporal_vanos
+
+    series = series_temporal_vanos(_tabla_series(), circuito="C1", fids=["VA"], n_ventanas=3)
+
+    assert len(series) == 1
+    assert series[0]["fid"] == "VA"
+    assert series[0]["x"] == [0, 1, 2]
+    assert series[0]["uiti"] == [0.5, None, 2.5]
+    assert series[0]["eventos"] == [1, None, 5]
+
+
+def test_series_temporal_vanos_keeps_the_requested_order_and_ignores_other_circuits():
+    from chec_local_interpreter.ventanas_015 import series_temporal_vanos
+
+    series = series_temporal_vanos(_tabla_series(), circuito="C1", fids=["VB", "VA"],
+                                   n_ventanas=1)
+
+    assert [s["fid"] for s in series] == ["VB", "VA"]
+    assert series[0]["uiti"] == [7.5]
+
+
+def test_reparto_por_clase_describes_only_the_marked_vanos():
+    """Regla de 01.4, citada: sin vanos marcados el reparto queda VACIO, no cae al
+    circuito entero. Un reparto de miles de vanos y otro de tres se dibujan igual
+    pero no dicen lo mismo, y nada en el violin los distingue."""
+    from chec_local_interpreter.ventanas_015 import reparto_por_clase
+
+    tabla = _tabla_series()
+    mask_ventana = (tabla["CIRCUITO"] == "C1").to_numpy() & (tabla["ventana_i"] == 0).to_numpy()
+    clases = np.array([0, 3, 2, 1])
+
+    reparto = reparto_por_clase(tabla, clases, mask_ventana=mask_ventana, marcados=["VB"])
+    assert reparto[2] == {"uiti": [7.5], "eventos": [9]}
+    assert reparto[0] == {"uiti": [], "eventos": []}
+
+    vacio = reparto_por_clase(tabla, clases, mask_ventana=mask_ventana, marcados=[])
+    assert all(grupo == {"uiti": [], "eventos": []} for grupo in vacio)
+
+
+def test_nube_fondo_subsamples_deterministically_above_the_cap():
+    """111.231 celdas en un panel de ~400x300 px son puro sobredibujo, y cada punto
+    viaja al navegador por el comm del widget -- 1,2 MB de coordenadas en una sola
+    rafaga, por encima del `iopub_data_rate_limit` de 1 MB/s que ipykernel trae por
+    defecto. Se submuestrea con semilla FIJA: dos corridas dibujan la misma nube."""
+    tabla = pd.DataFrame(
+        {
+            "CIRCUITO": ["C1"] * 100,
+            "FID_VANO": [f"V{i}" for i in range(100)],
+            "ventana_i": [0] * 100,
+            "num_eventos": list(range(100)),
+            "uiti_acumulado": [float(i) for i in range(100)],
+        }
+    )
+    clases = np.array([i % 4 for i in range(100)])
+
+    capas = nube_fondo(tabla, clases, maximo=40)
+    otra = nube_fondo(tabla, clases, maximo=40)
+
+    assert sum(len(c["x"]) for c in capas) == 40
+    assert [c["x"] for c in capas] == [c["x"] for c in otra]  # misma semilla, misma nube
+
+
+def test_nube_fondo_draws_everything_below_the_cap():
+    tabla = pd.DataFrame(
+        {
+            "CIRCUITO": ["C1"] * 4,
+            "FID_VANO": ["VA", "VB", "VC", "VD"],
+            "ventana_i": [0, 0, 0, 0],
+            "num_eventos": [1, 2, 3, 4],
+            "uiti_acumulado": [0.5, 1.5, 2.5, 3.5],
+        }
+    )
+
+    capas = nube_fondo(tabla, np.array([0, 0, 1, 1]), maximo=40)
+
+    assert sum(len(c["x"]) for c in capas) == 4
+    assert capas[0]["x"] == [1, 2]

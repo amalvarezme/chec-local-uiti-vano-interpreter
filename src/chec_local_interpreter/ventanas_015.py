@@ -280,27 +280,174 @@ def capas_mapa_historico(
     }
 
 
+MAX_PUNTOS_NUBE = 20_000
+
+
 def nube_fondo(
-    tabla: pd.DataFrame, clase_por_fila: np.ndarray
+    tabla: pd.DataFrame,
+    clase_por_fila: np.ndarray,
+    *,
+    maximo: int = MAX_PUNTOS_NUBE,
+    semilla: int = 42,
 ) -> list[dict[str, list[float]]]:
-    """01.4's KMeans cloud background (its row-1 col-3 panel): EVERY
-    (vano, ventana) cell of `tabla` as a point `(num_eventos,
-    uiti_acumulado)`, grouped into the 4 class layers by `clase_por_fila`
-    (one class per row of `tabla`, in row order).
+    """01.4's KMeans cloud background: the (vano, ventana) cells of `tabla` as
+    points `(num_eventos, uiti_acumulado)`, grouped into the 4 class layers by
+    `clase_por_fila` (one class per row of `tabla`, in row order).
 
     It never depends on the selection: 01.4 fits KMeans once over all cells,
     so choosing a circuit or marking vanos only changes what is highlighted,
     never where the boundaries fall. Computing it once and only restyling the
     highlight is what keeps the panel free at interaction time.
+
+    Above `maximo` rows the cloud is SUBSAMPLED uniformly with a fixed seed.
+    Two reasons, and the second is the one that bites: 111k points inside a
+    ~400x300 px panel is pure overplotting, and every one of them travels to
+    the browser through the widget comm -- over a megabyte of coordinates in a
+    single burst, past the 1 MB/s `iopub_data_rate_limit` ipykernel ships by
+    default, which drops the message and leaves the figure blank. The sample
+    is uniform over rows (not stratified by class) so the visual density stays
+    proportional, and the seed is fixed so two runs draw the same cloud.
     """
     clase_por_fila = np.asarray(clase_por_fila)
     x = tabla["num_eventos"].to_numpy()
     y = tabla["uiti_acumulado"].to_numpy()
+
+    n = len(x)
+    if n > int(maximo):
+        elegidos = np.sort(
+            np.random.default_rng(semilla).choice(n, size=int(maximo), replace=False)
+        )
+        x, y, clase_por_fila = x[elegidos], y[elegidos], clase_por_fila[elegidos]
+
     capas = []
     for clase in range(4):
         mask = clase_por_fila == clase
-        capas.append({"x": x[mask].tolist(), "y": y[mask].tolist()})
+        # Redondeo explicito: el UITI ya viene a 3 decimales de
+        # `construir_tabla_vano_ventana`, pero un float64 se serializa con toda su
+        # cola y el panel no distingue el cuarto decimal.
+        capas.append(
+            {
+                "x": np.round(x[mask], 3).tolist(),
+                "y": np.round(y[mask], 3).tolist(),
+            }
+        )
     return capas
+
+
+def frontera_kmeans(
+    geometria: Any,
+    *,
+    x_min: float,
+    x_max: float,
+    y_min: float,
+    y_max: float,
+    n: int = 90,
+) -> dict[str, Any]:
+    """The Voronoi partition of the `(eventos, UITI)` plane under 01.4's
+    KMeans geometry: an `n x n` grid whose every cell carries the class of its
+    NEAREST centroid, ready for a filled `go.Contour` underneath the cloud.
+
+    The grid is scored with `asignar_clase` -- the same function that
+    classifies the vanos themselves. Reimplementing the boundary with its own
+    distance rule is how a contour ends up disagreeing with the very points
+    drawn on top of it.
+
+    A logged axis is spaced GEOMETRICALLY. On a log axis a linear grid packs
+    almost every sample into the last decade, so the boundary comes out
+    stair-stepped exactly where the eye is looking.
+
+    Returns `{'x', 'y', 'z'}` with `z[fila_y][columna_x]`, Plotly's own
+    orientation for `Contour`.
+    """
+    log_x, log_y = (bool(v) for v in geometria.logs)
+    eje_x = (
+        np.geomspace(max(float(x_min), 1e-6), float(x_max), n)
+        if log_x else np.linspace(float(x_min), float(x_max), n)
+    )
+    eje_y = (
+        np.geomspace(max(float(y_min), 1e-6), float(y_max), n)
+        if log_y else np.linspace(float(y_min), float(y_max), n)
+    )
+    malla_x, malla_y = np.meshgrid(eje_x, eje_y)
+    clase, _n_clamped = asignar_clase(malla_x.ravel(), malla_y.ravel(), geometria)
+    return {
+        "x": eje_x.tolist(),
+        "y": eje_y.tolist(),
+        "z": np.asarray(clase, dtype=int).reshape(malla_x.shape).tolist(),
+    }
+
+
+def series_temporal_vanos(
+    tabla: pd.DataFrame,
+    *,
+    circuito: str,
+    fids: Iterable[str],
+    n_ventanas: int,
+) -> list[dict[str, Any]]:
+    """One time series per vano in `fids`, in the order given: UITI and events
+    across the `n_ventanas` windows of `circuito`.
+
+    A window where the vano has no cell carries `None`, never `0`. A zero
+    would read as "no UITI in that window", and what actually happened is
+    that there was no measurement -- Plotly breaks the line at `None`, which
+    is the honest mark for a gap.
+    """
+    circuitos = tabla["CIRCUITO"].astype(str).to_numpy()
+    fids_tabla = tabla["FID_VANO"].astype(str).to_numpy()
+    ventanas_i = tabla["ventana_i"].to_numpy()
+    uiti = tabla["uiti_acumulado"].to_numpy()
+    eventos = tabla["num_eventos"].to_numpy()
+
+    del_circuito = circuitos == str(circuito)
+    series: list[dict[str, Any]] = []
+    for fid in fids:
+        mask = del_circuito & (fids_tabla == str(fid))
+        por_ventana = {int(v): (u, e) for v, u, e in
+                       zip(ventanas_i[mask], uiti[mask], eventos[mask])}
+        series.append(
+            {
+                "fid": str(fid),
+                "x": list(range(int(n_ventanas))),
+                "uiti": [float(por_ventana[i][0]) if i in por_ventana else None
+                         for i in range(int(n_ventanas))],
+                "eventos": [int(por_ventana[i][1]) if i in por_ventana else None
+                            for i in range(int(n_ventanas))],
+            }
+        )
+    return series
+
+
+def reparto_por_clase(
+    tabla: pd.DataFrame,
+    clase_por_fila: np.ndarray,
+    *,
+    mask_ventana: np.ndarray,
+    marcados: Iterable[str],
+) -> list[dict[str, list]]:
+    """UITI and event counts per class, over the MARKED vanos of the active
+    window -- four entries, index 0-3.
+
+    No marked vanos means four EMPTY groups, deliberately: this is 01.4's own
+    rule for its violins, and its reason carries over unchanged -- a
+    distribution over thousands of vanos and one over three draw identically,
+    and nothing in a violin tells them apart. Falling back to the whole
+    circuit here would silently change the subject of the panel.
+    """
+    marcados = {str(m) for m in marcados}
+    grupos: list[dict[str, list]] = [{"uiti": [], "eventos": []} for _ in range(4)]
+    if not marcados:
+        return grupos
+
+    mask = np.asarray(mask_ventana, dtype=bool) & np.isin(
+        tabla["FID_VANO"].astype(str).to_numpy(), list(marcados)
+    )
+    clases = np.asarray(clase_por_fila)[mask]
+    uiti = tabla["uiti_acumulado"].to_numpy()[mask]
+    eventos = tabla["num_eventos"].to_numpy()[mask]
+    for clase, u, e in zip(clases, uiti, eventos):
+        grupos[int(clase)]["uiti"].append(float(u))
+        grupos[int(clase)]["eventos"].append(int(e))
+    return grupos
 
 
 def nube_seleccion(
