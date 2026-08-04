@@ -69,6 +69,258 @@ _LANGUAGE_INFO = {
 # generator).
 # ---------------------------------------------------------------------------
 
+
+_MD_ENTRENAMIENTO = '''\
+---
+
+# Reentrenamiento desde cero
+
+Todo lo que sigue corre SOLO con `EJECUCION = "entrenamiento"`. Con el valor
+por defecto (`"visualizacion"`) cada celda de aqui en adelante no hace nada, y
+el cuaderno termina en segundos.
+
+Reentrenar con `mode = "full"` toma alrededor de 40 minutos y SOBREESCRIBE
+`data/models/mil_vano_ventana_v1.pt`, que es el artefacto que consume el
+simulador de 01.5.
+'''
+
+_MD_ARQUITECTURA = '''\
+## Arquitectura
+
+Cada **bolsa** es una celda `(CIRCUITO, FID_VANO, ventana)`; cada **instancia**
+es un evento de falla dentro de ella. El modelo predice un escalar por bolsa,
+`p_bag ~ log1p(uiti_acumulado)`, y la **clase de criticidad se deriva** con la
+regla de vecino mas cercano que 01.4 ya calculo -- nunca se reajusta aqui.
+
+```mermaid
+flowchart TD
+    X["x_inst (n_inst x p)<br/>+ instance_bag (CSR)"] --> E1
+    subgraph PASO1["Paso 1 -- fuente de la compuerta"]
+        E1["encoders por modalidad<br/>estructural (30) | climatica (50)"] --> Z1["z1 (n_inst x 128)"]
+        Z1 --> AP["SegmentAttentionPool<br/>invariante a cardinalidad"]
+        AP --> ZB["z_bag (n_bags x 128)"]
+        ZB --> GD["PerSampleEdgeGateDecoder<br/>g = 2*sigmoid(W z_bag)"]
+    end
+    GD --> PROP["propagacion sobre el grafo experto FIJO<br/>x' = x + alpha * g * A^T x"]
+    X --> PROP
+    PROP --> E2
+    subgraph PASO2["Paso 2 -- el MISMO modulo base"]
+        E2["encoders + decoders"] --> Z2["z2 (n_inst x 128)"]
+        E2 --> REC["reconstructed_features"]
+        Z2 --> AP2["la MISMA atencion<br/>(pesos compartidos)"]
+        AP2 --> ZB2["z_bag_2 (n_bags x 128)"]
+    end
+    ZB2 --> FUS{"fusion"}
+    FUS -->|concat| H1["Linear(128 -> 1)"]
+    FUS -->|film| H2["z_est * (1 + gamma(z_clim)) + beta(z_clim)<br/>Linear(64 -> 1)"]
+    FUS -->|reliability| H3["sum_m r_m * p_m"]
+    H1 --> P["p_bag"]
+    H2 --> P
+    H3 --> P
+    P --> CLS["asignar_clase(n_obs OBSERVADO, expm1(p_bag), geometria de 01.4)<br/>-> Bajo | Medio | Medio-Alto | Alto"]
+```
+
+**Tres propiedades que no son detalles:**
+
+- **Invariancia de cardinalidad.** Duplicar todas las instancias de una bolsa
+  deja `p_bag` identico. Sin eso el modelo podria leer `num_eventos` por la
+  puerta de atras, y `num_eventos` es exactamente el target que se descarto.
+- **`n_obs` es OBSERVADO, nunca predicho.** De las dos coordenadas que deciden
+  la clase, el modelo solo aporta `u`.
+- **El grafo es fijo y las columnas de grado 0 quedan intactas.** `index_add`
+  solo escribe en `edge_cols`; los indicadores `COD_CAUSA_*` sin aristas pasan
+  sin tocarse.
+'''
+
+_MD_PERDIDA = '''\
+## Funcion de costo
+
+```
+total = 1.00 * supervisado
+      + 0.01 * reconstruccion_suave
+      + 0.01 * perdida_informacion_mutua
+      + 0.00 * desviacion_de_compuertas
+      + LAMBDA_CLASE * perdida_de_clase
+```
+
+| termino | que mide | por que esta |
+|---|---|---|
+| **supervisado** | `KernelDensityWeightedMSELoss(p_bag, log1p(u))` | MSE ponderado por densidad INVERSA. El KDE se ajusta SOLO sobre el pliegue de entrenamiento (higiene de pliegue) y los pesos se normalizan a media 1 por lote, para que la cola alta de UITI no se ahogue bajo la masa central |
+| **reconstruccion** | `raw/(1+raw)` con `raw = MSE(reconstruido, entrada estandarizada)` | Se calcula contra el `x_inst` ORIGINAL, nunca contra `x'`: si no, la compuerta podria bajar la perdida simplificando su propio objetivo en vez de mejorar la representacion. La forma `raw/(1+raw)` acota en [0,1) SIN matar el gradiente, a diferencia de un recorte |
+| **informacion mutua** | MI cuadratica de Renyi entre un kernel RBF sobre los perfiles de variables reconstruidas y el kernel del grafo fijo, normalizada por `log(p)`; la perdida es `1 - MI_norm` | Ata la representacion aprendida a la estructura del grafo experto |
+| **desviacion de compuertas** | `lambda * media(abs(g - 1))` | Ancla las compuertas a la identidad. Apagado (`lambda = 0`) |
+| **clase** | entropia cruzada sobre `softmax(-d^2 / T)` contra la clase observada, diferenciable a traves de `u_hat` | Sin el, nada en el costo sabe donde estan las fronteras entre centroides -- que es exactamente lo que mide la metrica |
+
+**Dos advertencias medidas, no teoricas:**
+
+- `TEMPERATURA_CLASE` **no** hereda el `1.0` de `distribucion_suave`. Con
+  distancias de mediana 0.038, esa temperatura deja la softmax 99,9% uniforme
+  (entropia 1.3850 contra `ln(4) = 1.3863`) y el termino queda en su piso desde
+  la primera epoca, aportando una constante y ningun gradiente. `T = 0.01` es
+  el valor medido sobre la geometria real.
+- Los terminos del grafo estan acotados en [0,1] y pesan 0.01 cada uno: entre
+  los dos pueden mover el total como maximo 0.02, contra un termino supervisado
+  que se movio entre 0.35 y 6.8. Con estos lambda, el grafo casi no participa
+  del gradiente.
+'''
+
+_MD_VISOR = '''\
+## Modelo entrenado: carga y verificacion
+
+Lee el artefacto guardado y las predicciones fuera de pliegue de la corrida
+base. El artefacto lleva sus propios nombres de features y el cargador RECHAZA
+un desajuste: puntuar columnas equivocadas no lanza error por si solo, solo
+devuelve un mapa creible y falso.
+'''
+
+_CODE_VISOR = '''\
+RUTA_MODELO = PROJECT_ROOT / "data" / "models" / "mil_vano_ventana_v1.pt"
+RUTA_OOF = DERIVED_DIR / "oof_mil_full_film_clase1.0.npz"
+
+if ENTRENAR:
+    print("Modo entrenamiento: el visor se salta y el modelo se reentrena mas abajo.")
+    predictor_guardado = None
+    oof = None
+else:
+    predictor_guardado = cargar_modelo_mil(RUTA_MODELO, device=str(DEVICE))
+    meta = predictor_guardado.metadatos
+    # El desglose viaja DENTRO del artefacto: `data/models/**` esta versionado
+    # y `data/derived/*` no, asi que depender del .npz haria que el visor
+    # fallara en cualquier checkout limpio. El .npz queda como extra opcional
+    # para analisis mas profundos.
+    oof = np.load(RUTA_OOF) if RUTA_OOF.exists() else None
+    print(f"Modelo: {RUTA_MODELO.name}")
+    print(f"  fusion={meta.get('fusion')!r} lambda_clase={meta.get('lambda_clase')} "
+          f"temperatura_clase={meta.get('temperatura_clase')} epocas={meta.get('epochs')}")
+    print(f"  p (features de instancia) = {len(predictor_guardado.feature_names)}")
+    print(f"  macro-F1 en validacion cruzada = {meta.get('macro_f1_cv')}")
+    print(f"  referencia RandomForest       = {meta.get('macro_f1_randomforest_referencia')}")
+    print(f"  NOTA: {meta.get('macro_f1_cv_nota')}")
+    print(f"  bolsas evaluadas              = {meta['desglose_por_clase']['modelo']['n']:,}")
+    print(f"Predicciones fuera de pliegue (.npz, opcional): "
+          f"{'presentes' if oof is not None else 'ausentes -- el desglose sale del artefacto'}")
+'''
+
+_MD_VARIABLES = '''\
+## Variables de entrada
+
+Una fila por variable: su modalidad y su papel en el grafo experto fijo.
+`grado_entrada` es lo que la propagacion puede CAMBIAR de esa variable, asi que
+grado de entrada 0 significa que pasa por el grafo intacta.
+`aristas_cruzadas` cuenta las aristas que unen las dos modalidades -- el unico
+camino cruzado que el grafo aporta.
+'''
+
+_CODE_VARIABLES = '''\
+if not ENTRENAR:
+    _payload = torch.load(RUTA_MODELO, map_location="cpu", weights_only=False)
+    tabla_vars = tabla_variables(
+        _payload["features"], _payload["modalidades"], _payload["adjacency"],
+    )
+    resumen_modalidad = (
+        tabla_vars.groupby("modalidad")
+        .agg(variables=("variable", "size"),
+             en_grafo=("en_grafo", "sum"),
+             aristas_cruzadas=("aristas_cruzadas", "sum"))
+        .reset_index()
+    )
+    print(f"p = {len(tabla_vars)} variables de instancia")
+    print(resumen_modalidad.to_string(index=False))
+    print()
+    print("Variables que el grafo NO toca (grado de entrada 0):")
+    _sin = tabla_vars.loc[tabla_vars["grado_entrada"] == 0, "variable"].tolist()
+    print(f"  {len(_sin)} de {len(tabla_vars)}: {_sin}")
+    print()
+    display(tabla_vars)
+'''
+
+_MD_DESEMPENO = '''\
+## Desempeno del modelo base
+
+Matriz de confusion en CONTEO y en PORCENTAJE por fila observada, mas el
+desempeno por grupo y global. El porcentaje se normaliza por fila para que
+cada una responda "de las bolsas que ERAN de este grupo, a donde fueron" --
+la vista de recall, que es en la que una clase abandonada aparece como una
+fila con la diagonal en cero.
+'''
+
+_CODE_DESEMPENO = '''\
+if not ENTRENAR:
+    _desglose = predictor_guardado.metadatos["desglose_por_clase"]
+
+    for _nombre in ("modelo", "estructural (RandomForest)"):
+        _d = _desglose[_nombre]
+        print(f"===== {_nombre} =====")
+        _conteo = pd.DataFrame(np.asarray(_d["matriz_confusion"]), index=GRUPOS, columns=GRUPOS)
+        _conteo.index.name = "OBSERVADA \\ PREDICHA"
+        print("\\nMatriz de confusion (conteo)")
+        display(_conteo)
+        _pct = pd.DataFrame(
+            matriz_confusion_porcentaje(np.asarray(_d["matriz_confusion"])).round(2),
+            index=GRUPOS, columns=GRUPOS,
+        )
+        _pct.index.name = "OBSERVADA \\ PREDICHA (%)"
+        print("Matriz de confusion (% por fila observada)")
+        display(_pct)
+        print("Desempeno por grupo")
+        display(pd.DataFrame(_d["por_clase"])[
+            ["grupo", "precision", "recall", "f1", "soporte"]
+        ].round(4))
+        print(f"GLOBAL: accuracy={_d['accuracy']:.4f}  macro-F1={_d['macro_f1']:.4f}  "
+              f"n={_d['n']:,}  clases nunca predichas={_d['clases_abandonadas']}")
+        print()
+
+    _resumen = pd.DataFrame([
+        {"arm": k, "accuracy": v["accuracy"], "macro_f1": v["macro_f1"], "n": v["n"]}
+        for k, v in _desglose.items()
+    ]).sort_values("macro_f1", ascending=False)
+    print("Comparacion global de todos los brazos")
+    display(_resumen.round(6))
+'''
+
+_MD_GUARDADO = '''\
+## Guardado del modelo (solo al reentrenar)
+
+Persiste el modelo ajustado con sus nombres de features, su grafo y la
+geometria, para que 01.5 pueda cargarlo. Sin esto, el modelo final vivia solo
+en memoria y el simulador no tenia nada que levantar.
+'''
+
+_CODE_GUARDADO = '''\
+if ENTRENAR and PROCEDER_CON_ENTRENAMIENTO_COMPLETO and mode == "full":
+    ruta_modelo = guardar_modelo_mil(
+        PROJECT_ROOT / "data" / "models" / "mil_vano_ventana_v1.pt",
+        modelo=resultado_final["model"],
+        features=features_inst,
+        modalidades=modality_indices,
+        adjacency=A_adyacencia,
+        edges=preserved_edges,
+        geometria=geometria,
+        hiperparametros={
+            "hidden_dim": HIDDEN_DIM, "embed_dim": EMBED_DIM, "dropout": DROPOUT,
+            "alpha": ALPHA, "attn_dim": ATTN_DIM,
+        },
+        metadatos={
+            "fusion": FUSION,
+            "film_modulated_modality": FILM_MODULATED_MODALITY if FUSION == "film" else None,
+            "lambda_clase": LAMBDA_CLASE,
+            "temperatura_clase": TEMPERATURA_CLASE,
+            "epochs": EPOCHS,
+            "seed": RANDOM_STATE,
+            "macro_f1_cv": float(tabla_arms.loc[tabla_arms["arm"] == "modelo", "macro_f1"].iloc[0]),
+            "macro_f1_randomforest_referencia": float(
+                tabla_arms.loc[tabla_arms["arm"] == "estructural", "macro_f1"].iloc[0]
+            ),
+            "ventana_climatica_horas": 12,
+            "min_frecuencia_relativa_cod_causa": 0.01,
+        },
+    )
+    print(f"Modelo guardado en: {ruta_modelo}")
+else:
+    print("Guardado OMITIDO -- solo se guarda al reentrenar con mode='full'.")
+'''
+
+
 _MD_TITLE = '''\
 # 10. Aprendizaje de instancias multiples (MIL) sobre bolsas vano x ventana de 01.4
 
@@ -121,6 +373,14 @@ _CODE_PARAMETERS = '''\
 # Celda de parametros (papermill). Sobrescribir con `-p mode full` para la corrida real.
 # El default es "smoke" a proposito, mismo patron que la libreta 12.
 mode = "smoke"
+
+# COMO se ejecuta este cuaderno:
+#   "visualizacion" (default) -> NO entrena. Lee el modelo guardado y las
+#        predicciones fuera de pliegue, y reporta arquitectura, costo,
+#        variables y desempeno. Corre en segundos.
+#   "entrenamiento"           -> reentrena de cero (~40 min con mode="full")
+#        y sobreescribe el artefacto.
+EJECUCION = "visualizacion"
 
 # Diales de BRAZO. Viven aqui, y no en la celda de configuracion, para que
 # papermill pueda fijarlos con -p: atribuir un cambio exige una corrida por
@@ -189,9 +449,11 @@ try:
         asignar_clase,
         cargar_geometria_014,
         distribucion_suave,
+        GRUPOS,
         verificar_sha1_geometrias,
     )
     from chec_impacto.models.mgcecdl_mil import MILBagLoss, MILBagRegressor, entrenar_mil
+    from chec_impacto.models.mil_persistencia import cargar_modelo_mil, guardar_modelo_mil
     from chec_impacto.interpretability.mil_vano_ventana import (
         BARRA_ACEPTACION_A1_PUNTOS,
         BagPredictor,
@@ -204,6 +466,8 @@ try:
         contraste_u,
         predecir_u_estructural,
         formatear_desglose_por_clase,
+        matriz_confusion_porcentaje,
+        tabla_variables,
         evaluar_arms,
         evaluar_diagnostico_temporal,
         grafo_por_grupo_si_no_colapsado,
@@ -259,6 +523,15 @@ Optuna definido en el diseno).
 '''
 
 _CODE_CONFIG = '''\
+if EJECUCION not in ("visualizacion", "entrenamiento"):
+    raise ValueError(
+        f"EJECUCION desconocida: {EJECUCION!r} -- se esperaba 'visualizacion' o 'entrenamiento'."
+    )
+ENTRENAR = EJECUCION == "entrenamiento"
+print(f"EJECUCION={EJECUCION!r} -> "
+      + ("REENTRENA de cero y sobreescribe el artefacto."
+         if ENTRENAR else "solo LEE el modelo guardado; no entrena nada."))
+
 if FUSION not in ("concat", "film", "reliability"):
     raise ValueError(f"FUSION desconocida: {FUSION!r}")
 if mode not in ("smoke", "full"):
@@ -300,16 +573,11 @@ print(f"fusion={FUSION!r} | LAMBDA_MODALITY_SUPERVISED={LAMBDA_MODALITY_SUPERVIS
 '''
 
 _MD_DATA_LOAD = '''\
-## 1. Carga de datos y codificacion de `COD_CAUSA` (D4)
+### Datos e instancias
 
-`filtro_uiti_max=None`: 01.4 no filtra su poblacion, y las bolsas deben
-coincidir exactamente con las 111.233 celdas vano x ventana que 01.4 ya
-reporto. `COD_CAUSA` se codifica DESPUES de `procesar_dataset_completo`
-(nunca antes) -- se reemplaza, bajo el MISMO nombre, por su frecuencia
-relativa (columna metrica, mantiene el nodo del grafo experto vivo), mas un
-bloque de indicadores 0/1 por codigo con frecuencia >= 1.0%. `p` -- el ancho
-final de la matriz de instancias -- se deriva de `len(features_inst)`, NUNCA
-un literal.
+`procesar_dataset_completo` + `codificar_cod_causa` (umbral 1,0%) ->
+`construir_matriz_instancias` agrega la frecuencia de `COD_CAUSA` y sus
+indicadores. `p` se deriva en tiempo de ejecucion, nunca se escribe a mano.
 '''
 
 _CODE_DATA_LOAD = '''\
@@ -341,13 +609,10 @@ assert features_inst.count("COD_CAUSA") == 1, (
 '''
 
 _MD_GRAPH = '''\
-## 2. Grafo experto: adyacencia, indice de aristas y sumidero de `COD_CAUSA`
+### Grafo experto fijo
 
-`E` se deriva de `edge_index.n_edges` en tiempo de ejecucion y se compara
-contra el valor DERIVADO por construccion en el diseno (D4): 56 aristas
-originales + 8 de entrada a `COD_CAUSA` = 64, medido de punta a punta contra
-`construir_matriz_adyacencia_mgcecdl` real (ver obs #532). `COD_CAUSA` debe
-ser un sumidero puro: 8 aristas de entrada, 0 de salida.
+`construir_matriz_adyacencia_mgcecdl` sobre las features de instancia.
+`COD_CAUSA` debe quedar como sumidero (aristas de entrada, ninguna de salida).
 '''
 
 _CODE_GRAPH = '''\
@@ -375,16 +640,10 @@ print("Modalidad climatica:  ", len(modality_indices["climaticos"]), "features")
 '''
 
 _MD_GEOMETRIA = '''\
-## 3. Geometria KMeans de 01.4 y aserto de sha1 sobre sus VALORES
+### Geometria de 01.4
 
-`extraer_geometrias_014` es de solo lectura sobre 01.4 (sha256
-antes/despues). Eso prueba que el cuaderno fuente no fue ESCRITO, pero no
-que sus centroides no CAMBIARON de valor entre dos extracciones -- por eso
-`verificar_sha1_geometrias` compara el sha1 del bloque `geometrias` extraido
-contra `GEOMETRIAS_SHA1_ESPERADO`, un valor fijo medido el 2026-08-02 sobre
-el 01.4 real. Un cambio de centroides en una edicion futura de 01.4 rompe
-esta aserción en vez de correr en silencio con clases de criticidad
-desplazadas.
+Se reutiliza la geometria KMeans que 01.4 ya exporto, verificada por sha1. La
+clase de criticidad NO se reajusta aqui.
 '''
 
 _CODE_GEOMETRIA = '''\
@@ -410,19 +669,10 @@ assert geometrias_sha1_coincide, (
 '''
 
 _MD_BAGS = '''\
-## 4. Bolsas vano x ventana (D1): las 11 ventanas de 01.4, replicadas
+### Bolsas vano x ventana
 
-Las ventanas son IDENTICAS a las que 01.3/01.4 calculan: cada mes aporta el
-mes calendario completo y la cruzada del dia 15 al 15 del siguiente. Esto
-NO importa un modulo compartido -- 01.4 las define inline en su propia
-celda 2 -- asi que se replican aqui byte a byte, sobre `df_identidad`
-(la copia sin filtrar que `procesar_dataset_completo` ya produjo).
-
-`X_inst_bolsas = X_inst_original[bag_index.instance_rows]` es el paso que
-expande la matriz de instancias del orden de fila ORIGINAL (159.470 eventos)
-al orden CSR de `bag_index` (288.632 instancias, con duplicados donde las
-ventanas se solapan) -- necesario porque `entrenar_mil` indexa
-`bag_index.offsets` directamente contra las filas de `X_inst_bolsas`.
+Las 11 ventanas de 01.4 se solapan: un evento puede caer en dos bolsas del
+mismo vano y se duplica, nunca se filtra.
 '''
 
 _CODE_BAGS = '''\
@@ -464,15 +714,10 @@ print("Bolsas cacheadas en:", cache_path)
 '''
 
 _MD_CLASE_OBSERVADA = '''\
-## 5. Clase observada por bolsa (D6)
+### Clase observada
 
-**El limite que gobierna toda metrica de este cuaderno**: la clase es una
-funcion de dos ejes, `n_obs` (cardinalidad de la bolsa, num_eventos) y `u`
-(`uiti_acumulado`). `n_obs` es SIEMPRE OBSERVADO -- para el modelo, para las
-tres lineas base y para el oraculo por igual. Solo `u` cambia entre el valor
-OBSERVADO (para la clase de referencia de esta celda) y el PREDICHO `u_hat`
-(para el modelo, mas abajo). Por eso cada metrica reportada aqui mide
-UNICAMENTE el eje de `u_hat` -- nunca el de `n_obs`, que ningun arm predice.
+`n_obs` es SIEMPRE observado; `u` es observado en la verdad y predicho (`u_hat`)
+para el modelo.
 '''
 
 _CODE_CLASE_OBSERVADA = '''\
@@ -490,14 +735,10 @@ circuito_por_bolsa = bag_index.keys["CIRCUITO"].to_numpy()
 '''
 
 _MD_HELPERS = '''\
-## 6. Funciones auxiliares (subconjunto de bolsas, promedios, ajuste de un pliegue)
+### Utilidades de pliegue
 
-`construir_subindice_bolsas` y `promedio_por_bolsa` son utilidades de
-orquestacion propias de este cuaderno -- ni `bags.py` ni
-`mil_vano_ventana.py` ofrecen subconjuntar un `BagIndex` por indices de
-bolsa arbitrarios (necesario para separar cada pliegue de validacion
-cruzada), asi que se definen aqui, reutilizando `BagIndex.__post_init__`
-para validar sus propios invariantes.
+Subindices de bolsas, promedio por bolsa y el ciclo ajustar-evaluar que cada
+pliegue reutiliza.
 '''
 
 _CODE_HELPERS = '''\
@@ -604,14 +845,10 @@ def ajustar_y_evaluar_pliegue(train_idx, test_idx, *, epochs, seed):
 '''
 
 _MD_COST_FORECAST = '''\
-## 7. Pronostico de costo (compuerta obligatoria antes de la validacion completa)
+### Pronostico de costo (compuerta obligatoria)
 
-Ninguna corrida MIL de dos pasadas se ha cronometrado antes en esta maquina.
-Esta celda MIDE una corrida de referencia (un pliegue pequeno, `EPOCHS`
-epocas) y proyecta el costo de las `N_SPLITS` corridas de la validacion
-cruzada completa. El resultado se compara contra `COST_CEILING_SECONDS`
-(declarado por quien ejecuta el cuaderno en la celda de configuracion) para
-decidir, de forma explicita y sin numeros inventados, si se procede.
+Cronometra un pliegue de referencia y proyecta la validacion cruzada completa
+contra `COST_CEILING_SECONDS` antes de lanzarla.
 '''
 
 _CODE_COST_FORECAST = '''\
@@ -642,13 +879,11 @@ else:
 '''
 
 _MD_CV_LOOP = '''\
-## 8. Validacion cruzada agrupada (D8) + subconjunto de variacion intra-vano
+### Validacion cruzada agrupada + subconjunto intra-vano
 
-`StratifiedGroupKFold(groups=bag_index.group)` evita que las bolsas de un
-mismo vano crucen un pliegue -- necesario porque las ventanas se solapan y
-el bloque estructural es casi constante dentro de un vano. El subconjunto de
-variacion intra-vano se calcula UNA sola vez sobre la clase OBSERVADA, antes
-de cualquier pliegue, y se congela.
+`StratifiedGroupKFold(groups=bag_index.group)` evita que las bolsas de un mismo
+vano crucen pliegues. El subconjunto de variacion intra-vano se congela ANTES
+de la validacion.
 '''
 
 _CODE_CV_LOOP = '''\
@@ -720,29 +955,10 @@ else:
 '''
 
 _MD_A1_BASELINES = '''\
-## 9. Las tres lineas base + la barra de aceptacion A1 (+5.0 puntos, no renegociable)
+### Compuerta A1 contra la mejor linea base
 
-**La linea base de persistencia esta deliberadamente adelantada en
-informacion**: la validacion cruzada agrupada mantiene todas las bolsas de
-un vano en un mismo pliegue, asi que persistencia ve los desenlaces
-OBSERVADOS reales de las otras ventanas del mismo vano -- algo que el modelo
-nunca recibe.
-
-`BARRA_ACEPTACION_A1_PUNTOS` son 5.0 puntos de macro-F1 sobre la MEJOR linea
-base -- el maximo macro-F1 entre TODAS las lineas base no-modelo, no solo
-persistencia -- fijados ANTES de ver resultados y ausentes de toda firma de
-funcion (no se pueden renegociar despues). Comparar solo contra persistencia
-dejaba pasar sin deteccion el caso en que una linea base estructural (sin
-clima) supera tanto al modelo como a persistencia; exigir la mejor linea
-base cierra ese hueco y hace la barra mas estricta que antes -- endurecer un
-criterio de aceptacion despues de ver resultados es diligencia legitima,
-nunca mover la porteria (que seria RELAJAR un criterio tras un resultado
-desfavorable).
-
-Si la barra no se supera, este cuaderno lo dice sin suavizar: reporta un
-RESULTADO NEGATIVO y una caracterizacion descriptiva, exactamente como lo
-hizo la libreta 12 -- nunca itera sobre los terminos de la perdida para
-perseguir la barra despues de observar el resultado.
+El modelo debe superar por >= 5,0 puntos de macro-F1 a la MEJOR linea base, no
+solo a persistencia. No cumplirla se reporta como resultado negativo explicito.
 '''
 
 _CODE_A1_BASELINES = '''\
@@ -863,12 +1079,10 @@ else:
 '''
 
 _MD_A3 = '''\
-## 11. Guardia de proxy univariante (A3)
+### A3: guarda de proxy univariante
 
-Para cada feature de instancia se ajusta un KMeans 1-D sobre el promedio por
-bolsa y se compara su ARI contra la clase observada; `max_f ARI > 0.8` anula
-(voids) la afirmacion de modelado -- una sola variable no puede estar
-reproduciendo la particion completa.
+Comprueba si alguna feature observada funciona como proxy univariante de la
+clase observada. No depende del modelo.
 '''
 
 _CODE_A3 = '''\
@@ -883,11 +1097,9 @@ if tabla_proxy.attrs["voided"]:
 '''
 
 _MD_A4 = '''\
-## 12. Deteccion de colapso de compuerta (A4)
+### A4: colapso de compuertas
 
-Si las compuertas por bolsa colapsan (varianza casi nula entre bolsas), el
-grafo reconstruido por grupo de criticidad se reporta VACIO -- nunca se
-interpreta un colapso como estructura real.
+Si las compuertas no colapsaron, reconstruye un grafo por grupo de criticidad.
 '''
 
 _CODE_A4 = '''\
@@ -906,12 +1118,10 @@ else:
 '''
 
 _MD_A6 = '''\
-## 13. Particion por bloque temporal (A6, diagnostico SECUNDARIO)
+### A6: split temporal (diagnostico secundario)
 
-Entrena sobre V1..V7 y prueba sobre V8..V11. Esto es un diagnostico de
-robustez secundario -- nunca reselecciona la metrica principal de
-`StratifiedGroupKFold` de la celda 9; se reporta lado a lado, no en su
-lugar.
+Bloque de ventanas de entrenamiento -> bloque de prueba. Nunca reselecciona la
+metrica principal; se reporta al lado.
 '''
 
 _CODE_A6 = '''\
@@ -940,17 +1150,10 @@ else:
 '''
 
 _MD_SHAP = '''\
-## 14. Atribucion SHAP (solo `mode="full"` y compuerta GO) y etiqueta de exposicion/severidad
+### Kernel SHAP -> ranking Borda
 
-`KernelShapTopVarsExtractor` hardcodea `predict_proba_positiva`, que lee la
-columna 1 de `predict_proba` -- por eso `BagPredictor.predict_proba` (D7)
-devuelve exactamente `[1 - P(Alto), P(Alto)]`, nunca la matriz de 4 clases;
-esta seccion explica P(Alto), no P(Medio).
-
-`CAPACIDAD_NOMINAL` y `PROMEDIO_KWH_TRF` son exposicion/severidad por
-construccion (dependen del tamano/capacidad del activo, no de una causa
-accionable) -- la tabla de abajo adjunta esa nota en la MISMA fila que su
-puntaje, nunca como pie de pagina. `CNT_VN` NO pertenece a esa familia.
+Relevancias por bolsa agregadas por (circuito, vano, ventana), en formato largo
+con la nota de exposicion/severidad por variable.
 '''
 
 _CODE_SHAP = '''\
@@ -1038,20 +1241,50 @@ geometria de 01.4.
 '''
 
 _CODE_SUMMARY = '''\
-resumen_final = {
-    "mode": mode,
-    "p": p_derivado,
-    "E": edge_index.n_edges,
-    "K_indicadores_cod_causa": len(encoding.codigos_propios) + 1,
-    "n_bolsas": n_bags,
-    "n_instancias": n_inst,
-    "fraccion_singleton": fraccion_singleton,
-    "geometrias_sha1_coincide": geometrias_sha1_coincide,
-    "entrenamiento_completo_ejecutado": bool(PROCEDER_CON_ENTRENAMIENTO_COMPLETO),
-}
+if ENTRENAR:
+    resumen_final = {
+        "ejecucion": EJECUCION,
+        "mode": mode,
+        "p": p_derivado,
+        "E": edge_index.n_edges,
+        "K_indicadores_cod_causa": len(encoding.codigos_propios) + 1,
+        "n_bolsas": n_bags,
+        "n_instancias": n_inst,
+        "fraccion_singleton": fraccion_singleton,
+        "geometrias_sha1_coincide": geometrias_sha1_coincide,
+        "entrenamiento_completo_ejecutado": bool(PROCEDER_CON_ENTRENAMIENTO_COMPLETO),
+    }
+else:
+    _m = predictor_guardado.metadatos
+    resumen_final = {
+        "ejecucion": EJECUCION,
+        "modelo": RUTA_MODELO.name,
+        "p": len(predictor_guardado.feature_names),
+        "fusion": _m.get("fusion"),
+        "lambda_clase": _m.get("lambda_clase"),
+        "temperatura_clase": _m.get("temperatura_clase"),
+        "macro_f1_cv": _m.get("macro_f1_cv"),
+        "macro_f1_randomforest": _m.get("macro_f1_randomforest_referencia"),
+        "bolsas_evaluadas": _m["desglose_por_clase"]["modelo"]["n"],
+        "entrenamiento_completo_ejecutado": False,
+    }
 for key, value in resumen_final.items():
     print(f"{key}: {value}")
 '''
+
+
+
+def _solo_entrenamiento(codigo: str) -> str:
+    """Indenta el cuerpo de una celda bajo `if ENTRENAR:`.
+
+    El cuaderno corre por defecto sin entrenar, asi que toda la tuberia cara
+    -- cargar el CSV, construir bolsas, la validacion cruzada -- queda detras
+    de una sola bandera en vez de repartida en guardas por celda que se
+    desincronizan.
+    """
+    lineas = codigo.rstrip("\n").split("\n")
+    cuerpo = "\n".join(f"    {linea}" if linea.strip() else "" for linea in lineas)
+    return "if ENTRENAR:\n" + cuerpo + "\n"
 
 
 def _cell(kind: str, source: str, *, tags: list[str] | None = None) -> nbformat.NotebookNode:
@@ -1067,45 +1300,59 @@ def build_notebook() -> nbformat.NotebookNode:
     """Assemble the (unexecuted) notebook-10 skeleton -- pure, no training."""
     cells = [
         _cell("markdown", _MD_TITLE),
-        _cell("markdown", _MD_DIAGRAM),
         _cell("code", _CODE_PARAMETERS, tags=["parameters"]),
         _cell("markdown", _MD_BOOTSTRAP),
         _cell("code", _CODE_BOOTSTRAP),
         _cell("code", _CODE_IMPORTS),
         _cell("markdown", _MD_CONFIG),
         _cell("code", _CODE_CONFIG),
+        # ---- documentacion: siempre visible, no depende de EJECUCION ----
+        _cell("markdown", _MD_ARQUITECTURA),
+        _cell("markdown", _MD_PERDIDA),
+        # ---- visor: lee el modelo guardado ----
+        _cell("markdown", _MD_VISOR),
+        _cell("code", _CODE_VISOR),
+        _cell("markdown", _MD_VARIABLES),
+        _cell("code", _CODE_VARIABLES),
+        _cell("markdown", _MD_DESEMPENO),
+        _cell("code", _CODE_DESEMPENO),
+        # ---- entrenamiento: solo con EJECUCION="entrenamiento" ----
+        _cell("markdown", _MD_ENTRENAMIENTO),
+        _cell("markdown", _MD_DIAGRAM),
         _cell("markdown", _MD_DATA_LOAD),
-        _cell("code", _CODE_DATA_LOAD),
+        _cell("code", _solo_entrenamiento(_CODE_DATA_LOAD)),
         _cell("markdown", _MD_GRAPH),
-        _cell("code", _CODE_GRAPH),
+        _cell("code", _solo_entrenamiento(_CODE_GRAPH)),
         _cell("markdown", _MD_GEOMETRIA),
-        _cell("code", _CODE_GEOMETRIA),
+        _cell("code", _solo_entrenamiento(_CODE_GEOMETRIA)),
         _cell("markdown", _MD_BAGS),
-        _cell("code", _CODE_BAGS),
+        _cell("code", _solo_entrenamiento(_CODE_BAGS)),
         _cell("markdown", _MD_CLASE_OBSERVADA),
-        _cell("code", _CODE_CLASE_OBSERVADA),
+        _cell("code", _solo_entrenamiento(_CODE_CLASE_OBSERVADA)),
         _cell("markdown", _MD_HELPERS),
-        _cell("code", _CODE_HELPERS),
+        _cell("code", _solo_entrenamiento(_CODE_HELPERS)),
         _cell("markdown", _MD_COST_FORECAST),
-        _cell("code", _CODE_COST_FORECAST),
+        _cell("code", _solo_entrenamiento(_CODE_COST_FORECAST)),
         _cell("markdown", _MD_CV_LOOP),
-        _cell("code", _CODE_CV_LOOP),
+        _cell("code", _solo_entrenamiento(_CODE_CV_LOOP)),
         _cell("markdown", _MD_A1_BASELINES),
-        _cell("code", _CODE_A1_BASELINES),
+        _cell("code", _solo_entrenamiento(_CODE_A1_BASELINES)),
         _cell("markdown", _MD_POR_CLASE),
-        _cell("code", _CODE_POR_CLASE),
+        _cell("code", _solo_entrenamiento(_CODE_POR_CLASE)),
         _cell("markdown", _MD_DESGLOSE),
-        _cell("code", _CODE_DESGLOSE),
+        _cell("code", _solo_entrenamiento(_CODE_DESGLOSE)),
         _cell("markdown", _MD_A3),
-        _cell("code", _CODE_A3),
+        _cell("code", _solo_entrenamiento(_CODE_A3)),
         _cell("markdown", _MD_A4),
-        _cell("code", _CODE_A4),
+        _cell("code", _solo_entrenamiento(_CODE_A4)),
         _cell("markdown", _MD_A6),
-        _cell("code", _CODE_A6),
+        _cell("code", _solo_entrenamiento(_CODE_A6)),
         _cell("markdown", _MD_SHAP),
-        _cell("code", _CODE_SHAP),
+        _cell("code", _solo_entrenamiento(_CODE_SHAP)),
+        _cell("markdown", _MD_GUARDADO),
+        _cell("code", _CODE_GUARDADO),
         _cell("markdown", _MD_SIMULATOR),
-        _cell("code", _CODE_SIMULATOR),
+        _cell("code", _solo_entrenamiento(_CODE_SIMULATOR)),
         _cell("markdown", _MD_LIMITACION),
         _cell("markdown", _MD_SUMMARY),
         _cell("code", _CODE_SUMMARY),

@@ -845,3 +845,73 @@ def formatear_desglose_por_clase(desglose: Mapping[str, Mapping[str, Any]]) -> s
             lineas.append(f"  AVISO: nunca predice {nombres} -- macro-F1 solo no lo mostraria.")
         lineas.append("")
     return "\n".join(lineas)
+
+
+# ---------------------------------------------------------------------------
+# Viewer helpers (notebook 10 runs read-only by default)
+# ---------------------------------------------------------------------------
+
+
+def matriz_confusion_porcentaje(matriz: np.ndarray) -> np.ndarray:
+    """Row-normalised confusion matrix, in percent.
+
+    Normalised by OBSERVED row, so each row reads "of the bags that WERE
+    tier k, where did they end up?" -- the recall view. That is the
+    orientation in which an abandoned tier is a row of zeros on the
+    diagonal, which is the failure macro-F1 hides. A tier with no observed
+    bags yields zeros, never NaN: one empty row must not poison the table.
+    """
+    matriz = np.asarray(matriz, dtype=np.float64)
+    totales = matriz.sum(axis=1, keepdims=True)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        pct = np.where(totales > 0, matriz / np.where(totales > 0, totales, 1.0) * 100.0, 0.0)
+    return pct
+
+
+def tabla_variables(
+    features: Sequence[str],
+    modalidades: Mapping[str, Sequence[int]],
+    adjacency: np.ndarray,
+) -> pd.DataFrame:
+    """One row per input variable: modality and its role in the fixed graph.
+
+    `grado_entrada` is what the propagation step can CHANGE about a variable
+    (`index_add` only writes at `edge_cols`), so a variable with in-degree 0
+    -- every degree-0 `COD_CAUSA_*` indicator -- is passed through the graph
+    untouched by construction. `aristas_cruzadas` counts the edges that join
+    the two modalities, the model's only graph-borne cross-modality path.
+    """
+    features = list(features)
+    adjacency = np.asarray(adjacency, dtype=np.float64)
+    if adjacency.shape != (len(features), len(features)):
+        raise ValueError(
+            f"la adyacencia es {adjacency.shape} pero hay {len(features)} features; "
+            "deben coincidir."
+        )
+
+    modalidad_de = {}
+    for nombre, indices in modalidades.items():
+        for i in indices:
+            modalidad_de[int(i)] = nombre
+
+    filas_idx, cols_idx = np.nonzero(adjacency)
+    grado_salida = np.zeros(len(features), dtype=int)
+    grado_entrada = np.zeros(len(features), dtype=int)
+    cruzadas = np.zeros(len(features), dtype=int)
+    for r, c in zip(filas_idx, cols_idx):
+        grado_salida[r] += 1
+        grado_entrada[c] += 1
+        if modalidad_de.get(int(r)) != modalidad_de.get(int(c)):
+            cruzadas[r] += 1
+            cruzadas[c] += 1
+
+    return pd.DataFrame(
+        {
+            "variable": features,
+            "modalidad": [modalidad_de.get(i, "?") for i in range(len(features))],
+            "grado_entrada": grado_entrada,
+            "grado_salida": grado_salida,
+            "aristas_cruzadas": cruzadas,
+            "en_grafo": (grado_entrada + grado_salida) > 0,
+        }
+    )
