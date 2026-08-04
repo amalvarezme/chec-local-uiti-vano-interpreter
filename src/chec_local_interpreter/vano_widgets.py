@@ -75,11 +75,11 @@ def _clase_selector():
 
         value = traitlets.Tuple()
 
-        def __init__(self, opciones=(), *, alto="150px", **kwargs):
+        def __init__(self, opciones=(), *, alto="132px", **kwargs):
             super().__init__(**kwargs)
             self.casillas = {}
             self._silencio = False
-            self._caja = widgets.Box(
+            self.caja = widgets.Box(
                 layout=widgets.Layout(
                     # `overflow` y no `overflow_y`: ipywidgets 8 saco los ejes
                     # sueltos de Layout y los ignora con un DeprecationWarning.
@@ -88,7 +88,7 @@ def _clase_selector():
                     border="1px solid #e4c4c0", padding="4px 6px",
                 ),
             )
-            self.children = [widgets.HTML("<b>Vanos</b>"), self._caja]
+            self.children = [widgets.HTML("<b>Vanos</b>"), self.caja]
             self.poblar(opciones)
 
         def poblar(self, opciones):
@@ -100,13 +100,17 @@ def _clase_selector():
                 self.casillas = {
                     str(fid): widgets.Checkbox(
                         value=False, description=str(fid), indent=False,
-                        layout=widgets.Layout(width="118px", margin="0 8px 0 0"),
+                        # Ancho explicito y no via CSS: el `layout` viaja como estilo
+                        # inline y le gana a cualquier hoja de estilos sin `!important`,
+                        # asi que mezclar los dos deja columnas impredecibles. 96 px es
+                        # el fid de 8 digitos a 12 px mas su casilla, como en 01.4.
+                        layout=widgets.Layout(width="96px", margin="0 8px 0 0"),
                     )
                     for fid in opciones
                 }
                 for caja in self.casillas.values():
                     caja.observe(self._al_cambiar_casilla, names="value")
-                self._caja.children = tuple(self.casillas.values())
+                self.caja.children = tuple(self.casillas.values())
             finally:
                 self._silencio = False
             self.value = ()
