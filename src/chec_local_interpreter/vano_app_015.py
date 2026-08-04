@@ -194,6 +194,33 @@ def clases_por_fid_para_estado(tabla_resultado: pd.DataFrame, estado: str) -> di
     raise ValueError(f"Estado de alternador desconocido: {estado!r}")
 
 
+# --- Row 2's `sin_dato` trace: two absence-reasons, two labels (verify finding W1) -------
+
+# `capas_mapa_historico` (shared with row 1) buckets any fid absent from `clases_por_fid`
+# into ONE `sin_dato` layer. Row 2 feeds it `{}` in two genuinely different situations:
+# before the first "Simular" press (no simulation exists yet for the active selection)
+# and after a simulation whose result table simply has no row for a given vano (zero
+# event-rows in the active window). D2's anti-conflation rule says one visual signal must
+# not carry two meanings, so the two states get two different legend labels -- the
+# notebook cell pairs each with a different trace colour too (`COLOR_SIN_DATO` vs. its own
+# `COLOR_AUN_NO_SIMULADO`, both notebook-owned constants matching 01.4's palette
+# convention). This restyles the EXISTING `pred_sin_dato` trace (idx 12, design section G)
+# on every repaint -- it does not add a trace.
+ETIQUETA_SIN_DATO = "Sin dato"
+ETIQUETA_AUN_NO_SIMULADO = "Aun no simulado"
+
+
+def etiqueta_capa_sin_dato(hay_resultado: bool) -> str:
+    """Legend label for row 2's `sin_dato` trace, disambiguating the two absence-reasons
+    a fid can land in that bucket for: `hay_resultado=False` means no simulation exists
+    yet for the active selection (every vano is "aun no simulado"); `hay_resultado=True`
+    means a simulation ran and this specific vano has zero event-rows in the active
+    window ("sin dato"). Never returns the same label for both -- an unlabelled or
+    identically-labelled state would silently recreate the exact ambiguity D2 exists to
+    prevent."""
+    return ETIQUETA_SIN_DATO if hay_resultado else ETIQUETA_AUN_NO_SIMULADO
+
+
 # --- Event-row mask cache, owned by PR5 (design section A) -------------------------------
 
 

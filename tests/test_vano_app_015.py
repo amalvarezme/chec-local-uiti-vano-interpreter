@@ -25,6 +25,8 @@ from chec_local_interpreter.vano_app_015 import (
     ESTADO_BASE,
     ESTADO_DELTA,
     ESTADO_SIMULADO,
+    ETIQUETA_AUN_NO_SIMULADO,
+    ETIQUETA_SIN_DATO,
     FILAS_MAX_INTERACTIVO,
     aplicar_si_vigente,
     bin_delta_riesgo,
@@ -32,6 +34,7 @@ from chec_local_interpreter.vano_app_015 import (
     clases_por_fid_para_estado,
     construir_evento_mask_cache,
     debe_degradar_a_manual,
+    etiqueta_capa_sin_dato,
     siguiente_epoca,
     submuestrear_si_excede,
 )
@@ -151,6 +154,20 @@ def test_clases_por_fid_para_estado_delta_bins_delta_riesgo_ordinal():
 def test_clases_por_fid_para_estado_rejects_an_unknown_toggle_value():
     with pytest.raises(ValueError, match="alternador"):
         clases_por_fid_para_estado(_tabla_resultado(), "no-es-un-estado-valido")
+
+
+# --- Row 2 sin_dato layer: pre-simulation vs. genuinely-no-data (verify finding W1) ------
+
+
+def test_etiqueta_capa_sin_dato_distinguishes_not_yet_simulated_from_genuinely_empty():
+    # D2's anti-conflation rule: one visual signal must never carry two meanings. Before
+    # the first "Simular" press `hay_resultado` is False for every vano (no simulation
+    # exists yet); after a simulation runs, the same bucket means "this vano genuinely
+    # has zero event-rows in the active window". The two states must resolve to two
+    # DIFFERENT labels, not the same "Sin dato" string reused for both.
+    assert etiqueta_capa_sin_dato(hay_resultado=False) == ETIQUETA_AUN_NO_SIMULADO
+    assert etiqueta_capa_sin_dato(hay_resultado=True) == ETIQUETA_SIN_DATO
+    assert ETIQUETA_AUN_NO_SIMULADO != ETIQUETA_SIN_DATO
 
 
 # --- Event-row mask cache ---------------------------------------------------------------
