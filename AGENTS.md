@@ -28,6 +28,12 @@ itself, never a Python call to Gemini/OpenAI.
   `smoke`/`full` notebook, gate on explicit user approval, then push/poll/pull it on Kaggle via
   the official `kaggle` CLI. It never runs unattended and never touches the 5 LLM agent roles or
   `report_pipeline.py`.
+- `/clima` (`.claude/skills/clima/SKILL.md`) is the interactive weather-enrichment runbook that
+  replaces both climate notebooks. It first asks the mode: **A** update `data/Indicadores_vano_v3.csv`
+  by event (25 lags, transactional, pass-through when nothing is new), or **B** query a
+  user-chosen points table for a **day or date range**, appending wide `hours × variables` columns
+  and embedding an `origen_id` so same-origin outputs can be unified/concatenated. Engine:
+  `src/chec_local_interpreter/clima_engine.py`; it never touches the 5 LLM agent roles.
 
 ## Agent-native architecture
 
