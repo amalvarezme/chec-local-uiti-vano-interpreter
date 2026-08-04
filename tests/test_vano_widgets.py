@@ -1,0 +1,181 @@
+"""RED/GREEN tests for PR2a of notebook 01.5 (widget constructor).
+
+Covers `chec_local_interpreter.vano_widgets.widget_for_knob`, the ONLY
+place `ipywidgets` is imported for the Knob catalog -- and it is imported
+lazily, inside the function, so `vano_controls` (tested in
+`tests/test_vano_controls.py`) never needs ipywidgets installed.
+
+See:
+  - spec: `sdd/notebook-15-trayectorias-vano-explicabilidad-simulador/spec`
+    (domain `vano-risk-simulation`, requirement "Control type follows
+    variable kind")
+  - design: `sdd/notebook-15-trayectorias-vano-explicabilidad-simulador/design`
+    (section B)
+"""
+
+from __future__ import annotations
+
+import pytest
+
+pytest.importorskip("ipywidgets")
+
+from chec_local_interpreter.vano_controls import Knob
+from chec_local_interpreter.vano_widgets import widget_for_knob
+
+
+def _numeric_knob(**overrides) -> Knob:
+    fields = dict(
+        id="LONGITUD",
+        label="LONGITUD",
+        kind="numeric",
+        feature_names=("LONGITUD",),
+        bounds=(0.0, 10.0),
+        categories=None,
+        default=5.0,
+        step=0.1,
+    )
+    fields.update(overrides)
+    return Knob(**fields)
+
+
+def _categorical_knob(**overrides) -> Knob:
+    fields = dict(
+        id="TIPO",
+        label="TIPO",
+        kind="categorical",
+        feature_names=("TIPO",),
+        bounds=None,
+        categories=("A", "B", "C"),
+        default="B",
+        step=None,
+    )
+    fields.update(overrides)
+    return Knob(**fields)
+
+
+def _constant_knob(**overrides) -> Knob:
+    fields = dict(
+        id="CNT_FASES",
+        label="CNT_FASES",
+        kind="constant",
+        feature_names=("CNT_FASES",),
+        bounds=(3.0, 3.0),
+        categories=None,
+        default=3.0,
+        step=None,
+    )
+    fields.update(overrides)
+    return Knob(**fields)
+
+
+def test_widget_for_numeric_knob_returns_float_slider():
+    import ipywidgets as widgets
+
+    widget = widget_for_knob(_numeric_knob())
+
+    assert isinstance(widget, widgets.FloatSlider)
+    assert widget.min == 0.0
+    assert widget.max == 10.0
+    assert widget.step == pytest.approx(0.1)
+    assert widget.value == pytest.approx(5.0)
+    assert widget.disabled is False
+
+
+def test_widget_for_categorical_knob_returns_dropdown():
+    import ipywidgets as widgets
+
+    widget = widget_for_knob(_categorical_knob())
+
+    assert isinstance(widget, widgets.Dropdown)
+    assert tuple(widget.options) == ("A", "B", "C")
+    assert widget.value == "B"
+
+
+def test_widget_for_constant_knob_returns_disabled_float_text():
+    import ipywidgets as widgets
+
+    widget = widget_for_knob(_constant_knob())
+
+    assert isinstance(widget, widgets.FloatText)
+    assert widget.disabled is True
+    assert widget.value == pytest.approx(3.0)
+
+
+def test_widget_for_numeric_knob_falls_back_to_bounds_when_default_missing():
+    import ipywidgets as widgets
+
+    widget = widget_for_knob(_numeric_knob(default=None))
+
+    assert isinstance(widget, widgets.FloatSlider)
+    assert widget.value == pytest.approx(0.0)
+
+
+def test_widget_for_categorical_knob_falls_back_to_first_option_when_default_missing():
+    widget = widget_for_knob(_categorical_knob(default=None))
+
+    assert widget.value == "A"
+
+
+# --- PR6: selector de vanos por casilla (reemplaza el SelectMultiple) -------
+
+
+def test_selector_vanos_exposes_a_value_trait_and_one_checkbox_per_vano():
+    """01.4 marca vanos con CASILLAS, no con una lista de seleccion
+    multiple. El selector expone `value` como trait para que las celdas de
+    figura/ranking/simulacion sigan usando `observe(names='value')` sin
+    saber que hay casillas detras."""
+    from chec_local_interpreter.vano_widgets import construir_selector_vanos
+
+    selector = construir_selector_vanos(["VA", "VB", "VC"])
+
+    assert selector.value == ()
+    assert list(selector.casillas) == ["VA", "VB", "VC"]
+    assert all(caja.value is False for caja in selector.casillas.values())
+
+
+def test_selector_vanos_checkbox_and_click_share_one_state():
+    """Alternar la casilla y alternar por clic en el mapa tienen que llegar
+    al MISMO `value`: si llevaran registros separados, la lista, el mapa y
+    el ranking podrian contar cosas distintas (01.4, `marcarPorFid`)."""
+    from chec_local_interpreter.vano_widgets import construir_selector_vanos
+
+    selector = construir_selector_vanos(["VA", "VB", "VC"])
+    vistos = []
+    selector.observe(lambda cambio: vistos.append(cambio["new"]), names="value")
+
+    selector.casillas["VB"].value = True          # por casilla
+    assert selector.value == ("VB",)
+
+    selector.alternar("VA")                        # por clic en el mapa
+    assert selector.value == ("VA", "VB")
+
+    selector.alternar("VB")                        # el clic tambien desmarca
+    assert selector.value == ("VA",)
+    assert selector.casillas["VB"].value is False
+    assert vistos == [("VB",), ("VA", "VB"), ("VA",)]
+
+
+def test_selector_vanos_repopulating_clears_the_previous_selection():
+    """Cambiar de circuito cambia el universo de vanos: conservar la
+    seleccion anterior dejaria marcados fids que ya no existen en el mapa."""
+    from chec_local_interpreter.vano_widgets import construir_selector_vanos
+
+    selector = construir_selector_vanos(["VA", "VB"])
+    selector.alternar("VA")
+    assert selector.value == ("VA",)
+
+    selector.poblar(["VX", "VY"])
+    assert selector.value == ()
+    assert list(selector.casillas) == ["VX", "VY"]
+
+
+def test_selector_vanos_ignores_a_click_on_an_unknown_fid():
+    """Un clic puede caer sobre un tramo cuyo fid no esta en la lista (el
+    mapa dibuja la geometria del circuito, que no siempre coincide con los
+    vanos con eventos). No debe crear una casilla fantasma ni fallar."""
+    from chec_local_interpreter.vano_widgets import construir_selector_vanos
+
+    selector = construir_selector_vanos(["VA"])
+    selector.alternar("DESCONOCIDO")
+    assert selector.value == ()
+    assert list(selector.casillas) == ["VA"]
