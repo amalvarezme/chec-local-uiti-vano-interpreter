@@ -8,6 +8,7 @@ from sklearn.preprocessing import LabelEncoder, MinMaxScaler
 from chec_local_interpreter.simulator import (
     save_prioritized_variables_table,
     simulate_automatic_minmax_sensitivity,
+    simulate_explicit_overrides,
     simulate_feature_class_transitions,
     simulate_suggested_vano_risk,
     simulate_top_softmax_curves,
@@ -301,3 +302,126 @@ def test_simulate_suggested_vano_risk_averages_probabilities_by_vano():
     assert v1["simulado_clase"] == "Riesgo bajo (Q1)"
     assert v1["variables_aplicadas"] == "CNT_TRF"
     assert metadata["agregacion"] == "promedio_probabilidades_por_vano"
+
+
+def test_simulate_explicit_overrides_broadcasts_multiple_variables_by_vano():
+    feature_names = ["CNT_TRF", "CNT_VN"]
+    X_raw = np.array(
+        [
+            [0.0, 0.0],
+            [10.0, 3.0],
+            [5.0, 1.5],
+        ],
+        dtype=np.float32,
+    )
+    scaler = MinMaxScaler().fit(X_raw)
+    X_scaled = scaler.transform(X_raw).astype(np.float32)
+
+    def predict_fn(model, X, device, batch_size=1024):
+        x = np.clip(np.asarray(X)[:, 0], 0.0, 1.0)
+        y = np.clip(np.asarray(X)[:, 1], 0.0, 1.0)
+        avg = (x + y) / 2.0
+        probs = np.column_stack([1.0 - avg, avg])
+        return {"fused_probs": probs, "predicted_classes": probs.argmax(axis=1)}
+
+    result, metadata = simulate_explicit_overrides(
+        model=object(),
+        X_scaled=X_scaled,
+        X_raw_model=X_raw,
+        feature_names=feature_names,
+        feature_scaler=scaler,
+        predict_fn=predict_fn,
+        device="cpu",
+        mask=np.array([True, True, True]),
+        vano_ids=pd.Series(["V1", "V1", "V2"]),
+        overrides=[
+            {"variable": "CNT_TRF", "valor": 10.0},
+            {"variable": "CNT_VN", "valor": 3.0},
+        ],
+    )
+
+    v1 = result[result["FID_VANO"] == "V1"].iloc[0]
+    assert v1["n_registros"] == 2
+    assert v1["base_prob_clase_0"] == pytest.approx(0.5)
+    assert v1["simulado_prob_clase_1"] == pytest.approx(1.0)
+    assert v1["delta_riesgo_ordinal"] == pytest.approx(0.5)
+    assert result.loc[0, "variables_aplicadas"] == "CNT_TRF, CNT_VN"
+    assert result.loc[0, "variables_quietas"] == ""
+    assert metadata["agregacion"] == "promedio_probabilidades_por_vano"
+    assert metadata["variables_quietas"] == []
+    assert metadata["warnings"] == []
+
+
+def test_simulate_explicit_overrides_tolerates_bad_override():
+    feature_names = ["CNT_TRF", "CNT_VN"]
+    X_raw = np.array(
+        [
+            [0.0, 0.0],
+            [10.0, 3.0],
+        ],
+        dtype=np.float32,
+    )
+    scaler = MinMaxScaler().fit(X_raw)
+    X_scaled = scaler.transform(X_raw).astype(np.float32)
+
+    def predict_fn(model, X, device, batch_size=1024):
+        x = np.clip(np.asarray(X)[:, 0], 0.0, 1.0)
+        probs = np.column_stack([1.0 - x, x])
+        return {"fused_probs": probs, "predicted_classes": probs.argmax(axis=1)}
+
+    result, metadata = simulate_explicit_overrides(
+        model=object(),
+        X_scaled=X_scaled,
+        X_raw_model=X_raw,
+        feature_names=feature_names,
+        feature_scaler=scaler,
+        predict_fn=predict_fn,
+        device="cpu",
+        mask=np.array([True, True]),
+        vano_ids=pd.Series(["V1", "V2"]),
+        overrides=[
+            {"variable": "CNT_TRF", "valor": 10.0},
+            {"variable": "NO_EXISTE", "valor": 1.0},
+        ],
+    )
+
+    assert result.loc[0, "simulado_prob_clase_1"] == pytest.approx(1.0)
+    assert result.loc[0, "variables_aplicadas"] == "CNT_TRF"
+    assert metadata["variables_quietas"] == ["NO_EXISTE"]
+    assert any("NO_EXISTE" in warning for warning in metadata["warnings"])
+
+
+def test_simulate_explicit_overrides_extra_quiet_marks_variables_without_warning():
+    feature_names = ["CNT_TRF", "CNT_VN"]
+    X_raw = np.array(
+        [
+            [0.0, 0.0],
+            [10.0, 3.0],
+        ],
+        dtype=np.float32,
+    )
+    scaler = MinMaxScaler().fit(X_raw)
+    X_scaled = scaler.transform(X_raw).astype(np.float32)
+
+    def predict_fn(model, X, device, batch_size=1024):
+        x = np.clip(np.asarray(X)[:, 0], 0.0, 1.0)
+        probs = np.column_stack([1.0 - x, x])
+        return {"fused_probs": probs, "predicted_classes": probs.argmax(axis=1)}
+
+    result, metadata = simulate_explicit_overrides(
+        model=object(),
+        X_scaled=X_scaled,
+        X_raw_model=X_raw,
+        feature_names=feature_names,
+        feature_scaler=scaler,
+        predict_fn=predict_fn,
+        device="cpu",
+        mask=np.array([True, True]),
+        vano_ids=pd.Series(["V1", "V2"]),
+        overrides=[{"variable": "CNT_TRF", "valor": 10.0}],
+        extra_quiet=["OTRA_VAR"],
+    )
+
+    assert metadata["variables_quietas"] == ["OTRA_VAR"]
+    assert result.loc[0, "variables_quietas"] == "OTRA_VAR"
+    assert metadata["warnings"] == []

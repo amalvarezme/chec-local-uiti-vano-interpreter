@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import warnings
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 import pandas as pd
@@ -883,7 +883,33 @@ def _risk_reduction_softmax_values(curves: dict[str, Any] | None) -> tuple[list[
     return selected, kept
 
 
-def simulate_suggested_vano_risk(
+def _aggregate_probs_by_vano(
+    probs: np.ndarray,
+    prefix: str,
+    *,
+    base_vanos: pd.Series,
+    n_classes: int,
+    class_labels: list[str],
+) -> pd.DataFrame:
+    """Average per-row class probabilities into one row per FID_VANO.
+
+    Averaging (not summing) is intentional: summing would overweight vanos with more rows.
+    """
+    prob_df = pd.DataFrame(probs, columns=[f"{prefix}_prob_clase_{idx}" for idx in range(n_classes)])
+    prob_df.insert(0, "FID_VANO", base_vanos.to_numpy())
+    grouped = prob_df.groupby("FID_VANO", dropna=False).mean()
+    counts = prob_df.groupby("FID_VANO", dropna=False).size().rename("n_registros")
+    grouped = grouped.join(counts)
+    prob_cols = [f"{prefix}_prob_clase_{idx}" for idx in range(n_classes)]
+    argmax_idx = grouped[prob_cols].to_numpy().argmax(axis=1)
+    grouped[f"{prefix}_clase_idx"] = argmax_idx
+    grouped[f"{prefix}_clase"] = [class_labels[idx] for idx in argmax_idx]
+    class_axis = np.arange(n_classes, dtype=np.float64)
+    grouped[f"{prefix}_riesgo_ordinal"] = grouped[prob_cols].to_numpy() @ class_axis
+    return grouped
+
+
+def simulate_explicit_overrides(
     *,
     model: Any,
     X_scaled: np.ndarray,
@@ -894,15 +920,29 @@ def simulate_suggested_vano_risk(
     device: str,
     mask: np.ndarray,
     vano_ids: pd.Series | np.ndarray | list[Any],
-    softmax_curves: dict[str, Any] | None,
+    overrides: Sequence[Mapping[str, Any]],
     label_encoders: dict[str, Any] | None = None,
     max_values_imputed: dict[str, Any] | None = None,
+    extra_quiet: Sequence[str] = (),
     batch_size: int = 1024,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
-    """Simulate selected softmax values and aggregate predicted probabilities by FID_VANO.
+    """Apply an arbitrary user-chosen override list and aggregate predicted probabilities by FID_VANO.
 
-    Multiple records for the same vano are handled by averaging class probabilities per vano.
-    Averaging is intentional: summing probabilities would overweight vanos with more rows.
+    ``overrides`` is a flat ``[{"variable": str, "valor": Any}, ...]`` list: one scalar per
+    variable, broadcast across every masked row. This is the single entry point behind both
+    the softmax-suggested simulation (`simulate_suggested_vano_risk`) and any user-chosen knob
+    values from the 01.5 notebook — climate-family fan-out into 12 lags happens before this call
+    (`vano_controls.expand_knob_overrides`), never inside it, so this module stays model- and
+    climate-schema-agnostic.
+
+    Return type is byte-for-byte `simulate_suggested_vano_risk`'s schema: one row per FID_VANO
+    with base/simulado probability columns, class, ordinal risk, their delta, and which
+    variables were applied vs. left quiet. All three states of a base/simulado/delta toggle can
+    therefore be read from this single call's output at zero extra forward passes.
+
+    A failing override (unknown variable, or a value that `transform_single_feature_value`
+    rejects) never raises: it is recorded in ``warnings`` and its variable moves to
+    ``variables_quietas``, while every other override still applies.
     """
     X_scaled = np.asarray(X_scaled, dtype=np.float32)
     X_raw_model = np.asarray(X_raw_model, dtype=np.float32)
@@ -915,7 +955,6 @@ def simulate_suggested_vano_risk(
     if len(vano_series) != X_scaled.shape[0]:
         raise ValueError("vano_ids debe tener la misma longitud que X_scaled.")
 
-    selected, kept = _risk_reduction_softmax_values(softmax_curves)
     X_base = X_scaled[mask].copy()
     X_raw_base = X_raw_model[mask].copy()
     base_vanos = vano_series.loc[mask].fillna("").astype(str).reset_index(drop=True)
@@ -931,8 +970,9 @@ def simulate_suggested_vano_risk(
 
     X_sim = X_base.copy()
     applied: list[dict[str, Any]] = []
+    kept: list[str] = list(extra_quiet)
     warnings_out: list[str] = []
-    for item in selected:
+    for item in overrides:
         variable = str(item.get("variable", "")).strip()
         if variable not in feature_names:
             kept.append(variable)
@@ -963,22 +1003,12 @@ def simulate_suggested_vano_risk(
         batch_size=batch_size,
     )
 
-    def aggregate_probs(probs: np.ndarray, prefix: str) -> pd.DataFrame:
-        prob_df = pd.DataFrame(probs, columns=[f"{prefix}_prob_clase_{idx}" for idx in range(n_classes)])
-        prob_df.insert(0, "FID_VANO", base_vanos.to_numpy())
-        grouped = prob_df.groupby("FID_VANO", dropna=False).mean()
-        counts = prob_df.groupby("FID_VANO", dropna=False).size().rename("n_registros")
-        grouped = grouped.join(counts)
-        prob_cols = [f"{prefix}_prob_clase_{idx}" for idx in range(n_classes)]
-        argmax_idx = grouped[prob_cols].to_numpy().argmax(axis=1)
-        grouped[f"{prefix}_clase_idx"] = argmax_idx
-        grouped[f"{prefix}_clase"] = [class_labels[idx] for idx in argmax_idx]
-        class_axis = np.arange(n_classes, dtype=np.float64)
-        grouped[f"{prefix}_riesgo_ordinal"] = grouped[prob_cols].to_numpy() @ class_axis
-        return grouped
-
-    baseline_grouped = aggregate_probs(baseline_probs, "base")
-    simulated_grouped = aggregate_probs(sim_probs, "simulado").drop(columns=["n_registros"])
+    baseline_grouped = _aggregate_probs_by_vano(
+        baseline_probs, "base", base_vanos=base_vanos, n_classes=n_classes, class_labels=class_labels
+    )
+    simulated_grouped = _aggregate_probs_by_vano(
+        sim_probs, "simulado", base_vanos=base_vanos, n_classes=n_classes, class_labels=class_labels
+    ).drop(columns=["n_registros"])
     result = baseline_grouped.join(simulated_grouped, how="outer").reset_index()
     result["delta_riesgo_ordinal"] = result["simulado_riesgo_ordinal"] - result["base_riesgo_ordinal"]
     result["variables_aplicadas"] = ", ".join(item["variable"] for item in applied)
@@ -993,6 +1023,47 @@ def simulate_suggested_vano_risk(
         "warnings": warnings_out,
     }
     return result, metadata
+
+
+def simulate_suggested_vano_risk(
+    *,
+    model: Any,
+    X_scaled: np.ndarray,
+    X_raw_model: np.ndarray,
+    feature_names: list[str],
+    feature_scaler: Any,
+    predict_fn: Callable[..., dict[str, Any]],
+    device: str,
+    mask: np.ndarray,
+    vano_ids: pd.Series | np.ndarray | list[Any],
+    softmax_curves: dict[str, Any] | None,
+    label_encoders: dict[str, Any] | None = None,
+    max_values_imputed: dict[str, Any] | None = None,
+    batch_size: int = 1024,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Simulate selected softmax values and aggregate predicted probabilities by FID_VANO.
+
+    Thin wrapper around `simulate_explicit_overrides`: picks the softmax-suggested value per
+    variable via `_risk_reduction_softmax_values`, then delegates. Kept as a separate entry
+    point because callers only have `softmax_curves`, not a ready-made override list.
+    """
+    selected, kept = _risk_reduction_softmax_values(softmax_curves)
+    return simulate_explicit_overrides(
+        model=model,
+        X_scaled=X_scaled,
+        X_raw_model=X_raw_model,
+        feature_names=feature_names,
+        feature_scaler=feature_scaler,
+        predict_fn=predict_fn,
+        device=device,
+        mask=mask,
+        vano_ids=vano_ids,
+        overrides=selected,
+        label_encoders=label_encoders,
+        max_values_imputed=max_values_imputed,
+        extra_quiet=kept,
+        batch_size=batch_size,
+    )
 
 
 def save_auto_minmax_results(result_df: pd.DataFrame, path: str | Path) -> Path:
