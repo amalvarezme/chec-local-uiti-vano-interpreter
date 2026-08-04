@@ -1,17 +1,25 @@
-"""RED/GREEN tests for PR1 of notebook 01.5 (geometry reuse via 01.4's sha1
-guard).
+"""RED/GREEN tests for notebook 01.5's `ventanas_015` module.
 
-Covers `chec_local_interpreter.ventanas_015.cargar_clases_desde_014`, which
-composes `extraer_geometrias_014` -> `verificar_sha1_geometrias` ->
+PR1 covers `cargar_clases_desde_014`, which composes
+`extraer_geometrias_014` -> `verificar_sha1_geometrias` ->
 `cargar_geometria_014` -> `asignar_clase` (design section F). No KMeans
 fitting happens here -- 01.4's own nearest-centroid geometry is replayed.
 
+PR3 covers the window builder and the row-1-col-1 (historical map) support
+functions: `construir_ventanas` (01.4's own month + shifted-15 cut list,
+design section E cell 7), `construir_tabla_vano_ventana` (per-vano x
+ventana `num_eventos`/`uiti_acumulado`, 01.4 cell 3's aggregation),
+`construir_mask_cache` / `construir_hist_class_cache` (design section A's
+`mask_cache` and `hist_class_cache`) and `capas_mapa_historico` (the pure
+grouping logic behind row 1 col 1's map traces -- the only piece of that
+cell's logic worth testing outside a live kernel, per the Strict TDD rule
+that notebook cells only call already-tested functions).
+
 See:
   - spec: `sdd/notebook-15-trayectorias-vano-explicabilidad-simulador/spec`
-    (domain `vano-explainability-panel`, requirement "Geometry reuse via
-    sha1-guarded 01.4 extractor")
+    (domains `vano-explainability-panel`)
   - design: `sdd/notebook-15-trayectorias-vano-explicabilidad-simulador/design`
-    (section F)
+    (sections A, E, F)
 
 Uses the same committed fixture as `tests/test_criticality_assignment.py`
 and `tests/test_geometrias_sha1.py`
@@ -27,11 +35,19 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from chec_impacto.models.criticality_assignment import GEOMETRIAS_SHA1_ESPERADO
 from chec_local_interpreter import ventanas_015
-from chec_local_interpreter.ventanas_015 import cargar_clases_desde_014
+from chec_local_interpreter.ventanas_015 import (
+    cargar_clases_desde_014,
+    capas_mapa_historico,
+    construir_hist_class_cache,
+    construir_mask_cache,
+    construir_tabla_vano_ventana,
+    construir_ventanas,
+)
 from scripts.extract_geometrias_014 import _extraer_bloque_json
 
 FIXTURE_NOTEBOOK = Path(__file__).parent / "fixtures" / "notebook_01_4_fixture.ipynb"
@@ -226,3 +242,148 @@ def test_cargar_clases_desde_014_reuses_existing_cache_without_re_extracting(tmp
 
     assert clase[0] == 0
     assert n_clamped == 0
+
+
+# --- 3.1: construir_ventanas reproduces 01.4's month + shifted-15 cut list -
+
+
+def test_construir_ventanas_reproduces_01_4_cut_list_for_a_two_month_range():
+    """Hand-computed against 01.4's own algorithm (cell 2): each calendar
+    month contributes its full span plus the 15th-to-15th crossover into
+    the next month; sorted and filtered to the fixed [min, max] range."""
+    fechas = pd.to_datetime(["2025-01-05", "2025-01-20", "2025-02-10", "2025-02-25"])
+
+    ventanas = construir_ventanas(fechas)
+
+    assert [v["periodo"] for v in ventanas] == [
+        "2025-01-01 a 2025-01-31",
+        "2025-01-15 a 2025-02-14",
+        "2025-02-01 a 2025-02-28",
+    ]
+    assert [v["etiqueta"] for v in ventanas] == ["V1", "V2", "V3"]
+    assert [v["i"] for v in ventanas] == [0, 1, 2]
+
+
+def test_construir_ventanas_hasta_excl_is_the_exclusive_upper_bound():
+    fechas = pd.to_datetime(["2025-01-05", "2025-02-25"])
+
+    primera = construir_ventanas(fechas)[0]
+
+    assert primera["desde"] == pd.Timestamp("2025-01-01")
+    assert primera["hasta_excl"] == pd.Timestamp("2025-02-01")
+
+
+# --- 3.2: per-(vano, ventana) num_eventos / uiti_acumulado ----------------
+
+
+def test_construir_tabla_vano_ventana_aggregates_events_per_vano_and_window():
+    """Same shape as 01.4 cell 3's `TABLA`: one row per (CIRCUITO,
+    FID_VANO, ventana_i) with events, `uiti_acumulado` rounded to 3
+    decimals, zero-UITI rows dropped."""
+    df = pd.DataFrame({
+        "CIRCUITO": ["C1", "C1", "C2"],
+        "FID_VANO": ["VA", "VA", "VB"],
+        "UITI_VANO": [1.0, 2.0, 0.5],
+        # Jan-03 falls only in window 0; Feb-25 falls only in window 2;
+        # Jan-10 falls only in window 0 too (window 1 starts Jan-15).
+        "FECHA": pd.to_datetime(["2025-01-03", "2025-02-25", "2025-01-10"]),
+    })
+    ventanas = construir_ventanas(df["FECHA"])
+
+    tabla = construir_tabla_vano_ventana(df, ventanas)
+
+    fila_va_v0 = tabla[(tabla["FID_VANO"] == "VA") & (tabla["ventana_i"] == 0)].iloc[0]
+    assert fila_va_v0["num_eventos"] == 1
+    assert fila_va_v0["uiti_acumulado"] == 1.0
+
+    fila_va_v2 = tabla[(tabla["FID_VANO"] == "VA") & (tabla["ventana_i"] == 2)].iloc[0]
+    assert fila_va_v2["num_eventos"] == 1
+    assert fila_va_v2["uiti_acumulado"] == 2.0
+
+    assert tabla[(tabla["FID_VANO"] == "VA") & (tabla["ventana_i"] == 1)].empty
+    assert (tabla["uiti_acumulado"] > 0).all()
+
+
+# --- 3.2: mask_cache (LRU 64) ----------------------------------------------
+
+
+def test_construir_mask_cache_returns_boolean_mask_matching_circuito_y_ventana():
+    tabla = pd.DataFrame({
+        "CIRCUITO": ["C1", "C1", "C2"],
+        "FID_VANO": ["VA", "VB", "VC"],
+        "ventana_i": [0, 1, 0],
+        "num_eventos": [1, 1, 1],
+        "uiti_acumulado": [1.0, 1.0, 1.0],
+    })
+    mask_para = construir_mask_cache(tabla)
+
+    mask = mask_para("C1", 0)
+
+    assert mask.tolist() == [True, False, False]
+    # Same key returns the SAME cached array object -- proves this is
+    # actually `lru_cache`-backed, not recomputing every call.
+    assert mask_para("C1", 0) is mask
+
+
+# --- 3.2: hist_class_cache --------------------------------------------------
+
+
+def test_construir_hist_class_cache_returns_empty_dict_when_window_has_no_rows():
+    tabla = pd.DataFrame({
+        "CIRCUITO": ["C1"], "FID_VANO": ["VA"], "ventana_i": [0],
+        "num_eventos": [1], "uiti_acumulado": [1.0],
+    })
+    mask_para = construir_mask_cache(tabla)
+    clases_para = construir_hist_class_cache(tabla, mask_para)
+
+    assert clases_para("C1", 1) == {}
+
+
+def test_construir_hist_class_cache_maps_fid_to_class_via_injected_classifier():
+    """`cargar_clases` is injectable so this stays a fast, model/file-free
+    unit test -- the real `cargar_clases_desde_014` default is already
+    covered end-to-end by the PR1 tests above."""
+    tabla = pd.DataFrame({
+        "CIRCUITO": ["C1", "C1"], "FID_VANO": ["VA", "VB"], "ventana_i": [0, 0],
+        "num_eventos": [1, 5], "uiti_acumulado": [1.0, 9.0],
+    })
+    mask_para = construir_mask_cache(tabla)
+    llamadas = []
+
+    def _clasificador_falso(n_obs, u, **kwargs):
+        llamadas.append((tuple(n_obs), tuple(u)))
+        return np.where(np.asarray(u) > 5, 3, 0), 0
+
+    clases_para = construir_hist_class_cache(tabla, mask_para, cargar_clases=_clasificador_falso)
+
+    assert clases_para("C1", 0) == {"VA": 0, "VB": 3}
+    assert len(llamadas) == 1
+    # Cached: a second call with the same key does not invoke the
+    # classifier again.
+    clases_para("C1", 0)
+    assert len(llamadas) == 1
+
+
+# --- row 1 col 1: capas_mapa_historico --------------------------------------
+
+
+def test_capas_mapa_historico_groups_by_class_marks_sin_dato_and_halo():
+    """The pure layer-grouping logic behind row 1 col 1's map traces
+    (design section G, idx 0-5): every vano lands in exactly one class
+    layer or `sin_dato`, and marked vanos additionally land in `marcados`
+    -- the halo layer. Every returned lat/lon list ends with `None` so
+    Plotly draws each vano's segments separately within one trace."""
+    geo_circuito = {
+        "fids": ["VA", "VB", "VC"],
+        "lat": [[1.0, 1.1], [2.0, 2.1], [3.0, 3.1]],
+        "lon": [[-75.0, -75.1], [-76.0, -76.1], [-77.0, -77.1]],
+    }
+    clases_por_fid = {"VA": 0, "VB": 3}  # VC absent from the window -> sin_dato
+
+    capas = capas_mapa_historico(geo_circuito, clases_por_fid, marcados=["VB"])
+
+    assert capas["clases"][0]["lat"] == [1.0, 1.1, None]
+    assert capas["clases"][3]["lon"] == [-76.0, -76.1, None]
+    assert capas["clases"][1] == {"lat": [], "lon": []}
+    assert capas["sin_dato"]["lat"] == [3.0, 3.1, None]
+    assert capas["marcados"]["lon"] == [-76.0, -76.1, None]
