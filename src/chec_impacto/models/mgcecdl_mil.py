@@ -49,6 +49,21 @@ from chec_impacto.models.mgcecdl_graph import GraphEdgeIndex, PerSampleEdgeGateD
 
 _SUPPORTED_OPTIMIZERS = ("adam", "adamw")
 
+# Temperature for the class-aware term's softmax. NOT inherited from
+# , whose 1.0 default is right for what it documents:
+# softmax is strictly monotone in -d^2, so any T > 0 leaves the argmax
+# (and therefore SHAP and the simulator) unchanged. That exact property
+# is why T is decisive for a CROSS-ENTROPY, where it sets how peaked the
+# distribution is and nothing else.
+#
+# Measured on 01.4's real geometry: d^2 to the 4 centroids has median
+# 0.038, and the gap between nearest and runner-up is 0.017. At T=1.0
+# those logits differ by ~0.02, the softmax entropy comes out 1.3850
+# against ln(4)=1.3863, and the term sits at its own floor from epoch 1 --
+# a constant with no gradient. At T=0.01 a perfect prediction scores 0.2475
+# instead of 1.3373, which is a signal a model can actually follow.
+TEMPERATURA_CLASE_POR_DEFECTO = 0.01
+
 
 class SegmentAttentionPool(nn.Module):
     """Normalized gated attention pooling over a CSR-style instance segment
@@ -359,7 +374,7 @@ class MILBagLoss(nn.Module):
         lambda_modality_supervised: float = 0.0,
         lambda_clase: float = 0.0,
         geometria: Any = None,
-        temperatura_clase: float = 1.0,
+        temperatura_clase: float = TEMPERATURA_CLASE_POR_DEFECTO,
         reconstruction_normalization: str = "soft",
     ) -> None:
         super().__init__()

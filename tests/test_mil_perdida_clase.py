@@ -234,3 +234,66 @@ def test_class_term_has_non_zero_gradient_at_initialization():
     p_bag = torch.zeros(5, requires_grad=True)  # exactly the init regime
     perdida._perdida_de_clase(p_bag, _y_bag(), _n_obs()).backward()
     assert p_bag.grad is not None and torch.any(p_bag.grad != 0)
+
+
+# ---------------------------------------------------------------------------
+# Temperature: the parameter that decides whether the term can learn at all.
+# ---------------------------------------------------------------------------
+
+_ENTROPIA_UNIFORME_4 = float(np.log(4.0))  # 1.3863
+
+
+def test_default_temperature_yields_a_usable_gradient_signal():
+    """The regression this pins, measured on the real geometry.
+
+    `distribucion_suave` defaults to `temperatura=1.0`, which is correct for
+    what it documents: softmax is strictly monotone in -d^2, so ANY T > 0
+    gives the same argmax for SHAP and the simulator. That same property is
+    what makes T critical for a cross-entropy: it sets how peaked the
+    distribution is, and nothing else.
+
+    On 01.4's real geometry the squared distances to the 4 centroids have
+    median 0.038 and the gap between nearest and runner-up is 0.017. Divided
+    by T=1.0 those logits differ by ~0.02, so the softmax comes out 99.9%
+    uniform: the measured entropy was 1.3850 against ln(4) = 1.3863, and the
+    term sat at ~1.35 from epoch 1 to epoch 6 -- already at its own floor,
+    contributing a constant and no gradient.
+
+    So the assertion is not "T equals some number" but "a PERFECT prediction
+    must score far better than chance", which is the property the term needs
+    in order to teach anything.
+    """
+    geo = _geometria()
+    perdida = MILBagLoss(**_loss_kwargs(lambda_clase=1.0, geometria=geo))
+
+    y, n_obs = _y_bag(), _n_obs()
+    ce_perfecta = float(perdida._perdida_de_clase(torch.log1p(y), y, n_obs))
+
+    assert ce_perfecta < 0.5 * _ENTROPIA_UNIFORME_4, (
+        f"con una prediccion perfecta la CE es {ce_perfecta:.4f}, contra "
+        f"{_ENTROPIA_UNIFORME_4:.4f} de una distribucion uniforme: la temperatura "
+        "aplana la softmax y el termino no puede aprender."
+    )
+
+
+def test_temperature_of_one_is_what_flattened_the_term():
+    """Documents the failure directly, so the fix cannot silently regress."""
+    geo = _geometria()
+    y, n_obs = _y_bag(), _n_obs()
+    plana = MILBagLoss(**_loss_kwargs(lambda_clase=1.0, geometria=geo, temperatura_clase=1.0))
+    ce = float(plana._perdida_de_clase(torch.log1p(y), y, n_obs))
+    assert ce > 0.9 * _ENTROPIA_UNIFORME_4, "T=1.0 deberia dar una softmax casi uniforme"
+
+
+def test_temperature_is_tunable_and_lower_means_sharper():
+    geo = _geometria()
+    y, n_obs = _y_bag(), _n_obs()
+
+    def ce(t):
+        return float(
+            MILBagLoss(
+                **_loss_kwargs(lambda_clase=1.0, geometria=geo, temperatura_clase=t)
+            )._perdida_de_clase(torch.log1p(y), y, n_obs)
+        )
+
+    assert ce(1.0) > ce(0.1) > ce(0.01) > ce(0.003)

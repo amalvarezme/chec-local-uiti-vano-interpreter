@@ -270,6 +270,11 @@ LAMBDA_MODALITY_SUPERVISED = 0.0
 # estan las fronteras entre centroides, que es exactamente lo que
 # `evaluar_arms` mide.
 LAMBDA_CLASE = 1.0
+# Temperatura de la softmax del termino de clase. NO se hereda el 1.0 de
+# distribucion_suave: con d^2 de mediana 0.038 esa temperatura deja la
+# distribucion 99,9% uniforme (entropia 1.3850 contra ln(4)=1.3863) y el
+# termino queda en su propio piso desde la primera epoca, sin gradiente.
+TEMPERATURA_CLASE = 0.01
 LR = 1e-3
 WEIGHT_DECAY = 1e-5
 BAG_BATCH_SIZE = 256
@@ -287,7 +292,7 @@ else:
 print(f"mode={mode!r} | N_SPLITS={N_SPLITS} | EPOCHS={EPOCHS} | "
       f"COST_CEILING_SECONDS={COST_CEILING_SECONDS}")
 print(f"fusion={FUSION!r} | LAMBDA_MODALITY_SUPERVISED={LAMBDA_MODALITY_SUPERVISED} | "
-      f"LAMBDA_CLASE={LAMBDA_CLASE}")
+      f"LAMBDA_CLASE={LAMBDA_CLASE} | TEMPERATURA_CLASE={TEMPERATURA_CLASE}")
 '''
 
 _MD_DATA_LOAD = '''\
@@ -553,6 +558,7 @@ def construir_modelo_y_perdida(feature_mean, feature_std, kernel_loss):
         lambda_gate_deviation=LAMBDA_GATE_DEVIATION,
         lambda_modality_supervised=LAMBDA_MODALITY_SUPERVISED,
         lambda_clase=LAMBDA_CLASE, geometria=geometria,
+        temperatura_clase=TEMPERATURA_CLASE,
         reconstruction_normalization="soft",
     ).to(DEVICE)
     return modelo, perdida
