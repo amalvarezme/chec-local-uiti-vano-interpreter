@@ -252,6 +252,13 @@ ATTN_DIM = 64
 LAMBDA_RECONSTRUCTION = 0.01
 LAMBDA_MUTUAL_INFORMATION = 0.01
 LAMBDA_GATE_DEVIATION = 0.0
+# "reliability": la fusion ocurre a grano de BOLSA y revive
+# base.modality_regressors / base.modality_reliability_heads, que bajo
+# "concat" reciben gradiente cero. Expone `reliabilities` por bolsa.
+FUSION = "reliability"
+# Supervisa la prediccion de cada modalidad por separado; es lo que
+# mantiene legibles las confiabilidades (ver MILBagLoss.compute_components).
+LAMBDA_MODALITY_SUPERVISED = 0.0
 LR = 1e-3
 WEIGHT_DECAY = 1e-5
 BAG_BATCH_SIZE = 256
@@ -268,6 +275,7 @@ else:
 
 print(f"mode={mode!r} | N_SPLITS={N_SPLITS} | EPOCHS={EPOCHS} | "
       f"COST_CEILING_SECONDS={COST_CEILING_SECONDS}")
+print(f"fusion={FUSION!r} | LAMBDA_MODALITY_SUPERVISED={LAMBDA_MODALITY_SUPERVISED}")
 '''
 
 _MD_DATA_LOAD = '''\
@@ -523,12 +531,15 @@ def construir_modelo_y_perdida(feature_mean, feature_std, kernel_loss):
     )
     modelo = MILBagRegressor(
         base=base, adjacency=A_adyacencia, edge_index=edge_index, alpha=ALPHA, attn_dim=ATTN_DIM,
+        fusion=FUSION,
     ).to(DEVICE)
     perdida = MILBagLoss(
         feature_mean=feature_mean, feature_std=feature_std, adjacency_matrix=A_adyacencia,
         kernel_loss=kernel_loss, lambda_reconstruction=LAMBDA_RECONSTRUCTION,
         lambda_mutual_information=LAMBDA_MUTUAL_INFORMATION,
-        lambda_gate_deviation=LAMBDA_GATE_DEVIATION, reconstruction_normalization="soft",
+        lambda_gate_deviation=LAMBDA_GATE_DEVIATION,
+        lambda_modality_supervised=LAMBDA_MODALITY_SUPERVISED,
+        reconstruction_normalization="soft",
     ).to(DEVICE)
     return modelo, perdida
 

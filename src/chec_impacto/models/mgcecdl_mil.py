@@ -102,13 +102,27 @@ class MILBagRegressor(nn.Module):
     -> re-pool -> bag head (design D3).
 
     Reuses `base._encode_modalities`/`base.forward` and
-    `PerSampleEdgeGateDecoder` UNCHANGED. `self.base(propagated_inputs)`
-    still computes `fused_prediction`/`modality_predictions`/`reliabilities`
-    internally (those heads are part of `MGCECDLRegressor.forward`), but
-    this class deliberately never reads them into its own output, so no
-    gradient ever reaches `modality_regressors`/`modality_reliability_heads`
-    -- same discipline as
-    `sdd/notebook-12-criticality-representation/design` D1.
+    `PerSampleEdgeGateDecoder` UNCHANGED.
+
+    `fusion` selects how the bag prediction is formed:
+
+    - `"concat"` (default, preserves the originally measured arm): a single
+      `Linear(latent_dim, 1)` over the concatenated pooled latent. Both
+      modality ENCODERS feed it, but `base.modality_regressors` and
+      `base.modality_reliability_heads` receive no gradient -- reliability
+      fusion is inert. That was not a preference: `MGCECDLRegressor.forward`
+      fuses at INSTANCE grain and the label here is per BAG, so its fused
+      prediction had no target to answer to.
+    - `"reliability"`: fusion moved to bag grain, where the label lives.
+      `p_bag = sum_m r_m * p_m` with `p_m = base.modality_regressors[m]`
+      and `r_m` a softmax over `base.modality_reliability_heads[m]`, both
+      applied to the pooled per-modality embedding. Revives both head
+      families with their existing weights and yields a per-bag modality
+      attribution (`reliabilities`) that a per-circuit report can read
+      directly.
+
+    Under `"reliability"` there is no `self.head`: replacing one dead path
+    with another would defeat the purpose.
     """
 
     def __init__(
@@ -118,8 +132,13 @@ class MILBagRegressor(nn.Module):
         edge_index: GraphEdgeIndex,
         alpha: float,
         attn_dim: int = 64,
+        fusion: str = "concat",
     ) -> None:
         super().__init__()
+        if fusion not in ("concat", "reliability"):
+            raise ValueError(
+                f"fusion must be 'concat' or 'reliability' (received: {fusion!r})."
+            )
         adjacency_tensor = torch.as_tensor(adjacency, dtype=torch.float32)
         n_features = adjacency_tensor.shape[0]
         if adjacency_tensor.shape != (n_features, n_features):
@@ -157,11 +176,15 @@ class MILBagRegressor(nn.Module):
         self.register_buffer("edge_values", edge_values)
 
         latent_dim = base.n_modalities * base.embed_dim
+        self.fusion = fusion
         self.attention_pool = SegmentAttentionPool(latent_dim=latent_dim, attn_dim=attn_dim)
         self.gate_decoder = PerSampleEdgeGateDecoder(
             latent_dim=latent_dim, n_edges=edge_index.n_edges
         )
-        self.head = nn.Linear(latent_dim, 1)
+        # Under "reliability" the bag head IS `base.modality_regressors` +
+        # `base.modality_reliability_heads`; creating an unused `self.head`
+        # would just move the dead path instead of removing it.
+        self.head = nn.Linear(latent_dim, 1) if fusion == "concat" else None
 
     def forward(
         self,
@@ -199,10 +222,8 @@ class MILBagRegressor(nn.Module):
 
         # SAME attention module (shared weights) re-pools the post-propagation latent.
         z_bag_2, attention_2 = self.attention_pool(z2, instance_bag, n_bags)
-        p_bag = self.head(z_bag_2).squeeze(-1)
 
-        return {
-            "p_bag": p_bag,
+        salida: dict[str, Any] = {
             "edge_gates": edge_gates,
             "attention": attention,
             "attention_pass2": attention_2,
@@ -210,6 +231,43 @@ class MILBagRegressor(nn.Module):
             "propagated_inputs": propagated_inputs,
             "embeddings": modality_embeddings_2,
         }
+
+        if self.fusion == "reliability":
+            # Bag-grain reliability fusion. `z_bag_2` is a sum over instances of
+            # concatenated per-modality embeddings weighted by a SINGLE attention
+            # distribution, and pooling is linear in `z` for fixed `a`, so column
+            # slice `m` of `z_bag_2` IS modality `m` pooled on its own -- no extra
+            # pooling pass, and one interpretable "which instances matter" story
+            # shared by both modalities. The per-modality split of the prediction
+            # then lives entirely in the reliabilities.
+            embed_dim = self.base.embed_dim
+            bag_embeddings = [
+                z_bag_2[:, i * embed_dim : (i + 1) * embed_dim]
+                for i in range(self.base.n_modalities)
+            ]
+            modality_predictions = torch.stack(
+                [
+                    regressor(embedding).squeeze(-1)
+                    for regressor, embedding in zip(
+                        self.base.modality_regressors, bag_embeddings
+                    )
+                ],
+                dim=1,
+            )
+            reliability_scores = [
+                head(embedding).squeeze(-1)
+                for head, embedding in zip(
+                    self.base.modality_reliability_heads, bag_embeddings
+                )
+            ]
+            reliabilities = self.base._compute_reliabilities(reliability_scores)
+            salida["p_bag"] = torch.sum(reliabilities * modality_predictions, dim=1)
+            salida["modality_predictions"] = modality_predictions
+            salida["reliabilities"] = reliabilities
+        else:
+            salida["p_bag"] = self.head(z_bag_2).squeeze(-1)
+
+        return salida
 
 
 class MILBagLoss(nn.Module):
@@ -222,6 +280,13 @@ class MILBagLoss(nn.Module):
     heads `MILBagRegressor.forward` never routes gradient to in the first
     place, so they would regularize a dead path while still leaking
     unmotivated gradient into the shared encoder.
+
+    That verdict is scoped to `fusion="concat"`. Under
+    `fusion="reliability"` those heads are live and carry the bag
+    prediction, so the "regularizes a dead path" argument no longer holds
+    for that arm -- the terms stay out because nothing has measured them
+    here, not because they are provably inert. `lambda_modality_supervised`
+    is the term that arm actually needs; see `compute_components`.
     """
 
     def __init__(
@@ -235,6 +300,7 @@ class MILBagLoss(nn.Module):
         lambda_reconstruction: float = 0.01,
         lambda_mutual_information: float = 0.01,
         lambda_gate_deviation: float = 0.0,
+        lambda_modality_supervised: float = 0.0,
         reconstruction_normalization: str = "soft",
     ) -> None:
         super().__init__()
@@ -270,6 +336,7 @@ class MILBagLoss(nn.Module):
         self.reconstruction_normalization = reconstruction_normalization
         self.lambda_supervised = float(lambda_supervised)
         self.lambda_gate_deviation = float(lambda_gate_deviation)
+        self.lambda_modality_supervised = float(lambda_modality_supervised)
 
     def compute_components(
         self,
@@ -294,17 +361,37 @@ class MILBagLoss(nn.Module):
         edge_gates = model_output["edge_gates"]
         gate_deviation_loss = self.lambda_gate_deviation * (edge_gates - 1.0).abs().mean()
 
+        # Supervising each modality's own bag prediction is what keeps the
+        # reliabilities READABLE. Without it, `r_m` and `p_m` co-adapt freely:
+        # a modality can predict noise while its reliability collapses to zero
+        # to compensate, and `r_m` stops meaning "how much this modality knows".
+        # Absent under `fusion="concat"`, where there are no per-modality bag
+        # predictions to supervise -- the term is inert, never an error.
+        modality_predictions = model_output.get("modality_predictions")
+        if self.lambda_modality_supervised > 0.0 and modality_predictions is not None:
+            per_modality = torch.stack(
+                [
+                    self.kernel_loss(modality_predictions[:, m], targets)
+                    for m in range(modality_predictions.shape[1])
+                ]
+            )
+            modality_supervised_loss = self.lambda_modality_supervised * per_modality.mean()
+        else:
+            modality_supervised_loss = supervised_loss.new_zeros(())
+
         total_loss = (
             self.lambda_supervised * supervised_loss
             + self._graph_reconstruction.lambda_reconstruction * soft_reconstruction
             + self._graph_reconstruction.lambda_mutual_information
             * graph_components["mutual_information_loss"]
             + gate_deviation_loss
+            + modality_supervised_loss
         )
 
         return {
             "total_loss": total_loss,
             "supervised_loss": supervised_loss,
+            "modality_supervised_loss": modality_supervised_loss,
             "reconstruction_loss": soft_reconstruction,
             "reconstruction_loss_raw": raw_reconstruction,
             "mutual_information": graph_components["mutual_information"],
@@ -330,6 +417,7 @@ _TRACKED_HISTORY_KEYS = (
     "mutual_information_loss",
     "mutual_information_normalized",
     "gate_deviation_loss",
+    "modality_supervised_loss",
 )
 
 
