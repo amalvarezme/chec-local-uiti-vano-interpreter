@@ -384,6 +384,95 @@ def test_capas_mapa_historico_groups_by_class_marks_sin_dato_and_halo():
 
     assert capas["clases"][0]["lat"] == [1.0, 1.1, None]
     assert capas["clases"][3]["lon"] == [-76.0, -76.1, None]
-    assert capas["clases"][1] == {"lat": [], "lon": []}
+    # Una capa sin vanos queda vacia en sus CUATRO columnas (lat/lon mas las
+    # dos que PR6 agrego: hovertext y el customdata que resuelve el clic).
+    assert capas["clases"][1] == {"lat": [], "lon": [], "hovertext": [], "customdata": []}
     assert capas["sin_dato"]["lat"] == [3.0, 3.1, None]
     assert capas["marcados"]["lon"] == [-76.0, -76.1, None]
+
+
+# --- PR6: hover/customdata, recentrado y seleccion por clic -----------------
+
+
+def test_capas_mapa_historico_carries_fid_and_label_on_every_point():
+    """01.4 resolves a map click to a vano by reading the clicked point's
+    `customdata`, never by point index -- the segments travel concatenated
+    with a `None` separator, so that index shifts with the window. 01.5
+    needs the same channel, which means `customdata` has to be exactly as
+    long as lat/lon INCLUDING the separator slot, or Plotly misaligns the
+    rest of the trace."""
+    geo_circuito = {
+        "fids": ["VA", "VB", "VC"],
+        "lat": [[1.0, 1.1, 1.2], [2.0, 2.1], [3.0, 3.1]],
+        "lon": [[-75.0, -75.1, -75.2], [-76.0, -76.1], [-77.0, -77.1]],
+    }
+    clases_por_fid = {"VA": 0, "VB": 3}
+
+    capas = capas_mapa_historico(
+        geo_circuito,
+        clases_por_fid,
+        marcados=["VB"],
+        etiquetas_por_fid={"VA": "vano A", "VB": "vano B", "VC": "vano C"},
+    )
+
+    for capa in (capas["clases"][0], capas["clases"][3], capas["sin_dato"], capas["marcados"]):
+        assert len(capa["customdata"]) == len(capa["lat"]) == len(capa["lon"])
+        assert len(capa["hovertext"]) == len(capa["lat"])
+
+    # Tres puntos mas el separador, y el fid viaja tambien en el separador.
+    assert capas["clases"][0]["customdata"] == ["VA"] * 4
+    # El separador NO lleva etiqueta: es un hueco, no un punto con hover.
+    assert capas["clases"][0]["hovertext"] == ["vano A", "vano A", "vano A", ""]
+    assert capas["sin_dato"]["customdata"] == ["VC"] * 3
+    assert capas["marcados"]["customdata"] == ["VB"] * 3
+
+
+def test_capas_mapa_historico_labels_default_to_empty_when_not_given():
+    """`etiquetas_por_fid` es opcional: sin ella el hover queda vacio pero
+    `customdata` sigue estando, porque el clic no depende del texto."""
+    capas = capas_mapa_historico(
+        {"fids": ["VA"], "lat": [[1.0, 1.1]], "lon": [[-75.0, -75.1]]}, {"VA": 2},
+    )
+    assert capas["clases"][2]["hovertext"] == ["", "", ""]
+    assert capas["clases"][2]["customdata"] == ["VA"] * 3
+
+
+def test_centro_y_zoom_frames_the_circuit_like_014():
+    """Puerto exacto de la formula de 01.4 (celda 7, `map.center`/`map.zoom`):
+    centro en el medio del bounding box y zoom por el span mayor, acotado a
+    [9, 15]. Un circuito pequenio se acerca; uno enorme no pasa de 9."""
+    from chec_local_interpreter.ventanas_015 import centro_y_zoom
+
+    # bounds = [lat_min, lat_max, lon_min, lon_max]
+    vista = centro_y_zoom([5.0, 5.2, -75.6, -75.2])
+    assert vista["center"] == {"lat": 5.1, "lon": -75.4}
+    assert 9.0 <= vista["zoom"] <= 15.0
+    # 360/0.4 -> log2 ~= 9.81, menos 0.4 -> 9.41
+    assert vista["zoom"] == pytest.approx(9.4139, abs=1e-3)
+
+    # Un circuito diminuto se topa con el techo, no se va a zoom 30.
+    assert centro_y_zoom([5.0, 5.00001, -75.0, -75.00001])["zoom"] == 15.0
+    # Uno que cubre medio mundo se topa con el piso.
+    assert centro_y_zoom([-40.0, 40.0, -100.0, 100.0])["zoom"] == 9.0
+
+
+def test_centro_y_zoom_rejects_missing_bounds():
+    """Sin bounds no hay a donde centrar: devuelve None en vez de inventar
+    un centro, para que el llamador deje la vista como estaba."""
+    from chec_local_interpreter.ventanas_015 import centro_y_zoom
+
+    assert centro_y_zoom(None) is None
+    assert centro_y_zoom([]) is None
+
+
+def test_fid_de_punto_reads_customdata_not_the_index():
+    """El clic devuelve indices de punto dentro de la traza; el fid sale de
+    `customdata` en esa posicion. Fuera de rango o sin customdata devuelve
+    None en vez de un fid equivocado."""
+    from chec_local_interpreter.ventanas_015 import fid_de_punto
+
+    assert fid_de_punto(["VA", "VA", "VA", "VB"], [3]) == "VB"
+    assert fid_de_punto(["VA", "VA"], [0]) == "VA"
+    assert fid_de_punto(["VA"], []) is None
+    assert fid_de_punto(None, [0]) is None
+    assert fid_de_punto(["VA"], [7]) is None

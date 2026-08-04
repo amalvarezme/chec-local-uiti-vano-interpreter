@@ -213,6 +213,7 @@ def capas_mapa_historico(
     clases_por_fid: Mapping[str, int],
     *,
     marcados: Iterable[str] = (),
+    etiquetas_por_fid: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """The pure layer-grouping logic behind row 1 col 1's map traces
     (design section G, idx 0-5): given one circuit's vano polylines
@@ -226,18 +227,76 @@ def capas_mapa_historico(
     Each returned lat/lon list is flat with a trailing `None` after every
     vano's coordinates, so Plotly draws each vano's segments separately
     within a single `Scattermap` trace instead of connecting them.
+
+    Every layer also carries `customdata` (the fid of each point) and
+    `hovertext` (`etiquetas_por_fid[fid]`, empty when not supplied). The fid
+    travels in the separator slot too: 01.4 learned that `customdata` has to
+    measure exactly what lat/lon measure or Plotly misaligns the rest of the
+    trace. That column is what turns a map click into a vano -- resolving it
+    by point index would be fragile, because the index moves with the window.
     """
-    capas: dict[int, dict[str, list]] = {clase: {"lat": [], "lon": []} for clase in range(4)}
-    sin_dato: dict[str, list] = {"lat": [], "lon": []}
-    marcados_capa: dict[str, list] = {"lat": [], "lon": []}
+    etiquetas_por_fid = etiquetas_por_fid or {}
+    capas: dict[int, dict[str, list]] = {clase: _capa_vacia() for clase in range(4)}
+    sin_dato = _capa_vacia()
+    marcados_capa = _capa_vacia()
     marcados = set(marcados)
 
     for fid, lat, lon in zip(geo_circuito["fids"], geo_circuito["lat"], geo_circuito["lon"]):
         destino = capas.get(clases_por_fid.get(fid), sin_dato)
-        destino["lat"].extend([*lat, None])
-        destino["lon"].extend([*lon, None])
+        _agregar_tramo(destino, fid, lat, lon, etiquetas_por_fid.get(fid, ""))
         if fid in marcados:
-            marcados_capa["lat"].extend([*lat, None])
-            marcados_capa["lon"].extend([*lon, None])
+            _agregar_tramo(marcados_capa, fid, lat, lon, etiquetas_por_fid.get(fid, ""))
 
     return {"clases": capas, "sin_dato": sin_dato, "marcados": marcados_capa}
+
+
+def _capa_vacia() -> dict[str, list]:
+    return {"lat": [], "lon": [], "hovertext": [], "customdata": []}
+
+
+def _agregar_tramo(
+    capa: dict[str, list], fid: str, lat: Iterable[float], lon: Iterable[float], etiqueta: str
+) -> None:
+    """Appends one vano's polyline plus its trailing `None` separator, keeping
+    the four columns the same length. The separator carries the fid but an
+    EMPTY label: it is a gap in the line, not a point with a tooltip."""
+    lat = list(lat)
+    capa["lat"].extend([*lat, None])
+    capa["lon"].extend([*lon, None])
+    capa["hovertext"].extend([etiqueta] * len(lat) + [""])
+    capa["customdata"].extend([fid] * (len(lat) + 1))
+
+
+def centro_y_zoom(bounds: Iterable[float] | None) -> dict[str, Any] | None:
+    """01.4's own framing formula (cell 7, `map.center` / `map.zoom`), ported
+    verbatim: center on the middle of the circuit's bounding box and derive
+    the zoom from its LARGER span, clamped to [9, 15]. Without the clamp a
+    one-vano circuit would zoom past any tile level, and a circuit spanning
+    half the department would zoom out of the region entirely.
+
+    Returns None when there are no bounds, so the caller leaves the current
+    view untouched instead of centering on a made-up point.
+    """
+    bounds = list(bounds or ())
+    if len(bounds) != 4:
+        return None
+    lat_min, lat_max, lon_min, lon_max = (float(v) for v in bounds)
+    span = max(max(lat_max - lat_min, 1e-4), max(lon_max - lon_min, 1e-4))
+    zoom = min(15.0, max(9.0, np.log2(360.0 / span) - 0.4))
+    return {
+        "center": {"lat": (lat_min + lat_max) / 2, "lon": (lon_min + lon_max) / 2},
+        "zoom": float(zoom),
+    }
+
+
+def fid_de_punto(customdata: Iterable[str] | None, point_inds: Iterable[int]) -> str | None:
+    """Resolves a click to a vano through the trace's `customdata` column, the
+    channel `capas_mapa_historico` fills. Returns None for an empty click or
+    an index outside the column instead of guessing a neighbouring fid."""
+    if customdata is None:
+        return None
+    columna = list(customdata)
+    for indice in point_inds:
+        if 0 <= int(indice) < len(columna):
+            return str(columna[int(indice)])
+    return None

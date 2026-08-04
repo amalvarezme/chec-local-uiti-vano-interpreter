@@ -114,3 +114,68 @@ def test_widget_for_categorical_knob_falls_back_to_first_option_when_default_mis
     widget = widget_for_knob(_categorical_knob(default=None))
 
     assert widget.value == "A"
+
+
+# --- PR6: selector de vanos por casilla (reemplaza el SelectMultiple) -------
+
+
+def test_selector_vanos_exposes_a_value_trait_and_one_checkbox_per_vano():
+    """01.4 marca vanos con CASILLAS, no con una lista de seleccion
+    multiple. El selector expone `value` como trait para que las celdas de
+    figura/ranking/simulacion sigan usando `observe(names='value')` sin
+    saber que hay casillas detras."""
+    from chec_local_interpreter.vano_widgets import construir_selector_vanos
+
+    selector = construir_selector_vanos(["VA", "VB", "VC"])
+
+    assert selector.value == ()
+    assert list(selector.casillas) == ["VA", "VB", "VC"]
+    assert all(caja.value is False for caja in selector.casillas.values())
+
+
+def test_selector_vanos_checkbox_and_click_share_one_state():
+    """Alternar la casilla y alternar por clic en el mapa tienen que llegar
+    al MISMO `value`: si llevaran registros separados, la lista, el mapa y
+    el ranking podrian contar cosas distintas (01.4, `marcarPorFid`)."""
+    from chec_local_interpreter.vano_widgets import construir_selector_vanos
+
+    selector = construir_selector_vanos(["VA", "VB", "VC"])
+    vistos = []
+    selector.observe(lambda cambio: vistos.append(cambio["new"]), names="value")
+
+    selector.casillas["VB"].value = True          # por casilla
+    assert selector.value == ("VB",)
+
+    selector.alternar("VA")                        # por clic en el mapa
+    assert selector.value == ("VA", "VB")
+
+    selector.alternar("VB")                        # el clic tambien desmarca
+    assert selector.value == ("VA",)
+    assert selector.casillas["VB"].value is False
+    assert vistos == [("VB",), ("VA", "VB"), ("VA",)]
+
+
+def test_selector_vanos_repopulating_clears_the_previous_selection():
+    """Cambiar de circuito cambia el universo de vanos: conservar la
+    seleccion anterior dejaria marcados fids que ya no existen en el mapa."""
+    from chec_local_interpreter.vano_widgets import construir_selector_vanos
+
+    selector = construir_selector_vanos(["VA", "VB"])
+    selector.alternar("VA")
+    assert selector.value == ("VA",)
+
+    selector.poblar(["VX", "VY"])
+    assert selector.value == ()
+    assert list(selector.casillas) == ["VX", "VY"]
+
+
+def test_selector_vanos_ignores_a_click_on_an_unknown_fid():
+    """Un clic puede caer sobre un tramo cuyo fid no esta en la lista (el
+    mapa dibuja la geometria del circuito, que no siempre coincide con los
+    vanos con eventos). No debe crear una casilla fantasma ni fallar."""
+    from chec_local_interpreter.vano_widgets import construir_selector_vanos
+
+    selector = construir_selector_vanos(["VA"])
+    selector.alternar("DESCONOCIDO")
+    assert selector.value == ()
+    assert list(selector.casillas) == ["VA"]
