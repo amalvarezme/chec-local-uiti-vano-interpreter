@@ -1,6 +1,15 @@
-# Flujo de los notebooks de modelado (`notebooks/project_flow/`)
+# Flujo de los notebooks MGCECDL (hoy en `notebooks/project_flow/old_version/`)
 
-Estos 9 notebooks **no** son el punto de entrada canónico del proyecto — ese es `/report` y el resto
+> **Ubicación, desde el 2026-08-04.** Los 8 cuadernos MGCECDL que detalla este documento
+> (`02_mgcecdl_optuna_classification_search` … `09_simulador`) viven ahora en
+> `notebooks/project_flow/old_version/`. El flujo activo de `notebooks/project_flow/` son otros 6
+> cuadernos, numerados `01`-`06`, descritos en el README — y `02`-`06` significan cosas distintas
+> en cada grupo, así que acá los números se refieren siempre a los archivados.
+> `01_climate.ipynb` fue eliminado del repo: ese enriquecimiento lo hace el comando `/clima`.
+> El resto de este documento (dependencias reales, gotchas, artefactos) sigue siendo válido:
+> el contenido de los cuadernos no cambió, solo su carpeta.
+
+Estos notebooks **no** son el punto de entrada canónico del proyecto — ese es `/report` y el resto
 de la familia de comandos documentada en `docs/report-family-workflow.mmd` y `docs/agents-guide.md`.
 Son el pipeline de investigación/entrenamiento que produce el modelo predictivo MGCECDL y sus
 artefactos de soporte, que el agente `inference` (vía `report_pipeline.py`) carga en modo
@@ -10,7 +19,7 @@ comentarios explicativos.
 
 ## Orden real de ejecución
 
-El README enumera los notebooks 01-09 en orden lineal, pero **no todas las dependencias son
+La numeración original 01-09 sugiere un orden lineal, pero **no todas las dependencias son
 lineales**. Verificado leyendo el código, no asumido:
 
 ```mermaid

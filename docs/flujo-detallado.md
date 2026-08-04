@@ -9,7 +9,7 @@
 El proyecto sostiene **dos flujos** que comparten la misma fuente de verdad — el CSV `Indicadores_vano_v3.csv` y la función real `compute_circuit_criticality_groups` — pero terminan en destinos distintos y **no comparten runtime ni credenciales**:
 
 - **Flujo A — pipeline local de reportes.** Genera HTML por circuito (o por lote) usando agentes LLM de Claude Code, publicado opcionalmente a un vault Obsidian indexado con `graphify`.
-- **Flujo B — despliegue a Databricks.** Replica el mismo dominio (circuitos, vanos, clustering de criticidad, evolución diaria) como un dashboard AI/BI de Databricks Lakeview respaldado por tablas/vistas Delta, y opcionalmente migra datos crudos, paquetes fuente, los 9 notebooks de investigación y los reportes de interpretabilidad.
+- **Flujo B — despliegue a Databricks.** Replica el mismo dominio (circuitos, vanos, clustering de criticidad, evolución diaria) como un dashboard AI/BI de Databricks Lakeview respaldado por tablas/vistas Delta, y opcionalmente migra datos crudos, paquetes fuente, los 6 cuadernos activos de investigación y los reportes de interpretabilidad.
 
 Un cambio en `plotting.py` no se refleja en Databricks hasta que se re-ejecuta `uiti_vano_tables.py` — son copias de datos independientes, no una vista en vivo del mismo backend.
 
@@ -39,21 +39,53 @@ Cada agente valida su propio JSON contra un esquema antes de aceptarlo; un JSON 
 
 > **Lección aprendida — aislamiento de graphify.** El paso 2.5 de `informe-gerencial` reconstruye el grafo del vault de forma completamente aislada después de un incidente de producción donde una actualización con alcance mal delimitado podó ~271 archivos no relacionados. `vault-circuito` sigue el mismo principio: su `/graphify --update` queda acotado únicamente a `reports/vault/graphify-out/graph.json`.
 
-### 2.3 Los 9 notebooks de investigación (`notebooks/project_flow/`)
+### 2.3 Los cuadernos de `notebooks/project_flow/`
 
-Estos notebooks **no** son el punto de entrada del proyecto — son el pipeline offline de entrenamiento/investigación que produce el modelo MGCECDL y sus artefactos de soporte, consumidos en modo solo-lectura por `report_pipeline.py`. Ver [`notebooks-project-flow.md`](./notebooks-project-flow.md) para el detalle celda por celda de cada uno (dependencias reales, gotchas, dónde caen los artefactos).
+La carpeta se renumeró el 2026-08-04. Hoy tiene **6 cuadernos activos**, numerados de corrido, y una
+subcarpeta `old_version/` con los 8 del pipeline MGCECDL original.
 
-Resumen de orden real de ejecución (no estrictamente lineal pese a la numeración 01-09):
+Ninguno de los dos grupos es el punto de entrada del proyecto — ese es `/report`. Ver
+[`notebooks-project-flow.md`](./notebooks-project-flow.md) para el detalle celda por celda de los
+archivados (dependencias reales, gotchas, dónde caen los artefactos).
+
+**Activos** (`notebooks/project_flow/`):
 
 ```
-01_climate (enriquece CSV) → 02_optuna (búsqueda HP) → 03_training (modelo final)
-                                                              ├→ 04_performance (métricas + SHAP)
-                                                              ├→ 05_circuit_analysis (SHAP por circuito, ancestro de report_pipeline.py)
-                                                              ├→ 06_document_replication (export CSV masivo)
-                                                              └→ 09_simulador (interactivo, ipywidgets)
+01_uiti_vano_clima                     panel climático (violines + nube de rezagos), 208 circuitos
+02_uiti_vano_kmeans                    agrupamiento de circuitos y de vanos por UITI acumulado
+03_uiti_vano_trayectorias_circuitos    trayectorias de circuito por ventanas deslizantes + mapa
+04_uiti_vano_trayectorias_vano         idem a nivel de vano; DUEÑO de la geometría KMeans
+   │                                   que 05 y 06 replican (verificada por sha1)
+   ├→ 05_mil_vano_ventana              MIL sobre bolsas vano × ventana (generado por
+   │                                   scripts/generate_notebook_10.py)
+   └→ 06_uiti_vano_explicabilidad_simulador   explicabilidad + simulador de riesgo,
+                                       requiere kernel vivo (ipywidgets)
+```
+
+Los tres primeros son independientes entre sí. La única dependencia dura es la geometría de `04`:
+`05` y `06` la reutilizan a través de `chec_local_interpreter.ventanas_015`, que la extrae del
+archivo de `04` y verifica su sha1 — si alguien mueve los centroides de `04`, los dos fallan
+ruidosamente en vez de derivar en silencio.
+
+**Archivados** (`notebooks/project_flow/old_version/`), el pipeline MGCECDL que entrenó el modelo
+que `06` y `report_pipeline.py` siguen cargando desde `data/models/`:
+
+```
+02_optuna (búsqueda HP) → 03_training (modelo final)
+                                 ├→ 04_performance (métricas + SHAP)
+                                 ├→ 05_circuit_analysis (SHAP por circuito, ancestro de report_pipeline.py)
+                                 ├→ 06_document_replication (export CSV masivo)
+                                 └→ 09_simulador (interactivo, ipywidgets)
 07_graph_preserved_connections (grafo experto, cache opcional para 03, no bloqueante)
 08_geo_network_exploration (standalone, solo shapefiles + CSV)
 ```
+
+Ojo con la colisión de numeración: `02`/`03`/`04`/`05`/`06` significan cosas distintas según el
+grupo. En este documento y en los comandos, un número suelto se refiere siempre al grupo **activo**;
+los archivados se nombran con su archivo completo.
+
+El enriquecimiento climático que hacía el viejo `01_climate.ipynb` ya no vive en un cuaderno: lo
+hace el comando `/clima`, y `01_uiti_vano_clima` solo lo visualiza.
 
 ## 3. Flujo B — despliegue a Databricks
 
@@ -63,7 +95,7 @@ Cuatro comandos cooperan, todos en `.claude/commands/`, todos reutilizando por r
 |---|---|---|
 | `/deploy-databricks-dashboard` | Nada de `data/`/notebooks — solo construye/reconstruye tablas + vistas + publica el dashboard | Sí |
 | `/subir-datos-databricks` | `data/` completo + `site/data/variables.json` (única excepción fuera de `data/`) al Volume | No |
-| `/subir-notebooks-databricks` | Ambos paquetes fuente (`chec_local_interpreter`, `chec_impacto`) + los 9 notebooks (copias adaptadas) | No |
+| `/subir-notebooks-databricks` | Los tres paquetes fuente (`chec_local_interpreter`, `chec_impacto`, `scripts`) + los 6 cuadernos activos (copias adaptadas); `old_version/` NO se sube | No |
 | `/subir-a-databricks` | Orquesta los tres anteriores + tablas + reportes de interpretabilidad + dashboard en una sola corrida | Sí |
 
 ### 3.1 Objetos de datos (5, todos reproducibles desde este repo)
@@ -80,17 +112,17 @@ Cuatro comandos cooperan, todos en `.claude/commands/`, todos reutilizando por r
 
 ### 3.2 Restricción dura: nada de `site/` en Databricks
 
-Ninguno de los cuatro comandos puede crear una ruta con nombre `site/` dentro del Volume de Databricks. La página web del proyecto (`site/`, publicada vía GitHub Actions/Pages) **solo se regenera con una corrida local** contra las rutas reales del repo. De los 9 notebooks, solo `04` y `07` originalmente escriben ahí (figuras PNG y grafos HTML respectivamente); sus copias subidas a Databricks redirigen esa salida a carpetas del Volume sin la palabra "site" (`SITE_RESULTS_DIR = RESULTS_DIR` en `04`; `outputs/graphs/` en `07`).
+Ninguno de los cuatro comandos puede crear una ruta con nombre `site/` dentro del Volume de Databricks. La página web del proyecto (`site/`, publicada vía GitHub Actions/Pages) **solo se regenera con una corrida local** contra las rutas reales del repo. De los 6 cuadernos activos, solo `04` y `07` originalmente escriben ahí (figuras PNG y grafos HTML respectivamente); sus copias subidas a Databricks redirigen esa salida a carpetas del Volume sin la palabra "site" (`SITE_RESULTS_DIR = RESULTS_DIR` en `04`; `outputs/graphs/` en `07`).
 
 ### 3.3 Notebooks en Databricks — shims y gotchas reales (encontrados en corridas en vivo)
 
-`/subir-notebooks-databricks` sube cada uno de los 9 notebooks como una **copia modificada** (nunca el original del repo) con solo su celda de resolución de rutas reescrita (alias a variables del Volume, no reemplazo total de la celda). Hallazgos empíricos, no teóricos:
+`/subir-notebooks-databricks` sube cada uno de los 6 cuadernos activos como una **copia modificada** (nunca el original del repo) con solo su celda de resolución de rutas reescrita (alias a variables del Volume, no reemplazo total de la celda). Hallazgos empíricos, no teóricos:
 
-- **Cada copia necesita su propia celda `%pip install -q -r requirements.txt`** como primera celda. El entorno local pre-configurado no existe en Databricks; sin esto, cualquier notebook que importe `chec_impacto`/`chec_local_interpreter` puede fallar con `ModuleNotFoundError` para cualquier paquete de esa cadena de imports (confirmado con `optuna` en `09`). El `requirements.txt` subido excluye `jupyter`/`ipykernel`/`pytest`/`python-dotenv`/`pydantic` (0 referencias en `src/` o en los notebooks, verificado por auditoría AST de imports).
+- **Cada copia necesita su propia celda `%pip install -q -r requirements.txt`** como primera celda. El entorno local pre-configurado no existe en Databricks; sin esto, cualquier notebook que importe `chec_impacto`/`chec_local_interpreter` puede fallar con `ModuleNotFoundError` para cualquier paquete de esa cadena de imports (confirmado con `optuna` en el archivado `09_simulador`; `05` y `06` importan el mismo paquete y heredan el riesgo). El `requirements.txt` subido excluye `jupyter`/`ipykernel`/`pytest`/`python-dotenv`/`pydantic` (0 referencias en `src/` o en los notebooks, verificado por auditoría AST de imports).
 - **`workspace import`/`import-dir` no crean carpetas padre** — hace falta `databricks workspace mkdirs` explícito antes de subir archivos sueltos o notebooks.
-- **`--format JUPYTER` tiene un límite de 10MB** — un notebook con salidas locales embebidas (ej. mapas folium de `08`) puede superarlo aunque su código sea pequeño; hay que limpiar `outputs`/`execution_count` de las 9 copias antes de subir.
+- **`--format JUPYTER` tiene un límite de 10MB**, y para este conjunto no es un caso borde sino la norma: medido, `01` pesa **81,43 MB** con salidas (0,05 MB sin), `03` 11,58 MB y `04` 12,31 MB — tres de seis pasan el techo. Hay que limpiar `outputs`/`execution_count` de las 6 copias antes de subir.
 - **Los SQL Warehouse no pueden ejecutar notebooks** — solo celdas SQL. Un notebook debe adjuntarse a un cluster o a Serverless (compute Python), nunca a un Warehouse.
-- **`09_simulador.ipynb` necesita un cluster clásico ("all-purpose"), no Serverless** — su interfaz final usa `ipywidgets`, y la documentación de Databricks es explícita: *"A notebook using ipywidgets must be attached to a running cluster"*, excluyendo Serverless. Los otros 8 notebooks sí funcionan en Serverless.
+- **`06_uiti_vano_explicabilidad_simulador.ipynb` necesita un cluster clásico ("all-purpose"), no Serverless** — todo su panel es `ipywidgets`, y la documentación de Databricks es explícita: *"A notebook using ipywidgets must be attached to a running cluster"*, excluyendo Serverless. Los otros 5 activos sí funcionan en Serverless. La regla se descubrió con el archivado `09_simulador`, que la hereda.
 - **El Volume `chec-simulador` no persiste entre sesiones garantizado** — un workspace verificado como completamente poblado un día apareció vacío (0 tablas, sin Volume) al día siguiente. Siempre verificar en vivo (`SHOW TABLES`, `databricks fs ls`) antes de asumir estado previo.
 
 ### 3.4 Widgets del dashboard publicado y limitaciones conocidas de Lakeview
@@ -116,7 +148,7 @@ Ninguno de los cuatro comandos puede crear una ruta con nombre `site/` dentro de
 
 ## 5. Más detalle
 
-- [`notebooks-project-flow.md`](./notebooks-project-flow.md) — detalle celda por celda de los 9 notebooks.
+- [`notebooks-project-flow.md`](./notebooks-project-flow.md) — detalle celda por celda de los 8 cuadernos archivados en `old_version/`.
 - [`agents-guide.md`](./agents-guide.md) — arquitectura de 4 capas del framework de agentes (Skills vs. roles vs. playbooks de prompt).
 - [`report-runtime-contract.md`](./report-runtime-contract.md) — contrato de invocación de `/report` entre runtimes.
 - [`flujo-detallado.html`](./flujo-detallado.html) — este mismo documento en HTML.

@@ -4,6 +4,13 @@
 > Scope: full-repo functional analysis to seed the SDD (Spec-Driven Development) work on agent orchestration.
 >
 > **Historical snapshot — do not treat as current-state documentation.** Several paths referenced below (`src/assets/site/`, `llm/skills/`, `core/01_pdf_discussion`, TabNet) have since moved or been removed. For the current project flow, see [`flujo-detallado.md`](./flujo-detallado.md) (technical) or [`flujo-resumen.md`](./flujo-resumen.md) (non-technical summary), updated 2026-07-24.
+>
+> **Notebook paths updated 2026-08-04.** `notebooks/project_flow/` was renumbered that day: the
+> MGCECDL notebooks referenced below moved to `notebooks/project_flow/old_version/` and the paths here
+> were rewritten to point at where the files actually live, so nothing in this table is a dead link.
+> The numbering in the `#` column is the one from 2026-07-08 and is NOT the current numbering — the
+> active flow is now `01`-`06` and means different things. `01_climate.ipynb` no longer exists at all:
+> that enrichment is done by the `/clima` command. See the README for the current set.
 
 ## 1. Purpose
 

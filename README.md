@@ -72,7 +72,7 @@ roles LLM. Detalle completo en [`docs/flujo-detallado.md`](docs/flujo-detallado.
 | `.claude/commands/` | Comandos de mantenimiento y despliegue a Databricks (fuera de la familia de skills de reporte) |
 | `reports/` | Artefactos locales de ejecución, reportes generados, insumos PDF, notas de `reports/vault/` |
 | `tests/` | Tests automatizados de contratos, pipelines y render |
-| `notebooks/project_flow/` | Pipeline real de investigación/entrenamiento MGCECDL + exploraciones de soporte |
+| `notebooks/project_flow/` | 6 cuadernos activos (`01`-`06`) del flujo actual, más `old_version/` con el pipeline MGCECDL original |
 | `notebooks/databricks/` | PoC manual, bajo demanda, del dashboard AI/BI en Databricks (excepción sancionada, ver alcance) |
 
 ## Instalación
@@ -140,7 +140,7 @@ Ejemplos:
 |---|---|
 | `/deploy-databricks-dashboard` | Tablas base + vistas + dashboard Lakeview "Explorador de circuito UITI_VANO" |
 | `/subir-datos-databricks` | `data/` completo + `site/data/variables.json` al Volume |
-| `/subir-notebooks-databricks` | Ambos paquetes fuente + los notebooks de `project_flow/` (copias adaptadas) |
+| `/subir-notebooks-databricks` | Los tres paquetes fuente + los 6 cuadernos activos de `project_flow/` (copias adaptadas) |
 | `/subir-a-databricks` | Orquesta los tres anteriores en una sola corrida |
 
 Ver [`docs/flujo-detallado.md`](docs/flujo-detallado.md#3-flujo-b--despliegue-a-databricks) para el flujo completo, objetos de datos y limitaciones conocidas.
@@ -266,7 +266,7 @@ ambos cubren el pipeline local de reportes **y** el despliegue a Databricks:
 
 - **[`docs/flujo-detallado.md`](docs/flujo-detallado.md)** (o su versión HTML con diagramas interactivos,
   [`docs/project-flow-review.html`](docs/project-flow-review.html)) — flujo técnico completo: comandos,
-  agentes, los 9 notebooks, los 4 comandos de Databricks, objetos de datos, restricciones y limitaciones
+  agentes, los 6 cuadernos activos, los 4 comandos de Databricks, objetos de datos, restricciones y limitaciones
   conocidas de la plataforma.
 - **[`docs/flujo-resumen.md`](docs/flujo-resumen.md)** (o su versión visual,
   [`docs/flujo-resumen.html`](docs/flujo-resumen.html)) — misma historia sin jerga técnica, para
@@ -285,7 +285,7 @@ flowchart TD
         PDF[(PDFs expertos<br/>reports/analysis-documents)] --> P0[Runbook batch de discusión PDF<br/>pdf_discussion_pipeline.py<br/>skill: pdf-discussion-extraction]
         P0 --> XLSX[(tabla_pdfs_intervalo_*.xlsx)]
         CSV[(CSV Indicadores_vano<br/>data/Indicadores_vano_v3.csv)]
-        MET[API Open-Meteo] --> P1[Enriquecimiento climático<br/>project_flow/01_climate.ipynb]
+        MET[API Open-Meteo] --> P1[Enriquecimiento climático<br/>comando /clima]
         CSV --> P1
     end
 
@@ -541,22 +541,46 @@ Las salidas LLM inválidas se guardan por separado con sus errores de validació
 
 ## Notebooks
 
-Estos notebooks soportan exploración, modelado o replicación. **No** son el punto de entrada canónico del flujo de reporte, pero son el pipeline real que entrena el modelo MGCECDL y produce los artefactos que el agente `inference` carga en cada corrida de `/report`:
+La carpeta `notebooks/project_flow/` se renumeró el 2026-08-04. Tiene dos grupos, y ninguno es el
+punto de entrada canónico del flujo de reporte.
 
-- `notebooks/project_flow/01_climate.ipynb`
-- `notebooks/project_flow/old_version/02_mgcecdl_optuna_classification_search.ipynb`
-- `notebooks/project_flow/old_version/03_mgcecdl_training.ipynb`
-- `notebooks/project_flow/old_version/04_mgcecdl_performance.ipynb`
-- `notebooks/project_flow/old_version/05_mgcecdl_circuit_analysis.ipynb`
-- `notebooks/project_flow/old_version/06_mgcecdl_document_replication.ipynb`
-- `notebooks/project_flow/old_version/07_graph_preserved_connections_uiti_vano.ipynb`
-- `notebooks/project_flow/old_version/08_geo_network_exploration.ipynb`
-- `notebooks/project_flow/old_version/09_simulador.ipynb`
+**Activos** — el flujo actual, numerado de corrido:
 
-Resumen detallado de propósito, entradas/salidas, orden real de dependencias (con una corrección al orden lineal implícito arriba) y hallazgos por notebook: **[`docs/notebooks-project-flow.md`](docs/notebooks-project-flow.md)** (cubre los notebooks 01-09).
+| Cuaderno | Qué hace |
+|---|---|
+| `01_uiti_vano_clima.ipynb` | Panel climático: violines por variable y nube de rezagos horarios, 208 circuitos |
+| `02_uiti_vano_kmeans.ipynb` | Agrupamiento de circuitos y de vanos por UITI acumulado y número de eventos |
+| `03_uiti_vano_trayectorias_circuitos.ipynb` | Trayectorias de circuito por ventanas deslizantes, con mapa geográfico |
+| `04_uiti_vano_trayectorias_vano.ipynb` | Lo mismo a nivel de vano; **dueño de la geometría KMeans** que 05 y 06 replican |
+| `05_mil_vano_ventana.ipynb` | Aprendizaje de instancias múltiples sobre bolsas vano × ventana |
+| `06_uiti_vano_explicabilidad_simulador.ipynb` | Explicabilidad y simulador de riesgo por vano (requiere kernel vivo) |
 
-Además, `notebooks/project_flow/02_uiti_vano_kmeans.ipynb` es un notebook exploratorio independiente
-(no forma parte de la cadena de dependencias 01-09 ni alimenta `/report`): agrupa vanos por UITI
+Los tres primeros son independientes. La única dependencia dura es la geometría de `04`: `05` y `06`
+la reutilizan vía `chec_local_interpreter.ventanas_015`, que la extrae del archivo de `04` y verifica
+su sha1, de modo que un cambio de centroides falla ruidosamente en vez de derivar en silencio.
+
+**Archivados en `notebooks/project_flow/old_version/`** — el pipeline MGCECDL que entrenó el modelo
+que `06` y el agente `inference` siguen cargando desde `data/models/`:
+
+- `old_version/02_mgcecdl_optuna_classification_search.ipynb`
+- `old_version/03_mgcecdl_training.ipynb`
+- `old_version/04_mgcecdl_performance.ipynb`
+- `old_version/05_mgcecdl_circuit_analysis.ipynb`
+- `old_version/06_mgcecdl_document_replication.ipynb`
+- `old_version/07_graph_preserved_connections_uiti_vano.ipynb`
+- `old_version/08_geo_network_exploration.ipynb`
+- `old_version/09_simulador.ipynb`
+
+Cuidado con la colisión: `02`-`06` significan cosas distintas en cada grupo. Un número suelto en este
+README se refiere siempre al grupo activo; los archivados se nombran con su archivo completo.
+
+El enriquecimiento climático que hacía el viejo `01_climate.ipynb` ya no vive en un cuaderno: lo hace
+el comando `/clima`, y `01_uiti_vano_clima.ipynb` solo lo visualiza.
+
+Resumen detallado de propósito, entradas/salidas y orden real de dependencias de los archivados:
+**[`docs/notebooks-project-flow.md`](docs/notebooks-project-flow.md)**.
+
+Sobre `02_uiti_vano_kmeans.ipynb`, que tampoco alimenta `/report`: agrupa vanos por UITI
 acumulado y número de eventos con KMeans en espacio log (4 grupos, preprocesamiento MinMax), con KDE
 por variable y un scatter interactivo en Plotly etiquetado por vano/circuito/grupo.
 

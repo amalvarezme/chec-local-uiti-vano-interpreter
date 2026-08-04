@@ -1,4 +1,4 @@
-# MIL vano x ventana: estado, acople a 01.5 y mejoras pendientes
+# MIL vano x ventana: estado, acople a 06 y mejoras pendientes
 
 Estado al 2026-08-04. Modelo: `data/models/mil_vano_ventana_v1.pt`.
 
@@ -12,7 +12,7 @@ Estado al 2026-08-04. Modelo: `data/models/mil_vano_ventana_v1.pt`.
 | Barra A1 pre-registrada | +5,0 puntos sobre la mejor línea base |
 | **Veredicto A1** | **NEGATIVO** (−1,02 puntos) |
 
-El cuaderno 10 corre por defecto como **visor** (`EJECUCION="visualizacion"`,
+El cuaderno 05 (MIL) corre por defecto como **visor** (`EJECUCION="visualizacion"`,
 segundos) y reentrena con `EJECUCION="entrenamiento"` (~40 min).
 
 ### Desempeño por grupo
@@ -27,9 +27,9 @@ segundos) y reentrena con `EJECUCION="entrenamiento"` (~40 min).
 accuracy 0,8535 · **ninguna clase abandonada** · el error es casi siempre de
 vecino inmediato (confundir Bajo con Alto ocurre 1 vez en 13.323).
 
-## 2. Acople a 01.5
+## 2. Acople a 06
 
-El SEAM de la celda 5 de `01.5` debe quedar así:
+El SEAM de la celda 5 de `06_uiti_vano_explicabilidad_simulador` debe quedar así:
 
 ```python
 # --- SEAM D1: MIL -------------------------------------------------------
