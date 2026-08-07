@@ -36,6 +36,9 @@ reports/geo/*
 reports/vault/*
 !reports/vault/.gitkeep
 !reports/vault/*.md
+# paneles autocontenidos que exportan los cuadernos (decenas de MB por corrida)
+reports/paneles/*
+!reports/paneles/.gitkeep
 lib/
 
 .vscode/
