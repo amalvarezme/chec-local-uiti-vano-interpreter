@@ -1,10 +1,10 @@
 ---
-description: Publica el cuaderno 02 (agrupamiento de circuitos y de vanos) como una Databricks App en una URL fija, detectando y reparando por su cuenta todo lo que falte — si no hay datos en el Volume encadena /subir-datos-databricks, y configura el permiso de lectura de la app sin intervención manual. Pregunta solo el nombre de la app y la URL del workspace destino.
+description: Publica el tablero de VANOS del cuaderno 02 (agrupamiento de vanos por UITI acumulado, con el top 10 de circuitos por vanos en clase Alto) como una Databricks App en una URL fija, detectando y reparando por su cuenta todo lo que falte — si no hay datos en el Volume encadena /subir-datos-databricks, y configura el permiso de lectura de la app sin intervención manual. Pregunta solo el nombre de la app y la URL del workspace destino.
 ---
 
-Follow this exact sequence when `/app-agrupamiento-circuitos` is invoked. It publishes `notebooks/project_flow/02_uiti_vano_kmeans.ipynb` as a browsable dashboard at a stable URL, and it is **self-healing**: it inspects the target workspace first and creates whatever is missing, so it works against a workspace that has never been touched as well as against one that already has everything.
+Follow this exact sequence when `/app-agrupamiento-circuitos` is invoked. It publishes the **vano board** of `notebooks/project_flow/02_uiti_vano_kmeans.ipynb` as a browsable dashboard at a stable URL (the notebook renders two boards; only that one is published — see edit 3), and it is **self-healing**: it inspects the target workspace first and creates whatever is missing, so it works against a workspace that has never been touched as well as against one that already has everything.
 
-**Why this is not a Lakeview dashboard.** `/deploy-databricks-dashboard` publishes `circuit_explorer_dashboard.lvdash.json`: SQL datasets plus declarative widgets. `02` is a different animal — it fits K-Means with scikit-learn (8 coordinate spaces, frozen over the full window), builds 23 Plotly traces on the circuit board and 19 on the vano board, and drives them from a hand-written HTML+JS panel (cells 6 and 13). Lakeview executes neither Python nor arbitrary JS, so porting `02` would mean rewriting the analysis and losing the Voronoi partition contours, the marginal KDEs, the violins and the panel. This command therefore uses **Databricks Apps**, which hosts arbitrary Python web servers, and serves the notebook's own HTML verbatim.
+**Why this is not a Lakeview dashboard.** `/deploy-databricks-dashboard` publishes `circuit_explorer_dashboard.lvdash.json`: SQL datasets plus declarative widgets. `02` is a different animal — it fits K-Means with scikit-learn (8 coordinate spaces, frozen over the full window), builds 23 Plotly traces on the circuit board and 23 on the vano board — the latter on a 4x4 grid, including a horizontal stacked bar of the top 10 circuits by vanos in the `Alto` class that the browser recomputes for the selected date range — and drives them from a hand-written HTML+JS panel (cells 6 and 13). Lakeview executes neither Python nor arbitrary JS, so porting `02` would mean rewriting the analysis and losing the Voronoi partition contours, the marginal KDEs, the violins and the panel. This command therefore uses **Databricks Apps**, which hosts arbitrary Python web servers, and serves the notebook's own HTML verbatim.
 
 **What this command does NOT need.** Verified by reading the notebook: `02` reads exactly one file, `data/Indicadores_vano_v3.csv`, and imports neither `chec_impacto` nor `chec_local_interpreter`. It needs **no** Delta table, **no** view, **no** Lakeview dashboard, **no** shapefile, **no** model checkpoint, and **no** source package. Do not create or check any of those here — if they are absent, that is not this command's problem. `/deploy-databricks-dashboard` owns them.
 
@@ -121,16 +121,20 @@ ABRIR_EN_NAVEGADOR = True    →    ABRIR_EN_NAVEGADOR = False
 There is no browser inside a job. Leaving it `True` makes `webbrowser.open()` run against a headless container; it does not raise, it just silently does nothing — but it also leaves a misleading "abriendo en el navegador" line in the job log.
 
 **Edit 3 — cells 6, 13 and 15**: do not render and do not double-write.
-
-The notebook already assembles each board into a named variable — `PANEL_CIRCUITOS` in cell 6 and `PANEL_VANOS` in cell 13 — so nothing needs to be re-concatenated here. Only the three lines that would push megabytes through iopub or write a second copy come out:
 ```python
 display(HTML(PANEL_CIRCUITOS))                    → # display() omitido en Databricks: el bloque va por iopub y tumba la ejecucion.
 display(HTML(PANEL_VANOS))                        → # idem: el documento lo escribe la celda final, directo al Volume.
 RUTA_PANEL = exportar_y_abrir(abrir=ABRIR_EN_NAVEGADOR)  → # El export local no corre aca: la celda final escribe en el Volume.
 ```
-That third line matters as much as the other two. `exportar_y_abrir` writes to `REPO_ROOT / 'reports' / 'paneles'`, and edit 2 already repointed `REPO_ROOT` at the Volume — so leaving it in writes the same ~8 MB **twice** into the Volume, once under `reports/paneles/` and once under `dashboards/`. Leave the `exportar_y_abrir` **definition** alone; only its call goes.
+That third line matters as much as the other two. `exportar_y_abrir` writes to `REPO_ROOT / 'reports' / 'paneles'`, and edit 2 already repointed `REPO_ROOT` at the Volume — so leaving it in writes the same megabytes **twice** into the Volume, once under `reports/paneles/` and once under `dashboards/`. Leave everything else in cell 15 alone — in particular `FIGURA_VANO_SOLA` and `PANEL_VANOS_SOLO`, which edit 4 consumes.
 
-Cell 6 builds its figure with `include_plotlyjs=True` and cell 13 with `include_plotlyjs=False`, so the concatenation order in edit 4 is load-bearing: reversed, the vano board has no plotly.js.
+### What gets published: the vano board only
+
+The notebook renders **two** boards — circuits and vanos — but the app publishes **only the vano one**. That is the board that answers the operational question (which vanos, and from which circuits, concentrate the criticality); the circuit board stays as an intermediate step to read inside the notebook.
+
+Do **not** try to assemble that from `PANEL_VANOS`. Cell 13 builds it with `include_plotlyjs=False`, because when both boards travel together the library already arrived with the circuit one, and its `<style>` block for `.panel-agrup` lives in the circuit panel too. Published alone it would come out with **no Plotly and no styling** — a blank page with unstyled controls, and nothing raises.
+
+Cell 15 already solves this and exposes the result: `PANEL_VANOS_SOLO = PANEL_CSS + PANEL_VANO_HTML + FIGURA_VANO_SOLA + PANEL_VANO_JS`, where `FIGURA_VANO_SOLA` is a second `to_html` of the same figure with `include_plotlyjs=True`. Use that variable and nothing else.
 
 **Edit 4 — append a final cell** that assembles and writes the document:
 ```python
@@ -144,33 +148,27 @@ DOCUMENTO = f'''<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Agrupamiento de circuitos y vanos por UITI acumulado</title>
+<title>Agrupamiento de vanos por UITI acumulado</title>
 <style>
   body {{ font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
          margin: 0; padding: 24px; color: #2b2b2b; background: #fff; }}
   h1 {{ font-size: 20px; margin: 0 0 4px 0; }}
-  h2 {{ font-size: 17px; margin: 32px 0 8px 0; }}
   p.meta {{ font-size: 13px; color: #666; margin: 0 0 20px 0; }}
-  hr {{ border: 0; border-top: 1px solid #e4c4c0; margin: 36px 0 24px 0; }}
-  /* Los dos divs de figura al ancho del contenedor. Las figuras de `02` ya NO traen
-     `width` en su layout y sus `to_html` pasan `default_width='100%'` mas
-     `config.responsive`, asi que sin esta regla el tablero igual funciona pero queda a
-     merced de lo que herede el div. Con las tres piezas juntas usa toda la pantalla y
-     se reajusta al redimensionar (medido: 952 px a 1000 de ventana, 2352 a 2400, sin
-     scroll horizontal en ningun caso). */
-  #{DIV_FIGURA}, #{DIV_VANO} {{ width: 100%; }}
+  /* El div de la figura al ancho del contenedor. La figura de vanos ya NO trae `width`
+     en su layout y su `to_html` pasa `default_width='100%'` mas `config.responsive`,
+     asi que sin esta regla el tablero igual funciona pero queda a merced de lo que
+     herede el div. Con las tres piezas juntas usa toda la pantalla y se reajusta al
+     redimensionar (medido: 952 px de plot a 1000 px de ventana, 2352 a 2400, sin scroll
+     horizontal en ningun caso). */
+  #{DIV_VANO} {{ width: 100%; }}
 </style>
 </head>
 <body>
-<h1>Agrupamiento de circuitos y vanos por UITI acumulado</h1>
+<h1>Agrupamiento de vanos por UITI acumulado</h1>
 <p class="meta">Generado desde <code>02_uiti_vano_kmeans.ipynb</code> el {pd.Timestamp.now():%Y-%m-%d %H:%M} &mdash;
 {len(df):,} eventos, {df["CIRCUITO"].nunique()} circuitos, {len(VANOS):,} vanos,
 periodo {df["FECHA"].min():%Y-%m-%d} a {df["FECHA"].max():%Y-%m-%d}.</p>
-<h2>Circuitos</h2>
-{PANEL_CIRCUITOS}
-<hr>
-<h2>Vanos</h2>
-{PANEL_VANOS}
+{PANEL_VANOS_SOLO}
 </body>
 </html>'''
 
@@ -210,11 +208,22 @@ with
 ```
 No cluster spec — the task runs on serverless. That is fine here: `02` uses no `ipywidgets` (that constraint belongs to `09_simulador`). Poll `databricks jobs get-run <run_id> -p <profile>` until terminal. On failure, surface the notebook's own error rather than retrying blindly.
 
-**Verify the artifact by content, not by exit code.** Expect **~8.6 MB** — the two boards measured 8.54 MB of HTML on the current base (4.66 MB of it is the embedded plotly.js, 1.90 MB the circuit `CTX` and 1.97 MB the vano `CTX`), plus the wrapper this cell adds. **Do not hardcode that number**: it scales with the base, and the 7.43 MB sitting in the Volume from an earlier run is simply what the same assembly produced over a shorter period. Fail only under 1 MB, which means a board came out empty. Download it and assert both boards survived:
+**Verify the artifact by content, not by exit code.** Expect **~6.6 MB** — the vano board alone measured 6.6 MB on the current base (4.66 MB of it is the embedded plotly.js and 1.97 MB the vano `CTX`), plus the wrapper this cell adds. Publishing only that board is what took it down from the 8.5 MB the two of them used to weigh. **Do not hardcode that number**: it scales with the base. Fail only under 1 MB, which means the board came out empty. Download it and assert:
 ```
 databricks fs cp dbfs:/Volumes/workspace/default/chec-simulador/dashboards/agrupamiento_circuitos.html <scratch>/verif.html --overwrite -p <profile>
 ```
-Then confirm exactly one `id="agrupamiento-circuitos"`, exactly one `id="agrupamiento-vanos"`, exactly one each of the ten panel controls (`ag-desde`, `ag-hasta`, `ag-logx`, `ag-prep`, `ag-csv` and the five `va-*` equivalents), and that `Plotly` appears. A size check alone cannot catch a missing second board; a `count()` on those two div ids can.
+Then confirm:
+- exactly one `id="agrupamiento-vanos"`, and **zero** `id="agrupamiento-circuitos"` — the circuit board must NOT be in the published artifact. A non-zero count means edit 4 was assembled from the wrong variable;
+- exactly one each of the five `va-*` panel controls (`va-desde`, `va-hasta`, `va-logx`, `va-logy`, `va-prep`, `va-csv`);
+- `Plotly` appears **and** the artifact is over ~4 MB. Both together are what prove `PANEL_VANOS_SOLO` was used and not `PANEL_VANOS`: the latter carries no plotly.js, so it would come out ~2 MB and render a blank page. A `count()` on the div id alone cannot catch that;
+- `.panel-agrup {` appears, which is `PANEL_CSS`. Without it the controls render unstyled — the board still works, so nothing else catches this.
+
+Three more checks guard the full-width rendering, because losing it degrades silently — the board still works, it just renders in a narrow column:
+- `"responsive":true` appears. Without it the board does not re-fit when the window is resized;
+- `width:100%` appears. Plotly emits it into the div because `to_html` gets `default_width='100%'`;
+- `width:860px` appears **nowhere**. That was the hardcoded `width=860` in cell 12's layout; if it comes back, `default_width` is overridden and the board pins itself to that many pixels no matter how wide the screen is.
+
+Finally, the vano board is a **4x4 grid** since the redistribution — assert `23` traces' worth of structure by checking that `Top 10 circuitos por vanos en clase Alto` appears in the artifact. That subplot is the horizontal stacked bar (top 10 circuits by count of vanos in the `Alto` class, drawn as each circuit's percentage split across the four classes, in the K-Means palette). Its absence means the artifact predates the redistribution.
 
 Three more checks guard the full-width rendering, because losing it degrades silently — the boards still work, they just render in a narrow column:
 - `"responsive":true` appears **twice**, once per figure. Without it the board does not re-fit when the window is resized;
@@ -302,7 +311,7 @@ This is the step that makes the deploy hands-off. Create the app with a `uc_secu
 ```
 databricks apps create --json '{
   "name": "<app-name>",
-  "description": "Agrupamiento de circuitos y vanos por UITI acumulado (cuaderno 02)",
+  "description": "Agrupamiento de vanos por UITI acumulado, con top 10 de circuitos (cuaderno 02)",
   "resources": [{
     "name": "volumen-chec-simulador",
     "description": "Volume con el HTML generado por el cuaderno 02",
