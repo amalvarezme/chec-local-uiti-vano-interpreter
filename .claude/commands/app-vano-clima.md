@@ -90,7 +90,7 @@ Warn first: `data/Indicadores_vano_v3.csv` is **566 MB** (Git-LFS tracked) and d
 
 **Hard invariant**: the modified notebook is a COPY in the scratch directory. `git status --porcelain notebooks/project_flow/01_uiti_vano_clima.ipynb` MUST be empty when this step ends.
 
-**Strip every code cell's `outputs` and `execution_count` first.** The repo file is **83.7 MB** on disk, essentially all of it cell 9's embedded `text/html`; stripped it is **0.083 MB** (measured). `databricks workspace import --format JUPYTER` enforces a 10 MB limit, so an unstripped copy is 8x over the ceiling — this is the single difference between the upload working and failing outright, and `01` is by far the worst offender in the family.
+**Strip every code cell's `outputs` and `execution_count` first.** The repo file is **68 MB** on disk, essentially all of it cell 9's embedded `text/html`; stripped it is **0.086 MB** (measured). Both figures scale with the base, so treat them as orders of magnitude, not constants. `databricks workspace import --format JUPYTER` enforces a 10 MB limit, so an unstripped copy is 8x over the ceiling — this is the single difference between the upload working and failing outright, and `01` is by far the worst offender in the family.
 
 Four edits, everything else byte-identical. Assert each match is unique and fail loudly if not.
 
@@ -221,14 +221,15 @@ with
 ```
 No cluster spec — serverless is fine, `01` uses no `ipywidgets`. Poll `databricks jobs get-run <run_id> -p <profile>` until terminal. On failure, surface the notebook's own error rather than retrying blindly.
 
-**Verify by content, not by exit code.** Expect **~82 MB** (measured locally: 81.90 MB). It is by far the largest artifact in the family — `04`'s is 11.6 MB — because `CTX` carries all 208 circuits with, per circuit and per day, the 25 hourly lags of the four climate variables. Download it and assert:
+**Verify by content, not by exit code.** Expect **tens of MB** — measured locally at **67 MB** for the current base, against `04`'s 11.6 MB. It is by far the largest artifact in the family because `CTX` carries every circuit with, per circuit and per day, the 25 hourly lags of the four climate variables. **Do not hardcode that number**: it scales with the base, which is expected to be updated and to cover other time spans. Compare it against the size the job itself prints (`panel autocontenido escrito en ... (N MB)`) and only fail if it is under 1 MB, which means the board came out empty. Download it and assert:
 ```
 databricks fs cp dbfs:/Volumes/workspace/default/chec-simulador/dashboards/clima_vano.html <scratch>/verif.html --overwrite -p <profile>
 ```
 - exactly one `id="clima-nube-vano"` — that is `DIV_FIGURA`'s value, and it is **not** `02`'s `agrupamiento-vanos`, `03`'s `trayectorias-circuitos` nor `04`'s `vano-ventana`, so a copy-pasted check from a sibling command would silently pass on the wrong artifact;
-- **the map layer non-empty**: count `"fids"`, which must equal the number of circuits with geometry (measured: **208**). With the shapefiles missing or unreadable the notebook still succeeds and still writes an HTML of roughly the right size, just with no map — a size check alone will not catch that;
+- **the map layer non-empty**: count `"fids"`, and require it to equal the circuit count the job printed (`N circuitos ensamblados (con eventos y geometria)`) — **208 on the current base, but read it from the job output rather than hardcoding it**, since a refreshed base can cover a different set of circuits. The check that must never be relaxed is `> 0`: with the shapefiles missing or unreadable the notebook still succeeds and still writes an HTML of roughly the right size, just with no map, and a size check alone will not catch that;
 - `scattermap` present, which doubles as proof the Plotly floor took effect;
 - exactly one `"nubeCfg"`, the root-level cloud config that carries the six resolved colorscales. If it is absent the six variables fall back to Plotly's default scale;
+- exactly one `"fidsPorDia"` per circuit. The cloud and the UITI layer travel as arrays **aligned to that shared list of vanos** instead of repeating the vano id as a key in each; if it is missing, the panel is from an older revision of the notebook and the JS will read `undefined`;
 - `optgroup` present, which is the two-group variable `<select>` (climate vs. static). Its absence means only the four climate variables are offered.
 
 ## 5. Stage the App source
