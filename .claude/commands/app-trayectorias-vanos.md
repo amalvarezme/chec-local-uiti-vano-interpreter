@@ -4,7 +4,7 @@ description: Publica el cuaderno 04 (agrupamiento y evolucion a nivel de vano po
 
 Follow this exact sequence when `/app-trayectorias-vanos` is invoked. It publishes `notebooks/project_flow/04_uiti_vano_trayectorias_vano.ipynb` as a browsable dashboard at a stable URL, and it is **self-healing**: it inspects the target workspace first and creates whatever is missing, so it works against a workspace that has never been touched as well as against one that already has everything.
 
-This is the third member of the app family, after `/app-agrupamiento-circuitos` (`02`) and `/app-trayectorias-circuitos` (`03`). Everything it does that is not specific to `04` is deliberately identical to those two, so read them as the reference when something here is terse.
+This is the third member of the app family, after `/app-agrupamiento-vanos-circuitos` (`02`) and `/app-trayectorias-circuitos` (`03`). Everything it does that is not specific to `04` is deliberately identical to those two, so read them as the reference when something here is terse.
 
 **Why Databricks Apps and not Lakeview.** Same reason as its two siblings: `04` fits K-Means with scikit-learn over 8 coordinate spaces, builds **56 Plotly traces** including a geographic map, and drives all of it from a hand-written HTML+JS panel (cell 7) that also handles clicking a vano on the map to select it. Lakeview executes neither Python nor arbitrary JS, so porting it would mean rewriting the analysis and losing the Voronoi contours, the trajectories with their arrows, the map and the whole selection model.
 

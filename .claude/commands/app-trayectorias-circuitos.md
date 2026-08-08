@@ -4,7 +4,7 @@ description: Publica el cuaderno 03 (trayectorias de circuito por ventanas desli
 
 Follow this exact sequence when `/app-trayectorias-circuitos` is invoked. It publishes `notebooks/project_flow/03_uiti_vano_trayectorias_circuitos.ipynb` as a browsable dashboard at a stable URL, and it is **self-healing**: it inspects the target workspace first and creates whatever is missing.
 
-This is the sibling of `/app-agrupamiento-circuitos`, which does the same for `02`. The two are **independent apps** with independent HTML artifacts — deploying one never touches the other. Read that command when something here is unclear about the shared mechanics; only the differences are spelled out below.
+This is the sibling of `/app-agrupamiento-vanos-circuitos`, which does the same for `02`. The two are **independent apps** with independent HTML artifacts — deploying one never touches the other. Read that command when something here is unclear about the shared mechanics; only the differences are spelled out below.
 
 **Why Databricks Apps and not Lakeview.** Same reason as `02`: `03` fits K-Means with scikit-learn over 8 coordinate spaces, builds 25 Plotly traces including a geographic map, and drives everything from a hand-written HTML+JS panel (cell 7). Lakeview executes neither Python nor arbitrary JS.
 
@@ -36,7 +36,7 @@ If a step finds a missing prerequisite, **do not ask whether to create it**. Onl
 
 ## 1. Resolve profile and identity
 
-Follow `.claude/commands/app-agrupamiento-circuitos.md` **section 1** verbatim, including its warning: never pipe `2>&1` into a JSON parser, because the CLI intermittently prints `Databricks skills are not installed...` on stderr and that reads as a bogus auth failure. Use `2>/dev/null` when parsing.
+Follow `.claude/commands/app-agrupamiento-vanos-circuitos.md` **section 1** verbatim, including its warning: never pipe `2>&1` into a JSON parser, because the CLI intermittently prints `Databricks skills are not installed...` on stderr and that reads as a bogus auth failure. Use `2>/dev/null` when parsing.
 
 ## 2. Preflight — inspect everything, then repair
 
@@ -55,7 +55,7 @@ For check 3, confirm all three shapefiles **and their sidecars** are present —
 
 ### 2a. Create the Volume if absent
 
-Identical to `/app-agrupamiento-circuitos` section 2a (`POST /api/2.1/unity-catalog/volumes`, catalog `workspace`, schema `default`, name `chec-simulador`, `MANAGED`).
+Identical to `/app-agrupamiento-vanos-circuitos` section 2a (`POST /api/2.1/unity-catalog/volumes`, catalog `workspace`, schema `default`, name `chec-simulador`, `MANAGED`).
 
 ### 2b. Delegate the data upload
 
@@ -158,7 +158,7 @@ databricks workspace import /Workspace/Users/<userName>/databricks-integration/p
 
 ## 4. Run the notebook once to generate the HTML
 
-Submit a serverless job exactly as `/app-agrupamiento-circuitos` section 4 does, pointing at `.../project_flow/03_uiti_vano_trayectorias_circuitos`, with `run_name: "trayectorias-circuitos-html"`. `03` uses no `ipywidgets`, so serverless is fine. Poll `databricks jobs get-run` until terminal; on failure surface the notebook's own error.
+Submit a serverless job exactly as `/app-agrupamiento-vanos-circuitos` section 4 does, pointing at `.../project_flow/03_uiti_vano_trayectorias_circuitos`, with `run_name: "trayectorias-circuitos-html"`. `03` uses no `ipywidgets`, so serverless is fine. Poll `databricks jobs get-run` until terminal; on failure surface the notebook's own error.
 
 Expect this leg to be slower than `02`'s: the job also reads three shapefiles from the Volume through the FUSE mount.
 
@@ -172,7 +172,7 @@ Reading the three shapefiles from the Volume through the FUSE mount **works** �
 
 ## 5. Stage the App source
 
-Identical to `/app-agrupamiento-circuitos` section 5 — same `app.yaml`, same `requirements.txt` (`fastapi`, `uvicorn`, `databricks-sdk`), same `app.py` — with **one change**: point `RUTA_HTML` at this dashboard.
+Identical to `/app-agrupamiento-vanos-circuitos` section 5 — same `app.yaml`, same `requirements.txt` (`fastapi`, `uvicorn`, `databricks-sdk`), same `app.py` — with **one change**: point `RUTA_HTML` at this dashboard.
 ```python
 RUTA_HTML = os.environ.get(
     "RUTA_HTML",
@@ -183,7 +183,7 @@ Upload the three files with `--format RAW` into `/Workspace/Users/<userName>/dat
 
 ## 6. Create the App with the Volume as a resource
 
-Same `uc_securable` body as `/app-agrupamiento-circuitos` section 6 — Databricks applies `READ VOLUME` itself during service-principal provisioning, so no manual `GRANT` is needed. Verify it landed with `SHOW GRANTS` rather than assuming, and read `service_principal_client_id` from **this** app: it is new per app and per re-creation, so the `02` app's grant does nothing for this one.
+Same `uc_securable` body as `/app-agrupamiento-vanos-circuitos` section 6 — Databricks applies `READ VOLUME` itself during service-principal provisioning, so no manual `GRANT` is needed. Verify it landed with `SHOW GRANTS` rather than assuming, and read `service_principal_client_id` from **this** app: it is new per app and per re-creation, so the `02` app's grant does nothing for this one.
 
 Fallback to the manual grant only if that fails — see section 6a there, including the note that the auto-mode classifier denies `GRANT` through `databricks api post` and the user must run it with `!`.
 

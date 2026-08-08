@@ -4,7 +4,7 @@ description: Publica el cuaderno 01 (nube por vano sobre el mapa, con las 6 vari
 
 Follow this exact sequence when `/app-vano-clima` is invoked. It publishes `notebooks/project_flow/01_uiti_vano_clima.ipynb` as a browsable dashboard at a stable URL, and it is **self-healing**: it inspects the target workspace first and creates whatever is missing, so it works against a workspace that has never been touched as well as against one that already has everything.
 
-This is the fourth member of the app family, after `/app-agrupamiento-circuitos` (`02`), `/app-trayectorias-circuitos` (`03`) and `/app-trayectorias-vanos` (`04`). Everything it does that is not specific to `01` is deliberately identical to those three, so read them as the reference when something here is terse.
+This is the fourth member of the app family, after `/app-agrupamiento-vanos-circuitos` (`02`), `/app-trayectorias-circuitos` (`03`) and `/app-trayectorias-vanos` (`04`). Everything it does that is not specific to `01` is deliberately identical to those three, so read them as the reference when something here is terse.
 
 **Why Databricks Apps and not Lakeview.** Same reason as its three siblings: `01` builds **16 Plotly traces** in a 4x3 grid — a geographic map as a 2x2 block, a dual-axis time series and six violins — and drives all of it from a hand-written HTML+JS panel (cell 9) that swaps between every circuit in the base (208 today), 6 variables and 25 hourly lags entirely in the browser. Lakeview executes neither Python nor arbitrary JS.
 
