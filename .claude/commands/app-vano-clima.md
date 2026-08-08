@@ -138,9 +138,9 @@ display(HTML(PANEL_COMPLETO))
 ```
 with
 ```python
-# display() omitido en Databricks: 82 MB por el canal iopub tumban la ejecucion.
+# display() omitido en Databricks: 28 MB por el canal iopub tumban la ejecucion.
 ```
-This is **not** hygiene. The block is ~82 MB and pushing it through iopub is exactly the failure reproduced locally (`Timeout waiting for IOPub output`, which silently drops the cell output); inside a Databricks job it hits the output limit instead. The document still gets written — by edit 4, straight to the Volume, never through the kernel's output channel.
+This is **not** hygiene. The block is ~28 MB (measured; it was 67 MB before the cloud series were deduplicated into a palette) and pushing it through iopub is exactly the failure reproduced locally (`Timeout waiting for IOPub output`, which silently drops the cell output); inside a Databricks job it hits the output limit instead. The document still gets written — by edit 4, straight to the Volume, never through the kernel's output channel.
 
 Then replace:
 ```python
@@ -150,7 +150,7 @@ with
 ```python
 # El export local no corre aca: la celda final escribe el documento en el Volume.
 ```
-Leaving it in would write the same 82 MB twice into the Volume (once under `reports/paneles/`, once under `dashboards/`), for no benefit. Leave the `exportar_y_abrir` **definition** alone — only the call goes.
+Leaving it in would write the same ~28 MB twice into the Volume (once under `reports/paneles/`, once under `dashboards/`), for no benefit. Leave the `exportar_y_abrir` **definition** alone — only the call goes.
 
 **Edit 4 — append a final cell** that assembles and writes the document:
 ```python
@@ -221,7 +221,7 @@ with
 ```
 No cluster spec — serverless is fine, `01` uses no `ipywidgets`. Poll `databricks jobs get-run <run_id> -p <profile>` until terminal. On failure, surface the notebook's own error rather than retrying blindly.
 
-**Verify by content, not by exit code.** Expect **tens of MB** — measured locally at **67 MB** for the current base, against `04`'s 11.6 MB. It is by far the largest artifact in the family because `CTX` carries every circuit with, per circuit and per day, the 25 hourly lags of the four climate variables. **Do not hardcode that number**: it scales with the base, which is expected to be updated and to cover other time spans. Compare it against the size the job itself prints (`panel autocontenido escrito en ... (N MB)`) and only fail if it is under 1 MB, which means the board came out empty. Download it and assert:
+**Verify by content, not by exit code.** Expect **tens of MB** — measured locally at **27.8 MB** for the current base, against `04`'s 11.6 MB. It is still the largest artifact in the family because `CTX` carries every circuit with, per circuit and per day, the 25 hourly lags of the four climate variables — but it used to be 67 MB, before those series were deduplicated into a palette (see the `nubePaleta` check below). **Do not hardcode that number**: it scales with the base, which is expected to be updated and to cover other time spans. Compare it against the size the job itself prints (`panel autocontenido escrito en ... (N MB)`) and only fail if it is under 1 MB, which means the board came out empty. Download it and assert:
 ```
 databricks fs cp dbfs:/Volumes/workspace/default/chec-simulador/dashboards/clima_vano.html <scratch>/verif.html --overwrite -p <profile>
 ```
@@ -230,6 +230,7 @@ databricks fs cp dbfs:/Volumes/workspace/default/chec-simulador/dashboards/clima
 - `scattermap` present, which doubles as proof the Plotly floor took effect;
 - exactly one `"nubeCfg"`, the root-level cloud config that carries the six resolved colorscales. If it is absent the six variables fall back to Plotly's default scale;
 - exactly one `"fidsPorDia"` per circuit. The cloud and the UITI layer travel as arrays **aligned to that shared list of vanos** instead of repeating the vano id as a key in each; if it is missing, the panel is from an older revision of the notebook and the JS will read `undefined`;
+- exactly one `"nubePaleta"`, the root-level palette of unique climate series. `nubePorDia` no longer carries the 25-lag series per vano but its **integer position** in that palette — the series repeat ~13x between neighbouring vanos because Open-Meteo resolves climate on a multi-km grid. If `nubePaleta` is absent the artifact predates the deduplication and `paleta[series[i]]` reads `undefined`, which paints the whole cloud a single flat colour without raising. Its absence is also why the file would be ~67 MB instead of ~28 MB, so a size far above the expected range is the same symptom;
 - `optgroup` present, which is the two-group variable `<select>` (climate vs. static). Its absence means only the four climate variables are offered.
 
 ## 5. Stage the App source
@@ -248,18 +249,18 @@ uvicorn
 databricks-sdk
 ```
 
-`app.py` — **this one deviates from its three siblings on purpose**, and the reason is the 82 MB:
+`app.py` — **this one deviates from its three siblings on purpose**, and the reason is the size:
 ```python
 """Sirve el HTML de la nube por vano que genera 01_uiti_vano_clima en el Volume.
 
-~82 MB, que comprimen a ~9.3 MB (medido). Frente a los otros tres apps de la familia hay
+~28 MB, que comprimen a ~6.5 MB (medido). Frente a los otros tres apps de la familia hay
 dos diferencias, ambas por ese tamaño:
 
 1. Se cachean BYTES, no str. Los hermanos hacen .decode('utf-8') y guardan el texto; con
-   82 MB eso duplica el pico de memoria durante la carga y obliga a re-encodear en cada
+   28 MB eso duplica el pico de memoria durante la carga y obliga a re-encodear en cada
    respuesta, sin ganar nada -- el contenido nunca se inspecciona.
 2. Se pre-comprime UNA vez y se cachea el gzip, en vez de usar GZipMiddleware, que
-   recomprime los 82 MB en CADA peticion.
+   recomprime los 28 MB en CADA peticion.
 
 GET /?refresh=1 tira ambos caches, que es como se hace visible una re-corrida del job sin
 volver a desplegar la app.
@@ -380,7 +381,7 @@ Tell the user, in their language:
 - That the HTML lives at `/Volumes/workspace/default/chec-simulador/dashboards/clima_vano.html`, its measured size, and which content checks passed (`id="clima-nube-vano"`, `"fids"` matching the circuit count the job printed, `scattermap`, `"nubeCfg"`, `"fidsPorDia"`, `optgroup`). Report the **observed** numbers, not the ones written here.
 - Whether the volume permission came from the `uc_securable` resource or from a manual grant.
 - **How to refresh**: re-run step 4's job, then hit `/?refresh=1`. No redeploy — the app carries no data.
-- **That this board is the heaviest of the four**, and why: ~82 MB uncompressed, ~9.3 MB over the wire once gzipped. The first load after a cold start pays the download from the Volume plus one compression; every later load is served from memory. `/salud` answers without touching the Volume, so it separates an app failure from a permission failure.
+- **That this board is the heaviest of the four**, and why: ~28 MB uncompressed, ~6.5 MB over the wire once gzipped (it was 67 MB / 7.3 MB before the palette deduplication — gzip already exploited the repetition, so the win shows up mostly in what the browser has to `JSON.parse` and hold in memory, not on the wire). The first load after a cold start pays the download from the Volume plus one compression; every later load is served from memory. `/salud` answers without touching the Volume, so it separates an app failure from a permission failure.
 - **How the board is read**: the map is a 2x2 block; every vano with events that day gets its UITI quartile drawn over the black structure, and a vano with no events that day gets nothing but the black line. The translucent circles encode the **variable chosen in the panel** — six of them, four climate ones that the hourly-lag slider moves and two static per-vano ones (`NR_T`, vegetation risk, and `DDT`, ground discharges) for which that slider is disabled on purpose. Colour, not opacity, carries the value, over a per-variable scale with `cmin`/`cmax` fixed across the whole dataset, so a colour means the same thing in every circuit. Top right is the dual-axis series: daily circuit UITI on the left, daily median of the selected variable on the right, with the current day's point drawn at triple size. The six violins below describe the vano-events of the chosen day.
 - That `git status --porcelain` on the notebook was empty — the repo copy was never modified.
 - That no Delta table, view or Lakeview dashboard was created or touched; point to `/deploy-databricks-dashboard` if those are wanted.
