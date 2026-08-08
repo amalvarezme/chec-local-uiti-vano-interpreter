@@ -208,7 +208,7 @@ with
 ```
 No cluster spec — the task runs on serverless. That is fine here: `02` uses no `ipywidgets` (that constraint belongs to `09_simulador`). Poll `databricks jobs get-run <run_id> -p <profile>` until terminal. On failure, surface the notebook's own error rather than retrying blindly.
 
-**Verify the artifact by content, not by exit code.** Expect **~6.6 MB** — the vano board alone measured 6.6 MB on the current base (4.66 MB of it is the embedded plotly.js and 1.97 MB the vano `CTX`), plus the wrapper this cell adds. Publishing only that board is what took it down from the 8.5 MB the two of them used to weigh. **Do not hardcode that number**: it scales with the base. Fail only under 1 MB, which means the board came out empty. Download it and assert:
+**Verify the artifact by content, not by exit code.** Expect **~6.1 MB**, which gzips to ~1.8 MB — the vano board measured 6.06 MB on the current base, of which **4.64 MB is the embedded plotly.js** and 1.41 MB the vano `CTX`. Two things brought it there: publishing one board instead of two (8.5 → 6.6 MB) and compacting the context (6.6 → 6.06 MB). The remaining 4.64 MB is not reducible from here — plotly 6.8.0 ships only the full `plotly.min.js`, and the board needs `scattergl` (27.390 points), `contour`, `violin` and `bar`, which no single official partial bundle covers; vendoring one would add an external dependency and a version to keep in sync for something gzip already halves. **Do not hardcode the number**: it scales with the base. Fail only under 1 MB, which means the board came out empty. Download it and assert:
 ```
 databricks fs cp dbfs:/Volumes/workspace/default/chec-simulador/dashboards/agrupamiento_circuitos.html <scratch>/verif.html --overwrite -p <profile>
 ```
@@ -216,7 +216,8 @@ Then confirm:
 - exactly one `id="agrupamiento-vanos"`, and **zero** `id="agrupamiento-circuitos"` — the circuit board must NOT be in the published artifact. A non-zero count means edit 4 was assembled from the wrong variable;
 - exactly one each of the five `va-*` panel controls (`va-desde`, `va-hasta`, `va-logx`, `va-logy`, `va-prep`, `va-csv`);
 - `Plotly` appears **and** the artifact is over ~4 MB. Both together are what prove `PANEL_VANOS_SOLO` was used and not `PANEL_VANOS`: the latter carries no plotly.js, so it would come out ~2 MB and render a blank page. A `count()` on the div id alone cannot catch that;
-- `.panel-agrup {` appears, which is `PANEL_CSS`. Without it the controls render unstyled — the board still works, so nothing else catches this.
+- `.panel-agrup {` appears, which is `PANEL_CSS`. Without it the controls render unstyled — the board still works, so nothing else catches this;
+- `"circuitosNombres"` appears. The context ships the 208 distinct circuit names once and an integer index per vano instead of repeating the name 27.390 times, and the JS resolves it through a single `circDe(v)` helper. Its absence means the artifact predates that compaction, and `CTX.circuitos[v]` would put an index number where the circuit name belongs — in the hover, in the CSV and in the top-10 ranking.
 
 Three more checks guard the full-width rendering, because losing it degrades silently — the board still works, it just renders in a narrow column:
 - the figure config carries `responsive: true`. **Match it whitespace-insensitively** — Plotly serializes the config block as `"responsive": true`, with a space after the colon, so a literal `grep '"responsive":true'` returns nothing on a perfectly good artifact (confirmed empirically; it read as a regression when nothing was wrong). Strip spaces before comparing, or match `"responsive":\s*true`. Without this flag the board does not re-fit when the window is resized;
