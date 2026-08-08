@@ -219,7 +219,7 @@ Then confirm:
 - `.panel-agrup {` appears, which is `PANEL_CSS`. Without it the controls render unstyled — the board still works, so nothing else catches this.
 
 Three more checks guard the full-width rendering, because losing it degrades silently — the board still works, it just renders in a narrow column:
-- `"responsive":true` appears. Without it the board does not re-fit when the window is resized;
+- the figure config carries `responsive: true`. **Match it whitespace-insensitively** — Plotly serializes the config block as `"responsive": true`, with a space after the colon, so a literal `grep '"responsive":true'` returns nothing on a perfectly good artifact (confirmed empirically; it read as a regression when nothing was wrong). Strip spaces before comparing, or match `"responsive":\s*true`. Without this flag the board does not re-fit when the window is resized;
 - `width:100%` appears. Plotly emits it into the div because `to_html` gets `default_width='100%'`;
 - `width:860px` appears **nowhere**. That was the hardcoded `width=860` in cell 12's layout; if it comes back, `default_width` is overridden and the board pins itself to that many pixels no matter how wide the screen is.
 
