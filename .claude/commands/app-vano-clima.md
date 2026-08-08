@@ -6,7 +6,7 @@ Follow this exact sequence when `/app-vano-clima` is invoked. It publishes `note
 
 This is the fourth member of the app family, after `/app-agrupamiento-circuitos` (`02`), `/app-trayectorias-circuitos` (`03`) and `/app-trayectorias-vanos` (`04`). Everything it does that is not specific to `01` is deliberately identical to those three, so read them as the reference when something here is terse.
 
-**Why Databricks Apps and not Lakeview.** Same reason as its three siblings: `01` builds **16 Plotly traces** in a 4x3 grid — a geographic map as a 2x2 block, a dual-axis time series and six violins — and drives all of it from a hand-written HTML+JS panel (cell 9) that swaps between 208 circuits, 6 variables and 25 hourly lags entirely in the browser. Lakeview executes neither Python nor arbitrary JS.
+**Why Databricks Apps and not Lakeview.** Same reason as its three siblings: `01` builds **16 Plotly traces** in a 4x3 grid — a geographic map as a 2x2 block, a dual-axis time series and six violins — and drives all of it from a hand-written HTML+JS panel (cell 9) that swaps between every circuit in the base (208 today), 6 variables and 25 hourly lags entirely in the browser. Lakeview executes neither Python nor arbitrary JS.
 
 **Scope.** MUST NOT create or refresh any Delta table or view, MUST NOT touch the Lakeview dashboard, MUST NOT modify the file under `notebooks/project_flow/`, and MUST NOT create any `site`-named path inside the Volume.
 
@@ -84,7 +84,7 @@ If this fails on privileges, stop and report exactly that — do not silently pi
 
 If the CSV **or** any shapefile is missing, run `/subir-datos-databricks` against the same workspace URL. It owns the mirror of `data/` plus the `.DS_Store` / `.gitkeep` / `.openmeteo_cache.sqlite` cleanup, and it carries the sidecar set correctly.
 
-Warn first: `data/Indicadores_vano_v3.csv` is **566 MB** (Git-LFS tracked) and dominates a cold run. Confirm it is a real payload and not an unfetched pointer (`ls -l data/Indicadores_vano_v3.csv`; ~130 bytes means run `git lfs pull`). The GEO tree is LFS-tracked too — check it the same way.
+Warn first: `data/Indicadores_vano_v3.csv` is **~566 MB today** (Git-LFS tracked; `ls -lh` shows it as 540 MiB, same thing) and dominates a cold run. The base is expected to be refreshed, so measure it rather than trusting that figure. Confirm it is a real payload and not an unfetched pointer (`ls -l data/Indicadores_vano_v3.csv`; ~130 bytes means run `git lfs pull`). The GEO tree is LFS-tracked too — check it the same way.
 
 ## 3. Stage and upload the shimmed copy of `01`
 
@@ -377,7 +377,7 @@ Require all three: `compute_status: ACTIVE`, `app_status: RUNNING`, `active_depl
 Tell the user, in their language:
 - The app URL, the app name, and the profile/workspace used.
 - **Everything the preflight found missing and what was done about it** — the headline of a cold run.
-- That the HTML lives at `/Volumes/workspace/default/chec-simulador/dashboards/clima_vano.html`, its measured size, and which content checks passed (`id="clima-nube-vano"`, 208 `"fids"`, `scattermap`, `"nubeCfg"`, `optgroup`).
+- That the HTML lives at `/Volumes/workspace/default/chec-simulador/dashboards/clima_vano.html`, its measured size, and which content checks passed (`id="clima-nube-vano"`, `"fids"` matching the circuit count the job printed, `scattermap`, `"nubeCfg"`, `"fidsPorDia"`, `optgroup`). Report the **observed** numbers, not the ones written here.
 - Whether the volume permission came from the `uc_securable` resource or from a manual grant.
 - **How to refresh**: re-run step 4's job, then hit `/?refresh=1`. No redeploy — the app carries no data.
 - **That this board is the heaviest of the four**, and why: ~82 MB uncompressed, ~9.3 MB over the wire once gzipped. The first load after a cold start pays the download from the Volume plus one compression; every later load is served from memory. `/salud` answers without touching the Volume, so it separates an app failure from a permission failure.
