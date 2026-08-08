@@ -90,7 +90,7 @@ If it is tiny, run `git lfs pull` first.
 
 **Hard invariant**: the modified notebook is a COPY in the scratch directory. `git status --porcelain notebooks/project_flow/` MUST be empty when this step ends.
 
-**Strip every code cell's `outputs` and `execution_count` first.** The repo file is 9.4 MB on disk, almost all of it embedded `text/html` from the last local run; stripped, the staged copy is **0.07 MB** (measured). `databricks workspace import --format JUPYTER` enforces a 10 MB limit, so this is not optional hygiene — it is what keeps the import under the ceiling.
+**Strip every code cell's `outputs` and `execution_count` first.** The repo file is now **97 KB** — the 8.84 MB of embedded `text/html` that used to sit in cells 6 and 13 was taken out of version control, since it is a regenerable artifact. Stripped, the staged copy measures **0.087 MB**. `databricks workspace import --format JUPYTER` enforces a 10 MB limit; with the repo copy this small the strip no longer decides whether the import fits, but keep it anyway — it costs nothing, and a future local run re-embeds those megabytes into the file the moment someone saves the notebook.
 
 Four edits, everything else byte-identical. Assert each match is unique and fail loudly if not — a silently-skipped edit produces a notebook that fails deep inside the job.
 
@@ -102,6 +102,8 @@ Four edits, everything else byte-identical. Assert each match is unique and fail
 
 Do **not** substitute the repo-wide `requirements.txt` install that `/subir-notebooks-databricks` applies to the 9 `project_flow` notebooks: `02` imports neither local package, so that would pull `torch`/`shap`/`geopandas`/`optuna` for nothing. Keep it as cell index 1 — `%pip install` restarts the interpreter, so no state-bearing cell may precede it.
 
+`pyarrow` is **not** on that install line and must not be added: cells 2 and 10 read with `engine='pyarrow'` (15x faster than the C parser on this file — 0.06 s against 0.90 s, measured), and pyarrow ships with the Databricks Runtime, exactly as `01`, `03` and `04` already rely on. Adding it to the pip line would only risk resolving a different version than the runtime's. If a future runtime ever drops it, the symptom is an `ImportError` naming pyarrow on cell 2, not a wrong result.
+
 **Edit 2 — cell 2**: replace the `find_repo_root()` definition **and** its call
 ```python
 REPO_ROOT = find_repo_root()
@@ -112,12 +114,23 @@ REPO_ROOT = Path('/Volumes/workspace/default/chec-simulador')
 ```
 The name is deliberately preserved, so cell 2's and cell 10's `REPO_ROOT / 'data' / 'Indicadores_vano_v3.csv'`, plus cells 7 and 14's `REPO_ROOT / 'reports' / 'interpretability' / 'artifacts'` CSV writes, all keep resolving with zero downstream edits. Leave every import (including the now-unused `from IPython.display import HTML, display`) and every constant untouched.
 
-**Edit 3 — cells 6 and 13**: capture instead of render.
+**Edit 2b — cell 2**: turn the browser off.
 ```python
-display(HTML(PANEL_HTML + FIGURA_HTML + PANEL_JS))            → BLOQUE_CIRCUITOS = PANEL_HTML + FIGURA_HTML + PANEL_JS
-display(HTML(PANEL_VANO_HTML + FIGURA_VANO_HTML + PANEL_VANO_JS)) → BLOQUE_VANOS = PANEL_VANO_HTML + FIGURA_VANO_HTML + PANEL_VANO_JS
+ABRIR_EN_NAVEGADOR = True    →    ABRIR_EN_NAVEGADOR = False
 ```
-Cell 6 builds its figure with `include_plotlyjs=True` and cell 13 with `include_plotlyjs=False`, so the concatenation order is load-bearing: reversed, the vano board has no plotly.js.
+There is no browser inside a job. Leaving it `True` makes `webbrowser.open()` run against a headless container; it does not raise, it just silently does nothing — but it also leaves a misleading "abriendo en el navegador" line in the job log.
+
+**Edit 3 — cells 6, 13 and 15**: do not render and do not double-write.
+
+The notebook already assembles each board into a named variable — `PANEL_CIRCUITOS` in cell 6 and `PANEL_VANOS` in cell 13 — so nothing needs to be re-concatenated here. Only the three lines that would push megabytes through iopub or write a second copy come out:
+```python
+display(HTML(PANEL_CIRCUITOS))                    → # display() omitido en Databricks: el bloque va por iopub y tumba la ejecucion.
+display(HTML(PANEL_VANOS))                        → # idem: el documento lo escribe la celda final, directo al Volume.
+RUTA_PANEL = exportar_y_abrir(abrir=ABRIR_EN_NAVEGADOR)  → # El export local no corre aca: la celda final escribe en el Volume.
+```
+That third line matters as much as the other two. `exportar_y_abrir` writes to `REPO_ROOT / 'reports' / 'paneles'`, and edit 2 already repointed `REPO_ROOT` at the Volume — so leaving it in writes the same ~8 MB **twice** into the Volume, once under `reports/paneles/` and once under `dashboards/`. Leave the `exportar_y_abrir` **definition** alone; only its call goes.
+
+Cell 6 builds its figure with `include_plotlyjs=True` and cell 13 with `include_plotlyjs=False`, so the concatenation order in edit 4 is load-bearing: reversed, the vano board has no plotly.js.
 
 **Edit 4 — append a final cell** that assembles and writes the document:
 ```python
@@ -139,6 +152,13 @@ DOCUMENTO = f'''<!DOCTYPE html>
   h2 {{ font-size: 17px; margin: 32px 0 8px 0; }}
   p.meta {{ font-size: 13px; color: #666; margin: 0 0 20px 0; }}
   hr {{ border: 0; border-top: 1px solid #e4c4c0; margin: 36px 0 24px 0; }}
+  /* Los dos divs de figura al ancho del contenedor. Las figuras de `02` ya NO traen
+     `width` en su layout y sus `to_html` pasan `default_width='100%'` mas
+     `config.responsive`, asi que sin esta regla el tablero igual funciona pero queda a
+     merced de lo que herede el div. Con las tres piezas juntas usa toda la pantalla y
+     se reajusta al redimensionar (medido: 952 px a 1000 de ventana, 2352 a 2400, sin
+     scroll horizontal en ningun caso). */
+  #{DIV_FIGURA}, #{DIV_VANO} {{ width: 100%; }}
 </style>
 </head>
 <body>
@@ -147,10 +167,10 @@ DOCUMENTO = f'''<!DOCTYPE html>
 {len(df):,} eventos, {df["CIRCUITO"].nunique()} circuitos, {len(VANOS):,} vanos,
 periodo {df["FECHA"].min():%Y-%m-%d} a {df["FECHA"].max():%Y-%m-%d}.</p>
 <h2>Circuitos</h2>
-{BLOQUE_CIRCUITOS}
+{PANEL_CIRCUITOS}
 <hr>
 <h2>Vanos</h2>
-{BLOQUE_VANOS}
+{PANEL_VANOS}
 </body>
 </html>'''
 
@@ -190,11 +210,18 @@ with
 ```
 No cluster spec — the task runs on serverless. That is fine here: `02` uses no `ipywidgets` (that constraint belongs to `09_simulador`). Poll `databricks jobs get-run <run_id> -p <profile>` until terminal. On failure, surface the notebook's own error rather than retrying blindly.
 
-**Verify the artifact by content, not by exit code.** Expect **~7.4 MB** (measured: 7,793,434 bytes). An earlier estimate of 8.5–9 MB was wrong — it came from summing the notebook's stored outputs, which carry Jupyter's own wrapper around the same HTML. Download it and assert both boards survived:
+**Verify the artifact by content, not by exit code.** Expect **~8.6 MB** — the two boards measured 8.54 MB of HTML on the current base (4.66 MB of it is the embedded plotly.js, 1.90 MB the circuit `CTX` and 1.97 MB the vano `CTX`), plus the wrapper this cell adds. **Do not hardcode that number**: it scales with the base, and the 7.43 MB sitting in the Volume from an earlier run is simply what the same assembly produced over a shorter period. Fail only under 1 MB, which means a board came out empty. Download it and assert both boards survived:
 ```
 databricks fs cp dbfs:/Volumes/workspace/default/chec-simulador/dashboards/agrupamiento_circuitos.html <scratch>/verif.html --overwrite -p <profile>
 ```
-Then confirm exactly one `id="agrupamiento-circuitos"`, exactly one `id="agrupamiento-vanos"`, the `ag-*` and `va-*` panel controls, and that `Plotly` appears. A size check alone cannot catch a missing second board; a `count()` on those two div ids can.
+Then confirm exactly one `id="agrupamiento-circuitos"`, exactly one `id="agrupamiento-vanos"`, exactly one each of the ten panel controls (`ag-desde`, `ag-hasta`, `ag-logx`, `ag-prep`, `ag-csv` and the five `va-*` equivalents), and that `Plotly` appears. A size check alone cannot catch a missing second board; a `count()` on those two div ids can.
+
+Three more checks guard the full-width rendering, because losing it degrades silently — the boards still work, they just render in a narrow column:
+- `"responsive":true` appears **twice**, once per figure. Without it the board does not re-fit when the window is resized;
+- `width:100%` appears at least twice (the two figure divs). Plotly emits it into each div because `to_html` gets `default_width='100%'`;
+- `width:820px` appears **nowhere**. That was the hardcoded `width=820` in cell 5's layout (and `860` in cell 12's); if either comes back, `default_width` is overridden and the board pins itself to that many pixels no matter how wide the screen is.
+
+Measured on the generated artifact: 952 px of plot at a 1000 px window, 1552 at 1600, 2352 at 2400, with no horizontal overflow at any of the three.
 
 ## 5. Stage the App source
 
