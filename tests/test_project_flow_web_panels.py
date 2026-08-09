@@ -157,6 +157,24 @@ def test_board_01_paints_the_uiti_layer_at_full_opacity():
     assert "ANCHO_MAPA = 7.0" in src, "the layer must stay thicker than the 1.5 px structure"
 
 
+def test_board_01_day_slider_declares_how_many_days_the_circuit_has():
+    """A circuit with a single day of events must not look like a broken slider.
+
+    Day counts are per circuit and range from 1 to 79 (median 14). Twelve of the 208 have
+    exactly one -- DOR23L12, for instance, is 26 rows all dated 2025-11-03 -- and 39 have
+    three or fewer. Left enabled, the control simply does not move and the time series draws
+    a single point, which reads as a broken board right after a circuit with 42 days. It was
+    reported as exactly that. The panel already disables the HOUR slider for static
+    variables "en vez de quedar mintiendo que mueve algo"; the day slider now follows the
+    same rule and its label carries the count.
+    """
+    src = _source(BOARDS["01"])
+    assert 'id="cl-dia-lbl"' in src, "the day label needs an id so it can be rewritten"
+    assert "sliderD.disabled = nDias <= 1" in src
+    assert "registra eventos en un solo dia" in src, "the single-day case must say so"
+    assert "' con eventos)'" in src, "the label must carry the day count"
+
+
 def test_board_01_draws_the_uiti_layer_above_the_cloud():
     """Trace order IS layer order in MapLibre, and the cloud was burying the UITI layer.
 
