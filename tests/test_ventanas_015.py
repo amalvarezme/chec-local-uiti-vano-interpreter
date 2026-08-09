@@ -38,7 +38,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from chec_impacto.models.criticality_assignment import GEOMETRIAS_SHA1_ESPERADO
+from chec_impacto.models.criticality_assignment import (
+    CLAVE_ESPACIO_CANONICO,
+    GEOMETRIAS_SHA1_ESPERADO,
+)
 from chec_local_interpreter import ventanas_015
 from chec_local_interpreter.ventanas_015 import (
     cargar_clases_desde_014,
@@ -81,7 +84,9 @@ def _notebook_tamperado(tmp_path: Path) -> Path:
 
     bloque = _extraer_bloque_json(html, "geometrias")
     geometrias = json.loads(bloque)
-    geometrias["2"]["centroides"][0][0] += 1.0
+    # The canonical space is the only one 01.4 exports since 2026-08-09, and its key is
+    # read from the constant so this helper follows a renumbering instead of dying on it.
+    geometrias[CLAVE_ESPACIO_CANONICO]["centroides"][0][0] += 1.0
     bloque_tamperado = json.dumps(geometrias)
 
     output["data"]["text/html"] = [html.replace(bloque, bloque_tamperado, 1)]

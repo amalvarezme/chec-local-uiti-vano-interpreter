@@ -37,8 +37,13 @@ from pathlib import Path
 
 import numpy as np
 
-ESPACIO_CANONICO = (False, True, "minmax")  # -> GEOMETRIAS key "2"
-CLAVE_ESPACIO_CANONICO = "2"
+ESPACIO_CANONICO = (False, True, "minmax")  # -> GEOMETRIAS key "0"
+# It was "2" while 01.4 enumerated eight spaces (log_x x log_y x {minmax, zscore}) and the
+# panel let you pick one. That choice was removed on 2026-08-09: the space is now fixed to
+# this exact triple, `ESPACIOS` holds a single entry, and the only key left is "0". The
+# canonical geometry's VALUES are byte-identical across that change -- same fit, same seed,
+# same space -- so no criticality class shifted; only the index it is filed under moved.
+CLAVE_ESPACIO_CANONICO = "0"
 EPS_UITI = 1e-6
 GRUPOS = ("Bajo", "Medio", "Medio-Alto", "Alto")
 
@@ -54,7 +59,16 @@ GRUPOS = ("Bajo", "Medio", "Medio-Alto", "Alto")
 # `verificar_sha1_geometrias` reports the mismatch instead of silently
 # shifting every downstream criticality class. See the residual risk this
 # closes: `sdd/notebook-10-mil-vano-ventana/estado-ramas`.
-GEOMETRIAS_SHA1_ESPERADO = "dcc90cea2aa820018412e3dc37189d6b3e6ec49a"
+#
+# Re-pinned 2026-08-09 (was dcc90cea2aa820018412e3dc37189d6b3e6ec49a). The digest covers
+# the WHOLE `geometrias` block, and that block lost its seven non-canonical spaces when the
+# axis-scale and preprocessing controls were removed from 01.4 -- so it moved even though
+# the canonical geometry did not. That was verified before re-pinning, not assumed: the
+# block under the old key "2" and the new key "0" compare equal field by field
+# (logs/offset/scale/centroides), so this is a re-pin of the same centroids under a smaller
+# block, NOT a geometry change. Anything that shifts the centroids themselves still trips
+# the guard exactly as before.
+GEOMETRIAS_SHA1_ESPERADO = "2e351bbdc7a391054440f8155235ec91b20f2b7b"
 
 
 @dataclass(frozen=True)

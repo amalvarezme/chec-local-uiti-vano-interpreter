@@ -317,6 +317,89 @@ def test_board_04_keeps_its_rendered_output_because_the_pipeline_reads_it():
     assert '"grupos":' in payload
 
 
+# Boards whose clustering space stopped being a control. `01` never had one.
+FIXED_SPACE_BOARDS = {"02": ("ag", "va"), "03": ("tr",), "04": ("v4",)}
+
+
+@pytest.mark.parametrize("board", sorted(FIXED_SPACE_BOARDS))
+def test_kmeans_space_is_fixed_and_no_longer_a_control(sources, board):
+    """The axis-scale checkboxes and the preprocessing select are gone from every board.
+
+    They were not cosmetic: the scale and the scaler are applied BEFORE K-Means, so each of
+    the eight combinations was a different partition, and a group called `Alto` meant a
+    different thing depending on which one the board happened to be left in. Fixing the space
+    -- linear x, `log10` y, `minmax` -- is what makes two readings comparable, and it also
+    drops the precomputed spaces from 8 to 1 (in `02`, the embedded combinations from 168 to
+    21, and one K-Means fit per board instead of eight).
+
+    `ESPACIOS` deliberately survives as a ONE-element list rather than disappearing: every
+    consumer downstream indexes by space, and the JS looks its geometry up by that key. What
+    this test pins is that the list holds exactly the fixed triple and that no control can
+    reintroduce a second one.
+    """
+    src = sources[board]
+    assert "LOG_X, LOG_Y, PREPROCESO = False, True, 'minmax'" in src, (
+        "the fixed space must be declared once, as named constants")
+    assert "ESPACIOS = [(LOG_X, LOG_Y, PREPROCESO)]" in src, (
+        "ESPACIOS must hold exactly the one fixed space")
+    assert "IDX_ESPACIO_DEFECTO = 0" in src
+    for prefix in FIXED_SPACE_BOARDS[board]:
+        for control in ("logx", "logy", "prep"):
+            assert f"{prefix}-{control}" not in src, (
+                f"{prefix}-{control} is back: the space must not be selectable again")
+
+
+@pytest.mark.parametrize("board", sorted(FIXED_SPACE_BOARDS))
+def test_space_keyed_lookups_use_the_literal_key_not_a_dead_variable(sources, board):
+    """`String(e)` outliving the `var e` that fed it is a silent, board-wide failure.
+
+    It happened: removing the control loop deleted the declaration while one
+    `CTX.geometrias[String(e)]` further down still referenced it. The board still mounted, at
+    the right size, with every panel check green -- the ReferenceError only fires inside
+    `aplicar()`, so the figure renders once and then never reacts. What gave it away was the
+    trajectory coming up empty. Every space-keyed lookup must now name the only key there is.
+    """
+    src = sources[board]
+    for container in ("geometrias", "gruposPorEspacio"):
+        assert f"CTX.{container}[String(" not in src, (
+            f"CTX.{container} must be indexed by the literal '0', not a computed key")
+
+
+def test_board_04_stored_output_carries_the_fixed_space_too():
+    """`04`'s cell-7 output is preserved, so a stale one keeps the old controls alive.
+
+    Unlike the other three boards, `04`'s rendered output is an input to the geometry
+    pipeline and is never cleared, which means the source can be right while the output the
+    Databricks command publishes still ships the removed checkboxes. The two must agree.
+    """
+    notebook = json.loads(
+        (NOTEBOOK_DIR / f"{BOARDS['04']}.ipynb").read_text(encoding="utf-8"))
+    payload = "".join(
+        "".join(o["data"]["text/html"])
+        for o in notebook["cells"][7]["outputs"]
+        if o.get("output_type") == "display_data" and "text/html" in o.get("data", {}))
+    assert payload, "cell 7 must keep its rendered output"
+    for control in ("v4-logx", "v4-logy", "v4-prep"):
+        assert control not in payload, f"{control} survives in the stored output: re-run 04"
+
+
+def test_board_02_exports_the_same_space_it_draws():
+    """`02`'s two Python exports used to default to a space the board could not show.
+
+    Both `tabla_etiquetas` and `tabla_etiquetas_vano` carried `log_y=False`, while the panel
+    started with `Log eje Y` checked -- so the CSV written by the kernel and the one the
+    button downloaded came from two different partitions, and the file name was the only
+    thing that said so. With a single space the divergence has nowhere to hide: the defaults
+    now read from the same constants the board does, and the suffix follows them.
+    """
+    src = _source(BOARDS["02"])
+    assert "def tabla_etiquetas(desde=None, hasta=None, log_x=LOG_X, log_y=LOG_Y," in src
+    assert "log_x=LOG_X, log_y=LOG_Y," in src.replace("\n", " ")
+    assert "prep=PREPROCESO" in src
+    assert "_xlin_ylin_minmax.csv" not in src, (
+        "the hard-coded suffix must follow the fixed space, not a frozen guess")
+
+
 @pytest.mark.parametrize("board", sorted(SHIM_ANCHORS))
 def test_databricks_command_names_the_notebooks_own_div_variable(board):
     """The generated document needs a `width: 100%` rule on the figure's real div id.

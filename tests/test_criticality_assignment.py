@@ -29,6 +29,7 @@ import numpy as np
 import pytest
 
 from chec_impacto.models.criticality_assignment import (
+    CLAVE_ESPACIO_CANONICO,
     EPS_UITI,
     Geometria,
     asignar_clase,
@@ -39,9 +40,11 @@ from scripts.extract_geometrias_014 import extraer_geometrias_014
 
 FIXTURE_NOTEBOOK = Path(__file__).parent / "fixtures" / "notebook_01_4_fixture.ipynb"
 
-# Real values for space "2" (log_x=False, log_y=True, prep="minmax"), copied
-# from 01.4's committed cell-7 output, 2026-08-02 -- NOT fabricated.
-GEOMETRIA_2_ESPERADA = {
+# Real values for the canonical space (log_x=False, log_y=True, prep="minmax"), copied
+# from 01.4's committed cell-7 output, 2026-08-02 -- NOT fabricated. They are UNCHANGED
+# since: on 2026-08-09 the space stopped being a control and its key moved from "2" to
+# "0", but the fit -- same data, same seed, same space -- produced the same numbers.
+GEOMETRIA_CANONICA_ESPERADA = {
     "logs": (False, True),
     "offset": [1.0, -3.0],
     "scale": [45.0, 7.424386],
@@ -70,10 +73,10 @@ def _sha256(path: Path) -> str:
 
 def _geometria_prueba() -> Geometria:
     return Geometria(
-        logs=GEOMETRIA_2_ESPERADA["logs"],
-        offset=np.array(GEOMETRIA_2_ESPERADA["offset"]),
-        scale=np.array(GEOMETRIA_2_ESPERADA["scale"]),
-        centroides=np.array(GEOMETRIA_2_ESPERADA["centroides"]),
+        logs=GEOMETRIA_CANONICA_ESPERADA["logs"],
+        offset=np.array(GEOMETRIA_CANONICA_ESPERADA["offset"]),
+        scale=np.array(GEOMETRIA_CANONICA_ESPERADA["scale"]),
+        centroides=np.array(GEOMETRIA_CANONICA_ESPERADA["centroides"]),
     )
 
 
@@ -85,12 +88,12 @@ def test_cargar_geometria_014_desde_extraccion(tmp_path):
     ruta_escrita = extraer_geometrias_014(FIXTURE_NOTEBOOK, salida)
     assert ruta_escrita == salida
 
-    geometria = cargar_geometria_014(salida, clave="2")
+    geometria = cargar_geometria_014(salida, clave=CLAVE_ESPACIO_CANONICO)
 
-    assert geometria.logs == GEOMETRIA_2_ESPERADA["logs"]
-    np.testing.assert_allclose(geometria.offset, GEOMETRIA_2_ESPERADA["offset"])
-    np.testing.assert_allclose(geometria.scale, GEOMETRIA_2_ESPERADA["scale"])
-    np.testing.assert_allclose(geometria.centroides, GEOMETRIA_2_ESPERADA["centroides"])
+    assert geometria.logs == GEOMETRIA_CANONICA_ESPERADA["logs"]
+    np.testing.assert_allclose(geometria.offset, GEOMETRIA_CANONICA_ESPERADA["offset"])
+    np.testing.assert_allclose(geometria.scale, GEOMETRIA_CANONICA_ESPERADA["scale"])
+    np.testing.assert_allclose(geometria.centroides, GEOMETRIA_CANONICA_ESPERADA["centroides"])
     assert geometria.centroides.shape == (4, 2)
 
 
@@ -100,14 +103,21 @@ def test_extraccion_es_de_solo_lectura_sobre_el_notebook_fuente(tmp_path):
     assert _sha256(FIXTURE_NOTEBOOK) == sha_antes
 
 
-def test_extraccion_conserva_las_ocho_geometrias_y_grupos(tmp_path):
+def test_extraccion_conserva_la_geometria_canonica_y_los_grupos(tmp_path):
+    """01.4 used to export eight spaces because its panel let you pick one.
+
+    That control is gone: the space is fixed to (linear x, log10 y, minmax) and exactly one
+    geometry is exported. Pinning "the only key is the canonical one" is what keeps a future
+    re-enumeration from silently filing the canonical geometry somewhere else -- which is the
+    failure this whole sha1 apparatus exists to catch.
+    """
     salida = tmp_path / "geometrias_014.json"
     extraer_geometrias_014(FIXTURE_NOTEBOOK, salida)
     import json
 
     payload = json.loads(salida.read_text(encoding="utf-8"))
     assert payload["grupos"] == ["Bajo", "Medio", "Medio-Alto", "Alto"]
-    assert set(payload["geometrias"].keys()) == {str(i) for i in range(8)}
+    assert set(payload["geometrias"].keys()) == {CLAVE_ESPACIO_CANONICO}
 
 
 def test_cargar_geometria_014_clave_ausente_lanza(tmp_path):
