@@ -47,6 +47,7 @@ from chec_impacto.interpretability.mil_vano_ventana import grafo_por_grupo_si_no
 from chec_impacto.models.criticality_assignment import asignar_clase, distribucion_suave
 from chec_local_interpreter.relevancias_015 import normalizar_softmax
 from chec_local_interpreter.simulator import _coerce_original_value_for_model, _direction
+from chec_local_interpreter.vano_controls import VALORES_NO_VALIDOS
 
 MENSAJE_SIN_BOLSAS = "Sin bolsas (vano x ventana) para esta seleccion."
 
@@ -153,13 +154,188 @@ def aplicar_overrides_instancias(
     return X_sim, aplicadas, avisos
 
 
+def _filas_por_fid(
+    instance_bag: np.ndarray, fids: Sequence[str]
+) -> dict[str, np.ndarray]:
+    """Boolean row mask per vano. A selection is ONE window, so a fid should
+    own a single bag -- but if it ever owns two, writing into only one of them
+    would leave half the simulation silently unapplied, so every bag with that
+    fid contributes."""
+    instance_bag = np.asarray(instance_bag)
+    por_fid: dict[str, np.ndarray] = {}
+    for bolsa, fid in enumerate(fids):
+        mascara = instance_bag == bolsa
+        clave = str(fid)
+        por_fid[clave] = mascara if clave not in por_fid else (por_fid[clave] | mascara)
+    return por_fid
+
+
+def valores_actuales_por_vano(
+    X_sel: np.ndarray,
+    feature_names: Sequence[str],
+    *,
+    instance_bag: np.ndarray,
+    fids: Sequence[str],
+    knobs: Iterable[Any],
+    label_encoders: Mapping[str, Any] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Where each vano's controls should START: that vano's OWN value in the
+    active window, one entry per knob, keyed `{fid: {knob_id: valor}}`.
+
+    A control that opens at a global default quietly asks the user to retype
+    data the model already holds, and -- worse -- any control left untouched
+    would then simulate the vano at a value that was never its own.
+
+    A vano usually brings several instances inside one window (its event rows),
+    so the value has to be summarised:
+
+    - numeric knobs take the MEDIAN. The mean is dragged by the storm hour
+      that motivated the row in the first place, which would open the control
+      already displaced towards the extreme.
+    - a climate family takes the median over ALL of its 12 lag columns pooled,
+      because the control writes ONE value into the twelve at once: summarising
+      only lag 0 would start it at a number the control itself cannot hold.
+    - categorical knobs take the MODE, decoded back to its label. A median over
+      label codes can land on a code the vano never had -- between `A`=0 and
+      `C`=2 it returns 1, which is `B`. Ties break towards the lowest code so
+      the panel opens the same way on every run; a control that starts
+      somewhere different each time makes two simulations incomparable.
+
+    Constant knobs get nothing (they have nothing to move), and a knob whose
+    feature is absent from `feature_names` is skipped rather than raised: the
+    MIL instance matrix carries more columns than the knob catalogue and a
+    mismatch must not take down the whole panel at startup.
+    """
+    label_encoders = dict(label_encoders or {})
+    X_sel = np.asarray(X_sel, dtype=float)
+    posicion = {str(name): i for i, name in enumerate(feature_names)}
+    por_fid = _filas_por_fid(instance_bag, fids)
+
+    valores: dict[str, dict[str, Any]] = {}
+    for fid, mascara in por_fid.items():
+        del_vano: dict[str, Any] = {}
+        if X_sel.size and mascara.any():
+            for knob in knobs:
+                if knob.kind == "constant":
+                    continue
+                columnas = [posicion[n] for n in knob.feature_names if n in posicion]
+                if not columnas:
+                    continue
+                bloque = X_sel[np.ix_(mascara, columnas)]
+                if knob.kind == "numeric":
+                    # Un codigo de relleno no es un valor: contarlo en la mediana
+                    # abre el control en un numero que ese vano nunca tuvo -- y que
+                    # ni siquiera cae dentro de los limites del propio control, que
+                    # ya lo excluyeron. Sin ningun valor real la clave se omite, y
+                    # el panel puede decir que no hay dato en vez de inventarlo.
+                    rellenos = VALORES_NO_VALIDOS.get(str(knob.feature_names[0]))
+                    if rellenos:
+                        bloque = bloque[~np.isin(bloque, list(rellenos))]
+                        if bloque.size == 0:
+                            continue
+                if knob.kind == "categorical":
+                    codigos, cuentas = np.unique(bloque.astype(np.int64), return_counts=True)
+                    # `argmax` se queda con el PRIMERO en caso de empate, y `unique`
+                    # devuelve ordenado: el desempate cae en el codigo mas bajo.
+                    codigo = int(codigos[int(np.argmax(cuentas))])
+                    del_vano[knob.id] = _etiqueta_de_codigo(
+                        knob, codigo, label_encoders.get(str(knob.feature_names[0]))
+                    )
+                else:
+                    del_vano[knob.id] = float(np.median(bloque))
+        valores[fid] = del_vano
+    return valores
+
+
+def _etiqueta_de_codigo(knob: Any, codigo: int, encoder: Any) -> Any:
+    """El control muestra ETIQUETAS, no codigos. Se prefiere el `classes_` del
+    encoder, que es la fuente que uso el entrenamiento; si no esta, se cae a las
+    categorias del propio knob, y si el codigo se sale de rango se devuelve el
+    codigo crudo antes que inventar una categoria."""
+    clases = getattr(encoder, "classes_", None)
+    if clases is None:
+        clases = knob.categories
+    if clases is not None and 0 <= codigo < len(clases):
+        return clases[codigo]
+    return codigo
+
+
+def aplicar_overrides_por_vano(
+    X_sel: np.ndarray,
+    feature_names: Sequence[str],
+    overrides_por_vano: Mapping[str, Sequence[Mapping[str, Any]]],
+    *,
+    instance_bag: np.ndarray,
+    fids: Sequence[str],
+    label_encoders: Mapping[str, Any] | None = None,
+    max_values_imputed: Mapping[str, Any] | None = None,
+) -> tuple[np.ndarray, list[str], list[str]]:
+    """`aplicar_overrides_instancias`, but each vano gets its OWN value, written
+    only into its own instance rows.
+
+    The broadcast version answers "what if it rained 40 mm on all of them",
+    which is the right question for a weather scenario and the wrong one for
+    maintenance: pruning is scheduled vano by vano, and there was no way to say
+    "raise the grounding of this one and leave the other four alone". Writing
+    per-vano values through the broadcast path would let the last vano's value
+    overwrite everyone else's.
+
+    Same failure policy as the broadcast version: a control that cannot be
+    resolved is reported and every other one still applies, because discarding
+    a simulation the user is waiting on is worse than a partial answer that
+    says what it skipped. An override aimed at a vano outside the selection --
+    left over from a previous one -- is reported too, instead of landing
+    nowhere in silence while the panel still shows its control.
+
+    Returns `(X_simulada, variables_aplicadas, avisos)` with the variables
+    reported ONCE and sorted: with five vanos the same variable arrives up to
+    five times, and the panel's summary says WHAT moved, not how many cells
+    were written.
+    """
+    X_sim = np.array(X_sel, dtype=np.float64, copy=True)
+    posicion = {str(name): i for i, name in enumerate(feature_names)}
+    por_fid = _filas_por_fid(instance_bag, fids)
+    aplicadas: set[str] = set()
+    avisos: list[str] = []
+
+    for fid, overrides in overrides_por_vano.items():
+        mascara = por_fid.get(str(fid))
+        if mascara is None:
+            avisos.append(
+                f"El vano {fid} no esta en la seleccion activa: sus controles no se "
+                "aplicaron."
+            )
+            continue
+        for override in overrides:
+            variable = str(override["variable"])
+            indice = posicion.get(variable)
+            if indice is None:
+                avisos.append(f"Variable desconocida para el modelo MIL: {variable}")
+                continue
+            try:
+                valor = _coerce_original_value_for_model(
+                    variable,
+                    override["valor"],
+                    label_encoders=dict(label_encoders or {}),
+                    max_values_imputed=dict(max_values_imputed or {}),
+                )
+            except (ValueError, TypeError) as exc:
+                avisos.append(f"{fid} / {variable}: {exc}")
+                continue
+            X_sim[mascara, indice] = valor
+            aplicadas.add(variable)
+
+    return X_sim, sorted(aplicadas), avisos
+
+
 def simular_bolsas(
     predictor: Any,
     X_inst: np.ndarray,
     *,
     seleccion: Mapping[str, Any],
     feature_names: Sequence[str],
-    overrides: Sequence[Mapping[str, Any]],
+    overrides: Sequence[Mapping[str, Any]] | None = None,
+    overrides_por_vano: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
     label_encoders: Mapping[str, Any] | None = None,
     max_values_imputed: Mapping[str, Any] | None = None,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
@@ -171,9 +347,32 @@ def simular_bolsas(
     `delta_riesgo_ordinal`) so the notebook's map painting -- and
     `vano_app_015.clases_por_fid_para_estado` -- read this table unchanged.
 
+    Overrides come in ONE of two shapes, never both:
+
+    - `overrides`: one value per variable, broadcast over every instance of
+      the selection. The right shape for a weather scenario -- "what if it
+      rained 40 mm on all of them" is a single question about a single sky.
+    - `overrides_por_vano`: `{fid: [{variable, valor}]}`, each written only
+      into that vano's rows. The right shape for maintenance, which is
+      scheduled vano by vano.
+
+    Passing both raises. Accepting both would force inventing a precedence,
+    and whichever one lost would leave the panel displaying a control that
+    never reached the model.
+
+    Either way it costs exactly TWO forward passes -- base and simulated --
+    and never one per vano: the per-vano values are written into one matrix
+    and scored together.
+
     An empty selection returns an empty table WITHOUT a forward pass: a map
     of fabricated classes over zero vanos is worse than an explicit blank.
     """
+    if overrides and overrides_por_vano:
+        raise ValueError(
+            "Se recibieron overrides globales y por vano a la vez. Elegir uno: "
+            "mezclarlos obliga a inventar una precedencia y deja controles del "
+            "panel sin aplicar."
+        )
     if int(seleccion["n_bolsas"]) == 0:
         vacia = pd.DataFrame(
             columns=["FID_VANO", "u_base", "u_simulado", "base_clase_idx",
@@ -187,10 +386,17 @@ def simular_bolsas(
     n_obs = np.asarray(seleccion["n_obs"], dtype=np.float64)
     X_sel = np.asarray(X_inst, dtype=np.float64)[filas]
 
-    X_sim, aplicadas, avisos = aplicar_overrides_instancias(
-        X_sel, feature_names, overrides,
-        label_encoders=label_encoders, max_values_imputed=max_values_imputed,
-    )
+    if overrides_por_vano:
+        X_sim, aplicadas, avisos = aplicar_overrides_por_vano(
+            X_sel, feature_names, overrides_por_vano,
+            instance_bag=instance_bag, fids=seleccion["fid"],
+            label_encoders=label_encoders, max_values_imputed=max_values_imputed,
+        )
+    else:
+        X_sim, aplicadas, avisos = aplicar_overrides_instancias(
+            X_sel, feature_names, overrides or (),
+            label_encoders=label_encoders, max_values_imputed=max_values_imputed,
+        )
 
     u_base = np.asarray(predictor.predict(X_sel, instance_bag=instance_bag), dtype=float)
     u_sim = np.asarray(predictor.predict(X_sim, instance_bag=instance_bag), dtype=float)
