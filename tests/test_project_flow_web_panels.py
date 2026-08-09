@@ -40,7 +40,10 @@ BOARDS = {
     "03": "03_uiti_vano_trayectorias_circuitos",
     "04": "04_uiti_vano_trayectorias_vano",
 }
-FLUID_MAP_BOARDS = ["03", "04"]
+# Boards carrying a geographic map, which must frame it against the live canvas.
+MAP_BOARDS = ["01", "03", "04"]
+# Boards the CSV download control was removed from. `02` deliberately keeps its own.
+NO_CSV_BOARDS = ["03", "04"]
 
 
 def _source(name: str) -> str:
@@ -78,8 +81,8 @@ def test_board_figure_is_fluid_not_pinned_to_pixels(sources, board):
     assert "{fig.layout.width}px" not in src
 
 
-@pytest.mark.parametrize("board", FLUID_MAP_BOARDS)
-def test_fluid_map_boards_frame_with_web_mercator_fitbounds(sources, board):
+@pytest.mark.parametrize("board", MAP_BOARDS)
+def test_map_boards_frame_with_web_mercator_fitbounds(sources, board):
     src = sources[board]
     assert "function mercatorY(" in src, "framing must project latitude, not use degrees"
     assert "function encuadrarCircuito(" in src
@@ -90,8 +93,23 @@ def test_fluid_map_boards_frame_with_web_mercator_fitbounds(sources, board):
     assert "Math.log(360 / span)" not in src
 
 
-@pytest.mark.parametrize("board", FLUID_MAP_BOARDS)
-def test_fluid_map_boards_have_no_csv_download_control(sources, board):
+@pytest.mark.parametrize("board", MAP_BOARDS)
+def test_map_boards_zoom_ceiling_is_high_enough_to_never_bind(sources, board):
+    """The ceiling guards the degenerate case; it must not quietly re-freeze the zoom.
+
+    Measured over the 208 circuits with geometry, the tightest framing any of them asks for
+    is zoom 16.9, so 17 only ever catches a null extent. At 15 -- the value first shipped --
+    the ceiling bound for 22% of `01`'s circuits on a 2560 px screen (its map is 842 px tall,
+    twice `03`/`04`'s, so it saturates far sooner) and 2% of `03`/`04`'s. Saturating means
+    falling back to a fixed zoom, which is exactly what this framing replaced, and it does so
+    on the SMALL circuits that most need to zoom in.
+    """
+    src = sources[board]
+    assert "Math.min(17, Math.max(3," in src, "the fitBounds ceiling must be 17, not 15"
+
+
+@pytest.mark.parametrize("board", NO_CSV_BOARDS)
+def test_boards_have_no_csv_download_control(sources, board):
     src = sources[board]
     lowered = src.lower()
     assert "descargar tabla (csv)" not in lowered
