@@ -89,19 +89,17 @@ Warn first: `data/Indicadores_vano_v3.csv` is **566 MB** (Git-LFS tracked) and d
 
 **Hard invariant**: the modified notebook is a COPY in the scratch directory. `git status --porcelain notebooks/project_flow/04_uiti_vano_trayectorias_vano.ipynb` MUST be empty when this step ends.
 
-**Strip every code cell's `outputs` and `execution_count` first.** The repo file is 12.3 MB on disk, almost all of it cell 7's embedded `text/html`; stripped it is **0.08 MB** (measured). `databricks workspace import --format JUPYTER` enforces a 10 MB limit, so an unstripped copy is over the ceiling outright — this is the difference between the upload working and failing, not hygiene.
+**Strip every code cell's `outputs` and `execution_count` first — in the STAGED COPY only.** The repo file is 12.3 MB on disk, almost all of it cell 7's embedded `text/html`; stripped it is **0.08 MB** (measured). `databricks workspace import --format JUPYTER` enforces a 10 MB limit, so an unstripped copy is over the ceiling outright — this is the difference between the upload working and failing, not hygiene.
+
+**Never strip the committed notebook.** Unlike `03`, `04`'s stored output is an *input*: `scripts/extract_geometrias_014.py` reads the K-Means `geometrias` and `grupos` blocks out of cell 7's `text/html` and caches them for `chec_impacto.models.criticality_assignment`, which verifies them against a pinned sha1. Clearing it in the repo breaks that chain with a `ValueError: No se encontró la clave 'geometrias'` raised far from the notebook that caused it. `tests/test_project_flow_web_panels.py` pins this.
 
 Four edits, everything else byte-identical. Assert each match is unique and fail loudly if not.
 
-**Edit 1 — cell 1, the dependency install.** The cell ships this, commented:
+**Edit 1 — cell 1, the dependency install.** The cell already ships the complete, Databricks-correct line, commented:
 ```python
-# %pip install pandas numpy scipy scikit-learn plotly geopandas
+# %pip install -q pandas numpy pyarrow "plotly>=6" geopandas scikit-learn
 ```
-Uncomment it **and pin plotly**:
-```python
-%pip install -q pandas numpy scipy "plotly>=6" geopandas scikit-learn
-```
-Unlike `03`'s, this list is already complete — the only thing wrong with it is the bare `plotly`. Cell 6 builds the map with a `{'type': 'map'}` entry in its `specs` grid and `go.Scattermap`, the MapLibre trace family that only exists in modern Plotly. Databricks Runtime preinstalls an older Plotly, and a bare `plotly` requirement is **already satisfied** by it, so pip prints nothing and upgrades nothing; the failure then surfaces as `ValueError: Unsupported subplot type: 'map'` with a traceback pointing at the *system* site-packages. A version floor forces the upgrade. Prefer the floor over `--upgrade`, which would also pull newer pandas/numpy/geopandas.
+Just uncomment it. Do not trim the list: `pyarrow` backs cell 2's CSV read (see edit 2), `shapely` arrives with `geopandas` and cell 5 imports it directly, and **the `>=6` on plotly is load-bearing**. Cell 6 builds the map with a `{'type': 'map'}` entry in its `specs` grid and `go.Scattermap`, the MapLibre trace family that only exists in modern Plotly. Databricks Runtime preinstalls an older Plotly, and a bare `plotly` requirement is **already satisfied** by it, so pip prints nothing and upgrades nothing; the failure then surfaces as `ValueError: Unsupported subplot type: 'map'` with a traceback pointing at the *system* site-packages. A version floor forces the upgrade. Prefer the floor over `--upgrade`, which would also pull newer pandas/numpy/geopandas.
 
 Keep this as cell index 1: `%pip install` restarts the interpreter, so no state-bearing cell may precede it.
 
@@ -113,19 +111,45 @@ with
 ```python
 REPO_ROOT = Path('/Volumes/workspace/default/chec-simulador')
 ```
-Aliasing the same name keeps every downstream path resolving untouched: cell 2's CSV read, cell 5's three `REPO_ROOT / 'data' / 'GEO' / ...` shapefile reads, and cell 8's `reports/interpretability/artifacts/` write. Leave every import and constant alone.
+Aliasing the same name keeps every downstream path resolving untouched: cell 2's `leer_eventos()` CSV read, cell 5's three `REPO_ROOT / 'data' / 'GEO' / ...` shapefile reads, cell 7's `reports/paneles/` export, and cell 8's `reports/interpretability/artifacts/` write. Leave every import and constant alone.
 
-Note cell 2 reads with `engine='pyarrow'`, the same as `03`. Keep it: pyarrow ships with the Databricks Runtime and it cuts that read from 2.47 s to 1.65 s locally on this file, with the resulting data identical byte for byte.
-
-**Edit 3 — cell 7, capture the HTML instead of rendering it.** Replace the last line:
+Then, in the same cell, replace:
 ```python
-display(HTML(PANEL_HTML + FIGURA_HTML + PANEL_JS))
+ABRIR_EN_NAVEGADOR = True
 ```
 with
 ```python
-BLOQUE_VANOS = PANEL_HTML + FIGURA_HTML + PANEL_JS
+ABRIR_EN_NAVEGADOR = False
 ```
-Cell 7 builds its figure with `include_plotlyjs=True`, so this single block already carries plotly.js — there is no second board to order it against, unlike `02`.
+There is no browser inside a job. `webbrowser.open()` against a headless container does not raise, it silently does nothing — but it leaves a misleading "abriendo en el navegador" line in the job log. Edit 3 removes the export call outright, so this is belt-and-braces.
+
+Note cell 2 reads through `leer_eventos()`, which wraps `pyarrow.csv.open_csv`. **Keep it as is.** It is not a stylistic choice: `pd.read_csv(engine='pyarrow')` materialises the whole 566 MB file before discarding the ~266 columns the notebook does not use, which measured **826 MB of peak RSS against 109 MB** for the block reader, at a cost of 0.2 s. Reverting it to `pd.read_csv` would silently undo the largest memory win in the notebook — end to end it took `04`'s peak from 1.33 GB to 0.65 GB.
+
+Cell 5 likewise reads the three shapefiles with `columns=[...]` and pulls coordinates in one `shapely.get_coordinates` pass. Both are measured wins (2.05 s → 0.9 s on that cell) and neither changes a single output value — the browser payload hashes identical before and after.
+
+**Edit 3 — cell 7, do not render and do not double-write.** Two replacements at the tail of the cell.
+
+Replace:
+```python
+display(HTML(PANEL_COMPLETO))
+```
+with
+```python
+# display() omitido en Databricks: el bloque va por el canal iopub y no hace falta.
+```
+The block is ~12 MB and nobody reads a job's cell output. The document still gets written, by edit 4, straight to the Volume.
+
+Then replace:
+```python
+RUTA_PANEL = exportar_y_abrir(PANEL_COMPLETO, abrir=ABRIR_EN_NAVEGADOR)
+```
+with
+```python
+# El export local no corre aqui: la celda final escribe el documento en el Volume.
+```
+Leaving it in would write the same ~12 MB twice into the Volume (once under `reports/paneles/`, once under `dashboards/`). Leave the `exportar_y_abrir` **definition** alone — only the call goes.
+
+Cell 7 builds its figure with `include_plotlyjs=True`, so `PANEL_COMPLETO` already carries plotly.js — there is no second board to order it against, unlike `02`.
 
 **Edit 4 — append a final cell** that assembles and writes the document:
 ```python
@@ -145,6 +169,7 @@ DOCUMENTO = f'''<!DOCTYPE html>
          margin: 0; padding: 24px; color: #2b2b2b; background: #fff; }}
   h1 {{ font-size: 20px; margin: 0 0 4px 0; }}
   p.meta {{ font-size: 13px; color: #666; margin: 0 0 20px 0; }}
+  #{DIV} {{ width: 100%; }}
 </style>
 </head>
 <body>
@@ -152,7 +177,7 @@ DOCUMENTO = f'''<!DOCTYPE html>
 <p class="meta">Generado desde <code>04_uiti_vano_trayectorias_vano.ipynb</code> el {pd.Timestamp.now():%Y-%m-%d %H:%M} &mdash;
 {len(df):,} eventos, {len(CIRCUITOS)} circuitos, {len(VENTANAS)} ventanas,
 {len(TABLA):,} celdas vano x ventana con eventos.</p>
-{BLOQUE_VANOS}
+{PANEL_COMPLETO}
 </body>
 </html>'''
 
@@ -161,7 +186,9 @@ print(f'{SALIDA} -> {SALIDA.stat().st_size / 1024 / 1024:.2f} MB')
 ```
 Use **triple single quotes** for that f-string. Its body contains `"Segoe UI"` and no nested single quotes; writing it as `f"""` would nest same-type quotes inside an f-string, which only compiles on Python 3.12+ (PEP 701) and blows up on Databricks serverless. A local `ast.parse` on 3.13+ does **not** catch this — it accepts both forms.
 
-The four names the template uses (`df`, `CIRCUITOS`, `VENTANAS`, `TABLA`) all exist in the notebook; verify they still do before relying on them.
+The `#{DIV} {{ width: 100% }}` rule is **required, not decoration**. Cell 6 deliberately leaves the figure without `width`, and cell 7 calls `to_html` with `default_width='100%'` and `config={{'responsive': True}}`. Those three work only together: without a full-width container the board renders into whatever the div collapses to, and the map — which frames itself with a `fitBounds` measured on the live canvas — then frames against that collapsed width. Serving the app at a narrow width is a layout bug, not a cosmetic one. `DIV` is the notebook's own variable (`'vano-ventana'`); do not hard-code the string.
+
+The six names the template uses (`DIV`, `pd`, `df`, `CIRCUITOS`, `VENTANAS`, `TABLA`, `PANEL_COMPLETO`) all exist in the notebook; verify they still do before relying on them.
 
 Upload:
 ```
@@ -200,7 +227,10 @@ databricks fs cp dbfs:/Volumes/workspace/default/chec-simulador/dashboards/traye
 - exactly one `id="vano-ventana"` — that is `DIV`'s value, and it is **not** `02`'s `agrupamiento-vanos` nor `03`'s `trayectorias-circuitos`, so a copy-pasted check from a sibling command would silently pass on the wrong artifact;
 - **the map layer non-empty**: count `"fids"`, which must equal the number of circuits with geometry (measured: **208**). With the shapefiles missing or unreadable the notebook still succeeds and still writes an HTML of roughly the right size, just with no map — a size check alone will not catch that;
 - `scattermap` present, which doubles as proof the Plotly floor took effect;
-- `plotly_click` present, which is the map's click-to-select handler; if it is missing the panel loads but a vano can only be selected from the checkbox list.
+- `plotly_click` present, which is the map's click-to-select handler; if it is missing the panel loads but a vano can only be selected from the checkbox list;
+- the responsive contract intact: `"responsive": true` in the config and **no** `"width":1480` in the figure layout. Both are cheap greps and together they are the difference between a full-width board and one frozen at 1480 px;
+- `function encuadrarCircuito(` and `maplibregl-map` present — the map's `fitBounds` measures the live canvas, and losing it puts the old zoom-from-degrees framing back, which clips tall circuits on a wide viewport;
+- **no** `createObjectURL` and no `csv` control in the panel: `04` has never had a download button and must not grow one; cell 8 is the reproducible table export.
 
 ## 5. Stage the App source
 
