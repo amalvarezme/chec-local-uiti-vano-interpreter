@@ -117,6 +117,44 @@ def test_boards_have_no_csv_download_control(sources, board):
     assert "-csv\"" not in lowered and "-csv'" not in lowered
 
 
+# Boards whose CSV read goes through pyarrow's incremental reader.
+BLOCK_READER_BOARDS = ["01", "03", "04"]
+
+
+@pytest.mark.parametrize("board", BLOCK_READER_BOARDS)
+def test_board_reads_the_csv_in_blocks_not_all_at_once(sources, board):
+    """`pd.read_csv` filters `usecols` AFTER parsing the whole 566 MB file.
+
+    Measured peak RSS for the read alone: 826 MB (4 columns) / 1172 MB (106 columns) against
+    109 MB / 437 MB through `pyarrow.csv.open_csv`. The board payloads hash identical either
+    way, so a revert to `pd.read_csv` looks harmless in review and silently triples the
+    memory ceiling -- which is what decides whether the notebook survives a serverless job.
+    """
+    src = sources[board]
+    assert "pacsv.open_csv(" in src, "the CSV must be read incrementally"
+    assert "include_columns=" in src
+    # `usecols=` is the fingerprint of the whole-file path, and unlike "engine='pyarrow'"
+    # it does not appear in the prose explaining why that path was dropped. `01` still calls
+    # `pd.read_csv(..., nrows=0)` to probe the header, which reads no rows and is fine.
+    assert "usecols=" not in src, "the pandas whole-file path must not come back"
+
+
+def test_board_01_paints_the_uiti_layer_at_full_opacity():
+    """Half-tinted, the layer stops showing the panel's thresholded colours.
+
+    At `opacity=0.5` over carto-positron's light background, `Alto` -- rgb(103,0,13), a
+    near-black red -- painted as rgb(172,121,128), a washed pink, and `Bajo` sat one step from
+    the background. Worse, over the black 1.5 px structure core the SAME class composited to a
+    different colour again (rgb(52,0,6) for `Alto`), so one vano showed two tones and neither
+    matched the swatch the panel prints in its legend. Verified opaque in MapLibre itself via
+    `getPaintProperty`: the four line layers report the palette colours at width 7, opacity 1.
+    """
+    src = _source(BOARDS["01"])
+    assert "OPACIDAD_UITI = 1.0" in src
+    assert "OPACIDAD_UITI == 1.0" in src, "the in-notebook assertion must pin it too"
+    assert "ANCHO_MAPA = 7.0" in src, "the layer must stay thicker than the 1.5 px structure"
+
+
 # Regional wording and the notebooks' former `01.x` names. `tira` is intentionally
 # absent from this list: it is legitimate Spanish for the legend's colour strip.
 REGIONALISMS = {
