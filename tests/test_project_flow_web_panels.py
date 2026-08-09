@@ -117,8 +117,8 @@ def test_boards_have_no_csv_download_control(sources, board):
     assert "-csv\"" not in lowered and "-csv'" not in lowered
 
 
-# Boards whose CSV read goes through pyarrow's incremental reader.
-BLOCK_READER_BOARDS = ["01", "03", "04"]
+# Every board reads the CSV through pyarrow's incremental reader.
+BLOCK_READER_BOARDS = sorted(BOARDS)
 
 
 @pytest.mark.parametrize("board", BLOCK_READER_BOARDS)
@@ -126,9 +126,11 @@ def test_board_reads_the_csv_in_blocks_not_all_at_once(sources, board):
     """`pd.read_csv` filters `usecols` AFTER parsing the whole 566 MB file.
 
     Measured peak RSS for the read alone: 826 MB (4 columns) / 1172 MB (106 columns) against
-    109 MB / 437 MB through `pyarrow.csv.open_csv`. The board payloads hash identical either
-    way, so a revert to `pd.read_csv` looks harmless in review and silently triples the
-    memory ceiling -- which is what decides whether the notebook survives a serverless job.
+    109 MB / 437 MB through `pyarrow.csv.open_csv`. End to end the boards went 1244->638 MB
+    (`03`), 1332->648 MB (`04`), 2036->1371 MB (`01`) and 1382->514 MB (`02`, which reads the
+    file twice, once per unit of analysis). The board payloads hash identical either way, so a
+    revert to `pd.read_csv` looks harmless in review and silently multiplies the memory
+    ceiling -- which is what decides whether the notebook survives a serverless job.
     """
     src = sources[board]
     assert "pacsv.open_csv(" in src, "the CSV must be read incrementally"
@@ -153,6 +155,29 @@ def test_board_01_paints_the_uiti_layer_at_full_opacity():
     assert "OPACIDAD_UITI = 1.0" in src
     assert "OPACIDAD_UITI == 1.0" in src, "the in-notebook assertion must pin it too"
     assert "ANCHO_MAPA = 7.0" in src, "the layer must stay thicker than the 1.5 px structure"
+
+
+def test_board_01_draws_the_uiti_layer_above_the_cloud():
+    """Trace order IS layer order in MapLibre, and the cloud was burying the UITI layer.
+
+    The cloud is one Scattermap of 78 px markers. Each is faint on its own, but they overlap
+    heavily between neighbouring vanos, so a dozen of them stack into full coverage. With the
+    cloud added AFTER the four class traces, a screenshot of DON23L13's map contained ZERO
+    pixels of the four palette colours; hiding the cloud brought back 1514. The data, the
+    widths and the paint properties were all correct the whole time -- only the order was
+    wrong, which is why it looked like the layer was never drawn.
+
+    `01` pins this in the notebook too (`IDX['nube'] < min(IDX['mapaClases'])`), so a reorder
+    fails at generation rather than silently in the browser. This test guards the ordering of
+    the `add_trace` calls that the index is derived from.
+    """
+    src = _source(BOARDS["01"])
+    assert "assert IDX['nube'] < min(IDX['mapaClases'])" in src
+    posicion_nube = src.index("name='Nube por vano (variable seleccionable)'")
+    posicion_clases = src.index("for _clase, _color in zip(CLASES_MAPA, COLORES_MAPA):")
+    assert posicion_nube < posicion_clases, (
+        "the cloud trace must be added BEFORE the UITI class traces, or it covers them"
+    )
 
 
 # Regional wording and the notebooks' former `01.x` names. `tira` is intentionally
