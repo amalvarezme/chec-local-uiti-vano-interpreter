@@ -619,6 +619,78 @@ def test_capas_mapa_historico_without_marca_extremos_keeps_the_bare_polyline():
     assert capas["clases"][0]["lat"] == [1.0, 1.1, None]
 
 
+def test_capas_mapa_historico_densifies_so_hover_lands_anywhere_on_the_vano():
+    """El hover de una traza de lineas en Scattermap se resuelve contra los
+    VERTICES, no contra la linea: plotly mide la distancia del cursor a cada
+    punto y descarta lo que quede a mas de `hoverdistance`. Los tramos de
+    MVLINSEC traen EXACTAMENTE dos vertices, asi que a zoom alto el centro de
+    un vano no tiene ninguno cerca -- no muestra etiqueta, y como plotly solo
+    convierte un clic en evento donde hay hover, tampoco se puede marcar
+    tocandolo ahi."""
+    largo = 0.01  # ~1,1 km: a zoom 14, 30 px son 143 m, asi que hacen falta cortes
+    geo_circuito = {"fids": ["VA"], "lat": [[1.0, 1.0]], "lon": [[-75.0, -75.0 + largo]]}
+
+    capas = capas_mapa_historico(geo_circuito, {"VA": 0}, paso_densificado=0.00022)
+
+    lats = [v for v in capas["clases"][0]["lat"] if v is not None]
+    lons = [v for v in capas["clases"][0]["lon"] if v is not None]
+    assert len(lons) > 40, len(lons)
+    # Los extremos siguen siendo los originales: densificar interpola, no mueve.
+    assert lons[0] == pytest.approx(-75.0) and lons[-1] == pytest.approx(-75.0 + largo)
+    assert all(v == pytest.approx(1.0) for v in lats)
+    # Y ningun hueco mayor al paso pedido, que es lo que da el hover continuo.
+    saltos = [abs(b - a) for a, b in zip(lons, lons[1:])]
+    assert max(saltos) <= 0.00022 + 1e-12, max(saltos)
+
+
+def test_capas_mapa_historico_keeps_every_column_aligned_when_densifying():
+    """Las cuatro columnas tienen que seguir midiendo lo mismo: si `customdata`
+    se desfasa de lat/lon, Plotly desalinea el resto de la traza y el clic
+    devuelve el vano equivocado."""
+    capas = capas_mapa_historico(
+        {"fids": ["VA", "VB"], "lat": [[1.0, 1.02], [2.0, 2.01]],
+         "lon": [[-75.0, -75.0], [-76.0, -76.0]]},
+        {"VA": 0}, marcados=["VB"], paso_densificado=0.005, marca_extremos=0.001,
+    )
+
+    for capa in (capas["clases"][0], capas["sin_dato"], capas["marcados"]):
+        assert len(capa["lat"]) == len(capa["lon"]) == len(capa["customdata"]) == len(
+            capa["hovertext"])
+
+
+def test_capas_mapa_historico_carries_extra_columns_in_customdata():
+    """Para que el tooltip no repita una etiqueta de ~130 caracteres en CADA
+    punto, el hover pasa a `hovertemplate` y lo que viaja por punto son los
+    datos crudos del vano. Medido sobre el peor circuito, eso baja la capa de
+    2,40 MB a 0,66 MB, y es lo que hace que densificar salga mas barato que lo
+    que se mandaba antes. El fid queda SIEMPRE primero: es el canal que
+    convierte un clic en un vano."""
+    capas = capas_mapa_historico(
+        {"fids": ["VA"], "lat": [[1.0, 1.1]], "lon": [[-75.0, -75.1]]}, {"VA": 0},
+        datos_por_fid={"VA": (12.5, 3)},
+    )
+
+    assert capas["clases"][0]["customdata"] == [["VA", 12.5, 3]] * 3
+
+
+def test_capas_mapa_historico_without_extra_columns_keeps_the_bare_fid():
+    """`datos_por_fid` es opcional: sin el, `customdata` sigue siendo el fid
+    suelto, como lo esperan los llamadores que ya existian."""
+    capas = capas_mapa_historico(
+        {"fids": ["VA"], "lat": [[1.0, 1.1]], "lon": [[-75.0, -75.1]]}, {"VA": 0})
+
+    assert capas["clases"][0]["customdata"] == ["VA", "VA", "VA"]
+
+
+def test_fid_de_punto_reads_the_fid_from_a_customdata_row():
+    """Con columnas extra, `customdata[i]` es una fila y no un escalar; el fid
+    sigue siendo su primer elemento."""
+    from chec_local_interpreter.ventanas_015 import fid_de_punto
+
+    assert fid_de_punto([["VA", 1.0, 2], ["VB", 3.0, 4]], [1]) == "VB"
+    assert fid_de_punto(["VA", "VB"], [0]) == "VA"
+
+
 def _tamanio_proyectado(bounds, zoom, *, tile=512):
     """El bounding box del circuito, en pixeles, bajo la proyeccion Web Mercator
     que usa MapLibre (teselas de 512 px). Verificado contra el navegador: para
