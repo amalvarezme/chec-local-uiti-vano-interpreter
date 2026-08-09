@@ -184,8 +184,45 @@ def test_board_02_circuits_sheet_names_its_risk_band_and_drops_the_derived_sum()
     # The chart keeps its own prefixed names; the two must not be collapsed into one list.
     assert ("var NOMBRE_RIESGO = ['Riesgo Bajo', 'Riesgo Medio', 'Riesgo Medio-Alto', "
             "'Riesgo Alto'];") in src
-    # The vanos sheet keeps the K-Means names as the rest of the family writes them.
-    assert "CTX.grupos[f.g]" in src
+
+
+def test_board_02_workbook_writes_both_label_columns_in_upper_case():
+    """Both label columns of the workbook read as BAJO / MEDIO / MEDIO-ALTO / ALTO.
+
+    The two scales live on different sheets -- `etiqueta` (K-Means group of a vano) on
+    Vanos, `grupo_ranking` (percentile band of a circuit) on Circuitos -- and they used to
+    be written differently: the circuit band in sustained caps, the vano label in title case
+    ('Medio-Alto'), because the vano label was taken straight from the chart legend. Read in
+    Excel, one file with two spellings of the same four words looks like two vocabularies,
+    and filtering the sheets side by side needs a case fold that nobody expects to need.
+
+    The label is derived from `CTX.grupos`, not written out again: the chart legend stays
+    the single source of the four names, and the sheet only changes their case. A hardcoded
+    second list would let the two drift apart silently.
+
+    The CHARTS keep title case (and the ranking chart its "Riesgo " prefix), because on
+    screen both scales are visible at once and the case is what makes them readable.
+    """
+    src = _source(BOARDS["02"])
+    assert "CTX.grupos[f.g].toUpperCase()" in src, (
+        "the vanos sheet must uppercase the K-Means label it takes from the legend"
+    )
+    assert "NOMBRES_GRUPOS = ['Bajo', 'Medio', 'Medio-Alto', 'Alto']" in src, (
+        "the chart legend must keep title case"
+    )
+
+
+def test_board_02_vanos_panel_notice_drops_the_per_group_split():
+    """The vanos panel notice stops repeating the split the bar chart already draws.
+
+    It read '... vanos con eventos en el periodo -- reparto 812 / 402 / 96 / 31.', four bare
+    numbers with no names attached, in the panel directly above a bar chart that draws those
+    same four counts labelled and to scale. The notice keeps what the chart cannot show: the
+    effective range and how many vanos of the total had events at all.
+    """
+    src = _source(BOARDS["02"])
+    assert "' vanos con eventos en el periodo.'" in src
+    assert "reparto ' + conteos.join" not in src, "the split must be gone from the notice"
 
 
 def test_board_01_day_slider_declares_how_many_days_the_circuit_has():
