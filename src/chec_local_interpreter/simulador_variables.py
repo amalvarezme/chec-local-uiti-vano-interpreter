@@ -1,0 +1,339 @@
+"""Which of the model's variables are worth simulating, and why.
+
+Notebook 06's simulator answers one question: *what happens to a vano's
+criticality if this variable changes*. The knob catalogue
+(`vano_controls.build_knobs`) offers every non-constant model feature as a
+control, because it is built from the feature list and knows nothing about
+what any of them mean. That is the right separation, but it leaves the panel
+presenting a lever CHEC pulls every week -- vegetation risk -- next to the
+vano's own coordinates, as if moving a vano were a maintenance option.
+
+This module supplies the missing half: one verdict per variable, with the
+reason attached, so the notebook can print a table instead of asking every
+reader to re-derive the distinction. The verdicts come from the project's own
+column dictionary (`data/Variables_seleccion.xlsx`), quoted in each reason,
+not from reading the variable names.
+
+Four levels, and the reason column carries the nuance:
+
+``Si -- intervencion``
+    CHEC can change it in the field. Simulating it is costing an actual work
+    order: pruning, grounding, a conductor swap, a bigger transformer.
+
+``Si -- escenario``
+    Nobody controls it, but that is precisely the what-if the simulator
+    exists for -- the weather, the lightning density of the site, the growth
+    of the load. The answer is not "do this", it is "expect this".
+
+``Limitado``
+    Only meaningful under one specific reading, stated in the reason. Moving
+    it outside that reading produces a number with no interpretation.
+
+``No``
+    Simulating it is either circular -- the variable is recorded after the
+    failure the model is meant to anticipate -- or it describes what the vano
+    IS rather than anything that could be done to it.
+
+A knob with no entry here is reported as ``Sin evaluar`` rather than assumed
+either way: defaulting to yes puts an unvetted lever in the panel, defaulting
+to no hides a real one.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterable, Mapping
+
+import pandas as pd
+
+from .vano_controls import Knob
+
+VEREDICTOS: tuple[str, ...] = (
+    "Si -- intervencion",
+    "Si -- escenario",
+    "Limitado",
+    "No",
+)
+
+# El orden en que se lee la tabla: primero lo que se puede hacer, al final lo que
+# no hay que tocar, donde se lee como una lista de advertencias.
+_ORDEN = {veredicto: i for i, veredicto in enumerate(VEREDICTOS)}
+SIN_EVALUAR = "Sin evaluar"
+
+# Veredicto y motivo por variable. La descripcion entre comillas de cada motivo es
+# la del diccionario del proyecto, `data/Variables_seleccion.xlsx`.
+JUICIO_SIMULACION: Mapping[str, tuple[str, str]] = {
+    # --- palancas: obra o mantenimiento que CHEC ejecuta -----------------------------
+    "NR_T": (
+        "Si -- intervencion",
+        "Es el nivel de riesgo por vegetacion asociada al vano, y bajarlo ES el plan "
+        "de poda. De todas las variables del modelo, es la que se mueve con la "
+        "cuadrilla de la semana entrante.",
+    ),
+    "CANTIDAD_TIERRA": (
+        "Si -- intervencion",
+        "Dice si el apoyo tiene puesta a tierra. Instalarla es una obra concreta y "
+        "acotada, asi que la simulacion se lee directamente como su beneficio "
+        "esperado.",
+    ),
+    "NG_RED": (
+        "Si -- intervencion",
+        "Indica si el vano posee guarda o neutro. Tenderlo es una obra de red "
+        "habitual, y el simulador estima que le pasa a la criticidad si se hace.",
+    ),
+    "CONDUCTOR": (
+        "Si -- intervencion",
+        "Es el conductor de fases del vano. Cambiarlo es un recambio programable, y "
+        "comparar dos conductores es una decision real de diseno.",
+    ),
+    "CALIBRE_NEUTRO": (
+        "Si -- intervencion",
+        "Es el calibre del neutro. Igual que el conductor, se cambia con obra y el "
+        "escenario se lee como la ganancia de subir de calibre.",
+    ),
+    "ALTURA": (
+        "Si -- intervencion",
+        "Es la altura del apoyo final del vano. Cambiar el apoyo por uno mas alto es "
+        "obra de red, y aleja el conductor de la vegetacion.",
+    ),
+    "LONG_CRUCETA": (
+        "Si -- intervencion",
+        "Es la longitud de la cruceta del apoyo final. Se cambia con la misma obra "
+        "que el apoyo y modifica la separacion entre fases.",
+    ),
+    "CNT_FASES": (
+        "Si -- intervencion",
+        "Es la cantidad de fases del vano. Cambiarla es una repotenciacion mayor, "
+        "pero es una decision de expansion que la empresa efectivamente toma.",
+    ),
+    "CAPACIDAD_NOMINAL": (
+        "Si -- intervencion",
+        "Es la capacidad del trafo del apoyo final. Cambiar el transformador es la "
+        "respuesta tipica a la sobrecarga y esta en el alcance del mantenimiento.",
+    ),
+    "TIPO": (
+        "Si -- intervencion",
+        "Es el tipo de equipo que protege al vano. Cambiar el esquema de proteccion "
+        "es una decision de operacion, no una propiedad fija del vano.",
+    ),
+    "VAL_CRIT_APOYO": (
+        "Si -- intervencion",
+        "Es la calificacion de criticidad por clase de apoyo, y la clase de apoyo se "
+        "cambia reponiendo la estructura. Cuidado con leerlo al reves: es una "
+        "clasificacion del activo, no la criticidad que el modelo predice.",
+    ),
+    # --- escenarios: nadie los controla, y ese es justamente el what-if --------------
+    "clima:prep": (
+        "Si -- escenario",
+        "Precipitacion acumulada en la hora previa, en los 12 rezagos a la vez. No se "
+        "interviene, pero preguntar que pasa bajo un aguacero es exactamente para lo "
+        "que existe el simulador.",
+    ),
+    "clima:temp": (
+        "Si -- escenario",
+        "Temperatura del aire a 2 m, en los 12 rezagos. Escenario ambiental: no es "
+        "una obra, es la condicion bajo la que se quiere anticipar la criticidad.",
+    ),
+    "clima:wind_gust_spd": (
+        "Si -- escenario",
+        "Velocidad maxima de rafaga a 10 m, en los 12 rezagos. Es el escenario de "
+        "vendaval, el mas util de la familia climatica para planear contingencias.",
+    ),
+    "clima:wind_spd": (
+        "Si -- escenario",
+        "Velocidad instantanea del viento a 10 m, en los 12 rezagos. Mismo caso que "
+        "la rafaga, en regimen sostenido en vez de pico.",
+    ),
+    "DDT": (
+        "Si -- escenario",
+        "Es la densidad de descargas a tierra promedio al ano del sitio. No se "
+        "interviene, pero describe la exposicion atmosferica y sirve para comparar "
+        "un vano con otro bajo la misma pregunta.",
+    ),
+    "PROMEDIO_KWH_TRF": (
+        "Si -- escenario",
+        "Es el consumo mensual promedio del trafo. Subirlo es el escenario de "
+        "crecimiento de demanda, que se proyecta y no se decide.",
+    ),
+    "PROMEDIO_KWH_VANO": (
+        "Si -- escenario",
+        "Es la energia mensual promedio que circula por el vano. Mismo escenario de "
+        "crecimiento de carga, medido sobre el vano en vez del trafo.",
+    ),
+    # --- limitados: una sola lectura los hace interpretables -------------------------
+    "FECHA_OPERACION_VANO": (
+        "Limitado",
+        "Es la fecha de entrada en operacion del vano, o sea su edad. Solo tiene "
+        "sentido en una direccion y con una lectura: adelantarla equivale a reponer "
+        "el activo. Atrasarla no corresponde a nada que se pueda hacer.",
+    ),
+    "FECHA_OPERACION_TRF": (
+        "Limitado",
+        "Es la fecha de entrada en operacion del trafo. Misma lectura unica que la "
+        "del vano: solo se interpreta como el recambio del transformador.",
+    ),
+    "LONGITUD": (
+        "Limitado",
+        "Es la longitud del vano. Solo cambia reconfigurando la red -- moviendo "
+        "apoyos --, asi que fuera de un proyecto de repotenciacion es geometria fija "
+        "y el escenario no corresponde a ninguna decision del dia a dia.",
+    ),
+    "CNT_VN": (
+        "Limitado",
+        "Es la cantidad de vanos que hay hasta el equipo que lo protege. Cambia solo "
+        "reubicando la proteccion, y esa obra mueve a la vez a todos los vanos del "
+        "tramo: simularlo para un vano aislado describe algo que no puede ocurrir "
+        "solo.",
+    ),
+    "TIPO_TAX": (
+        "Limitado",
+        "Es el tipo de taxonomia del vano. Describe lo que el vano ES y no una "
+        "palanca; solo se lee como comparar dos disenos distintos, nunca como una "
+        "intervencion sobre este vano.",
+    ),
+    # --- refutadas -------------------------------------------------------------------
+    "CNT_TRF": (
+        "No",
+        "El diccionario del proyecto lo define como la cantidad de trafos afectados "
+        "EN LA FALLA: se mide despues del evento que el modelo intenta anticipar. "
+        "Simularlo es circular, e invita a concluir que menos trafos afectados causan "
+        "menos criticidad, que es la flecha del analisis al reves.",
+    ),
+    "X2": (
+        "No",
+        "Es la coordenada X final del vano: su identidad geografica. Moverla no "
+        "corresponde a ninguna intervencion y ademas rompe en silencio el acople con "
+        "el clima, porque las series climaticas se consultaron EN esas coordenadas y "
+        "el vano movido se quedaria con el clima de otro lugar.",
+    ),
+    "Y2": (
+        "No",
+        "Es la coordenada Y final del vano: su identidad geografica. Mismo problema "
+        "que X2 -- no es una obra, y desacopla el vano del clima que se consulto en "
+        "ese punto.",
+    ),
+}
+
+
+UNIDADES: Mapping[str, str] = {
+    # Las CUATRO con unidad escrita en `data/Variables_seleccion.xlsx`. Se copian de
+    # ahi tal cual; no se deducen del nombre.
+    "clima:prep": "mm",
+    "clima:temp": "\u00b0C",
+    "clima:wind_gust_spd": "km/h",
+    "clima:wind_spd": "km/h",
+    # Derivadas sin ambiguedad de la descripcion del diccionario mas el rango medido.
+    "LONGITUD": "m",              # "Longitud del vano": 0,4 a 2.807
+    "ALTURA": "m",                # "Altura del apoyo final": 4 a 25 una vez fuera el 99
+    "LONG_CRUCETA": "m",          # "Longitud de la cruceta": misma familia de longitudes
+    "CAPACIDAD_NOMINAL": "kVA",   # "Capacidad del trafo": 0 a 400
+    "PROMEDIO_KWH_TRF": "kWh/mes",    # "Promedio mensual energia consumo trafo"
+    "PROMEDIO_KWH_VANO": "kWh/mes",   # "Promedio mensual energia que circula por el vano"
+    "FECHA_OPERACION_VANO": "a\u00f1o",
+    "FECHA_OPERACION_TRF": "a\u00f1o",
+    "X2": "grados",               # coordenada geografica, como X1/Y1
+    "Y2": "grados",
+    # Conteos: la unidad es lo que se cuenta, que es mas util que "unidades".
+    "CNT_VN": "vanos",
+    "CNT_TRF": "trafos",
+    "CNT_FASES": "fases",
+}
+"""Unidad de medida de cada variable, cuando aplique.
+
+Un rango sin unidad no se puede juzgar: 25 puede ser una altura razonable o un
+disparate segun si son metros o pies, y quien mueve el deslizador tiene que poder
+decidirlo sin ir a buscar el diccionario.
+
+Quedan DELIBERADAMENTE fuera:
+
+- las categoricas y las binarias (`TIPO`, `CONDUCTOR`, `CALIBRE_NEUTRO`, `TIPO_TAX`,
+  `NG_RED`, `CANTIDAD_TIERRA`): una unidad sobre una categoria es ruido;
+- los indices y calificaciones (`NR_T`, `VAL_CRIT_APOYO`): son puntajes, no magnitudes;
+- `DDT`. Su descripcion -- "densidad de descargas a tierra promedio ano" -- implica una
+  unidad por area, pero no dice cual, y el rango medido (0 a 658) no cuadra con las
+  descargas por km2 y ano que usa la norma. Antes que estampar una unidad equivocada
+  en un tablero que van a leer ingenieros, la celda queda vacia. Si alguien confirma
+  la unidad, este es el unico sitio donde agregarla.
+"""
+
+
+def _fila(knob: Knob) -> dict[str, object]:
+    veredicto, motivo = JUICIO_SIMULACION.get(
+        knob.id, (SIN_EVALUAR, "Sin veredicto en `JUICIO_SIMULACION`: agregarlo antes "
+                               "de ofrecer esta variable como palanca.")
+    )
+    limites = knob.bounds if knob.kind == "numeric" else None
+    return {
+        "Variable": knob.label,
+        # Una familia climatica es UN control que mueve 12 features. Sin esta columna
+        # "Precipitacion" se lee como una sola feature y su peso en el modelo parece
+        # doce veces menor de lo que es.
+        "Controla": len(knob.feature_names),
+        "Tipo": knob.kind,
+        "vmin": None if limites is None else float(limites[0]),
+        "vmax": None if limites is None else float(limites[1]),
+        "Unidad": UNIDADES.get(knob.id, ""),
+        "Opciones": " | ".join(knob.categories) if knob.categories else "",
+        "Sentido de simular": veredicto,
+        "Por que": motivo,
+        "_orden": _ORDEN.get(veredicto, len(VEREDICTOS)),
+    }
+
+
+def tabla_variables_simulables(knobs: Iterable[Knob]) -> pd.DataFrame:
+    """Notebook 06's variable table: one row per knob the panel can actually
+    move, with its range and the verdict on whether simulating it means
+    anything.
+
+    Constant knobs are left out -- they have a single observed value or a
+    single category, the panel already hides them, and a row whose range is a
+    point pads the table without telling anyone anything.
+
+    Numeric knobs carry `vmin`/`vmax` from the knob's OWN bounds, which
+    `build_knobs` derives from the observed data. Reading them from a second
+    hand-written source could disagree with what the slider actually allows.
+    Categorical knobs leave the range empty and list their options instead: a
+    range over category codes invites reading 2 as "twice 1".
+    """
+    filas = [_fila(knob) for knob in knobs if knob.kind != "constant"]
+    columnas = ["Variable", "Controla", "Tipo", "vmin", "vmax", "Unidad", "Opciones",
+                "Sentido de simular", "Por que"]
+    if not filas:
+        return pd.DataFrame(columns=columnas)
+    tabla = pd.DataFrame(filas).sort_values(
+        ["_orden", "Variable"], kind="stable"
+    ).reset_index(drop=True)
+    return tabla[columnas]
+
+
+def _veredicto(knob: Knob) -> str:
+    return JUICIO_SIMULACION.get(knob.id, (SIN_EVALUAR, ""))[0]
+
+
+def knobs_simulables(knobs: Iterable[Knob]) -> list[Knob]:
+    """Los controles que el panel PUEDE ofrecer: todos menos los refutados.
+
+    No es cosmetica. Mientras una variable refutada siga en la lista, el tablero la
+    presenta como equivalente a la poda o a la puesta a tierra, y tarde o temprano
+    alguien mueve las coordenadas de un vano creyendo que eso es un escenario -- o
+    baja los trafos afectados en la falla y lee el resultado como una causa.
+
+    Quitarlas del panel NO las saca de la simulacion: un override solo se escribe si
+    el usuario lo fija, asi que estas variables entran al modelo con el valor
+    OBSERVADO de cada vano, que es exactamente lo que corresponde. Lo unico que se
+    pierde es la posibilidad de moverlas.
+
+    `Limitado` se queda: significa que hay una lectura bajo la cual si se interpreta,
+    y el motivo la enuncia -- quitarla seria decidir por el usuario que esa lectura no
+    le sirve. `Sin evaluar` tambien se queda: esconder en silencio justo el caso que
+    hay que revisar es la peor de las opciones, y la tabla ya lo marca.
+    """
+    return [knob for knob in knobs if _veredicto(knob) != "No"]
+
+
+def knobs_bloqueados(knobs: Iterable[Knob]) -> list[Knob]:
+    """Los que `knobs_simulables` deja fuera, en el orden en que se nombran.
+
+    El panel los NOMBRA en vez de dejarlos desaparecer: una lista que se acorta sin
+    explicacion se lee como que faltan variables, no como una decision.
+    """
+    return sorted((k for k in knobs if _veredicto(k) == "No"), key=lambda k: k.id)
