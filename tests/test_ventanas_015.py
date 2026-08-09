@@ -44,6 +44,7 @@ from chec_impacto.models.criticality_assignment import (
 )
 from chec_local_interpreter import ventanas_015
 from chec_local_interpreter.ventanas_015 import (
+    cajas_seleccion,
     cargar_clases_desde_014,
     capas_mapa_historico,
     construir_hist_class_cache,
@@ -444,6 +445,87 @@ def test_capas_mapa_historico_splits_marked_vanos_by_class_and_paints_the_classl
     # El halo sigue llevando TODOS los marcados: es lo que va debajo, en blanco.
     assert capas["marcados"]["lat"] == [2.0, 2.1, None, 3.0, 3.1, None]
     assert capas["marcados_por_clase"][3]["customdata"] == ["VB", "VB", "VB"]
+
+
+# --- Caja de seleccion: el rectangulo amarillo del vano marcado --------------
+
+
+def _geo_cajas():
+    return {
+        "fids": ["VA", "VB", "VC"],
+        # VB es un vano exactamente NORTE-SUR: su longitud no varia, asi que su
+        # caja envolvente cruda tendria ancho CERO.
+        "lat": [[1.0, 1.2], [2.0, 2.4], [3.0, 3.1]],
+        "lon": [[-75.0, -75.4], [-76.0, -76.0], [-77.0, -77.1]],
+    }
+
+
+def test_cajas_seleccion_returns_one_bounding_box_per_marked_vano():
+    """El resaltado del vano seleccionado es su caja envolvente: el rectangulo
+    min/max de sus coordenadas, como un `Polygon` GeoJSON que la capa
+    `layout.map.layers` pinta debajo de las trazas. Un anillo de GeoJSON se
+    CIERRA -- el ultimo vertice repite el primero --; sin eso MapLibre descarta
+    el poligono en silencio y no se dibuja ninguna caja."""
+    cajas = cajas_seleccion(_geo_cajas(), marcados=["VA"])
+
+    assert cajas["type"] == "FeatureCollection"
+    (feature,) = cajas["features"]
+    assert feature["properties"]["fid"] == "VA"
+    anillo = feature["geometry"]["coordinates"][0]
+    assert feature["geometry"]["type"] == "Polygon"
+    assert anillo[0] == anillo[-1]
+    assert [round(v, 6) for v in anillo[0]] == [-75.4, 1.0]
+    assert sorted({round(lon, 6) for lon, _ in anillo}) == [-75.4, -75.0]
+    assert sorted({round(lat, 6) for _, lat in anillo}) == [1.0, 1.2]
+
+
+def test_cajas_seleccion_widens_a_degenerate_side_to_the_minimum():
+    """Un vano exactamente norte-sur (o este-oeste) tiene una caja envolvente de
+    lado CERO, que sobre el mapa es una franja invisible. `lado_minimo` la abre
+    de forma simetrica alrededor del vano, asi que la caja sigue centrada donde
+    esta el vano y solo el lado degenerado crece."""
+    cajas = cajas_seleccion(_geo_cajas(), marcados=["VB"], lado_minimo=0.001)
+
+    anillo = cajas["features"][0]["geometry"]["coordinates"][0]
+    lons = sorted({round(lon, 6) for lon, _ in anillo})
+    lats = sorted({round(lat, 6) for _, lat in anillo})
+    assert lons == [-76.0005, -75.9995]          # abierta a 0.001 alrededor de -76.0
+    assert lats == [2.0, 2.4]                    # el lado que ya medía mas no se toca
+
+
+def test_cajas_seleccion_adds_the_margin_on_every_side():
+    """El margen despega la caja del trazo: sin el, el borde del rectangulo cae
+    justo encima de la linea del vano y no se distingue cual es cual."""
+    cajas = cajas_seleccion(_geo_cajas(), marcados=["VA"], margen=0.01)
+
+    anillo = cajas["features"][0]["geometry"]["coordinates"][0]
+    assert sorted({round(lon, 6) for lon, _ in anillo}) == [-75.41, -74.99]
+    assert sorted({round(lat, 6) for _, lat in anillo}) == [0.99, 1.21]
+
+
+def test_cajas_seleccion_follows_the_geometry_order_and_ignores_foreign_fids():
+    """Recorre la geometria del circuito y no la seleccion: un fid marcado en OTRO
+    circuito no tiene coordenadas aqui y no puede producir una caja. Sin esto, la
+    seleccion arrastrada de un circuito anterior dibujaria cajas fantasma."""
+    cajas = cajas_seleccion(_geo_cajas(), marcados=["VC", "VA", "DE_OTRO_CIRCUITO"])
+
+    assert [f["properties"]["fid"] for f in cajas["features"]] == ["VA", "VC"]
+
+
+def test_cajas_seleccion_without_marked_vanos_is_an_empty_collection():
+    """Sin seleccion la capa sigue existiendo pero no pinta nada. Devolver una
+    coleccion VACIA y no `None` es lo que deja que el repintado sea siempre la
+    misma escritura, sin quitar y volver a poner la capa del mapa."""
+    assert cajas_seleccion(_geo_cajas(), marcados=[]) == {
+        "type": "FeatureCollection",
+        "features": [],
+    }
+
+
+def test_cajas_seleccion_on_a_circuit_without_geometry_is_empty():
+    cajas = cajas_seleccion({"fids": [], "lat": [], "lon": []}, marcados=["VA"])
+
+    assert cajas["features"] == []
 
 
 # --- Nube KMeans (fila 1 col 3 en 01.4): celdas vano x ventana ---------------

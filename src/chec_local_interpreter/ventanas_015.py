@@ -298,6 +298,78 @@ def capas_mapa_historico(
     }
 
 
+def cajas_seleccion(
+    geo_circuito: Mapping[str, Any],
+    marcados: Iterable[str] = (),
+    *,
+    lado_minimo: float = 0.0,
+    margen: float = 0.0,
+) -> dict[str, Any]:
+    """The yellow selection box of row 1's map: one axis-aligned bounding box
+    per marked vano, as a GeoJSON `FeatureCollection` of `Polygon`s.
+
+    It answers a question the class layers cannot: *which vano am I studying?*
+    The marked vano is already drawn in its class colour over a white halo, but
+    on a circuit of hundreds of segments a slightly thicker line is not enough
+    to find it. A translucent box around it is, and being a BOX it stays
+    findable at any zoom, where a line stops being distinguishable from its
+    neighbours.
+
+    It is deliberately NOT a trace. The box is painted through
+    `layout.map.layers` with `below='traces'`, which buys two things a
+    `Scattermap` fill could not: it never intercepts hover or click -- the map
+    click is what toggles the selection, and a filled polygon on top would eat
+    it -- and it sits UNDER the vano lines, so the class colour of the very
+    vano being highlighted stays readable instead of being tinted yellow.
+
+    The box comes from the GEOMETRY and never from the window's cells, which is
+    what makes the highlight survive moving the window: a marked vano with no
+    events in the active window has no class, but it still has coordinates.
+
+    `lado_minimo` (degrees) is the smallest side the box may have, opened
+    symmetrically around the vano. A vano that runs exactly north-south has a
+    zero-width bounding box, and zero width on a map is an invisible sliver.
+    `margen` (degrees) is added on every side afterwards, so the border of the
+    box does not fall on top of the vano's own line.
+
+    Vanos are walked in `geo_circuito` order, so a fid marked in another
+    circuit -- which has no coordinates here -- produces no box at all instead
+    of a ghost rectangle left over from the previous selection.
+    """
+    marcados = set(marcados)
+    features: list[dict[str, Any]] = []
+    for fid, lat, lon in zip(geo_circuito["fids"], geo_circuito["lat"], geo_circuito["lon"]):
+        if fid not in marcados or not len(lat):
+            continue
+        lat_min, lat_max = min(lat), max(lat)
+        lon_min, lon_max = min(lon), max(lon)
+        # Se abre alrededor del CENTRO: crecer solo hacia un lado correria la caja
+        # fuera del vano que esta senialando.
+        falta_lat = max(0.0, lado_minimo - (lat_max - lat_min)) / 2.0
+        falta_lon = max(0.0, lado_minimo - (lon_max - lon_min)) / 2.0
+        lat_min -= falta_lat + margen
+        lat_max += falta_lat + margen
+        lon_min -= falta_lon + margen
+        lon_max += falta_lon + margen
+        features.append({
+            "type": "Feature",
+            "properties": {"fid": fid},
+            "geometry": {
+                "type": "Polygon",
+                # El anillo CIERRA repitiendo el primer vertice: un anillo abierto
+                # lo descarta MapLibre sin decir nada y no se dibuja ninguna caja.
+                "coordinates": [[
+                    [lon_min, lat_min],
+                    [lon_max, lat_min],
+                    [lon_max, lat_max],
+                    [lon_min, lat_max],
+                    [lon_min, lat_min],
+                ]],
+            },
+        })
+    return {"type": "FeatureCollection", "features": features}
+
+
 MAX_PUNTOS_NUBE = 20_000
 
 
