@@ -254,3 +254,48 @@ def test_knob_is_frozen_dataclass_instance():
     )
     with pytest.raises(Exception):
         knob.id = "otro"  # frozen dataclass must reject mutation
+
+
+# --- Codigos de relleno excluidos del rango de un control -----------------------------
+
+
+def test_altura_bounds_exclude_the_99_filler_code():
+    """`ALTURA` usa 99 como codigo de "sin dato": aparece 327 veces sobre 159.470
+    filas y el siguiente valor real es 25 -- un poste de 99 m no existe en una red
+    de distribucion. Con 99 dentro de los limites, 74 de los 95 puntos de recorrido
+    del deslizador caen en un tramo que ningun vano puede ocupar, y el usuario
+    simula alturas imposibles sin que nada se lo diga.
+
+    Se declara por variable y no se deduce: una regla automatica del tipo "los
+    nueves son relleno" tumbaria el 9 de `LONG_CRUCETA` y el 10 de
+    `VAL_CRIT_APOYO`, que son valores reales."""
+    df = pd.DataFrame({"ALTURA": [4.0, 10.0, 12.0, 25.0, 99.0, 99.0]})
+
+    assert numeric_bounds("ALTURA", original_feature_df=df) == (4.0, 25.0)
+
+
+def test_the_filler_code_does_not_leak_into_the_default_either():
+    """El valor por defecto es la mediana. Contar los 99 la corre hacia arriba y
+    ademas puede dejarla fuera de los propios limites del control."""
+    df = pd.DataFrame({"ALTURA": [10.0, 12.0, 99.0, 99.0, 99.0]})
+
+    knob = build_knobs(feature_names=["ALTURA"], original_feature_df=df)[0]
+
+    assert knob.bounds == (10.0, 12.0)
+    assert knob.default == 11.0
+
+
+def test_other_variables_keep_their_nines_because_those_are_real_values():
+    """`LONG_CRUCETA` llega a 9 con 88 registros y su segundo maximo es 7: es una
+    longitud, no un relleno. Solo lo declarado se excluye."""
+    df = pd.DataFrame({"LONG_CRUCETA": [0.0, 7.0, 9.0]})
+
+    assert numeric_bounds("LONG_CRUCETA", original_feature_df=df) == (0.0, 9.0)
+
+
+def test_a_variable_that_is_only_filler_reports_no_usable_bounds():
+    """Sin ningun valor real no hay rango que ofrecer, y un control de 99 a 99 es
+    un deslizador que no se mueve disfrazado de uno que si."""
+    df = pd.DataFrame({"ALTURA": [99.0, 99.0]})
+
+    assert numeric_bounds("ALTURA", original_feature_df=df) is None

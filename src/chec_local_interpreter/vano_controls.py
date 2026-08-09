@@ -93,21 +93,44 @@ def categorical_values_for_variable(
     return values if max_values is None else values[:max_values]
 
 
+VALORES_NO_VALIDOS: dict[str, tuple[float, ...]] = {
+    # `ALTURA` usa 99 como codigo de "sin dato": 327 registros sobre 159.470, y el
+    # siguiente valor real es 25. Un poste de 99 m no existe en una red de
+    # distribucion. Sin excluirlo, 74 de los 95 puntos de recorrido del deslizador
+    # caen en un tramo que ningun vano puede ocupar, y el simulador contesta por
+    # alturas imposibles sin que nada lo advierta.
+    "ALTURA": (99.0,),
+}
+"""Codigos de relleno que no son valores: se excluyen del rango y del valor por
+defecto de su control.
+
+Se declara por variable a proposito. Una regla automatica del tipo "un maximo de
+nueves es relleno" tumbaria el 9 de `LONG_CRUCETA` (88 registros, segundo maximo
+7) y el 10 de `VAL_CRIT_APOYO`, que son valores reales. Medido sobre las 17
+variables numericas del catalogo, `ALTURA` es la unica con el patron: su maximo
+salta x4 respecto del siguiente.
+"""
+
+
 def _numeric_series_for_variable(
     variable: str,
     *,
     original_feature_df: pd.DataFrame,
     max_values_imputed: Mapping[str, Any] | None = None,
 ) -> pd.Series:
-    """Clean numeric raw-scale values for `variable`: true NaN dropped, and
-    the `-10 * max_values_imputed[var]` NaN sentinel excluded belt-and-braces
-    (see `simulator._coerce_original_value_for_model`)."""
+    """Clean numeric raw-scale values for `variable`: true NaN dropped, the
+    `-10 * max_values_imputed[var]` NaN sentinel excluded belt-and-braces
+    (see `simulator._coerce_original_value_for_model`), and any declared
+    `VALORES_NO_VALIDOS` filler code dropped as well."""
     max_values_imputed = max_values_imputed or {}
     series = pd.to_numeric(original_feature_df[variable], errors="coerce").dropna()
     max_val = float(max_values_imputed.get(variable, 0.0) or 0.0)
     if max_val > 0:
         sentinel = -10.0 * max_val
         series = series[series > sentinel]
+    rellenos = VALORES_NO_VALIDOS.get(str(variable))
+    if rellenos:
+        series = series[~series.isin(rellenos)]
     return series
 
 
