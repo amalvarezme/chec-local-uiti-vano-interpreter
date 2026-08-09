@@ -163,25 +163,28 @@ def test_board_02_circuits_sheet_names_its_risk_band_and_drops_the_derived_sum()
     Two fixes pinned here, both verified by downloading the real workbook from the browser
     and reading it with openpyxl:
 
-    1. `grupo_ranking` used to be the band number 1..4. It now carries the band NAME, the
-       same four strings the ranking chart already showed in its title and hover.
+    1. `grupo_ranking` used to be the band number 1..4. It now carries the band NAME, as
+       BAJO / MEDIO / MEDIO-ALTO / ALTO.
     2. `vanos_medio_alto_mas_alto` is gone. It was exactly the sum of the two columns
        immediately before it, so it added nothing the sheet did not already hold.
 
-    The "Riesgo " prefix is load-bearing and must not be dropped to bare Bajo/Medio/...:
-    those four words ALREADY name something else in the same workbook -- the K-Means group
-    of each vano, in the Vanos sheet's `etiqueta` column. The circuit bands are percentiles
-    (P50/P75/P97) of how many critical vanos a circuit has, which is a different question
-    about a different unit. Same words for both would make the two sheets read as one scale.
+    Note the workbook deliberately carries TWO four-level scales that share their words. The
+    Vanos sheet's `etiqueta` is the K-Means group of each vano; the Circuits sheet's
+    `grupo_ranking` is a percentile band (P50/P75/P97) of how many critical vanos a circuit
+    has -- a different question about a different unit. What tells them apart in the file is
+    the sheet and the column name, not the value. The ranking CHART keeps the "Riesgo "
+    prefix on those same bands, because there both scales are on screen at once.
     """
     src = _source(BOARDS["02"])
-    assert "rangoPorCirc[conAlto[i]] = NOMBRE_RIESGO[seg];" in src, (
+    assert "rangoPorCirc[conAlto[i]] = NOMBRE_RANGO_EXCEL[seg];" in src, (
         "the circuits sheet must carry the band name, not its number"
     )
+    assert "var NOMBRE_RANGO_EXCEL = ['BAJO', 'MEDIO', 'MEDIO-ALTO', 'ALTO'];" in src
     assert "'vanos_medio_alto_mas_alto'" not in src, "the derived sum column must be gone"
+    # The chart keeps its own prefixed names; the two must not be collapsed into one list.
     assert ("var NOMBRE_RIESGO = ['Riesgo Bajo', 'Riesgo Medio', 'Riesgo Medio-Alto', "
             "'Riesgo Alto'];") in src
-    # The vanos sheet keeps the K-Means names, unprefixed, and the two must stay distinct.
+    # The vanos sheet keeps the K-Means names as the rest of the family writes them.
     assert "CTX.grupos[f.g]" in src
 
 
