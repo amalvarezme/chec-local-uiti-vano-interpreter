@@ -92,11 +92,17 @@ def _clase_selector():
         value = traitlets.Tuple()
 
         def __init__(self, opciones=(), *, titulo="", alto="132px",
-                     ancho_casilla="96px", **kwargs):
+                     ancho_casilla="96px", maximo=None, **kwargs):
             super().__init__(**kwargs)
             self.casillas = {}
             self._silencio = False
             self._ancho_casilla = ancho_casilla
+            # `maximo` acota cuantas claves pueden quedar marcadas a la vez.
+            # Notebook 06 lo usa: cada vano seleccionado recibe su propia COLUMNA
+            # de controles, y una rejilla de 26 variables por 20 vanos no se lee
+            # ni se llena. `None` = sin tope, que es lo que heredan 01.4 y sus
+            # hermanos, donde marcar cientos de vanos es el caso normal.
+            self.maximo = maximo
             self.caja = widgets.Box(
                 layout=widgets.Layout(
                     # `overflow` y no `overflow_y`: ipywidgets 8 saco los ejes
@@ -135,9 +141,24 @@ def _clase_selector():
             finally:
                 self._silencio = False
             self.value = ()
+            # Sin esto un circuito nuevo arrancaria con las casillas que el
+            # anterior dejo deshabilitadas por el tope, y bloqueado de entrada.
+            self._aplicar_tope()
+
+        def _aplicar_tope(self):
+            """Con el cupo lleno, las casillas SIN marcar se deshabilitan. Se
+            deshabilitan en vez de aceptar el clic y revertirlo: un clic que se
+            deshace solo se lee como un fallo del tablero. Las ya marcadas quedan
+            habilitadas, o no habria forma de soltar una para tomar otra."""
+            if self.maximo is None:
+                return
+            lleno = sum(1 for c in self.casillas.values() if c.value) >= self.maximo
+            for caja in self.casillas.values():
+                caja.disabled = lleno and not caja.value
 
         def marcar_todos(self):
-            """01.4's "Marcar todos" button."""
+            """01.4's "Marcar todos" button. Con tope marca los primeros y para:
+            pasarse dejaria el estado en un tamano que el panel no puede dibujar."""
             self._fijar_todas(True)
 
         def desmarcar_todos(self):
@@ -151,23 +172,37 @@ def _clase_selector():
             one re-grouping the whole geometry."""
             self._silencio = True
             try:
-                for caja in self.casillas.values():
-                    caja.value = marcado
+                cupo = len(self.casillas) if self.maximo is None else self.maximo
+                for i, caja in enumerate(self.casillas.values()):
+                    caja.value = marcado and i < cupo
             finally:
                 self._silencio = False
             self.value = tuple(
                 clave for clave, caja in self.casillas.items() if caja.value
             )
+            self._aplicar_tope()
 
         def alternar(self, clave):
             """The map-click entry point. Flips the checkbox and lets its own
             handler recompute `value`, so a click and a tick cannot diverge.
             An unknown key -- the circuit's geometry has tramos that never had
-            an event -- is ignored, never turned into a phantom checkbox."""
+            an event -- is ignored, never turned into a phantom checkbox.
+
+            El tope se comprueba AQUI y no solo en la interfaz: el clic del mapa
+            entra por este camino sin pasar por la casilla, asi que confiar solo
+            en `disabled` dejaria al mapa como puerta trasera para el sexto vano.
+            """
             caja = self.casillas.get(str(clave))
             if caja is None:
                 return
+            if not caja.value and self._cupo_lleno():
+                return
             caja.value = not caja.value
+
+        def _cupo_lleno(self):
+            if self.maximo is None:
+                return False
+            return sum(1 for c in self.casillas.values() if c.value) >= self.maximo
 
         def _al_cambiar_casilla(self, _cambio):
             if self._silencio:
@@ -178,6 +213,7 @@ def _clase_selector():
             self.value = tuple(
                 clave for clave, caja in self.casillas.items() if caja.value
             )
+            self._aplicar_tope()
 
     _CLASE_SELECTOR = SelectorCasillas
     return _CLASE_SELECTOR
@@ -197,3 +233,13 @@ def construir_selector_vanos(opciones=(), **kwargs):
     kwargs.setdefault("titulo", "Vanos")
     kwargs.setdefault("ancho_casilla", "96px")
     return construir_selector_casillas(opciones, **kwargs)
+
+
+MAX_VANOS_ANALISIS = 5
+"""Cuantos vanos puede analizar a la vez el simulador del cuaderno 06.
+
+Cada vano seleccionado recibe su propia COLUMNA de controles, una por variable
+que se quiera mover. Con 26 controles simulables, cinco columnas ya son una
+rejilla de 130 celdas: mas que eso no se lee ni se llena, y el forward del MIL
+deja de ser el limite mucho antes que la paciencia de quien lo usa.
+"""

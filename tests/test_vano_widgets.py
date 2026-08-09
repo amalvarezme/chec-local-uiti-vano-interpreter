@@ -276,3 +276,84 @@ def test_selector_vanos_ignores_a_click_on_an_unknown_fid():
     selector.alternar("DESCONOCIDO")
     assert selector.value == ()
     assert list(selector.casillas) == ["VA"]
+
+
+# --- Tope de vanos analizables (cuaderno 06) -----------------------------------------
+
+
+from chec_local_interpreter.vano_widgets import construir_selector_vanos
+
+
+def test_selector_stops_accepting_ticks_once_the_cap_is_reached():
+    """El cuaderno 06 simula hasta 5 vanos: cada uno recibe su propia columna de
+    controles, y una rejilla de 26 variables por 20 vanos no se lee ni se llena.
+    Al llegar al tope las casillas SIN marcar se deshabilitan, en vez de aceptar
+    el clic y revertirlo -- un clic que se deshace solo parece un fallo."""
+    selector = construir_selector_vanos(["A", "B", "C"], maximo=2)
+
+    selector.casillas["A"].value = True
+    selector.casillas["B"].value = True
+
+    assert selector.value == ("A", "B")
+    assert selector.casillas["C"].disabled is True
+    # Las marcadas siguen habilitadas: hay que poder soltar una para tomar otra.
+    assert selector.casillas["A"].disabled is False
+
+
+def test_freeing_a_slot_re_enables_the_rest():
+    selector = construir_selector_vanos(["A", "B", "C"], maximo=2)
+    selector.casillas["A"].value = True
+    selector.casillas["B"].value = True
+
+    selector.casillas["A"].value = False
+
+    assert selector.value == ("B",)
+    assert selector.casillas["C"].disabled is False
+
+
+def test_a_map_click_cannot_get_past_the_cap_either():
+    """El clic en el mapa entra por `alternar`, no por la casilla, asi que el
+    tope tiene que vivir en el estado y no en la interfaz: si no, el mapa seria
+    una puerta trasera para marcar el sexto vano."""
+    selector = construir_selector_vanos(["A", "B", "C"], maximo=2)
+    selector.alternar("A")
+    selector.alternar("B")
+
+    selector.alternar("C")
+
+    assert selector.value == ("A", "B")
+    assert selector.casillas["C"].value is False
+
+
+def test_marcar_todos_respects_the_cap_and_takes_the_first_ones():
+    """`marcar_todos` sigue existiendo para los cuadernos sin tope. Con tope no
+    puede pasarse: marca los primeros y para."""
+    selector = construir_selector_vanos(["A", "B", "C", "D"], maximo=2)
+
+    selector.marcar_todos()
+
+    assert selector.value == ("A", "B")
+
+
+def test_without_a_cap_nothing_changes_for_the_other_notebooks():
+    """01.4 y sus hermanos marcan cientos de vanos a la vez y no pueden heredar
+    un tope que nadie les puso."""
+    selector = construir_selector_vanos(["A", "B", "C"])
+
+    selector.marcar_todos()
+
+    assert selector.value == ("A", "B", "C")
+    assert all(not c.disabled for c in selector.casillas.values())
+
+
+def test_repopulating_clears_the_selection_and_re_enables_every_checkbox():
+    """Cambiar de circuito suelta la seleccion; si las casillas quedaran
+    deshabilitadas del circuito anterior, el nuevo arrancaria bloqueado."""
+    selector = construir_selector_vanos(["A", "B", "C"], maximo=2)
+    selector.casillas["A"].value = True
+    selector.casillas["B"].value = True
+
+    selector.poblar(["X", "Y", "Z"])
+
+    assert selector.value == ()
+    assert all(not c.disabled for c in selector.casillas.values())
