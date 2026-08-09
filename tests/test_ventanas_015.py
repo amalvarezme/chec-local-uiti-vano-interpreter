@@ -550,6 +550,159 @@ def test_capas_mapa_historico_labels_default_to_empty_when_not_given():
     assert capas["clases"][2]["customdata"] == ["VA"] * 3
 
 
+def test_capas_mapa_historico_marks_both_ends_of_every_vano_with_a_horizontal_dash():
+    """01's map draws a black horizontal dash on BOTH ends of every vano so the
+    extent of each one is readable where two of them meet. It cannot be a marker:
+    `marker.symbol` on Scattermap only accepts the map style's sprite icons and
+    there is no horizontal-line glyph there. So the dash is two extra 2-point
+    segments appended to the SAME layer, which inherit its colour and width."""
+    geo_circuito = {"fids": ["VA"], "lat": [[1.0, 1.1]], "lon": [[-75.0, -75.1]]}
+
+    capas = capas_mapa_historico(
+        geo_circuito, {"VA": 0}, marca_extremos=0.001,
+        etiquetas_por_fid={"VA": "vano A"},
+    )
+
+    capa = capas["clases"][0]
+    # La polilinea y su separador, y despues un guion por extremo: mismo lat en
+    # sus dos puntos (es horizontal), lon corrido media marca a cada lado.
+    assert capa["lat"] == [1.0, 1.1, None, 1.0, 1.0, None, 1.1, 1.1, None]
+    assert capa["lon"] == [
+        -75.0, -75.1, None, -75.001, -74.999, None, -75.101, -75.099, None,
+    ]
+    # Las cuatro columnas siguen midiendo lo mismo, o Plotly desalinea la traza.
+    assert len(capa["customdata"]) == len(capa["hovertext"]) == len(capa["lat"]) == 9
+    assert capa["customdata"] == ["VA"] * 9
+
+
+def test_capas_mapa_historico_dash_points_carry_no_hover_label():
+    """El guion NO repite la etiqueta del vano. Medido sobre MVLINSEC: el peor
+    circuito pasa de 4.131 a 12.393 puntos al marcar los extremos, y repetir ahi
+    una etiqueta de ~130 caracteres agrega ~1 MB a una sola rafaga del comm del
+    widget -- por encima del `iopub_data_rate_limit` de 1 MB/s de ipykernel, que
+    descarta el mensaje y deja la figura en blanco. No se pierde nada: el vertice
+    real del extremo esta en el centro del guion y si lleva la etiqueta."""
+    capas = capas_mapa_historico(
+        {"fids": ["VA"], "lat": [[1.0, 1.1]], "lon": [[-75.0, -75.1]]}, {"VA": 0},
+        marca_extremos=0.001, etiquetas_por_fid={"VA": "vano A"},
+    )
+
+    assert capas["clases"][0]["hovertext"] == ["vano A", "vano A", "", *[""] * 6]
+
+
+def test_capas_mapa_historico_marks_the_ends_of_vanos_without_events_too():
+    """Los guiones van en TODOS los vanos, tengan o no eventos en la ventana: son
+    la extension del vano, no una senial de su clase."""
+    capas = capas_mapa_historico(
+        {"fids": ["VA", "VB"], "lat": [[1.0, 1.1], [2.0, 2.1]],
+         "lon": [[-75.0, -75.1], [-76.0, -76.1]]},
+        {"VA": 0}, marcados=["VB"], marca_extremos=0.001,
+    )
+
+    for capa in (capas["clases"][0], capas["sin_dato"], capas["marcados"],
+                 capas["marcados_sin_dato"]):
+        assert len(capa["lat"]) == 9, capa
+
+
+def test_capas_mapa_historico_without_marca_extremos_keeps_the_bare_polyline():
+    """El parametro es opcional y su default no dibuja ningun guion: el panel web
+    densifica y marca en el navegador, donde los puntos no viajan por el comm."""
+    capas = capas_mapa_historico(
+        {"fids": ["VA"], "lat": [[1.0, 1.1]], "lon": [[-75.0, -75.1]]}, {"VA": 0},
+    )
+
+    assert capas["clases"][0]["lat"] == [1.0, 1.1, None]
+
+
+def _tamanio_proyectado(bounds, zoom, *, tile=512):
+    """El bounding box del circuito, en pixeles, bajo la proyeccion Web Mercator
+    que usa MapLibre (teselas de 512 px). Verificado contra el navegador: para
+    DON23L13 a zoom 10.1553 predice 328,9 x 389,9 px y Chrome midio 329 x 390."""
+    import math
+
+    def merc_y(lat):
+        r = math.radians(lat)
+        return (1 - math.log(math.tan(r) + 1 / math.cos(r)) / math.pi) / 2
+
+    mundo = tile * 2 ** zoom
+    return (abs(bounds[3] - bounds[2]) / 360 * mundo,
+            abs(merc_y(bounds[0]) - merc_y(bounds[1])) * mundo)
+
+
+def test_centro_y_zoom_fits_the_circuit_inside_a_wide_short_viewport():
+    """Con el tamanio del mapa en pixeles, el encuadre tiene que meter el circuito
+    ENTERO adentro -- las dos dimensiones, no solo una.
+
+    La formula anterior derivaba el zoom del span mayor en grados y no sabia nada
+    del viewport. Al pasar la figura a ancho completo el mapa quedo en 1553 x 328
+    px y medido en el navegador el circuito ocupaba el 21% del ancho y el 119% del
+    alto: centrado, pero recortado arriba y abajo. Un grado de latitud y uno de
+    longitud no miden lo mismo en pantalla, y menos en un viewport apaisado."""
+    from chec_local_interpreter.ventanas_015 import centro_y_zoom
+
+    ancho, alto = 1553, 328
+    # DON23L13 y AGU23L15: los dos que se recortaban. bounds = [lat_min, lat_max,
+    # lon_min, lon_max].
+    for bounds in ([5.49022, 5.68869, -74.80587, -74.66823],
+                   [5.02, 5.29, -75.72, -75.63]):
+        vista = centro_y_zoom(bounds, ancho_px=ancho, alto_px=alto)
+
+        ancho_circ, alto_circ = _tamanio_proyectado(bounds, vista["zoom"])
+        assert ancho_circ <= ancho, (bounds, ancho_circ)
+        assert alto_circ <= alto, (bounds, alto_circ)
+        # Y que ENTRE no alcanza: tiene que LLENAR la dimension que manda, o el
+        # circuito volveria a verse diminuto en el medio.
+        assert max(ancho_circ / ancho, alto_circ / alto) > 0.8, (bounds, ancho_circ, alto_circ)
+
+
+def test_centro_y_zoom_keeps_the_center_of_the_bounding_box():
+    """El centro no depende del viewport: solo el zoom."""
+    from chec_local_interpreter.ventanas_015 import centro_y_zoom
+
+    bounds = [5.0, 5.2, -75.9, -75.7]
+    con_px = centro_y_zoom(bounds, ancho_px=1553, alto_px=328)
+
+    assert con_px["center"] == {"lat": 5.1, "lon": -75.80000000000001}
+
+
+def test_centro_y_zoom_without_pixel_size_keeps_the_014_formula():
+    """El tamanio del viewport es opcional: sin el, la formula historica de 01.4.
+    El cuaderno no siempre lo conoce -- con `autosize` el ancho lo decide el
+    navegador -- y adivinarlo seria peor que el encuadre aproximado de siempre."""
+    from chec_local_interpreter.ventanas_015 import centro_y_zoom
+
+    bounds = [5.0, 5.2, -75.9, -75.7]
+
+    assert centro_y_zoom(bounds)["zoom"] == pytest.approx(10.4137, abs=1e-3)
+
+
+def test_centro_y_zoom_can_frame_with_the_height_alone():
+    """El widget del cuaderno sabe su alto exacto (`height` por el dominio del
+    subplot) pero NO su ancho: con `autosize` lo decide el navegador. Encuadrar
+    solo por el alto es lo que evita el recorte vertical, que era el defecto;
+    que sobre mapa a los lados es el mal menor y ademas se puede paneár."""
+    from chec_local_interpreter.ventanas_015 import centro_y_zoom
+
+    bounds = [5.49022, 5.68869, -74.80587, -74.66823]
+    alto = 452
+
+    vista = centro_y_zoom(bounds, alto_px=alto)
+
+    _ancho_circ, alto_circ = _tamanio_proyectado(bounds, vista["zoom"])
+    assert alto_circ <= alto
+    assert alto_circ / alto > 0.8
+
+
+def test_centro_y_zoom_never_zooms_past_the_tile_limit():
+    """Un circuito de un solo vano pediria un zoom sin fin: sigue acotado."""
+    from chec_local_interpreter.ventanas_015 import centro_y_zoom
+
+    vista = centro_y_zoom([5.10000, 5.10001, -75.5, -75.49999],
+                          ancho_px=1553, alto_px=328)
+
+    assert vista["zoom"] <= 15.0
+
+
 def test_centro_y_zoom_frames_the_circuit_like_014():
     """Puerto exacto de la formula de 01.4 (celda 7, `map.center`/`map.zoom`):
     centro en el medio del bounding box y zoom por el span mayor, acotado a

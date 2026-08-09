@@ -26,6 +26,7 @@ See:
 
 from __future__ import annotations
 
+import math
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
@@ -220,6 +221,7 @@ def capas_mapa_historico(
     *,
     marcados: Iterable[str] = (),
     etiquetas_por_fid: Mapping[str, str] | None = None,
+    marca_extremos: float = 0.0,
 ) -> dict[str, Any]:
     """The pure layer-grouping logic behind row 1 col 1's map traces
     (design section G, idx 0-5): given one circuit's vano polylines
@@ -250,6 +252,9 @@ def capas_mapa_historico(
     vano looks identical. `marcados_sin_dato` is the marked vano with NO cell
     in the active window, which the notebook paints black -- absence of data,
     not the lowest class.
+
+    `marca_extremos` (degrees of longitude, 0 = off) adds 01's end-of-vano dash
+    to every vano of every layer -- see `_agregar_tramo`.
     """
     etiquetas_por_fid = etiquetas_por_fid or {}
     capas: dict[int, dict[str, list]] = {clase: _capa_vacia() for clase in range(4)}
@@ -264,11 +269,12 @@ def capas_mapa_historico(
     for fid, lat, lon in zip(geo_circuito["fids"], geo_circuito["lat"], geo_circuito["lon"]):
         clase = clases_por_fid.get(fid)
         etiqueta = etiquetas_por_fid.get(fid, "")
-        _agregar_tramo(capas.get(clase, sin_dato), fid, lat, lon, etiqueta)
+        _agregar_tramo(capas.get(clase, sin_dato), fid, lat, lon, etiqueta, marca_extremos)
         if fid in marcados:
-            _agregar_tramo(marcados_capa, fid, lat, lon, etiqueta)
+            _agregar_tramo(marcados_capa, fid, lat, lon, etiqueta, marca_extremos)
             _agregar_tramo(
-                marcados_por_clase.get(clase, marcados_sin_dato), fid, lat, lon, etiqueta
+                marcados_por_clase.get(clase, marcados_sin_dato),
+                fid, lat, lon, etiqueta, marca_extremos,
             )
 
     return {
@@ -490,24 +496,91 @@ def _capa_vacia() -> dict[str, list]:
 
 
 def _agregar_tramo(
-    capa: dict[str, list], fid: str, lat: Iterable[float], lon: Iterable[float], etiqueta: str
+    capa: dict[str, list],
+    fid: str,
+    lat: Iterable[float],
+    lon: Iterable[float],
+    etiqueta: str,
+    marca_extremos: float = 0.0,
 ) -> None:
     """Appends one vano's polyline plus its trailing `None` separator, keeping
     the four columns the same length. The separator carries the fid but an
-    EMPTY label: it is a gap in the line, not a point with a tooltip."""
+    EMPTY label: it is a gap in the line, not a point with a tooltip.
+
+    With `marca_extremos` > 0 it also appends 01's end-of-vano dash: two extra
+    2-point horizontal segments, one centred on each end of the polyline,
+    spanning `marca_extremos` degrees of longitude to either side. They go into
+    the SAME layer -- not a marker and not a new trace -- because
+    `marker.symbol` on Scattermap only accepts the map style's sprite icons,
+    which hold no horizontal-line glyph, and a separate trace would need its own
+    colour and width per class. Dash points carry the fid (so a click on one
+    still resolves to its vano) but NO label: see the payload note below.
+    """
     lat = list(lat)
+    lon = list(lon)
     capa["lat"].extend([*lat, None])
     capa["lon"].extend([*lon, None])
     capa["hovertext"].extend([etiqueta] * len(lat) + [""])
     capa["customdata"].extend([fid] * (len(lat) + 1))
+    if not marca_extremos or not lat:
+        return
+    # Etiqueta VACIA en los seis puntos del par de guiones. Medido sobre
+    # MVLINSEC.shp: marcar los extremos lleva al peor circuito (DON23L13) de
+    # 4.131 a 12.393 puntos por capa, y repetir ahi la etiqueta de ~130
+    # caracteres suma ~1 MB a una sola rafaga del comm del widget -- por encima
+    # del `iopub_data_rate_limit` de 1 MB/s de ipykernel, que descarta el
+    # mensaje y deja la figura en blanco (mismo riesgo que documenta
+    # `nube_fondo`). El vertice real del extremo queda en el centro del guion y
+    # ya lleva la etiqueta, asi que el hover no pierde nada.
+    for indice in (0, len(lat) - 1):
+        capa["lat"].extend([lat[indice], lat[indice], None])
+        capa["lon"].extend([
+            round(lon[indice] - marca_extremos, 6),
+            round(lon[indice] + marca_extremos, 6),
+            None,
+        ])
+        capa["hovertext"].extend(["", "", ""])
+        capa["customdata"].extend([fid] * 3)
 
 
-def centro_y_zoom(bounds: Iterable[float] | None) -> dict[str, Any] | None:
-    """01.4's own framing formula (cell 7, `map.center` / `map.zoom`), ported
-    verbatim: center on the middle of the circuit's bounding box and derive
-    the zoom from its LARGER span, clamped to [9, 15]. Without the clamp a
-    one-vano circuit would zoom past any tile level, and a circuit spanning
-    half the department would zoom out of the region entirely.
+TESELA_MAPLIBRE_PX = 512
+"""Tile size MapLibre projects with. Verified against the browser, not assumed:
+for DON23L13 at zoom 10.1553 the 512 model predicts a 328,9 x 389,9 px bounding
+box and Chrome measured 329 x 390; the 256 model is off by exactly 2x."""
+
+
+def _mercator_y(lat: float) -> float:
+    """Normalised Web Mercator y in [0, 1]. A degree of latitude and one of
+    longitude do NOT cover the same number of pixels, which is the whole reason
+    the old span-in-degrees formula could not frame a circuit."""
+    radianes = math.radians(lat)
+    return (1 - math.log(math.tan(radianes) + 1 / math.cos(radianes)) / math.pi) / 2
+
+
+def centro_y_zoom(
+    bounds: Iterable[float] | None,
+    *,
+    ancho_px: float | None = None,
+    alto_px: float | None = None,
+    margen: float = 0.9,
+) -> dict[str, Any] | None:
+    """Center and zoom that frame one circuit's bounding box.
+
+    With `ancho_px`/`alto_px` this is a real `fitBounds`: the zoom is whichever
+    of the two constraints binds under Web Mercator, so the circuit fits ENTIRE
+    inside the viewport and still fills the dimension that binds. `margen`
+    leaves a border so the outermost vanos do not touch the edge.
+
+    Without them it falls back to 01.4's original formula (zoom from the larger
+    span in DEGREES, clamped to [9, 15]). That fallback exists because the
+    caller does not always know the viewport: with `autosize` the width is the
+    browser's to decide, and guessing it frames worse than the historical
+    approximation.
+
+    Measured, this is not cosmetic. Once 06's figure went full width its map
+    became 1553 x 328 px, and the degrees formula put DON23L13 at 21% of the
+    width and 119% of the HEIGHT -- centred, but clipped top and bottom, which
+    reads as "it did not move to my circuit".
 
     Returns None when there are no bounds, so the caller leaves the current
     view untouched instead of centering on a made-up point.
@@ -516,12 +589,30 @@ def centro_y_zoom(bounds: Iterable[float] | None) -> dict[str, Any] | None:
     if len(bounds) != 4:
         return None
     lat_min, lat_max, lon_min, lon_max = (float(v) for v in bounds)
+    centro = {"lat": (lat_min + lat_max) / 2, "lon": (lon_min + lon_max) / 2}
+
+    if (ancho_px and ancho_px > 0) or (alto_px and alto_px > 0):
+        restricciones = []
+        if ancho_px and ancho_px > 0:
+            fraccion_x = max(abs(lon_max - lon_min) / 360.0, 1e-12)
+            restricciones.append(float(ancho_px) * margen / (TESELA_MAPLIBRE_PX * fraccion_x))
+        if alto_px and alto_px > 0:
+            fraccion_y = max(abs(_mercator_y(lat_min) - _mercator_y(lat_max)), 1e-12)
+            restricciones.append(float(alto_px) * margen / (TESELA_MAPLIBRE_PX * fraccion_y))
+        # El zoom lo fija la dimension que se queda sin lugar primero. Con UNA sola
+        # conocida se encuadra por esa: el widget del cuaderno sabe su alto exacto
+        # (`height` x el dominio del subplot) pero no su ancho, que con `autosize` lo
+        # decide el navegador. Encuadrar por el alto es lo que evita el recorte
+        # vertical, que era el defecto; sobrar ancho solo deja mapa de mas a los lados.
+        escala = min(restricciones)
+        # Sin techo, un circuito de un solo vano pediria un zoom sin fin; sin
+        # piso, uno que cruza el departamento se saldria de la region. El piso
+        # baja de 9 a 3 a proposito: en un viewport apaisado y bajo, encuadrar
+        # un circuito alto puede pedir menos de 9, y recortarlo era el defecto.
+        return {"center": centro, "zoom": float(min(15.0, max(3.0, math.log2(escala))))}
+
     span = max(max(lat_max - lat_min, 1e-4), max(lon_max - lon_min, 1e-4))
-    zoom = min(15.0, max(9.0, np.log2(360.0 / span) - 0.4))
-    return {
-        "center": {"lat": (lat_min + lat_max) / 2, "lon": (lon_min + lon_max) / 2},
-        "zoom": float(zoom),
-    }
+    return {"center": centro, "zoom": float(min(15.0, max(9.0, np.log2(360.0 / span) - 0.4)))}
 
 
 def fid_de_punto(customdata: Iterable[str] | None, point_inds: Iterable[int]) -> str | None:
