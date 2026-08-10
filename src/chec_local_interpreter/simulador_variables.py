@@ -41,6 +41,7 @@ to no hides a real one.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Mapping
 
 import pandas as pd
@@ -254,6 +255,112 @@ Quedan DELIBERADAMENTE fuera:
   en un tablero que van a leer ingenieros, la celda queda vacia. Si alguien confirma
   la unidad, este es el unico sitio donde agregarla.
 """
+
+
+# --- El rotulo que va DENTRO de la barra del top de variables --------------------------
+
+ABREVIATURAS: Mapping[str, str] = {
+    # Las familias climaticas: el "(12 lags)" es informacion de la tabla, no del rotulo.
+    "Precipitacion (12 lags)": "Precip.",
+    "Temperatura (12 lags)": "Temp.",
+    "Rafaga de viento (12 lags)": "Rafaga",
+    "Viento (12 lags)": "Viento",
+    # Las estaticas llegan con el nombre de columna crudo como etiqueta.
+    "PROMEDIO_KWH_TRF": "kWh trafo",
+    "PROMEDIO_KWH_VANO": "kWh vano",
+    "CAPACIDAD_NOMINAL": "Capacidad",
+    "LONG_CRUCETA": "Cruceta",
+    "VAL_CRIT_APOYO": "Crit. apoyo",
+    "FECHA_OPERACION_VANO": "Edad vano",
+    "FECHA_OPERACION_TRF": "Edad trafo",
+    "CNT_FASES": "Fases",
+    "CNT_VN": "Vanos",
+    "CANTIDAD_TIERRA": "Tierra",
+    "CALIBRE_NEUTRO": "Neutro",
+    "LONGITUD": "Longitud",
+    "ALTURA": "Altura",
+    "CONDUCTOR": "Conductor",
+}
+"""Nombre corto de cada variable, para escribirlo DENTRO de su barra.
+
+Se DECLARA y no se deduce recortando la cadena: `"PROMEDIO_KWH_TRF"[:8]` da
+`"PROMEDIO"`, que es la mitad del nombre de tres variables distintas y las
+vuelve indistinguibles justo en el panel que existe para diferenciarlas.
+
+Quedan fuera a proposito las que ya son cortas y reconocibles tal cual --
+`NR_T`, `DDT`, `TIPO`, `TIPO_TAX`, `NG_RED`, `X2`, `Y2` --: un resumen que no
+acorta solo agrega un nombre mas que aprender.
+"""
+
+# Ancho de caracter a 8 px con la pila de fuentes de Plotly (`"Open Sans", verdana,
+# arial, sans-serif`), MEDIDO con `measureText` en el navegador y no estimado:
+#
+#   kWh trafo   39,42 px -> 4,38 /car      NR_T   21,56 px -> 5,39 /car
+#   Precip.     27,18 px -> 3,88 /car      DDT    17,06 px -> 5,69 /car
+#   Crit. apoyo 44,18 px -> 4,02 /car      NR     11,55 px -> 5,77 /car
+#
+# Son dos familias y no una: las iniciales van en MAYUSCULA sostenida, que es medio
+# caracter mas ancha que el texto mixto de los resumenes. Un solo promedio le queda
+# corto a una y le sobra a la otra -- con 5,6 para todo, "kWh trafo" pedia 58 px de
+# barra para un texto que mide 39. Cada constante es el maximo medido de su familia,
+# asi que el rotulo nunca se sale; el error cae siempre del lado de escribir de menos,
+# que es el que no rompe nada porque el nombre completo esta en el hover.
+PX_POR_CARACTER_MAYUSCULAS = 5.8
+PX_POR_CARACTER_MIXTO = 4.7
+# El aire en las dos puntas, para que el rotulo no toque el borde de su barra.
+HOLGURA_PX = 6.0
+# Estas medidas valen para 8 px. Cambiar el tamanio de fuente del panel obliga a
+# volver a medir; el cuaderno lo fija en `TAM_FUENTE_BARRA`.
+TAM_FUENTE_MEDIDO = 8
+
+
+def ancho_px(texto: str) -> float:
+    """Cuanto mide `texto` escrito dentro de una barra, a `TAM_FUENTE_MEDIDO` px."""
+    por_caracter = (PX_POR_CARACTER_MAYUSCULAS if texto.isupper()
+                    else PX_POR_CARACTER_MIXTO)
+    return len(texto) * por_caracter
+
+
+def abreviatura(label: str) -> str:
+    """El nombre corto de la variable, o el suyo propio si no tiene uno declarado."""
+    return ABREVIATURAS.get(label, label)
+
+
+def iniciales(label: str) -> str:
+    """La ultima parada antes de no escribir nada: las iniciales del RESUMEN.
+
+    Del resumen y no del nombre crudo porque es el rotulo que el lector ya vio
+    escrito completo en las barras largas del mismo grupo, asi que `KT` se
+    reconstruye desde `kWh trafo` sin tener que adivinar.
+    """
+    palabras = [p for p in re.split(r"[^0-9A-Za-z]+", abreviatura(label)) if p]
+    return "".join(p[0].upper() for p in palabras[:3])
+
+
+def rotulo_en_barra(
+    label: str,
+    largo_px: float,
+    *,
+    holgura_px: float = HOLGURA_PX,
+) -> str:
+    """Que escribir dentro de una barra de `largo_px` de largo: el resumen, sus
+    iniciales, o nada.
+
+    La barra lleva el nombre encima porque con cinco vanos por diez posiciones
+    no hay leyenda que alcance -- cincuenta entradas no se leen -- y el rotulo
+    pegado al dato ahorra el cruce. Pero el nombre completo no cabe en una barra
+    corta, y Plotly no sabe achicarlo a media palabra: o lo escribe entero o lo
+    esconde. Elegir el rotulo aqui es lo que convierte ese todo-o-nada en una
+    cascada, y el nombre completo sigue estando en la etiqueta del mouse, que es
+    donde se resuelve la duda.
+
+    Vacio antes que cortado: un texto que se sale de su barra se monta sobre la
+    vecina y termina rotulando a la variable equivocada.
+    """
+    for texto in (abreviatura(label), iniciales(label)):
+        if texto and largo_px >= ancho_px(texto) + holgura_px:
+            return texto
+    return ""
 
 
 def _fila(knob: Knob) -> dict[str, object]:

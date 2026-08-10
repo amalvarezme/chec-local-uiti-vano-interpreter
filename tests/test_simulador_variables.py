@@ -29,9 +29,13 @@ from chec_local_interpreter.simulador_variables import (
     JUICIO_SIMULACION,
     UNIDADES,
     VEREDICTOS,
+    abreviatura,
+    ancho_px,
     columnas_panel,
+    iniciales,
     knobs_bloqueados,
     knobs_simulables,
+    rotulo_en_barra,
     tabla_variables_simulables,
 )
 from chec_local_interpreter.vano_controls import Knob
@@ -359,3 +363,80 @@ def test_an_empty_group_still_produces_its_two_columns():
 
     assert len(columnas) == 4
     assert [len(k) for _t, k in columnas] == [1, 0, 0, 0]
+
+
+# --- El rotulo que va DENTRO de la barra del top de variables --------------------------
+#
+# La barra lleva el nombre escrito encima porque con cinco vanos por diez posiciones no
+# hay leyenda que alcance: cincuenta entradas no se leen. Pero el nombre completo tampoco
+# cabe en una barra corta, y Plotly no sabe achicarlo a media palabra: o lo escribe entero
+# o lo esconde. Elegir el rotulo del lado de Python es lo que permite la cascada --
+# resumen, inicial, nada -- en vez del todo o nada.
+
+
+def test_the_abbreviation_shortens_the_names_that_do_not_fit():
+    """`PROMEDIO_KWH_TRF` dentro de una barra son dieciseis caracteres de un
+    nombre que se lee igual de bien resumido. El resumen se DECLARA, no se
+    deduce cortando la cadena: "PROMEDIO_KWH_TRF"[:8] da "PROMEDIO", que es la
+    mitad de tres variables distintas."""
+    assert abreviatura("PROMEDIO_KWH_TRF") == "kWh trafo"
+    assert abreviatura("PROMEDIO_KWH_VANO") == "kWh vano"
+    assert abreviatura("Precipitacion (12 lags)") == "Precip."
+
+
+def test_an_unknown_label_keeps_its_own_name():
+    """Una variable sin resumen declarado se escribe tal cual. Inventarle una
+    abreviatura al vuelo produce rotulos que nadie reconoce, y ese es el unico
+    trabajo que el rotulo tiene."""
+    assert abreviatura("DDT") == "DDT"
+    assert abreviatura("VARIABLE_NUEVA") == "VARIABLE_NUEVA"
+
+
+def test_the_initials_come_from_the_abbreviation_and_not_from_the_raw_name():
+    """La ultima parada antes de no escribir nada. Sale del RESUMEN porque es el
+    nombre que el lector ya vio en las barras largas del mismo grupo: "KT" se
+    reconstruye desde "kWh trafo", no desde "PROMEDIO_KWH_TRF"."""
+    assert iniciales("PROMEDIO_KWH_TRF") == "KT"
+    assert iniciales("Precipitacion (12 lags)") == "P"
+    assert iniciales("DDT") == "D"
+
+
+def test_a_long_bar_gets_the_abbreviation():
+    """Con sitio de sobra se escribe el resumen: es el rotulo que se entiende sin
+    pasar el mouse."""
+    assert rotulo_en_barra("PROMEDIO_KWH_TRF", 200.0) == "kWh trafo"
+
+
+def test_a_short_bar_falls_back_to_the_initials():
+    """La barra decima de un grupo mide una fraccion de la primera. Ahi el resumen
+    no entra y la inicial si -- y el nombre completo sigue estando en la etiqueta
+    del mouse, que es donde se resuelve la duda."""
+    assert rotulo_en_barra("PROMEDIO_KWH_TRF", 24.0) == "KT"
+
+
+def test_a_bar_too_short_even_for_the_initials_stays_empty():
+    """Antes que un rotulo cortado a la mitad, ninguno. Un texto que se sale de su
+    barra se monta sobre la vecina y termina rotulando a la variable equivocada."""
+    assert rotulo_en_barra("PROMEDIO_KWH_TRF", 4.0) == ""
+
+
+def test_the_cascade_is_monotone_in_the_available_length():
+    """Mas barra nunca puede dar menos rotulo. Es la propiedad que hace que mover
+    el eje no baraje los rotulos de forma caprichosa."""
+    largos = [rotulo_en_barra("PROMEDIO_KWH_TRF", px) for px in range(0, 200, 4)]
+    vistos = [len(t) for t in largos]
+    assert vistos == sorted(vistos)
+
+
+def test_the_uppercase_initials_are_measured_wider_than_the_mixed_case_summary():
+    """Dos familias de texto y no una: las iniciales van en MAYUSCULA sostenida,
+    que es medio caracter mas ancha que el texto mixto de los resumenes. Medido
+    con `measureText` a 8 px sobre la pila de fuentes de Plotly -- `NR` mide 11,55
+    px en dos caracteres y `Precip.` 27,18 en siete. Un solo promedio le queda
+    corto a una familia y le sobra a la otra."""
+    assert ancho_px("NR") / 2 > ancho_px("Precip.") / 7
+    # Nunca por debajo de lo medido: un rotulo mas ancho de lo que se creyo se sale
+    # de su barra y termina rotulando a la vecina.
+    assert ancho_px("NR") >= 11.55
+    assert ancho_px("kWh trafo") >= 39.42
+    assert ancho_px("Crit. apoyo") >= 44.18
