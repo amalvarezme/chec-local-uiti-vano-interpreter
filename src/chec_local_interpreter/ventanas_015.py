@@ -507,6 +507,51 @@ def series_temporal_vanos(
     return series
 
 
+def serie_temporal_circuito(
+    tabla: pd.DataFrame,
+    *,
+    circuito: str,
+    n_ventanas: int,
+) -> dict[str, Any]:
+    """One time series for the WHOLE circuit: UITI and events summed over every
+    vano of each window.
+
+    Notebook 06 falls back to the whole circuit whenever no vano is marked --
+    the map, the per-vano top and the simulation all do -- and the time series
+    has to fall there too. Otherwise choosing a circuit leaves that panel blank,
+    which reads as "there is nothing to see here" when there is.
+
+    Same shape as one entry of `series_temporal_vanos`, so the panel paints it
+    through the same code path, with `fid = None` and an `etiqueta` that names
+    the circuit: a series over a whole circuit that looked like a vano's would
+    be read as one vano's, off by three orders of magnitude.
+
+    A window with no cell carries `None`, never `0` -- a zero would read as "no
+    UITI in that window" when what happened is that there was no measurement.
+    """
+    circuitos = tabla["CIRCUITO"].astype(str).to_numpy()
+    mask = circuitos == str(circuito)
+    ventanas_i = tabla["ventana_i"].to_numpy()[mask]
+    uiti = tabla["uiti_acumulado"].to_numpy()[mask]
+    eventos = tabla["num_eventos"].to_numpy()[mask]
+
+    acumulado: dict[int, list[float]] = {}
+    for v, u, e in zip(ventanas_i, uiti, eventos):
+        fila = acumulado.setdefault(int(v), [0.0, 0.0])
+        fila[0] += float(u)
+        fila[1] += float(e)
+
+    return {
+        "fid": None,
+        "etiqueta": f"Circuito {circuito} (todos sus vanos)",
+        "x": list(range(int(n_ventanas))),
+        "uiti": [acumulado[i][0] if i in acumulado else None
+                 for i in range(int(n_ventanas))],
+        "eventos": [int(acumulado[i][1]) if i in acumulado else None
+                    for i in range(int(n_ventanas))],
+    }
+
+
 def reparto_por_clase(
     tabla: pd.DataFrame,
     clase_por_fila: np.ndarray,

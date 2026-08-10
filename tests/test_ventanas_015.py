@@ -53,6 +53,7 @@ from chec_local_interpreter.ventanas_015 import (
     construir_ventanas,
     nube_fondo,
     nube_seleccion,
+    serie_temporal_circuito,
 )
 from scripts.extract_geometrias_014 import _extraer_bloque_json
 
@@ -1040,3 +1041,63 @@ def test_nube_fondo_draws_everything_below_the_cap():
 
     assert sum(len(c["x"]) for c in capas) == 4
     assert capas[0]["x"] == [1, 2]
+
+
+# --- Serie del circuito completo (cuaderno 06, fila 3) -----------------------
+
+
+def _tabla_serie():
+    return pd.DataFrame(
+        {
+            "CIRCUITO": ["C1", "C1", "C1", "C1", "C2"],
+            "FID_VANO": ["VA", "VB", "VA", "VC", "VZ"],
+            "ventana_i": [0, 0, 2, 2, 0],
+            "num_eventos": [1, 4, 9, 1, 100],
+            "uiti_acumulado": [0.5, 1.5, 7.0, 3.0, 50.0],
+        }
+    )
+
+
+def test_serie_temporal_circuito_sums_every_vano_of_each_window():
+    """Sin vanos marcados el grano del tablero es el CIRCUITO COMPLETO -- la misma
+    regla a la que ya caen el mapa, el top por vano y la simulacion. La serie
+    tiene que caer ahi tambien, o al elegir circuito el panel se quedaria vacio
+    diciendo que no hay nada que ver cuando si lo hay."""
+    serie = serie_temporal_circuito(_tabla_serie(), circuito="C1", n_ventanas=3)
+
+    assert serie["x"] == [0, 1, 2]
+    assert serie["uiti"] == [2.0, None, 10.0]
+    assert serie["eventos"] == [5, None, 10]
+
+
+def test_a_window_without_cells_is_a_gap_and_never_a_zero():
+    """Un cero se leeria como "no hubo UITI en esa ventana"; lo que paso es que no
+    hubo medicion. Plotly corta la linea en `None`, que es la marca honesta."""
+    serie = serie_temporal_circuito(_tabla_serie(), circuito="C1", n_ventanas=3)
+
+    assert serie["uiti"][1] is None and serie["eventos"][1] is None
+
+
+def test_another_circuits_rows_never_leak_in():
+    serie = serie_temporal_circuito(_tabla_serie(), circuito="C2", n_ventanas=3)
+
+    assert serie["uiti"] == [50.0, None, None]
+    assert serie["eventos"] == [100, None, None]
+
+
+def test_a_circuit_with_no_rows_gives_a_series_of_gaps():
+    """No se devuelve vacio: el eje tiene que conservar sus once ventanas, o la
+    figura reescala y el panel parece describir otro periodo."""
+    serie = serie_temporal_circuito(_tabla_serie(), circuito="NO_EXISTE", n_ventanas=3)
+
+    assert serie["x"] == [0, 1, 2]
+    assert serie["uiti"] == [None, None, None]
+
+
+def test_the_circuit_series_declares_what_it_is():
+    """El panel escribe este nombre en la leyenda y en el hover: sin el, una serie
+    del circuito entero se lee como si fuera la de un vano."""
+    serie = serie_temporal_circuito(_tabla_serie(), circuito="C1", n_ventanas=3)
+
+    assert serie["fid"] is None
+    assert "C1" in serie["etiqueta"]
