@@ -231,27 +231,58 @@ def ranking_por_bolsa(
 
 def relevancia_media_por_grupo(
     barrido: BarridoLote, *, clases: np.ndarray, n_clases: int = 4,
-) -> dict[int, dict[str, float]]:
-    """La caida media alcanzable de cada control, por grupo de criticidad.
+) -> dict[int, dict[str, dict[str, float]]]:
+    """La caida alcanzable de cada control por grupo de criticidad: media, DESVIACION
+    y cuantas bolsas la sostienen.
 
     Es lo que se puede leer de un vistazo con 111 mil bolsas: la pregunta del
     cuaderno 07 no es que mueve a UN vano sino que mueve al GRUPO. Se promedia en
-    ordenes de magnitud, no en unidades de UITI, para que un puna~do de bolsas
+    ordenes de magnitud, no en unidades de UITI, para que un punado de bolsas
     caras no se lleve el promedio entero.
+
+    La desviacion NO es decoracion. Una media alta con una desviacion del mismo
+    tamano dice que la variable funciona en unos vanos del grupo y no en otros, y
+    esa es una recomendacion distinta -- "revisar vano por vano" -- de la que da
+    una media alta y estable, que si sostiene una politica para todo el grupo.
+    Sin la barra de error, las dos se dibujan identicas.
     """
     clases = np.asarray(clases, dtype=int)
     caida = _log10(barrido.u_base)[None, :] - _log10(barrido.u_min)
-    medias: dict[int, dict[str, float]] = {}
+    resumen: dict[int, dict[str, dict[str, float]]] = {}
     for clase in range(n_clases):
         mascara = clases == clase
         if not mascara.any():
-            medias[clase] = {}
+            resumen[clase] = {}
             continue
-        medias[clase] = {
-            label: float(caida[k, mascara].mean())
+        resumen[clase] = {
+            label: {
+                "media": float(caida[k, mascara].mean()),
+                "desviacion": float(caida[k, mascara].std()),
+                "n_bolsas": int(mascara.sum()),
+            }
             for k, label in enumerate(barrido.labels)
         }
-    return medias
+    return resumen
+
+
+def gates_medias_por_grupo(
+    gates: np.ndarray, clases: np.ndarray, n_clases: int = 4,
+) -> dict[int, np.ndarray]:
+    """Las compuertas del grafo experto PROMEDIADAS dentro de cada grupo.
+
+    El grafo del cuaderno 06 describe una seleccion de vanos; aqui la "seleccion"
+    es el grupo de criticidad entero, que es la unidad en la que este cuaderno
+    piensa. Se devuelve la submatriz de compuertas de cada grupo -- y no ya el
+    grafo -- porque quien decide si se puede reconstruir es
+    `grafo_por_grupo_si_no_colapsado`, y esa decision depende de si las compuertas
+    VARIAN dentro del grupo: un grupo cuyos vanos estan compuertados igual no
+    produjo ninguna estructura propia, y dibujarla seria presentar el grafo
+    experto fijo como si la hubiera estimado ese grupo.
+    """
+    gates = np.asarray(gates, dtype=float)
+    clases = np.asarray(clases, dtype=int)
+    return {clase: gates[clases == clase] for clase in range(n_clases)
+            if (clases == clase).any()}
 
 
 def tabla_vano_ventana(

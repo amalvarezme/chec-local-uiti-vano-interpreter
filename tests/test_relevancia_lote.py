@@ -30,6 +30,7 @@ from chec_impacto.models.criticality_assignment import Geometria
 from chec_local_interpreter.relevancia_lote import (
     SIN_EVENTOS,
     barrer_todas_las_bolsas,
+    gates_medias_por_grupo,
     guardar_hojas,
     ranking_por_bolsa,
     relevancia_media_por_grupo,
@@ -221,12 +222,49 @@ def test_the_group_bars_average_the_reachable_drop_over_the_bags_of_each_group()
     barrido = _barrido([lambda v: 100.0 - 9.9 * v[0], lambda v: 100.0 - 9.9 * v[0]],
                        [_knob("A", feature_names=("x",))])
 
-    medias = relevancia_media_por_grupo(
+    resumen = relevancia_media_por_grupo(
         barrido, clases=np.array([2, 3]), n_clases=4)
 
-    assert set(medias) <= {0, 1, 2, 3}
-    assert medias[2]["A"] > 0
-    assert 1 not in medias or not medias[1]
+    assert set(resumen) <= {0, 1, 2, 3}
+    assert resumen[2]["A"]["media"] > 0
+    assert 1 not in resumen or not resumen[1]
+
+
+def test_the_summary_carries_the_spread_across_the_bags_of_the_group():
+    """Una media alta con una desviacion del mismo tamano dice que la variable
+    funciona en unos vanos del grupo y no en otros, y esa es una recomendacion
+    distinta -- revisar vano por vano -- de la que da una media alta y estable.
+    Sin la barra de error las dos se dibujan identicas."""
+    # Dos bolsas del MISMO grupo que reaccionan de forma muy distinta.
+    barrido = _barrido([lambda v: 100.0 - 9.9 * v[0], lambda v: 100.0],
+                       [_knob("A", feature_names=("x",))])
+
+    resumen = relevancia_media_por_grupo(barrido, clases=np.array([2, 2]), n_clases=4)
+
+    assert resumen[2]["A"]["desviacion"] > 0
+    assert resumen[2]["A"]["n_bolsas"] == 2
+
+
+def test_a_group_whose_bags_all_react_alike_has_no_spread():
+    barrido = _barrido([lambda v: 100.0 - 9.9 * v[0], lambda v: 100.0 - 9.9 * v[0]],
+                       [_knob("A", feature_names=("x",))])
+
+    resumen = relevancia_media_por_grupo(barrido, clases=np.array([2, 2]), n_clases=4)
+
+    assert resumen[2]["A"]["desviacion"] == pytest.approx(0.0)
+
+
+def test_the_gates_are_split_by_group_and_not_averaged_yet():
+    """Quien decide si el grafo se puede reconstruir es
+    `grafo_por_grupo_si_no_colapsado`, y esa decision depende de si las compuertas
+    VARIAN dentro del grupo. Promediarlas aqui tiraria justo esa informacion."""
+    gates = np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+
+    por_grupo = gates_medias_por_grupo(gates, np.array([2, 2, 3]))
+
+    assert por_grupo[2].shape == (2, 2)
+    assert por_grupo[3].shape == (1, 2)
+    assert 0 not in por_grupo
 
 
 # --- el guardado --------------------------------------------------------------------------
