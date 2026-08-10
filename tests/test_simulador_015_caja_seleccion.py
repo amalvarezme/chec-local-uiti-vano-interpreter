@@ -61,12 +61,56 @@ def test_the_box_is_a_map_layer_below_the_traces_and_not_a_trace(fuente):
     assert "fig.layout.map.layers[0].source = cajas_seleccion(" in fuente
 
 
-def test_only_the_base_map_carries_the_selection_box(fuente):
+def test_only_the_base_map_carries_the_yellow_selection_box(fuente):
     """Row 2 is the model's OUTPUT, not a control: marking there would mix
-    "what I chose" with "what the model predicted" on the same surface."""
+    "what I chose" with "what the model predicted" on the same surface. Row 2
+    has boxes of its own, but they answer a different question -- see below."""
     assert fuente.count("layers=[CAPA_CAJA_SELECCION]") == 1
-    assert "assert len(_fig.layout.map.layers) == 1 and not _fig.layout.map2.layers" in fuente
-    assert "assert _fig.layout.map.layers[0].below == 'traces'" in fuente
+    assert "assert len(_fig.layout.map.layers) == 1" in fuente
+    assert "assert len(_fig.layout.map2.layers) == len(CAMBIOS)" in fuente
+
+
+def test_the_simulated_map_has_one_box_layer_per_outcome(fuente):
+    """El recuadro de la derecha no dice cual vano elegi -- eso ya lo dice el de
+    la izquierda, sobre el mismo vano -- sino QUE LE PASO: verde si bajo de
+    grupo, amarillo si se quedo igual, rojo si subio. Son TRES capas porque una
+    capa de `layout.map.layers` pinta con UN color, y se crean todas al armar la
+    figura para que el repintado sea una escritura de `source` por capa: quitar y
+    poner capas reordena en MapLibre lo que hay debajo."""
+    assert "CAPAS_CAJA_SIMULADA = [" in fuente
+    capas = fuente[fuente.index("CAPAS_CAJA_SIMULADA = [") :][:600]
+    assert "below='traces'" in capas
+    assert "for _cambio in CAMBIOS" in capas
+    assert "layers=CAPAS_CAJA_SIMULADA" in fuente
+    # El "no cambio" reusa el amarillo del mapa base: es justo el estado en que
+    # los dos mapas dicen lo mismo, y un cuarto color inventaria una diferencia.
+    assert "COLOR_CAJA_IGUAL = COLOR_CAJA_SELECCION" in fuente
+    assert "fig.layout.map2.layers[_i_capa].source = _cajas[_cambio]" in fuente
+
+
+def test_the_box_and_the_framing_follow_only_the_vanos_that_were_simulated(fuente):
+    """Marcar un vano DESPUES de simular no lo mete en el resultado. Si la caja o
+    el encuadre lo siguieran, el mapa se acercaria a un vano que el modelo nunca
+    puntuo y el recuadro afirmaria un desenlace que nadie calculo."""
+    assert "_simulados = set(_ultimo_resultado_simulacion['FID_VANO'].astype(str))" in fuente
+    assert "_marcados_simulados = [f for f in _marcados if f in _simulados]" in fuente
+    assert "marcados=_marcados_simulados" in fuente
+    assert "bounds_de_fids(geo, _marcados_simulados)" in fuente
+    # Sin nada marcado que se haya simulado, vuelve al encuadre del circuito en
+    # vez de quedarse en el de la seleccion anterior.
+    assert "or _vista_del_circuito(circuito)" in fuente
+
+
+def test_the_simulated_tooltip_carries_both_groups(fuente):
+    """El grupo base viaja por PUNTO y no en la plantilla de la traza: dentro de
+    una traza -- que es UNA clase simulada -- el grupo base cambia de vano a
+    vano. Sin los dos en la misma etiqueta, saber si el vano mejoro obliga a
+    cruzar al mapa de al lado y acordarse del color."""
+    assert "plantilla_extra='<br>Criticidad base: %{customdata[3]}'" in fuente
+    assert "clases_base = clases_por_fid_para_estado(_ultimo_resultado_simulacion, ESTADO_BASE)" in fuente
+    # La columna extra viaja para TODOS los fids: dentro de una traza customdata
+    # tiene que medir siempre lo mismo o `%{customdata[3]}` lee el hueco vecino.
+    assert "extra_por_fid.get(fid, ('sin dato',))" in fuente
 
 
 def test_the_notebook_redraw_feeds_the_layer_from_the_geometry(fuente):

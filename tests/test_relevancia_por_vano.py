@@ -16,6 +16,10 @@ up and the button stops feeling instant.
 
 from __future__ import annotations
 
+import json
+import re
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -149,3 +153,60 @@ def test_a_climate_family_moves_all_its_lags_as_one_control():
     assert [f["knob_id"] for f in por_vano["VA"]] == ["clima:x"]
     # Mover las dos columnas a la vez da el doble que mover una sola.
     assert por_vano["VA"][0]["magnitud"] > 0
+
+
+# --- El cableado del cuaderno: que variables entran al ranking -------------------------
+#
+# El barrido puntua lo que se le pase. Que el ranking se quede en los dos conjuntos
+# OFRECIDOS -- intervencion y escenario -- no es una propiedad de `sensibilidad_minmax_por_vano`
+# sino del argumento que el cuaderno le manda, y por eso se fija aqui contra la fuente.
+
+NOTEBOOK = (
+    Path(__file__).resolve().parents[1]
+    / "notebooks"
+    / "project_flow"
+    / "06_uiti_vano_explicabilidad_simulador.ipynb"
+)
+
+
+@pytest.fixture(scope="module")
+def fuente() -> str:
+    celdas = json.loads(NOTEBOOK.read_text(encoding="utf-8"))["cells"]
+    return "\n".join("".join(celda["source"]) for celda in celdas)
+
+
+def test_the_ranking_only_sweeps_the_variables_the_panel_offers(fuente):
+    """El ranking recorre `KNOBS_PANEL` -- el mismo filtro que arma las cuatro
+    columnas del panel -- y nunca `KNOBS` entero.
+
+    Con `KNOBS` entrarian al top las tres refutadas y las cinco de lectura unica,
+    y el panel terminaria diciendo que la variable mas relevante de un vano es
+    `CNT_TRF`: los trafos afectados EN LA FALLA, que se miden DESPUES del evento
+    que el modelo intenta anticipar. Eso no es un ranking flojo, es la flecha del
+    analisis al reves, y sostiene ordenes de trabajo que no arreglan nada.
+
+    Se fija contra la fuente porque el filtro no vive dentro del barrido: es el
+    argumento que el cuaderno le pasa, y cambiarlo por `KNOBS` no rompe nada
+    visible -- solo agrega ocho variables al ranking en silencio.
+    """
+    assert "KNOBS_PANEL = knobs_simulables(KNOBS)" in fuente
+    llamada = re.search(
+        r"return sensibilidad_minmax_por_vano\((.*?)\n    \)", fuente, re.S
+    )
+    assert llamada is not None
+    argumentos = llamada.group(1)
+    assert "knobs=KNOBS_PANEL" in argumentos
+    assert "knobs=KNOBS," not in argumentos
+
+
+def test_the_blocked_variables_reach_the_simulation_but_never_the_ranking(fuente):
+    """Quitarlas del ranking no las saca de la SIMULACION: un override solo se
+    escribe si se fija, asi que entran al modelo con el valor OBSERVADO de cada
+    vano. Por eso `simular_bolsas` sigue resolviendo contra `KNOBS` completo
+    mientras el barrido se queda con los ofrecidos -- son dos preguntas
+    distintas, y confundirlas es lo que este par de pruebas separa."""
+    assert "KNOBS_BLOQUEADOS = knobs_bloqueados(KNOBS)" in fuente
+    # `expand_knob_overrides` resuelve que features toca cada control fijado, y
+    # solo llegan ahi los que el panel ofrecio.
+    assert "expand_knob_overrides(\n" in fuente
+    assert "{knob_id: control.value for knob_id, control in controles.items()}, KNOBS)" in fuente
