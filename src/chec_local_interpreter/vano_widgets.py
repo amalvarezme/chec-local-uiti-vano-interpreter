@@ -92,7 +92,7 @@ def _clase_selector():
         value = traitlets.Tuple()
 
         def __init__(self, opciones=(), *, titulo="", alto="132px",
-                     ancho_casilla="96px", maximo=None, **kwargs):
+                     ancho_casilla="96px", maximo=None, columnas=None, **kwargs):
             super().__init__(**kwargs)
             self.casillas = {}
             self._silencio = False
@@ -114,7 +114,10 @@ def _clase_selector():
             )
             encabezado = [widgets.HTML(f"<b>{titulo}</b>")] if titulo else []
             self.children = [*encabezado, self.caja]
-            self.poblar(opciones)
+            if columnas is not None:
+                self.poblar_columnas(columnas)
+            else:
+                self.poblar(opciones)
 
         def poblar(self, opciones):
             """Rebuilds the list for a new option set (a new circuit, in the
@@ -143,6 +146,54 @@ def _clase_selector():
             self.value = ()
             # Sin esto un circuito nuevo arrancaria con las casillas que el
             # anterior dejo deshabilitadas por el tope, y bloqueado de entrada.
+            self._aplicar_tope()
+
+        def poblar_columnas(self, columnas):
+            """Las mismas casillas, repartidas en COLUMNAS con titulo.
+
+            Es lo que pide la lista de variables del simulador: dos columnas para lo
+            que se puede hacer y dos para lo que se quiere anticipar. Una lista
+            corrida obliga a recordar el veredicto de cada variable para saber a cual
+            de las dos preguntas pertenece; en columnas lo dice la posicion.
+
+            Una columna VACIA se dibuja igual, con su titulo solo: si desapareciera,
+            las demas se corririan de sitio cada vez que cambia el catalogo.
+
+            `value` sigue saliendo de las casillas y en el orden en que las columnas
+            las declaran, que es el que usan la rejilla de controles y el resumen.
+            """
+            self._silencio = True
+            try:
+                self.casillas = {}
+                cajas = []
+                for titulo_columna, opciones in columnas:
+                    de_la_columna = []
+                    for etiqueta, clave in _pares_de_opciones(opciones):
+                        caja = widgets.Checkbox(
+                            value=False, description=etiqueta, indent=False,
+                            layout=widgets.Layout(width=self._ancho_casilla,
+                                                  margin="0 0 0 0"),
+                        )
+                        caja.observe(self._al_cambiar_casilla, names="value")
+                        self.casillas[clave] = caja
+                        de_la_columna.append(caja)
+                    cabecera = widgets.HTML(
+                        f'<span style="font-weight:600;font-size:12px;'
+                        f'border-bottom:1px solid #e4c4c0;display:block;'
+                        f'margin-bottom:3px;">{titulo_columna}</span>'
+                    )
+                    cajas.append(widgets.VBox(
+                        [cabecera, *de_la_columna],
+                        layout=widgets.Layout(align_items="flex-start",
+                                              margin="0 12px 0 0"),
+                    ))
+                self.caja.children = tuple(cajas)
+                # Las columnas mandan el ancho; el `flex_flow` de fila corrida las
+                # apilaria de a una por renglon en cuanto la celda se estreche.
+                self.caja.layout.flex_flow = "row nowrap"
+            finally:
+                self._silencio = False
+            self.value = ()
             self._aplicar_tope()
 
         def _aplicar_tope(self):

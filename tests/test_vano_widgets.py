@@ -357,3 +357,63 @@ def test_repopulating_clears_the_selection_and_re_enables_every_checkbox():
 
     assert selector.value == ()
     assert all(not c.disabled for c in selector.casillas.values())
+
+
+# --- Selector por COLUMNAS (las variables del simulador, cuaderno 06) ------------------
+
+
+def test_the_selector_can_lay_its_checkboxes_out_in_titled_columns():
+    """Dieciocho casillas en una lista corrida obligan a recordar el veredicto de
+    cada variable para saber a cual de las dos preguntas pertenece. En columnas
+    eso lo dice la posicion, y el titulo lo confirma."""
+    from chec_local_interpreter.vano_widgets import construir_selector_casillas
+
+    selector = construir_selector_casillas(
+        columnas=[("Intervencion", [("Altura", "ALTURA"), ("Poda", "NR_T")]),
+                  ("Escenario", [("Lluvia", "clima:prep")])],
+    )
+
+    assert list(selector.casillas) == ["ALTURA", "NR_T", "clima:prep"]
+    # Una caja por columna, cada una con su titulo mas sus casillas.
+    assert len(selector.caja.children) == 2
+    assert len(selector.caja.children[0].children) == 3   # titulo + 2 casillas
+    assert len(selector.caja.children[1].children) == 2   # titulo + 1 casilla
+
+
+def test_the_value_of_a_column_selector_follows_the_declared_order():
+    """El orden importa: es el que usan la rejilla de controles y el resumen, y si
+    cambiara entre repintados las columnas se barajarian bajo la mano."""
+    from chec_local_interpreter.vano_widgets import construir_selector_casillas
+
+    selector = construir_selector_casillas(
+        columnas=[("A", [("uno", "1"), ("dos", "2")]), ("B", [("tres", "3")])],
+    )
+
+    selector.casillas["3"].value = True
+    selector.casillas["1"].value = True
+
+    assert selector.value == ("1", "3")
+
+
+def test_an_empty_column_still_renders_so_the_others_keep_their_place():
+    """Cuatro huecos fijos. Una columna que aparece y desaparece corre a las demas
+    de sitio cada vez que cambia el catalogo."""
+    from chec_local_interpreter.vano_widgets import construir_selector_casillas
+
+    selector = construir_selector_casillas(
+        columnas=[("Llena", [("uno", "1")]), ("Vacia", [])],
+    )
+
+    assert len(selector.caja.children) == 2
+    assert len(selector.caja.children[1].children) == 1   # solo su titulo
+
+
+def test_the_flat_option_list_keeps_working_for_the_vano_selector():
+    """Los vanos siguen siendo una lista corrida con scroll: son cientos y no
+    tienen grupos."""
+    from chec_local_interpreter.vano_widgets import construir_selector_vanos
+
+    selector = construir_selector_vanos(["VA", "VB"])
+
+    assert list(selector.casillas) == ["VA", "VB"]
+    assert len(selector.caja.children) == 2   # las dos casillas, sin columnas
