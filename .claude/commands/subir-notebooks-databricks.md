@@ -138,9 +138,15 @@ Fix: insert a NEW first cell — literally `nb["cells"].insert(0, ...)`, before 
 
 **`06` writes nothing by default, in Databricks or locally.** The `ipywidgets` app IS its interface everywhere: circuit, window, vano selection, simulator knobs and the "Simular" button all live in the notebook. Running it produces no files and opens no browser, so this command has nothing extra to redirect.
 
-**It CAN export a self-contained HTML panel, and that path is opt-in.** With `EXPORTAR_PANEL_WEB = True` (constants cell) the last cell also writes `reports/paneles/06_uiti_vano_explicabilidad_simulador.html` (~12 MB, `plotly.js` embedded) and, locally, opens it. In Databricks it never opens anything: the notebook detects the runtime itself through `DATABRICKS_RUNTIME_VERSION` (`EN_DATABRICKS`) and only writes the file to the Volume, printing the `databricks fs cp` to download it. The check is on the environment variable and NOT on `dbutils`/`spark`, which are names injected into the notebook kernel and absent from a `%run` or an imported module. The write also fails soft there: if the Volume rejects it the notebook warns and carries on, because that file is an optional extra — locally it raises, because if you asked for it, it is the deliverable.
-
-That exported HTML is **not** a snapshot: it carries a working "Simular". The MIL forward pass is transcribed into JavaScript from `chec_local_interpreter.mil_web_export.predecir_numpy`, which `tests/test_mil_web_export.py` pins against the torch module. What IS bounded is coverage — the model weights are 0.46 MB and always travel, but the instance matrix is 88 MB across the 208 circuits, so `CIRCUITOS_SIMULABLES` picks which ones to embed (default: the active circuit). There is still no `/app-*` sibling for `06` — set expectations accordingly when reporting back.
+**`06` has no HTML export path any more.** It used to be able to write a self-contained
+`reports/paneles/06_*.html` behind `EXPORTAR_PANEL_WEB`, carrying a working "Simular" with
+the MIL forward pass transcribed into JavaScript. That panel was removed on 2026-08-09
+together with `chec_local_interpreter.mil_web_export` and its test: it was a second
+implementation of the model that had to be kept in step with the Python by hand, and it
+fell behind on every change. The notebook is now the only interface, in Databricks and
+locally alike, so there is nothing extra to redirect and no `EXPORTAR_PANEL_WEB`,
+`EN_DATABRICKS` or `CIRCUITOS_SIMULABLES` left to reason about. There is still no `/app-*`
+sibling for `06` — set expectations accordingly when reporting back.
 
 ### Per-notebook bootstrap audit
 
