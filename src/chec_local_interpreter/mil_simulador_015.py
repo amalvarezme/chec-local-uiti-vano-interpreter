@@ -437,6 +437,105 @@ def _riesgo_ordinal(n_obs: np.ndarray, u: np.ndarray, geometria: Any) -> float:
     return float(np.mean(distribucion @ eje_clases))
 
 
+def _riesgo_ordinal_por_bolsa(n_obs: np.ndarray, u: np.ndarray, geometria: Any) -> np.ndarray:
+    """`_riesgo_ordinal` SIN promediar: el indice de clase esperado de cada bolsa.
+
+    Es lo que permite que un solo barrido sirva para los cinco vanos. Cada pasada
+    del modelo ya produce un u-hat por bolsa; promediarlo de inmediato tira esa
+    informacion y obliga a repetir el barrido vano por vano.
+    """
+    distribucion = distribucion_suave(
+        np.asarray(n_obs, dtype=float), np.asarray(u, dtype=float), geometria
+    )
+    eje_clases = np.arange(distribucion.shape[1], dtype=float)
+    return np.asarray(distribucion @ eje_clases, dtype=float)
+
+
+def sensibilidad_minmax_por_vano(
+    predictor: Any,
+    X_inst: np.ndarray,
+    *,
+    seleccion: Mapping[str, Any],
+    feature_names: Sequence[str],
+    knobs: Sequence[Any],
+    top: int = 5,
+    label_encoders: Mapping[str, Any] | None = None,
+    max_values_imputed: Mapping[str, Any] | None = None,
+    tolerancia: float = 1e-6,
+) -> dict[str, list[dict[str, Any]]]:
+    """El top `top` de variables mas relevantes PARA CADA VANO de la seleccion,
+    como `{fid: [{knob_id, label, magnitud, direccion_maximo, direccion_minimo}]}`
+    ordenado de mayor a menor.
+
+    El panel mostraba un solo ranking, el de la seleccion entera. Con hasta cinco
+    vanos bajo estudio eso contesta la pregunta equivocada: dice que variable mueve
+    AL GRUPO, cuando la decision de mantenimiento necesita saber cual mueve a ESTE
+    vano, el de la orden de trabajo que se esta costeando.
+
+    Cuesta las MISMAS `1 + 2 * knobs_numericos` pasadas que el barrido agregado, no
+    una tanda por vano. Cada pasada ya devuelve un u-hat por bolsa, asi que basta
+    con no promediarlo (`_riesgo_ordinal_por_bolsa`). Escrito como un bucle sobre
+    vanos serian cinco veces mas pasadas y el boton dejaria de sentirse inmediato.
+
+    Los knobs sin limites numericos -- categoricos y constantes -- se SALTAN, igual
+    que en el barrido agregado: inventarles un rango puntuaria un escenario que
+    nadie pidio.
+    """
+    if int(seleccion["n_bolsas"]) == 0:
+        return {}
+
+    filas_idx = np.asarray(seleccion["filas"], dtype=np.int64)
+    instance_bag = np.asarray(seleccion["instance_bag"], dtype=np.int64)
+    n_obs = np.asarray(seleccion["n_obs"], dtype=float)
+    fids = [str(f) for f in seleccion["fid"]]
+    X_base = np.asarray(X_inst, dtype=np.float64)[filas_idx]
+
+    base = _riesgo_ordinal_por_bolsa(
+        n_obs, predictor.predict(X_base, instance_bag=instance_bag), predictor.geometria
+    )
+
+    # magnitudes[knob] -> vector por bolsa
+    columnas: list[tuple[Any, np.ndarray]] = []
+    for knob in knobs:
+        if knob.kind != "numeric" or not knob.bounds:
+            continue
+        minimo, maximo = (float(v) for v in knob.bounds)
+        deltas: dict[str, np.ndarray] = {}
+        for nombre, valor in (("minimo", minimo), ("maximo", maximo)):
+            overrides = [{"variable": f, "valor": valor} for f in knob.feature_names]
+            X_sim, aplicadas, _avisos = aplicar_overrides_instancias(
+                X_base, feature_names, overrides,
+                label_encoders=label_encoders, max_values_imputed=max_values_imputed,
+            )
+            if not aplicadas:
+                continue
+            deltas[nombre] = _riesgo_ordinal_por_bolsa(
+                n_obs, predictor.predict(X_sim, instance_bag=instance_bag),
+                predictor.geometria,
+            ) - base
+        if len(deltas) != 2:
+            continue
+        columnas.append((knob, deltas))
+
+    por_vano: dict[str, list[dict[str, Any]]] = {}
+    for b, fid in enumerate(fids):
+        filas = [
+            {
+                "knob_id": knob.id,
+                "label": knob.label,
+                "magnitud": float(max(abs(deltas["minimo"][b]), abs(deltas["maximo"][b]))),
+                "direccion_maximo": _direction(float(deltas["maximo"][b]), tolerance=tolerancia),
+                "direccion_minimo": _direction(float(deltas["minimo"][b]), tolerance=tolerancia),
+            }
+            for knob, deltas in columnas
+        ]
+        filas.sort(key=lambda fila: fila["magnitud"], reverse=True)
+        # Un fid repetido -- no deberia pasar en una sola ventana -- se queda con su
+        # primera bolsa en vez de pisarse en silencio.
+        por_vano.setdefault(fid, filas[:top])
+    return por_vano
+
+
 def sensibilidad_minmax_bolsas(
     predictor: Any,
     X_inst: np.ndarray,
