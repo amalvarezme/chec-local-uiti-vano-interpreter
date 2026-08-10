@@ -417,6 +417,19 @@ VEREDICTOS_OFRECIDOS: tuple[str, ...] = ("Si -- intervencion", "Si -- escenario"
 _NOMBRE_GRUPO = {"Si -- intervencion": "Intervencion", "Si -- escenario": "Escenario"}
 
 
+GRUPO_POR_KNOB: Mapping[str, str] = {
+    knob_id: _NOMBRE_GRUPO[veredicto]
+    for knob_id, (veredicto, _motivo) in JUICIO_SIMULACION.items()
+    if veredicto in _NOMBRE_GRUPO
+}
+"""`knob_id -> "Intervencion" | "Escenario"` para los controles que el panel ofrece.
+
+Es lo que permite que el ranking de relevancia RESERVE sitio para los dos grupos. Sin
+la reserva, un ranking copado por las cuatro familias climaticas no deja ni una palanca
+que una cuadrilla pueda ejecutar, y el panel existe para sostener una orden de trabajo.
+"""
+
+
 def _veredicto(knob: Knob, juicio: Mapping[str, tuple[str, str]] | None = None) -> str:
     tabla = JUICIO_SIMULACION if juicio is None else juicio
     return tabla.get(knob.id, (SIN_EVALUAR, ""))[0]

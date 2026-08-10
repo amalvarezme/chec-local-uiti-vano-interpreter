@@ -47,7 +47,10 @@ from chec_impacto.interpretability.mil_vano_ventana import grafo_por_grupo_si_no
 from chec_impacto.models.criticality_assignment import asignar_clase, distribucion_suave
 from chec_local_interpreter.relevancias_015 import normalizar_softmax
 from chec_local_interpreter.simulator import _coerce_original_value_for_model, _direction
-from chec_local_interpreter.vano_controls import VALORES_NO_VALIDOS
+from chec_local_interpreter.vano_controls import (
+    VALORES_NO_VALIDOS,
+    expand_knob_overrides,
+)
 
 MENSAJE_SIN_BOLSAS = "Sin bolsas (vano x ventana) para esta seleccion."
 
@@ -840,6 +843,61 @@ def umbral_u_para_clase_minima(
     return float(rejilla[clases == 0].max())
 
 
+def candidatos_de_knob(knob: Any, *, puntos: int = 9) -> list[Any] | None:
+    """Los valores que se le prueban a un control, o None si no tiene ninguno.
+
+    Un control numerico aporta una rejilla sobre su rango observado; uno categorico,
+    sus categorias. Los constantes quedan fuera: un unico valor observado no mueve nada,
+    y probarlo solo gasta una pasada del modelo.
+    """
+    if knob.kind == "numeric" and knob.bounds:
+        minimo, maximo = (float(v) for v in knob.bounds)
+        return [float(v) for v in np.linspace(minimo, maximo, int(puntos))]
+    if knob.kind == "categorical" and knob.categories:
+        return list(knob.categories)
+    return None
+
+
+def _top_con_cuota(
+    filas: list[dict[str, Any]], *, top: int, grupos: Mapping[str, str] | None
+) -> list[dict[str, Any]]:
+    """Las `top` mejores, reservando sitio para cada grupo de variables.
+
+    Sin reserva, un ranking copado por las cuatro familias climaticas no deja ni una
+    palanca que una cuadrilla pueda ejecutar -- y el panel existe para sostener una orden
+    de trabajo. La reserva es la mitad para cada grupo; lo que un grupo no llene lo ocupa
+    el otro por orden global, asi que nunca se desperdicia un sitio.
+
+    Sin `grupos` se comporta como un top simple: la reserva es una decision del llamador
+    y no algo que este modulo imponga.
+    """
+    if not grupos:
+        return filas[:top]
+    nombres = [g for g in dict.fromkeys(grupos.values()) if g]
+    if len(nombres) < 2:
+        return filas[:top]
+    cuota = max(1, top // len(nombres))
+    elegidas: list[dict[str, Any]] = []
+    vistos: set[int] = set()
+    for nombre in nombres:
+        for fila in filas:
+            if len(elegidas) >= top:
+                break
+            if fila.get("grupo") == nombre and id(fila) not in vistos:
+                if sum(1 for f in elegidas if f.get("grupo") == nombre) >= cuota:
+                    break
+                elegidas.append(fila)
+                vistos.add(id(fila))
+    for fila in filas:                      # el resto, por orden global
+        if len(elegidas) >= top:
+            break
+        if id(fila) not in vistos:
+            elegidas.append(fila)
+            vistos.add(id(fila))
+    elegidas.sort(key=lambda f: f["caida_log"], reverse=True)
+    return elegidas
+
+
 def relevancia_hacia_uiti_minimo(
     predictor: Any,
     X_inst: np.ndarray,
@@ -849,6 +907,7 @@ def relevancia_hacia_uiti_minimo(
     knobs: Sequence[Any],
     top: int = 10,
     puntos: int = 9,
+    grupos: Mapping[str, str] | None = None,
     label_encoders: Mapping[str, Any] | None = None,
     max_values_imputed: Mapping[str, Any] | None = None,
 ) -> dict[str, dict[str, Any]]:
@@ -881,8 +940,18 @@ def relevancia_hacia_uiti_minimo(
     pasada ya devuelve un u-hat por bolsa. Medido sobre el modelo real, 15 controles a 9
     puntos son 136 pasadas en 0,2 s.
 
-    Los controles sin limites numericos -- categoricos y constantes -- se saltan:
-    inventarles un rango puntuaria un escenario que nadie pidio.
+    Se recorren TODOS los controles que el panel ofrece, tambien los categoricos: su
+    "rejilla" son sus categorias. Dejarlos fuera -- como hacia el barrido anterior --
+    quitaba del ranking al conductor, al calibre del neutro y al tipo de proteccion, que
+    son tres de las obras que CHEC efectivamente ejecuta; el usuario perdia libertad
+    justo sobre la mitad de intervencion. Solo quedan fuera los constantes, que tienen un
+    unico valor observado y no mueven nada.
+
+    Con `grupos` (`knob_id -> "Intervencion" | "Escenario"`), el top RESERVA sitio para
+    los dos: un ranking copado por las cuatro familias climaticas no deja ni una palanca
+    que una cuadrilla pueda ejecutar, y al reves deja al panel sin la pregunta "que pasa
+    si". La reserva es la mitad de `top` para cada grupo, y lo que un grupo no llene lo
+    ocupa el otro por orden global.
     """
     if int(seleccion["n_bolsas"]) == 0:
         return {}
@@ -900,10 +969,9 @@ def relevancia_hacia_uiti_minimo(
     # Por knob: el mejor u alcanzable de cada bolsa y con que valor se consigue.
     columnas: list[tuple[Any, np.ndarray, np.ndarray]] = []
     for knob in knobs:
-        if knob.kind != "numeric" or not knob.bounds:
+        valores = candidatos_de_knob(knob, puntos=puntos)
+        if valores is None:
             continue
-        minimo, maximo = (float(v) for v in knob.bounds)
-        valores = np.linspace(minimo, maximo, int(puntos))
         us = []
         for valor in valores:
             overrides = [{"variable": f, "valor": valor} for f in knob.feature_names]
@@ -918,9 +986,10 @@ def relevancia_hacia_uiti_minimo(
                 predictor.predict(X_sim, instance_bag=instance_bag), dtype=float))
         if not us:
             continue
-        matriz = np.vstack(us)                       # (puntos, n_bolsas)
+        matriz = np.vstack(us)                       # (candidatos, n_bolsas)
         indice_mejor = matriz.argmin(axis=0)
-        columnas.append((knob, matriz.min(axis=0), valores[indice_mejor]))
+        columnas.append((knob, matriz.min(axis=0),
+                         [valores[i] for i in indice_mejor]))
 
     def _log10(valor: float) -> float:
         # Piso comun para los dos lados de la resta: sin el, un u-hat de cero -- que el
@@ -949,7 +1018,8 @@ def relevancia_hacia_uiti_minimo(
             filas.append({
                 "knob_id": knob.id,
                 "label": knob.label,
-                "valor": float(mejor_valor[b]),
+                "grupo": (grupos or {}).get(knob.id, ""),
+                "valor": mejor_valor[b],
                 "u_optimo": u_optimo,
                 "caida_log": caida,
                 # Que fraccion del camino al grupo mas bajo cubre esta sola variable.
@@ -961,6 +1031,7 @@ def relevancia_hacia_uiti_minimo(
                             and u_optimo <= objetivo),
             })
         filas.sort(key=lambda fila: fila["caida_log"], reverse=True)
+        filas = _top_con_cuota(filas, top=int(top), grupos=grupos)
         resultado[fid] = {
             "u_base": float(u_base[b]),
             "n_obs": int(n_obs[b]),
@@ -968,6 +1039,138 @@ def relevancia_hacia_uiti_minimo(
             "ya_en_clase_minima": ya_en_minima,
             "objetivo_u": objetivo,
             "alcanza_alguna": any(fila["alcanza"] for fila in filas),
-            "filas": filas[: int(top)],
+            "filas": filas,
+        }
+    return resultado
+
+
+def plan_hacia_clase_minima(
+    predictor: Any,
+    X_inst: np.ndarray,
+    *,
+    seleccion: Mapping[str, Any],
+    feature_names: Sequence[str],
+    knobs: Sequence[Any],
+    puntos: int = 9,
+    max_pasos: int = 4,
+    label_encoders: Mapping[str, Any] | None = None,
+    max_values_imputed: Mapping[str, Any] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """La COMBINACION de cambios que lleva a cada vano al grupo mas bajo, o lo mas cerca
+    que se pueda.
+
+    El ranking de una variable a la vez alcanza en Medio y casi nunca mas arriba. Medido
+    sobre 59 bolsas de 40 circuitos: en Medio, 20 de 33 llegan con una sola variable; en
+    Medio-Alto, 0 de 18; en Alto, 0 de 8, y la mejor variable cubre apenas el 60% y el
+    49% del camino. No es la rareza de un vano: es el caso normal justo en los grupos
+    donde la pregunta importa, y por eso esto no es un extra del ranking sino su
+    continuacion.
+
+    Es un descenso por coordenadas, GOLOSO: en cada ronda se prueban todos los
+    candidatos de todos los controles que ese vano no haya usado todavia, se aplica el
+    que mas baja su u-hat, y se repite hasta caer en el grupo mas bajo, agotar
+    `max_pasos` o dejar de mejorar. Goloso y no exhaustivo por una razon de tamanio: con
+    18 controles y 9 valores, dos cambios simultaneos ya son 13 mil combinaciones, y
+    cuatro son 26 millones -- fuera del presupuesto de un boton que debe sentirse
+    inmediato. El precio se paga y se dice: el plan es bueno, no demostrablemente el
+    minimo.
+
+    Cada control entra COMO MUCHO UNA VEZ por vano. Un plan que reajusta dos veces la
+    misma variable no es una orden de trabajo mas barata, es la misma obra contada dos
+    veces.
+
+    Las rondas se comparten entre todos los vanos: un candidato se aplica a la vez sobre
+    el estado propio de cada bolsa y la pasada devuelve un u-hat por bolsa, asi que cada
+    una elige su mejor paso sin que la ronda cueste una tanda por vano. Cuesta
+    `1 + rondas * candidatos` pasadas, y se corta en cuanto no queda ningun vano por
+    resolver.
+
+    Se para al ALCANZAR: un plan de mantenimiento no agrega obra despues del objetivo,
+    porque cada paso de mas es dinero que no compra nada. Y cuando ni moviendolo todo se
+    llega, se devuelve lo conseguido con `alcanza=False`, que vale mas que un plan que
+    insinua lo contrario.
+    """
+    if int(seleccion["n_bolsas"]) == 0:
+        return {}
+
+    filas_idx = np.asarray(seleccion["filas"], dtype=np.int64)
+    instance_bag = np.asarray(seleccion["instance_bag"], dtype=np.int64)
+    n_obs = np.asarray(seleccion["n_obs"], dtype=float)
+    fids = [str(f) for f in seleccion["fid"]]
+    X_base = np.asarray(X_inst, dtype=np.float64)[filas_idx]
+    n_bolsas = len(fids)
+
+    candidatos = [(knob, valores) for knob in knobs
+                  if (valores := candidatos_de_knob(knob, puntos=puntos)) is not None]
+    objetivos = [umbral_u_para_clase_minima(float(n), predictor.geometria) for n in n_obs]
+
+    def _u_con(estado_por_bolsa: list[dict[str, Any]]) -> np.ndarray:
+        """u-hat de cada bolsa con SU propio conjunto de cambios ya fijados."""
+        overrides = {
+            fids[b]: [o for knob_id, valor in estado.items()
+                      for o in expand_knob_overrides({knob_id: valor}, knobs)]
+            for b, estado in enumerate(estado_por_bolsa) if estado
+        }
+        if not overrides:
+            X = X_base
+        else:
+            X, _aplicadas, _avisos = aplicar_overrides_por_vano(
+                X_base, feature_names, overrides, instance_bag=instance_bag,
+                fids=fids, label_encoders=label_encoders,
+                max_values_imputed=max_values_imputed,
+            )
+        return np.asarray(predictor.predict(X, instance_bag=instance_bag), dtype=float)
+
+    estado: list[dict[str, Any]] = [{} for _ in range(n_bolsas)]
+    u_actual = _u_con(estado)
+    u_base = u_actual.copy()
+    clase, _ = asignar_clase(n_obs, u_actual, predictor.geometria)
+    pendientes = [b for b in range(n_bolsas) if int(np.asarray(clase)[b]) != 0]
+    pasos: list[list[dict[str, Any]]] = [[] for _ in range(n_bolsas)]
+
+    for _ronda in range(int(max_pasos)):
+        if not pendientes:
+            break
+        mejor = {b: (u_actual[b], None, None) for b in pendientes}
+        for knob, valores in candidatos:
+            for valor in valores:
+                prueba = [dict(estado[b]) for b in range(n_bolsas)]
+                for b in pendientes:
+                    if knob.id in estado[b]:
+                        continue
+                    prueba[b][knob.id] = valor
+                u_prueba = _u_con(prueba)
+                for b in pendientes:
+                    if knob.id in estado[b]:
+                        continue
+                    if u_prueba[b] < mejor[b][0]:
+                        mejor[b] = (float(u_prueba[b]), knob, valor)
+        siguen = []
+        for b in pendientes:
+            u_mejor, knob, valor = mejor[b]
+            if knob is None:            # ningun candidato mejora: este vano no avanza mas
+                continue
+            estado[b][knob.id] = valor
+            pasos[b].append({"knob_id": knob.id, "label": knob.label, "valor": valor,
+                             "u_despues": u_mejor})
+            u_actual[b] = u_mejor
+            objetivo = objetivos[b]
+            if objetivo is None or u_mejor > objetivo:
+                siguen.append(b)
+        pendientes = siguen
+
+    clase_final, _ = asignar_clase(n_obs, u_actual, predictor.geometria)
+    clase_final = np.asarray(clase_final, dtype=int)
+    resultado: dict[str, dict[str, Any]] = {}
+    for b, fid in enumerate(fids):
+        if fid in resultado:
+            continue
+        resultado[fid] = {
+            "u_base": float(u_base[b]),
+            "u_final": float(u_actual[b]),
+            "clase_final": int(clase_final[b]),
+            "objetivo_u": objetivos[b],
+            "alcanza": bool(clase_final[b] == 0),
+            "pasos": pasos[b],
         }
     return resultado

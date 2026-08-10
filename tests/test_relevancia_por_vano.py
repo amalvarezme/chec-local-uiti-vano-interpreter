@@ -219,7 +219,11 @@ def test_the_panel_ranks_by_achievable_drop_and_not_by_unsigned_sensitivity(fuen
     puntaje. Medido sobre un vano real, los dos rankings no comparten ni una de sus
     cinco primeras variables."""
     assert "_y.append(_fila['caida_log'])" in fuente
-    assert "Llevarla a <b>{_fila[\"valor\"]:,.4g}</b>" in fuente
+    assert "Llevarla a <b>{_valor}</b>" in fuente
+    # El valor de un control CATEGORICO es texto -- su categoria --, y desde que el
+    # ranking los incluye, formatearlo con `:,.4g` revienta el repintado entero. Se
+    # detecto simulando sobre vanos reales: `CONDUCTOR` entro al top y tumbo el panel.
+    assert "isinstance(_fila['valor'], (int, float))" in fuente
     assert "'magnitud'" not in fuente, "queda una lectura del barrido min-max viejo"
 
 

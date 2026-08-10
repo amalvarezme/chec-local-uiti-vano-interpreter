@@ -35,6 +35,7 @@ import pytest
 
 from chec_impacto.models.criticality_assignment import Geometria
 from chec_local_interpreter.mil_simulador_015 import (
+    plan_hacia_clase_minima,
     relevancia_hacia_uiti_minimo,
     umbral_u_para_clase_minima,
 )
@@ -198,18 +199,56 @@ def test_the_whole_selection_costs_one_sweep_and_not_one_per_vano():
     assert predictor.llamadas == 1 + 2 * 7
 
 
-def test_categorical_and_constant_knobs_are_skipped():
-    """Sin limites numericos no hay rejilla que recorrer, e inventarles un rango
-    puntuaria un escenario que nadie pidio. Mismo criterio que el barrido anterior."""
-    predictor = _Predictor([lambda v: float(v[0]), lambda v: float(v[0])])
+def test_categorical_knobs_are_ranked_too_and_only_constants_are_skipped():
+    """El barrido anterior saltaba los categoricos, y con ellos se caian del ranking
+    el conductor, el calibre del neutro y el tipo de proteccion: tres de las obras
+    que CHEC efectivamente ejecuta. El usuario perdia libertad justo sobre la mitad
+    de intervencion. Su "rejilla" son sus categorias. El constante si queda fuera:
+    un unico valor observado no mueve nada y probarlo solo gasta una pasada."""
+    predictor = _Predictor([lambda v: float(v[0] + v[1]), lambda v: 1.0])
     knobs = [_knob("NUM", feature_names=("x",)),
-             _knob("CAT", kind="categorical", bounds=None, feature_names=("y",)),
+             Knob(id="CAT", label="CAT", kind="categorical", feature_names=("y",),
+                  bounds=None, categories=("a", "b"), default=None, step=None),
              _knob("CONST", kind="constant", bounds=None, feature_names=("y",))]
 
-    resultado = relevancia_hacia_uiti_minimo(
-        predictor, _X(), seleccion=SELECCION, feature_names=FEATURES, knobs=knobs)
+    etiquetas = [f["label"] for f in relevancia_hacia_uiti_minimo(
+        predictor, _X(), seleccion=SELECCION, feature_names=FEATURES,
+        knobs=knobs)["VA"]["filas"]]
 
-    assert [f["label"] for f in resultado["VA"]["filas"]] == ["NUM"]
+    assert "CAT" in etiquetas
+    assert "CONST" not in etiquetas
+
+
+def test_the_top_reserves_room_for_both_groups_of_variables():
+    """Un ranking copado por las familias climaticas no deja ni una palanca que una
+    cuadrilla pueda ejecutar, y el panel existe para sostener una orden de trabajo.
+    Aqui las tres de escenario bajan mas que las dos de intervencion, y aun asi el
+    top de cuatro reserva sitio para las dos."""
+    predictor = _Predictor([lambda v: float(v[0]), lambda v: 1.0])
+    knobs = [_knob(f"E{i}", feature_names=("x",)) for i in range(3)]
+    knobs += [_knob(f"I{i}", feature_names=("y",)) for i in range(2)]
+    grupos = {f"E{i}": "Escenario" for i in range(3)}
+    grupos.update({f"I{i}": "Intervencion" for i in range(2)})
+
+    filas = relevancia_hacia_uiti_minimo(
+        predictor, _X(), seleccion=SELECCION, feature_names=FEATURES, knobs=knobs,
+        top=4, grupos=grupos)["VA"]["filas"]
+
+    presentes = {f["grupo"] for f in filas}
+    assert presentes == {"Escenario", "Intervencion"}
+    assert len(filas) == 4
+
+
+def test_without_groups_the_top_is_a_plain_top():
+    """La reserva es una decision del llamador y no algo que el modulo imponga."""
+    predictor = _Predictor([lambda v: float(v[0]), lambda v: 1.0])
+    knobs = [_knob(f"K{i}", feature_names=("x",)) for i in range(4)]
+
+    filas = relevancia_hacia_uiti_minimo(
+        predictor, _X(), seleccion=SELECCION, feature_names=FEATURES, knobs=knobs,
+        top=2)["VA"]["filas"]
+
+    assert len(filas) == 2
 
 
 def test_only_the_top_n_survives_per_vano():
@@ -250,3 +289,87 @@ def test_a_vano_already_in_the_low_group_is_not_reported_as_reaching_it():
     assert va["ya_en_clase_minima"] is True
     assert va["filas"][0]["alcanza"] is False
     assert va["alcanza_alguna"] is False
+
+
+# --- el plan combinado ------------------------------------------------------------------
+#
+# Medido sobre 59 bolsas de 40 circuitos: en Medio, 20 de 33 alcanzan el grupo Bajo con
+# UNA sola variable; en Medio-Alto, 0 de 18; en Alto, 0 de 8. No es una rareza de un vano,
+# es el caso normal justo en los grupos donde la pregunta importa, y por eso el plan
+# combinado no es un extra sino la respuesta.
+
+
+def test_the_plan_chains_variables_until_the_vano_reaches_the_low_group():
+    """Ninguna de las dos sola alcanza; juntas si. Es exactamente la situacion de un
+    vano en Medio-Alto, donde la mejor variable cubre el 60% del camino."""
+    # Los centroides estan en log10(u) = -1, 0, 1 y 2, asi que el grupo mas bajo
+    # empieza por debajo de 10^-0,5 = 0,316. Cada variable divide u por 20 al llevarla
+    # a su maximo: una sola lo deja en 5 -- fuera --, las dos juntas en 0,25 -- dentro.
+    predictor = _Predictor([lambda v: 100.0 * 0.05 ** (v[0] / 10.0) * 0.05 ** (v[1] / 10.0),
+                            lambda v: 0.01])
+    knobs = [_knob("A", feature_names=("x",)), _knob("B", feature_names=("y",))]
+
+    plan = plan_hacia_clase_minima(
+        predictor, np.zeros((3, 2)), seleccion=SELECCION, feature_names=FEATURES,
+        knobs=knobs, puntos=3, max_pasos=3)
+
+    va = plan["VA"]
+    assert [p["label"] for p in va["pasos"]] == ["A", "B"]
+    assert va["u_final"] < va["u_base"]
+    assert va["alcanza"] is True
+
+
+def test_the_plan_stops_as_soon_as_the_low_group_is_reached():
+    """Un plan de mantenimiento no agrega obra despues de haber conseguido el
+    objetivo: cada paso de mas es dinero que no compra nada."""
+    predictor = _Predictor([lambda v: 100.0 - 10.0 * v[0], lambda v: 0.01])
+    knobs = [_knob("BASTA", feature_names=("x",)), _knob("SOBRA", feature_names=("y",))]
+
+    plan = plan_hacia_clase_minima(
+        predictor, np.zeros((3, 2)), seleccion=SELECCION, feature_names=FEATURES,
+        knobs=knobs, puntos=3, max_pasos=4)
+
+    assert [p["label"] for p in plan["VA"]["pasos"]] == ["BASTA"]
+
+
+def test_the_plan_reports_the_shortfall_when_the_group_is_out_of_reach():
+    """Cuando ni moviendolo todo se llega, decirlo vale mas que un plan que
+    insinua lo contrario: se devuelve lo mejor alcanzado y `alcanza=False`."""
+    predictor = _Predictor([lambda v: 1000.0 - v[0], lambda v: 0.01])
+    knobs = [_knob("POCO", feature_names=("x",))]
+
+    plan = plan_hacia_clase_minima(
+        predictor, np.zeros((3, 2)), seleccion=SELECCION, feature_names=FEATURES,
+        knobs=knobs, puntos=3, max_pasos=3)
+
+    va = plan["VA"]
+    assert va["alcanza"] is False
+    assert va["u_final"] < va["u_base"]
+    assert va["pasos"], "aun sin alcanzar, lo conseguido se reporta"
+
+
+def test_a_vano_already_in_the_low_group_gets_an_empty_plan():
+    """No hay obra que proponerle: ya esta donde se queria llegar."""
+    predictor = _Predictor([lambda v: 0.01, lambda v: 0.01])
+    knobs = [_knob("A", feature_names=("x",))]
+
+    plan = plan_hacia_clase_minima(
+        predictor, np.zeros((3, 2)), seleccion=SELECCION, feature_names=FEATURES,
+        knobs=knobs, puntos=3)
+
+    assert plan["VA"]["pasos"] == []
+    assert plan["VA"]["alcanza"] is True
+
+
+def test_a_knob_is_used_at_most_once_per_vano():
+    """Un plan que reajusta dos veces la misma variable no es una orden de trabajo
+    mas barata, es la misma obra contada dos veces."""
+    predictor = _Predictor([
+        lambda v: 100.0 * 0.05 ** (v[0] / 10.0) * 0.05 ** (v[1] / 10.0), lambda v: 0.01])
+    knobs = [_knob("A", feature_names=("x",)), _knob("B", feature_names=("y",))]
+
+    pasos = plan_hacia_clase_minima(
+        predictor, np.zeros((3, 2)), seleccion=SELECCION, feature_names=FEATURES,
+        knobs=knobs, puntos=3, max_pasos=4)["VA"]["pasos"]
+
+    assert len({p["knob_id"] for p in pasos}) == len(pasos)
