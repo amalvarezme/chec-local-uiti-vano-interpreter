@@ -507,49 +507,58 @@ def series_temporal_vanos(
     return series
 
 
-def serie_temporal_circuito(
-    tabla: pd.DataFrame,
+
+def clases_de_series(
+    series: Sequence[Mapping[str, Any]],
     *,
-    circuito: str,
-    n_ventanas: int,
-) -> dict[str, Any]:
-    """One time series for the WHOLE circuit: UITI and events summed over every
-    vano of each window.
+    cargar_clases: Callable[..., tuple[np.ndarray, int]] = cargar_clases_desde_014,
+    **cargar_clases_kwargs: Any,
+) -> list[list[int | None]]:
+    """The criticality class of every point of every series, aligned with its
+    windows: one list per series, `None` where the vano has no cell.
 
-    Notebook 06 falls back to the whole circuit whenever no vano is marked --
-    the map, the per-vano top and the simulation all do -- and the time series
-    has to fall there too. Otherwise choosing a circuit leaves that panel blank,
-    which reads as "there is nothing to see here" when there is.
+    Notebook 06 paints the series point with the group colour and the line with
+    the vano's own colour -- 03 and 04 do the same. Two codes over one datum,
+    split by channel (stroke against fill), which is what lets both be read at
+    once: the line says WHICH vano, the point says which group it fell into
+    that window.
 
-    Same shape as one entry of `series_temporal_vanos`, so the panel paints it
-    through the same code path, with `fid = None` and an `etiqueta` that names
-    the circuit: a series over a whole circuit that looked like a vano's would
-    be read as one vano's, off by three orders of magnitude.
+    A window with no cell has NO class, and that is not the lowest group: it is
+    the absence of the datum, which the panel paints grey.
 
-    A window with no cell carries `None`, never `0` -- a zero would read as "no
-    UITI in that window" when what happened is that there was no measurement.
+    Every point of every series is classified in ONE call. Five vanos across
+    eleven windows are fifty-five points, and the repaint runs on every map
+    click -- one call per point would put fifty-five geometry lookups in that
+    path. With nothing to classify the geometry is never touched at all.
+
+    Each `(vano, ventana)` cell is already ONE aggregated row
+    (`construir_tabla_vano_ventana` groups by `[CIRCUITO, FID_VANO]` inside each
+    window), so a point has exactly one `(n_obs, u)` pair and therefore exactly
+    one class: there is never a set of labels to take a mode over at this grain.
     """
-    circuitos = tabla["CIRCUITO"].astype(str).to_numpy()
-    mask = circuitos == str(circuito)
-    ventanas_i = tabla["ventana_i"].to_numpy()[mask]
-    uiti = tabla["uiti_acumulado"].to_numpy()[mask]
-    eventos = tabla["num_eventos"].to_numpy()[mask]
+    puntos: list[tuple[int, int]] = []
+    n_obs: list[float] = []
+    u: list[float] = []
+    for s_i, serie in enumerate(series):
+        for w_i, (eventos, uiti) in enumerate(zip(serie["eventos"], serie["uiti"])):
+            if eventos is None or uiti is None:
+                continue
+            puntos.append((s_i, w_i))
+            n_obs.append(float(eventos))
+            u.append(float(uiti))
 
-    acumulado: dict[int, list[float]] = {}
-    for v, u, e in zip(ventanas_i, uiti, eventos):
-        fila = acumulado.setdefault(int(v), [0.0, 0.0])
-        fila[0] += float(u)
-        fila[1] += float(e)
+    salida: list[list[int | None]] = [
+        [None] * len(serie["x"]) for serie in series
+    ]
+    if not puntos:
+        return salida
 
-    return {
-        "fid": None,
-        "etiqueta": f"Circuito {circuito} (todos sus vanos)",
-        "x": list(range(int(n_ventanas))),
-        "uiti": [acumulado[i][0] if i in acumulado else None
-                 for i in range(int(n_ventanas))],
-        "eventos": [int(acumulado[i][1]) if i in acumulado else None
-                    for i in range(int(n_ventanas))],
-    }
+    clase, _n_clamped = cargar_clases(
+        np.asarray(n_obs, dtype=float), np.asarray(u, dtype=float), **cargar_clases_kwargs
+    )
+    for (s_i, w_i), c in zip(puntos, np.asarray(clase).tolist()):
+        salida[s_i][w_i] = int(c)
+    return salida
 
 
 def reparto_por_clase(

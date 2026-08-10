@@ -53,7 +53,7 @@ from chec_local_interpreter.ventanas_015 import (
     construir_ventanas,
     nube_fondo,
     nube_seleccion,
-    serie_temporal_circuito,
+    clases_de_series,
 )
 from scripts.extract_geometrias_014 import _extraer_bloque_json
 
@@ -1043,61 +1043,76 @@ def test_nube_fondo_draws_everything_below_the_cap():
     assert capas[0]["x"] == [1, 2]
 
 
-# --- Serie del circuito completo (cuaderno 06, fila 3) -----------------------
 
 
-def _tabla_serie():
-    return pd.DataFrame(
-        {
-            "CIRCUITO": ["C1", "C1", "C1", "C1", "C2"],
-            "FID_VANO": ["VA", "VB", "VA", "VC", "VZ"],
-            "ventana_i": [0, 0, 2, 2, 0],
-            "num_eventos": [1, 4, 9, 1, 100],
-            "uiti_acumulado": [0.5, 1.5, 7.0, 3.0, 50.0],
-        }
-    )
 
 
-def test_serie_temporal_circuito_sums_every_vano_of_each_window():
-    """Sin vanos marcados el grano del tablero es el CIRCUITO COMPLETO -- la misma
-    regla a la que ya caen el mapa, el top por vano y la simulacion. La serie
-    tiene que caer ahi tambien, o al elegir circuito el panel se quedaria vacio
-    diciendo que no hay nada que ver cuando si lo hay."""
-    serie = serie_temporal_circuito(_tabla_serie(), circuito="C1", n_ventanas=3)
-
-    assert serie["x"] == [0, 1, 2]
-    assert serie["uiti"] == [2.0, None, 10.0]
-    assert serie["eventos"] == [5, None, 10]
 
 
-def test_a_window_without_cells_is_a_gap_and_never_a_zero():
-    """Un cero se leeria como "no hubo UITI en esa ventana"; lo que paso es que no
-    hubo medicion. Plotly corta la linea en `None`, que es la marca honesta."""
-    serie = serie_temporal_circuito(_tabla_serie(), circuito="C1", n_ventanas=3)
-
-    assert serie["uiti"][1] is None and serie["eventos"][1] is None
-
-
-def test_another_circuits_rows_never_leak_in():
-    serie = serie_temporal_circuito(_tabla_serie(), circuito="C2", n_ventanas=3)
-
-    assert serie["uiti"] == [50.0, None, None]
-    assert serie["eventos"] == [100, None, None]
+def _series_de_prueba():
+    return [
+        {"fid": "VA", "x": [0, 1, 2],
+         "uiti": [1.0, None, 300.0], "eventos": [2, None, 3]},
+        {"fid": "VB", "x": [0, 1, 2],
+         "uiti": [None, None, None], "eventos": [None, None, None]},
+    ]
 
 
-def test_a_circuit_with_no_rows_gives_a_series_of_gaps():
-    """No se devuelve vacio: el eje tiene que conservar sus once ventanas, o la
-    figura reescala y el panel parece describir otro periodo."""
-    serie = serie_temporal_circuito(_tabla_serie(), circuito="NO_EXISTE", n_ventanas=3)
-
-    assert serie["x"] == [0, 1, 2]
-    assert serie["uiti"] == [None, None, None]
+def _clases_falsas(n_obs, u):
+    """Una clase por punto, derivada del UITI para que el orden sea predecible."""
+    clase = np.where(np.asarray(u) > 100.0, 3, 0)
+    return clase, 0
 
 
-def test_the_circuit_series_declares_what_it_is():
-    """El panel escribe este nombre en la leyenda y en el hover: sin el, una serie
-    del circuito entero se lee como si fuera la de un vano."""
-    serie = serie_temporal_circuito(_tabla_serie(), circuito="C1", n_ventanas=3)
+def test_clases_de_series_gives_one_class_per_drawn_point():
+    """El punto de la serie se pinta con el grupo de riesgo de ESE vano en ESA
+    ventana, igual que en 03 y 04: la linea dice de que vano es la serie y el
+    punto dice en que grupo cayo. Son dos codigos distintos sobre el mismo dato,
+    y separarlos por canal -- trazo contra relleno -- es lo que los hace legibles
+    a la vez."""
+    clases = clases_de_series(_series_de_prueba(), cargar_clases=_clases_falsas)
 
-    assert serie["fid"] is None
-    assert "C1" in serie["etiqueta"]
+    assert clases[0] == [0, None, 3]
+
+
+def test_a_window_without_a_cell_has_no_class_at_all():
+    """Sin celda no hay clase, y eso NO es el grupo mas bajo: es la ausencia del
+    dato. El panel lo pinta gris, que es distinto del color del grupo 0."""
+    clases = clases_de_series(_series_de_prueba(), cargar_clases=_clases_falsas)
+
+    assert clases[0][1] is None
+    assert clases[1] == [None, None, None]
+
+
+def test_every_point_of_every_series_is_classified_in_a_single_call():
+    """Con cinco vanos por once ventanas son cincuenta y cinco puntos: clasificarlos
+    de a uno serian cincuenta y cinco llamadas a la geometria de 01.4 en cada
+    repintado, y el repintado corre en cada clic del mapa."""
+    llamadas = []
+
+    def _contar(n_obs, u):
+        llamadas.append(len(n_obs))
+        return _clases_falsas(n_obs, u)
+
+    clases_de_series(_series_de_prueba(), cargar_clases=_contar)
+
+    assert llamadas == [2]   # los dos unicos puntos con celda, en UNA sola llamada
+
+
+def test_no_cells_at_all_never_touches_the_geometry():
+    """Sin ningun punto con celda no hay nada que clasificar, y llamar igual
+    obligaria a la geometria a resolver un arreglo vacio."""
+    llamadas = []
+
+    def _contar(n_obs, u):
+        llamadas.append(len(n_obs))
+        return _clases_falsas(n_obs, u)
+
+    clases = clases_de_series([_series_de_prueba()[1]], cargar_clases=_contar)
+
+    assert llamadas == []
+    assert clases == [[None, None, None]]
+
+
+def test_an_empty_series_list_is_answered_without_work():
+    assert clases_de_series([], cargar_clases=_clases_falsas) == []
