@@ -795,3 +795,179 @@ def trazas_grafo(
             "indice": list(participantes),
         },
     }
+
+
+# --- Relevancia orientada al grupo BAJO (reemplaza al barrido min-max del panel) --------
+
+REJILLA_UMBRAL_U = 1024
+"""Cuantos puntos se prueban al buscar el `u` que hace caer una bolsa en el grupo mas bajo.
+
+Rejilla y no biseccion: la clase sale del centroide MAS CERCANO en un plano, y nada
+garantiza que al subir `u` con `n_obs` fijo se recorran los grupos en orden. Una
+biseccion asume esa monotonia; una rejilla no asume nada y cuesta una llamada
+vectorizada. Mil puntos sobre diez ordenes de magnitud dan una resolucion de ~2,3% en
+`u`, muy por debajo de lo que separa a dos grupos.
+"""
+
+
+def umbral_u_para_clase_minima(
+    n_obs: float, geometria: Any, *, puntos: int = REJILLA_UMBRAL_U
+) -> float | None:
+    """El `u` mas alto con el que una bolsa de `n_obs` eventos cae en el grupo MAS BAJO,
+    o None si con esos eventos ese grupo es inalcanzable.
+
+    Es el numero que convierte un ranking en una instruccion. "Esta variable baja el
+    UITI un 70%" no es una respuesta: la pregunta de mantenimiento es si eso cambia de
+    grupo, y para saberlo hace falta la meta.
+
+    `n_obs` no se simula NUNCA -- es el otro eje del espacio que define la clase --, asi
+    que la meta se calcula con los eventos observados y solo se mueve `u`. Medido sobre
+    la geometria real de 01.4, el umbral se desploma cuando los eventos se acumulan: 4,41
+    con un evento y 0,0029 con cuarenta y seis. Un vano con muchos eventos necesita un
+    UITI casi nulo para bajar de grupo, y eso es una propiedad del espacio, no del panel.
+
+    None y no un numero inventado: una meta que el simulador no puede cumplir se
+    presentaria en el panel como alcanzable.
+    """
+    rejilla = np.concatenate([[0.0], np.logspace(-6, 4, int(puntos))])
+    clases, _ = asignar_clase(
+        np.full(len(rejilla), float(n_obs)), rejilla, geometria
+    )
+    clases = np.asarray(clases)
+    minima = int(clases.min()) if clases.size else 0
+    if minima != 0 or not (clases == 0).any():
+        return None
+    return float(rejilla[clases == 0].max())
+
+
+def relevancia_hacia_uiti_minimo(
+    predictor: Any,
+    X_inst: np.ndarray,
+    *,
+    seleccion: Mapping[str, Any],
+    feature_names: Sequence[str],
+    knobs: Sequence[Any],
+    top: int = 10,
+    puntos: int = 9,
+    label_encoders: Mapping[str, Any] | None = None,
+    max_values_imputed: Mapping[str, Any] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Que variables pueden llevar a CADA vano a su UITI minimo, y cuanto lo bajan.
+
+    Sustituye al barrido min-max del panel, que tenia dos defectos para la pregunta que
+    de verdad se hace -- *que muevo para que este vano baje de grupo*:
+
+    - Su magnitud era `max(|delta-|, |delta+|)`, SIN SIGNO. Una variable que dispara el
+      riesgo en los dos extremos ganaba a una que lo baja un poco, y la cabeza del
+      ranking se llenaba de palancas que no hay que tocar.
+    - Solo miraba los dos EXTREMOS. Medido sobre el modelo real, 10 de los 15 controles
+      numericos tienen su mejor valor en el INTERIOR del rango para alguna bolsa
+      (`DDT` para todas): el modelo es marcadamente no monotono y los extremos son,
+      simplemente, los dos puntos equivocados.
+
+    Aqui cada control se recorre en una rejilla de `puntos` valores sobre su rango
+    observado, se guarda el que MINIMIZA el u-hat de cada bolsa, y se ordena por cuanto
+    lo baja. La caida se mide en ORDENES DE MAGNITUD de `u` -- el eje que usa la
+    geometria KMeans -- y no en unidades: `u` recorre varios ordenes entre vanos, y en
+    unidades el ranking de un vano caro seria incomparable con el de uno barato.
+
+    Cada fila trae el VALOR que consigue ese minimo, asi que el ranking se lee como una
+    instruccion ("lleva ALTURA a 25 m") y no como un puntaje. Y trae `alcanza`: si ese
+    solo cambio basta para caer en el grupo mas bajo. Cuando ninguna lo logra -- medido,
+    le pasa a un vano de Medio-Alto con u=271 -- decirlo vale mas que un ranking que
+    insinua lo contrario.
+
+    Cuesta `1 + puntos * K` pasadas para TODA la seleccion, no una tanda por vano: cada
+    pasada ya devuelve un u-hat por bolsa. Medido sobre el modelo real, 15 controles a 9
+    puntos son 136 pasadas en 0,2 s.
+
+    Los controles sin limites numericos -- categoricos y constantes -- se saltan:
+    inventarles un rango puntuaria un escenario que nadie pidio.
+    """
+    if int(seleccion["n_bolsas"]) == 0:
+        return {}
+
+    filas_idx = np.asarray(seleccion["filas"], dtype=np.int64)
+    instance_bag = np.asarray(seleccion["instance_bag"], dtype=np.int64)
+    n_obs = np.asarray(seleccion["n_obs"], dtype=float)
+    fids = [str(f) for f in seleccion["fid"]]
+    X_base = np.asarray(X_inst, dtype=np.float64)[filas_idx]
+
+    u_base = np.asarray(predictor.predict(X_base, instance_bag=instance_bag), dtype=float)
+    clase_base, _ = asignar_clase(n_obs, u_base, predictor.geometria)
+    clase_base = np.asarray(clase_base, dtype=int)
+
+    # Por knob: el mejor u alcanzable de cada bolsa y con que valor se consigue.
+    columnas: list[tuple[Any, np.ndarray, np.ndarray]] = []
+    for knob in knobs:
+        if knob.kind != "numeric" or not knob.bounds:
+            continue
+        minimo, maximo = (float(v) for v in knob.bounds)
+        valores = np.linspace(minimo, maximo, int(puntos))
+        us = []
+        for valor in valores:
+            overrides = [{"variable": f, "valor": valor} for f in knob.feature_names]
+            X_sim, aplicadas, _avisos = aplicar_overrides_instancias(
+                X_base, feature_names, overrides,
+                label_encoders=label_encoders, max_values_imputed=max_values_imputed,
+            )
+            if not aplicadas:
+                us = []
+                break
+            us.append(np.asarray(
+                predictor.predict(X_sim, instance_bag=instance_bag), dtype=float))
+        if not us:
+            continue
+        matriz = np.vstack(us)                       # (puntos, n_bolsas)
+        indice_mejor = matriz.argmin(axis=0)
+        columnas.append((knob, matriz.min(axis=0), valores[indice_mejor]))
+
+    def _log10(valor: float) -> float:
+        # Piso comun para los dos lados de la resta: sin el, un u-hat de cero -- que el
+        # modelo puede devolver -- daria -inf y la caida seria infinita para cualquier
+        # variable que lo alcance.
+        return float(np.log10(max(float(valor), 1e-12)))
+
+    resultado: dict[str, dict[str, Any]] = {}
+    for b, fid in enumerate(fids):
+        if fid in resultado:
+            continue
+        objetivo = umbral_u_para_clase_minima(float(n_obs[b]), predictor.geometria)
+        # `alcanza` promete un CAMBIO de grupo, asi que un vano que ya esta en el mas
+        # bajo no lo cumple con nada: lo cumpliria con todo. Medido, uno con u=0,415 y
+        # meta 4,24 daba sus diez variables en verde, senialando como palancas decisivas
+        # a diez que no mueven nada.
+        ya_en_minima = bool(clase_base[b] == 0)
+        base_log = _log10(u_base[b])
+        brecha = None if objetivo is None else base_log - _log10(objetivo)
+        filas = []
+        for knob, mejor_u, mejor_valor in columnas:
+            # El optimo nunca puede quedar por ENCIMA de la base: el valor observado
+            # esta dentro del rango, asi que en el peor caso la rejilla lo empata.
+            u_optimo = float(min(mejor_u[b], u_base[b]))
+            caida = base_log - _log10(u_optimo)
+            filas.append({
+                "knob_id": knob.id,
+                "label": knob.label,
+                "valor": float(mejor_valor[b]),
+                "u_optimo": u_optimo,
+                "caida_log": caida,
+                # Que fraccion del camino al grupo mas bajo cubre esta sola variable.
+                # None cuando el vano ya esta en el grupo mas bajo (no hay camino) o
+                # cuando ese grupo es inalcanzable con sus eventos.
+                "avance": (None if not brecha or brecha <= 0
+                           else float(min(caida / brecha, 1.0))),
+                "alcanza": (not ya_en_minima and objetivo is not None
+                            and u_optimo <= objetivo),
+            })
+        filas.sort(key=lambda fila: fila["caida_log"], reverse=True)
+        resultado[fid] = {
+            "u_base": float(u_base[b]),
+            "n_obs": int(n_obs[b]),
+            "clase_base": int(clase_base[b]),
+            "ya_en_clase_minima": ya_en_minima,
+            "objetivo_u": objetivo,
+            "alcanza_alguna": any(fila["alcanza"] for fila in filas),
+            "filas": filas[: int(top)],
+        }
+    return resultado

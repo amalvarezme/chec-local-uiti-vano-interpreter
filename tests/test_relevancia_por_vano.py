@@ -191,7 +191,7 @@ def test_the_ranking_only_sweeps_the_variables_the_panel_offers(fuente):
     """
     assert "KNOBS_PANEL = knobs_simulables(KNOBS)" in fuente
     llamada = re.search(
-        r"return sensibilidad_minmax_por_vano\((.*?)\n    \)", fuente, re.S
+        r"return relevancia_hacia_uiti_minimo\((.*?)\n    \)", fuente, re.S
     )
     assert llamada is not None
     argumentos = llamada.group(1)
@@ -210,3 +210,32 @@ def test_the_blocked_variables_reach_the_simulation_but_never_the_ranking(fuente
     # solo llegan ahi los que el panel ofrecio.
     assert "expand_knob_overrides(\n" in fuente
     assert "{knob_id: control.value for knob_id, control in controles.items()}, KNOBS)" in fuente
+
+
+def test_the_panel_ranks_by_achievable_drop_and_not_by_unsigned_sensitivity(fuente):
+    """El cambio de pregunta. La barra ya no mide cuanto MUEVE una variable sino
+    cuanto BAJA el UITI del vano, en ordenes de magnitud, y el hover trae el valor
+    que lo consigue -- asi la lista se lee como una instruccion y no como un
+    puntaje. Medido sobre un vano real, los dos rankings no comparten ni una de sus
+    cinco primeras variables."""
+    assert "_y.append(_fila['caida_log'])" in fuente
+    assert "Llevarla a <b>{_fila[\"valor\"]:,.4g}</b>" in fuente
+    assert "'magnitud'" not in fuente, "queda una lectura del barrido min-max viejo"
+
+
+def test_the_green_bar_means_that_variable_alone_changes_the_group(fuente):
+    """Verde es el mismo verde del recuadro del mapa simulado y significa lo mismo:
+    baja de grupo de criticidad. Un vano que YA esta en el mas bajo no puede pintar
+    nada de verde -- lo cumpliria con todo -- y eso lo decide el modulo, no el
+    cuaderno."""
+    assert "COLOR_CAJA_MEJORA if _fila['alcanza']" in fuente
+    assert "_datos['ya_en_clase_minima']" in fuente
+
+
+def test_the_grid_has_more_than_the_two_ends(fuente):
+    """Medido sobre este modelo, 10 de los 15 controles numericos tienen su mejor
+    valor en el INTERIOR del rango para alguna bolsa. Con dos puntos se muestrea
+    justo donde el optimo no esta."""
+    m = re.search(r"^PUNTOS_REJILLA_RELEVANCIA = (\d+)$", fuente, re.M)
+    assert m and int(m.group(1)) >= 3
+    assert "puntos=PUNTOS_REJILLA_RELEVANCIA" in fuente
