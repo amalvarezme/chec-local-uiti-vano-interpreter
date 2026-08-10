@@ -20,7 +20,11 @@ import pytest
 pytest.importorskip("ipywidgets")
 
 from chec_local_interpreter.vano_controls import Knob
-from chec_local_interpreter.vano_widgets import widget_for_knob
+from chec_local_interpreter.vano_widgets import (
+    MAX_VANOS_ANALISIS,
+    VANOS_POR_PAGINA,
+    widget_for_knob,
+)
 
 
 def _numeric_knob(**overrides) -> Knob:
@@ -417,3 +421,17 @@ def test_the_flat_option_list_keeps_working_for_the_vano_selector():
 
     assert list(selector.casillas) == ["VA", "VB"]
     assert len(selector.caja.children) == 2   # las dos casillas, sin columnas
+
+
+def test_the_analysis_cap_leaves_room_for_the_whole_circuit_diagnostic():
+    """El diagnostico del circuito estudia los diez vanos mas criticos y ofrece
+    aplicarles la sugerencia de golpe. Con el tope en cinco, la mitad del
+    diagnostico quedaba sin poder ejecutarse."""
+    assert MAX_VANOS_ANALISIS >= 10
+
+
+def test_the_grid_pages_at_fewer_vanos_than_the_cap():
+    """Lo que el tope de cinco protegia era la REJILLA, no la seleccion: diez
+    columnas de veintiseis controles no se leen ni se llenan. Eso lo resuelve la
+    paginacion, no un tope mas bajo."""
+    assert VANOS_POR_PAGINA < MAX_VANOS_ANALISIS

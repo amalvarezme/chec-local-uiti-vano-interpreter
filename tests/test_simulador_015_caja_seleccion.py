@@ -185,8 +185,14 @@ def test_the_circuit_diagnostic_has_its_own_trigger(fuente):
     a recalcularlo en cada escenario que no lo cambia."""
     assert "boton_diagnostico = widgets.Button(" in fuente
     assert "boton_diagnostico.on_click(_al_pedir_diagnostico)" in fuente
-    # Y se borra al cambiar de circuito o de ventana: describe UNO de cada uno.
-    assert fuente.count("_texto_del_diagnostico(None)") >= 3
+    # Y se OLVIDA al cambiar de circuito o de ventana: describe UNO de cada uno, y
+    # dejarlo en pantalla seria describir otra seleccion. Se borra el texto Y el
+    # diagnostico guardado, o los botones de aplicar seguirian ofreciendo los vanos
+    # del circuito anterior.
+    assert "circuito_widget.observe(_olvidar_diagnostico, names='value')" in fuente
+    assert "ventana_widget.observe(_olvidar_diagnostico, names='value')" in fuente
+    cuerpo = fuente[fuente.index("def _olvidar_diagnostico"):][:400]
+    assert "_ULTIMO_DIAGNOSTICO = None" in cuerpo
 
 
 def test_the_diagnostic_reports_the_two_halves_separately(fuente):
@@ -217,3 +223,47 @@ def test_the_framing_buttons_compute_the_view_at_click_time(fuente):
     assert "_boton_encuadre('map', 'Centrar mapa base')" in fuente
     assert "_boton_encuadre('map2', 'Centrar mapa simulado')" in fuente
     assert "widgets.VBox([ESTILO, PANEL, ENCUADRES, fig]" in fuente
+
+
+def test_the_diagnostic_takes_alto_first_and_completes_with_medio_alto(fuente):
+    """La pregunta es por donde EMPEZAR, y un vano en Medio no es por donde se empieza
+    mientras queden vanos en Alto sin atender. Dentro de cada grupo manda el UITI, que
+    es lo que ordena la urgencia."""
+    assert "GRUPOS_DIAGNOSTICO = [3, 2]" in fuente
+    cuerpo = fuente[fuente.index("def _diagnostico_del_circuito"):][:2600]
+    assert "clases.get(str(f)) == clase" in cuerpo
+    assert "peores.extend(por_grupo[clase][:TOP_VANOS_CIRCUITO - len(peores)])" in cuerpo
+
+
+def test_a_short_diagnostic_says_how_many_it_found(fuente):
+    """Sin el aviso, una lista de cuatro vanos se lee como que el circuito tiene cuatro
+    criticos, cuando lo que pasa es que no llegan a diez. Verificado sobre datos
+    reales: un circuito con 3 en Medio-Alto y ninguno en Alto lo dice, y otro sin
+    ninguno de los dos lo dice tambien."""
+    assert "Se identificaron " in fuente
+    assert "no tiene mas en Alto ni en Medio-Alto" in fuente
+    # El caso sin NINGUNO tiene su propio mensaje, que dice que no es un fallo.
+    assert "no hay ningun vano en " in fuente
+    assert "No hay diagnostico que dar" in fuente
+
+
+def test_the_apply_buttons_use_each_vano_own_value_and_not_the_average(fuente):
+    """El promedio ORDENA la lista, pero lo que baja a un vano concreto es su propio
+    optimo. Aplicar el promedio simularia un escenario que no es el de ninguno."""
+    assert "'ranking': ranking," in fuente
+    cuerpo = fuente[fuente.index("def _aplicar_sugerencia"):][:2600]
+    assert "diag['ranking'].get(fid, {}).get('filas', [])" in cuerpo
+    # Se AGREGAN a lo que el usuario ya tuviera fijado, no lo reemplazan.
+    assert "dict.fromkeys([*knob_selector_widget.value, *ids_sugeridos])" in cuerpo
+
+
+def test_the_grid_pages_and_keeps_the_hidden_controls_alive(fuente):
+    """Paginar no puede ser una forma silenciosa de descartar lo que se fijo: los
+    controles de los vanos que no estan en pantalla siguen existiendo y entran igual a
+    la simulacion. Verificado: 10 columnas y 50 controles vivos tras avanzar."""
+    assert "def _mostrar_pagina():" in fuente
+    assert "_COLUMNAS_VANO[desde:desde + VANOS_POR_PAGINA]" in fuente
+    assert "boton_pagina_anterior.on_click(lambda _b: _mover_pagina(-1))" in fuente
+    assert "boton_pagina_siguiente.on_click(lambda _b: _mover_pagina(1))" in fuente
+    # La navegacion solo aparece si HAY mas de una pagina.
+    assert "if paginas > 1 else []" in fuente

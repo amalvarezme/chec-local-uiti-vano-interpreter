@@ -286,11 +286,24 @@ def construir_selector_vanos(opciones=(), **kwargs):
     return construir_selector_casillas(opciones, **kwargs)
 
 
-MAX_VANOS_ANALISIS = 5
+MAX_VANOS_ANALISIS = 10
 """Cuantos vanos puede analizar a la vez el simulador del cuaderno 06.
 
-Cada vano seleccionado recibe su propia COLUMNA de controles, una por variable
-que se quiera mover. Con 26 controles simulables, cinco columnas ya son una
-rejilla de 130 celdas: mas que eso no se lee ni se llena, y el forward del MIL
-deja de ser el limite mucho antes que la paciencia de quien lo usa.
+Diez y no cinco: el diagnostico del circuito estudia los diez vanos mas criticos
+y ofrece aplicarles la sugerencia de golpe, asi que un tope de cinco dejaria la
+mitad del diagnostico sin poder ejecutarse.
+
+Lo que cinco protegia era la REJILLA -- cada vano recibe su propia columna de
+controles, y diez columnas de veintiseis controles no se leen ni se llenan --, y
+eso ahora lo resuelve la paginacion: se muestran `VANOS_POR_PAGINA` a la vez y se
+avanza. Los controles de los vanos que no estan en pantalla siguen existiendo y
+conservando su valor, asi que la simulacion los aplica igual.
+"""
+
+VANOS_POR_PAGINA = 5
+"""Cuantas columnas de controles se muestran a la vez en la rejilla del 06.
+
+Cinco es lo que cabe legible a lo ancho del panel. Por encima, las columnas se
+estrechan hasta que el nombre de la variable y su deslizador dejan de caber en la
+misma linea, y la rejilla se vuelve un muro.
 """
