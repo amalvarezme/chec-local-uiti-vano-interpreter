@@ -174,3 +174,46 @@ def test_a_circuit_without_windows_still_gets_one_option(fuente):
     """Un `SelectionSlider` sin opciones lanza al construirse, y eso dejaria el panel
     entero sin arrancar por un circuito vacio."""
     assert "VENTANAS_POR_CIRCUITO.get(circuito) or [0]" in fuente
+
+
+# --- Los dos botones nuevos -------------------------------------------------------------
+
+
+def test_the_circuit_diagnostic_has_its_own_trigger(fuente):
+    """Contesta otra pregunta -- por donde empiezo en este circuito --, no depende de
+    lo que este marcado ni de las variables fijadas, y colgarlo de "Simular" obligaria
+    a recalcularlo en cada escenario que no lo cambia."""
+    assert "boton_diagnostico = widgets.Button(" in fuente
+    assert "boton_diagnostico.on_click(_al_pedir_diagnostico)" in fuente
+    # Y se borra al cambiar de circuito o de ventana: describe UNO de cada uno.
+    assert fuente.count("_texto_del_diagnostico(None)") >= 3
+
+
+def test_the_diagnostic_reports_the_two_halves_separately(fuente):
+    """Lo que se HACE es lo que se cotiza y lo que se ANTICIPA dice bajo que
+    condiciones rinde. Mezcladas en una sola lista, el clima la copa -- medido: en los
+    diez peores vanos de un circuito real, el escenario saca cuarenta veces a la
+    intervencion."""
+    assert "_mejores('Intervencion', TOP_INTERVENCION_CIRCUITO)" in fuente
+    assert "_mejores('Escenario', TOP_ESCENARIO_CIRCUITO)" in fuente
+
+
+def test_the_diagnostic_coerces_the_fid_to_text_before_looking_it_up(fuente):
+    """`DATOS_VENTANA` esta indexado por TEXTO y `VANOS_POR_CIRCUITO` puede traer los
+    fid como numero. Sin la coercion no coincide ninguno."""
+    assert "if str(f) in datos" in fuente
+
+
+def test_the_framing_buttons_compute_the_view_at_click_time(fuente):
+    """Un `updatemenu` de plotly lleva argumentos FIJOS calculados al dibujar: entre el
+    dibujo y el clic pueden haber cambiado los vanos marcados, y el boton llevaria a
+    donde estaba la seleccion antes."""
+    assert "def _centrar_mapa(nombre_mapa):" in fuente
+    cuerpo = fuente[fuente.index("def _centrar_mapa(nombre_mapa):"):][:1400]
+    assert "_seleccion_actual()" in cuerpo
+    assert "bounds_de_fids(geo, marcados)" in cuerpo
+    assert "or _vista_del_circuito(circuito)" in cuerpo
+    # Uno por mapa, y los dos dentro del layout de la app.
+    assert "_boton_encuadre('map', 'Centrar mapa base')" in fuente
+    assert "_boton_encuadre('map2', 'Centrar mapa simulado')" in fuente
+    assert "widgets.VBox([ESTILO, PANEL, ENCUADRES, fig]" in fuente
