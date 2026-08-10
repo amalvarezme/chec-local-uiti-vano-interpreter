@@ -44,6 +44,8 @@ from chec_impacto.models.criticality_assignment import (
 )
 from chec_local_interpreter import ventanas_015
 from chec_local_interpreter.ventanas_015 import (
+    bounds_de_fids,
+    cajas_por_cambio_de_grupo,
     cajas_seleccion,
     cargar_clases_desde_014,
     capas_mapa_historico,
@@ -1116,3 +1118,108 @@ def test_no_cells_at_all_never_touches_the_geometry():
 
 def test_an_empty_series_list_is_answered_without_work():
     assert clases_de_series([], cargar_clases=_clases_falsas) == []
+
+
+# --- El recuadro del mapa SIMULADO: tres colores, uno por desenlace -------------------
+
+
+def _tabla_simulada(filas):
+    """La tabla que devuelve `simular_bolsas`, recortada a lo que la caja mira."""
+    return pd.DataFrame(
+        [{"FID_VANO": fid, "base_clase_idx": base, "simulado_clase_idx": sim,
+          "delta_riesgo_ordinal": sim - base} for fid, base, sim in filas]
+    )
+
+
+def test_cajas_por_cambio_de_grupo_separates_the_three_outcomes():
+    """El recuadro del mapa simulado ya no dice "este es el vano que elegi" --
+    eso lo dice el del mapa base -- sino QUE LE PASO al vano: bajo de grupo,
+    se quedo igual, o subio. Son tres capas y no una porque una capa de
+    `layout.map.layers` lleva UN color: pintar tres desenlaces en la misma
+    capa obligaria a elegir cual de los tres colores miente."""
+    tabla = _tabla_simulada([("VA", 2, 0), ("VB", 1, 1), ("VC", 0, 3)])
+
+    cajas = cajas_por_cambio_de_grupo(_geo_cajas(), tabla, marcados=["VA", "VB", "VC"])
+
+    assert [f["properties"]["fid"] for f in cajas["mejora"]["features"]] == ["VA"]
+    assert [f["properties"]["fid"] for f in cajas["igual"]["features"]] == ["VB"]
+    assert [f["properties"]["fid"] for f in cajas["empeora"]["features"]] == ["VC"]
+
+
+def test_cajas_por_cambio_de_grupo_only_boxes_the_marked_vanos():
+    """La tabla trae una fila por bolsa de la seleccion simulada, pero el
+    recuadro senala lo que el usuario ESTA estudiando. Un vano puntuado que no
+    esta marcado no lleva caja: si la llevara, marcar un vano y simular todo el
+    circuito llenaria el mapa de rectangulos."""
+    tabla = _tabla_simulada([("VA", 2, 0), ("VB", 1, 1)])
+
+    cajas = cajas_por_cambio_de_grupo(_geo_cajas(), tabla, marcados=["VA"])
+
+    assert [f["properties"]["fid"] for f in cajas["mejora"]["features"]] == ["VA"]
+    assert cajas["igual"]["features"] == []
+
+
+def test_a_marked_vano_absent_from_the_table_gets_no_box_at_all():
+    """Un vano marcado SIN celda en la ventana activa no lo puntuo la simulacion:
+    no tiene grupo base ni grupo simulado, asi que no hay desenlace que pintar.
+    Meterlo en "igual" seria afirmar que no cambio, que es justamente lo que
+    nadie midio."""
+    cajas = cajas_por_cambio_de_grupo(
+        _geo_cajas(), _tabla_simulada([("VA", 1, 1)]), marcados=["VA", "VC"]
+    )
+
+    assert [f["properties"]["fid"] for f in cajas["igual"]["features"]] == ["VA"]
+    assert all(
+        "VC" not in [f["properties"]["fid"] for f in coleccion["features"]]
+        for coleccion in cajas.values()
+    )
+
+
+def test_cajas_por_cambio_de_grupo_keeps_the_three_keys_when_empty():
+    """Las tres capas se escriben SIEMPRE, tambien vacias: el repintado es una
+    sola escritura por capa y no un quitar y poner capas del mapa, que en
+    MapLibre reordena lo que hay debajo."""
+    cajas = cajas_por_cambio_de_grupo(_geo_cajas(), _tabla_simulada([]), marcados=["VA"])
+
+    assert sorted(cajas) == ["empeora", "igual", "mejora"]
+    assert all(c["type"] == "FeatureCollection" and c["features"] == []
+               for c in cajas.values())
+
+
+def test_cajas_por_cambio_de_grupo_uses_the_same_geometry_as_the_base_box():
+    """Mismo rectangulo que el del mapa base: los dos mapas comparten geometria,
+    y dos cajas de tamanio distinto sobre el mismo vano se leerian como dos
+    vanos."""
+    tabla = _tabla_simulada([("VB", 1, 1)])
+
+    cajas = cajas_por_cambio_de_grupo(
+        _geo_cajas(), tabla, marcados=["VB"], lado_minimo=0.001, margen=0.01
+    )
+    base = cajas_seleccion(_geo_cajas(), marcados=["VB"], lado_minimo=0.001, margen=0.01)
+
+    assert cajas["igual"]["features"] == base["features"]
+
+
+# --- El encuadre del mapa simulado sobre los vanos elegidos ---------------------------
+
+
+def test_bounds_de_fids_frames_only_the_given_vanos():
+    """El mapa simulado se centra sobre los vanos que se estan estudiando y no
+    sobre el circuito entero: despues de simular, la pregunta es que le paso a
+    ESOS vanos, y buscarlos otra vez dentro del garabato completo es trabajo
+    que el tablero puede ahorrar."""
+    assert bounds_de_fids(_geo_cajas(), ["VA"]) == (1.0, 1.2, -75.4, -75.0)
+
+
+def test_bounds_de_fids_covers_every_vano_of_the_selection():
+    """Con varios vanos el encuadre los tiene que contener a TODOS: encuadrar
+    sobre el primero dejaria los demas fuera de pantalla."""
+    assert bounds_de_fids(_geo_cajas(), ["VA", "VC"]) == (1.0, 3.1, -77.1, -75.0)
+
+
+def test_bounds_de_fids_without_coordinates_is_none():
+    """Sin fids -- o con fids de otro circuito -- devuelve None para que el
+    llamador deje el encuadre donde estaba, en vez de centrar en un punto
+    inventado. Es el mismo contrato que `centro_y_zoom` con bounds vacios."""
+    assert bounds_de_fids(_geo_cajas(), []) is None
+    assert bounds_de_fids(_geo_cajas(), ["DE_OTRO_CIRCUITO"]) is None

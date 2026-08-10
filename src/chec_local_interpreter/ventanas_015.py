@@ -370,6 +370,103 @@ def cajas_seleccion(
     return {"type": "FeatureCollection", "features": features}
 
 
+# --- Row 2's box: the same rectangle, coloured by what the simulation did ---------------
+
+CAMBIO_MEJORA = "mejora"
+CAMBIO_IGUAL = "igual"
+CAMBIO_EMPEORA = "empeora"
+CAMBIOS: tuple[str, ...] = (CAMBIO_MEJORA, CAMBIO_IGUAL, CAMBIO_EMPEORA)
+
+
+def cajas_por_cambio_de_grupo(
+    geo_circuito: Mapping[str, Any],
+    tabla_resultado: pd.DataFrame,
+    *,
+    marcados: Iterable[str] = (),
+    lado_minimo: float = 0.0,
+    margen: float = 0.0,
+) -> dict[str, dict[str, Any]]:
+    """The selection boxes of row 2's simulated map, split into three
+    `FeatureCollection`s by what the simulation did to each marked vano:
+    `mejora` (it dropped to a lower criticality group), `igual` (it stayed) and
+    `empeora` (it climbed).
+
+    Row 1's box answers *which vano am I studying?*. Once the model has run,
+    that question is already settled -- the same vano is boxed on the left --
+    and the simulated map can spend the same channel on the answer instead:
+    *what happened to it?*. Reading it off the map is otherwise a segment-by-
+    segment comparison of two colours across two panels.
+
+    Three collections and not one because a `layout.map.layers` entry carries
+    ONE colour: painting three outcomes through a single layer would force
+    picking a colour that lies about two of them. The three keys are always
+    present, empty included, so the repaint is one write per layer and never an
+    add/remove of map layers -- MapLibre reorders what sits underneath when
+    layers come and go.
+
+    The outcome comes from `delta_riesgo_ordinal`, which is
+    `simulado_clase_idx - base_clase_idx` over the SAME KMeans geometry of 01.4
+    that paints both maps, so "dropped a group" means exactly what the two
+    palettes show.
+
+    A marked vano with no row in `tabla_resultado` gets NO box at all: without
+    a cell in the active window the simulation never scored it, so it has
+    neither a base nor a simulated group. Filing it under `igual` would assert
+    that nothing changed, which is precisely what nobody measured.
+    """
+    marcados = set(marcados)
+    if tabla_resultado is None or len(tabla_resultado) == 0:
+        delta_por_fid: dict[str, int] = {}
+    else:
+        delta_por_fid = {
+            str(fid): int(delta)
+            for fid, delta in zip(tabla_resultado["FID_VANO"],
+                                  tabla_resultado["delta_riesgo_ordinal"])
+        }
+    por_cambio: dict[str, list[str]] = {cambio: [] for cambio in CAMBIOS}
+    for fid in geo_circuito["fids"]:
+        if fid not in marcados or fid not in delta_por_fid:
+            continue
+        delta = delta_por_fid[fid]
+        cambio = (CAMBIO_MEJORA if delta < 0
+                  else CAMBIO_IGUAL if delta == 0 else CAMBIO_EMPEORA)
+        por_cambio[cambio].append(fid)
+    # Se reusa `cajas_seleccion` en vez de repetir la geometria: las dos cajas
+    # tienen que ser el MISMO rectangulo sobre el mismo vano, y dos tamanios
+    # distintos en los dos mapas se leerian como dos vanos.
+    return {
+        cambio: cajas_seleccion(geo_circuito, fids, lado_minimo=lado_minimo,
+                                margen=margen)
+        for cambio, fids in por_cambio.items()
+    }
+
+
+def bounds_de_fids(
+    geo_circuito: Mapping[str, Any], fids: Iterable[str]
+) -> tuple[float, float, float, float] | None:
+    """`(lat_min, lat_max, lon_min, lon_max)` over just those vanos -- the shape
+    `centro_y_zoom` takes -- or None when none of them has coordinates here.
+
+    It is what lets the simulated map frame the vanos under study instead of the
+    whole circuit. After pressing "Simular" the question is what happened to
+    THOSE vanos, and finding them again inside the full sprawl is work the panel
+    can save.
+
+    None and not a made-up point: the caller then leaves the view where it was,
+    the same contract `centro_y_zoom` has for empty bounds.
+    """
+    fids = set(fids)
+    lats: list[float] = []
+    lons: list[float] = []
+    for fid, lat, lon in zip(geo_circuito["fids"], geo_circuito["lat"], geo_circuito["lon"]):
+        if fid in fids and len(lat):
+            lats.extend(float(v) for v in lat)
+            lons.extend(float(v) for v in lon)
+    if not lats:
+        return None
+    return (min(lats), max(lats), min(lons), max(lons))
+
+
 MAX_PUNTOS_NUBE = 20_000
 
 
