@@ -34,6 +34,7 @@ from chec_local_interpreter.relevancia_lote import (
     guardar_hojas,
     ranking_por_bolsa,
     relevancia_media_por_grupo,
+    subconjunto_de_bolsas,
     tabla_vano_ventana,
 )
 from chec_local_interpreter.vano_controls import Knob
@@ -307,3 +308,56 @@ def test_an_empty_cell_stays_empty_and_does_not_become_nan_text(tmp_path):
 
     leida = pd.read_excel(destino, sheet_name="d")
     assert pd.isna(leida["A"].iloc[1])
+
+
+# --- el subconjunto que alimenta al selector del tablero --------------------------------
+
+
+class _BagIndex:
+    def __init__(self, claves, counts):
+        self.keys = claves
+        self.counts = np.asarray(counts, dtype=np.int64)
+        self.offsets = np.concatenate([[0], np.cumsum(self.counts)])
+
+
+def _indice():
+    claves = pd.DataFrame({
+        "CIRCUITO": ["C1", "C1", "C2"],
+        "FID_VANO": ["V1", "V2", "V3"],
+        "VENTANA": ["W1", "W2", "W1"],
+    })
+    return _BagIndex(claves, [2, 1, 3])
+
+
+def test_without_filters_the_subset_is_the_whole_dataset():
+    """El 07 arranca sobre todo y se recorta solo si el usuario lo pide."""
+    sub = subconjunto_de_bolsas(_indice())
+
+    assert sub["n_bolsas"] == 3
+    assert sub["filas"].tolist() == [0, 1, 2, 3, 4, 5]
+
+
+def test_the_subset_can_be_cut_by_circuit_by_window_or_by_both():
+    indice = _indice()
+
+    assert subconjunto_de_bolsas(indice, circuito="C1")["n_bolsas"] == 2
+    assert subconjunto_de_bolsas(indice, ventana="W1")["n_bolsas"] == 2
+    assert subconjunto_de_bolsas(indice, circuito="C1", ventana="W1")["n_bolsas"] == 1
+
+
+def test_the_instance_bag_is_renumbered_from_zero():
+    """El modelo toma `n_bags` como `instance_bag.max() + 1`: conservar los ids
+    originales reservaria una bolsa vacia por cada celda que quedo fuera y
+    desplazaria todos los resultados."""
+    sub = subconjunto_de_bolsas(_indice(), circuito="C2")
+
+    assert sub["instance_bag"].tolist() == [0, 0, 0]
+    assert sub["filas"].tolist() == [3, 4, 5]
+    assert sub["n_obs"].tolist() == [3.0]
+
+
+def test_an_empty_subset_reports_zero_without_inventing_rows():
+    sub = subconjunto_de_bolsas(_indice(), circuito="NO_EXISTE")
+
+    assert sub["n_bolsas"] == 0
+    assert sub["filas"].size == 0

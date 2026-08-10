@@ -368,3 +368,41 @@ def guardar_hojas(rutas_hojas: Mapping[str, pd.DataFrame], destino: Any) -> None
                     hoja.write(i, j, valor)
     finally:
         libro.close()
+
+
+def subconjunto_de_bolsas(
+    bag_index: Any, *, circuito: str | None = None, ventana: str | None = None,
+) -> dict[str, Any]:
+    """Las bolsas de un circuito, de una ventana, de los dos, o de TODO el dataset.
+
+    `seleccionar_bolsas` exige circuito Y ventana porque el tablero del 06 siempre
+    tiene los dos. Aqui los dos son opcionales: el 07 arranca sobre el dataset
+    entero y se recorta solo si el usuario lo pide.
+
+    Devuelve las mismas piezas que una pasada de bolsas necesita, con
+    `instance_bag` RENUMERADO desde 0 -- el modelo toma `n_bags` como
+    `instance_bag.max() + 1`, asi que conservar los ids originales reservaria una
+    bolsa vacia por cada celda que quedo fuera y desplazaria todos los resultados.
+    """
+    claves = bag_index.keys
+    mascara = np.ones(len(claves), dtype=bool)
+    if circuito is not None:
+        mascara &= claves["CIRCUITO"].astype(str).to_numpy() == str(circuito)
+    if ventana is not None:
+        mascara &= claves["VENTANA"].astype(str).to_numpy() == str(ventana)
+
+    bolsas = np.flatnonzero(mascara)
+    offsets = np.asarray(bag_index.offsets, dtype=np.int64)
+    counts = np.asarray(bag_index.counts, dtype=np.int64)[bolsas]
+    if bolsas.size == 0:
+        vacio = np.array([], dtype=np.int64)
+        return {"bolsas": bolsas, "filas": vacio, "instance_bag": vacio,
+                "n_obs": vacio.astype(float), "n_bolsas": 0}
+    filas = np.concatenate([np.arange(offsets[b], offsets[b + 1]) for b in bolsas])
+    return {
+        "bolsas": bolsas,
+        "filas": filas,
+        "instance_bag": np.repeat(np.arange(len(bolsas), dtype=np.int64), counts),
+        "n_obs": counts.astype(float),
+        "n_bolsas": int(len(bolsas)),
+    }
