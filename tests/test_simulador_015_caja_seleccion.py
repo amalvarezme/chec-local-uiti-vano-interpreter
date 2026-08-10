@@ -142,3 +142,35 @@ def test_the_minimum_side_is_wider_than_zero_so_a_north_south_vano_is_visible(fu
     assert float(lado.group(1)) > 0.0
     assert float(margen.group(1)) > 0.0
     assert float(opacidad.group(1)) == 0.5
+
+
+# --- El deslizador de ventana recorre solo lo que el circuito tiene --------------------
+
+
+def test_the_window_slider_is_repopulated_per_circuit(fuente):
+    """No son las once ventanas para todos: medido, 121 de los 208 circuitos tienen
+    menos, y uno tiene UNA sola. Antes el deslizador los llevaba igual a una ventana
+    sin celdas -- un mapa sin un solo tramo de color, que se lee como que el tablero se
+    rompio y no como que no hubo eventos."""
+    assert "VENTANAS_POR_CIRCUITO = {" in fuente
+    assert "def _opciones_de_ventana(circuito):" in fuente
+    assert "options=_opciones_de_ventana(circuito_widget.value)" in fuente
+    assert "ventana_widget.options = _opciones" in fuente
+
+
+def test_the_current_window_is_read_before_options_are_reassigned(fuente):
+    """Asignar `options` reajusta `value` a la primera opcion de INMEDIATO. Leerlo
+    despues devuelve siempre esa primera, asi que la ventana vigente se perdia en cada
+    cambio de circuito -- medido: pasar a un circuito que SI tiene la ventana 10 la
+    dejaba en la 0. El orden de estas dos lineas es todo el arreglo."""
+    cuerpo = fuente[fuente.index("def _on_circuito_change"):][:1200]
+    assert cuerpo.index("_vigente = ventana_widget.value") < cuerpo.index(
+        "ventana_widget.options = _opciones"), (
+        "la ventana vigente se lee DESPUES de reescribir options: se pierde siempre")
+    assert "_vigente if _vigente in _disponibles else _disponibles[0]" in cuerpo
+
+
+def test_a_circuit_without_windows_still_gets_one_option(fuente):
+    """Un `SelectionSlider` sin opciones lanza al construirse, y eso dejaria el panel
+    entero sin arrancar por un circuito vacio."""
+    assert "VENTANAS_POR_CIRCUITO.get(circuito) or [0]" in fuente

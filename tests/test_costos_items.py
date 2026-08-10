@@ -244,3 +244,83 @@ def test_an_empty_selection_costs_nothing():
     }
 
 
+# --- El cableado del cuaderno ----------------------------------------------------------
+#
+# La aritmetica ya esta cubierta arriba. Lo que estas pruebas miran es lo que ninguna
+# prueba unitaria puede ver: si el tablero llega hasta esa aritmetica, y si lo hace en el
+# momento correcto.
+
+import json  # noqa: E402
+import re  # noqa: E402
+
+NOTEBOOK = (
+    Path(__file__).resolve().parents[1]
+    / "notebooks"
+    / "project_flow"
+    / "06_uiti_vano_explicabilidad_simulador.ipynb"
+)
+
+
+@pytest.fixture(scope="module")
+def fuente() -> str:
+    celdas = json.loads(NOTEBOOK.read_text(encoding="utf-8"))["cells"]
+    return "\n".join("".join(celda["source"]) for celda in celdas)
+
+
+def test_the_cost_is_computed_inside_the_simulate_job(fuente):
+    """El tablero tiene UN solo disparador. Un costo que se recalculara al marcar una
+    casilla, mientras el mapa de al lado sigue mostrando la corrida anterior, dejaria
+    dos planes distintos en pantalla al mismo tiempo -- que es la misma confusion que
+    separa a las dos filas de mapas."""
+    cuerpo = fuente[fuente.index("def _simular(epoca_job)"):]
+    cuerpo = cuerpo[: cuerpo.index("def _programar_simulacion")]
+    assert "costos = costos_de_intervencion(" in cuerpo
+    assert "_pintar_costos(costos)" in cuerpo
+
+
+def test_only_the_vanos_the_model_scored_are_costed(fuente):
+    """Costear un vano que la simulacion no puntuo pondria un precio al lado de un
+    riesgo que nadie estimo. Es el mismo criterio que ya rige al recuadro y al encuadre
+    del mapa simulado."""
+    assert "_puntuados = set(resultado['FID_VANO'].astype(str))" in fuente
+    assert "for fid, actividades in _costos_por_vano.items() if fid in _puntuados" in fuente
+
+
+def test_changing_circuit_or_window_clears_the_cost_row(fuente):
+    """El costo pertenece a una seleccion concreta. Sobrevivir a un cambio de ventana lo
+    dejaria describiendo una intervencion sobre otros vanos."""
+    limpiar = fuente[fuente.index("def _limpiar_resultado_simulacion"):][:1200]
+    assert "_pintar_costos(None)" in limpiar
+
+
+def test_the_quantity_dropdown_offers_zero_through_five(fuente):
+    """De 0 a 5. El cero no sobra por tener casilla: la casilla elige que actividades
+    entran al PLAN, y el cero dice en cuales de los vanos marcados NO se ejecuta esa
+    actividad. Sin el, una lista compartida obligaria a darle la misma obra a los cinco
+    vanos. El tope sale de la constante del modulo y no de un literal, que es lo que
+    mantiene al panel y al costeo de acuerdo sobre que es un valor valido."""
+    assert "options=[(str(n), n) for n in range(0, MAX_REPETICIONES + 1)]" in fuente
+
+
+def test_the_cost_row_is_a_single_trace_with_an_array_of_colours(fuente):
+    """Los vanos y el TOTAL viven en la MISMA escala de pesos y en la misma traza: el
+    total es su suma, y darle un eje propio dejaria de mostrar cuanto pesa cada vano
+    dentro de el. Se distinguen por color, que por eso viaja como arreglo."""
+    assert "IDX['costos'] = _agregar(go.Bar(" in fuente
+    assert "assert isinstance(_fig.data[IDX['costos']].marker.color, (list, tuple))" in fuente
+    assert re.search(r"\), 5, 1\)\n", fuente), "la barra de costos va en la fila 5"
+
+
+def test_the_activity_list_is_shared_and_the_rows_are_per_vano(fuente):
+    """Una sola lista de 125 casillas arriba, y una fila por actividad bajo CADA vano
+    marcado. Repetir el catalogo por vano serian 625 casillas para elegir tres."""
+    assert fuente.count("item_selector_widget = construir_selector_casillas(") == 1
+    assert "_costos_por_vano[fid] = controles" in fuente
+    assert "*_bloque_de_costos(fid)" in fuente
+
+
+def test_the_uncosted_activities_are_named_and_not_just_dropped(fuente):
+    """Doce actividades ausentes sin explicacion se leen como que el contrato no las
+    incluye. Mismo criterio que las variables no simulables."""
+    assert "AVISO_SIN_COSTO = widgets.HTML(" in fuente
+    assert "CATALOGO_COSTOS.sin_costo" in fuente
