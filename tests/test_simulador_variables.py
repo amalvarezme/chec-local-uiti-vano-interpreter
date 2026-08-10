@@ -29,6 +29,7 @@ from chec_local_interpreter.simulador_variables import (
     JUICIO_SIMULACION,
     UNIDADES,
     VEREDICTOS,
+    columnas_panel,
     knobs_bloqueados,
     knobs_simulables,
     tabla_variables_simulables,
@@ -263,33 +264,98 @@ def test_the_panel_only_offers_knobs_that_mean_something_to_simulate():
     tablero las presenta como equivalentes a la poda o a la puesta a tierra, y
     alguien va a mover las coordenadas de un vano creyendo que eso es un
     escenario."""
-    knobs = [_knob("NR_T"), _knob("X2"), _knob("CNT_TRF"), _knob("LONGITUD")]
+    knobs = [_knob("NR_T"), _knob("X2"), _knob("CNT_TRF"), _knob("LONGITUD"),
+             _knob("DDT")]
 
     ofrecidos = knobs_simulables(knobs)
 
-    assert [k.id for k in ofrecidos] == ["NR_T", "LONGITUD"]
+    # NR_T es una obra y DDT un escenario. X2 y CNT_TRF estan refutadas; LONGITUD es
+    # "Limitado" y tampoco se ofrece -- un deslizador no puede transmitir la condicion
+    # bajo la cual esa lectura vale.
+    assert [k.id for k in ofrecidos] == ["NR_T", "DDT"]
 
 
 def test_the_removed_knobs_are_reported_so_the_panel_can_name_them():
     """Desaparecer sin decir nada se lee como que faltan. El panel las nombra y
     dice que conservan su valor observado."""
-    knobs = [_knob("NR_T"), _knob("X2"), _knob("CNT_TRF")]
+    knobs = [_knob("NR_T"), _knob("X2"), _knob("CNT_TRF"), _knob("LONGITUD")]
 
     bloqueados = knobs_bloqueados(knobs)
 
-    assert [k.id for k in bloqueados] == ["CNT_TRF", "X2"]
+    assert [k.id for k in bloqueados] == ["CNT_TRF", "LONGITUD", "X2"]
 
 
-def test_a_limited_knob_stays_in_the_panel():
-    """"Limitado" NO es "sin sentido": significa que hay una lectura bajo la cual
-    si se interpreta, y el motivo la dice. Quitarla seria decidir por el usuario
-    que esa lectura no le sirve."""
+def test_a_limited_knob_no_longer_reaches_the_panel():
+    """El panel ofrece solo lo que se puede llevar a una decision: una obra
+    (intervencion) o un escenario que se quiera anticipar. "Limitado" significa que
+    hay UNA lectura bajo la cual se interpreta, y un deslizador no puede transmitir
+    esa condicion -- quien lo mueve no ve el motivo, solo el numero. Siguen entrando
+    a la simulacion con su valor observado; lo unico que se pierde es moverlas."""
     knobs = [_knob("FECHA_OPERACION_VANO"), _knob("LONGITUD"), _knob("TIPO_TAX")]
 
-    assert len(knobs_simulables(knobs)) == 3
+    assert knobs_simulables(knobs) == []
+    assert len(knobs_bloqueados(knobs)) == 3
 
 
 def test_an_unevaluated_knob_stays_in_the_panel_but_is_not_hidden():
     """Sin veredicto no hay motivo para quitarla, y quitarla en silencio ocultaria
     justo el caso que hay que revisar. La tabla ya la marca "Sin evaluar"."""
     assert len(knobs_simulables([_knob("VARIABLE_NUEVA")])) == 1
+
+
+# --- Las cuatro columnas del selector de variables --------------------------------------
+
+
+def test_the_panel_is_laid_out_as_four_columns_two_per_group():
+    """Dos columnas para lo que se puede hacer y dos para lo que se quiere
+    anticipar. Una lista corrida de 18 casillas obliga a leer el veredicto de cada
+    una para saber en cual de las dos preguntas esta; en columnas, la posicion ya
+    lo dice."""
+    knobs = [_knob(f"I{i}") for i in range(5)] + [_knob(f"E{i}") for i in range(3)]
+    juicio = {f"I{i}": ("Si -- intervencion", "x") for i in range(5)}
+    juicio.update({f"E{i}": ("Si -- escenario", "x") for i in range(3)})
+
+    columnas = columnas_panel(knobs, juicio=juicio)
+
+    assert len(columnas) == 4
+    assert [len(k) for _titulo, k in columnas] == [3, 2, 2, 1]
+    assert [k.id for k in columnas[0][1]] == ["I0", "I1", "I2"]
+    assert [k.id for k in columnas[1][1]] == ["I3", "I4"]
+    assert [k.id for k in columnas[2][1]] == ["E0", "E1"]
+    assert [k.id for k in columnas[3][1]] == ["E2"]
+
+
+def test_the_first_column_of_each_group_carries_its_name():
+    knobs = [_knob("I0"), _knob("E0")]
+    juicio = {"I0": ("Si -- intervencion", "x"), "E0": ("Si -- escenario", "x")}
+
+    titulos = [t for t, _k in columnas_panel(knobs, juicio=juicio)]
+
+    assert titulos[0].startswith("Intervencion")
+    assert titulos[2].startswith("Escenario")
+    # La segunda columna de cada grupo NO repite el nombre como si fuera otro grupo.
+    assert "cont" in titulos[1].lower() or titulos[1] == ""
+    assert "cont" in titulos[3].lower() or titulos[3] == ""
+
+
+def test_the_split_puts_the_bigger_half_first_so_columns_stay_even():
+    """Con 11 controles, 6 y 5 -- no 5 y 6. Una columna mas corta a la izquierda
+    deja un escalon que se lee como si faltara algo."""
+    knobs = [_knob(f"I{i}") for i in range(11)]
+    juicio = {f"I{i}": ("Si -- intervencion", "x") for i in range(11)}
+
+    columnas = columnas_panel(knobs, juicio=juicio)
+
+    assert [len(k) for _t, k in columnas[:2]] == [6, 5]
+
+
+def test_an_empty_group_still_produces_its_two_columns():
+    """El selector se arma una sola vez con cuatro columnas fijas. Si un grupo
+    quedara sin columnas, las demas se correrian de sitio al cambiar de circuito."""
+    knobs = [_knob("I0")]
+    juicio = {"I0": ("Si -- intervencion", "x")}
+
+    columnas = columnas_panel(knobs, juicio=juicio)
+
+    assert len(columnas) == 4
+    assert [len(k) for _t, k in columnas] == [1, 0, 0, 0]

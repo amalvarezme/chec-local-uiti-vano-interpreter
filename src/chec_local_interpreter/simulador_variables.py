@@ -305,8 +305,14 @@ def tabla_variables_simulables(knobs: Iterable[Knob]) -> pd.DataFrame:
     return tabla[columnas]
 
 
-def _veredicto(knob: Knob) -> str:
-    return JUICIO_SIMULACION.get(knob.id, (SIN_EVALUAR, ""))[0]
+# Los DOS veredictos que el panel ofrece como controles, y el orden de sus columnas.
+VEREDICTOS_OFRECIDOS: tuple[str, ...] = ("Si -- intervencion", "Si -- escenario")
+_NOMBRE_GRUPO = {"Si -- intervencion": "Intervencion", "Si -- escenario": "Escenario"}
+
+
+def _veredicto(knob: Knob, juicio: Mapping[str, tuple[str, str]] | None = None) -> str:
+    tabla = JUICIO_SIMULACION if juicio is None else juicio
+    return tabla.get(knob.id, (SIN_EVALUAR, ""))[0]
 
 
 def knobs_simulables(knobs: Iterable[Knob]) -> list[Knob]:
@@ -322,12 +328,16 @@ def knobs_simulables(knobs: Iterable[Knob]) -> list[Knob]:
     OBSERVADO de cada vano, que es exactamente lo que corresponde. Lo unico que se
     pierde es la posibilidad de moverlas.
 
-    `Limitado` se queda: significa que hay una lectura bajo la cual si se interpreta,
-    y el motivo la enuncia -- quitarla seria decidir por el usuario que esa lectura no
-    le sirve. `Sin evaluar` tambien se queda: esconder en silencio justo el caso que
-    hay que revisar es la peor de las opciones, y la tabla ya lo marca.
+    `Limitado` TAMPOCO se ofrece. Significa que hay una lectura unica bajo la cual la
+    variable se interpreta, y un deslizador no puede transmitir esa condicion: quien lo
+    mueve ve el numero, no el motivo. Recibe el mismo trato que las refutadas -- entra
+    con su valor observado y no se puede mover -- y la tabla explica por que.
+
+    `Sin evaluar` SI se queda: esconder en silencio justo el caso que hay que revisar
+    es la peor de las opciones, y la tabla ya lo marca.
     """
-    return [knob for knob in knobs if _veredicto(knob) != "No"]
+    return [knob for knob in knobs
+            if _veredicto(knob) in VEREDICTOS_OFRECIDOS or _veredicto(knob) == SIN_EVALUAR]
 
 
 def knobs_bloqueados(knobs: Iterable[Knob]) -> list[Knob]:
@@ -336,4 +346,41 @@ def knobs_bloqueados(knobs: Iterable[Knob]) -> list[Knob]:
     El panel los NOMBRA en vez de dejarlos desaparecer: una lista que se acorta sin
     explicacion se lee como que faltan variables, no como una decision.
     """
-    return sorted((k for k in knobs if _veredicto(k) == "No"), key=lambda k: k.id)
+    ofrecidos = {k.id for k in knobs_simulables(knobs)}
+    return sorted((k for k in knobs if k.id not in ofrecidos), key=lambda k: k.id)
+
+
+def columnas_panel(
+    knobs: Iterable[Knob],
+    *,
+    por_grupo: int = 2,
+    juicio: Mapping[str, tuple[str, str]] | None = None,
+) -> list[tuple[str, list[Knob]]]:
+    """Las columnas del selector de variables: `por_grupo` por cada veredicto que el
+    panel ofrece, o sea cuatro -- dos de intervencion y dos de escenario.
+
+    Una lista corrida de dieciocho casillas obliga a recordar el veredicto de cada
+    una para saber a cual de las dos preguntas pertenece: "que obra hago" y "que pasa
+    si". En columnas eso lo dice la posicion, y el titulo de la primera columna de
+    cada grupo lo confirma.
+
+    El reparto deja la mitad MAYOR primero -- con 11 controles, 6 y 5 --, porque una
+    columna corta a la izquierda deja un escalon que se lee como si faltara algo.
+
+    Los cuatro huecos existen siempre, aunque un grupo quede vacio: el selector se
+    arma una sola vez y una columna que aparece y desaparece correria a las demas de
+    sitio cada vez que cambia el catalogo.
+    """
+    columnas: list[tuple[str, list[Knob]]] = []
+    knobs = list(knobs)
+    for veredicto in VEREDICTOS_OFRECIDOS:
+        delgrupo = [k for k in knobs if _veredicto(k, juicio) == veredicto]
+        nombre = _NOMBRE_GRUPO[veredicto]
+        # `-(-n // p)` es el techo de la division: la primera columna se queda con el
+        # sobrante en vez de arrastrarlo hasta la ultima.
+        tam = -(-len(delgrupo) // por_grupo) if delgrupo else 0
+        for i in range(por_grupo):
+            trozo = delgrupo[i * tam:(i + 1) * tam] if tam else []
+            titulo = f"{nombre} ({len(delgrupo)})" if i == 0 else f"{nombre} (cont.)"
+            columnas.append((titulo, trozo))
+    return columnas
