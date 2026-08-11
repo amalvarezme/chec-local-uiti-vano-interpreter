@@ -17,7 +17,6 @@ AGENT_ROLE_FILES = (
     "historical.md",
     "inference.md",
     "expert-alignment.md",
-    "auto-simulator.md",
     "pdf-discussion-extraction.md",
 )
 _TOOLS_LINE_RE = re.compile(r"^tools:\s*(.+)$", re.MULTILINE)

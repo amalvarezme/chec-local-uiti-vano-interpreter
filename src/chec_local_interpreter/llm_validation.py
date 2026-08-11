@@ -417,43 +417,6 @@ def save_invalid_output(response_text: str, errors: list[str], output_dir: str |
 # function.
 
 
-def validate_auto_simulator_response(response_text: str) -> dict[str, Any]:
-    """Validate a candidate auto-simulator LLM response.
-
-    Checks that `response_text` parses as a JSON object containing the seven
-    required keys (`titulo`, `resumen`, `variables_mas_sensibles`,
-    `patrones_minimo_maximo`, `hallazgos_para_criticidad`, `limitaciones`,
-    `contexto_reutilizado`), and that every key besides `titulo` is a list
-    when present. Returns `{"ok": bool, "data": dict | None, "errors": [...]}`.
-    """
-    required_keys = {
-        "titulo",
-        "resumen",
-        "variables_mas_sensibles",
-        "patrones_minimo_maximo",
-        "hallazgos_para_criticidad",
-        "limitaciones",
-        "contexto_reutilizado",
-    }
-    try:
-        data = parse_llm_json(response_text or "")
-    except Exception as exc:  # noqa: BLE001 - mirrors the notebook's broad catch
-        return {"ok": False, "data": None, "errors": [f"JSON inválido: {exc}"]}
-    if not isinstance(data, dict):
-        return {"ok": False, "data": None, "errors": ["La respuesta debe ser un objeto JSON."]}
-    missing_keys = sorted(required_keys - set(data))
-    errors = [f"Faltan claves requeridas: {missing_keys}"] if missing_keys else []
-    for key in [
-        "resumen",
-        "variables_mas_sensibles",
-        "patrones_minimo_maximo",
-        "hallazgos_para_criticidad",
-        "limitaciones",
-        "contexto_reutilizado",
-    ]:
-        if key in data and not isinstance(data[key], list):
-            errors.append(f"{key} debe ser una lista.")
-    return {"ok": not errors, "data": data, "errors": errors}
 
 
 # --- PDF-discussion-extraction row validator ----------------------------

@@ -36,9 +36,3 @@ def test_inference_prompt_uses_skill_contract():
     assert "discusion_grafos` debe ser siempre un arreglo/lista de objetos" in prompt
 
 
-def test_auto_simulator_skill_bundle_loads():
-    assert verify_required_skills(profile="auto_simulator") == []
-    bundle = assemble_skill_bundle(profile="auto_simulator")
-    assert "Contexto del Simulador Automático Mínimo/Máximo" in bundle
-    assert "Contrato de Salida del Agente de Simulación Automática" in bundle
-    assert len(list_available_skills(profile="auto_simulator")) == 2

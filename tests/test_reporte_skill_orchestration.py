@@ -31,16 +31,21 @@ def _run_sequence_text() -> str:
     return match.group("body")
 
 
-def test_skill_declares_historical_inference_auto_simulator_independent():
+def test_skill_declares_historical_and_inference_independent():
+    """El flujo pasa de cuatro agentes a tres: el `auto-simulator` se jubilo con
+    MGCECDL, porque su barrido min-max es lo que la relevancia MIL sustituyo. Lo que
+    esta prueba sigue fijando es que los dos que quedan antes de expert-alignment
+    puedan correr en paralelo -- es de donde sale el tiempo de una corrida."""
     body = _run_sequence_text()
 
     independence_markers = ["independent", "parallel"]
     assert all(marker in body.lower() for marker in independence_markers), (
-        "Run sequence must declare historical/inference/auto-simulator as independent "
+        "Run sequence must declare historical/inference as independent "
         "and parallel-eligible where the runtime supports it"
     )
 
-    assert "historical" in body and "inference" in body and "auto-simulator" in body
+    assert "historical" in body and "inference" in body
+    assert "auto-simulator" not in body, "el agente jubilado no puede volver al flujo"
 
 
 def test_skill_does_not_require_true_concurrency():

@@ -23,7 +23,7 @@ def _isolate_agent_tools_artifacts_root(tmp_path, monkeypatch):
     """Redirect every agent-tools module's `ARTIFACTS_ROOT` to a per-test
     `tmp_path` subdirectory for the duration of each test.
 
-    `historical.py`/`inference.py`/`expert_alignment.py`/`auto_simulator.py`/
+    `historical.py`/`inference.py`/`expert_alignment.py`/
     `pdf_discussion.py` each resolve a module-level `ARTIFACTS_ROOT` relative
     to the process cwd -- a deliberate feature for real `/reporte` runs (the
     invoking agent's cwd is the repo root). In-process tests that call
@@ -37,7 +37,6 @@ def _isolate_agent_tools_artifacts_root(tmp_path, monkeypatch):
     + subprocess (explicit cwd) cover every writer.
     """
     from chec_local_interpreter.agent_tools import (
-        auto_simulator,
         expert_alignment,
         historical,
         inference,
@@ -48,5 +47,4 @@ def _isolate_agent_tools_artifacts_root(tmp_path, monkeypatch):
     monkeypatch.setattr(historical, "ARTIFACTS_ROOT", artifacts_root / "historical")
     monkeypatch.setattr(inference, "ARTIFACTS_ROOT", artifacts_root / "inference")
     monkeypatch.setattr(expert_alignment, "ARTIFACTS_ROOT", artifacts_root)
-    monkeypatch.setattr(auto_simulator, "ARTIFACTS_ROOT", artifacts_root / "auto-simulator")
     monkeypatch.setattr(pdf_discussion, "ARTIFACTS_ROOT", artifacts_root / "pdf-discussion-extraction")

@@ -30,12 +30,6 @@ EXPERT_ALIGNMENT_REQUIRED_SKILLS = (
     "04_prior_report_continuity.md",
 )
 
-AUTO_SIMULATOR_REQUIRED_SKILLS = (
-    "01_auto_minmax_sensitivity_context.md",
-    "02_auto_minmax_sensitivity_output_contract.md",
-)
-
-
 def _required_skills(profile: str = "base") -> tuple[str, ...]:
     if profile == "base":
         return REQUIRED_SKILLS
@@ -43,9 +37,7 @@ def _required_skills(profile: str = "base") -> tuple[str, ...]:
         return INFERENCE_REQUIRED_SKILLS
     if profile in {"expert_alignment", "pdf_report_comparison"}:
         return EXPERT_ALIGNMENT_REQUIRED_SKILLS
-    if profile in {"auto_simulator", "simulador_automatico"}:
-        return AUTO_SIMULATOR_REQUIRED_SKILLS
-    raise ValueError("profile debe ser 'base', 'inferencia', 'expert_alignment' o 'auto_simulator'.")
+    raise ValueError("profile debe ser 'base', 'inferencia' o 'expert_alignment'.")
 
 
 def skills_dir(base_dir: str | Path | None = None, *, profile: str = "base") -> Path:
@@ -53,8 +45,7 @@ def skills_dir(base_dir: str | Path | None = None, *, profile: str = "base") -> 
         return Path(base_dir)
     # All profiles (sdd/retire-llm-directory, per-profile incremental
     # repoint, design D3): base/historical, inferencia/inference,
-    # expert_alignment/pdf_report_comparison, and
-    # auto_simulator/simulador_automatico resolve to their code-owned
+    # y expert_alignment/pdf_report_comparison resuelven a su
     # `.claude/skills/<agent>/prompt/` home. The repo-root `llm/` tree and its
     # resolver were removed from `config.py` in Slice E.
     if profile == "base":
@@ -63,9 +54,7 @@ def skills_dir(base_dir: str | Path | None = None, *, profile: str = "base") -> 
         return agent_prompt_dir("inference")
     if profile in {"expert_alignment", "pdf_report_comparison"}:
         return agent_prompt_dir("expert-alignment")
-    if profile in {"auto_simulator", "simulador_automatico"}:
-        return agent_prompt_dir("auto-simulator")
-    raise ValueError("profile debe ser 'base', 'inferencia', 'expert_alignment' o 'auto_simulator'.")
+    raise ValueError("profile debe ser 'base', 'inferencia' o 'expert_alignment'.")
 
 
 def list_available_skills(base_dir: str | Path | None = None, *, profile: str = "base") -> list[str]:
