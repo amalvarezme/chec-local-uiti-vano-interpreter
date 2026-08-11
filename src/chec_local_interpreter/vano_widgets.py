@@ -307,3 +307,56 @@ Cinco es lo que cabe legible a lo ancho del panel. Por encima, las columnas se
 estrechan hasta que el nombre de la variable y su deslizador dejan de caber en la
 misma linea, y la rejilla se vuelve un muro.
 """
+
+
+# --- El guardia del relayout: arrastrar un mapa no puede tumbar el tablero -----------
+
+
+def sin_claves_derivadas(relayout_data):
+    """El payload de relayout del navegador, sin las claves que plotly se manda a
+    si mismo.
+
+    Se descarta todo tramo final que empieza por guion bajo. Ninguna propiedad
+    real del layout empieza asi; `_derived` es la que manda MapLibre con las
+    esquinas que acaba de calcular, y no es algo que se pueda FIJAR.
+    """
+    return {clave: valor for clave, valor in relayout_data.items()
+            if not clave.split(".")[-1].startswith("_")}
+
+
+def figura_de_mapas(*args, **kwargs):
+    """Un `go.FigureWidget` que sobrevive a que el usuario arrastre o haga zoom
+    sobre un mapa. Toma los mismos argumentos que `go.FigureWidget`.
+
+    Con plotly 6.8.0, mover un subplot `map` (MapLibre) dentro de un
+    `FigureWidget` devuelve `map._derived` junto a `map.center` y `map.zoom`, y
+    `plotly_relayout` lo rechaza con `Invalid property path 'map._derived' for
+    layout`. `basewidget._handler_js2py_relayout` limpia `lastInputTime` de ese
+    mismo payload pero nada mas, asi que la excepcion salta en CADA arrastre.
+
+    Aparece en la salida de la celda que muestra el widget -- por encima del
+    tablero --, que es lo que hace que se lea como si una celda anterior se
+    hubiera roto, y no como lo que es: un mapa que se movio.
+
+    Se corrige en `plotly_relayout` y no en el manejador privado del widget
+    porque es el punto publico por el que pasa todo lo que llega del navegador,
+    y no depende de como plotly nombre sus internos manana.
+
+    Es una funcion y no una clase de modulo porque plotly se importa AL
+    CONSTRUIR: `vano_widgets` se importa desde codigo que no dibuja nada, y
+    seguir la misma regla que `widget_for_knob` con ipywidgets deja el modulo
+    importable sin las dependencias de dibujo.
+    """
+    import plotly.graph_objects as go
+
+    class FiguraDeMapas(go.FigureWidget):
+        def plotly_relayout(self, relayout_data, **kwargs):
+            limpio = sin_claves_derivadas(relayout_data)
+            # Un payload que SOLO traia claves internas no llega a plotly: no
+            # queda nada que cambiar, y `plotly_relayout({})` haria trabajo y
+            # avisos por una interaccion que no movio nada.
+            if not limpio:
+                return None
+            return super().plotly_relayout(limpio, **kwargs)
+
+    return FiguraDeMapas(*args, **kwargs)

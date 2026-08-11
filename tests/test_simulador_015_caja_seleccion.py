@@ -254,10 +254,60 @@ def test_the_apply_buttons_use_each_vano_own_value_and_not_the_average(fuente):
     """El promedio ORDENA la lista, pero lo que baja a un vano concreto es su propio
     optimo. Aplicar el promedio simularia un escenario que no es el de ninguno."""
     assert "'ranking': ranking," in fuente
-    cuerpo = fuente[fuente.index("def _aplicar_sugerencia"):][:2600]
+    cuerpo = fuente[fuente.index("def _aplicar_sugerencia"):][:3200]
     assert "diag['ranking'].get(fid, {}).get('filas', [])" in cuerpo
-    # Se AGREGAN a lo que el usuario ya tuviera fijado, no lo reemplazan.
-    assert "dict.fromkeys([*knob_selector_widget.value, *ids_sugeridos])" in cuerpo
+
+
+def test_the_diagnosis_marks_the_vanos_it_identified(fuente):
+    """Marcarlos es parte de la respuesta y no un paso aparte: el diagnostico nombra
+    diez vanos, y sin marcarlos hay que buscarlos a mano en la lista de casillas y
+    otra vez en el mapa, que es justo el trabajo que el boton venia a ahorrar.
+
+    Al marcarlos, `vano_widget.observe(_redibujar_mapa_historico)` encierra cada uno
+    en su recuadro sobre el mapa base. Verificado en vivo: 10 vanos marcados y 10
+    recuadros."""
+    cuerpo = fuente[fuente.index("def _al_pedir_diagnostico"):][:1600]
+    assert "vano_widget.value = tuple(" in cuerpo
+    assert "_ULTIMO_DIAGNOSTICO['vanos'][:MAX_VANOS_ANALISIS]" in cuerpo
+    # Las VARIABLES no se tocan aqui: que vanos mirar y que moverles son dos
+    # decisiones, y los botones de aplicar responden la segunda.
+    assert "knob_selector_widget.value" not in cuerpo
+
+
+def test_each_apply_button_only_brings_in_its_own_half(fuente):
+    """Un clic en intervencion deja EXACTAMENTE variables de intervencion. Si
+    quedaran ademas las de escenario de una vuelta anterior, la simulacion mezclaria
+    obra y clima y no se sabria cual de los dos movio el UITI.
+
+    Los dos botones juntos si suman, porque presionar los dos es una decision del
+    usuario y no un residuo. Verificado en vivo sobre AGU23L14: intervencion sola da
+    5/0, escenario solo 0/3, y los dos 5/3."""
+    cuerpo = fuente[fuente.index("def _aplicar_sugerencia"):][:3200]
+    assert "GRUPOS_SUGERIDOS = ('intervencion', 'escenario')" in fuente
+    # La seleccion se REEMPLAZA por los grupos aplicados, no se acumula sobre lo que
+    # hubiera antes: eso es lo que hace que "solo lo aplicado" sea cierto.
+    assert "knob_selector_widget.value = tuple(dict.fromkeys(ids_sugeridos))" in cuerpo
+    assert "for g in GRUPOS_SUGERIDOS if g in _GRUPOS_APLICADOS" in cuerpo
+    assert "if clave not in _GRUPOS_APLICADOS:" in cuerpo
+
+
+def test_a_new_diagnosis_forgets_which_halves_were_applied(fuente):
+    """Los grupos aplicados describen a los vanos del diagnostico VIGENTE. Al pedir
+    otro -- o al cambiar de circuito o de ventana --, arrastrarlos haria que el primer
+    clic marcara las dos mitades sin que nadie lo pidiera."""
+    for ancla in ("def _al_pedir_diagnostico", "def _olvidar_diagnostico"):
+        cuerpo = fuente[fuente.index(ancla):][:1600]
+        assert "_GRUPOS_APLICADOS = []" in cuerpo, ancla
+
+
+def test_the_figure_survives_dragging_a_map(fuente):
+    """Con plotly 6.8.0, arrastrar un mapa MapLibre devuelve `map._derived` y
+    `plotly_relayout` lo rechaza, asi que el tablero lanzaba en CADA arrastre. El
+    error salia en la salida de la celda que muestra el widget -- por encima del
+    tablero --, que es lo que lo hacia parecer un fallo de una celda anterior."""
+    assert "fig = figura_de_mapas(_fig)" in fuente
+    assert "fig = go.FigureWidget(_fig)" not in fuente
+    assert "    figura_de_mapas," in fuente  # importada en la celda de arranque
 
 
 def test_the_grid_pages_and_keeps_the_hidden_controls_alive(fuente):
