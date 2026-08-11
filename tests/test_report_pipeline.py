@@ -1027,7 +1027,7 @@ def test_prepare_survives_persistence_failure_for_one_scenario_keeps_others_and_
     _enable_real_mgcecdl_model(monkeypatch)
 
     original_persist = report_pipeline_module._persist_scenario_render_assets
-    _FAILING_SCENARIO_KEY = "top_frecuencia_periodo"
+    _FAILING_SCENARIO_KEY = "top_uiti_periodo"
     failed_calls: list[str] = []
 
     def _persist_failing_for_one_scenario(*, scenario_key, **kwargs):
@@ -1060,12 +1060,12 @@ def test_prepare_survives_persistence_failure_for_one_scenario_keeps_others_and_
     # computation succeeded, only the render-asset save failed.
     inference_context = _read_json(run_dir / "inference.bc.json")
     nombres = {escenario["nombre"] for escenario in inference_context["escenarios"]}
-    frecuencia_periodo_nombres = [
-        nombre for nombre in nombres if "frecuencia" in nombre and "período completo" in nombre
+    periodo_nombres = [
+        nombre for nombre in nombres if "UITI_VANO" in nombre and "período completo" in nombre
     ]
-    assert frecuencia_periodo_nombres, "expected the scenario to survive despite the persistence failure"
-    assert len(inference_context["escenarios"]) >= 3, (
-        "expected the other scenarios' render assets to be unaffected by one scenario's "
+    assert periodo_nombres, "expected the scenario to survive despite the persistence failure"
+    assert len(inference_context["escenarios"]) >= 2, (
+        "expected the other scenario's render assets to be unaffected by one scenario's "
         "persistence failure"
     )
 
@@ -1244,7 +1244,7 @@ def test_prepare_survives_graph_html_write_failure_for_one_scenario_keeps_others
     import chec_impacto.interpretability.circuit_analysis as circuit_analysis_module
 
     original_mostrar = circuit_analysis_module.mostrar_grafo_interactivo_muestras
-    _FAILING_GRAPH_NAME = "top_frecuencia_periodo.html"
+    _FAILING_GRAPH_NAME = "top_uiti_periodo.html"
     failed_calls: list[str] = []
 
     def _mostrar_failing_for_one_scenario(*args, **kwargs):
@@ -1273,12 +1273,14 @@ def test_prepare_survives_graph_html_write_failure_for_one_scenario_keeps_others
 
     inference_context = _read_json(run_dir / "inference.bc.json")
     nombres = {escenario["nombre"] for escenario in inference_context["escenarios"]}
-    frecuencia_periodo_nombres = [
-        nombre for nombre in nombres if "frecuencia" in nombre and "período completo" in nombre
+    periodo_nombres = [
+        nombre for nombre in nombres if "UITI_VANO" in nombre and "período completo" in nombre
     ]
-    assert not frecuencia_periodo_nombres, "expected the failing scenario to be omitted entirely"
-    assert len(inference_context["escenarios"]) >= 3, (
-        "expected the other scenarios to be unaffected by one scenario's graph-HTML write failure"
+    assert not periodo_nombres, "expected the failing scenario to be omitted entirely"
+    # Con dos escenarios, omitir uno deja uno: lo que se vigila es que el fallo de
+    # ESE no se lleve por delante al otro, no cuantos quedan.
+    assert len(inference_context["escenarios"]) >= 1, (
+        "expected the other scenario to be unaffected by one scenario's graph-HTML write failure"
     )
 
 
@@ -2415,3 +2417,29 @@ def test_scenario_mid_run_hard_stop_preserves_completed_stages_data_on_disk(tmp_
     assert token_usage_on_disk["inference"] == {"total": 222}
     assert stage_timing_on_disk["historical"] == {"duration_seconds": 10.0}
     assert stage_timing_on_disk["inference"] == {"duration_seconds": 20.0}
+
+
+# --- El modelo predictivo mide severidad, no frecuencia ----------------------------------
+
+
+def test_the_predictive_path_never_ranks_vanos_by_event_count():
+    """`UITI_VANO` es el objetivo del modelo; `N_APARICIONES` no lo es.
+
+    El camino predictivo corria CUATRO escenarios y dos seleccionaban los vanos por
+    conteo de eventos. Eso le pedia al modelo que explicara una poblacion elegida por
+    una magnitud que el no predice: sus rankings SHAP salen siempre del mismo objetivo
+    -- UITI acumulado --, pero el informe los presentaba lado a lado como si fueran dos
+    lecturas distintas del modelo. Ademas duplicaba el costo: cuatro pasadas de SHAP y
+    cuatro grafos reconstruidos por circuito, para dos respuestas al mismo objetivo.
+
+    La frecuencia sigue siendo un dato del caso, pero DESCRIPTIVO: le pertenece al
+    historiador, que la lee de los eventos y no del modelo.
+    """
+    fuente = Path(report_pipeline_module.__file__).read_text(encoding="utf-8")
+    culpables = [l.strip() for l in fuente.splitlines()
+                 if "N_APARICIONES" in l and not l.strip().startswith("#")]
+
+    assert not culpables, (
+        "el camino predictivo vuelve a seleccionar vanos por conteo de eventos: "
+        f"{culpables}"
+    )

@@ -113,17 +113,19 @@ def test_compute_inference_scenarios_all_four_survive_with_sufficient_events(tmp
     )
 
     assert features, "features must be computed regardless of scenario survival"
-    assert len(escenarios) == 4
+    # DOS y no cuatro: los escenarios por conteo de eventos salieron del camino
+    # predictivo -- el modelo predice UITI_VANO, no frecuencia.
+    assert len(escenarios) == 2
     nombres = {escenario["nombre"] for escenario in escenarios}
-    assert len(nombres) == 4, "each scenario name must be distinct"
+    assert len(nombres) == 2, "each scenario name must be distinct"
     for escenario in escenarios:
         assert escenario["top_variables"], "a surviving scenario must have top variables"
 
 
 def test_compute_inference_scenarios_partial_survival_when_dates_of_interest_dont_match(tmp_path):
-    """Per-scenario skip (task 2.3): the two dates-of-interest scenarios must
-    skip individually when `fechas_interes` matches nothing, while the two
-    período-completo scenarios still survive -- `features` stays non-empty
+    """Per-scenario skip (task 2.3): the dates-of-interest scenario must
+    skip when `fechas_interes` matches nothing, while the
+    período-completo one still survives -- `features` stays non-empty
     throughout (R1 gap shape, obs#219)."""
     model, rbf_sigma = _load_mgcecdl_model_and_sigma()
     assert model is not None
@@ -138,7 +140,7 @@ def test_compute_inference_scenarios_partial_survival_when_dates_of_interest_don
     )
 
     assert features
-    assert len(escenarios) == 2
+    assert len(escenarios) == 1
     for escenario in escenarios:
         assert "período completo" in escenario["nombre"]
 
@@ -209,7 +211,7 @@ def test_compute_inference_scenarios_is_reproducible_across_two_runs(tmp_path):
         graph_output_dir=tmp_path / "run_b",
     )
 
-    assert len(escenarios_a) == len(escenarios_b) == 4
+    assert len(escenarios_a) == len(escenarios_b) == 2
     top_vars_a = [json.dumps(e["top_variables"], sort_keys=True) for e in escenarios_a]
     top_vars_b = [json.dumps(e["top_variables"], sort_keys=True) for e in escenarios_b]
     assert top_vars_a == top_vars_b, "top-vars ranking must be byte-identical across runs"
@@ -229,9 +231,9 @@ def test_compute_inference_scenarios_persists_graph_html_for_each_surviving_scen
         graph_output_dir=graph_dir,
     )
 
-    assert len(escenarios) == 4
+    assert len(escenarios) == 2
     html_files = sorted(graph_dir.glob("*.html"))
-    assert len(html_files) == 4
+    assert len(html_files) == 2
     for escenario in escenarios:
         graph_path = escenario["grafo"]["path"]
         assert graph_path is not None
@@ -253,14 +255,14 @@ def test_compute_inference_scenarios_skips_one_scenario_on_value_error_without_l
     model, rbf_sigma = _load_mgcecdl_model_and_sigma()
     assert model is not None
 
-    _TARGET_NOMBRE_FRAGMENT = "frecuencia — período completo"
+    _TARGET_NOMBRE_FRAGMENT = "UITI_VANO — período completo"
 
     def _raising_for_one_scenario(eventos, nombre, *args, **kwargs):
         # Run the real implementation first so `fig_barras`/`fig_radar` are
         # actually created (mirrors a real `ValueError` raised AFTER figure
         # creation but before `graficar_barras_y_radar` returns, e.g. inside
         # graph estimation), then discard the result and raise for exactly
-        # one scenario -- the other three calls pass through untouched.
+        # one scenario -- the other call passes through untouched.
         resultado = _real_graficar_barras_y_radar(eventos, nombre, *args, **kwargs)
         if _TARGET_NOMBRE_FRAGMENT in nombre:
             raise ValueError("forced failure for round-2 regression test")
@@ -283,8 +285,8 @@ def test_compute_inference_scenarios_skips_one_scenario_on_value_error_without_l
         )
 
     assert features
-    # Only the targeted scenario is skipped -- the other three still survive.
-    assert len(escenarios) == 3
+    # Only the targeted scenario is skipped -- the other one still survives.
+    assert len(escenarios) == 1
     nombres = {escenario["nombre"] for escenario in escenarios}
     assert not any(_TARGET_NOMBRE_FRAGMENT in nombre for nombre in nombres)
 
@@ -389,10 +391,10 @@ def test_run_inference_simulator_persists_figures_with_run_dir_relative_paths(tm
     )
 
     assert features
-    assert len(escenarios) == 4
+    assert len(escenarios) == 2
     assert modelo_label == type(model).__name__
     assert resolved_sigma == rbf_sigma
-    assert len(render_assets) == 4
+    assert len(render_assets) == 2
 
     for scenario_key, asset in render_assets.items():
         for field in ("fig_barras_png", "fig_radar_png", "grafo_interactivo_html"):
@@ -404,8 +406,8 @@ def test_run_inference_simulator_persists_figures_with_run_dir_relative_paths(tm
 
     figures_dir = run_dir / "inference_figures"
     graphs_dir = run_dir / "inference_graphs"
-    assert len(list(figures_dir.glob("*.png"))) == 8  # 4 scenarios x (barras + radar)
-    assert len(list(graphs_dir.glob("*.html"))) == 4
+    assert len(list(figures_dir.glob("*.png"))) == 4  # 2 escenarios x (barras + radar)
+    assert len(list(graphs_dir.glob("*.html"))) == 2
 
 
 # ---------------------------------------------------------------------------

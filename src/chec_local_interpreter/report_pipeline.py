@@ -194,10 +194,8 @@ _TOP_K_PDF_DATE_MATCHES = 10
 # rather than `costs.DEFAULT_COST_ITEMS_PATH`'s cwd-relative default.
 DEFAULT_COST_ITEMS_PATH = project_root() / "data" / "COSTOS ITEMS CONTRATOS.xlsx"
 
-
 def _read_json(path: Path) -> Any:
     return json.loads(Path(path).read_text(encoding="utf-8"))
-
 
 def _resolve_pdf_discussions_path(pdf_discussions_path: str | Path | None = None) -> Path:
     """Resolve "the" PDF-discussion xlsx table for this run.
@@ -219,7 +217,6 @@ def _resolve_pdf_discussions_path(pdf_discussions_path: str | Path | None = None
         return DEFAULT_PDF_DISCUSSIONS_DIR / _PDF_DISCUSSIONS_GLOB.replace("*", "not-found")
     return candidates[-1]
 
-
 def _new_run_dir(circuito: str, *, runs_root: str | Path | None = None) -> Path:
     root = Path(runs_root) if runs_root is not None else DEFAULT_RUNS_ROOT
     safe_name = canonical_circuit_identity(circuito)
@@ -227,7 +224,6 @@ def _new_run_dir(circuito: str, *, runs_root: str | Path | None = None) -> Path:
     run_dir = root / safe_name / timestamp
     run_dir.mkdir(parents=True, exist_ok=True)
     return run_dir
-
 
 class _MGCECDLClassifierShapAdapter:
     """`predict_proba` adapter so Kernel SHAP can drive the MGCECDL classifier.
@@ -250,7 +246,6 @@ class _MGCECDLClassifierShapAdapter:
             dtype=np.float64,
         )
 
-
 def _seleccionar_vanos_por_percentil(
     tabla: pd.DataFrame, metric_col: str, percentile: float
 ) -> tuple[pd.DataFrame, float]:
@@ -264,7 +259,6 @@ def _seleccionar_vanos_por_percentil(
     selected = tabla[values >= threshold].copy()
     selected = selected.sort_values([metric_col, "UITI_VANO_PROM"], ascending=[False, False], kind="stable")
     return selected.reset_index(drop=True), threshold
-
 
 def _load_mgcecdl_model_and_sigma() -> tuple[Any, float | None]:
     """Load the most recent MGCECDL classifier and resolve its estimated-graph
@@ -293,7 +287,6 @@ def _load_mgcecdl_model_and_sigma() -> tuple[Any, float | None]:
         rbf_sigma = 1.0
 
     return model, rbf_sigma
-
 
 def _persist_scenario_render_assets(
     *,
@@ -324,7 +317,6 @@ def _persist_scenario_render_assets(
         "fig_radar_png": str(fig_radar_path),
         "grafo_interactivo_html": str(grafo_path) if grafo_path is not None else None,
     }
-
 
 @dataclass
 class SharedInferenceInputs:
@@ -390,7 +382,6 @@ class SharedInferenceInputs:
             self._splits = splits
         return self._splits
 
-
 def _prepare_shared_inference_inputs(
     source_path: str | Path,
     variables_path: str | Path,
@@ -421,7 +412,6 @@ def _prepare_shared_inference_inputs(
         )
 
     return SharedInferenceInputs(datos=datos)
-
 
 def _compute_inference_scenarios(
     circuito: str,
@@ -764,7 +754,16 @@ def _compute_inference_scenarios(
         escenarios: list[dict[str, Any]] = []
         fechas_label = ", ".join(fechas_interes or [])
 
-        # Scenario 1/4: severity (UITI_VANO_PROM), full period.
+        # DOS escenarios y no cuatro: severidad sobre el periodo completo y sobre los
+        # puntos criticos. Los otros dos seleccionaban los vanos por conteo de eventos
+        # (`N_APARICIONES`), y eso le pedia al modelo que explicara una poblacion
+        # elegida por una magnitud que NO predice -- su objetivo es UITI_VANO --,
+        # mientras el informe los presentaba como dos lecturas distintas del modelo.
+        # La frecuencia sigue en el informe, pero como dato descriptivo del
+        # historiador, que la lee de los eventos. De paso el camino predictivo pasa
+        # de cuatro pasadas de SHAP y cuatro grafos reconstruidos por circuito a dos.
+        #
+        # Escenario 1/2: severidad (UITI_VANO_PROM), periodo completo.
         # The cheap "no events" pre-check below stays as-is (nothing to
         # compute). Any *other* `ValueError` `_ejecutar_escenario` can
         # legitimately raise for THIS scenario (e.g. a real SHAP/graph gap)
@@ -789,28 +788,7 @@ def _compute_inference_scenarios(
             if resultado_escenario is not None:
                 escenarios.append(resultado_escenario)
 
-        # Scenario 2/4: frequency (N_APARICIONES), full period. Same
-        # explicit-empty-check and skip-on-`ValueError` rationale as scenario
-        # 1/4 above.
-        tabla_top_frecuencia, _ = _seleccionar_vanos_por_percentil(
-            tabla_periodo_inf, "N_APARICIONES", top_n_vanos_percentile
-        )
-        ids_top_frecuencia = tabla_top_frecuencia["FID_VANO"].tolist()
-        base_top_frecuencia = base_inf[base_inf["FID_VANO"].isin(ids_top_frecuencia)].copy()
-        if not base_top_frecuencia.empty:
-            resultado_escenario = _ejecutar_escenario(
-                f"Top P{top_n_vanos_percentile:g} por frecuencia — período completo",
-                f"seleccionar vanos con N_APARICIONES >= percentil {top_n_vanos_percentile} del período completo; "
-                "UITI_VANO_PROM solo ordena empates",
-                tabla_top_frecuencia,
-                base_top_frecuencia,
-                "top_frecuencia_periodo.html",
-                "top_frecuencia_periodo",
-            )
-            if resultado_escenario is not None:
-                escenarios.append(resultado_escenario)
-
-        # Scenario 3/4: severity (UITI_VANO_PROM), dates of interest. Same
+        # Escenario 2/2: severidad (UITI_VANO_PROM), fechas de interes. Same
         # explicit-empty-check and skip-on-`ValueError` rationale as scenario
         # 1/4 above; the dates-of-interest filter itself is checked before
         # grouping/selecting too.
@@ -835,37 +813,9 @@ def _compute_inference_scenarios(
                 if resultado_escenario is not None:
                     escenarios.append(resultado_escenario)
 
-        # Scenario 4/4: frequency (N_APARICIONES), dates of interest. Same
-        # explicit-empty-check and skip-on-`ValueError` rationale as scenario
-        # 1/4 above.
-        base_fechas_inf = base_inf[base_inf["_FECHA_DIA"].isin(fechas_interes or [])].copy()
-        if not base_fechas_inf.empty:
-            tabla_fechas_inf = agrupar_por_vano(base_fechas_inf)
-            tabla_top_fechas_frecuencia, _ = _seleccionar_vanos_por_percentil(
-                tabla_fechas_inf, "N_APARICIONES", top_n_vanos_percentile
-            )
-            ids_top_fechas_frecuencia = tabla_top_fechas_frecuencia["FID_VANO"].tolist()
-            base_top_fechas_frecuencia = base_fechas_inf[
-                base_fechas_inf["FID_VANO"].isin(ids_top_fechas_frecuencia)
-            ].copy()
-            if not base_top_fechas_frecuencia.empty:
-                resultado_escenario = _ejecutar_escenario(
-                    f"Top P{top_n_vanos_percentile:g} por frecuencia — puntos críticos ({fechas_label})",
-                    f"filtrar fechas críticas y seleccionar vanos con N_APARICIONES >= percentil {top_n_vanos_percentile}; "
-                    "UITI_VANO_PROM solo ordena empates",
-                    tabla_top_fechas_frecuencia,
-                    base_top_fechas_frecuencia,
-                    "top_frecuencia_fechas.html",
-                    "top_frecuencia_puntos_criticos",
-                    fechas=fechas_interes,
-                )
-                if resultado_escenario is not None:
-                    escenarios.append(resultado_escenario)
-
         return features, escenarios
     finally:
         np.random.set_state(rng_state)
-
 
 def _run_inference_simulator(
     model: Any,
@@ -937,7 +887,6 @@ def _run_inference_simulator(
 
     return features, escenarios, modelo_label, rbf_sigma, render_assets
 
-
 def _variables_desde_inferencia(inference_context: dict[str, Any] | None) -> list[str]:
     """Collect unique variable names referenced by every scenario's
     `top_variables` in an `inference.bc.json`-shaped context.
@@ -966,7 +915,6 @@ def _variables_desde_inferencia(inference_context: dict[str, Any] | None) -> lis
             if text and text not in variables:
                 variables.append(text)
     return variables
-
 
 def _run_automatic_simulator(
     circuito: str,
@@ -1215,14 +1163,12 @@ def _run_automatic_simulator(
 
     return compact_context
 
-
 # Kept as a module-private alias (rather than rewriting every call site)
 # so this file's internal call sites stay untouched -- the implementation
 # now lives in `agent_output.py` (task 1.3: shared, dependency-free module
 # so `expert_alignment.py` can reuse it without a circular import, since
 # this module already imports names FROM `expert_alignment.py` above).
 _load_validated_agent_output = load_validated_agent_output
-
 
 @dataclass(frozen=True)
 class ReportPreflight:
@@ -1232,7 +1178,6 @@ class ReportPreflight:
     fecha_inicio: str
     fecha_fin: str
     event_count: int
-
 
 def preflight(
     circuito: str,
@@ -1280,7 +1225,6 @@ def preflight(
         fecha_fin=str(end),
         event_count=int(len(events_df)),
     )
-
 
 def prepare(
     circuito: str,
@@ -1461,7 +1405,6 @@ def prepare(
     )
     return run_dir
 
-
 def prepare_expert_alignment(
     run_dir: str | Path,
     *,
@@ -1549,7 +1492,6 @@ def prepare_expert_alignment(
     save_json_artifact(context, run_dir / "expert-alignment.bc.json")
     return run_dir
 
-
 def _build_inference_results(run_dir: Path) -> dict[str, Any] | None:
     """Read `run_dir/inference_render_assets.json` (task 3.2's sidecar) if
     present and rebuild the `inference_results` mapping `render_llm_analysis`
@@ -1588,7 +1530,6 @@ def _build_inference_results(run_dir: Path) -> dict[str, Any] | None:
             "contexto": escenarios_by_nombre.get(nombre, {}),
         }
     return inference_results
-
 
 def _build_auto_simulation_kwargs(run_dir: Path) -> dict[str, Any]:
     """Read the optional auto-simulator artifacts under `run_dir` and build
@@ -1629,7 +1570,6 @@ def _build_auto_simulation_kwargs(run_dir: Path) -> dict[str, Any]:
 
     return kwargs
 
-
 def _detect_llm_runtime() -> tuple[str, str]:
     """Best-effort detection of the orchestrating agent host and its model.
 
@@ -1653,9 +1593,7 @@ def _detect_llm_runtime() -> tuple[str, str]:
         return "Claude Code", model_override
     return "Desconocido", model_override
 
-
 TOKEN_USAGE_STAGES = ("historical", "inference", "auto-simulator", "expert-alignment")
-
 
 def _validate_usage_measurement(*, total: Any = None, input: Any = None, output: Any = None) -> dict[str, int]:
     provided_total = total is not None
@@ -1666,7 +1604,6 @@ def _validate_usage_measurement(*, total: Any = None, input: Any = None, output:
     if not all(isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0 and float(value).is_integer() for value in values.values()):
         raise ValueError("token usage values must be non-negative integers")
     return {key: int(value) for key, value in values.items()}
-
 
 def record_token_usage(run_dir: str | Path, stage: str, *, total: Any = None, input: Any = None, output: Any = None) -> dict[str, int]:
     if stage not in TOKEN_USAGE_STAGES:
@@ -1688,7 +1625,6 @@ def record_token_usage(run_dir: str | Path, stage: str, *, total: Any = None, in
     os.replace(temporary, sidecar)
     return measurement
 
-
 def _validate_duration_measurement(seconds: Any) -> dict[str, float]:
     if isinstance(seconds, bool) or not isinstance(seconds, (int, float)):
         raise ValueError("stage duration must be a non-negative real number")
@@ -1696,7 +1632,6 @@ def _validate_duration_measurement(seconds: Any) -> dict[str, float]:
     if not math.isfinite(value) or value < 0:
         raise ValueError("stage duration must be a non-negative real number")
     return {"duration_seconds": value}
-
 
 def record_stage_timing(run_dir: str | Path, stage: str, *, seconds: Any) -> dict[str, float]:
     """Record `stage`'s wall-clock duration (seconds) into the optional
@@ -1728,7 +1663,6 @@ def record_stage_timing(run_dir: str | Path, stage: str, *, seconds: Any) -> dic
     os.replace(temporary, sidecar)
     return measurement
 
-
 @dataclass(frozen=True)
 class TokenUsageVerification:
     expected_roles: tuple[str, ...]
@@ -1744,7 +1678,6 @@ class TokenUsageVerification:
 
     def to_json(self) -> dict[str, Any]:
         return {"ok": self.ok, "expected_roles": list(self.expected_roles), "executed_roles": list(self.executed_roles), "valid_roles": list(self.valid_roles), "missing_measurements": list(self.missing_measurements), "invalid_roles": list(self.invalid_roles), "errors": list(self.errors)}
-
 
 def verify_token_usage(run_dir: str | Path, *, expected_roles: Sequence[str], executed_roles: Sequence[str]) -> TokenUsageVerification:
     expected = tuple(dict.fromkeys(expected_roles))
@@ -1779,7 +1712,6 @@ def verify_token_usage(run_dir: str | Path, *, expected_roles: Sequence[str], ex
             valid.append(role)
     missing = [role for role in executed if role not in valid]
     return TokenUsageVerification(expected, executed, tuple(valid), tuple(missing), tuple(invalid), tuple(errors))
-
 
 def _resolve_token_usage(run_dir: Path) -> tuple[int, int, int, str, str]:
     """Resolve `(tokens_input, tokens_output, tokens_total, token_source, token_total_source)`
@@ -1932,7 +1864,6 @@ def _resolve_token_usage(run_dir: Path) -> tuple[int, int, int, str, str]:
 
     return tokens_input, tokens_output, tokens_total, token_source, token_total_source
 
-
 def _resolve_stage_timing(run_dir: Path) -> dict[str, float | None]:
     """Resolve each of `TOKEN_USAGE_STAGES`' wall-clock duration from the
     optional `run_dir/stage_timing.json` sidecar (design ADR-1/ADR-3),
@@ -1967,7 +1898,6 @@ def _resolve_stage_timing(run_dir: Path) -> dict[str, float | None]:
                     value = candidate
         result[stage] = value
     return result
-
 
 def _resolve_stage_breakdown(run_dir: Path) -> list[dict[str, Any]]:
     """Resolve a per-stage `{stage, tokens_total, token_source,
@@ -2052,7 +1982,6 @@ def _resolve_stage_breakdown(run_dir: Path) -> list[dict[str, Any]]:
 
     return breakdown
 
-
 def _resolve_elapsed_seconds(run_dir: Path) -> float | None:
     """Resolve this run's total wall-clock execution time by parsing the
     UTC timestamp encoded in `run_dir.name` (written by `_new_run_dir` as
@@ -2069,7 +1998,6 @@ def _resolve_elapsed_seconds(run_dir: Path) -> float | None:
         return None
     return (datetime.now(timezone.utc) - parsed_start).total_seconds()
 
-
 def _render_output_filename(state: dict[str, Any], run_dir: Path) -> str:
     """Return the stable HTML filename for a prepared report run.
 
@@ -2083,7 +2011,6 @@ def _render_output_filename(state: dict[str, Any], run_dir: Path) -> str:
     end_str = str(state.get("fecha_fin") or "fin").replace("-", "")
     run_id = run_dir.name or "run"
     return f"{circuito}_{start_str}_{end_str}_{run_id}.html"
-
 
 def render(
     run_dir: str | Path,
