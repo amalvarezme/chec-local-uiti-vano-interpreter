@@ -548,3 +548,96 @@ def test_board_04_boxes_the_marked_vano_exactly_like_board_06():
     # Drawn from the geometry and repainted with the map, so it survives a window change
     # and disappears the moment the vano is unmarked -- by its box or by clicking it again.
     assert re.search(r"pintarCajas\(gd, circuito, sel\);", src04)
+
+
+# --- One map style across every board ---------------------------------------------------
+# `01` is the reference: it is the board whose map was measured and tuned (equipment went
+# from 6/5 to 14/12 px and the vano layer from 3.5 to 7.0 when its figure doubled in
+# height). `03`, `04` and `06` draw the SAME objects over the SAME geography, so a
+# transformer or a vano that measures one thing here and another there makes the same
+# circuit read as two different circuits when you move between notebooks.
+MAP_STYLE_NOTEBOOKS = {
+    "01": BOARDS["01"],
+    "03": BOARDS["03"],
+    "04": BOARDS["04"],
+    # `06` is not an HTML board -- it is the ipywidgets simulator -- but its two maps are
+    # the same map, so it shares this contract even though it shares no other.
+    "06": "06_uiti_vano_explicabilidad_simulador",
+}
+# value: the reference reading, taken from `01`.
+MAP_STYLE_CONSTANTS = {
+    "TAM_TRAFO": "14",
+    "TAM_SWITCH": "12",
+    "ANCHO_MAPA": "7.0",
+    "ANCHO_SIN_EVENTOS": "1.5",
+    "COLOR_SIN_EVENTO": "'rgb(0,0,0)'",
+    "COLOR_TRAFO": "'#f59e0b'",
+    "COLOR_SWITCH": "'#7c3aed'",
+}
+GROUP_PALETTE = "['rgb(26,150,65)', 'rgb(242,194,0)', 'rgb(239,108,0)', 'rgb(198,40,40)']"
+
+
+def _constant(src: str, name: str) -> str | None:
+    """The right-hand side of `NAME = ...`, with any trailing comment dropped."""
+    found = re.search(rf"^{name} = (.+?)(?:\s+#.*)?$", src, re.MULTILINE)
+    return found.group(1).strip() if found else None
+
+
+@pytest.mark.parametrize("notebook", sorted(MAP_STYLE_NOTEBOOKS))
+@pytest.mark.parametrize("constant", sorted(MAP_STYLE_CONSTANTS))
+def test_every_map_shares_board_01s_style(notebook, constant):
+    """Equipment size, vano widths and map colours are one value across all four maps."""
+    valor = _constant(_source(MAP_STYLE_NOTEBOOKS[notebook]), constant)
+    assert valor is not None, (
+        f"{notebook} must declare {constant}; the map style is not allowed to be implicit")
+    assert valor == MAP_STYLE_CONSTANTS[constant], (
+        f"{notebook} says {constant} = {valor}, board 01 says {MAP_STYLE_CONSTANTS[constant]}")
+
+
+@pytest.mark.parametrize("notebook", sorted(MAP_STYLE_NOTEBOOKS))
+def test_every_map_shares_the_same_four_group_colours(notebook):
+    """The four class colours are the traffic light, spelled the same way everywhere.
+
+    Same list, same `rgb(...)` form: the fill of the violins and contours comes from
+    `.replace('rgb', 'rgba')`, which over a hex finds nothing and silently leaves the fill
+    unapplied. So the notation is part of the contract, not a style preference.
+    """
+    src = _source(MAP_STYLE_NOTEBOOKS[notebook])
+    nombre = "COLORES_MAPA" if notebook == "01" else "COLORES_GRUPOS"
+    assert _constant(src, nombre) == GROUP_PALETTE, (
+        f"{notebook}'s {nombre} drifted from board 01's palette")
+
+
+@pytest.mark.parametrize("notebook", ["03", "04", "06"])
+def test_no_map_hard_codes_a_style_the_constants_are_supposed_to_own(notebook):
+    """The equipment sizes used to be literals inside the `add_trace` loop.
+
+    That is how `03`, `04` and `06` all ended up at 6/5 px while `01` moved to 14/12: a
+    literal in a trace definition is invisible from the constants block, so aligning the
+    boards looks done when it is not.
+    """
+    src = _source(MAP_STYLE_NOTEBOOKS[notebook])
+    assert "COLOR_TRAFO, 6)" not in src and "COLOR_SWITCH, 5)" not in src, (
+        "equipment size must come from TAM_TRAFO/TAM_SWITCH, not from a literal")
+    assert "COLOR_SWITCH), (6, 5))" not in src.replace(" ", "").replace("\n", ""), (
+        "equipment size must come from TAM_TRAFO/TAM_SWITCH, not from a literal tuple")
+    # A marked vano is a wider version of the same line, never a loose second number.
+    for derivado in ("ANCHO_MAPA_RESALTE", "ANCHO_MAPA_MARCADO", "ANCHO_HALO"):
+        valor = _constant(src, derivado)
+        if valor is not None:
+            assert "round(" in valor and "ANCHO_" in valor, (
+                f"{derivado} must be derived from ANCHO_MAPA, not written as a literal")
+
+
+def test_board_06_draws_the_vano_without_events_as_structure_not_as_data():
+    """`06` used to draw a vano with no cell in the window as wide as one with events.
+
+    Only the colour changed, so absence of data competed in visual weight with the data
+    itself -- the opposite of what it means. Both maps (historical and simulated) now use
+    board 01's 1.5 px structure line for it.
+    """
+    src = _source(MAP_STYLE_NOTEBOOKS["06"])
+    assert src.count("line=dict(width=ANCHO_SIN_EVENTOS, color=COLOR_SIN_EVENTO)") == 2, (
+        "both the historical `sin_dato` layer and the simulated `pred_sin_dato` one")
+    assert "== ANCHO_SIN_EVENTOS == 1.5)" in src, (
+        "the notebook must assert it too, where the traces are built")
