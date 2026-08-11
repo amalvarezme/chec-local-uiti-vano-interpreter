@@ -671,3 +671,33 @@ def test_board_06_warns_when_the_frontend_cannot_mount_the_figure_widget():
     assert "raise" not in cuerpo and "sys.exit" not in cuerpo, (
         "la guarda no puede abortar: bloquearia a quien SI ve el tablero"
     )
+
+
+def test_board_04_draws_its_equipment_on_top_like_boards_01_and_03():
+    """In MapLibre the order of the traces IS the order of the layers.
+
+    `04` used to add transformers and switches BEFORE the white halo and the highlight, so
+    the 25 px halo painted over them. Measured on the exported panel of the same circuit:
+    2.286 transformer pixels against `03`'s 3.295, and 413 switch pixels against 1.039 --
+    31% and 60% of the equipment simply not drawn. Moving the two traces to the end brings
+    it to 3.320 and 1.045, which is `03` (its canvas is 2% wider). The dots were never
+    smaller: they were covered.
+
+    The auto-marking of the window made it worse, because from then on almost every vano
+    with events carries a halo. `01` and `03` never had the problem -- both add equipment
+    last -- which is why the same map read differently in each notebook.
+    """
+    src = _source(BOARDS["04"])
+    # The order in the source is the order of the layers: equipment after every vano trace.
+    fin_resaltado = src.index("# marcados, por grupo")
+    assert src.index("('Transformadores', COLOR_TRAFO, TAM_TRAFO)") > fin_resaltado, (
+        "the equipment traces must be added after the highlight, or the halo covers them")
+    # And the notebook has to assert it where the indices are built, not just here.
+    assert "assert min(IDX['mapaTrafos'], IDX['mapaSwitches']) > max(IDX['mapaResaltado'])" in src
+    assert "assert IDX['mapaSwitches'] == len(fig.data) - 1" in src, (
+        "nothing may be added after the equipment")
+    # The loop used to bind `_n` and `_c`, the very names the IDX arithmetic below counts
+    # with. It only worked because the loop ran before `_n = MAX_VANOS_RESALTADOS`; once
+    # moved down it would have left `_n = 'Switches'`.
+    assert "for _n, _c, _t in" not in src, (
+        "the equipment loop must not bind the names the IDX arithmetic uses")
