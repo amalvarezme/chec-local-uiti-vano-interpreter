@@ -41,8 +41,10 @@ to no hides a real one.
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Iterable, Mapping
+from typing import Any
 
 import pandas as pd
 
@@ -504,3 +506,146 @@ def columnas_panel(
             titulo = f"{nombre} ({len(delgrupo)})" if i == 0 else f"{nombre} (cont.)"
             columnas.append((titulo, trozo))
     return columnas
+
+
+# --- Fila 4 del cuaderno 06: UITI medido contra UITI simulado -------------------------
+
+ETIQUETA_CIRCUITO_COMPLETO = "TODOS los vanos"
+
+# Un grado de holgura al decidir de que lado se ancla el rotulo de un nodo. Es el
+# ancho del borde donde `cos` no da cero exacto; ver `rotacion_radial`.
+_TOLERANCIA_ANGULO = 1e-6
+
+
+def barras_uiti_por_vano(
+    tabla_simulada,
+    *,
+    observados: Mapping[str, float],
+    total_circuito: float,
+    etiqueta_total: str = ETIQUETA_CIRCUITO_COMPLETO,
+) -> dict[str, Any]:
+    """The grouped bars of row 4: for each simulated vano, the `uiti_acumulado`
+    MEASURED in the active window against the UITI the model predicts after the
+    intervention, plus a last group for the whole circuit.
+
+    The base bar is the measured value and not the model's own base, because that
+    is the number the user compares against -- it is what the database says
+    happened. The consequence has to be read with care and is why the `+-` exists:
+    the two bars are different KINDS of quantity, so their naked difference carries
+    the model's level error.
+
+    That error was measured rather than guessed. Over 599 real bags the model
+    correlates 0,950 with the observed UITI -- it ranks well -- but its median
+    relative error is 39,4% (p90 104%) and its total runs +34,0% high. So each
+    bar's error is `|u_base - observado|`: what the model got wrong on the BASE of
+    that same vano, which is a local, directly measured quantity and needs no extra
+    model call.
+
+    The rejected alternative is recorded because it looks more principled and is
+    not: bootstrapping each bag's own events and re-predicting gives a relative
+    standard deviation of 0,000 (measured at 50 and 200 replicas). The prediction
+    does not depend on which events fell in the bag, so that error bar would have
+    been decoration over the real uncertainty, which is two orders of magnitude
+    larger.
+
+    The total group's error is the SUM of the offsets and not their quadrature:
+    the bias is systematic (+34% across the board), so combining them in quadrature
+    would assert a cancellation that does not happen.
+
+    A scored vano with no measured cell in the active window is LEFT OUT: there is
+    no measured value to compare it against, and giving it a zero base would assert
+    an observed UITI of zero, which is exactly what nobody measured.
+    """
+    vacio = {
+        "x": [], "observado": [], "simulado": [], "error": [], "hover": [],
+        "etiqueta_total": etiqueta_total, "reduccion": None, "desviacion": None,
+    }
+    if tabla_simulada is None or len(tabla_simulada) == 0:
+        return vacio
+
+    x: list[str] = []
+    observado: list[float] = []
+    simulado: list[float] = []
+    error: list[float] = []
+    hover: list[str] = []
+    for fid, u_base, u_sim in zip(tabla_simulada["FID_VANO"],
+                                  tabla_simulada["u_base"],
+                                  tabla_simulada["u_simulado"]):
+        fid = str(fid)
+        if fid not in observados:
+            continue
+        medido = float(observados[fid])
+        desfase = abs(float(u_base) - medido)
+        x.append(fid)
+        observado.append(medido)
+        simulado.append(float(u_sim))
+        error.append(desfase)
+        hover.append(
+            f"<b>Vano {fid}</b>"
+            f"<br>UITI medido en la ventana: {medido:,.2f}"
+            f"<br>UITI simulado: {float(u_sim):,.2f}"
+            f"<br>Base del modelo: {float(u_base):,.2f}"
+            f"<br>Desfase del modelo en la base: {desfase:,.2f}"
+        )
+
+    if not x:
+        return vacio
+
+    total_circuito = float(total_circuito)
+    # Los vanos que nadie simulo se quedan como estan: el total simulado cambia solo
+    # en lo que cambiaron los simulados.
+    total_simulado = total_circuito - sum(observado) + sum(simulado)
+    error_total = float(sum(error))
+    x.append(etiqueta_total)
+    observado.append(total_circuito)
+    simulado.append(total_simulado)
+    error.append(error_total)
+    hover.append(
+        f"<b>{etiqueta_total}</b>"
+        f"<br>UITI medido del circuito en la ventana: {total_circuito:,.2f}"
+        f"<br>Con la intervencion: {total_simulado:,.2f}"
+        f"<br>Los {len(x) - 1} vanos simulados aportan "
+        f"{sum(observado[:-1]):,.2f} de ese total"
+        f"<br>Desfase acumulado del modelo: {error_total:,.2f}"
+    )
+    return {
+        "x": x, "observado": observado, "simulado": simulado, "error": error,
+        "hover": hover, "etiqueta_total": etiqueta_total,
+        "reduccion": float(sum(observado[:-1]) - sum(simulado[:-1])),
+        "desviacion": error_total,
+    }
+
+
+def rotacion_radial(x: float, y: float) -> tuple[float, str]:
+    """`(textangle, xanchor)` so a circular graph's node label runs ALONG its own
+    radius, pointing away from the centre.
+
+    With every label horizontal, the names of neighbouring nodes sit on top of each
+    other around the ring -- the crowding is worst at the top and bottom, where the
+    circle is flattest. Along the radius they fan out with the nodes themselves, so
+    the spacing between labels grows with the distance from the centre.
+
+    Two conventions are baked in. Plotly's `textangle` turns CLOCKWISE, hence the
+    negated angle. And on the left half a radial label would read upside down, so
+    it is turned another half turn and anchored on its other side -- which keeps it
+    growing outward while still reading left to right.
+
+    A node exactly at the centre has no radius to follow and stays horizontal: an
+    `atan2(0, 0)` would hand back an angle that means nothing.
+
+    Labels have to be `layout.annotations` and not the trace's own `text`: a
+    `Scatter` cannot rotate its text at all (checked against plotly 6.8.0 -- only
+    `Bar` and annotations carry `textangle`).
+    """
+    if x == 0.0 and y == 0.0:
+        return 0.0, "left"
+    grados = math.degrees(math.atan2(y, x))
+    # La comparacion lleva tolerancia porque el borde cae justo donde `cos` no da cero
+    # exacto: en la base del circulo `cos(270 grados)` vale -1,8e-16, negativo, y sin
+    # la holgura el rotulo de ese nodo salta de un anclaje al otro por ruido de punto
+    # flotante. Arriba y abajo el texto queda vertical y los dos anclajes se ven igual;
+    # lo que no puede pasar es que la eleccion dependa del decimal diecisiete.
+    if -90.0 - _TOLERANCIA_ANGULO <= grados <= 90.0 + _TOLERANCIA_ANGULO:
+        return -grados, "left"
+    # Media vuelta y anclaje al otro lado: el rotulo sigue saliendo hacia afuera.
+    return -(grados - 180.0) if grados > 90.0 else -(grados + 180.0), "right"

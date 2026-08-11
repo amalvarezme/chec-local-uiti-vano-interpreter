@@ -1044,9 +1044,13 @@ def _tabla_series():
     )
 
 
-def test_series_temporal_vanos_leaves_a_gap_on_windows_without_a_cell():
-    """El vano VA no tiene celda en la ventana 1. Ese hueco va como None y no como
-    cero: un cero dice "no hubo UITI", y lo que pasa es que no hubo medicion."""
+def test_series_temporal_vanos_fills_windows_without_a_cell_with_zero():
+    """El vano VA no tiene celda en la ventana 1, y eso vale CERO, no un hueco.
+
+    `TABLA` se arma agregando EVENTOS: un vano sin fila en una ventana no es un vano
+    sin medir, es un vano sin eventos, y sin eventos el UITI acumulado de esa ventana
+    es cero. Con `None` la linea se partia y la secuencia de ventanas se leia como si
+    faltara informacion, cuando lo que hay es un cero."""
     from chec_local_interpreter.ventanas_015 import series_temporal_vanos
 
     series = series_temporal_vanos(_tabla_series(), circuito="C1", fids=["VA"], n_ventanas=3)
@@ -1054,8 +1058,21 @@ def test_series_temporal_vanos_leaves_a_gap_on_windows_without_a_cell():
     assert len(series) == 1
     assert series[0]["fid"] == "VA"
     assert series[0]["x"] == [0, 1, 2]
-    assert series[0]["uiti"] == [0.5, None, 2.5]
-    assert series[0]["eventos"] == [1, None, 5]
+    assert series[0]["uiti"] == [0.5, 0.0, 2.5]
+    assert series[0]["eventos"] == [1, 0, 5]
+
+
+def test_series_temporal_vanos_covers_every_window_even_with_no_cells_at_all():
+    """La secuencia completa de ventanas se dibuja igual: un vano sin una sola celda
+    da una linea en cero de punta a punta, que es lo que dice el dato."""
+    from chec_local_interpreter.ventanas_015 import series_temporal_vanos
+
+    series = series_temporal_vanos(_tabla_series(), circuito="C1",
+                                   fids=["SIN_EVENTOS"], n_ventanas=4)
+
+    assert series[0]["x"] == [0, 1, 2, 3]
+    assert series[0]["uiti"] == [0.0, 0.0, 0.0, 0.0]
+    assert series[0]["eventos"] == [0, 0, 0, 0]
 
 
 def test_series_temporal_vanos_keeps_the_requested_order_and_ignores_other_circuits():
@@ -1310,3 +1327,22 @@ def test_bounds_de_fids_without_coordinates_is_none():
     inventado. Es el mismo contrato que `centro_y_zoom` con bounds vacios."""
     assert bounds_de_fids(_geo_cajas(), []) is None
     assert bounds_de_fids(_geo_cajas(), ["DE_OTRO_CIRCUITO"]) is None
+
+
+def test_clases_de_series_gives_no_class_to_a_window_with_zero_events():
+    """Cero eventos no es el grupo mas bajo: es la ausencia del dato. La geometria de
+    01.4 vive en (n_obs, log10 u), y log10(0) no existe, asi que ese punto no se puede
+    clasificar -- el panel lo pinta gris."""
+    from chec_local_interpreter.ventanas_015 import clases_de_series
+
+    series = [{"x": [0, 1], "uiti": [0.0, 2.5], "eventos": [0, 5]}]
+    llamadas = []
+
+    def _clases(n_obs, u, **kwargs):
+        llamadas.append(len(n_obs))
+        return np.zeros(len(n_obs), dtype=int), 0
+
+    clases = clases_de_series(series, cargar_clases=_clases)
+
+    assert clases == [[None, 0]]
+    assert llamadas == [1]  # la ventana en cero no se manda a clasificar

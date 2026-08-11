@@ -404,3 +404,83 @@ def test_the_diagnosis_button_is_called_just_diagnostico(fuente):
     corto: un boton que dice "Diagnostico circ..." no dice nada."""
     assert "boton_diagnostico = widgets.Button(description='Diagnostico'," in fuente
     assert "Diagnostico del circuito" not in fuente
+
+
+# --- La figura de seis filas -----------------------------------------------------------
+
+
+def test_the_figure_has_six_rows_with_the_bars_and_the_graph_in_their_own(fuente):
+    """Fila 4 las barras de UITI a lo ancho, fila 5 los costos a lo ancho y fila 6 el
+    grafo centrado en las columnas 2-3. El grafo va a MEDIA fila y no a lo ancho porque
+    es circular: a ancho completo queda un disco pequenio con dos franjas vacias."""
+    assert "rows=6, cols=4," in fuente
+    assert "[None, {'type': 'xy', 'colspan': 2}, None, None]" in fuente
+    assert "row_heights=[0.14, 0.14, 0.17, 0.17, 0.14, 0.24]," in fuente
+    # Los violines ya no existen: los reemplazan dos barras por vano.
+    assert "go.Violin(" not in fuente
+    assert "IDX['barra_observada']" in fuente
+    assert "IDX['barra_simulada']" in fuente
+
+
+def test_no_axis_of_the_dashboard_is_logarithmic(fuente):
+    """La unica escala log era la del UITI de la serie, y era incompatible con dibujar
+    las ventanas sin eventos: valen CERO, y `log(0)` no existe, asi que Plotly las
+    descartaba en silencio y la secuencia completa de ventanas no se veia.
+
+    Se miran solo las lineas de CODIGO: el comentario que explica por que se quito la
+    escala nombra `type='log'`, y una busqueda sobre el texto entero lo confundiria con
+    un eje logaritmico vivo."""
+    codigo = [l for l in fuente.splitlines() if not l.strip().startswith("#")]
+    assert not [l for l in codigo if "type='log'" in l or '"log"' in l]
+
+
+def test_the_circular_graph_keeps_its_aspect_at_any_screen_width(fuente):
+    """Sin `scaleanchor` el panel es mucho mas ancho que alto y el circulo se dibujaba
+    como una elipse aplastada 2,93 veces -- medido --, lo que ademas descuadra el giro
+    radial de cada rotulo respecto de la direccion que se ve.
+
+    El rango en x va JUSTO a lo que ocupan los rotulos: con `scaleanchor` manda el eje
+    con menos pixeles por unidad, y con un rango ancho mandaba la x, asi que el circulo
+    se encogia con la ventana. Medido: con 6,4 unidades, por debajo de 1.400 px de
+    pantalla el radio caia de los 94,5 px que hacen falta para 66 nombres."""
+    assert "scaleanchor=_EJE_X_GRAFO, scaleratio=1.0, row=6, col=2" in fuente
+    assert "range=[-1.95, 1.95], row=6, col=2" in fuente
+
+
+def test_the_node_labels_are_rotated_annotations_and_not_trace_text(fuente):
+    """Un `Scatter` no puede girar su texto -- comprobado contra plotly 6.8.0, solo `Bar`
+    y las anotaciones llevan `textangle` --, asi que los nombres van como anotaciones.
+
+    La reserva es FIJA y las que sobran quedan invisibles: quitar anotaciones correria
+    los indices de los avisos del grafo, de los costos y del mapa simulado, que se
+    guardan por posicion."""
+    assert "MAX_NODOS_GRAFO = len(FEATURES_MIL)" in fuente
+    assert "IDX_ANOTACIONES_NODOS" in fuente
+    assert "_anotacion.textangle = _giro" in fuente
+    cuerpo = fuente[fuente.index("IDX['grafo_nodos'] = ["):][:600]
+    assert "mode='markers'," in cuerpo and "markers+text" not in cuerpo
+
+
+def test_the_graph_panel_shows_what_the_simulation_moved(fuente):
+    """`|grafo_base - grafo_simulado|`. Los dos comparten los pesos fijos del experto y
+    solo difieren por las compuertas, asi que puestos uno al lado del otro se ven iguales
+    y el efecto de la intervencion se pierde.
+
+    Las features simuladas salen de la metadata y no se rearman en el cuaderno: repetir
+    ahi la expansion de overrides es la forma segura de que el grafo acabe describiendo
+    un escenario distinto del que puntuo el mapa."""
+    assert "grafo_diferencia(gates_base, gates_simuladas" in fuente
+    assert "metadata['X_simulado']" in fuente
+    # Una matriz toda en cero es un RESULTADO y se dice, no se deja como panel vacio.
+    assert "La simulacion no movio ninguna relacion del grafo." in fuente
+
+
+def test_the_bars_headline_carries_the_models_own_offset(fuente):
+    """El titulo publica la reduccion con su `+-`. La barra medida y la simulada son
+    cantidades de naturaleza distinta -- medido sobre 599 bolsas, el modelo correlaciona
+    0,950 con lo observado pero su nivel corre +34% --, asi que la resta desnuda de las
+    dos barras lleva el error del modelo. El `+-` es exactamente lo que lo cubre."""
+    assert "def _titulo_de_barras(barras):" in fuente
+    assert "IDX_TITULO_BARRAS" in fuente
+    # El indice se BUSCA por el texto: los titulos de subplot dependen de la rejilla.
+    assert "if (_a.text or '').startswith('UITI acumulado: medido')" in fuente

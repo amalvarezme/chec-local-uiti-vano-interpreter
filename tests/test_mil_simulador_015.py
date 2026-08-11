@@ -31,6 +31,7 @@ from chec_impacto.models.criticality_assignment import Geometria
 from chec_local_interpreter.mil_simulador_015 import (
     aplicar_overrides_instancias,
     grafo_de_gates,
+    grafo_diferencia,
     seleccionar_bolsas,
     simular_bolsas,
     trazas_grafo,
@@ -482,3 +483,97 @@ def test_relevance_cache_mil_reports_an_empty_selection_explicitly():
     assert resultado["vacio"] is True and resultado["filas"] == []
     assert resultado["mensaje"]
     assert predictor.llamadas == 0
+
+
+# --- El grafo de la ultima fila: lo que la simulacion le HIZO al grafo ------------------
+
+
+def test_grafo_diferencia_is_the_absolute_change_the_simulation_produced():
+    """El panel de la ultima fila ya no muestra el grafo de la seleccion sino
+    `|grafo_base - grafo_simulado|`: cuanto movio la simulacion cada relacion.
+
+    El grafo base y el simulado se parecen mucho -- comparten los pesos fijos del
+    experto y solo cambian por las compuertas --, asi que puestos uno al lado del
+    otro se ven iguales y la diferencia se pierde. En valor ABSOLUTO porque la
+    pregunta es cuanto se movio la relacion, no en que direccion: una arista que
+    baja y otra que sube importan lo mismo para saber que toco la intervencion."""
+    edge_index = _EdgeIndexFalso(pairs=[[0, 1], [1, 2]], weights=[2.0, 4.0])
+    gates_base = np.array([[0.5, 1.0], [1.5, 3.0], [1.0, 1.0]])
+    gates_sim = np.array([[0.5, 0.5], [1.5, 1.0], [1.0, 0.5]])
+
+    grafo = grafo_diferencia(gates_base, gates_sim, edge_index, n_features=3)
+
+    assert grafo["voided"] is False
+    assert grafo["n_vanos"] == 3
+    # La arista 0 no cambio de compuertas: su diferencia es exactamente cero.
+    assert grafo["matriz"][0, 1] == pytest.approx(0.0)
+    # La arista 1: media base 5/3, media simulada 2/3, por el peso fijo 4.
+    assert grafo["matriz"][1, 2] == pytest.approx(4.0 * (5.0 / 3.0 - 2.0 / 3.0))
+
+
+def test_grafo_diferencia_is_absolute_and_never_signed():
+    """Una arista que la simulacion SUBE pesa lo mismo que una que baja: las dos
+    dicen que la intervencion toco esa relacion."""
+    # DOS aristas que varian de forma independiente entre vanos. Con una sola, el
+    # `effective_rank` vale 1 por construccion y `estadistico_colapso` anula siempre,
+    # asi que el test no llegaria a mirar el signo.
+    edge_index = _EdgeIndexFalso(pairs=[[0, 1], [1, 2]], weights=[1.0, 1.0])
+    gates_base = np.array([[1.0, 5.0], [2.0, 1.0], [3.0, 3.0]])   # arista 0: media 2.0
+    gates_sim = np.array([[3.0, 1.0], [4.0, 4.0], [5.0, 4.0]])    # arista 0: media 4.0
+
+    grafo = grafo_diferencia(gates_base, gates_sim, edge_index, n_features=3)
+
+    # Subio de 2,0 a 4,0 y el panel lo reporta como 2,0, igual que si hubiera bajado.
+    assert grafo["matriz"][0, 1] == pytest.approx(2.0)
+
+
+def test_grafo_diferencia_is_voided_when_either_side_is():
+    """Si el grafo base no es estimable, su diferencia tampoco: restar contra algo
+    que no se pudo estimar produciria una matriz que parece un resultado. Con menos
+    de 3 vanos `estadistico_colapso` anula, y la diferencia hereda esa anulacion."""
+    edge_index = _EdgeIndexFalso(pairs=[[0, 1], [1, 2]], weights=[2.0, 4.0])
+    gates = np.array([[0.5, 1.0], [1.5, 3.0]])  # 2 vanos: anulado por construccion
+
+    grafo = grafo_diferencia(gates, gates, edge_index, n_features=3)
+
+    assert grafo["voided"] is True
+    assert grafo["matriz"] is None
+
+
+def test_grafo_diferencia_of_a_simulation_that_changed_nothing_is_all_zeros():
+    """Sin overrides el grafo simulado es el mismo que el base. La matriz sale toda
+    en cero, que es un resultado y no un panel roto: dice que la intervencion no
+    movio ninguna relacion."""
+    edge_index = _EdgeIndexFalso(pairs=[[0, 1], [1, 2]], weights=[2.0, 4.0])
+    gates = np.array([[0.5, 1.0], [1.5, 3.0], [1.0, 1.0]])
+
+    grafo = grafo_diferencia(gates, gates, edge_index, n_features=3)
+
+    assert grafo["voided"] is False
+    assert float(np.abs(grafo["matriz"]).max()) == pytest.approx(0.0)
+
+
+def test_simular_bolsas_hands_back_the_simulated_matrix():
+    """El grafo de la ultima fila necesita las features SIMULADAS para estimar su
+    lado del `|base - simulado|`. Salen por la metadata en vez de rearmarse en el
+    cuaderno: repetir ahi la expansion de overrides es la forma segura de que el
+    grafo acabe describiendo un escenario distinto del que puntuo el mapa."""
+    predictor = _PredictorFalso(_geometria())
+    seleccion = {
+        "fid": ["VA", "VB"],
+        "filas": np.array([0, 1, 2, 3]),
+        "instance_bag": np.array([0, 0, 1, 1]),
+        "n_bolsas": 2,
+        "n_obs": np.array([2, 2]),
+    }
+    X = np.arange(4 * 3, dtype=float).reshape(4, 3)
+
+    _tabla, metadata = simular_bolsas(
+        predictor, X, seleccion=seleccion, feature_names=["a", "b", "c"],
+        overrides=[{"variable": "b", "valor": 99.0}],
+    )
+
+    X_sim = metadata["X_simulado"]
+    assert X_sim.shape == (4, 3)
+    assert list(X_sim[:, 1]) == [99.0] * 4          # la override esta aplicada
+    assert list(X_sim[:, 0]) == list(X[:, 0])       # y nada mas se toco

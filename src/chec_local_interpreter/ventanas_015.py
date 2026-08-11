@@ -612,10 +612,15 @@ def series_temporal_vanos(
     """One time series per vano in `fids`, in the order given: UITI and events
     across the `n_ventanas` windows of `circuito`.
 
-    A window where the vano has no cell carries `None`, never `0`. A zero
-    would read as "no UITI in that window", and what actually happened is
-    that there was no measurement -- Plotly breaks the line at `None`, which
-    is the honest mark for a gap.
+    Every window of the sequence is present, and a window where the vano has no
+    cell carries `0`. `TABLA` is built by aggregating EVENTS: a vano with no row
+    in a window is not a vano nobody measured, it is a vano with no events, and
+    with no events the accumulated UITI of that window is zero. Carrying `None`
+    instead broke the line and read as missing information, which hid the very
+    thing the panel is for -- seeing that the vano was quiet.
+
+    A zero window still has NO criticality class: see `clases_de_series`. The
+    value is a measurement; the group is undefined, and the panel paints it grey.
     """
     circuitos = tabla["CIRCUITO"].astype(str).to_numpy()
     fids_tabla = tabla["FID_VANO"].astype(str).to_numpy()
@@ -633,9 +638,9 @@ def series_temporal_vanos(
             {
                 "fid": str(fid),
                 "x": list(range(int(n_ventanas))),
-                "uiti": [float(por_ventana[i][0]) if i in por_ventana else None
+                "uiti": [float(por_ventana[i][0]) if i in por_ventana else 0.0
                          for i in range(int(n_ventanas))],
-                "eventos": [int(por_ventana[i][1]) if i in por_ventana else None
+                "eventos": [int(por_ventana[i][1]) if i in por_ventana else 0
                             for i in range(int(n_ventanas))],
             }
         )
@@ -658,8 +663,10 @@ def clases_de_series(
     once: the line says WHICH vano, the point says which group it fell into
     that window.
 
-    A window with no cell has NO class, and that is not the lowest group: it is
-    the absence of the datum, which the panel paints grey.
+    A window with ZERO events has NO class, and that is not the lowest group. The
+    value is a measurement -- no events means no accumulated UITI -- but 01.4's
+    geometry lives in `(n_obs, log10 u)` and `log10(0)` does not exist, so there
+    is no point to place. The panel paints it grey.
 
     Every point of every series is classified in ONE call. Five vanos across
     eleven windows are fifty-five points, and the repaint runs on every map
@@ -676,7 +683,9 @@ def clases_de_series(
     u: list[float] = []
     for s_i, serie in enumerate(series):
         for w_i, (eventos, uiti) in enumerate(zip(serie["eventos"], serie["uiti"])):
-            if eventos is None or uiti is None:
+            # `not eventos` cubre el None de una serie vieja y el CERO de una ventana
+            # sin eventos: las dos son puntos que no se pueden clasificar.
+            if not eventos or uiti is None:
                 continue
             puntos.append((s_i, w_i))
             n_obs.append(float(eventos))

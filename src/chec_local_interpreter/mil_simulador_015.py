@@ -424,6 +424,11 @@ def simular_bolsas(
         "n_instancias": int(len(filas)),
         "variables_aplicadas": aplicadas,
         "avisos": avisos,
+        # Las features ya simuladas viajan de vuelta: el grafo `|base - simulado|` de
+        # la ultima fila del 06 necesita este lado, y rearmarlo en el cuaderno seria
+        # repetir la expansion de overrides -- la forma segura de que el grafo acabe
+        # describiendo un escenario distinto del que puntuo el mapa.
+        "X_simulado": X_sim,
     }
     return tabla, metadata
 
@@ -730,6 +735,47 @@ def grafo_de_gates(
         "matriz": np.asarray(grafo["matrix"], dtype=float),
         "n_vanos": int(grafo["n_vanos"]),
         "colapso": resultado["colapso"],
+    }
+
+
+def grafo_diferencia(
+    gates_base: np.ndarray,
+    gates_simuladas: np.ndarray,
+    edge_index: Any,
+    n_features: int,
+) -> dict[str, Any]:
+    """`|graph(base) - graph(simulated)|`: how much the simulation moved each
+    relation of the reconstructed expert graph.
+
+    The panel used to show the selection's graph as it is. That graph is mostly
+    the FIXED expert weights -- the gates only rescale them -- so the before and
+    the after look the same side by side and the effect of the intervention, which
+    is the whole point of the panel, is invisible. The difference isolates exactly
+    what changed.
+
+    ABSOLUTE and not signed: the question is how much a relation moved, not in
+    which direction. An edge the intervention weakens and one it strengthens both
+    say the same thing -- the intervention reached that relation.
+
+    Voided when EITHER side is voided. Subtracting against a graph that could not
+    be estimated would still produce a matrix, and that matrix would look like a
+    result. `estadistico_colapso` voids below three vanos by construction, and the
+    difference inherits it rather than working around it.
+
+    An all-zero matrix is a RESULT and not an empty panel: it says the simulation
+    did not move a single relation.
+    """
+    base = grafo_de_gates(gates_base, edge_index, n_features)
+    simulado = grafo_de_gates(gates_simuladas, edge_index, n_features)
+    if base["voided"] or simulado["voided"]:
+        anulado = base if base["voided"] else simulado
+        return {"voided": True, "matriz": None, "n_vanos": anulado["n_vanos"],
+                "colapso": anulado["colapso"]}
+    return {
+        "voided": False,
+        "matriz": np.abs(base["matriz"] - simulado["matriz"]),
+        "n_vanos": base["n_vanos"],
+        "colapso": base["colapso"],
     }
 
 
