@@ -641,3 +641,33 @@ def test_board_06_draws_the_vano_without_events_as_structure_not_as_data():
         "both the historical `sin_dato` layer and the simulated `pred_sin_dato` one")
     assert "== ANCHO_SIN_EVENTOS == 1.5)" in src, (
         "the notebook must assert it too, where the traces are built")
+
+
+# --- El cuaderno 06 avisa cuando el visor no puede montar su tablero ----------------------
+
+
+def test_board_06_warns_when_the_frontend_cannot_mount_the_figure_widget():
+    """El tablero del 06 es un `go.FigureWidget`, y desde plotly 6.0 eso lo respalda
+    `anywidget`. El visor de notebooks de VS Code falla al cargar esa vista, y falla
+    MUDO: medido, el kernel ejecuta las catorce celdas sin un solo error, construye el
+    widget y lo serializa entero -- cero widgets defectuosos --, y la celda del tablero
+    sale en blanco.
+
+    Sin aviso eso se lee como que el cuaderno esta roto. Este cuaderno ya tiene esa
+    filosofia en su sonda `_sonda`, que falla en la PRIMERA celda con instrucciones en
+    vez de reventar diez minutos mas abajo.
+
+    Avisa y NO interrumpe: el soporte depende de la version de la extension Jupyter de
+    VS Code, asi que a alguien le puede funcionar, y abortar seria peor que el aviso.
+    """
+    src = _source("06_uiti_vano_explicabilidad_simulador")
+
+    assert "VSCODE_PID" in src, "sin marcador de entorno el aviso nunca se dispara"
+    assert "anywidget" in src, "el aviso confirma el respaldo en vez de suponerlo"
+    assert "jupyter lab" in src, "un aviso sin salida deja al usuario igual de atascado"
+
+    bloque = src[src.index("_EN_VSCODE"):]
+    cuerpo = bloque.split("=" * 78)[0]
+    assert "raise" not in cuerpo and "sys.exit" not in cuerpo, (
+        "la guarda no puede abortar: bloquearia a quien SI ve el tablero"
+    )
