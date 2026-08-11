@@ -387,7 +387,13 @@ def simular_bolsas(
     filas = np.asarray(seleccion["filas"], dtype=np.int64)
     instance_bag = np.asarray(seleccion["instance_bag"], dtype=np.int64)
     n_obs = np.asarray(seleccion["n_obs"], dtype=np.float64)
-    X_sel = np.asarray(X_inst, dtype=np.float64)[filas]
+    # Se INDEXA y despues se promueve, nunca al reves. `X_inst` es la matriz
+    # completa del artefacto -- 288.632 x 80 en float32 -- y una seleccion son unos
+    # cientos de filas: promoverla entera reserva y tira 176,7 MB en cada pasada,
+    # contra 0,6 MB indexando primero, con el mismo resultado bit a bit. Ademas la
+    # app de Databricks la carga MAPEADA en memoria, y promoverla entera la leeria
+    # entera del disco y haria privada una copia que estaba compartida.
+    X_sel = np.asarray(X_inst[filas], dtype=np.float64)
 
     if overrides_por_vano:
         X_sim, aplicadas, avisos = aplicar_overrides_por_vano(
@@ -496,7 +502,7 @@ def sensibilidad_minmax_por_vano(
     instance_bag = np.asarray(seleccion["instance_bag"], dtype=np.int64)
     n_obs = np.asarray(seleccion["n_obs"], dtype=float)
     fids = [str(f) for f in seleccion["fid"]]
-    X_base = np.asarray(X_inst, dtype=np.float64)[filas_idx]
+    X_base = np.asarray(X_inst[filas_idx], dtype=np.float64)
 
     base = _riesgo_ordinal_por_bolsa(
         n_obs, predictor.predict(X_base, instance_bag=instance_bag), predictor.geometria
@@ -580,7 +586,7 @@ def sensibilidad_minmax_bolsas(
     filas_idx = np.asarray(seleccion["filas"], dtype=np.int64)
     instance_bag = np.asarray(seleccion["instance_bag"], dtype=np.int64)
     n_obs = np.asarray(seleccion["n_obs"], dtype=float)
-    X_base = np.asarray(X_inst, dtype=np.float64)[filas_idx]
+    X_base = np.asarray(X_inst[filas_idx], dtype=np.float64)
 
     riesgo_base = _riesgo_ordinal(
         n_obs, predictor.predict(X_base, instance_bag=instance_bag), predictor.geometria
@@ -1006,7 +1012,7 @@ def relevancia_hacia_uiti_minimo(
     instance_bag = np.asarray(seleccion["instance_bag"], dtype=np.int64)
     n_obs = np.asarray(seleccion["n_obs"], dtype=float)
     fids = [str(f) for f in seleccion["fid"]]
-    X_base = np.asarray(X_inst, dtype=np.float64)[filas_idx]
+    X_base = np.asarray(X_inst[filas_idx], dtype=np.float64)
 
     u_base = np.asarray(predictor.predict(X_base, instance_bag=instance_bag), dtype=float)
     clase_base, _ = asignar_clase(n_obs, u_base, predictor.geometria)
@@ -1164,7 +1170,7 @@ def plan_hacia_clase_minima(
     instance_bag = np.asarray(seleccion["instance_bag"], dtype=np.int64)
     n_obs = np.asarray(seleccion["n_obs"], dtype=float)
     fids = [str(f) for f in seleccion["fid"]]
-    X_base = np.asarray(X_inst, dtype=np.float64)[filas_idx]
+    X_base = np.asarray(X_inst[filas_idx], dtype=np.float64)
     n_bolsas = len(fids)
 
     candidatos = [(knob, valores) for knob in knobs

@@ -23,11 +23,16 @@ See:
 
 from __future__ import annotations
 
+import pathlib
+import re
+import tracemalloc
+
 import numpy as np
 import pandas as pd
 import pytest
 
 from chec_impacto.models.criticality_assignment import Geometria
+from chec_local_interpreter import mil_simulador_015
 from chec_local_interpreter.mil_simulador_015 import (
     aplicar_overrides_instancias,
     grafo_de_gates,
@@ -651,3 +656,61 @@ def test_the_batched_plan_keeps_each_trial_in_its_own_bags():
             assert plan[fid]["u_final"] == pytest.approx(float(pasos[-1]["valor"]))
         else:
             assert plan[fid]["u_final"] == pytest.approx(plan[fid]["u_base"])
+
+
+# --- La matriz de instancias no se promueve entera ---------------------------------------
+
+
+def test_simular_bolsas_only_promotes_the_selected_rows_to_float64():
+    """`X_inst` es la matriz COMPLETA del artefacto: 288.632 x 80 en float32, 88 MB.
+    Una seleccion son unos cientos de filas. Promoverla entera a float64 antes de
+    indexar reserva y tira 176,7 MB en cada pasada -- medido sobre la matriz real --
+    y con el arreglo baja a 0,6 MB, bit a bit igual.
+
+    Importa el doble cuando la matriz llega MAPEADA en memoria, que es como la
+    carga la app de Databricks: promoverla entera la lee entera del disco en cada
+    clic de "Simular", y de paso hace privada una copia que estaba compartida entre
+    sesiones.
+    """
+    predictor = _PredictorFalso(_geometria())
+    filas, columnas, tomadas = 60_000, 40, 100
+    X = np.zeros((filas, columnas), dtype=np.float32)
+    seleccion = {
+        "fid": ["VA"],
+        "filas": np.arange(tomadas, dtype=np.int64),
+        "instance_bag": np.zeros(tomadas, dtype=np.int64),
+        "n_obs": np.array([tomadas]),
+        "n_bolsas": 1,
+    }
+    nombres = [f"f{i}" for i in range(columnas)]
+
+    tracemalloc.start()
+    simular_bolsas(predictor, X, seleccion=seleccion, feature_names=nombres,
+                   overrides=[{"variable": "f0", "valor": 1.0}])
+    _actual, pico = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+
+    matriz_entera_en_float64 = filas * columnas * 8
+    # Holgado a proposito: lo que se vigila es el ORDEN DE MAGNITUD. Promover entera
+    # reserva los 19,2 MB completos; indexar primero se queda en decenas de KB.
+    assert pico < matriz_entera_en_float64 / 10, (
+        f"la matriz entera se promovio a float64: pico {pico / 1e6:.1f} MB de "
+        f"{matriz_entera_en_float64 / 1e6:.1f} MB"
+    )
+
+
+def test_no_entry_point_promotes_the_whole_instance_matrix():
+    """Los cinco caminos que el tablero dispara -- simular, las dos sensibilidades,
+    la relevancia y el plan -- reciben la MISMA matriz completa. La prueba de arriba
+    cubre uno solo por su coste; esta fija el patron en los cinco, que es barato y
+    evita que vuelva por la puerta de al lado.
+    """
+    fuente = pathlib.Path(mil_simulador_015.__file__).read_text(encoding="utf-8")
+    codigo = [l for l in fuente.splitlines() if not l.strip().startswith("#")]
+    culpables = [l.strip() for l in codigo
+                 if re.search(r"np\.asarray\(\s*X_inst\s*,\s*dtype", l)]
+
+    assert not culpables, (
+        "promueve la matriz entera antes de indexar; indexa primero "
+        f"(`np.asarray(X_inst[filas], dtype=...)`): {culpables}"
+    )
