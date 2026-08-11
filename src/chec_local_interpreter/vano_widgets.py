@@ -96,6 +96,9 @@ def _clase_selector():
             super().__init__(**kwargs)
             self.casillas = {}
             self._silencio = False
+            # Corta la reentrada cuando el observer de `value` reescribe `value` para
+            # dejarlo en el orden y el tope de las casillas.
+            self._normalizando = False
             self._ancho_casilla = ancho_casilla
             # `maximo` acota cuantas claves pueden quedar marcadas a la vez.
             # Notebook 06 lo usa: cada vano seleccionado recibe su propia COLUMNA
@@ -264,6 +267,50 @@ def _clase_selector():
             self.value = tuple(
                 clave for clave, caja in self.casillas.items() if caja.value
             )
+            self._aplicar_tope()
+
+        @traitlets.observe("value")
+        def _al_fijar_value(self, cambio):
+            """Marcar POR CODIGO tambien tiene que mover las casillas.
+
+            `value` es la puerta que usa el diagnostico del cuaderno 06 para marcar
+            los vanos que identifico. Sin esto el trait decia diez y la lista se veia
+            vacia -- el mapa si los resaltaba, porque lee `value` --, y como
+            `_al_cambiar_casilla` recalcula `value` DESDE las casillas, tocar una
+            sola a mano borraba en silencio todo lo que el diagnostico habia puesto.
+
+            Se normaliza ademas lo que se asigno: se descartan las claves que este
+            selector no tiene -- un fid de otro circuito no puede quedar afirmado en
+            `value` sin casilla que lo muestre --, se respeta el tope y el orden pasa
+            a ser el de las opciones. Asi `value` nunca describe algo distinto de lo
+            que hay en pantalla.
+            """
+            if self._silencio or self._normalizando:
+                return
+            cupo = len(self.casillas) if self.maximo is None else self.maximo
+            elegidas, vistas = [], set()
+            for clave in cambio["new"]:
+                clave = str(clave)
+                if clave in self.casillas and clave not in vistas:
+                    vistas.add(clave)
+                    elegidas.append(clave)
+            elegidas = set(elegidas[:cupo])
+            self._silencio = True
+            try:
+                for clave, caja in self.casillas.items():
+                    caja.value = clave in elegidas
+            finally:
+                self._silencio = False
+            ordenado = tuple(c for c in self.casillas if c in elegidas)
+            if ordenado != tuple(cambio["new"]):
+                # `_normalizando` corta la reentrada: la segunda pasada ya llegaria al
+                # mismo resultado, pero dejarla correr encadena un observer por cada
+                # marcado por codigo.
+                self._normalizando = True
+                try:
+                    self.value = ordenado
+                finally:
+                    self._normalizando = False
             self._aplicar_tope()
 
     _CLASE_SELECTOR = SelectorCasillas

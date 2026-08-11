@@ -435,3 +435,76 @@ def test_the_grid_pages_at_fewer_vanos_than_the_cap():
     columnas de veintiseis controles no se leen ni se llenan. Eso lo resuelve la
     paginacion, no un tope mas bajo."""
     assert VANOS_POR_PAGINA < MAX_VANOS_ANALISIS
+
+
+# --- Marcar por codigo: el diagnostico del 06 escribe `value` directamente -------------
+
+
+def test_setting_value_ticks_the_checkboxes():
+    """El diagnostico del cuaderno 06 marca sus vanos asignando `value`. Sin
+    sincronizar las casillas, el trait decia diez y la lista se veia vacia: el mapa
+    los resaltaba -- lee `value` -- y el panel de seleccion manual no."""
+    selector = construir_selector_vanos(["A", "B", "C"])
+
+    selector.value = ("A", "C")
+
+    assert [c for c, caja in selector.casillas.items() if caja.value] == ["A", "C"]
+    assert selector.value == ("A", "C")
+
+
+def test_a_manual_tick_after_setting_value_does_not_wipe_the_selection():
+    """El fallo que hacia esto urgente: `_al_cambiar_casilla` recalcula `value`
+    DESDE las casillas. Con las casillas sin marcar, tocar una sola borraba en
+    silencio todo lo que el diagnostico habia puesto."""
+    selector = construir_selector_vanos(["A", "B", "C"])
+    selector.value = ("A", "C")
+
+    selector.casillas["B"].value = True
+
+    assert set(selector.value) == {"A", "B", "C"}
+
+
+def test_setting_value_respects_the_cap():
+    """El tope existe porque cada vano marcado recibe su columna de controles.
+    Escribir `value` no puede ser una puerta trasera para pasarselo, igual que no
+    lo es el clic del mapa."""
+    selector = construir_selector_vanos(["A", "B", "C", "D"], maximo=2)
+
+    selector.value = ("A", "B", "C", "D")
+
+    assert selector.value == ("A", "B")
+    assert [c for c, caja in selector.casillas.items() if caja.value] == ["A", "B"]
+    # Con el cupo lleno, las que quedaron fuera se deshabilitan.
+    assert selector.casillas["C"].disabled is True
+
+
+def test_setting_value_drops_keys_the_selector_does_not_have():
+    """Un fid de OTRO circuito no tiene casilla aqui. Dejarlo dentro de `value`
+    haria que el trait afirmara una seleccion que la lista no puede mostrar."""
+    selector = construir_selector_vanos(["A", "B"])
+
+    selector.value = ("A", "DE_OTRO_CIRCUITO")
+
+    assert selector.value == ("A",)
+
+
+def test_setting_value_follows_the_option_order_and_not_the_given_order():
+    """El orden sale de las opciones, como en el resto del selector: asi la rejilla
+    de controles y la leyenda no se barajan segun como llego la lista."""
+    selector = construir_selector_vanos(["A", "B", "C"])
+
+    selector.value = ("C", "A")
+
+    assert selector.value == ("A", "C")
+
+
+def test_clearing_value_unticks_everything():
+    """El camino de vuelta tiene que funcionar igual: sin esto, `value = ()` dejaba
+    las casillas marcadas y la lista contradecia al mapa."""
+    selector = construir_selector_vanos(["A", "B"])
+    selector.value = ("A", "B")
+
+    selector.value = ()
+
+    assert not any(caja.value for caja in selector.casillas.values())
+    assert not any(caja.disabled for caja in selector.casillas.values())

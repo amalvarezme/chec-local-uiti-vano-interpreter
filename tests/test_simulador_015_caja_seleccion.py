@@ -366,7 +366,7 @@ def test_a_markdown_title_introduces_the_dashboard():
     texto = "".join(anterior["source"])
     assert "## El tablero" in texto
     # Nombra los pasos, que es lo que lo hace util y no decorativo.
-    for paso in ("Diagnostico del circuito", "Aplicar intervencion", "Simular"):
+    for paso in ("Diagnostico", "Aplicar intervencion", "Simular"):
         assert paso in texto
 
 
@@ -397,3 +397,10 @@ def test_the_raw_shapefile_is_released_after_the_geometry_is_built(fuente):
     esta armado. Se sueltan en la misma celda que las leyo, que es lo que deja volver a
     correr esa celda sin un NameError."""
     assert "del _lineas, _utiles" in fuente
+
+
+def test_the_diagnosis_button_is_called_just_diagnostico(fuente):
+    """El rotulo largo no cabia en el boton y se leia recortado, que es peor que
+    corto: un boton que dice "Diagnostico circ..." no dice nada."""
+    assert "boton_diagnostico = widgets.Button(description='Diagnostico'," in fuente
+    assert "Diagnostico del circuito" not in fuente
