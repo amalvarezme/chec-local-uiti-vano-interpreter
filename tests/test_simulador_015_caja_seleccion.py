@@ -157,7 +157,8 @@ def test_the_window_slider_is_repopulated_per_circuit(fuente):
     rompio y no como que no hubo eventos."""
     assert "VENTANAS_POR_CIRCUITO = {" in fuente
     assert "def _opciones_de_ventana(circuito):" in fuente
-    assert "options=_opciones_de_ventana(circuito_widget.value)" in fuente
+    assert "_OPCIONES_INICIALES = _opciones_de_ventana(circuito_widget.value)" in fuente
+    assert "options=_OPCIONES_INICIALES" in fuente
     assert "ventana_widget.options = _opciones" in fuente
 
 
@@ -166,11 +167,12 @@ def test_the_current_window_is_read_before_options_are_reassigned(fuente):
     despues devuelve siempre esa primera, asi que la ventana vigente se perdia en cada
     cambio de circuito -- medido: pasar a un circuito que SI tiene la ventana 10 la
     dejaba en la 0. El orden de estas dos lineas es todo el arreglo."""
-    cuerpo = fuente[fuente.index("def _on_circuito_change"):][:1200]
+    cuerpo = fuente[fuente.index("def _on_circuito_change"):][:1600]
     assert cuerpo.index("_vigente = ventana_widget.value") < cuerpo.index(
         "ventana_widget.options = _opciones"), (
         "la ventana vigente se lee DESPUES de reescribir options: se pierde siempre")
-    assert "_vigente if _vigente in _disponibles else _disponibles[0]" in cuerpo
+    # El respaldo es la ULTIMA que si tiene, igual que el arranque del deslizador.
+    assert "_vigente if _vigente in _disponibles else _disponibles[-1]" in cuerpo
 
 
 def test_a_circuit_without_windows_still_gets_one_option(fuente):
@@ -320,3 +322,78 @@ def test_the_grid_pages_and_keeps_the_hidden_controls_alive(fuente):
     assert "boton_pagina_siguiente.on_click(lambda _b: _mover_pagina(1))" in fuente
     # La navegacion solo aparece si HAY mas de una pagina.
     assert "if paginas > 1 else []" in fuente
+
+
+# --- Presentacion y arranque del cuaderno ---------------------------------------------
+
+
+def test_the_window_slider_opens_on_the_most_recent_window(fuente):
+    """Arranca en la ULTIMA ventana con eventos del circuito y no en la primera: es el
+    periodo mas reciente, que es la pregunta con la que se abre el tablero. La primera
+    es historia y se alcanza moviendo el deslizador.
+
+    El respaldo al cambiar de circuito tambien cae en la ultima, por el mismo motivo.
+    Lo que NO cambia es que una ventana elegida a mano se conserve cuando el circuito
+    nuevo la tiene: eso es una eleccion del usuario, no un valor por defecto."""
+    assert "value=_OPCIONES_INICIALES[-1][1]" in fuente
+    assert "ventana_widget.value = _vigente if _vigente in _disponibles else _disponibles[-1]" in fuente
+
+
+def test_every_code_cell_is_collapsed_but_its_output_is_not():
+    """El cuaderno se lee como documento: el texto y las SALIDAS a la vista -- el
+    tablero es una salida -- y el codigo plegado. `jupyter.source_hidden` es lo que
+    leen JupyterLab, Notebook 7 y el editor de VS Code; la etiqueta `hide-input` es
+    para nbconvert, que no mira `source_hidden` y sin ella exportaria todo el codigo."""
+    celdas = json.loads(NOTEBOOK.read_text(encoding="utf-8"))["cells"]
+    codigo = [c for c in celdas if c["cell_type"] == "code"]
+    assert codigo, "el cuaderno perdio sus celdas de codigo"
+    for celda in codigo:
+        meta = celda.get("metadata", {})
+        assert meta.get("jupyter", {}).get("source_hidden") is True
+        assert "hide-input" in meta.get("tags", [])
+        # La SALIDA no se pliega: es lo unico que queda para ver.
+        assert meta.get("jupyter", {}).get("outputs_hidden") is not True
+
+
+def test_a_markdown_title_introduces_the_dashboard():
+    """Sin un titulo antes del tablero, la celda que lo muestra es una mas entre catorce
+    plegadas y no hay nada que diga cual ejecutar ni en que orden se usa."""
+    celdas = json.loads(NOTEBOOK.read_text(encoding="utf-8"))["cells"]
+    i_panel = next(i for i, c in enumerate(celdas) if c["cell_type"] == "code"
+                   and "El panel, ARRIBA y del ancho de la figura" in "".join(c["source"]))
+    anterior = celdas[i_panel - 1]
+    assert anterior["cell_type"] == "markdown"
+    texto = "".join(anterior["source"])
+    assert "## El tablero" in texto
+    # Nombra los pasos, que es lo que lo hace util y no decorativo.
+    for paso in ("Diagnostico del circuito", "Aplicar intervencion", "Simular"):
+        assert paso in texto
+
+
+def test_the_startup_does_not_keep_a_second_copy_of_the_dataset(fuente):
+    """Medido: `datos` sostenia la matriz cruda y los dos DataFrame mientras el cuaderno
+    guardaba ademas un `.copy()` de cada uno -- 506 MB duplicados. Se suelta en la MISMA
+    celda que lo creo, asi que la celda sigue siendo re-ejecutable."""
+    assert "Xdf = datos['Xdata'].reset_index(drop=True)" in fuente
+    assert "context_df = datos['df_original_copy'].reset_index(drop=True)" in fuente
+    assert ".copy().reset_index(drop=True)" not in fuente
+    assert "del datos" in fuente
+    # `X_raw_model` eran 44,7 MB que solo alimentaban un `len()`: ya no se construye.
+    assert "X_raw_model = " not in fuente
+    assert "n_filas_x = len(datos['X'])" in fuente
+
+
+def test_the_instance_matrix_is_float32_like_the_model_weights(fuente):
+    """Los pesos del MIL son float32, asi que la conversion ya ocurria en cada llamada.
+    Medido sobre 523 bolsas de 3 circuitos con un override aplicado: clase simulada y
+    UITI IDENTICOS BIT A BIT, y la matriz baja de 184,7 a 92,4 MB."""
+    assert "X_INST = np.asarray(BOLSAS['X'], dtype=np.float32)" in fuente
+    # Sin soltar el dict del artefacto, el ahorro seria un tercer juego de la matriz.
+    assert "del BOLSAS" in fuente
+
+
+def test_the_raw_shapefile_is_released_after_the_geometry_is_built(fuente):
+    """76 MB entre las dos tablas del shapefile, muertas en cuanto `GEO_POR_CIRCUITO`
+    esta armado. Se sueltan en la misma celda que las leyo, que es lo que deja volver a
+    correr esa celda sin un NameError."""
+    assert "del _lineas, _utiles" in fuente
