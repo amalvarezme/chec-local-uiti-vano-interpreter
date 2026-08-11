@@ -22,6 +22,7 @@ from chec_local_interpreter.mil_inferencia import (
     RecursosMIL,
     diagnostico_de_circuito,
     escenarios_de_circuito,
+    knobs_desde_datos,
     relevancia_de_circuito,
     resumen_de_modelo,
     ventanas_de_circuito,
@@ -217,3 +218,24 @@ def test_ventanas_de_circuito_lists_only_the_windows_that_circuit_has():
 
     assert ventanas_de_circuito(recursos, circuito="C1") == ["W1"]
     assert ventanas_de_circuito(recursos, circuito="NO_EXISTE") == []
+
+
+def test_knobs_come_from_the_dataset_and_drop_the_refuted_ones():
+    """El panel del cuaderno 06 no ofrece las variables refutadas -- coordenadas del
+    vano, identidad -- porque presentarlas junto a la poda invita a simular que se
+    mueve un vano de sitio. El informe hereda ese catalogo, no uno propio: dos listas
+    de palancas para el mismo modelo se separan en cuanto alguien edita una.
+    """
+    datos = {
+        "features": ["NR_T", "X2"],
+        "Xdata": pd.DataFrame({"NR_T": [0.0, 1.0, 2.0], "X2": [1.0, 2.0, 3.0]}),
+        "label_encoders": {},
+        "max_values_imputed": {},
+    }
+
+    knobs, grupos = knobs_desde_datos(datos)
+
+    ids = {k.id for k in knobs}
+    assert "NR_T" in ids
+    assert "X2" not in ids, "las variables refutadas no son palancas"
+    assert grupos.get("NR_T") in {"Intervencion", "Escenario"}

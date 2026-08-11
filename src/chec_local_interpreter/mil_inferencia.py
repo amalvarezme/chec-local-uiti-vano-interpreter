@@ -98,6 +98,32 @@ def cargar_recursos_mil(
     )
 
 
+def knobs_desde_datos(datos: Mapping[str, Any]) -> tuple[list[Any], dict[str, str]]:
+    """El catalogo de controles del informe, heredado del panel del cuaderno 06.
+
+    Devuelve `(knobs, grupos)`, ya SIN las variables refutadas. El panel no las ofrece
+    porque presentarlas junto a la poda invita a simular que se mueve un vano de sitio,
+    y el informe hereda ese mismo catalogo en vez de construir uno propio: dos listas de
+    palancas para el mismo modelo se separan en cuanto alguien edita una sola.
+
+    Quitarlas del catalogo NO las saca de la simulacion: un override solo se escribe si
+    se fija, asi que entran al modelo con el valor observado de cada vano. Lo unico que
+    se pierde es poder moverlas.
+    """
+    from chec_local_interpreter.simulador_variables import GRUPO_POR_KNOB, knobs_simulables
+    from chec_local_interpreter.vano_controls import build_knobs
+
+    knobs = build_knobs(
+        feature_names=list(datos["features"]),
+        original_feature_df=datos["Xdata"],
+        label_encoders=datos.get("label_encoders", {}),
+        max_values_imputed=datos.get("max_values_imputed", {}),
+    )
+    simulables = knobs_simulables(knobs)
+    return simulables, {k.id: GRUPO_POR_KNOB[k.id] for k in simulables
+                        if k.id in GRUPO_POR_KNOB}
+
+
 def _seleccion(recursos: RecursosMIL, *, circuito: str, ventana: str) -> dict[str, Any]:
     from chec_local_interpreter.mil_simulador_015 import seleccionar_bolsas
 
