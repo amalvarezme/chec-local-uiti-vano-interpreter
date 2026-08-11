@@ -144,10 +144,10 @@ def test_board_reads_the_csv_in_blocks_not_all_at_once(sources, board):
 def test_board_01_paints_the_uiti_layer_at_full_opacity():
     """Half-tinted, the layer stops showing the panel's thresholded colours.
 
-    At `opacity=0.5` over carto-positron's light background, `Alto` -- rgb(103,0,13), a
-    near-black red -- painted as rgb(172,121,128), a washed pink, and `Bajo` sat one step from
+    At `opacity=0.5` over carto-positron's light background, `Alto` -- rgb(198,40,40) --
+    painted as rgb(220,140,137), a washed pink, and `Bajo` sat one step from
     the background. Worse, over the black 1.5 px structure core the SAME class composited to a
-    different colour again (rgb(52,0,6) for `Alto`), so one vano showed two tones and neither
+    different colour again (rgb(99,20,20) for `Alto`), so one vano showed two tones and neither
     matched the swatch the panel prints in its legend. Verified opaque in MapLibre itself via
     `getPaintProperty`: the four line layers report the palette colours at width 7, opacity 1.
     """
