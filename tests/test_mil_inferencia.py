@@ -21,8 +21,10 @@ import pytest
 from chec_local_interpreter.mil_inferencia import (
     RecursosMIL,
     diagnostico_de_circuito,
+    escenarios_de_circuito,
     relevancia_de_circuito,
     resumen_de_modelo,
+    ventanas_de_circuito,
 )
 
 
@@ -179,3 +181,39 @@ def test_relevance_says_when_it_ran_without_controls():
 
     assert resultado["n_controles"] == 0
     assert resultado["sin_controles"] is True
+
+
+# --- Los escenarios, que con el MIL son VENTANAS -----------------------------------------
+
+
+def test_scenarios_are_windows_because_that_is_what_a_bag_is():
+    """Con MGCECDL un escenario era un percentil de filas; con el MIL la unidad es la
+    bolsa (vano, ventana), asi que el escenario natural es la VENTANA. Mantener el
+    percentil habria dejado el informe hablando de una particion que el modelo no ve.
+    """
+    recursos = _recursos()
+
+    escenarios = escenarios_de_circuito(recursos, circuito="C1")
+
+    assert escenarios, "un circuito con bolsas tiene al menos un escenario"
+    uno = escenarios[0]
+    assert uno["ventana"] == "W1"
+    assert uno["metrica"] == "uiti_acumulado"
+    assert {"nombre", "ventana", "relevancia", "vanos_criticos"} <= set(uno)
+
+
+def test_scenarios_are_restricted_to_the_windows_asked_for():
+    recursos = _recursos()
+
+    assert escenarios_de_circuito(recursos, circuito="C1", ventanas=["W9"]) == []
+    assert len(escenarios_de_circuito(recursos, circuito="C1", ventanas=["W1"])) == 1
+
+
+def test_ventanas_de_circuito_lists_only_the_windows_that_circuit_has():
+    """Un circuito tranquilo puede no tener bolsas en media parte del ano. Ofrecer
+    ventanas que ese circuito no tiene produce escenarios vacios que el informe
+    presenta como si el modelo no hubiera encontrado nada."""
+    recursos = _recursos()
+
+    assert ventanas_de_circuito(recursos, circuito="C1") == ["W1"]
+    assert ventanas_de_circuito(recursos, circuito="NO_EXISTE") == []

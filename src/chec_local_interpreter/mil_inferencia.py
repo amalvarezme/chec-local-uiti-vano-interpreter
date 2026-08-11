@@ -243,6 +243,72 @@ def diagnostico_de_circuito(
     return criticos[: int(top)]
 
 
+def ventanas_de_circuito(recursos: RecursosMIL, *, circuito: str) -> list[str]:
+    """Las ventanas en que ESE circuito tiene bolsas, en orden.
+
+    No son todas para todos: un circuito tranquilo puede no registrar una sola celda
+    en media parte del ano. Ofrecer ventanas que no tiene produce escenarios vacios
+    que el informe presenta como si el modelo no hubiera encontrado nada, cuando lo
+    que no hubo fueron eventos.
+    """
+    keys = recursos.bag_index.keys
+    de_este = keys[keys["CIRCUITO"].astype(str) == str(circuito)]
+    if de_este.empty:
+        return []
+    return sorted(de_este["VENTANA"].astype(str).unique().tolist(), key=_orden_ventana)
+
+
+def _orden_ventana(etiqueta: str) -> tuple[int, str]:
+    """`V10` va despues de `V9`, no entre `V1` y `V2`: el orden alfabetico de las
+    etiquetas no es el cronologico de las ventanas."""
+    resto = str(etiqueta).lstrip("Vv")
+    return (int(resto), "") if resto.isdigit() else (10**9, str(etiqueta))
+
+
+def escenarios_de_circuito(
+    recursos: RecursosMIL,
+    *,
+    circuito: str,
+    ventanas: Sequence[str] | None = None,
+    top_variables: int = TOP_VARIABLES,
+    top_vanos: int = TOP_VANOS_DIAGNOSTICO,
+) -> list[dict[str, Any]]:
+    """Un escenario por VENTANA del circuito.
+
+    Con MGCECDL un escenario era un percentil de filas -- top por severidad, top por
+    frecuencia --; con el MIL la unidad es la bolsa (vano, ventana), asi que el
+    escenario natural es la ventana. Mantener el percentil habria dejado el informe
+    hablando de una particion que el modelo no ve por dentro, y obligaba a explicar
+    dos recortes distintos de la misma poblacion.
+
+    Cada escenario trae lo que el agente de inferencia necesita para una ventana: que
+    variables bajan el UITI de sus vanos, y cuales son los criticos con su plan.
+    """
+    disponibles = ventanas_de_circuito(recursos, circuito=circuito)
+    if ventanas is not None:
+        pedidas = {str(v) for v in ventanas}
+        disponibles = [v for v in disponibles if v in pedidas]
+
+    escenarios: list[dict[str, Any]] = []
+    for ventana in disponibles:
+        relevancia = relevancia_de_circuito(
+            recursos, circuito=circuito, ventana=ventana, top=top_variables)
+        if not relevancia["vanos"]:
+            continue
+        escenarios.append({
+            "nombre": f"{circuito} -- ventana {ventana}",
+            "circuito": str(circuito),
+            "ventana": str(ventana),
+            "metrica": METRICA,
+            "unidad": UNIDAD,
+            "n_vanos": len(relevancia["vanos"]),
+            "relevancia": relevancia,
+            "vanos_criticos": diagnostico_de_circuito(
+                recursos, circuito=circuito, ventana=ventana, top=top_vanos),
+        })
+    return escenarios
+
+
 def resumen_de_modelo(recursos: RecursosMIL) -> dict[str, Any]:
     """Lo que el informe imprime sobre el modelo que lo respalda.
 
