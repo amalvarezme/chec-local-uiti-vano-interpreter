@@ -449,3 +449,102 @@ def test_databricks_command_names_the_notebooks_own_div_variable(board):
     variable = "DIV_FIGURA" if board == "03" else "DIV"
     assert f"#{{{variable}}} {{{{ width: 100%; }}}}" in command
     assert "{PANEL_COMPLETO}" in command, "the document must embed the notebook's own block"
+
+
+# --- `04`'s selection: what the board opens on, and what marks a vano -------------------
+# The three behaviours below are one story: the board must land on a circuit already
+# showing something, the window must bring its own subject, and a marked vano must be
+# findable on the map. All three are JS in the panel, so they are pinned against the
+# source rather than executed.
+
+def _notebook_source(name: str) -> str:
+    return _source(name)
+
+
+@pytest.mark.parametrize("board", ["03", "04"])
+def test_board_opens_on_the_first_circuit(sources, board):
+    """`(ninguno)` is still an option, but no longer the one the board starts in.
+
+    Opening on `(ninguno)` means opening on a board with no map and an empty vano list:
+    the first thing anyone has to do is pick a circuit before seeing anything at all. The
+    first circuit is as good a starting point as any, and `03` already worked this way --
+    `04` was the odd one out.
+    """
+    src = sources[board]
+    assert '" selected" if i == 0 else ""' in src, (
+        "the first circuit must carry `selected` in the option markup")
+    assert "for i, c in enumerate(CIRCUITOS)" in src, (
+        "the index has to come from enumerate, not from a second pass over the list")
+    assert "SIN_SELECCION" in src, "the `(ninguno)` option itself must survive"
+
+
+def test_board_04_auto_marks_the_vanos_with_events_of_the_moving_window(sources):
+    """Moving the window re-marks the vanos that registered events IN it.
+
+    Without this the slider changes the window but not the subject: the map, the series
+    and the split keep describing vanos that in the new window have no cell at all, and
+    re-picking them by hand at every step is the work the board exists to save.
+
+    It is a REPLACEMENT and not an addition -- `checked` is assigned from the lookup for
+    every box, so a vano that stops having events also stops being marked -- and it runs
+    BEFORE the map is drawn, or the first frame of every window would show the previous
+    window's selection.
+    """
+    src = sources["04"]
+    assert "function autoseleccionar()" in src
+    assert "cajas[i].checked = uiti[cajas[i].value] !== undefined;" in src, (
+        "the mark must be an assignment over every box, not an OR that only ever adds")
+    # Both entry points: the slider, and repopulating the list on a circuit change.
+    assert re.search(r"autoseleccionar\(\);\s*\n\s*dibujarMapa\(gd,", src), (
+        "the slider must mark before drawing the map")
+    assert re.search(r"poblarLista\(circuito\);\s*\n\s*autoseleccionar\(\);", src), (
+        "a circuit change repopulates the list, which leaves every box unchecked")
+    # The window now brings a different SELECTION, so the debounced tail has to redo the
+    # quotas, the legend, the evolution series and the arrows -- not just the split and the
+    # opacities, which was enough while the selection survived a window change.
+    assert "refrescarReparto(gd, geoActual(), circ, cuposDe(elegidos()));" not in src, (
+        "the partial refresh is not enough once the window changes the selection")
+
+
+def test_board_04_boxes_the_marked_vano_exactly_like_board_06():
+    """The yellow box of `04` is the box of `06`: same size, same colour, same bearing.
+
+    `06` marks a vano with a translucent rectangle TURNED to the vano's own direction,
+    drawn as a `layout.map.layers` fill under the traces. `04` marked its vanos with a
+    thicker line and a halo only, which on a circuit of hundreds of segments is not enough
+    to find the one under study.
+
+    The four numbers are compared across the two notebooks rather than asserted as
+    literals here: what matters is not the value, it is that the two boards cannot drift
+    apart. Two highlights of different size over the same vano read as two different
+    things.
+    """
+    src04 = _notebook_source(BOARDS["04"])
+    src06 = _notebook_source("06_uiti_vano_explicabilidad_simulador")
+
+    for constante in ("COLOR_CAJA_SELECCION", "OPACIDAD_CAJA_SELECCION",
+                      "LADO_MINIMO_CAJA", "MARGEN_CAJA"):
+        patron = rf"^{constante} = (.+?)(?:\s+#.*)?$"
+        en04 = re.search(patron, src04, re.MULTILINE)
+        en06 = re.search(patron, src06, re.MULTILINE)
+        assert en04 and en06, f"{constante} must be declared in both notebooks"
+        assert en04.group(1).strip() == en06.group(1).strip(), (
+            f"{constante} drifted: 04 says {en04.group(1)!r}, 06 says {en06.group(1)!r}")
+
+    # The layer, not a trace: a filled trace on top would eat the very click that toggles
+    # the selection, and would tint the class colour of the vano it is pointing at.
+    assert "sourcetype='geojson', type='fill', below='traces'," in src04
+    assert "layers=[CAPA_CAJA_SELECCION]" in src04
+    assert "assert fig.layout.map.layers[0].below == 'traces'" in src04
+
+    # The JS port of `cajas_seleccion`: the rectangle turns with the vano (`u` along it,
+    # `v` across it), opens about its centre, and closes its ring.
+    assert "function cajasSeleccion(circuito, sel)" in src04
+    assert "var v = [-u[1], u[0]];" in src04, "the cross axis must be `u` turned 90 degrees"
+    assert "anillo.push(anillo[0]);" in src04, (
+        "MapLibre silently drops an open ring and draws no box at all")
+    assert "'map.layers[0].source': cajasSeleccion(circuito, sel)" in src04, (
+        "the box must be repainted by writing the source of the layer that already exists")
+    # Drawn from the geometry and repainted with the map, so it survives a window change
+    # and disappears the moment the vano is unmarked -- by its box or by clicking it again.
+    assert re.search(r"pintarCajas\(gd, circuito, sel\);", src04)
