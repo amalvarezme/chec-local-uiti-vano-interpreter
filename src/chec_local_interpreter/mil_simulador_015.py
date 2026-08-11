@@ -1090,6 +1090,27 @@ def relevancia_hacia_uiti_minimo(
     return resultado
 
 
+MAX_FILAS_POR_PASADA = 400_000
+"""Cuantas filas como mucho arma `plan_hacia_clase_minima` en una sola pasada al modelo.
+
+Los ensayos de una ronda se apilan para puntuarlos juntos, y con una seleccion grande esa
+matriz crece con el numero de candidatos por el de instancias. El troceo no cambia el
+resultado -- cada ensayo vive en sus propias bolsas -- y evita pedir varios GB de golpe.
+"""
+
+
+def _clave_valor(valor: Any) -> Any:
+    """Clave hashable para memorizar la expansion de un candidato.
+
+    Los valores numericos llegan como `np.float64` y los categoricos como texto. `float`
+    y `np.float64` son iguales y comparten hash, asi que basta con normalizar a tipos de
+    Python para que dos rutas distintas al mismo valor compartan entrada.
+    """
+    if isinstance(valor, (np.floating, np.integer)):
+        return valor.item()
+    return valor
+
+
 def plan_hacia_clase_minima(
     predictor: Any,
     X_inst: np.ndarray,
@@ -1150,22 +1171,93 @@ def plan_hacia_clase_minima(
                   if (valores := candidatos_de_knob(knob, puntos=puntos)) is not None]
     objetivos = [umbral_u_para_clase_minima(float(n), predictor.geometria) for n in n_obs]
 
-    def _u_con(estado_por_bolsa: list[dict[str, Any]]) -> np.ndarray:
-        """u-hat de cada bolsa con SU propio conjunto de cambios ya fijados."""
+    # La expansion de un control a las columnas que toca NO depende del vano ni de la
+    # ronda, asi que se hace una sola vez. Antes se rehacia dentro del doble bucle: por
+    # cada par (control, valor) se volvia a expandir el estado ENTERO de las diez bolsas.
+    # Medido sobre una seleccion de 10 bolsas y 18 instancias, el 67% de los 2,75 s de
+    # esta funcion se iba ahi, en Python, sin tocar el modelo.
+    expansion = {(knob.id, _clave_valor(valor)): expand_knob_overrides({knob.id: valor}, knobs)
+                 for knob, valores in candidatos for valor in valores}
+
+    def _matriz_con(estado_por_bolsa: list[dict[str, Any]]) -> np.ndarray:
+        """La matriz de instancias con los cambios ya fijados de cada bolsa."""
         overrides = {
             fids[b]: [o for knob_id, valor in estado.items()
-                      for o in expand_knob_overrides({knob_id: valor}, knobs)]
+                      for o in expansion[(knob_id, _clave_valor(valor))]]
             for b, estado in enumerate(estado_por_bolsa) if estado
         }
         if not overrides:
-            X = X_base
-        else:
-            X, _aplicadas, _avisos = aplicar_overrides_por_vano(
-                X_base, feature_names, overrides, instance_bag=instance_bag,
+            return X_base
+        X, _aplicadas, _avisos = aplicar_overrides_por_vano(
+            X_base, feature_names, overrides, instance_bag=instance_bag,
+            fids=fids, label_encoders=label_encoders,
+            max_values_imputed=max_values_imputed,
+        )
+        return X
+
+    def _u_de(X: np.ndarray, bolsas: np.ndarray) -> np.ndarray:
+        return np.asarray(predictor.predict(X, instance_bag=bolsas), dtype=float)
+
+    def _u_con(estado_por_bolsa: list[dict[str, Any]]) -> np.ndarray:
+        """u-hat de cada bolsa con SU propio conjunto de cambios ya fijados."""
+        return _u_de(_matriz_con(estado_por_bolsa), instance_bag)
+
+    def _u_de_los_ensayos(X_estado: np.ndarray, ensayos: list) -> np.ndarray:
+        """Un u-hat por (ensayo, bolsa), evaluando TODOS los ensayos de la ronda juntos.
+
+        Cada ensayo es el estado vigente mas UN cambio, asi que su matriz sale de aplicar
+        ese cambio sobre `X_estado` en vez de rearmar el estado desde cero. Las matrices
+        se apilan con el `instance_bag` desplazado -- el ensayo `t` usa las bolsas
+        `t * n_bolsas + b` -- y el modelo las puntua en una sola pasada.
+
+        Es la misma cuenta que hacia el bucle -- mismo estado base, mismos candidatos,
+        mismas filas -- pero NO da el mismo numero bit a bit, y conviene saber por que:
+        la suma en punto flotante no es asociativa, asi que puntuar una matriz apilada
+        cambia el orden de reduccion interno del modelo respecto de puntuar 18 filas.
+
+        Lo que importa es si ese ruido llega a cambiar una DECISION, porque el descenso
+        es goloso y dos candidatos casi empatados podrian invertirse. Medido contra la
+        implementacion anterior sobre 25 vanos de 3 circuitos: los 25 conservan los
+        MISMOS pasos, en el mismo orden y con los mismos valores, y la misma clase final.
+        La peor diferencia relativa en `u_final` es 2,9e-05, del orden del float32 en que
+        vive el modelo. El plan que alguien ejecuta en campo no cambia; el u-hat que se
+        muestra puede variar en el quinto decimal.
+
+        Se trocea por `MAX_FILAS_POR_PASADA` para que una seleccion grande no arme una
+        matriz de varios GB: el troceo no cambia el resultado porque cada ensayo vive en
+        sus propias bolsas.
+        """
+        por_ensayo = np.empty((len(ensayos), n_bolsas), dtype=float)
+        bloque: list[np.ndarray] = []
+        bolsas: list[np.ndarray] = []
+        indices: list[int] = []
+        filas_en_bloque = 0
+
+        def _vaciar():
+            if not bloque:
+                return
+            u = _u_de(np.concatenate(bloque), np.concatenate(bolsas))
+            for k, t in enumerate(indices):
+                por_ensayo[t] = u[k * n_bolsas:(k + 1) * n_bolsas]
+            bloque.clear(); bolsas.clear(); indices.clear()
+
+        for t, (knob, valor, elegibles) in enumerate(ensayos):
+            overrides = {fids[b]: expansion[(knob.id, _clave_valor(valor))]
+                         for b in elegibles}
+            X_t, _a, _av = aplicar_overrides_por_vano(
+                X_estado, feature_names, overrides, instance_bag=instance_bag,
                 fids=fids, label_encoders=label_encoders,
                 max_values_imputed=max_values_imputed,
             )
-        return np.asarray(predictor.predict(X, instance_bag=instance_bag), dtype=float)
+            if filas_en_bloque and filas_en_bloque + len(X_t) > MAX_FILAS_POR_PASADA:
+                _vaciar()
+                filas_en_bloque = 0
+            bloque.append(X_t)
+            bolsas.append(instance_bag + len(indices) * n_bolsas)
+            indices.append(t)
+            filas_en_bloque += len(X_t)
+        _vaciar()
+        return por_ensayo
 
     estado: list[dict[str, Any]] = [{} for _ in range(n_bolsas)]
     u_actual = _u_con(estado)
@@ -1178,19 +1270,20 @@ def plan_hacia_clase_minima(
         if not pendientes:
             break
         mejor = {b: (u_actual[b], None, None) for b in pendientes}
-        for knob, valores in candidatos:
-            for valor in valores:
-                prueba = [dict(estado[b]) for b in range(n_bolsas)]
-                for b in pendientes:
-                    if knob.id in estado[b]:
-                        continue
-                    prueba[b][knob.id] = valor
-                u_prueba = _u_con(prueba)
-                for b in pendientes:
-                    if knob.id in estado[b]:
-                        continue
-                    if u_prueba[b] < mejor[b][0]:
-                        mejor[b] = (float(u_prueba[b]), knob, valor)
+        # El estado de la ronda es FIJO, asi que su matriz se arma UNA vez y cada ensayo
+        # solo le agrega su propio cambio encima.
+        X_estado = _matriz_con(estado)
+        ensayos = [(knob, valor, elegibles)
+                   for knob, valores in candidatos
+                   for valor in valores
+                   if (elegibles := [b for b in pendientes if knob.id not in estado[b]])]
+        if not ensayos:
+            break
+        u_ensayos = _u_de_los_ensayos(X_estado, ensayos)
+        for t, (knob, valor, elegibles) in enumerate(ensayos):
+            for b in elegibles:
+                if u_ensayos[t, b] < mejor[b][0]:
+                    mejor[b] = (float(u_ensayos[t, b]), knob, valor)
         siguen = []
         for b in pendientes:
             u_mejor, knob, valor = mejor[b]

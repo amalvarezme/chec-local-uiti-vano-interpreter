@@ -74,7 +74,13 @@ class _Predictor:
         X = np.asarray(X_inst, dtype=float)
         ib = np.asarray(instance_bag)
         n = int(ib.max()) + 1 if ib.size else 0
-        return np.array([self.funciones[b](X[ib == b].mean(axis=0)) for b in range(n)])
+        # `% len(self.funciones)`: el plan puntua todos los ensayos de una ronda en UNA
+        # pasada, apilandolos con las bolsas desplazadas -- el ensayo `t` usa las bolsas
+        # `t * n_bolsas + b` --, asi que el mismo vano aparece varias veces con indices
+        # distintos. El modulo lo devuelve a su propia funcion de respuesta, que es lo
+        # que este doble modela: una `f` por VANO, no por posicion en la matriz.
+        return np.array([self.funciones[b % len(self.funciones)](X[ib == b].mean(axis=0))
+                         for b in range(n)])
 
 
 SELECCION = {

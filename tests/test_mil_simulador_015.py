@@ -32,6 +32,7 @@ from chec_local_interpreter.mil_simulador_015 import (
     aplicar_overrides_instancias,
     grafo_de_gates,
     grafo_diferencia,
+    plan_hacia_clase_minima,
     seleccionar_bolsas,
     simular_bolsas,
     trazas_grafo,
@@ -577,3 +578,76 @@ def test_simular_bolsas_hands_back_the_simulated_matrix():
     assert X_sim.shape == (4, 3)
     assert list(X_sim[:, 1]) == [99.0] * 4          # la override esta aplicada
     assert list(X_sim[:, 0]) == list(X[:, 0])       # y nada mas se toco
+
+
+def test_plan_evaluates_every_round_in_a_single_pass():
+    """El plan puntuaba UNA pasada por cada par (control, valor): medido, 592 pasadas de
+    18 filas para una seleccion de 10 vanos, y 2,75 s de los 4,97 que costaba `Simular`.
+
+    Ahora los ensayos de cada ronda se apilan con el `instance_bag` desplazado y se
+    puntuan juntos, asi que las pasadas son del orden de las RONDAS y no de los
+    candidatos. Se fija el numero de llamadas porque es el cambio entero: si alguien
+    vuelve a evaluar candidato a candidato, la funcion sigue dando lo mismo y solo se
+    nota en el reloj."""
+    predictor = _PredictorFalso(_geometria())
+    seleccion = {
+        "fid": ["VA", "VB", "VC"],
+        "filas": np.arange(6),
+        "instance_bag": np.array([0, 0, 1, 1, 2, 2]),
+        "n_bolsas": 3,
+        "n_obs": np.array([2, 2, 2]),
+    }
+    X = np.full((6, 2), 50.0)
+    from chec_local_interpreter.vano_controls import Knob
+    knobs = [
+        Knob(id="u_driver", label="u_driver", kind="numeric",
+             feature_names=("u_driver",), bounds=(0.0, 10.0), categories=None,
+             default=5.0, step=0.1),
+        Knob(id="otro", label="otro", kind="numeric", feature_names=("otro",),
+             bounds=(0.0, 10.0), categories=None, default=5.0, step=0.1),
+    ]
+
+    plan_hacia_clase_minima(
+        predictor, X, seleccion=seleccion, feature_names=["u_driver", "otro"],
+        knobs=knobs, puntos=5, max_pasos=3,
+    )
+
+    # 1 pasada de base + como mucho una por ronda. Candidato a candidato serian
+    # 2 controles x 5 puntos x 3 rondas = 30 pasadas.
+    assert predictor.llamadas <= 1 + 3
+
+
+def test_the_batched_plan_keeps_each_trial_in_its_own_bags():
+    """Los ensayos se apilan en la MISMA matriz, asi que si dos compartieran bolsa se
+    mezclarian sus instancias y el u-hat de uno contaminaria al otro. El desplazamiento
+    `t * n_bolsas + b` es lo que los mantiene separados.
+
+    Se comprueba por el resultado y no por la forma: `_PredictorFalso` devuelve la media
+    de la primera columna de cada bolsa, asi que fijar el control en `v` tiene que dejar
+    el u-hat de esa bolsa EXACTAMENTE en `v`. Si las bolsas se mezclaran, el promedio
+    saldria entre las dos y no coincidiria con ningun valor elegido."""
+    predictor = _PredictorFalso(_geometria())
+    seleccion = {
+        "fid": ["VA", "VB"],
+        "filas": np.arange(4),
+        "instance_bag": np.array([0, 0, 1, 1]),
+        "n_bolsas": 2,
+        "n_obs": np.array([2, 9]),          # distinto n_obs -> distinto objetivo por bolsa
+    }
+    X = np.array([[90.0], [90.0], [1.0], [1.0]])
+    from chec_local_interpreter.vano_controls import Knob
+    knobs = [Knob(id="u_driver", label="u_driver", kind="numeric",
+                  feature_names=("u_driver",), bounds=(0.0, 100.0), categories=None,
+                  default=50.0, step=0.1)]
+
+    plan = plan_hacia_clase_minima(
+        predictor, X, seleccion=seleccion, feature_names=["u_driver"],
+        knobs=knobs, puntos=5, max_pasos=1,
+    )
+
+    for fid in ("VA", "VB"):
+        pasos = plan[fid]["pasos"]
+        if pasos:
+            assert plan[fid]["u_final"] == pytest.approx(float(pasos[-1]["valor"]))
+        else:
+            assert plan[fid]["u_final"] == pytest.approx(plan[fid]["u_base"])
