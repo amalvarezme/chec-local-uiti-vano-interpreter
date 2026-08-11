@@ -305,8 +305,9 @@ def cajas_seleccion(
     lado_minimo: float = 0.0,
     margen: float = 0.0,
 ) -> dict[str, Any]:
-    """The yellow selection box of row 1's map: one axis-aligned bounding box
-    per marked vano, as a GeoJSON `FeatureCollection` of `Polygon`s.
+    """The yellow selection box of row 1's map: one rectangle per marked vano,
+    TURNED to the vano's own direction, as a GeoJSON `FeatureCollection` of
+    `Polygon`s.
 
     It answers a question the class layers cannot: *which vano am I studying?*
     The marked vano is already drawn in its class colour over a white halo, but
@@ -326,11 +327,42 @@ def cajas_seleccion(
     what makes the highlight survive moving the window: a marked vano with no
     events in the active window has no class, but it still has coordinates.
 
+    The rectangle follows the INCLINATION of the vano instead of the north-south
+    axes. What that fixes is the THICKNESS of the highlight. The min/max
+    rectangle of a diagonal segment sticks out through the two corners the line
+    never reaches, and how far it sticks out depends on the vano's bearing and
+    length -- measured across all 59.776 traces, the axis-aligned box is 1,3
+    times wider than the band across the trace at the median, 4 times at p90 and
+    169 times at the worst. So the same marker looked like a tight sleeve on a
+    north-south vano and like a loose patch on a long diagonal one, and 52,8% of
+    the traces do run diagonally (20 to 70 degrees). Turned to the vano's own
+    bearing the width is `lado_minimo + 2 * margen` on every vano.
+
+    It does NOT meaningfully reduce which OTHER vanos fall inside the box: on
+    AGU23L14 the mean number of foreign traces the box touches is 2,98 either
+    way (the worst case does drop from 15 to 9, and the area from 1,00 to 0,80).
+    Neighbours in a network hang off the ENDS of a trace, and the turned box
+    still reaches its ends.
+
     `lado_minimo` (degrees) is the smallest side the box may have, opened
-    symmetrically around the vano. A vano that runs exactly north-south has a
-    zero-width bounding box, and zero width on a map is an invisible sliver.
-    `margen` (degrees) is added on every side afterwards, so the border of the
-    box does not fall on top of the vano's own line.
+    symmetrically about the vano. A trace has no thickness, so ACROSS the vano
+    the box always starts at zero, and zero width on a map is an invisible
+    sliver; opening it symmetrically leaves the trace on the box's axis instead
+    of glued to one edge. `margen` (degrees) is added on every side afterwards,
+    in the vano's own frame, so the border of the box does not fall on top of
+    the vano's own line.
+
+    Direction comes from the FIRST and LAST vertex. Measured on `MVLINSEC`: all
+    60.053 traces have exactly two vertices, so there is one unambiguous bearing
+    and nothing to fit. The 277 traces whose two vertices are the SAME point
+    have no bearing at all, and those fall back to the axis-aligned box: it is
+    the only honest rectangle to draw over a vano that points nowhere.
+
+    Rotation happens in raw degrees and not in a metric frame. Web Mercator
+    stretches latitude by 1/cos(lat), which shears the box off square -- but
+    measured over CHEC's latitudes (4,56 to 5,88) the worst deviation from a
+    right angle is 0,24 degrees, which on a 40 px box is 0,17 px of skew. Below
+    one pixel is below what a correction could show.
 
     Vanos are walked in `geo_circuito` order, so a fid marked in another
     circuit -- which has no coordinates here -- produces no box at all instead
@@ -341,16 +373,28 @@ def cajas_seleccion(
     for fid, lat, lon in zip(geo_circuito["fids"], geo_circuito["lat"], geo_circuito["lon"]):
         if fid not in marcados or not len(lat):
             continue
-        lat_min, lat_max = min(lat), max(lat)
-        lon_min, lon_max = min(lon), max(lon)
+        largo = math.hypot(lon[-1] - lon[0], lat[-1] - lat[0])
+        if largo:
+            # `u` corre CON el vano y `v` lo cruza. `v` es `u` girado 90 grados en
+            # sentido antihorario, asi que el anillo sale antihorario en lon/lat,
+            # que es el sentido que GeoJSON pide para el anillo exterior.
+            u = ((lon[-1] - lon[0]) / largo, (lat[-1] - lat[0]) / largo)
+            v = (-u[1], u[0])
+        else:
+            u, v = (1.0, 0.0), (0.0, 1.0)
+        origen = (lon[0], lat[0])
+        # Cada vertice, medido a lo largo (`s`) y a traves (`t`) del vano.
+        s = [(p - origen[0]) * u[0] + (q - origen[1]) * u[1] for p, q in zip(lon, lat)]
+        t = [(p - origen[0]) * v[0] + (q - origen[1]) * v[1] for p, q in zip(lon, lat)]
         # Se abre alrededor del CENTRO: crecer solo hacia un lado correria la caja
         # fuera del vano que esta senialando.
-        falta_lat = max(0.0, lado_minimo - (lat_max - lat_min)) / 2.0
-        falta_lon = max(0.0, lado_minimo - (lon_max - lon_min)) / 2.0
-        lat_min -= falta_lat + margen
-        lat_max += falta_lat + margen
-        lon_min -= falta_lon + margen
-        lon_max += falta_lon + margen
+        falta_s = max(0.0, lado_minimo - (max(s) - min(s))) / 2.0 + margen
+        falta_t = max(0.0, lado_minimo - (max(t) - min(t))) / 2.0 + margen
+        s_min, s_max = min(s) - falta_s, max(s) + falta_s
+        t_min, t_max = min(t) - falta_t, max(t) + falta_t
+        esquinas = [(s_min, t_min), (s_max, t_min), (s_max, t_max), (s_min, t_max)]
+        anillo = [[origen[0] + a * u[0] + b * v[0], origen[1] + a * u[1] + b * v[1]]
+                  for a, b in esquinas]
         features.append({
             "type": "Feature",
             "properties": {"fid": fid},
@@ -358,13 +402,7 @@ def cajas_seleccion(
                 "type": "Polygon",
                 # El anillo CIERRA repitiendo el primer vertice: un anillo abierto
                 # lo descarta MapLibre sin decir nada y no se dibuja ninguna caja.
-                "coordinates": [[
-                    [lon_min, lat_min],
-                    [lon_max, lat_min],
-                    [lon_max, lat_max],
-                    [lon_min, lat_max],
-                    [lon_min, lat_min],
-                ]],
+                "coordinates": [anillo + [anillo[0]]],
             },
         })
     return {"type": "FeatureCollection", "features": features}

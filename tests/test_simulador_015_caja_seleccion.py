@@ -1,8 +1,9 @@
 """Contract tests for notebook 06's yellow selection box.
 
 Clicking a vano on the base map (row 1) marks it, and a marked vano is
-enclosed in a translucent yellow bounding box so it stays findable on a
-circuit of hundreds of segments. The geometry of that box is
+enclosed in a translucent yellow box -- turned to the vano's own inclination
+-- so it stays findable on a circuit of hundreds of segments. The geometry of
+that box is
 `ventanas_015.cajas_seleccion`, covered by unit tests in
 `tests/test_ventanas_015.py`. What those unit tests cannot see is the WIRING:
 whether the notebook actually reaches that geometry, and whether it puts the
@@ -133,8 +134,10 @@ def test_the_notebook_redraw_feeds_the_layer_from_the_geometry(fuente):
 
 
 def test_the_minimum_side_is_wider_than_zero_so_a_north_south_vano_is_visible(fuente):
-    """A vano that runs exactly north-south has a zero-width bounding box, and
-    zero pixels wide is nothing at all on the map."""
+    """Across the trace the box starts at zero width -- a line has no thickness
+    -- and zero pixels wide is nothing at all on the map. With the box turned to
+    the vano this is the band's width on EVERY vano, not only on the ones that
+    happened to run along an axis."""
     lado = re.search(r"^LADO_MINIMO_CAJA = ([0-9.]+)$", fuente, re.M)
     margen = re.search(r"^MARGEN_CAJA = ([0-9.]+)$", fuente, re.M)
     opacidad = re.search(r"^OPACIDAD_CAJA_SELECCION = ([0-9.]+)$", fuente, re.M)

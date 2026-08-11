@@ -32,6 +32,7 @@ be exercised without ever touching the real 01.4 notebook.
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 import numpy as np
@@ -457,36 +458,95 @@ def _geo_cajas():
     return {
         "fids": ["VA", "VB", "VC"],
         # VB es un vano exactamente NORTE-SUR: su longitud no varia, asi que su
-        # caja envolvente cruda tendria ancho CERO.
+        # ancho a traves del trazo es CERO. VC corre a 45 grados exactos, que es
+        # donde una caja alineada a los ejes se separa mas de la direccion real.
         "lat": [[1.0, 1.2], [2.0, 2.4], [3.0, 3.1]],
         "lon": [[-75.0, -75.4], [-76.0, -76.0], [-77.0, -77.1]],
     }
 
 
-def test_cajas_seleccion_returns_one_bounding_box_per_marked_vano():
-    """El resaltado del vano seleccionado es su caja envolvente: el rectangulo
-    min/max de sus coordenadas, como un `Polygon` GeoJSON que la capa
-    `layout.map.layers` pinta debajo de las trazas. Un anillo de GeoJSON se
-    CIERRA -- el ultimo vertice repite el primero --; sin eso MapLibre descarta
-    el poligono en silencio y no se dibuja ninguna caja."""
-    cajas = cajas_seleccion(_geo_cajas(), marcados=["VA"])
+def _lados(anillo):
+    """Los cuatro lados del anillo como vectores (dlon, dlat)."""
+    return [(anillo[i + 1][0] - anillo[i][0], anillo[i + 1][1] - anillo[i][1])
+            for i in range(4)]
+
+
+def _distancia_al_trazo(punto, lon, lat):
+    """Distancia con signo del punto a la RECTA del vano, en grados."""
+    dlon, dlat = lon[-1] - lon[0], lat[-1] - lat[0]
+    largo = math.hypot(dlon, dlat)
+    return ((punto[0] - lon[0]) * -dlat + (punto[1] - lat[0]) * dlon) / largo
+
+
+def test_cajas_seleccion_returns_one_box_per_marked_vano():
+    """El resaltado del vano seleccionado es un rectangulo, como un `Polygon`
+    GeoJSON que la capa `layout.map.layers` pinta debajo de las trazas. Un
+    anillo de GeoJSON se CIERRA -- el ultimo vertice repite el primero --; sin
+    eso MapLibre descarta el poligono en silencio y no se dibuja ninguna caja."""
+    cajas = cajas_seleccion(_geo_cajas(), marcados=["VA"], lado_minimo=0.02)
 
     assert cajas["type"] == "FeatureCollection"
     (feature,) = cajas["features"]
     assert feature["properties"]["fid"] == "VA"
     anillo = feature["geometry"]["coordinates"][0]
     assert feature["geometry"]["type"] == "Polygon"
+    assert len(anillo) == 5
     assert anillo[0] == anillo[-1]
-    assert [round(v, 6) for v in anillo[0]] == [-75.4, 1.0]
-    assert sorted({round(lon, 6) for lon, _ in anillo}) == [-75.4, -75.0]
-    assert sorted({round(lat, 6) for _, lat in anillo}) == [1.0, 1.2]
 
 
-def test_cajas_seleccion_widens_a_degenerate_side_to_the_minimum():
-    """Un vano exactamente norte-sur (o este-oeste) tiene una caja envolvente de
-    lado CERO, que sobre el mapa es una franja invisible. `lado_minimo` la abre
-    de forma simetrica alrededor del vano, asi que la caja sigue centrada donde
-    esta el vano y solo el lado degenerado crece."""
+def test_cajas_seleccion_gira_la_caja_hasta_la_direccion_del_vano():
+    """La caja va INCLINADA como el vano y no alineada a los ejes.
+
+    Sobre un vano diagonal, el rectangulo min/max se sale por las dos esquinas
+    que el trazo no toca y encierra tramos vecinos que no son los marcados; el
+    usuario termina mirando un cuadro que abarca mas de lo que eligio.
+
+    La prueba dura es contar coordenadas distintas: una caja alineada a los ejes
+    solo tiene DOS longitudes y DOS latitudes; una girada tiene cuatro de cada.
+    """
+    cajas = cajas_seleccion(_geo_cajas(), marcados=["VC"], lado_minimo=0.02)
+
+    esquinas = cajas["features"][0]["geometry"]["coordinates"][0][:4]
+    assert len({round(lon, 9) for lon, _ in esquinas}) == 4
+    assert len({round(lat, 9) for _, lat in esquinas}) == 4
+    assert [[round(v, 9) for v in p] for p in esquinas] == [
+        [-76.992928932, 3.007071068],
+        [-77.092928932, 3.107071068],
+        [-77.107071068, 3.092928932],
+        [-77.007071068, 2.992928932],
+    ]
+
+
+def test_cajas_seleccion_deja_los_lados_paralelos_y_perpendiculares_al_trazo():
+    """Dos lados corren CON el vano y dos lo cruzan en angulo recto: es lo que
+    hace que la caja se lea como el resaltado de ese trazo y no como un cuadro
+    puesto encima."""
+    cajas = cajas_seleccion(_geo_cajas(), marcados=["VA"], lado_minimo=0.02)
+
+    anillo = cajas["features"][0]["geometry"]["coordinates"][0]
+    dlon, dlat = -0.4, 0.2
+    paralelos = [abs(a * dlat - b * dlon) for a, b in _lados(anillo)]
+    perpendiculares = [abs(a * dlon + b * dlat) for a, b in _lados(anillo)]
+    assert sum(v < 1e-12 for v in paralelos) == 2
+    assert sum(v < 1e-12 for v in perpendiculares) == 2
+
+
+def test_cajas_seleccion_abre_lado_minimo_a_lado_y_lado_del_trazo():
+    """A traves del vano el ancho es CERO -- un trazo no tiene grosor -- y sobre
+    el mapa eso es una franja invisible. `lado_minimo` lo abre de forma SIMETRICA,
+    asi que el trazo queda en el eje de la caja y no pegado a un borde."""
+    cajas = cajas_seleccion(_geo_cajas(), marcados=["VC"], lado_minimo=0.02)
+
+    esquinas = cajas["features"][0]["geometry"]["coordinates"][0][:4]
+    distancias = sorted(round(_distancia_al_trazo(p, [-77.0, -77.1], [3.0, 3.1]), 9)
+                        for p in esquinas)
+    assert distancias == [-0.01, -0.01, 0.01, 0.01]
+
+
+def test_cajas_seleccion_de_un_vano_norte_sur_no_cambia_con_el_giro():
+    """Un vano exactamente norte-sur ya corria sobre un eje, asi que girar la
+    caja a su direccion la deja donde estaba. Se fija para que el giro no se
+    cuele como un cambio en los vanos que ya estaban bien."""
     cajas = cajas_seleccion(_geo_cajas(), marcados=["VB"], lado_minimo=0.001)
 
     anillo = cajas["features"][0]["geometry"]["coordinates"][0]
@@ -498,12 +558,33 @@ def test_cajas_seleccion_widens_a_degenerate_side_to_the_minimum():
 
 def test_cajas_seleccion_adds_the_margin_on_every_side():
     """El margen despega la caja del trazo: sin el, el borde del rectangulo cae
-    justo encima de la linea del vano y no se distingue cual es cual."""
-    cajas = cajas_seleccion(_geo_cajas(), marcados=["VA"], margen=0.01)
+    justo encima de la linea del vano y no se distingue cual es cual. Se agrega
+    en el marco DEL VANO, asi que separa lo mismo por los cuatro lados."""
+    cajas = cajas_seleccion(_geo_cajas(), marcados=["VC"], lado_minimo=0.02,
+                            margen=0.005)
+
+    esquinas = cajas["features"][0]["geometry"]["coordinates"][0][:4]
+    distancias = sorted(round(_distancia_al_trazo(p, [-77.0, -77.1], [3.0, 3.1]), 9)
+                        for p in esquinas)
+    assert distancias == [-0.015, -0.015, 0.015, 0.015]
+    # A lo largo el trazo mide 0.141421 grados y la caja lo desborda 0.005 por
+    # cada punta, asi que la diagonal sale de 0.151421 por 0.03.
+    diagonal = max(math.dist(a, b) for a in esquinas for b in esquinas)
+    assert round(diagonal, 6) == round(math.hypot(math.hypot(0.1, 0.1) + 0.01, 0.03), 6)
+
+
+def test_cajas_seleccion_de_un_vano_sin_largo_vuelve_a_los_ejes():
+    """277 de los 60.053 tramos del shapefile tienen sus dos vertices en el MISMO
+    punto: no tienen direccion que seguir. Ahi la caja vuelve a alinearse con los
+    ejes en vez de fallar o de inventarse un rumbo, que es lo unico honesto que
+    se puede dibujar sobre un vano que no apunta a ninguna parte."""
+    geo = {"fids": ["VP"], "lat": [[4.0, 4.0]], "lon": [[-75.0, -75.0]]}
+
+    cajas = cajas_seleccion(geo, marcados=["VP"], lado_minimo=0.02)
 
     anillo = cajas["features"][0]["geometry"]["coordinates"][0]
-    assert sorted({round(lon, 6) for lon, _ in anillo}) == [-75.41, -74.99]
-    assert sorted({round(lat, 6) for _, lat in anillo}) == [0.99, 1.21]
+    assert sorted({round(lon, 9) for lon, _ in anillo}) == [-75.01, -74.99]
+    assert sorted({round(lat, 9) for _, lat in anillo}) == [3.99, 4.01]
 
 
 def test_cajas_seleccion_follows_the_geometry_order_and_ignores_foreign_fids():
@@ -1187,17 +1268,23 @@ def test_cajas_por_cambio_de_grupo_keeps_the_three_keys_when_empty():
 
 
 def test_cajas_por_cambio_de_grupo_uses_the_same_geometry_as_the_base_box():
-    """Mismo rectangulo que el del mapa base: los dos mapas comparten geometria,
-    y dos cajas de tamanio distinto sobre el mismo vano se leerian como dos
-    vanos."""
-    tabla = _tabla_simulada([("VB", 1, 1)])
+    """Mismo rectangulo que el del mapa base, INCLINACION incluida: los dos mapas
+    comparten geometria, y dos cajas de forma distinta sobre el mismo vano se
+    leerian como dos vanos.
+
+    Se prueba sobre VC, que corre en diagonal, y no sobre un vano norte-sur: ahi
+    el rectangulo min/max y el girado coinciden, asi que la prueba pasaria aunque
+    el mapa simulado se hubiera quedado con la caja alineada a los ejes."""
+    tabla = _tabla_simulada([("VC", 1, 1)])
 
     cajas = cajas_por_cambio_de_grupo(
-        _geo_cajas(), tabla, marcados=["VB"], lado_minimo=0.001, margen=0.01
+        _geo_cajas(), tabla, marcados=["VC"], lado_minimo=0.02, margen=0.005
     )
-    base = cajas_seleccion(_geo_cajas(), marcados=["VB"], lado_minimo=0.001, margen=0.01)
+    base = cajas_seleccion(_geo_cajas(), marcados=["VC"], lado_minimo=0.02, margen=0.005)
 
     assert cajas["igual"]["features"] == base["features"]
+    esquinas = cajas["igual"]["features"][0]["geometry"]["coordinates"][0][:4]
+    assert len({round(lon, 9) for lon, _ in esquinas}) == 4
 
 
 # --- El encuadre del mapa simulado sobre los vanos elegidos ---------------------------
