@@ -143,7 +143,10 @@ def test_build_context_envelope_shape_matches_allowed_helpers():
     assert isinstance(envelope["prompt"], str) and envelope["prompt"]
     assert envelope["context"] == context
 
-    assert set(envelope["allowed"].keys()) == {"dates", "critical_point_ids", "unavailable_columns"}
+    # `ventanas` entra al universo citable con la serie por ventana: sin declararla,
+    # el agente ve la serie en `context` pero no puede nombrar una sola ventana.
+    assert set(envelope["allowed"].keys()) == {
+        "dates", "critical_point_ids", "unavailable_columns", "ventanas"}
     assert sorted(envelope["allowed"]["dates"]) == sorted(allowed_dates(context))
     assert sorted(envelope["allowed"]["critical_point_ids"]) == sorted(allowed_critical_point_ids(context))
     assert sorted(envelope["allowed"]["unavailable_columns"]) == sorted(unavailable_columns(context))

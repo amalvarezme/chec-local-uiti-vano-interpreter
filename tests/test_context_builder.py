@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 from chec_local_interpreter.attribution import enrich_critical_points
-from chec_local_interpreter.context_builder import _compute_circuit_characterization, build_context_package
+from chec_local_interpreter.context_builder import _compute_circuit_characterization, build_context_package, window_series_records
 from chec_local_interpreter.critical_points import build_daily_series, compute_daily_features, detect_point_reasons, rank_critical_points
 from chec_local_interpreter.plotting import CRITICALITY_GROUP_LABELS
 
@@ -118,3 +119,63 @@ def test_compute_circuit_characterization_matches_shared_clustering_helper():
 
     for row in results:
         assert row["criticidad"] == expected.loc[row["circuito"], "criticidad"]
+
+
+# --- La serie del historiador va por VENTANAS, no por dias -------------------------------
+
+
+def test_window_series_covers_every_window_including_the_empty_ones():
+    """La ventana es la unidad de analisis de los cuadernos 04, 05 y 06 -- una bolsa
+    es (vano, ventana) --, y el historiador recibia una serie DIARIA. Peor: recortada
+    a 60 dias y filtrando los dias en cero, asi que describia los picos y no la serie.
+
+    Una ventana sin eventos es un dato, no un hueco: leer "hubo cinco ventanas
+    tranquilas seguidas" es distinto de no ver esas ventanas. El cuaderno 06 ya dibuja
+    su serie asi.
+    """
+    eventos = pd.DataFrame(
+        {
+            "CIRCUITO": ["C1", "C1", "C1"],
+            "FID_VANO": ["V1", "V1", "V2"],
+            "FECHA": ["2026-01-05", "2026-03-20", "2026-03-21"],
+            "UITI_VANO": [2.0, 5.0, 1.0],
+        }
+    )
+
+    serie = window_series_records(eventos, circuito="C1")
+
+    etiquetas = [r["w"] for r in serie]
+    assert len(etiquetas) == len(set(etiquetas)), "una ventana no puede repetirse"
+    # Enero y marzo tienen eventos; las ventanas intermedias van en cero y SIGUEN ahi.
+    assert any(r["uv"] == 0.0 and r["n"] == 0 for r in serie), (
+        "las ventanas sin eventos tienen que aparecer, en cero"
+    )
+    con_eventos = [r for r in serie if r["n"] > 0]
+    assert con_eventos, "las ventanas con eventos no pueden perderse"
+    assert sum(r["uv"] for r in serie) == pytest.approx(8.0)
+    assert sum(r["n"] for r in serie) == 3
+
+
+def test_window_series_is_empty_for_a_circuit_with_no_events():
+    eventos = pd.DataFrame(
+        {"CIRCUITO": ["C2"], "FID_VANO": ["V9"], "FECHA": ["2026-01-05"],
+         "UITI_VANO": [1.0]}
+    )
+
+    assert window_series_records(eventos, circuito="C1") == []
+
+
+def test_context_package_carries_the_window_series():
+    eventos = pd.DataFrame(
+        {"CIRCUITO": ["C1", "C1"], "FID_VANO": ["V1", "V1"],
+         "FECHA": ["2026-01-05", "2026-02-20"], "UITI_VANO": [2.0, 5.0]}
+    )
+    daily = build_daily_series(eventos)
+
+    paquete = build_context_package(
+        events_df=eventos, daily_df=daily, critical_points=[], critical_periods=[],
+        selected_circuitos=["C1"], start_date="2026-01-01", end_date="2026-03-01",
+    )
+
+    assert paquete["ventanas"], "el paquete del historiador tiene que traer las ventanas"
+    assert {"w", "uv", "n"} <= set(paquete["ventanas"][0])

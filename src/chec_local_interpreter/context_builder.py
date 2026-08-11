@@ -53,6 +53,76 @@ def daily_series_records(daily_df: pd.DataFrame, limit: int = 60) -> list[dict[s
     return records
 
 
+def window_series_records(
+    events_df: pd.DataFrame, *, circuito: str | None = None
+) -> list[dict[str, Any]]:
+    """La serie del circuito por VENTANA, completa, con cero donde no hubo eventos.
+
+    La ventana es la unidad de analisis del resto del flujo -- una bolsa del modelo MIL
+    es (vano, ventana), y de ahi salen las clases de criticidad --, asi que describir el
+    circuito por dia obliga a quien lee a traducir entre dos rejillas que no coinciden.
+
+    Va COMPLETA a proposito. `daily_series_records` recorta a 60 dias y descarta los que
+    quedan en cero, de modo que describe los picos y no la serie: "cinco ventanas
+    tranquilas seguidas" es una lectura que ahi no se puede hacer, porque esas ventanas
+    no estan. `construir_tabla_vano_ventana` agrega EVENTOS, asi que una ventana sin
+    fila no es una ventana sin medir, es una ventana sin eventos, y vale cero.
+    """
+    # `construir_tabla_vano_ventana` agrega por (CIRCUITO, FID_VANO, ventana). Sin esas
+    # columnas no hay serie por ventana que construir -- y eso NO es un fallo: hay
+    # caminos del reporte que entregan eventos ya agregados, sin identidad de vano.
+    # Se devuelve vacio y el paquete sigue armandose con el resto.
+    requeridas = {"FECHA", "CIRCUITO", "FID_VANO", "UITI_VANO"}
+    if events_df is None or events_df.empty or not requeridas <= set(events_df.columns):
+        return []
+    from chec_local_interpreter.ventanas_015 import (
+        construir_tabla_vano_ventana,
+        construir_ventanas,
+    )
+
+    df = events_df.copy()
+    df["FECHA"] = pd.to_datetime(df["FECHA"], errors="coerce")
+    # Los cortes de `construir_ventanas` son Timestamps SIN zona. Comparar contra una
+    # columna con zona levanta TypeError, y hay caminos del reporte que la traen asi.
+    if getattr(df["FECHA"].dtype, "tz", None) is not None:
+        df["FECHA"] = df["FECHA"].dt.tz_localize(None)
+    df = df[df["FECHA"].notna()]
+    # `construir_tabla_vano_ventana` descarta las filas con UITI en cero, asi que
+    # compara la columna contra un numero. Hay fixtures y caminos que la traen como
+    # texto, y ahi la comparacion levanta TypeError en vez de dar una serie vacia.
+    df["UITI_VANO"] = pd.to_numeric(df["UITI_VANO"], errors="coerce").fillna(0.0)
+    if df.empty:
+        return []
+
+    ventanas = construir_ventanas(df["FECHA"])
+    if circuito is not None:
+        df = df[df["CIRCUITO"].astype(str) == str(circuito)]
+        if df.empty:
+            return []
+    tabla = construir_tabla_vano_ventana(df, ventanas)
+
+    por_ventana: dict[int, tuple[float, int, int]] = {}
+    if not tabla.empty:
+        for vi, grupo in tabla.groupby("ventana_i"):
+            por_ventana[int(vi)] = (
+                _safe_float(grupo["uiti_acumulado"].sum()),
+                int(grupo["num_eventos"].sum()),
+                int(grupo["FID_VANO"].nunique()),
+            )
+
+    registros: list[dict[str, Any]] = []
+    for v in ventanas:
+        uv, n, vanos = por_ventana.get(int(v["i"]), (0.0, 0, 0))
+        registros.append({
+            "w": str(v["etiqueta"]),
+            "periodo": str(v["periodo"]),
+            "uv": uv,
+            "n": n,
+            "vanos": vanos,
+        })
+    return registros
+
+
 def window_summary(events_df: pd.DataFrame, daily_df: pd.DataFrame) -> dict[str, Any]:
     if daily_df.empty:
         return {
@@ -108,6 +178,12 @@ def build_context_package(
         },
         "summary": window_summary(events_df, daily_df),
         "daily": daily_series_records(daily_df),
+        # La serie por ventana, completa. `daily` se conserva para el detalle de los
+        # picos; `ventanas` es la que da la forma del periodo.
+        "ventanas": window_series_records(
+            events_df,
+            circuito=selected_circuitos[0] if len(selected_circuitos) == 1 else None,
+        ),
         "critical_points": critical_points,
         "critical_periods": critical_periods,
         "domain": domain_context_payload(),
