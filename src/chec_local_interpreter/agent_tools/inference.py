@@ -54,6 +54,7 @@ from chec_local_interpreter.inference_validation import (
     allowed_critical_point_ids,
     allowed_dates,
     allowed_scenario_names,
+    allowed_ventanas,
     allowed_variables,
     validar_provenance_inferencia,
     validar_respuesta_inferencia_strict,
@@ -109,6 +110,9 @@ def build_context(payload: dict[str, Any]) -> dict[str, Any]:
             "critical_point_ids": sorted(allowed_critical_point_ids(context)),
             "variables": sorted(allowed_variables(context)),
             "scenario_names": sorted(allowed_scenario_names(context)),
+            # El escenario ES una ventana desde el port al MIL: sin declararlas, el
+            # agente no puede nombrar la ventana de la que habla.
+            "ventanas": sorted(allowed_ventanas(context)),
         },
     }
 

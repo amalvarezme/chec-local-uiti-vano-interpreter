@@ -161,12 +161,10 @@ def test_build_context_envelope_shape_matches_allowed_helpers():
     assert isinstance(envelope["prompt"], str) and envelope["prompt"]
     assert envelope["context"] == context
 
+    # `ventanas` entra al universo citable: el escenario ES una ventana desde el
+    # port al MIL, y sin declararla el agente no puede nombrarla.
     assert set(envelope["allowed"].keys()) == {
-        "dates",
-        "critical_point_ids",
-        "variables",
-        "scenario_names",
-    }
+        "dates", "critical_point_ids", "variables", "scenario_names", "ventanas"}
     assert sorted(envelope["allowed"]["dates"]) == sorted(allowed_dates(context))
     assert sorted(envelope["allowed"]["critical_point_ids"]) == sorted(allowed_critical_point_ids(context))
     assert sorted(envelope["allowed"]["variables"]) == sorted(allowed_variables(context))

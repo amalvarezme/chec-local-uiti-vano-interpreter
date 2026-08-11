@@ -133,6 +133,55 @@ def allowed_variables(context: dict[str, Any]) -> set[str]:
     return {str(feature).strip().upper() for feature in context.get("features", []) or [] if str(feature).strip()}
 
 
+def allowed_ventanas(context: dict[str, Any]) -> set[str]:
+    """Las ventanas que el contexto declara. El escenario del informe ES una ventana
+    desde el port al MIL, asi que sin declararlas el agente no puede nombrar la ventana
+    de la que habla sin salirse del universo permitido."""
+    return {str(v).strip() for v in context.get("ventanas", []) or [] if str(v).strip()}
+
+
+# Terminos que nombran al MODELO y terminos que nombran el CONTEO DE EVENTOS. La guarda
+# salta cuando una misma frase junta los dos: el MIL predice UITI acumulado, y el conteo
+# es un EJE del espacio KMeans que fija la clase, no una salida suya.
+_TERMINOS_MODELO = (
+    "modelo", "mil", "predice", "predicho", "prediccion", "predicción",
+    "estima", "estimado", "simulador", "shap", "relevancia",
+)
+_TERMINOS_FRECUENCIA = (
+    "frecuencia de eventos", "cantidad de eventos", "numero de eventos",
+    "número de eventos", "conteo de eventos", "tasa de eventos",
+    "frecuencia de fallas", "n_obs", "n_apariciones",
+)
+_SEPARADOR_FRASE = re.compile(r"[.;\n]")
+
+
+def errores_de_metrica(data: dict[str, Any], context: dict[str, Any]) -> list[str]:
+    """Rechaza atribuir el conteo de eventos al modelo.
+
+    El MIL predice UITI acumulado. Sin esta guarda el agente escribe "el modelo indica
+    que esta variable eleva la frecuencia de eventos": una frase plausible, imposible de
+    distinguir de una correcta al leer el informe, y que el modelo no respalda. Es justo
+    el tipo de afirmacion que un validador atrapa y un lector no.
+
+    Se mira FRASE a frase y no el texto entero: la frecuencia sigue siendo un dato del
+    caso -- el historiador la reporta -- y prohibir mencionarla dejaria al agente sin
+    poder citar el contexto observado. Lo prohibido es colgarsela al modelo.
+    """
+    metrica = str(context.get("metrica", "uiti_acumulado"))
+    errores: list[str] = []
+    for texto in _flatten_strings(data):
+        for frase in _SEPARADOR_FRASE.split(str(texto)):
+            bajo = frase.lower()
+            if not any(term in bajo for term in _TERMINOS_FRECUENCIA):
+                continue
+            if any(term in bajo for term in _TERMINOS_MODELO):
+                errores.append(
+                    f"Atribuye el conteo de eventos al modelo, que predice "
+                    f"`{metrica}`: {frase.strip()[:120]}"
+                )
+    return errores
+
+
 def allowed_scenario_names(context: dict[str, Any]) -> set[str]:
     """Every scenario name the inference context actually built."""
     return {
@@ -195,6 +244,7 @@ def validar_respuesta_inferencia_strict(response_text: str, context: dict[str, A
                 errors.append(f"<root>: missing required property {key}")
 
     errors.extend(_guardrail_errors(data, context))
+    errors.extend(errores_de_metrica(data, context))
     return {"ok": not errors, "data": data if not errors else data, "errors": errors}
 
 
