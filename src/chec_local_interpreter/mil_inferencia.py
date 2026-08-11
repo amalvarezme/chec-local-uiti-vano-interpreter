@@ -321,6 +321,8 @@ def escenarios_de_circuito(
             recursos, circuito=circuito, ventana=ventana, top=top_variables)
         if not relevancia["vanos"]:
             continue
+        criticos = diagnostico_de_circuito(
+            recursos, circuito=circuito, ventana=ventana, top=top_vanos)
         escenarios.append({
             "nombre": f"{circuito} -- ventana {ventana}",
             "circuito": str(circuito),
@@ -329,8 +331,13 @@ def escenarios_de_circuito(
             "unidad": UNIDAD,
             "n_vanos": len(relevancia["vanos"]),
             "relevancia": relevancia,
-            "vanos_criticos": diagnostico_de_circuito(
-                recursos, circuito=circuito, ventana=ventana, top=top_vanos),
+            "vanos_criticos": criticos,
+            # La simulacion del informe mueve SOLO palancas de intervencion: es lo que
+            # sustenta una orden de trabajo. Trae el UITI medido contra el estimado y el
+            # grupo de criticidad en cada caso, mas el grafo diferencia de la seleccion.
+            "simulacion": simulacion_de_circuito(
+                recursos, circuito=circuito, ventana=ventana,
+                fids=[c["fid"] for c in criticos]),
         })
     return escenarios
 
@@ -388,6 +395,130 @@ def construir_contexto_inferencia_mil(
             ),
         },
     }
+
+
+GRUPO_INTERVENCION = "Intervencion"
+
+
+def knobs_de_intervencion(recursos: RecursosMIL) -> list[Any]:
+    """Solo las palancas que una cuadrilla puede ejecutar.
+
+    El informe sustenta una ORDEN DE TRABAJO. Un control de escenario -- lluvia,
+    viento, temperatura -- no se ejecuta: simularlo produce una caida de UITI que nadie
+    puede comprar, y presentada junto a la poda se lee como si fuera igual de
+    accionable. Las de escenario NO desaparecen del modelo: entran con el valor
+    observado de cada vano, que es lo que corresponde. Lo que no hacen es moverse.
+    """
+    return [k for k in recursos.knobs
+            if recursos.grupos_por_knob.get(k.id) == GRUPO_INTERVENCION]
+
+
+def simulacion_de_circuito(
+    recursos: RecursosMIL,
+    *,
+    circuito: str,
+    ventana: str,
+    fids: Sequence[str],
+    max_pasos: int = MAX_PASOS_PLAN,
+) -> dict[str, Any]:
+    """Que le pasa al UITI y al grupo de los vanos identificados si se interviene.
+
+    Devuelve, por vano, el UITI base y el simulado con su grupo de criticidad en cada
+    caso, mas el grafo DIFERENCIA de la seleccion. La diferencia y no los dos grafos:
+    el grafo reconstruido es casi todo pesos fijos del experto -- las compuertas solo
+    los reescalan --, asi que el antes y el despues se ven iguales lado a lado y el
+    efecto de la intervencion, que es lo unico que interesa, queda invisible.
+    """
+    from chec_local_interpreter.mil_simulador_015 import (
+        gates_de_bolsas,
+        grafo_de_gates,
+        grafo_diferencia,
+        plan_hacia_clase_minima,
+        simular_bolsas,
+    )
+
+    knobs = knobs_de_intervencion(recursos)
+    vacio = {"circuito": str(circuito), "ventana": str(ventana),
+             "solo_intervencion": True, "metrica": METRICA, "unidad": UNIDAD,
+             "knobs_usados": [k.id for k in knobs], "vanos": [], "grafo_diferencia": None}
+
+    fids = [str(f) for f in fids]
+    if not fids or not knobs:
+        return vacio
+
+    from chec_local_interpreter.mil_simulador_015 import seleccionar_bolsas
+
+    seleccion = seleccionar_bolsas(recursos.bag_index, circuito=str(circuito),
+                                   ventana=str(ventana), marcados=fids)
+    if not int(seleccion.get("n_bolsas", 0)):
+        return vacio
+
+    plan = plan_hacia_clase_minima(
+        recursos.modelo, recursos.X_inst, seleccion=seleccion,
+        feature_names=recursos.features, knobs=knobs, puntos=PUNTOS_REJILLA,
+        max_pasos=int(max_pasos), label_encoders=recursos.label_encoders,
+        max_values_imputed=recursos.max_values_imputed,
+    )
+    overrides = {
+        fid: [{"variable": paso["knob_id"], "valor": paso["valor"]}
+              for paso in entrada.get("pasos", [])]
+        for fid, entrada in plan.items()
+    }
+
+    tabla, meta = simular_bolsas(
+        recursos.modelo, recursos.X_inst, seleccion=seleccion,
+        feature_names=recursos.features, overrides_por_vano=overrides,
+        label_encoders=recursos.label_encoders,
+        max_values_imputed=recursos.max_values_imputed,
+    )
+
+    vanos = [
+        {
+            "fid": str(fila["FID_VANO"]),
+            "u_base": float(fila["u_base"]),
+            "u_simulado": float(fila["u_simulado"]),
+            "clase_base": int(fila["base_clase_idx"]),
+            "clase_simulada": int(fila["simulado_clase_idx"]),
+            "delta_grupo": int(fila["delta_riesgo_ordinal"]),
+            "pasos": list(plan.get(str(fila["FID_VANO"]), {}).get("pasos", [])),
+        }
+        for _, fila in tabla.iterrows()
+    ]
+
+    return {**vacio, "vanos": vanos,
+            "grafo_diferencia": _grafo_diferencia_de(recursos, seleccion, meta,
+                                                     gates_de_bolsas, grafo_de_gates,
+                                                     grafo_diferencia)}
+
+
+def _aristas_del_modelo(modelo: Any) -> Any | None:
+    """`edge_index` del artefacto MIL, o `None` si no lo expone.
+
+    Cuelga de `modelo.model`, NO de `modelo.model.base`. Buscarlo en el sitio
+    equivocado no revienta: se devuelve `None` y el informe pierde el panel del grafo
+    en silencio, sin un solo mensaje. Se aisla aqui para que el sitio correcto quede
+    en UN lugar y con su prueba.
+    """
+    return getattr(getattr(modelo, "model", None), "edge_index", None)
+
+
+def _grafo_diferencia_de(recursos, seleccion, meta, gates_de_bolsas, grafo_de_gates,
+                         grafo_diferencia) -> dict[str, Any] | None:
+    """El grafo diferencia, o `None` si el modelo no expone sus aristas.
+
+    Se aisla aqui porque depende de internals del artefacto (`edge_index`) que un
+    modelo futuro podria no traer: sin el, el informe pierde un panel, no la corrida.
+    """
+    edge_index = _aristas_del_modelo(recursos.modelo)
+    if edge_index is None or meta.get("X_simulado") is None:
+        return None
+    filas = np.asarray(seleccion["filas"], dtype=np.int64)
+    instance_bag = np.asarray(seleccion["instance_bag"], dtype=np.int64)
+    n_bolsas = int(seleccion["n_bolsas"])
+    X_base = np.asarray(recursos.X_inst[filas], dtype=np.float64)
+    g_base = gates_de_bolsas(recursos.modelo, X_base, instance_bag, n_bolsas)
+    g_sim = gates_de_bolsas(recursos.modelo, meta["X_simulado"], instance_bag, n_bolsas)
+    return grafo_diferencia(g_base, g_sim, edge_index, len(recursos.features))
 
 
 def resumen_de_modelo(recursos: RecursosMIL) -> dict[str, Any]:

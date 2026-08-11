@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from chec_local_interpreter.attribution import enrich_critical_points
-from chec_local_interpreter.context_builder import _compute_circuit_characterization, build_context_package, window_series_records
+from chec_local_interpreter.context_builder import _compute_circuit_characterization, build_context_package, vano_series_records, window_series_records
 from chec_local_interpreter.critical_points import build_daily_series, compute_daily_features, detect_point_reasons, rank_critical_points
 from chec_local_interpreter.plotting import CRITICALITY_GROUP_LABELS
 
@@ -179,3 +179,31 @@ def test_context_package_carries_the_window_series():
 
     assert paquete["ventanas"], "el paquete del historiador tiene que traer las ventanas"
     assert {"w", "uv", "n"} <= set(paquete["ventanas"][0])
+
+
+def test_vano_series_covers_every_window_for_each_identified_vano():
+    """La serie de los vanos que el diagnostico señalo, para verlos en el tiempo y no
+    solo en la ventana en que salieron criticos. Completa, con cero donde el vano no
+    registro eventos: una ventana tranquila de un vano critico es informacion -- dice
+    que el problema es reciente o intermitente, no cronico."""
+    eventos = pd.DataFrame({
+        "CIRCUITO": ["C1", "C1", "C1"],
+        "FID_VANO": ["V1", "V1", "V2"],
+        "FECHA": ["2026-01-05", "2026-03-20", "2026-01-06"],
+        "UITI_VANO": [2.0, 5.0, 1.0],
+    })
+
+    series = vano_series_records(eventos, circuito="C1", fids=["V1", "V2"])
+
+    assert [s["fid"] for s in series] == ["V1", "V2"], "en el orden pedido"
+    for s in series:
+        assert len(s["uv"]) == len(s["w"]) == len(s["n"])
+        assert any(u == 0.0 for u in s["uv"]), "las ventanas sin eventos van en cero"
+    assert sum(series[0]["uv"]) == pytest.approx(7.0)
+
+
+def test_vano_series_without_fids_is_empty():
+    eventos = pd.DataFrame({"CIRCUITO": ["C1"], "FID_VANO": ["V1"],
+                            "FECHA": ["2026-01-05"], "UITI_VANO": [1.0]})
+
+    assert vano_series_records(eventos, circuito="C1", fids=[]) == []

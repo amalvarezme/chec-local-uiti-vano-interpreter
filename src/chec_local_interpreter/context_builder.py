@@ -123,6 +123,47 @@ def window_series_records(
     return registros
 
 
+def vano_series_records(
+    events_df: pd.DataFrame, *, circuito: str, fids: Sequence[str]
+) -> list[dict[str, Any]]:
+    """Una serie por vano identificado, sobre la secuencia COMPLETA de ventanas.
+
+    El diagnostico señala vanos en UNA ventana. Verlos solo ahi no distingue un
+    problema cronico de uno que aparecio el mes pasado, y esas dos cosas se atienden
+    distinto. Las ventanas sin eventos van en cero, no ausentes: una ventana tranquila
+    de un vano critico es informacion, no un hueco.
+    """
+    fids = [str(f) for f in fids]
+    requeridas = {"FECHA", "CIRCUITO", "FID_VANO", "UITI_VANO"}
+    if not fids or events_df is None or events_df.empty or not requeridas <= set(events_df.columns):
+        return []
+
+    from chec_local_interpreter.ventanas_015 import (
+        construir_tabla_vano_ventana,
+        construir_ventanas,
+        series_temporal_vanos,
+    )
+
+    df = events_df.copy()
+    df["FECHA"] = pd.to_datetime(df["FECHA"], errors="coerce")
+    if getattr(df["FECHA"].dtype, "tz", None) is not None:
+        df["FECHA"] = df["FECHA"].dt.tz_localize(None)
+    df = df[df["FECHA"].notna()]
+    df["UITI_VANO"] = pd.to_numeric(df["UITI_VANO"], errors="coerce").fillna(0.0)
+    if df.empty:
+        return []
+
+    ventanas = construir_ventanas(df["FECHA"])
+    tabla = construir_tabla_vano_ventana(df, ventanas)
+    series = series_temporal_vanos(tabla, circuito=str(circuito), fids=fids,
+                                   n_ventanas=len(ventanas))
+    etiquetas = [str(v["etiqueta"]) for v in ventanas]
+    return [{"fid": str(s["fid"]), "w": etiquetas,
+             "uv": [float(u) for u in s["uiti"]],
+             "n": [int(e) for e in s["eventos"]]}
+            for s in series]
+
+
 def window_summary(events_df: pd.DataFrame, daily_df: pd.DataFrame) -> dict[str, Any]:
     if daily_df.empty:
         return {

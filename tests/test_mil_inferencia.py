@@ -20,12 +20,14 @@ import pytest
 
 from chec_local_interpreter.mil_inferencia import (
     RecursosMIL,
+    _aristas_del_modelo,
     construir_contexto_inferencia_mil,
     diagnostico_de_circuito,
     escenarios_de_circuito,
     knobs_desde_datos,
     relevancia_de_circuito,
     resumen_de_modelo,
+    simulacion_de_circuito,
     ventanas_de_circuito,
 )
 
@@ -275,3 +277,72 @@ def test_the_inference_context_survives_a_circuit_with_no_bags():
     assert contexto["escenarios"] == []
     assert contexto["ventanas"] == []
     assert contexto["modelo_tipo"] == "mil_bolsas"
+
+
+# --- La simulacion del informe: solo lo que una cuadrilla puede ejecutar ------------------
+
+
+def test_the_report_simulation_only_moves_intervention_levers():
+    """El informe sustenta una ORDEN DE TRABAJO. Un escenario -- lluvia, viento -- no se
+    ejecuta: incluirlo produce una caida de UITI que nadie puede comprar, y presentada
+    junto a la poda se lee como si fuera igual de accionable.
+
+    Las de escenario no desaparecen del modelo: entran con el valor observado de cada
+    vano, que es lo que corresponde. Lo que no hacen es moverse.
+    """
+    recursos = _recursos()
+    recursos.grupos_por_knob = {"u_driver": "Escenario"}
+
+    resultado = simulacion_de_circuito(recursos, circuito="C1", ventana="W1",
+                                       fids=["V2"])
+
+    assert resultado["knobs_usados"] == [], "un control de escenario no se mueve"
+    assert resultado["solo_intervencion"] is True
+
+
+def test_the_report_simulation_reports_base_and_simulated_uiti_and_class():
+    """Las dos barras del informe -- medido y estimado -- y el grupo de criticidad de
+    cada una. Sin la clase, una caida de UITI no dice si el vano cambio de grupo, que es
+    la unidad en la que se decide."""
+    recursos = _recursos()
+    recursos.grupos_por_knob = {"u_driver": "Intervencion"}
+
+    resultado = simulacion_de_circuito(recursos, circuito="C1", ventana="W1",
+                                       fids=["V2"])
+
+    assert resultado["knobs_usados"] == ["u_driver"]
+    fila = resultado["vanos"][0]
+    assert {"fid", "u_base", "u_simulado", "clase_base", "clase_simulada"} <= set(fila)
+    assert fila["u_simulado"] <= fila["u_base"], "la intervencion no puede empeorarlo"
+
+
+def test_the_report_simulation_without_marked_vanos_is_empty_not_the_whole_circuit():
+    """Sin vanos identificados no hay nada que simular. Caer al circuito completo
+    produciria un plan sobre vanos que el diagnostico no señalo, presentado como si
+    los hubiera señalado."""
+    recursos = _recursos()
+    recursos.grupos_por_knob = {"u_driver": "Intervencion"}
+
+    assert simulacion_de_circuito(recursos, circuito="C1", ventana="W1",
+                                  fids=[])["vanos"] == []
+
+
+def test_the_difference_graph_is_read_from_the_attribute_the_model_actually_has():
+    """`edge_index` cuelga de `modelo.model`, no de `modelo.model.base`.
+
+    Buscarlo en el sitio equivocado no revienta: la guarda devuelve `None` y el
+    informe pierde el panel EN SILENCIO. Medido contra el artefacto real, esa era la
+    diferencia entre un grafo y ningun grafo, sin un solo mensaje de error.
+    """
+    recursos = _recursos()
+    recursos.grupos_por_knob = {"u_driver": "Intervencion"}
+
+    class _ModeloConAristas:
+        edge_index = np.array([[0, 1], [1, 0]])
+
+    recursos.modelo.model = _ModeloConAristas()
+    recursos.modelo.device = "cpu"
+
+    assert _aristas_del_modelo(recursos.modelo) is not None
+    # Y en el sitio viejo NO esta, que es lo que hacia fallar la lectura.
+    assert getattr(getattr(recursos.modelo.model, "base", None), "edge_index", None) is None

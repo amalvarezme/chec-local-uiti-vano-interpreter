@@ -120,7 +120,11 @@ from chec_local_interpreter.config import (
     _modelo_mas_reciente,
     project_root,
 )
-from chec_local_interpreter.context_builder import build_context_package, save_json_artifact
+from chec_local_interpreter.context_builder import (
+    build_context_package,
+    save_json_artifact,
+    vano_series_records,
+)
 from chec_local_interpreter.costs import build_auto_simulation_cost_context, load_cost_items
 from chec_local_interpreter.critical_points import (
     build_daily_series,
@@ -499,6 +503,17 @@ def prepare(
             fecha_inicio=start,
             fecha_fin=end,
             fechas_interes=fechas_interes,
+        )
+        # La serie completa de los vanos que el diagnostico señalo. Verlos solo en la
+        # ventana en que salieron criticos no distingue un problema cronico de uno que
+        # aparecio el mes pasado, y esas dos cosas se atienden distinto.
+        _identificados = list(dict.fromkeys(
+            c["fid"]
+            for e in inference_context["escenarios"]
+            for c in e.get("vanos_criticos", [])
+        ))
+        inference_context["series_vanos_identificados"] = vano_series_records(
+            events_df, circuito=circuito, fids=_identificados
         )
 
     save_json_artifact(historical_context, run_dir / "historical.bc.json")
