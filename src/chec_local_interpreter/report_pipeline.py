@@ -92,7 +92,6 @@ from chec_impacto.interpretability.circuit_analysis import (
     KernelShapTopVarsExtractor,
     agrupar_por_vano,
     construir_contexto_escenario_inferencia,
-    construir_contexto_inferencia,
     construir_modos_chec,
     graficar_barras_y_radar,
 )
@@ -106,6 +105,13 @@ from chec_impacto.training import (
 from chec_local_interpreter.agent_output import ReportPipelineError, load_validated_agent_output
 from chec_local_interpreter.attribution import enrich_critical_points
 from chec_local_interpreter.circuit_identity import canonical_circuit_identity
+from chec_local_interpreter.mil_inferencia import (
+    METRICA as _METRICA_MIL,
+    UNIDAD as _UNIDAD_MIL,
+    cargar_recursos_mil,
+    construir_contexto_inferencia_mil,
+    knobs_desde_datos,
+)
 from chec_local_interpreter.config import (
     CriticalityThresholds,
     DEFAULT_DATA_PATH,
@@ -1179,6 +1185,36 @@ class ReportPreflight:
     fecha_fin: str
     event_count: int
 
+NOMBRE_MODELO_MIL = "mil_vano_ventana_v1.pt"
+"""El artefacto que produce `05_mil_vano_ventana.ipynb`."""
+
+
+def _contexto_inferencia_vacio(
+    circuito: str, fecha_inicio: str, fecha_fin: str, fechas_interes: list[str]
+) -> dict[str, Any]:
+    """El contexto cuando no hay artefacto del modelo en disco.
+
+    Declara el modelo y la unidad igual que el lleno, y `escenarios` vacio. Un contexto
+    sin esas claves obligaria al agente a adivinar sobre que trabaja, y un informe que
+    no distingue "el modelo no encontro nada" de "no habia modelo" es peor que uno que
+    no habla del modelo.
+    """
+    return {
+        "circuito_interes": str(circuito),
+        "fecha_inicio": str(fecha_inicio),
+        "fecha_fin": str(fecha_fin),
+        "fechas_interes": [str(f) for f in fechas_interes or []],
+        "modelo": _NO_SIMULATOR_MODEL_LABEL,
+        "modelo_tipo": "mil_bolsas",
+        "unidad": _UNIDAD_MIL,
+        "metrica": _METRICA_MIL,
+        "features": [],
+        "ventanas": [],
+        "escenarios": [],
+        "sin_artefacto_de_modelo": True,
+    }
+
+
 def preflight(
     circuito: str,
     fecha_inicio: str | None = None,
@@ -1307,7 +1343,18 @@ def prepare(
     # Loaded ONCE here and threaded into both simulators (design D2): the
     # inference/SHAP simulator and the automatic min/max simulator each used
     # to load their own copy of the same MGCECDL model.
-    model, rbf_sigma = _load_mgcecdl_model_and_sigma()
+    # El modelo del informe es el MIL por bolsas del cuaderno 05, el mismo que responde
+    # el tablero del 06. Antes era MGCECDL por fila: dos modelos contestando la misma
+    # pregunta, y un vano podia salir critico en uno y no en el otro sin que nada lo
+    # explicara. El catalogo de controles se construye del mismo dataset y se hereda del
+    # panel, para que informe y tablero ofrezcan las MISMAS palancas.
+    # La ruta sale de `DEFAULT_MODEL_DIR` y no de una constante propia: es el mismo
+    # directorio que el camino anterior consultaba, asi que apuntarlo a otro sitio
+    # sigue significando "esta corrida no tiene modelo" -- que es como se prueba el
+    # degradado y como se aisla una corrida de los artefactos del repo.
+    recursos_mil = cargar_recursos_mil(
+        ruta_modelo=Path(DEFAULT_MODEL_DIR) / NOMBRE_MODELO_MIL
+    )
     # Computed ONCE here and threaded into both simulators (design item 3):
     # `_run_inference_simulator`/`_compute_inference_scenarios` and
     # `_run_automatic_simulator` each used to independently recompute
@@ -1317,36 +1364,30 @@ def prepare(
     # model artifact never pays this cost for nothing.
     shared_inputs = (
         _prepare_shared_inference_inputs(source_path, DEFAULT_VARIABLES_SELECCION_PATH)
-        if model is not None
+        if recursos_mil is not None
         else None
     )
-    features, escenarios, modelo_label, rbf_sigma, render_assets = _run_inference_simulator(
-        model,
-        rbf_sigma,
-        circuito,
-        start,
-        end,
-        fechas_interes,
-        run_dir,
-        data_path=source_path,
-        shared_inputs=shared_inputs,
-    )
-    inference_context = construir_contexto_inferencia(
-        circuito_interes=circuito,
-        fecha_inicio=start,
-        fecha_fin=end,
-        fechas_interes=fechas_interes,
-        top_n_vanos=_TOP_N_VANOS_PERCENTILE,
-        top_k_vars=_TOP_K_VARS,
-        filtro_uiti_max=_FILTRO_UITI_MAX,
-        ventana_climatica_horas=_VENTANA_CLIMATICA_HORAS,
-        features=features,
-        base=events_df,
-        escenarios=escenarios,
-        modelo=modelo_label,
-        estimated_graph_rbf_sigma=rbf_sigma,
-        top_vanos_percentile=_TOP_N_VANOS_PERCENTILE,
-    )
+    if recursos_mil is not None and shared_inputs is not None:
+        recursos_mil.knobs, recursos_mil.grupos_por_knob = knobs_desde_datos(
+            shared_inputs.datos
+        )
+        recursos_mil.label_encoders = shared_inputs.datos.get("label_encoders", {})
+        recursos_mil.max_values_imputed = shared_inputs.datos.get("max_values_imputed", {})
+
+    # Sin artefacto del modelo el informe sigue saliendo, con la parte predictiva vacia:
+    # la misma forma de hueco que tenia el camino anterior (R3), para que la falta de un
+    # `.pt` no tumbe el diagnostico historico, que no lo necesita.
+    render_assets: dict[str, Any] = {}
+    if recursos_mil is None:
+        inference_context = _contexto_inferencia_vacio(circuito, start, end, fechas_interes)
+    else:
+        inference_context = construir_contexto_inferencia_mil(
+            recursos_mil,
+            circuito=circuito,
+            fecha_inicio=start,
+            fecha_fin=end,
+            fechas_interes=fechas_interes,
+        )
 
     save_json_artifact(historical_context, run_dir / "historical.bc.json")
     save_json_artifact(inference_context, run_dir / "inference.bc.json")
@@ -1381,13 +1422,18 @@ def prepare(
     # object passed to `_run_inference_simulator` above, guaranteeing this
     # simulator's `feature_scaler` is object-identical to the inference
     # simulator's.
+    # El simulador automatico corria un barrido min-max sobre MGCECDL. Ese barrido es
+    # exactamente lo que `relevancia_hacia_uiti_minimo` sustituyo en el cuaderno 06 --
+    # con signo, y mirando el INTERIOR del rango y no solo los extremos --, asi que su
+    # contenido ya vive en la relevancia de cada escenario. Se le pasa `None`, que es su
+    # no-op documentado, mientras la seccion se pliega sobre la tabla del MIL.
     _run_automatic_simulator(
         circuito,
         start,
         end,
         fechas_interes,
         run_dir,
-        model,
+        None,
         data_path=source_path,
         shared_inputs=shared_inputs,
     )

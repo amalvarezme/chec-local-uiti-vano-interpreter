@@ -335,6 +335,61 @@ def escenarios_de_circuito(
     return escenarios
 
 
+def construir_contexto_inferencia_mil(
+    recursos: RecursosMIL,
+    *,
+    circuito: str,
+    fecha_inicio: str,
+    fecha_fin: str,
+    fechas_interes: Sequence[str] = (),
+    ventanas: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """El contexto determinista que consume el agente de inferencia.
+
+    Declara EXPLICITAMENTE el modelo, la unidad y la metrica. El agente cita lo que el
+    contexto declara: sin la unidad escrita, redacta "esta variable pesa en este
+    circuito" cuando lo medido es "pesa en esta celda vano-ventana", y quien lee el
+    informe no tiene como notar la diferencia.
+
+    Conserva `nombre` por escenario porque es el universo citable que el validador
+    exige -- un escenario sin nombre no se puede referenciar sin inventar uno.
+    """
+    escenarios = escenarios_de_circuito(recursos, circuito=circuito, ventanas=ventanas)
+    resumen = resumen_de_modelo(recursos)
+    return {
+        "circuito_interes": str(circuito),
+        "fecha_inicio": str(fecha_inicio),
+        "fecha_fin": str(fecha_fin),
+        "fechas_interes": [str(f) for f in fechas_interes or []],
+        "modelo": resumen["modelo"],
+        "modelo_tipo": "mil_bolsas",
+        "unidad": UNIDAD,
+        "metrica": METRICA,
+        "n_bolsas": resumen["n_bolsas"],
+        "n_instancias": resumen["n_instancias"],
+        "n_features": resumen["n_features"],
+        "features": list(recursos.features),
+        "n_controles": len(recursos.knobs),
+        "ventanas": ventanas_de_circuito(recursos, circuito=circuito)
+                    if ventanas is None else
+                    [v for v in ventanas_de_circuito(recursos, circuito=circuito)
+                     if v in {str(x) for x in ventanas}],
+        "escenarios": escenarios,
+        "metadata": {
+            # Lo que el agente NO puede afirmar, escrito donde lo va a leer.
+            "uiti_es_objetivo": True,
+            "eventos_no_son_objetivo": (
+                "El conteo de eventos es un EJE del espacio KMeans que fija la clase, "
+                "no una salida del modelo: este contexto no lo explica."
+            ),
+            "grafo_del_modelo": (
+                "El grafo se reconstruye de las compuertas del propio MIL, no de una "
+                "aproximacion RBF sobre otro modelo."
+            ),
+        },
+    }
+
+
 def resumen_de_modelo(recursos: RecursosMIL) -> dict[str, Any]:
     """Lo que el informe imprime sobre el modelo que lo respalda.
 

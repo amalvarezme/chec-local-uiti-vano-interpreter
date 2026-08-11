@@ -20,6 +20,7 @@ import pytest
 
 from chec_local_interpreter.mil_inferencia import (
     RecursosMIL,
+    construir_contexto_inferencia_mil,
     diagnostico_de_circuito,
     escenarios_de_circuito,
     knobs_desde_datos,
@@ -239,3 +240,38 @@ def test_knobs_come_from_the_dataset_and_drop_the_refuted_ones():
     assert "NR_T" in ids
     assert "X2" not in ids, "las variables refutadas no son palancas"
     assert grupos.get("NR_T") in {"Intervencion", "Escenario"}
+
+
+def test_the_inference_context_declares_the_model_the_unit_and_the_metric():
+    """El agente de inferencia cita lo que el contexto declara. Si el contexto no dice
+    en que unidad trabaja el modelo, el agente escribe "la variable X pesa en este
+    circuito" cuando lo medido es "pesa en esta celda vano-ventana", y nadie que lea el
+    informe puede notar la diferencia.
+    """
+    recursos = _recursos()
+
+    contexto = construir_contexto_inferencia_mil(
+        recursos, circuito="C1", fecha_inicio="2026-01-01", fecha_fin="2026-03-01",
+        fechas_interes=["2026-02-01"],
+    )
+
+    assert contexto["modelo_tipo"] == "mil_bolsas"
+    assert contexto["unidad"] == "bolsa (vano, ventana)"
+    assert contexto["metrica"] == "uiti_acumulado"
+    assert "mgcecdl" not in str(contexto).lower()
+    # `nombre` por escenario es lo que el validador usa como universo citable.
+    assert all("nombre" in e for e in contexto["escenarios"])
+    assert contexto["ventanas"] == ["W1"]
+
+
+def test_the_inference_context_survives_a_circuit_with_no_bags():
+    recursos = _recursos()
+
+    contexto = construir_contexto_inferencia_mil(
+        recursos, circuito="NO_EXISTE", fecha_inicio="2026-01-01",
+        fecha_fin="2026-03-01", fechas_interes=[],
+    )
+
+    assert contexto["escenarios"] == []
+    assert contexto["ventanas"] == []
+    assert contexto["modelo_tipo"] == "mil_bolsas"
