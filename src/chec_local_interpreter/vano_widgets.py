@@ -92,9 +92,15 @@ def _clase_selector():
         value = traitlets.Tuple()
 
         def __init__(self, opciones=(), *, titulo="", alto="132px",
-                     ancho_casilla="96px", maximo=None, columnas=None, **kwargs):
+                     ancho_casilla="96px", maximo=None, columnas=None,
+                     tooltips=None, **kwargs):
             super().__init__(**kwargs)
             self.casillas = {}
+            # `clave -> texto` que el navegador muestra al posar el mouse sobre la
+            # casilla. Vive en el selector y no en las opciones porque `poblar` se
+            # vuelve a llamar al cambiar de circuito: colgado de la lista de
+            # opciones, el tooltip se perderia en el primer cambio.
+            self.tooltips = dict(tooltips or {})
             self._silencio = False
             # Corta la reentrada cuando el observer de `value` reescribe `value` para
             # dejarlo en el orden y el tope de las casillas.
@@ -131,6 +137,7 @@ def _clase_selector():
                 self.casillas = {
                     clave: widgets.Checkbox(
                         value=False, description=etiqueta, indent=False,
+                        tooltip=self.tooltips.get(clave, ""),
                         # Ancho explicito y no via CSS: el `layout` viaja como estilo
                         # inline y le gana a cualquier hoja de estilos sin `!important`,
                         # asi que mezclar los dos deja columnas impredecibles. 96 px es
@@ -174,6 +181,7 @@ def _clase_selector():
                     for etiqueta, clave in _pares_de_opciones(opciones):
                         caja = widgets.Checkbox(
                             value=False, description=etiqueta, indent=False,
+                            tooltip=self.tooltips.get(clave, ""),
                             layout=widgets.Layout(width=self._ancho_casilla,
                                                   margin="0 0 0 0"),
                         )

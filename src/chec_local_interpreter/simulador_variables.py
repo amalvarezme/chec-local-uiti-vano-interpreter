@@ -61,6 +61,8 @@ VEREDICTOS: tuple[str, ...] = (
 # no hay que tocar, donde se lee como una lista de advertencias.
 _ORDEN = {veredicto: i for i, veredicto in enumerate(VEREDICTOS)}
 SIN_EVALUAR = "Sin evaluar"
+_MOTIVO_SIN_JUICIO = ("Sin veredicto en `JUICIO_SIMULACION`: agregarlo antes de ofrecer "
+                      "esta variable como palanca.")
 
 # Veredicto y motivo por variable. La descripcion entre comillas de cada motivo es
 # la del diccionario del proyecto, `data/Variables_seleccion.xlsx`.
@@ -365,11 +367,42 @@ def rotulo_en_barra(
     return ""
 
 
+def definicion_de_knob(knob: Knob) -> str:
+    """Que ES esta variable, en una linea, para el tooltip de su casilla.
+
+    El panel del cuaderno 06 ofrece las variables como casillas, y en una casilla
+    solo cabe el nombre. El veredicto y el motivo de `JUICIO_SIMULACION` -- lo unico
+    que dice si mover esa variable representa una obra, un escenario o nada --
+    vivian solo en la tabla de la celda 8, arriba y lejos del sitio donde se elige.
+    Al pasar el mouse por la casilla se lee ahi mismo.
+
+    Se arma de la MISMA fuente que esa tabla y no de un texto aparte: dos redacciones
+    de la misma decision se separan en cuanto alguien edita una sola.
+    """
+    veredicto, motivo = JUICIO_SIMULACION.get(knob.id, (SIN_EVALUAR, _MOTIVO_SIN_JUICIO))
+    partes = [f"{veredicto}. {motivo}"]
+    unidad = UNIDADES.get(knob.id, "")
+    if knob.kind == "numeric" and knob.bounds is not None:
+        rango = f"Rango observado: {float(knob.bounds[0]):,.4g} a {float(knob.bounds[1]):,.4g}"
+        partes.append(f"{rango} {unidad}".strip() + ".")
+    elif unidad:
+        partes.append(f"Unidad: {unidad}.")
+    if knob.categories:
+        partes.append("Opciones: " + " | ".join(knob.categories) + ".")
+    # Una familia climatica es UN control que mueve doce columnas del modelo. Sin
+    # decirlo, "Precipitacion" se lee como una sola variable.
+    if len(knob.feature_names) > 1:
+        partes.append(f"Controla {len(knob.feature_names)} columnas del modelo.")
+    return " ".join(partes)
+
+
+def definiciones_de_knobs(knobs: Iterable[Knob]) -> dict[str, str]:
+    """`knob_id -> definicion`, tal como lo consume el selector de casillas."""
+    return {knob.id: definicion_de_knob(knob) for knob in knobs}
+
+
 def _fila(knob: Knob) -> dict[str, object]:
-    veredicto, motivo = JUICIO_SIMULACION.get(
-        knob.id, (SIN_EVALUAR, "Sin veredicto en `JUICIO_SIMULACION`: agregarlo antes "
-                               "de ofrecer esta variable como palanca.")
-    )
+    veredicto, motivo = JUICIO_SIMULACION.get(knob.id, (SIN_EVALUAR, _MOTIVO_SIN_JUICIO))
     limites = knob.bounds if knob.kind == "numeric" else None
     return {
         "Variable": knob.label,

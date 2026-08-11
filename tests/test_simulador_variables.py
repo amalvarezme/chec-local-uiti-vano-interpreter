@@ -32,10 +32,12 @@ from chec_local_interpreter.simulador_variables import (
     abreviatura,
     ancho_px,
     columnas_panel,
+    definicion_de_knob,
     iniciales,
     knobs_bloqueados,
     knobs_simulables,
     rotulo_en_barra,
+    SIN_EVALUAR,
     tabla_variables_simulables,
 )
 from chec_local_interpreter.vano_controls import Knob
@@ -440,3 +442,41 @@ def test_the_uppercase_initials_are_measured_wider_than_the_mixed_case_summary()
     assert ancho_px("NR") >= 11.55
     assert ancho_px("kWh trafo") >= 39.42
     assert ancho_px("Crit. apoyo") >= 44.18
+
+
+# --- La definicion que el panel muestra al pasar el mouse --------------------------------
+
+
+def test_definicion_de_knob_carries_the_verdict_and_the_reason():
+    """La casilla del panel solo tiene sitio para el nombre. El motivo de
+    `JUICIO_SIMULACION` es lo unico que dice QUE ES la variable y por que se puede
+    -- o no se debe -- mover, y hasta ahora vivia unicamente en la tabla de la
+    celda 8, lejos del sitio donde se elige."""
+    knob = _knob("NR_T", bounds=(0.0, 3.0))
+
+    texto = definicion_de_knob(knob)
+
+    veredicto, motivo = JUICIO_SIMULACION["NR_T"]
+    assert texto.startswith(veredicto)
+    assert motivo in texto
+
+
+def test_definicion_de_knob_adds_the_unit_and_the_range_when_it_has_them():
+    knob = _knob("clima:prep", label="Precipitacion", bounds=(0.0, 42.5))
+
+    texto = definicion_de_knob(knob)
+
+    assert UNIDADES["clima:prep"] in texto
+    assert "42.5" in texto or "42,5" in texto
+
+
+def test_definicion_de_knob_says_so_when_the_variable_was_never_judged():
+    """Una variable nueva del modelo no puede salir con una definicion en blanco:
+    eso se lee como que no tiene nada que explicar, en vez de como que nadie la
+    reviso todavia."""
+    knob = _knob("VARIABLE_NUEVA", label="Variable nueva", bounds=(0.0, 1.0))
+
+    texto = definicion_de_knob(knob)
+
+    assert SIN_EVALUAR in texto
+    assert texto.strip()

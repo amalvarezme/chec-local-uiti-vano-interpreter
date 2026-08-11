@@ -508,3 +508,52 @@ def test_clearing_value_unticks_everything():
 
     assert not any(caja.value for caja in selector.casillas.values())
     assert not any(caja.disabled for caja in selector.casillas.values())
+
+
+# --- La definicion de cada variable, al pasar el mouse ------------------------------------
+
+
+def test_the_checkbox_list_hangs_a_tooltip_on_each_key_that_has_one():
+    """El panel del 06 ofrece 26 variables como casillas y en la casilla solo cabe
+    el nombre. Sin el tooltip, saber que es `NR_T` obliga a subir a la tabla de la
+    celda 8, que esta fuera de la pantalla cuando se esta eligiendo."""
+    from chec_local_interpreter.vano_widgets import construir_selector_casillas
+
+    selector = construir_selector_casillas(
+        [("Vegetacion", "NR_T"), ("Precipitacion", "clima:prep")],
+        tooltips={"NR_T": "Nivel de riesgo por vegetacion."},
+    )
+
+    assert selector.casillas["NR_T"].tooltip == "Nivel de riesgo por vegetacion."
+    # Una clave sin definicion no inventa una: el tooltip vacio no muestra nada.
+    assert not selector.casillas["clima:prep"].tooltip
+
+
+def test_the_column_layout_carries_the_tooltips_too():
+    """El selector de variables del 06 se construye por COLUMNAS, no como lista
+    corrida, asi que un tooltip que solo funcione en la lista plana no llega al
+    unico sitio donde hace falta."""
+    from chec_local_interpreter.vano_widgets import construir_selector_casillas
+
+    selector = construir_selector_casillas(
+        columnas=[("Intervencion", [("Vegetacion", "NR_T")]),
+                  ("Escenario", [("Precipitacion", "clima:prep")])],
+        tooltips={"NR_T": "Es el plan de poda.", "clima:prep": "Lluvia acumulada."},
+    )
+
+    assert selector.casillas["NR_T"].tooltip == "Es el plan de poda."
+    assert selector.casillas["clima:prep"].tooltip == "Lluvia acumulada."
+
+
+def test_repopulating_keeps_the_tooltips():
+    """`poblar` se vuelve a llamar al cambiar de circuito. Si los tooltips se
+    perdieran ahi, funcionarian solo hasta el primer cambio -- que es peor que no
+    tenerlos, porque nadie vuelve a probar algo que ya vio funcionar."""
+    from chec_local_interpreter.vano_widgets import construir_selector_casillas
+
+    selector = construir_selector_casillas(
+        [("Vegetacion", "NR_T")], tooltips={"NR_T": "Es el plan de poda."})
+
+    selector.poblar([("Vegetacion", "NR_T"), ("Otra", "OTRA")])
+
+    assert selector.casillas["NR_T"].tooltip == "Es el plan de poda."
