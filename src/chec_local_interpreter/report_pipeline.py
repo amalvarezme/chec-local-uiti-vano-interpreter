@@ -109,6 +109,7 @@ from chec_local_interpreter.mil_inferencia import (
     construir_contexto_inferencia_mil,
     knobs_desde_datos,
 )
+from chec_local_interpreter.mil_figuras import figuras_de_escenario
 from chec_local_interpreter.config import (
     CriticalityThresholds,
     DEFAULT_DATA_PATH,
@@ -516,6 +517,29 @@ def prepare(
             events_df, circuito=circuito, fids=_identificados
         )
 
+        # Los cuatro paneles por escenario. Se dibujan aqui y no en `render` porque
+        # `render` no vuelve a cargar el modelo ni a recalcular nada: solo compone lo
+        # que `prepare` dejo en disco.
+        _series_por_fid = {s["fid"]: s
+                           for s in inference_context["series_vanos_identificados"]}
+        for _escenario in inference_context["escenarios"]:
+            _fids = [c["fid"] for c in _escenario.get("vanos_criticos", [])]
+            try:
+                render_assets[_escenario["ventana"]] = figuras_de_escenario(
+                    _escenario,
+                    series=[_series_por_fid[f] for f in _fids if f in _series_por_fid],
+                    destino=run_dir / "inference_figures",
+                    features=inference_context.get("features", []),
+                )
+            except OSError as exc:
+                # Un fallo de disco dibujando un panel no puede tumbar una corrida que
+                # ya tiene su diagnostico: se avisa y el informe sale sin esa figura.
+                warnings.warn(
+                    f"No se pudieron escribir las figuras del escenario "
+                    f"'{_escenario.get('nombre')}': {exc}. El informe sale sin ellas.",
+                    stacklevel=2,
+                )
+
     save_json_artifact(historical_context, run_dir / "historical.bc.json")
     save_json_artifact(inference_context, run_dir / "inference.bc.json")
     if render_assets:
@@ -689,9 +713,14 @@ def _build_inference_results(run_dir: Path) -> dict[str, Any] | None:
             continue
         nombre = asset.get("nombre")
         inference_results[scenario_key] = {
-            "fig_barras": _resolve(asset.get("fig_barras_png")),
-            "fig_radar": _resolve(asset.get("fig_radar_png")),
-            "grafo_interactivo": _resolve(asset.get("grafo_interactivo_html")),
+            # Los cuatro paneles del MIL. `fig_barras` conserva su nombre porque el
+            # renderizador ya lo pinta: es la relevancia, que es lo que ocupaba el
+            # sitio de las barras SHAP.
+            "fig_barras": _resolve(asset.get("relevancia_png")),
+            "fig_serie": _resolve(asset.get("serie_png")),
+            "fig_uiti": _resolve(asset.get("uiti_png")),
+            "fig_grafo": _resolve(asset.get("grafo_png")),
+            "grafo_motivo": asset.get("grafo_motivo") or "",
             "contexto": escenarios_by_nombre.get(nombre, {}),
         }
     return inference_results

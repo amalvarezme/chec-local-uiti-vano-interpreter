@@ -2489,15 +2489,30 @@ def render_llm_analysis(
             if not isinstance(result, dict):
                 return ""
             interpretacion = _scenario_interpretation(result)
-            html_barras = _figure_html(result.get("fig_barras"), f"Barras - {heading}")
-            html_radar = _figure_html(result.get("fig_radar"), f"Radar - {heading}")
+            # Los cuatro paneles del MIL, en el orden en que se leen: primero DONDE y
+            # CUANDO (la serie), luego QUE mover (relevancia), luego CUANTO cambia
+            # (UITI medido contra estimado, con su grupo) y por ultimo que movio en el
+            # grafo. El par barras/radar de SHAP se fue con MGCECDL.
+            html_serie = _figure_html(result.get("fig_serie"), f"Serie - {heading}")
+            html_barras = _figure_html(result.get("fig_barras"), f"Relevancia - {heading}")
+            html_uiti = _figure_html(result.get("fig_uiti"), f"UITI - {heading}")
+            html_grafo = _figure_html(result.get("fig_grafo"), f"Grafo - {heading}")
 
             html_parts = [f"<h3>{_escape(heading)}</h3>"]
             if interpretacion:
                 html_parts.append(f"<div class='content-box'>{_text_to_items(interpretacion)}</div>")
+            # Un grafo ausente se EXPLICA. Callarlo se lee como que la intervencion no
+            # movio nada, que es lo contrario de "no hay vanos suficientes para
+            # reconstruirlo".
+            if not html_grafo and result.get("grafo_motivo"):
+                html_parts.append(
+                    f"<div class='content-box'><em>{_escape(result['grafo_motivo'])}</em></div>"
+                )
             chart_panels = [
-                _chart_panel(f"Barras - {heading}", html_barras),
-                _chart_panel(f"Radar - {heading}", html_radar),
+                _chart_panel(f"Serie por ventana - {heading}", html_serie),
+                _chart_panel(f"Relevancia - {heading}", html_barras),
+                _chart_panel(f"UITI medido vs estimado - {heading}", html_uiti),
+                _chart_panel(f"Grafo diferencia - {heading}", html_grafo),
             ]
             html_parts.append(f"<div class='chart-grid two-col'>{''.join(panel for panel in chart_panels if panel)}</div>")
             return "\n".join(html_parts)
