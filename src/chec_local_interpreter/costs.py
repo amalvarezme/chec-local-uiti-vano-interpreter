@@ -9,9 +9,15 @@ from typing import Any
 import pandas as pd
 
 
-DEFAULT_COST_ITEMS_PATH = Path("data/COSTOS ITEMS CONTRATOS.xlsx")
-ITEM_COLUMN_CANDIDATES = ["Etiquetas de fila", "item", "descripcion", "descripción"]
-COST_COLUMN_CANDIDATES = ["Promedio de UNITCOST", "unitcost", "costo", "valor"]
+# El libro de precios del contrato es `Actividades_mantenimiento_costos_2026.xlsx`.
+# Reemplazo a `COSTOS ITEMS CONTRATOS.xlsx`, que se retiro del proyecto: no comparten
+# ni una cabecera -- el viejo traia `Etiquetas de fila` y `Promedio de UNITCOST`, y el
+# de 2026 trae `Actividad` y `COSTO` --, asi que los nombres viejos ya no se buscan.
+DEFAULT_COST_ITEMS_PATH = Path("data/Actividades_mantenimiento_costos_2026.xlsx")
+# `Actividad` va PRIMERA: el libro de 2026 tambien trae `Descripción de la actividad`,
+# y una lista que empezara por el nombre generico podria enganchar la columna larga.
+ITEM_COLUMN_CANDIDATES = ["Actividad", "item", "descripcion", "descripción"]
+COST_COLUMN_CANDIDATES = ["COSTO", "costo", "unitcost", "valor"]
 
 VARIABLE_COST_KEYWORDS: dict[str, list[str]] = {
     "CNT_TRF": ["transformador", "bajantes", "transporte transformador"],
@@ -199,7 +205,7 @@ def build_auto_simulation_cost_context(
 
     return {
         "disponible": bool(coincidencias),
-        "metodo": "Coincidencia determinística por tokens entre variables sensibles y descripciones de COSTOS ITEMS CONTRATOS.xlsx.",
+        "metodo": "Coincidencia determinística por tokens entre variables sensibles y actividades de Actividades_mantenimiento_costos_2026.xlsx.",
         "advertencias": [] if coincidencias else ["No se encontraron ítems de costo cercanos para las variables simuladas."],
         "coincidencias": coincidencias,
     }

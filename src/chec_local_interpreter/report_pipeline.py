@@ -126,7 +126,6 @@ from chec_local_interpreter.context_builder import (
     save_json_artifact,
     vano_series_records,
 )
-from chec_local_interpreter.costs import build_auto_simulation_cost_context, load_cost_items
 from chec_local_interpreter.critical_points import (
     build_daily_series,
     compute_daily_features,
@@ -197,10 +196,6 @@ _PDF_DISCUSSIONS_GLOB = "tabla_pdfs_intervalo_*.xlsx"
 # `02_local_uiti_vano_interpretability_v3.ipynb`).
 _TOP_K_PDF_DATE_MATCHES = 10
 
-# Same `COSTOS ITEMS CONTRATOS.xlsx` file the deprecated notebook read via
-# `COST_ITEMS_EXCEL_PATH` (cell ~59), resolved absolute against `project_root()`
-# rather than `costs.DEFAULT_COST_ITEMS_PATH`'s cwd-relative default.
-DEFAULT_COST_ITEMS_PATH = project_root() / "data" / "COSTOS ITEMS CONTRATOS.xlsx"
 
 def _read_json(path: Path) -> Any:
     return json.loads(Path(path).read_text(encoding="utf-8"))

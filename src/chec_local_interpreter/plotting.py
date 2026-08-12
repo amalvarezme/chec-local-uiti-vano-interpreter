@@ -1281,7 +1281,7 @@ def render_expert_alignment_tab(
         parts = [
             "<h4>Costos aproximados por ítems de contrato</h4>",
             "<p class='muted'>Los costos se estiman por cercanía textual entre variables sensibles del simulador "
-            "y apartados del archivo COSTOS ITEMS CONTRATOS.xlsx. Son referencias para discusión económica, "
+            "y actividades del archivo Actividades_mantenimiento_costos_2026.xlsx. Son referencias para discusión económica, "
             "no presupuestos cerrados ni causalidad de intervención.</p>",
         ]
         if prioritized_variables:

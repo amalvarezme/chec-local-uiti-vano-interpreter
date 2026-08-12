@@ -234,7 +234,7 @@ joblib.dump({'knobs': ns['KNOBS'], 'feature_names': ns['feature_names'],
             SALIDA / 'catalogo.joblib', compress=3)
 for origen in (RAIZ / 'data/derived/geometrias_014.json',
                RAIZ / 'data/models/mil_vano_ventana_v1.pt',
-               RAIZ / 'data/COSTOS ITEMS CONTRATOS.xlsx'):
+               RAIZ / 'data/Actividades_mantenimiento_costos_2026.xlsx'):
     shutil.copy2(origen, SALIDA / origen.name)
 
 # El manifiesto es lo que permite comprobar en el arranque de la app que el paquete
@@ -342,7 +342,7 @@ print(f'{len(feature_names)} features (del paquete; el CSV no se abre en la app)
 Keep `DATA_PATH`, `VARIABLES_SELECCION_PATH` and `MODEL_DIR` defined but repoint the two that
 are still read:
 ```python
-COSTOS_ITEMS_PATH = PAQUETE / 'COSTOS ITEMS CONTRATOS.xlsx'
+COSTOS_ITEMS_PATH = PAQUETE / 'Actividades_mantenimiento_costos_2026.xlsx'
 MODEL_DIR = PAQUETE
 ```
 `context_df`, `Xdf` and `n_filas_x` must **not** be defined. That is the point of the edit, and

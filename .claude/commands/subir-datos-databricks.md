@@ -48,7 +48,7 @@ Document the hybrid nature of this upload to the user:
 | `graphs/*.npy`, `graphs/*.json` | Uploaded as-is |
 | `models/*.zip`, `models/manifest.sha256.json` | Uploaded as-is |
 | `optuna/*.journal`, `optuna/*.pkl` | Uploaded as-is |
-| `COSTOS ITEMS CONTRATOS.xlsx`, `Variables_seleccion.xlsx` | Uploaded as-is |
+| `Actividades_mantenimiento_costos_2026.xlsx`, `Variables_seleccion.xlsx` | Uploaded as-is |
 
 ## 3. Upload `site/data/variables.json` as an extra data item
 

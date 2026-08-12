@@ -2,7 +2,7 @@
 
 The simulator answers what happens to a vano's criticality if this variable
 changes. That is half of a maintenance decision; the other half is what the
-change COSTS. `data/COSTOS ITEMS CONTRATOS.xlsx` is CHEC's own contract price
+change COSTS. `data/Actividades_mantenimiento_costos_2026.xlsx` is CHEC's own contract price
 list, and joining it to the marked vanos turns "the risk drops one group" into
 "the risk drops one group for 283.472 pesos", which is the sentence a work
 order is actually approved on.
