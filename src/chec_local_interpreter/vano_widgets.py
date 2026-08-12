@@ -93,7 +93,7 @@ def _clase_selector():
 
         def __init__(self, opciones=(), *, titulo="", alto="132px",
                      ancho_casilla="96px", maximo=None, columnas=None,
-                     tooltips=None, **kwargs):
+                     tooltips=None, info=None, **kwargs):
             super().__init__(**kwargs)
             self.casillas = {}
             # `clave -> texto` que el navegador muestra al posar el mouse sobre la
@@ -101,6 +101,20 @@ def _clase_selector():
             # vuelve a llamar al cambiar de circuito: colgado de la lista de
             # opciones, el tooltip se perderia en el primer cambio.
             self.tooltips = dict(tooltips or {})
+            # `clave -> texto` del boton "i". La casilla lleva el precio y el nombre;
+            # el boton contesta QUE es. Con 142 actividades y nombres de hasta 153
+            # caracteres, meter tipo, unidad, codigo y descripcion en la etiqueta deja
+            # la lista sin recorrer. `None` = sin botones, que es lo que heredan los
+            # selectores de vanos y de items que no lo usan: no pueden pagar 142
+            # widgets extra ni cambiar de aspecto.
+            self.info = dict(info or {}) if info is not None else None
+            self.botones_info: dict = {}
+            self.panel_info = (
+                widgets.HTML('<span style="font-size:12px;color:#5b4a48;">'
+                             'Pulsa <b>i</b> en cualquier renglon para ver su detalle.'
+                             '</span>')
+                if info is not None else None
+            )
             self._silencio = False
             # Corta la reentrada cuando el observer de `value` reescribe `value` para
             # dejarlo en el orden y el tope de las casillas.
@@ -122,11 +136,40 @@ def _clase_selector():
                 ),
             )
             encabezado = [widgets.HTML(f"<b>{titulo}</b>")] if titulo else []
-            self.children = [*encabezado, self.caja]
+            pie = [self.panel_info] if self.panel_info is not None else []
+            self.children = [*encabezado, self.caja, *pie]
             if columnas is not None:
                 self.poblar_columnas(columnas)
             else:
                 self.poblar(opciones)
+
+        def _con_boton(self, clave, casilla):
+            """La casilla y su boton "i", en un renglon.
+
+            El boton escribe en UN panel compartido debajo de la lista, y no abre un
+            emergente por actividad: 142 emergentes son 142 sitios donde mirar, y el
+            panel unico deja el detalle siempre en el mismo lugar de la pantalla.
+            """
+            boton = widgets.Button(
+                description="i", tooltip="Ver el detalle de este renglon",
+                layout=widgets.Layout(width="26px", min_width="26px", margin="0 6px 0 0"),
+            )
+            boton.on_click(lambda _b, c=clave: self._mostrar_info(c))
+            self.botones_info[clave] = boton
+            return widgets.HBox([boton, casilla],
+                                layout=widgets.Layout(align_items="center",
+                                                      margin="0 8px 0 0"))
+
+        def _mostrar_info(self, clave):
+            # Un panel en blanco se lee como que el boton no funciona; se dice que no
+            # hay detalle en vez de dejarlo vacio.
+            texto = (self.info or {}).get(clave) or (
+                f"Sin detalle registrado para <b>{clave}</b>.")
+            self.panel_info.value = (
+                '<div style="font-size:12px;color:#2b2b2b;background:#fdf7f6;'
+                'border:1px solid #e4c4c0;border-left:4px solid rgb(203,24,29);'
+                'border-radius:4px;padding:6px 10px;margin-top:4px;">'
+                f'{texto}</div>')
 
         def poblar(self, opciones):
             """Rebuilds the list for a new option set (a new circuit, in the
@@ -150,7 +193,9 @@ def _clase_selector():
                 }
                 for caja in self.casillas.values():
                     caja.observe(self._al_cambiar_casilla, names="value")
-                self.caja.children = tuple(self.casillas.values())
+                self.caja.children = (
+                    tuple(self._con_boton(c, w) for c, w in self.casillas.items())
+                    if self.info is not None else tuple(self.casillas.values()))
             finally:
                 self._silencio = False
             self.value = ()
@@ -187,7 +232,12 @@ def _clase_selector():
                         )
                         caja.observe(self._al_cambiar_casilla, names="value")
                         self.casillas[clave] = caja
-                        de_la_columna.append(caja)
+                        # Mismo boton "i" que la lista plana. Sin esto, el selector de
+                        # VARIABLES -- que es el unico que usa columnas -- se queda sin
+                        # botones, y es justo donde hacen falta: la sigla no dice nada.
+                        de_la_columna.append(
+                            self._con_boton(clave, caja) if self.info is not None
+                            else caja)
                     cabecera = widgets.HTML(
                         f'<span style="font-weight:600;font-size:12px;'
                         f'border-bottom:1px solid #e4c4c0;display:block;'

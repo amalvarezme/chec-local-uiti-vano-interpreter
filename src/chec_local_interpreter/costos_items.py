@@ -38,6 +38,14 @@ from typing import Any
 
 import pandas as pd
 
+COLUMNA_ACTIVIDAD = "Actividad"
+COLUMNA_COSTO_2026 = "COSTO"
+COLUMNA_TIPO = "TIPO_ACTIVIDAD"
+COLUMNA_UNIDAD = "UM"
+COLUMNA_CODIGO = "Codigo Maximo"
+COLUMNA_DESCRIPCION = "Descripción de la actividad"
+# Los del libro anterior, que se siguen aceptando: el lector cae a ellos si el archivo
+# que recibe es el viejo, en vez de renombrar columnas por posicion y producir basura.
 COLUMNA_ITEM = "Etiquetas de fila"
 COLUMNA_COSTO = "Promedio de UNITCOST"
 FILA_TOTAL = "Total general"
@@ -57,12 +65,30 @@ misma obra a los cinco vanos, y "podar solo este" seria imposible de expresar.
 """
 
 
+SIN_DESCRIPCION = "Sin descripcion en el libro de actividades."
+"""52 de las 142 actividades del libro no traen descripcion.
+
+Un panel de informacion en blanco se lee como que la consulta fallo; decirlo lo
+distingue de una actividad que si tiene texto y no se cargo.
+"""
+
+
 @dataclass(frozen=True)
 class ItemCosto:
-    """Una actividad del contrato y su costo unitario promedio."""
+    """Una actividad del contrato: lo que cuesta y lo que ES.
+
+    La casilla del panel solo tiene sitio para el precio y el nombre. El resto --
+    tipo, unidad, codigo maximo y descripcion -- es lo que contesta el boton de
+    informacion, y viaja aqui para que el cuaderno no vuelva a abrir el libro por su
+    cuenta: dos lecturas del mismo archivo se separan en cuanto alguien cambia una.
+    """
 
     nombre: str
     costo: float
+    tipo: str = ""
+    unidad: str = ""
+    codigo_maximo: str = ""
+    descripcion: str = SIN_DESCRIPCION
 
 
 @dataclass(frozen=True)
@@ -114,27 +140,62 @@ def reparar_texto(texto: str) -> str:
 
 
 def leer_catalogo_costos(path: str | Path) -> CatalogoCostos:
-    """El catalogo de actividades del libro de costos.
+    """El catalogo de actividades de `Actividades_mantenimiento_costos_2026.xlsx`.
 
-    Conserva el ORDEN DEL ARCHIVO, que es alfabetico y es lo que hace
-    encontrable una lista de 125 casillas. Ordenar por costo pondria "PODA EN
-    REDES URBANAS" al lado de una reubicacion de poste solo porque valen
-    parecido, y quien busca una poda no la busca por precio.
+    Las columnas se leen por NOMBRE y no por posicion. El lector anterior renombraba
+    las dos primeras por orden, y ese libro trae siete: tomaria `TIPO_ACTIVIDAD` como
+    nombre de la actividad y el codigo maximo como su precio, SIN fallar -- el panel
+    saldria con dos "actividades" y precios de seis cifras que son codigos.
+
+    Conserva el ORDEN DEL ARCHIVO, que es por tipo de mantenimiento y es lo que hace
+    encontrable una lista de 142 casillas. Ordenar por costo pondria una poda urbana al
+    lado de una reubicacion de poste solo porque valen parecido, y quien busca una poda
+    no la busca por precio.
     """
     tabla = pd.read_excel(path)
-    tabla.columns = [COLUMNA_ITEM, COLUMNA_COSTO][: len(tabla.columns)]
-    nombres = tabla[COLUMNA_ITEM].astype(str).map(reparar_texto)
-    costos = pd.to_numeric(tabla[COLUMNA_COSTO], errors="coerce")
+    columnas = {str(c).strip(): c for c in tabla.columns}
+
+    def _col(*candidatas: str):
+        for c in candidatas:
+            if c in columnas:
+                return tabla[columnas[c]]
+        # Vacio y de tipo objeto: una serie de `None` sale float64, y en esta version
+        # de pandas `astype(str)` CONSERVA el NaN en vez de escribir "nan", asi que
+        # `reparar_texto` recibiria un float y reventaria al leer el libro anterior.
+        return pd.Series([""] * len(tabla), dtype=object)
+
+    def _texto(serie):
+        return serie.fillna("").astype(str).map(reparar_texto)
+
+    nombres = _texto(_col(COLUMNA_ACTIVIDAD, COLUMNA_ITEM))
+    costos = pd.to_numeric(_col(COLUMNA_COSTO_2026, COLUMNA_COSTO), errors="coerce")
+    tipos = _texto(_col(COLUMNA_TIPO))
+    unidades = _col(COLUMNA_UNIDAD).fillna("").astype(str)
+    codigos = _col(COLUMNA_CODIGO)
+    descripciones = _col(COLUMNA_DESCRIPCION)
 
     items: list[ItemCosto] = []
     sin_costo: list[str] = []
-    for nombre, costo in zip(nombres, costos):
-        if nombre == FILA_TOTAL:
+    for nombre, costo, tipo, unidad, codigo, descripcion in zip(
+        nombres, costos, tipos, unidades, codigos, descripciones
+    ):
+        if nombre == FILA_TOTAL or nombre in ("nan", "None", ""):
             continue
         if pd.isna(costo):
             sin_costo.append(nombre)
             continue
-        items.append(ItemCosto(nombre=nombre, costo=float(costo)))
+        texto = "" if descripcion is None or pd.isna(descripcion) else str(descripcion).strip()
+        items.append(ItemCosto(
+            nombre=nombre,
+            costo=float(costo),
+            tipo="" if tipo in ("nan", "None") else tipo,
+            unidad="" if unidad in ("nan", "None") else unidad.strip(),
+            # El codigo va como TEXTO: es un identificador, y formateado como numero
+            # pierde ceros a la izquierda y se imprime con separador de miles.
+            codigo_maximo="" if codigo is None or pd.isna(codigo) else str(int(codigo))
+                          if isinstance(codigo, (int, float)) else str(codigo).strip(),
+            descripcion=reparar_texto(texto) if texto else SIN_DESCRIPCION,
+        ))
     return CatalogoCostos(items=tuple(items), sin_costo=tuple(sin_costo))
 
 

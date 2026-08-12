@@ -3,7 +3,7 @@
 
 The simulator answers what happens to a vano's criticality if this variable
 changes. That is half of a maintenance decision: the other half is what the
-change COSTS. `data/COSTOS ITEMS CONTRATOS.xlsx` is CHEC's own contract price
+change COSTS. `data/Actividades_mantenimiento_costos_2026.xlsx` is CHEC's own contract price
 list, and joining it to the marked vanos turns "the risk drops one group" into
 "the risk drops one group for 283.472 pesos", which is the sentence a work
 order is actually approved on.
@@ -31,6 +31,7 @@ import pandas as pd
 import pytest
 
 from chec_local_interpreter.costos_items import (
+    SIN_DESCRIPCION,
     COLUMNA_COSTO,
     COLUMNA_ITEM,
     FILA_TOTAL,
@@ -42,7 +43,7 @@ from chec_local_interpreter.costos_items import (
     reparar_texto,
 )
 
-LIBRO_REAL = Path(__file__).resolve().parents[1] / "data" / "COSTOS ITEMS CONTRATOS.xlsx"
+LIBRO_REAL = Path(__file__).resolve().parents[1] / "data" / "Actividades_mantenimiento_costos_2026.xlsx"
 
 
 def _libro(tmp_path, filas):
@@ -116,17 +117,31 @@ def test_the_catalogue_keeps_the_file_order(tmp_path):
 
 
 def test_the_real_workbook_yields_the_measured_catalogue():
-    """Contra el archivo real del proyecto: 138 filas -> 125 actividades
-    costeables, 12 sin costo y el pie de la tabla fuera. Si el archivo cambia,
-    esto avisa aqui en vez de dejar el presupuesto moverse en silencio."""
+    """Contra el libro real de 2026: 142 actividades, TODAS costeables.
+
+    El anterior era una exportacion de tabla dinamica y traia dos trampas -- su pie
+    `Total general` y doce filas sin costo unitario. Este no: 142 filas, cero costos
+    faltantes, cero duplicados y sin pie. Lo que si trae son 52 actividades sin
+    descripcion, y esas se NOMBRAN en vez de salir en blanco.
+
+    Si el archivo cambia, esto avisa aqui en vez de dejar el presupuesto moverse en
+    silencio.
+    """
     catalogo = leer_catalogo_costos(LIBRO_REAL)
 
-    assert len(catalogo.items) == 125
-    assert len(catalogo.sin_costo) == 12
-    assert FILA_TOTAL not in [i.nombre for i in catalogo.items]
+    assert len(catalogo.items) == 142
+    assert len(catalogo.sin_costo) == 0
     assert all(i.costo > 0 for i in catalogo.items)
-    # El nombre roto del archivo real queda legible.
-    assert any("CONDUCCIÓN" in i.nombre for i in catalogo.items)
+    assert len({i.nombre for i in catalogo.items}) == 142, "el nombre es la clave"
+
+    # Lo que el boton de informacion muestra tiene que venir completo.
+    assert all(i.tipo for i in catalogo.items), "toda actividad declara su tipo"
+    assert all(i.unidad for i in catalogo.items), "toda actividad declara su unidad"
+    assert all(i.codigo_maximo.isdigit() for i in catalogo.items), (
+        "el codigo va como texto: formateado como numero pierde ceros a la izquierda"
+    )
+    sin_desc = [i for i in catalogo.items if i.descripcion == SIN_DESCRIPCION]
+    assert len(sin_desc) == 52, "las que no traen descripcion lo dicen, no salen vacias"
 
 
 # --- costear la intervencion -----------------------------------------------------------
@@ -324,3 +339,69 @@ def test_the_uncosted_activities_are_named_and_not_just_dropped(fuente):
     incluye. Mismo criterio que las variables no simulables."""
     assert "AVISO_SIN_COSTO = widgets.HTML(" in fuente
     assert "CATALOGO_COSTOS.sin_costo" in fuente
+
+
+# --- El libro de 2026: una actividad es mas que su precio ---------------------------------
+
+
+def _libro_2026(tmp_path):
+    import pandas as pd
+
+    ruta = tmp_path / "Actividades_mantenimiento_costos_2026.xlsx"
+    pd.DataFrame({
+        "TIPO_ACTIVIDAD": ["MANTENIMIENTO_FORESTAL", "MANTENIMIENTO_ELECTROMECÁNICO"],
+        "Codigo Maximo": [290027, 301466],
+        "Actividad": ["Poda en redes urbanas", "Cambio de aislador"],
+        "UM": ["Km", "Und"],
+        "Descripción de la actividad": ["Consiste en podar la vegetacion.", None],
+        "Item anterior contratación": [1, None],
+        "COSTO": [5131579.0, 166112.0],
+    }).to_excel(ruta, index=False)
+    return ruta
+
+
+def test_the_2026_catalogue_carries_what_the_info_button_shows(tmp_path):
+    """El panel ofrece la actividad y su precio; el boton de informacion contesta QUE
+    es esa actividad. Tipo, unidad, codigo maximo y descripcion viven en el libro, y
+    leerlos aqui evita que el cuaderno los vuelva a abrir por su cuenta."""
+    catalogo = leer_catalogo_costos(_libro_2026(tmp_path))
+
+    primero = catalogo.items[0]
+    assert primero.nombre == "Poda en redes urbanas"
+    assert primero.costo == 5131579.0
+    assert primero.tipo == "MANTENIMIENTO_FORESTAL"
+    assert primero.unidad == "Km"
+    assert primero.codigo_maximo == "290027"
+    assert "podar la vegetacion" in primero.descripcion
+
+
+def test_the_columns_are_read_by_name_not_by_position(tmp_path):
+    """El lector anterior renombraba las dos primeras columnas por POSICION. Con siete
+    columnas eso toma `TIPO_ACTIVIDAD` como nombre de la actividad y el codigo como su
+    precio, sin fallar: el panel saldria con dos tipos y precios de seis cifras que son
+    codigos."""
+    import pandas as pd
+
+    ruta = tmp_path / "revuelto.xlsx"
+    pd.DataFrame({
+        "COSTO": [1000.0],
+        "Actividad": ["Poda"],
+        "UM": ["Km"],
+        "TIPO_ACTIVIDAD": ["FORESTAL"],
+        "Codigo Maximo": [7],
+        "Descripción de la actividad": ["x"],
+    }).to_excel(ruta, index=False)
+
+    item = leer_catalogo_costos(ruta).items[0]
+
+    assert item.nombre == "Poda" and item.costo == 1000.0
+
+
+def test_an_activity_without_description_says_so_instead_of_showing_blank(tmp_path):
+    """52 de las 142 actividades del libro real no traen descripcion. Un panel de
+    informacion en blanco se lee como que la consulta fallo; decirlo lo distingue."""
+    catalogo = leer_catalogo_costos(_libro_2026(tmp_path))
+
+    sin_desc = catalogo.items[1]
+    assert sin_desc.descripcion, "no puede quedar vacia"
+    assert "sin descripcion" in sin_desc.descripcion.lower()

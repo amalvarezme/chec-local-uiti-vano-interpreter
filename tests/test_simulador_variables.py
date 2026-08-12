@@ -33,6 +33,7 @@ from chec_local_interpreter.simulador_variables import (
     ancho_px,
     columnas_panel,
     definicion_de_knob,
+    descripciones_de_variables,
     iniciales,
     knobs_bloqueados,
     knobs_simulables,
@@ -480,3 +481,49 @@ def test_definicion_de_knob_says_so_when_the_variable_was_never_judged():
 
     assert SIN_EVALUAR in texto
     assert texto.strip()
+
+
+# --- El nombre detallado, no la sigla ----------------------------------------------------
+
+
+def test_the_detailed_name_comes_from_the_project_dictionary(tmp_path):
+    """`NR_T` no le dice nada a quien opera la red. El diccionario del proyecto
+    (`data/Variables_seleccion.xlsx`) ya tiene el nombre en palabras de cada columna, y
+    es el mismo texto que sustenta el veredicto de simulacion: leerlo de ahi evita que
+    el panel invente una segunda redaccion que se separa de la primera."""
+    import pandas as pd
+
+    ruta = tmp_path / "dic.xlsx"
+    pd.DataFrame({
+        "COLUMNA": ["NR_T", "prep"],
+        "DESCRIPCIÓN_COLUMNA": ["Nivel de riesgo por vegetacion del vano",
+                                "Precipitacion acumulada"],
+        "SELECCIÓN": [1, 1],
+    }).to_excel(ruta, index=False, sheet_name="Variables_análisis")
+
+    mapa = descripciones_de_variables(ruta)
+
+    assert mapa["NR_T"] == "Nivel de riesgo por vegetacion del vano"
+    # Las familias climaticas llegan como `clima:prep`; la clave del diccionario es la
+    # columna sin el prefijo, y resolverla aqui evita 12 entradas sin nombre.
+    assert mapa["clima:prep"] == "Precipitacion acumulada"
+
+
+def test_the_definition_leads_with_the_detailed_name(tmp_path):
+    knob = _knob("NR_T", bounds=(0.0, 3.0))
+
+    texto = definicion_de_knob(knob, nombres={"NR_T": "Nivel de riesgo por vegetacion"})
+
+    assert texto.startswith("Nivel de riesgo por vegetacion"), (
+        "el nombre en palabras va primero: es lo que se lee al posar el mouse"
+    )
+    assert JUICIO_SIMULACION["NR_T"][0] in texto, "el veredicto sigue estando"
+
+
+def test_without_a_dictionary_the_definition_still_works(tmp_path):
+    """El diccionario es un archivo mas del proyecto y puede faltar en una corrida.
+    Sin el, la definicion cae al veredicto y el rango -- que es lo que tenia antes --
+    en vez de quedarse sin texto."""
+    texto = definicion_de_knob(_knob("NR_T", bounds=(0.0, 3.0)), nombres={})
+
+    assert texto.strip() and JUICIO_SIMULACION["NR_T"][0] in texto

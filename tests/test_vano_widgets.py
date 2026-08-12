@@ -557,3 +557,87 @@ def test_repopulating_keeps_the_tooltips():
     selector.poblar([("Vegetacion", "NR_T"), ("Otra", "OTRA")])
 
     assert selector.casillas["NR_T"].tooltip == "Es el plan de poda."
+
+
+# --- El boton "i" de cada casilla --------------------------------------------------------
+
+
+def test_each_option_gets_an_info_button_when_info_is_given():
+    """La casilla lleva el precio y el nombre; el boton "i" contesta QUE es. Con 142
+    actividades y nombres de hasta 153 caracteres, meter tipo, unidad, codigo y
+    descripcion en la etiqueta no es una opcion: la lista deja de ser recorrible."""
+    from chec_local_interpreter.vano_widgets import construir_selector_casillas
+
+    selector = construir_selector_casillas(
+        [("$ 100 -- Poda", "PODA"), ("$ 50 -- Tala", "TALA")],
+        info={"PODA": "Forestal · Km · 290027 · Consiste en podar."},
+    )
+
+    assert set(selector.botones_info) == {"PODA", "TALA"}
+    assert selector.botones_info["PODA"].description == "i"
+    assert selector.panel_info is not None
+
+
+def test_pressing_the_info_button_shows_that_option_text():
+    from chec_local_interpreter.vano_widgets import construir_selector_casillas
+
+    selector = construir_selector_casillas(
+        [("Poda", "PODA")], info={"PODA": "Forestal · Km · 290027 · Consiste en podar."})
+
+    selector.botones_info["PODA"].click()
+
+    assert "290027" in selector.panel_info.value
+    assert "Consiste en podar" in selector.panel_info.value
+
+
+def test_an_option_without_info_says_so_instead_of_showing_an_empty_panel():
+    """Un panel en blanco se lee como que el boton no funciona."""
+    from chec_local_interpreter.vano_widgets import construir_selector_casillas
+
+    selector = construir_selector_casillas([("Tala", "TALA")], info={})
+
+    selector.botones_info["TALA"].click()
+
+    assert selector.panel_info.value.strip(), "tiene que decir algo"
+
+
+def test_without_info_the_list_keeps_its_plain_checkbox_layout():
+    """Sin `info` no aparece ningun boton: los selectores de vanos y de variables que
+    no lo usan no pueden pagar 142 widgets extra ni cambiar de aspecto."""
+    from chec_local_interpreter.vano_widgets import construir_selector_casillas
+
+    selector = construir_selector_casillas([("Vano", "V1")])
+
+    assert selector.botones_info == {}
+    assert selector.panel_info is None
+
+
+def test_the_info_buttons_survive_a_repopulate():
+    from chec_local_interpreter.vano_widgets import construir_selector_casillas
+
+    selector = construir_selector_casillas(
+        [("Poda", "PODA")], info={"PODA": "Forestal.", "TALA": "Electromecanico."})
+
+    selector.poblar([("Poda", "PODA"), ("Tala", "TALA")])
+
+    assert set(selector.botones_info) == {"PODA", "TALA"}
+    selector.botones_info["TALA"].click()
+    assert "Electromecanico" in selector.panel_info.value
+
+
+def test_the_column_layout_gets_info_buttons_too():
+    """El selector de VARIABLES del 06 se construye por columnas, no como lista
+    corrida. Un boton "i" que solo funcione en la lista plana no llega al unico sitio
+    donde el usuario lo pidio -- medido: 142 botones en las actividades y CERO en las
+    variables."""
+    from chec_local_interpreter.vano_widgets import construir_selector_casillas
+
+    selector = construir_selector_casillas(
+        columnas=[("Intervencion", [("Vegetacion", "NR_T")]),
+                  ("Escenario", [("Lluvia", "clima:prep")])],
+        info={"NR_T": "Nivel de riesgo por vegetacion. Unidad: -"},
+    )
+
+    assert set(selector.botones_info) == {"NR_T", "clima:prep"}
+    selector.botones_info["NR_T"].click()
+    assert "vegetacion" in selector.panel_info.value.lower()

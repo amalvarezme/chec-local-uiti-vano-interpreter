@@ -367,7 +367,47 @@ def rotulo_en_barra(
     return ""
 
 
-def definicion_de_knob(knob: Knob) -> str:
+RUTA_DICCIONARIO = "data/Variables_seleccion.xlsx"
+HOJA_DICCIONARIO = "Variables_análisis"
+
+
+def descripciones_de_variables(path: str | Path | None = None) -> dict[str, str]:
+    """`knob_id -> nombre en palabras`, del diccionario del proyecto.
+
+    `NR_T` no le dice nada a quien opera la red. `Variables_seleccion.xlsx` ya trae el
+    nombre en palabras de cada columna -- y es el MISMO documento que sustenta los
+    veredictos de `JUICIO_SIMULACION` --, asi que leerlo de ahi evita que el panel
+    invente una segunda redaccion que se separa de la primera en cuanto alguien edita
+    una sola.
+
+    Devuelve `{}` si el archivo no esta: el diccionario es un archivo mas del proyecto
+    y puede faltar en una corrida, y quedarse sin panel de informacion es peor que
+    quedarse sin el nombre largo.
+    """
+    from pathlib import Path as _Path
+
+    ruta = _Path(path) if path is not None else _Path(RUTA_DICCIONARIO)
+    if not ruta.exists():
+        return {}
+    tabla = pd.read_excel(ruta, sheet_name=HOJA_DICCIONARIO)
+    columnas = {str(c).strip(): c for c in tabla.columns}
+    if "COLUMNA" not in columnas or "DESCRIPCIÓN_COLUMNA" not in columnas:
+        return {}
+
+    mapa: dict[str, str] = {}
+    for col, desc in zip(tabla[columnas["COLUMNA"]], tabla[columnas["DESCRIPCIÓN_COLUMNA"]]):
+        if pd.isna(col) or pd.isna(desc):
+            continue
+        clave = str(col).strip()
+        texto = str(desc).strip()
+        mapa[clave] = texto
+        # Las familias climaticas llegan como `clima:prep`; la clave del diccionario es
+        # la columna pelada. Sin esta linea, las doce entradas de clima salen sin nombre.
+        mapa[f"clima:{clave}"] = texto
+    return mapa
+
+
+def definicion_de_knob(knob: Knob, *, nombres: Mapping[str, str] | None = None) -> str:
     """Que ES esta variable, en una linea, para el tooltip de su casilla.
 
     El panel del cuaderno 06 ofrece las variables como casillas, y en una casilla
@@ -380,7 +420,11 @@ def definicion_de_knob(knob: Knob) -> str:
     de la misma decision se separan en cuanto alguien edita una sola.
     """
     veredicto, motivo = JUICIO_SIMULACION.get(knob.id, (SIN_EVALUAR, _MOTIVO_SIN_JUICIO))
-    partes = [f"{veredicto}. {motivo}"]
+    # El nombre en palabras VA PRIMERO: es lo que se lee al posar el mouse, y la sigla
+    # ya esta escrita en la propia casilla.
+    detallado = (nombres or {}).get(knob.id, "")
+    partes = [f"{detallado}." if detallado else "", f"{veredicto}. {motivo}"]
+    partes = [p for p in partes if p]
     unidad = UNIDADES.get(knob.id, "")
     if knob.kind == "numeric" and knob.bounds is not None:
         rango = f"Rango observado: {float(knob.bounds[0]):,.4g} a {float(knob.bounds[1]):,.4g}"
@@ -396,9 +440,10 @@ def definicion_de_knob(knob: Knob) -> str:
     return " ".join(partes)
 
 
-def definiciones_de_knobs(knobs: Iterable[Knob]) -> dict[str, str]:
+def definiciones_de_knobs(knobs: Iterable[Knob], *,
+                          nombres: Mapping[str, str] | None = None) -> dict[str, str]:
     """`knob_id -> definicion`, tal como lo consume el selector de casillas."""
-    return {knob.id: definicion_de_knob(knob) for knob in knobs}
+    return {knob.id: definicion_de_knob(knob, nombres=nombres) for knob in knobs}
 
 
 def _fila(knob: Knob) -> dict[str, object]:
