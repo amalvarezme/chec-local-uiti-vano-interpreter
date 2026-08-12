@@ -1,5 +1,5 @@
 % =============================================================================
-%  Informe tecnico CHEC - UNAL 2026
+%  Informe técnico CHEC - UNAL 2026
 %  Misma estructura y referencia contractual que report.pdf (Acta de Trabajo No. 1).
 %  Secciones 1-3 y 8-9 conservan el formato contractual; de la 4 en adelante el
 %  contenido corresponde al estado actual del proyecto.
@@ -26,13 +26,14 @@
 \usepackage{tocloft}
 \setlength{\cftsecnumwidth}{2.4em}
 \setlength{\cftsubsecnumwidth}{3.2em}
+\usepackage{rotating}
 \usepackage{tikz}
 \usetikzlibrary{shapes.geometric,arrows.meta,positioning,fit,calc,backgrounds}
 \usepackage[hidelinks,breaklinks=true]{hyperref}
 \usepackage{url}
 
 \hypersetup{
-  pdftitle={Informe tecnico CHEC UNAL 2026},
+  pdftitle={Informe t\'ecnico CHEC UNAL 2026},
   pdfauthor={Universidad Nacional de Colombia Sede Manizales},
 }
 
@@ -136,8 +137,7 @@ junto con la publicación web de evidencias, y se incorpora la migración del do
 Databricks como copia reproducible bajo demanda. La línea M\_GCECDL y la línea MIL se
 presentan como complementarias: la primera clasifica el impacto por evento y sostiene la
 explicabilidad por modos y escenarios; la segunda opera en la unidad sobre la cual se emite
-una orden de trabajo. TabNet conserva su valor como antecedente comparativo de modelado
-tabular estructurado.
+una orden de trabajo.
 
 % ======================================================== 2. IDENTIFICACION ==
 \section{Identificación del proyecto}
@@ -302,20 +302,8 @@ salida que incumpla el contrato.
 \end{tabularx}
 \end{table}
 
-\subsection{Grafo experto y grafo estimado}
-
-El grafo experto representa relaciones de dominio entre variables: clima, riesgo, topología,
-protección, activos, eventos e impacto. Sus aristas y sus pesos son juicio experto escrito
-explícitamente --- valores como $0{,}60$, $0{,}75$ o $0{,}90$ declarados variable por variable
----, no correlaciones estimadas de los datos. Lo único que los datos deciden es qué nodos
-existen: si un código de causa no alcanza el umbral de frecuencia, su columna no está y las
-aristas que lo tocaban no se proyectan. Esa distinción es la que permite usar el grafo como
-conocimiento previo y no como una segunda lectura del mismo conjunto de datos.
-
-El grafo estimado por muestra o escenario se presenta como artefacto de interpretabilidad y
-asociación aprendida. No se reporta como prueba causal ni como reemplazo del grafo experto:
-su valor está en mostrar relaciones inducidas por el modelo, normalizadas y comparables entre
-escenarios, para orientar revisión técnica posterior.
+El grafo experto de dominio y los grafos estimados por el modelo se tratan en la
+Sección~\ref{sec:grafos}, a continuación de la formulación matemática que los define.
 
 % ================================================= 6. MODELADO Y EXPLICAB. ==
 \section{Modelado y explicabilidad}
@@ -399,7 +387,7 @@ El diseño garantiza tres propiedades con consecuencias directas sobre la valide
 clasificación:
 
 \begin{itemize}
-  \item \textbf{Invariancia de cardinalidad.} Duplicar todas las instancias de una bolsa deja
+  \item \textbf{Invarianza de cardinalidad.} Duplicar todas las instancias de una bolsa deja
         $\hat{p}_b$ idéntico. En ausencia de esta garantía el modelo podría acceder al número
         de eventos por una vía indirecta, siendo esa cantidad una de las dos coordenadas que
         definen la clase.
@@ -527,6 +515,114 @@ observado fue de $0{,}35$ a $6{,}8$. Con esta configuración la participación d
 gradiente es marginal, y su aporte efectivo requiere una ablación explícita para ser
 establecido.
 
+\subsection{Grafo experto y grafos estimados}
+\label{sec:grafos}
+
+La formulación anterior emplea dos clases de objeto de naturaleza distinta que conviene
+separar de forma explícita: un grafo experto, que es conocimiento previo declarado, y los
+grafos estimados, que son lecturas del modelo ya entrenado. El primero entra en la propagación
+y en el término $\mathcal{L}_{\mathrm{MI}}$ como referencia inmóvil; los segundos se derivan
+de las salidas del modelo y no intervienen en el entrenamiento.
+
+\paragraph{Origen del grafo experto.} El grafo experto representa relaciones de dominio entre variables: clima, riesgo, topología,
+protección, activos, eventos e impacto. Sus aristas y sus pesos son juicio experto declarado
+variable por variable --- valores como $0{,}60$, $0{,}75$ o $0{,}90$ ---, y no correlaciones
+estimadas de los datos. Lo único que los datos determinan es qué nodos existen: si un código
+de causa no alcanza el umbral de frecuencia, su columna no está y las aristas que lo tocaban
+no se proyectan. Esa distinción es la que permite emplear el grafo como conocimiento previo y
+no como una segunda lectura del mismo conjunto de datos.
+
+Las 156 variables del dominio se organizan en seis modos, dominados en número por el modo de
+entorno, riesgo y clima, que aporta 110 columnas: vegetación, descargas y nueve familias
+meteorológicas representadas en una ventana de doce horas. La Tabla~\ref{tab:conexiones}
+resume las reglas de causalidad técnica con que esos modos se conectan entre sí.
+
+\begin{table}[H]
+\centering
+\caption{Reglas de conexión físico-lógica del grafo experto, con el peso declarado para cada
+relación}
+\label{tab:conexiones}
+\footnotesize
+\begin{tabularx}{\textwidth}{L{2.9cm} L{2.5cm} L{3.0cm} X}
+\toprule
+\textbf{Origen} & \textbf{Destino} & \textbf{Relación (peso)} & \textbf{Justificación técnica} \\
+\midrule
+Series climáticas & Nodos de riesgo & Acumulación ambiental ($0{,}85$) & Lluvia, nubosidad, viento y temperatura acumulan estrés sobre aisladores, conductores y entorno. \\
+Entorno y riesgo & Eventos / causa & Causa directa ($0{,}90$) & Vegetación, descargas y ráfagas pueden romper el aislamiento dieléctrico o mecánico. \\
+Físicas y eléctricas & Eventos / causa & Susceptibilidad material ($0{,}80$) & Conductor, guarda, material y longitud modulan la exposición y la resistencia ante fallas. \\
+Topología & Protección & Propagación de falla ($0{,}95$) & Distancia y cantidad de vanos determinan el equipo que debe operar para aislar el daño. \\
+Activos finales & Entorno y riesgo & Vulnerabilidad estructural ($0{,}75$) & Altura, norma y clase del apoyo condicionan la respuesta ante árboles, viento y tensión mecánica. \\
+Carga y consumo & Impacto & Impacto demográfico ($0{,}85$) & Usuarios y demanda del transformador explican la magnitud del corte y su efecto aguas abajo. \\
+Protección & Impacto & Aislamiento y tiempos ($0{,}80$) & Fusibles y reconectadores producen tiempos de reposición e impactos operativos distintos. \\
+Eventos & UITI & Cálculo del impacto ($1{,}00$) & UITI relaciona la duración del evento con el total de usuarios afectados. \\
+UITI y aporte del vano & \texttt{UITI\_VANO} & Ponderación por vano ($1{,}00$) & \texttt{UITI\_VANO} distribuye el impacto del evento según el aporte relativo del vano. \\
+Atributos espaciales & Topología & Geometría de red ($1{,}00$) & Las coordenadas del vano definen el trazado físico, la longitud y la relación con el circuito. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Esas reglas se materializan en 156 aristas dirigidas declaradas en código --- cifra que
+coincide con el número de variables por casualidad y no por una correspondencia uno a uno.
+De ellas, 109 son de origen climático, dado que cada hora de una familia alimenta la anterior
+con peso $0{,}90$ y la hora cero alimenta \texttt{COD\_CAUSA} con peso $0{,}85$; las 47
+restantes son de dominio y recorren el camino desde la geometría del vano hasta el cálculo de
+\texttt{UITI\_VANO}.
+
+La selección de variables elimina después una parte de esos nodos, y ahí interviene el único
+paso no declarativo de la construcción. En lugar de descartar las aristas que tocaban un nodo
+eliminado, un recorrido en anchura busca, desde cada nodo conservado, el primer nodo también
+conservado que sea alcanzable a través de los eliminados, y registra una \emph{arista
+virtual} con el peso mínimo del trayecto. El mínimo es la elección conservadora: una cadena no
+puede declararse más fuerte que su eslabón más débil. Sobre el artefacto M\_GCECDL vigente el
+resultado es una matriz de $70 \times 70$ con 56 aristas no nulas, de las cuales 4 son
+virtuales. El artefacto del modelo por bolsas parte de una selección distinta y conserva
+80 variables con 64 aristas, según se aprecia en la Figura~\ref{fig:nb05}.
+
+\paragraph{Origen de los grafos estimados.} Los grafos estimados se obtienen por dos vías
+independientes, que responden a preguntas distintas y no deben leerse como la misma evidencia.
+
+La primera opera \textbf{por muestra o escenario} sobre la línea M\_GCECDL. Se ejecuta el
+modelo sobre el conjunto de interés, se recogen las variables reconstruidas por el
+decodificador y se transpone esa matriz para obtener un perfil por variable a lo largo de las
+muestras. Sobre esos perfiles se calculan distancias euclídeas cuadradas, normalizadas por la
+dimensión del perfil, y se aplica un núcleo gaussiano con la diagonal anulada:
+
+\begin{equation}
+K_r[i,j] = \exp\!\left(-\frac{\lVert \hat{x}_{:,i} - \hat{x}_{:,j} \rVert^2}{2\,\sigma^2\, n}\right),
+\qquad K_r[i,i] = 0 .
+\label{eq:grafoestimado}
+\end{equation}
+
+Esta matriz no es un artefacto añadido a posteriori: es exactamente el $K_r$ que el término
+$\mathcal{L}_{\mathrm{MI}}$ de la Ecuación~\eqref{eq:costo} compara contra el núcleo del grafo
+experto durante el entrenamiento. Lo que la visualización muestra, en consecuencia, es el lado
+aprendido de esa comparación, evaluado sobre la muestra o el escenario seleccionado.
+
+La segunda opera \textbf{por bolsa o por grupo} sobre la línea MIL, y no estima una estructura
+nueva: pondera la existente. El peso que se dibuja para cada arista es la media de la
+compuerta $g_b$ sobre las bolsas del conjunto, multiplicada por el peso experto fijo de esa
+arista. Ninguna arista se crea ni se elimina, de modo que la lectura correcta es cuánto
+\emph{activa} un grupo de criticidad las relaciones ya declaradas, y no qué relaciones
+descubrió. El procedimiento incorpora además un resguardo explícito: si las compuertas no
+varían dentro de un grupo, el grafo de ese grupo no se dibuja, porque un conjunto cuyas
+compuertas son uniformes no produjo estructura propia, y representarlo equivaldría a presentar
+el grafo experto fijo como si el grupo lo hubiera estimado.
+
+\begin{sidewaysfigure}
+\centering
+\includegraphics[width=0.96\textheight]{figures/cuadernos/nb07_grafos.png}
+\caption{Grafo estimado por compuertas, render real sobre el conjunto de datos completo. Un
+grafo circular por grupo de criticidad --- Alto, Medio-Alto y Medio --- donde el peso de cada
+arista es la media de la compuerta multiplicada por el peso experto fijo, y el color distingue
+variables climáticas de estructurales. Los tres comparten la misma topología, que es la
+declarada: lo que cambia entre grupos es la intensidad con que cada relación se activa.}
+\label{fig:nb07grafos}
+\end{sidewaysfigure}
+
+Ninguno de los dos grafos estimados se reporta como prueba causal ni como reemplazo del grafo
+experto. Su valor está en exhibir asociaciones inducidas por el modelo, normalizadas y
+comparables entre escenarios o entre grupos, para orientar una revisión técnica posterior.
+
 \subsection{Importancia por modos y escenarios}
 
 La explicabilidad incluye resúmenes por modo, ranking de variables, salidas por escenario y
@@ -624,8 +720,6 @@ enumerar de forma explícita las doce actividades que llegan sin costo unitario,
 omitirlas en silencio; y reparar la codificación de los nombres, dado que el catálogo carece
 de código de ítem y el nombre opera como clave.
 
-\subsubsection{Estimación económica en el informe de circuito}
-
 El flujo \texttt{/report} incorpora un apartado económico propio dentro de la pestaña de
 simulación automática de su informe HTML. Su construcción es determinista: se ordenan las
 variables de la tabla de sensibilidad por la magnitud absoluta máxima de cambio, se conservan
@@ -645,8 +739,6 @@ no como presupuesto. Este mismo contexto se entrega, cuando existe, a la skill
 aproximaciones. Si el libro de precios o la tabla de sensibilidad no están disponibles, el
 apartado se declara vacío y el informe se genera igual.
 
-\subsubsection{Costo de la intervención en el simulador por vano}
-
 El simulador del cuaderno 06 emplea el mismo catálogo con otro propósito: no aproximar por
 cercanía textual, sino cotizar el plan que el usuario declara. La rejilla del panel recibe las
 actividades marcadas por vano con sus repeticiones y devuelve el total de cada vano junto con
@@ -654,8 +746,6 @@ su desglose ordenado de mayor a menor subtotal. Un vano sin actividades conserva
 valor cero, porque ese cero indica que la simulación movió su riesgo sin obra asociada. Una
 actividad ausente del catálogo interrumpe el cálculo en lugar de valorarse en cero, dado que
 un presupuesto incompleto no sería distinguible en pantalla de uno correcto.
-
-\subsubsection{Desacople entre efecto simulado y costo}
 
 En ambos recorridos las dos mitades permanecen deliberadamente desacopladas: seleccionar una
 actividad de poda no modifica la variable de riesgo por vegetación, y reducir esa variable no
@@ -714,15 +804,6 @@ Los importes que el sistema despliega proceden en su totalidad del libro de prec
 se recalculan en cada ejecución; el presente informe no los reproduce, dado que la
 cuantificación final depende de cantidades, alcance de obra, zona, disponibilidad operativa y
 validación contractual de CHEC.
-
-\subsection{TabNet como contexto comparativo}
-
-TabNet se mantiene como línea complementaria para modelado tabular estructurado,
-experimentación comparativa e interpretabilidad basada en relevancia de variables. En
-paralelo, la línea M\_GCECDL, los grafos, el modelo por bolsas y la inferencia agéntica
-amplían la ruta de implementación actual con lectura multimodal, asociación entre variables y
-explicación asistida. La combinación conserva valor metodológico para comparar explicabilidad,
-sensibilidad y comportamiento frente a datos tabulares y escenarios de criticidad.
 
 % ================================================== 7. SKILLS Y COMANDOS ====
 \section{Skills y comandos operativos}
@@ -930,7 +1011,7 @@ vano sobre el mapa geográfico, con seis variables seleccionables desde el propi
 --- cuatro climáticas, más riesgo por vegetación y densidad de descargas ---, una serie de
 tiempo de doble eje que enfrenta el UITI diario del circuito contra la mediana diaria de la
 variable activa, y seis violines de distribución. La capa de UITI se superpone a la nube con
-su color umbralizado, de manera que la nube no la oculte.
+su color asignado por umbrales, de manera que la nube no la oculte.
 
 El resultado es un panel HTML autocontenido, que el comando \texttt{/app-vano-clima} publica
 como aplicación.
@@ -938,7 +1019,7 @@ como aplicación.
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.80\textwidth]{figures/cuadernos/nb01_clima.png}
-\caption{Panel climático, render real para el circuito DON23L13. Sobre el mapa, la capa de \texttt{UITI\_VANO} umbralizada por color y la nube de precipitación del día seleccionado; a la derecha, la serie de doble eje que enfrenta el UITI diario contra la mediana de la variable activa; abajo, los seis violines de distribución.}
+\caption{Panel climático, render real para el circuito DON23L13. Sobre el mapa, la capa de \texttt{UITI\_VANO} coloreada por umbrales y la nube de precipitación del día seleccionado; a la derecha, la serie de doble eje que enfrenta el UITI diario contra la mediana de la variable activa; abajo, los seis violines de distribución.}
 \label{fig:nb01}
 \end{figure}
 
@@ -1294,12 +1375,11 @@ determinismo antes de comparar variantes o continuar la búsqueda de hiperparám
 documentan además seis hipótesis explícitamente falseadas, para que no se reintenten sin
 evidencia nueva.
 
-Las líneas M\_GCECDL, MIL y TabNet se mantienen como enfoques complementarios: clasificación
-de impacto por evento con explicabilidad multimodal, predicción en la unidad de intervención,
-y referencia comparativa de modelado tabular. La combinación, junto con la referencia
-económica por ítems de contrato y la copia reproducible del dominio en Databricks, constituye
-una base más robusta para la priorización de intervenciones y la generación de reportes de
-evidencia.
+Las líneas M\_GCECDL y MIL se mantienen como enfoques complementarios: clasificación de
+impacto por evento con explicabilidad multimodal, y predicción en la unidad de intervención.
+La combinación, junto con la referencia económica por ítems de contrato y la copia
+reproducible del dominio en Databricks, constituye una base más robusta para la priorización
+de intervenciones y la generación de reportes de evidencia.
 
 \vspace{22mm}
 
