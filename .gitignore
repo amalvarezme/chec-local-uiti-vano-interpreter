@@ -39,6 +39,11 @@ reports/vault/*
 # paneles autocontenidos que exportan los cuadernos (decenas de MB por corrida)
 reports/paneles/*
 !reports/paneles/.gitkeep
+# bitacoras de despliegue: el .md se conserva (es el reporte de restricciones que
+# se le lleva al dueno del catalogo), el .json es solo el estado del renderizador
+reports/despliegues/*
+!reports/despliegues/.gitkeep
+!reports/despliegues/*.md
 lib/
 
 .vscode/

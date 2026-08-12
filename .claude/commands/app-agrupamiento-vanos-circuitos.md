@@ -2,6 +2,12 @@
 description: Publica el tablero de VANOS del cuaderno 02 (agrupamiento de vanos por UITI acumulado, con el top 10 de circuitos por vanos en clase Alto) como una Databricks App en una URL fija, detectando y reparando por su cuenta todo lo que falte — si no hay datos en el Volume encadena /subir-datos-databricks, y configura el permiso de lectura de la app sin intervención manual. Pregunta solo el nombre de la app y la URL del workspace destino.
 ---
 
+> **Read `.claude/commands/_contrato-despliegue-databricks.md` before anything else.** It is mandatory and it overrides what follows:
+> - **A. Run log** — open the bitacora *before* asking the user anything, record every numbered step as you finish it, and always close it. Its path and final state are part of the report back to the user.
+> - **B. Never abort** — a restriction gets recorded and worked around; the command runs to the end regardless. Wherever this file says "stop and report", rule B applies instead.
+> - **C. Unity Catalog target** — `workspace.default.chec-simulador` below is a default, not a requirement. Resolve it at runtime and substitute the resolved value into every path here.
+> - **D. Known restrictions** — D1–D9. If one shows up, do not re-diagnose it.
+
 Follow this exact sequence when `/app-agrupamiento-vanos-circuitos` is invoked. It publishes the **vano board** of `notebooks/project_flow/02_uiti_vano_kmeans.ipynb` as a browsable dashboard at a stable URL (the notebook renders two boards; only that one is published — see edit 3), and it is **self-healing**: it inspects the target workspace first and creates whatever is missing, so it works against a workspace that has never been touched as well as against one that already has everything.
 
 **Why this is not a Lakeview dashboard.** `/deploy-databricks-dashboard` publishes `circuit_explorer_dashboard.lvdash.json`: SQL datasets plus declarative widgets. `02` is a different animal — it fits K-Means with scikit-learn (8 coordinate spaces, frozen over the full window), builds 23 Plotly traces on the circuit board and 25 on the vano board — the latter on a 6x4 grid, including a horizontal stacked bar of the top 10 circuits by vanos in the `Alto` class and a full-width per-circuit ranking over all 208 circuits, coloured by P50/P75/P97 risk range, both recomputed in the browser for the selected date range — and drives them from a hand-written HTML+JS panel (cells 6 and 13) that also builds a two-sheet `.xlsx` on the client. Lakeview executes neither Python nor arbitrary JS, so porting `02` would mean rewriting the analysis and losing the Voronoi partition contours, the marginal KDEs, the violins and the panel. This command therefore uses **Databricks Apps**, which hosts arbitrary Python web servers, and serves the notebook's own HTML verbatim.
@@ -66,7 +72,7 @@ databricks api post /api/2.1/unity-catalog/volumes -p <profile> --json '{
   "comment": "Datos y artefactos del proyecto CHEC UITI_VANO"
 }'
 ```
-If this fails on privileges (the profile lacks `CREATE VOLUME` on `workspace.default`), stop and report exactly that — do not silently pick a different catalog or schema, since every other command in this family hardcodes `workspace.default.chec-simulador`.
+If this fails on privileges, **do not stop** — this is contract rule B. Resolve the target with contract section C (the catalog is discovered, not hardcoded), record the deviation in the bitacora, and carry on. Only when no catalog anywhere grants `CREATE VOLUME` does this become a `bloqueante` restriction — and even then the run continues, so the report ends up listing every other wall too, not just the first one.
 
 ### 2b. Delegate the data upload — do not reimplement it
 
@@ -259,7 +265,7 @@ databricks-sdk
 ```python
 """Serves the agrupamiento HTML that 02_uiti_vano_kmeans generates into the Volume.
 
-~7.4 MB, so it is read once and cached in memory rather than re-downloaded per request,
+~6.1 MB, so it is read once and cached in memory rather than re-downloaded per request,
 and always sent gzipped. GET /?refresh=1 drops the cache, which is how a re-run of the
 notebook job becomes visible without redeploying the app.
 """
@@ -369,6 +375,8 @@ databricks apps deploy <app-name> --source-code-path /Workspace/Users/<userName>
 Waits for `SUCCEEDED` and reports `mode: SNAPSHOT` plus `"App started successfully"`. On anything else, pull `databricks apps logs <app-name> -p <profile>` before touching anything.
 
 ## 8. Verify and report back
+- **The bitacora**: its path under `reports/despliegues/`, the final state `cerrar` printed (`COMPLETO`, `COMPLETO CON RESTRICCIONES` or `INCOMPLETO`), and the count of restrictions it holds. Do not soften that state in prose.
+- **Every restriction recorded, with who unblocks each one** — reproduce the `resumen` output. A run that ended INCOMPLETO reports what is still blocking, not just what worked.
 
 ```
 databricks apps get <app-name> -o json -p <profile>
@@ -381,7 +389,7 @@ Tell the user, in their language:
 - That the HTML lives at `/Volumes/workspace/default/chec-simulador/dashboards/agrupamiento_circuitos.html`, its measured size, and the two div ids that were verified present.
 - Whether the volume permission came from the `uc_securable` resource or from a manual grant.
 - **How to refresh**: re-run step 4's job, then hit `/?refresh=1`. No redeploy — the app carries no data.
-- That the first page load is slow (~7.4 MB gzipped from the Volume) and every later one is cached.
+- That the first page load is slow (~6.1 MB, ~1.8 MB gzipped from the Volume) and every later one is cached.
 - That `/salud` answers without touching the Volume, so it distinguishes an app failure from a permission failure.
 - That the two label CSVs also landed under `.../chec-simulador/reports/interpretability/artifacts/` as a side effect of cells 7 and 14.
 - That `git status --porcelain notebooks/project_flow/` was empty — the repo notebook was never modified.

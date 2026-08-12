@@ -2,6 +2,12 @@
 description: Sube/sincroniza los paquetes fuente (chec_local_interpreter, chec_impacto, scripts) y los 6 cuadernos activos de notebooks/project_flow/ al mismo Workspace de Databricks usado por /deploy-databricks-dashboard y /subir-a-databricks, ajustando únicamente sus celdas de arranque para que corran en Databricks sin generar archivos de site/, preguntando solo la URL del workspace destino.
 ---
 
+> **Read `.claude/commands/_contrato-despliegue-databricks.md` before anything else.** It is mandatory and it overrides what follows:
+> - **A. Run log** — open the bitacora *before* asking the user anything, record every numbered step as you finish it, and always close it. Its path and final state are part of the report back to the user.
+> - **B. Never abort** — a restriction gets recorded and worked around; the command runs to the end regardless. Wherever this file says "stop and report", rule B applies instead.
+> - **C. Unity Catalog target** — `workspace.default.chec-simulador` below is a default, not a requirement. Resolve it at runtime and substitute the resolved value into every path here.
+> - **D. Known restrictions** — D1–D9. If one shows up, do not re-diagnose it.
+
 Follow this exact sequence when `/subir-notebooks-databricks` is invoked. It is the standalone, single-source-of-truth command for getting the 6 **active** `notebooks/project_flow/*.ipynb` notebooks running in Databricks — useful on its own when only the notebooks or the source packages changed and neither `data/`, the tables/dashboard, nor the reports need to be touched. `/subir-a-databricks` reuses this exact command by cross-reference instead of duplicating this logic.
 
 **The 6 active notebooks, and what they were called before.** The folder was renumbered on 2026-08-04; the old numbering survives in older commits, in `notebooks/project_flow/old_version/`, and in prose across `docs/` that has not been swept yet.
@@ -181,6 +187,8 @@ Confirm the output is empty before moving on.
 ## 5. Report back
 
 Tell the user, in their language:
+- **The bitacora**: its path under `reports/despliegues/`, the final state `cerrar` printed (`COMPLETO`, `COMPLETO CON RESTRICCIONES` or `INCOMPLETO`), and the count of restrictions it holds. Do not soften that state in prose.
+- **Every restriction recorded, with who unblocks each one** — reproduce the `resumen` output. A run that ended INCOMPLETO reports what is still blocking, not just what worked.
 - The profile and workspace this run used.
 - That the three source roots (`chec_local_interpreter`, `chec_impacto`, `scripts`) and `requirements.txt` were uploaded (or refreshed) at `/Workspace/Users/<userName>/databricks-integration/...`.
 - Which of the 6 active notebooks were uploaded, and that each is a shimmed copy — the originals under `notebooks/project_flow/` were never modified. Say explicitly that `notebooks/project_flow/old_version/` was not uploaded.

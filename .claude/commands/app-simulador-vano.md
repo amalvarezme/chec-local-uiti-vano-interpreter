@@ -2,6 +2,12 @@
 description: Publica el simulador de riesgo por vano del cuaderno 06 como una Databricks App en una URL fija, servido con Voila sobre un kernel vivo. Precalcula fuera de la app todo lo que hoy se deriva del CSV de 540 MB, de modo que el arranque baje de 2.867 MB a 579 MB y de 909 MB leidos a 94,5 MB. Detecta y repara por su cuenta lo que falte. Pregunta solo el nombre de la app y la URL del workspace destino.
 ---
 
+> **Read `.claude/commands/_contrato-despliegue-databricks.md` before anything else.** It is mandatory and it overrides what follows:
+> - **A. Run log** — open the bitacora *before* asking the user anything, record every numbered step as you finish it, and always close it. Its path and final state are part of the report back to the user.
+> - **B. Never abort** — a restriction gets recorded and worked around; the command runs to the end regardless. Wherever this file says "stop and report", rule B applies instead.
+> - **C. Unity Catalog target** — `workspace.default.chec-simulador` below is a default, not a requirement. Resolve it at runtime and substitute the resolved value into every path here.
+> - **D. Known restrictions** — D1–D9. If one shows up, do not re-diagnose it.
+
 Follow this exact sequence when `/app-simulador-vano` is invoked. It publishes
 `notebooks/project_flow/06_uiti_vano_explicabilidad_simulador.ipynb` — the per-vano
 explainability and risk simulator — at a stable URL, and it is **self-healing**: it inspects
@@ -184,8 +190,7 @@ databricks api post /api/2.1/unity-catalog/volumes -p <profile> --json '{
   "comment": "Datos y artefactos del proyecto CHEC UITI_VANO"
 }'
 ```
-If this fails on privileges, stop and report exactly that — do not silently pick a different
-catalog or schema; every command in this family hardcodes `workspace.default.chec-simulador`.
+If this fails on privileges, **do not stop** — this is contract rule B. Resolve the target with contract section C (the catalog is discovered, not hardcoded), record the deviation in the bitacora, and carry on. Only when no catalog anywhere grants `CREATE VOLUME` does this become a `bloqueante` restriction — and even then the run continues, so the report ends up listing every other wall too, not just the first one.
 
 ## 3. Build the bundle
 
@@ -607,6 +612,8 @@ user to open the URL and confirm three things, because each fails differently:
 ## 9. Report back
 
 Tell the user, in their language:
+- **The bitacora**: its path under `reports/despliegues/`, the final state `cerrar` printed (`COMPLETO`, `COMPLETO CON RESTRICCIONES` or `INCOMPLETO`), and the count of restrictions it holds. Do not soften that state in prose.
+- **Every restriction recorded, with who unblocks each one** — reproduce the `resumen` output. A run that ended INCOMPLETO reports what is still blocking, not just what worked.
 - The app URL, the app name, the compute size **and why that size**, and the profile used.
 - **Everything the preflight found missing and what was done about it** — the headline of a cold
   run.

@@ -2,6 +2,12 @@
 description: Regenera el dashboard AI/BI "Explorador de circuito UITI_VANO" completo en un workspace de Databricks (tablas base + vistas + dashboard Lakeview), preguntando solo el nombre del dashboard y la URL del workspace destino.
 ---
 
+> **Read `.claude/commands/_contrato-despliegue-databricks.md` before anything else.** It is mandatory and it overrides what follows:
+> - **A. Run log** — open the bitacora *before* asking the user anything, record every numbered step as you finish it, and always close it. Its path and final state are part of the report back to the user.
+> - **B. Never abort** — a restriction gets recorded and worked around; the command runs to the end regardless. Wherever this file says "stop and report", rule B applies instead.
+> - **C. Unity Catalog target** — `workspace.default.chec-simulador` below is a default, not a requirement. Resolve it at runtime and substitute the resolved value into every path here.
+> - **D. Known restrictions** — D1–D9. If one shows up, do not re-diagnose it.
+
 Follow this exact sequence when `/deploy-databricks-dashboard` is invoked. It builds a working copy of the dashboard defined in `notebooks/databricks/circuit_explorer_dashboard.lvdash.json` — same datasets, same widgets, same maps — in a target Databricks workspace. This touches shared workspace state (creates tables/views, runs a job, publishes a dashboard), so confirm with the user before any step that spends compute or creates something visible to others.
 
 ## 0. Ask the user for the two required inputs
@@ -159,6 +165,8 @@ Only do this for tables/views actually missing from step 3.
 ## 6. Report back
 
 Tell the user, in their language:
+- **The bitacora**: its path under `reports/despliegues/`, the final state `cerrar` printed (`COMPLETO`, `COMPLETO CON RESTRICCIONES` or `INCOMPLETO`), and the count of restrictions it holds. Do not soften that state in prose.
+- **Every restriction recorded, with who unblocks each one** — reproduce the `resumen` output. A run that ended INCOMPLETO reports what is still blocking, not just what worked.
 - The new `dashboard_id` and which profile/workspace it was created in.
 - That it's reachable from that workspace's Databricks UI under Dashboards (do not fabricate a direct URL — none was confirmed from the CLI's output).
 - Which of the 5 prerequisite objects were already present vs. freshly built in this run.
