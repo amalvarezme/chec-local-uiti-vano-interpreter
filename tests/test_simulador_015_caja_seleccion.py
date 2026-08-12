@@ -421,16 +421,37 @@ def test_the_diagnosis_button_is_called_just_diagnostico(fuente):
 
 
 def test_the_figure_has_six_rows_with_the_bars_and_the_graph_in_their_own(fuente):
-    """Fila 4 las barras de UITI a lo ancho, fila 5 los costos a lo ancho y fila 6 el
+    """Fila 4 las barras de UITI partidas 3+1, fila 5 los costos a lo ancho y fila 6 el
     grafo centrado en las columnas 2-3. El grafo va a MEDIA fila y no a lo ancho porque
-    es circular: a ancho completo queda un disco pequenio con dos franjas vacias."""
+    es circular: a ancho completo queda un disco pequenio con dos franjas vacias.
+
+    El reparto de alturas se comprueba por su INVARIANTE y no por sus cifras. El grafo
+    es circular y su diametro lo fija la altura del panel, asi que su fila tiene que ser
+    con mucho la mas alta; clavar los seis numeros hacia fallar el test cada vez que se
+    reajusta el tamanio del grafo, que es justo lo que se quiere poder hacer.
+    """
     assert "rows=6, cols=4," in fuente
     assert "[None, {'type': 'xy', 'colspan': 2}, None, None]" in fuente
-    assert "row_heights=[0.14, 0.14, 0.17, 0.17, 0.14, 0.24]," in fuente
+    # Las barras de UITI: los vanos en las columnas 1-3 y el acumulado del circuito en
+    # la 4. Juntos, el total -- la suma de todos los vanos -- aplastaba contra la base a
+    # los grupos por vano, que es donde se decide la obra.
+    assert "[{'type': 'xy', 'colspan': 3}, None, None, {'type': 'xy'}]," in fuente
+
+    alturas = re.search(r"row_heights=\[([\d.,\s]+)\]", fuente)
+    assert alturas, "la figura tiene que repartir el alto explicitamente"
+    fracciones = [float(v) for v in alturas.group(1).split(",")]
+    assert len(fracciones) == 6
+    assert abs(sum(fracciones) - 1.0) < 1e-6, f"las fracciones no suman 1: {fracciones}"
+    assert fracciones[-1] >= 3 * max(fracciones[:-1]), (
+        f"la fila del grafo tiene que dominar el alto: {fracciones}"
+    )
+
     # Los violines ya no existen: los reemplazan dos barras por vano.
     assert "go.Violin(" not in fuente
     assert "IDX['barra_observada']" in fuente
     assert "IDX['barra_simulada']" in fuente
+    assert "IDX['barra_total_observada']" in fuente
+    assert "IDX['barra_total_simulada']" in fuente
 
 
 def test_no_axis_of_the_dashboard_is_logarithmic(fuente):
