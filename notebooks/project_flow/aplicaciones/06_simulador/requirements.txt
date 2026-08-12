@@ -1,0 +1,42 @@
+# Dependencias del simulador de riesgo por vano (cuaderno 06).
+#
+# Esta es la unica de las tres aplicaciones que necesita Python EN EJECUCION: el
+# boton "Simular" corre el modelo MIL de PyTorch sobre lo que el usuario elija, y no
+# hay respuesta que precomputar.
+#
+# La lista no se adivino: sale de importar el conjunto real de modulos de la
+# aplicacion y mirar que quedo en site-packages. `shap`, `optuna` y `matplotlib`
+# estan porque `chec_impacto.models.mil_persistencia` los arrastra al importarse, no
+# porque el tablero los use. Quitar de aqui sin repetir esa auditoria es como se
+# llega a un ModuleNotFoundError con la aplicacion ya arrancando.
+voila>=0.5
+jupyter-server>=2.14
+# ipykernel NO es opcional aunque no se importe en ninguna celda: es lo que provee el
+# kernel que Voila arranca. Sin el, el entorno no registra ningun kernel `python3` y
+# Voila cae en el primer kernelspec que encuentre A NIVEL DE USUARIO -- que puede
+# apuntar a un entorno de otro proyecto, o a uno ya borrado. El sintoma es un 500 y un
+# FileNotFoundError sobre un interprete que no tiene nada que ver con esta aplicacion.
+ipykernel>=6.29
+ipywidgets>=8.1
+anywidget>=0.11        # plotly>=6 respalda go.FigureWidget con anywidget; sin el, ImportError
+plotly>=6.8
+pandas>=3.0
+numpy>=2.4
+scipy>=1.17
+scikit-learn>=1.9
+torch>=2.6
+shap>=0.51
+optuna>=4.9
+matplotlib>=3.10
+joblib>=1.5
+pyarrow>=24.0
+openpyxl>=3.1
+cloudpickle>=3.0
+
+# --- Solo para CONSTRUIR el paquete, nunca en ejecucion --------------------------
+# El constructor corre las celdas de arranque del cuaderno, que si leen los
+# shapefiles. La copia que sirve la aplicacion tiene el `import geopandas` quitado,
+# asi que estos paquetes ocupan disco pero no memoria del simulador.
+geopandas>=1.1
+pyogrio>=0.13
+shapely>=2.1

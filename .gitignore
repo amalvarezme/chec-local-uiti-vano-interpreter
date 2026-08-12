@@ -88,3 +88,12 @@ Informe_Impacto_CHEC/*
 .claude/skills/**/__pycache__/
 **/__pycache__/
 *.pyc
+
+# Aplicaciones locales (notebooks/project_flow/aplicaciones/): todo lo que producen
+# es artefacto de cada maquina y se regenera con instalar + iniciar. Los entornos
+# pesan 484 MB, 530 MB y 1,6 GB; el tablero de clima construido, 27,8 MB; el paquete
+# del simulador, 95,2 MB.
+notebooks/project_flow/aplicaciones/*/.venv/
+notebooks/project_flow/aplicaciones/*/panel/
+notebooks/project_flow/aplicaciones/*/paquete/
+notebooks/project_flow/aplicaciones/*/cuaderno/

@@ -1,0 +1,19 @@
+# Dependencias del visor del cuaderno 01 (nube por vano y clima).
+#
+# Solo hacen falta para CONSTRUIR el tablero: una vez construido, servirlo no usa
+# mas que la biblioteca estandar de Python. Por eso el entorno de esta aplicacion no
+# tiene torch, ni scikit-learn, ni jupyter.
+#
+# Versiones verificadas en la maquina donde se construyo este visor. El limite
+# inferior importa en dos: plotly, porque de el sale el plotly.js que se empaqueta,
+# y pyarrow, porque el cuaderno lee el CSV de 540 MB por bloques con `pacsv.open_csv`.
+pandas>=3.0
+numpy>=2.4
+pyarrow>=24.0
+# Version EXACTA, no un minimo. De plotly.py sale el plotly.js que se empaqueta, y
+# la aplicacion 01 y la 02 comparten ese archivo en el cache del navegador solo si
+# las dos producen el MISMO bundle. Con `>=`, instalarlas en semanas distintas da dos
+# versiones y cada una se descarga aparte. Para subirla, subela en las DOS a la vez.
+plotly==6.9.0
+geopandas>=1.1
+ipython>=9.0
