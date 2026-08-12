@@ -345,3 +345,11 @@ git -c lfs.https://github.com/amalvarezme/chec-local-uiti-vano-interpreter.git/i
 
 Do not retry the `-c` form yourself, and do not run `git config` to persist it —
 that is the user's call. Record it `limitante`.
+
+**A second thing rejects a push: GitHub secret scanning.** It fires on the
+*shape* of a credential, so a `dapi…` string in a committed bitacora blocks the
+push even if the token is dead or invented (confirmed — it rejected a deliberately
+fake one in a test fixture). If it fires, the right move is to remove the secret
+from the commit, never to click the "allow secret" URL in the error. This is the
+backstop behind the redaction in section A, not a replacement for it: keep tokens
+out of `--salida` in the first place.
