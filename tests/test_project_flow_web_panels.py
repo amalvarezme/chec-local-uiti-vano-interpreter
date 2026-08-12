@@ -507,23 +507,27 @@ def test_board_04_auto_marks_the_vanos_with_events_of_the_moving_window(sources)
 
 
 def test_board_04_boxes_the_marked_vano_exactly_like_board_06():
-    """The yellow box of `04` is the box of `06`: same size, same colour, same bearing.
+    """The box of `04` is the box of `06`: same size, same opacity, same bearing.
 
     `06` marks a vano with a translucent rectangle TURNED to the vano's own direction,
     drawn as a `layout.map.layers` fill under the traces. `04` marked its vanos with a
     thicker line and a halo only, which on a circuit of hundreds of segments is not enough
     to find the one under study.
 
-    The four numbers are compared across the two notebooks rather than asserted as
-    literals here: what matters is not the value, it is that the two boards cannot drift
-    apart. Two highlights of different size over the same vano read as two different
-    things.
+    The numbers are compared across the two notebooks rather than asserted as literals
+    here: what matters is not the value, it is that the two boards cannot drift apart.
+    Two highlights of different SIZE over the same vano read as two different things.
+
+    COLOUR is deliberately NOT compared. `06` paints its selection box in the board's
+    own red, the same one as the panel border and the window bar, because there red
+    means "this is what I am looking at". `04` has no second map to disambiguate
+    against, so it keeps its yellow. Geometry is the invariant; the palette is a
+    per-board decision.
     """
     src04 = _notebook_source(BOARDS["04"])
     src06 = _notebook_source("06_uiti_vano_explicabilidad_simulador")
 
-    for constante in ("COLOR_CAJA_SELECCION", "OPACIDAD_CAJA_SELECCION",
-                      "LADO_MINIMO_CAJA", "MARGEN_CAJA"):
+    for constante in ("OPACIDAD_CAJA_SELECCION", "LADO_MINIMO_CAJA", "MARGEN_CAJA"):
         patron = rf"^{constante} = (.+?)(?:\s+#.*)?$"
         en04 = re.search(patron, src04, re.MULTILINE)
         en06 = re.search(patron, src06, re.MULTILINE)

@@ -1,7 +1,7 @@
-"""Contract tests for notebook 06's yellow selection box.
+"""Contract tests for notebook 06's selection box.
 
 Clicking a vano on the base map (row 1) marks it, and a marked vano is
-enclosed in a translucent yellow box -- turned to the vano's own inclination
+enclosed in a translucent red box -- turned to the vano's own inclination
 -- so it stays findable on a circuit of hundreds of segments. The geometry of
 that box is
 `ventanas_015.cajas_seleccion`, covered by unit tests in
@@ -12,8 +12,8 @@ source (no execution, so this stays fast), because each failure is silent:
 
   1. The box is a `layout.map.layers` fill with `below='traces'`, NOT a
      trace. A filled trace on top would swallow the map click -- which is
-     the very thing that toggles the selection -- and would tint the vano's
-     own class colour yellow.
+     the very thing that toggles the selection -- and would tint over the
+     vano's own class colour.
   2. Only row 1 carries it. Row 2 is the model's output, not a control.
   3. The box is built from the GEOMETRY, never from the window's cells.
      That is what makes the highlight survive moving the window slider,
@@ -62,7 +62,7 @@ def test_the_box_is_a_map_layer_below_the_traces_and_not_a_trace(fuente):
     assert "fig.layout.map.layers[0].source = cajas_seleccion(" in fuente
 
 
-def test_only_the_base_map_carries_the_yellow_selection_box(fuente):
+def test_only_the_base_map_carries_the_selection_box(fuente):
     """Row 2 is the model's OUTPUT, not a control: marking there would mix
     "what I chose" with "what the model predicted" on the same surface. Row 2
     has boxes of its own, but they answer a different question -- see below."""
@@ -83,9 +83,20 @@ def test_the_simulated_map_has_one_box_layer_per_outcome(fuente):
     assert "below='traces'" in capas
     assert "for _cambio in CAMBIOS" in capas
     assert "layers=CAPAS_CAJA_SIMULADA" in fuente
-    # El "no cambio" reusa el amarillo del mapa base: es justo el estado en que
-    # los dos mapas dicen lo mismo, y un cuarto color inventaria una diferencia.
-    assert "COLOR_CAJA_IGUAL = COLOR_CAJA_SELECCION" in fuente
+    # El "no cambio" ya NO se hereda de la caja de seleccion. Esa paso a ROJA -- el rojo
+    # del tablero, "esto es lo que estoy mirando" --, y heredarla dejaria a "se quedo
+    # igual" del mismo color que "subio de grupo", que es la lectura contraria. Los tres
+    # desenlaces tienen que seguir siendo tres colores distintos entre si.
+    assert "COLOR_CAJA_IGUAL = COLOR_CAJA_SELECCION" not in fuente, (
+        "atar el amarillo de 'no cambio' a la caja de seleccion lo vuelve rojo"
+    )
+    colores = {
+        nombre: re.search(rf"^{nombre} = (.+?)(?:\s+#.*)?$", fuente, re.MULTILINE)
+        for nombre in ("COLOR_CAJA_MEJORA", "COLOR_CAJA_IGUAL", "COLOR_CAJA_EMPEORA")
+    }
+    assert all(colores.values()), "los tres desenlaces tienen que declarar su color"
+    valores = [m.group(1).strip() for m in colores.values()]
+    assert len(set(valores)) == 3, f"dos desenlaces comparten color: {valores}"
     assert "fig.layout.map2.layers[_i_capa].source = _cajas[_cambio]" in fuente
 
 
