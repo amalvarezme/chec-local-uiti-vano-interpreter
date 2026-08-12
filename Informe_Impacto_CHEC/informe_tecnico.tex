@@ -220,9 +220,11 @@ Las actividades del periodo se agrupan en seis frentes de trabajo.
         barras por grupo de criticidad y una hoja de cálculo distribuible con el detalle por
         celda.
 
-  \item \textbf{Catálogo de costos por ítems de contrato.} Se incorporó el archivo de
-        actividades del contrato de CHEC, normalizado y aproximado por cercanía a las
-        variables revisables, como referencia económica del efecto simulado.
+  \item \textbf{Referencia económica por ítems de contrato.} Se incorporó el libro de precios
+        de actividades del contrato de CHEC en dos puntos del sistema: el apartado de costos
+        aproximados de la pestaña de simulación automática del informe de circuito, donde las
+        actividades se asocian por cercanía a las variables sensibles, y la cotización del
+        plan de intervención del simulador por vano.
 
   \item \textbf{Tableros de trayectorias y clima.} Se consolidaron los cuadernos de
         agrupamiento de circuitos y vanos, trayectorias por ventanas deslizantes con mapa
@@ -272,15 +274,15 @@ notas, con la ruta de síntesis multicircuito y la ruta de despliegue a Databric
 El constructor de contexto transforma series de \texttt{UITI\_VANO}, circuitos, fechas,
 variables disponibles y puntos críticos en un paquete controlado para los agentes. Las
 respuestas se validan contra contratos de salida y deben citar fechas, variables, puntos
-críticos y escenarios presentes en el contexto; una referencia que el agente no recibió no
-puede aparecer en su análisis.
+críticos y escenarios presentes en el contexto; toda referencia ausente del paquete entregado
+queda excluida del análisis por validación.
 
 El flujo distingue cuatro voces técnicas, resumidas en la Tabla~\ref{tab:agentes}. El
 despacho de las tres primeras es paralelo y solo las dos primeras bloquean la continuación:
-si falta el insumo opcional de la sensibilidad automática, esa etapa se omite declarándolo y
-el informe se genera igual. Si tras los reintentos de reparación no existe un objeto JSON
-válido, el flujo detiene la generación del HTML antes que publicar una salida que no cumpla
-el contrato.
+si falta el insumo opcional de la sensibilidad automática, esa etapa se omite dejando
+constancia de ello y el informe se genera igual. Si tras los reintentos de reparación no
+existe un objeto JSON válido, el flujo detiene la generación del HTML en lugar de publicar una
+salida que incumpla el contrato.
 
 \begin{table}[H]
 \centering
@@ -326,8 +328,8 @@ impidiendo que se use como predictor. Las clases son cuatro niveles ordinales --
 Medio-Alto y Alto --- obtenidos por vecino más cercano sobre una geometría de agrupamiento
 $K$-medias en el plano $(n_{\text{obs}}, u)$, donde $n_{\text{obs}}$ es el número de eventos
 observados y $u$ el UITI acumulado. Esa geometría se calcula una sola vez, se congela y se
-verifica por firma criptográfica: si alguien moviera los centroides, el flujo falla de forma
-ruidosa en lugar de desplazar en silencio todas las clases derivadas.
+verifica por firma criptográfica: cualquier modificación de los centroides interrumpe la
+ejecución con un error explícito, en lugar de desplazar las clases derivadas sin registro.
 
 Sobre esa base operan dos granularidades complementarias. La línea M\_GCECDL clasifica el
 \textbf{evento} y sostiene la explicabilidad por modos y escenarios. La línea MIL puntúa la
@@ -393,19 +395,20 @@ reutilizando exactamente los mismos pesos.}
 \label{fig:modelo}
 \end{figure}
 
-Tres propiedades del diseño no son detalles de implementación:
+El diseño garantiza tres propiedades con consecuencias directas sobre la validez de la
+clasificación:
 
 \begin{itemize}
   \item \textbf{Invariancia de cardinalidad.} Duplicar todas las instancias de una bolsa deja
-        $\hat{p}_b$ idéntico. Sin esa garantía el modelo podría leer el número de eventos por
-        una vía indirecta, y ese número es justamente una de las dos coordenadas que definen
-        la clase.
+        $\hat{p}_b$ idéntico. En ausencia de esta garantía el modelo podría acceder al número
+        de eventos por una vía indirecta, siendo esa cantidad una de las dos coordenadas que
+        definen la clase.
   \item \textbf{$n_{\text{obs}}$ es observado, nunca predicho.} De las dos coordenadas que
-        deciden la clase, el modelo solo aporta $u$.
-  \item \textbf{El grafo es fijo.} Se registra como memoria intermedia y no como parámetro:
-        ninguna arista se aprende. Lo único aprendible en todo el camino del grafo es la
-        compuerta $g_b$, que escala por bolsa las aristas que ya existen; nunca crea ni borra
-        ninguna.
+        determinan la clase, el modelo solo aporta $u$.
+  \item \textbf{El grafo es fijo.} Se registra como memoria intermedia y no como parámetro,
+        de modo que ninguna arista se aprende. El único elemento ajustable en todo el camino
+        del grafo es la compuerta $g_b$, que escala por bolsa las aristas existentes sin crear
+        ni eliminar ninguna.
 \end{itemize}
 
 \subsection{Formulación matemática}
@@ -442,7 +445,7 @@ objetivo de la bolsa $b$:
 \end{equation}
 
 El término supervisado es un error cuadrático ponderado por la densidad inversa del objetivo,
-de modo que la cola alta de UITI no quede sepultada bajo la masa central:
+lo que evita que la cola alta de UITI quede dominada por la masa central de la distribución:
 
 \begin{equation}
 \mathcal{L}_{\mathrm{sup}} = \frac{1}{B}\sum_{b} \tilde{w}(t_b)\,(\hat{p}_b - t_b)^2,
@@ -465,9 +468,9 @@ se acota sin anular el gradiente:
 \tilde{\mathcal{L}}_{\mathrm{rec}} = \frac{\mathcal{L}^{\mathrm{raw}}_{\mathrm{rec}}}{1 + \mathcal{L}^{\mathrm{raw}}_{\mathrm{rec}}} \in [0,1) .
 \end{equation}
 
-Su objetivo es el $x$ original y nunca $x'$: si fuera $x'$, la compuerta --- lo único
-aprendible del camino del grafo --- controlaría su propio objetivo y podría reducir la pérdida
-simplificándolo en lugar de mejorar la representación.
+Su objetivo es el $x$ original y no $x'$. De emplearse $x'$, la compuerta --- único elemento
+ajustable del camino del grafo --- controlaría su propio objetivo y podría reducir la pérdida
+simplificándolo, sin mejorar la representación.
 
 El término de información mutua es el único que ata la representación aprendida a la
 estructura experta. Compara, mediante información mutua cuadrática de Rényi, un núcleo
@@ -480,9 +483,9 @@ gaussiano sobre los perfiles de variables reconstruidas contra el núcleo del gr
 \end{equation}
 
 $K_g$ no se estima de los datos: se construye una sola vez en el constructor de la pérdida a
-partir de la lista de nombres de las variables, se guarda como constante y no recibe
-gradiente. El lado experto es inmóvil por construcción, así que el término solo puede empujar
-la representación aprendida hacia la estructura del grafo, nunca el grafo hacia los datos.
+partir de la lista de nombres de las variables, se almacena como constante y no recibe
+gradiente. El lado experto es invariante por construcción, de modo que el término solo puede
+aproximar la representación aprendida a la estructura del grafo, y no el grafo a los datos.
 
 Finalmente, el término de clase es una entropía cruzada sobre las fronteras de la geometría
 congelada, diferenciable a través de $\hat{p}_b$:
@@ -493,10 +496,10 @@ congelada, diferenciable a través de $\hat{p}_b$:
 \mathcal{L}_{\mathrm{cl}} = \mathrm{CE}\!\left(-\frac{d^2\big(n^{\mathrm{obs}}_b,\, \hat{u}_b\big)}{T},\; c^{*}_b\right).
 \end{equation}
 
-Sin este término nada en el costo sabría dónde están las fronteras entre centroides, que es
-exactamente lo que mide la métrica de evaluación. La clase objetivo $c^{*}_b$ se deriva aquí
-de lo observado con la misma geometría, nunca se recibe por parámetro, de modo que es
-imposible pasar por accidente un objetivo inconsistente con la regla de asignación.
+Sin este término, ningún componente del costo incorporaría la posición de las fronteras entre
+centroides, que es precisamente lo que evalúa la métrica de desempeño. La clase objetivo
+$c^{*}_b$ se deriva de lo observado con la misma geometría y no se recibe por parámetro, lo
+que impide introducir un objetivo inconsistente con la regla de asignación.
 
 \begin{table}[H]
 \centering
@@ -517,11 +520,12 @@ Clase & $1{,}00$ & No & Usa la geometría de centroides, artefacto fijo distinto
 \end{tabularx}
 \end{table}
 
-Conviene registrar una advertencia medida y no teórica: los dos términos del grafo están
-acotados en $[0,1]$ y pesan $0{,}01$ cada uno, de modo que entre ambos pueden mover el costo
-total como máximo $0{,}02$, frente a un término supervisado que se movió entre $0{,}35$ y
-$6{,}8$. Con estos valores el grafo casi no participa del gradiente, y determinar su aporte
-real exige una ablación explícita.
+Corresponde registrar una limitación de orden cuantitativo y no conceptual: los dos términos
+del grafo están acotados en $[0,1]$ y pesan $0{,}01$ cada uno, por lo que su contribución
+conjunta al costo total no supera $0{,}02$, frente a un término supervisado cuyo rango
+observado fue de $0{,}35$ a $6{,}8$. Con esta configuración la participación del grafo en el
+gradiente es marginal, y su aporte efectivo requiere una ablación explícita para ser
+establecido.
 
 \subsection{Importancia por modos y escenarios}
 
@@ -587,52 +591,129 @@ bolsa, recalcula $\hat{u}_b$ y deriva la clase con la misma regla. La cardinalid
 $n_{\text{obs}}$ nunca se modifica: una intervención cambia las características del activo, no
 el número de eventos ya ocurridos.
 
-Cada variable del modelo recibe además un veredicto explícito de simulabilidad, tomado del
+Cada variable del modelo recibe además una calificación explícita de simulabilidad, tomada del
 diccionario de columnas del proyecto: \emph{sí, por intervención} cuando CHEC puede
-modificarla en campo; \emph{sí, por escenario} cuando nadie la controla pero constituye el
-``qué pasaría si'' que justifica el simulador; \emph{limitado} cuando solo tiene sentido bajo
-una lectura declarada; y \emph{no} cuando simularla sería circular o describe lo que el vano
-es. Sin esa capa, el panel ofrecería mover las coordenadas geográficas de un vano junto a su
-riesgo de vegetación, como si reubicar un poste y podar fueran opciones equivalentes.
+modificarla en campo; \emph{sí, por escenario} cuando no es controlable pero constituye el
+supuesto hipotético que justifica el simulador; \emph{limitado} cuando solo admite una lectura
+declarada; y \emph{no} cuando su simulación resultaría circular o cuando la variable describe
+un atributo constitutivo del vano. Esta capa evita que el panel presente como equivalentes
+intervenciones de naturaleza distinta, por ejemplo el desplazamiento de las coordenadas
+geográficas de un vano y la reducción de su riesgo por vegetación.
 
 El mismo cálculo se ejecuta en lote sobre las 111.233 celdas del conjunto de datos en
 aproximadamente un minuto, dado que cada pasada del modelo devuelve un valor por bolsa. Dos
-decisiones gobiernan la lectura de esa hoja: la pregunta se invierte para las celdas que ya
-están en el grupo más bajo --- donde el ranking informativo es de qué depende que se
-mantengan ---, y las celdas sin eventos se etiquetan como tales en lugar de asignarles el
-grupo Bajo, porque sin bolsa no hay predicción.
+convenciones condicionan la lectura de esa hoja: para las celdas que ya se encuentran en el
+grupo más bajo la pregunta se invierte, y el ranking informa de qué depende que se mantengan;
+y las celdas sin eventos se etiquetan como tales en lugar de asignarles el grupo Bajo, dado
+que en ausencia de bolsa no existe predicción.
 
 \subsection{Referencia económica por ítems de contrato}
+\label{sec:costos}
 
-El catálogo de actividades del contrato de CHEC se normaliza y se aproxima por cercanía a las
-variables revisables, para traducir el efecto simulado a un orden de magnitud de costo. Las
-dos mitades están deliberadamente desacopladas: seleccionar una actividad de poda no modifica
-la variable de riesgo por vegetación, y bajar esa variable no programa una poda. El modelo no
-dispone de un mapeo entre actividades contractuales y variables, e inventarlo produciría un
-número con apariencia de estimación de beneficio sin serlo.
+La valoración económica se apoya en un único insumo, el libro de precios del contrato de CHEC
+--- \texttt{Actividades\_mantenimiento\_costos\_2026.xlsx} ---, y se expone en dos puntos
+distintos del sistema: la pestaña de simulación automática del informe de circuito y la fila
+de costo del simulador por vano. Ambos recorridos comparten el mismo principio de diseño y se
+describen a continuación.
+
+El insumo se lee mediante un módulo específico y no con una lectura directa de hoja de
+cálculo, porque el archivo es la exportación de una tabla dinámica y requiere tres
+correcciones deterministas: descartar la fila \emph{Total general}, que es el pie de la tabla
+dinámica y, ofrecida como actividad, introduciría el promedio de todo el catálogo; apartar y
+enumerar de forma explícita las doce actividades que llegan sin costo unitario, en lugar de
+omitirlas en silencio; y reparar la codificación de los nombres, dado que el catálogo carece
+de código de ítem y el nombre opera como clave.
+
+\subsubsection{Estimación económica en el informe de circuito}
+
+El flujo \texttt{/report} incorpora un apartado económico propio dentro de la pestaña de
+simulación automática de su informe HTML. Su construcción es determinista: se ordenan las
+variables de la tabla de sensibilidad por la magnitud absoluta máxima de cambio, se conservan
+las ocho primeras y, para cada una, se recuperan hasta tres actividades del libro de precios
+por coincidencia de tokens entre el nombre de la variable, sus términos asociados y la
+descripción de la actividad. La correspondencia entre variables del modelo y familias de
+actividad está declarada explícitamente en el código, variable por variable, según se resume
+en la Tabla~\ref{tab:costos}.
+
+El resultado se presenta en dos bloques. El primero lista, por variable sensible, las
+actividades cercanas con su costo promedio y su puntaje de cercanía. El segundo cruza ese
+listado con las curvas \emph{softmax} por clase: para hasta cuatro variables toma el valor
+probado con menor riesgo ordinal estimado y lo coteja con la actividad cercana de menor costo
+disponible, produciendo una suma orientativa que el propio informe declara como referencia y
+no como presupuesto. Este mismo contexto se entrega, cuando existe, a la skill
+\texttt{auto-simulator}, que debe citar únicamente los costos recibidos y calificarlos como
+aproximaciones. Si el libro de precios o la tabla de sensibilidad no están disponibles, el
+apartado se declara vacío y el informe se genera igual.
+
+\subsubsection{Costo de la intervención en el simulador por vano}
+
+El simulador del cuaderno 06 emplea el mismo catálogo con otro propósito: no aproximar por
+cercanía textual, sino cotizar el plan que el usuario declara. La rejilla del panel recibe las
+actividades marcadas por vano con sus repeticiones y devuelve el total de cada vano junto con
+su desglose ordenado de mayor a menor subtotal. Un vano sin actividades conserva su fila con
+valor cero, porque ese cero indica que la simulación movió su riesgo sin obra asociada. Una
+actividad ausente del catálogo interrumpe el cálculo en lugar de valorarse en cero, dado que
+un presupuesto incompleto no sería distinguible en pantalla de uno correcto.
+
+\subsubsection{Desacople entre efecto simulado y costo}
+
+En ambos recorridos las dos mitades permanecen deliberadamente desacopladas: seleccionar una
+actividad de poda no modifica la variable de riesgo por vegetación, y reducir esa variable no
+programa una poda. El modelo no dispone de una correspondencia entre actividades contractuales
+y variables, y establecerla sin respaldo produciría una cifra con apariencia de estimación de
+beneficio que no lo sería. Lo que el sistema presenta lado a lado es el efecto simulado y el
+costo cotizado del plan declarado; la unión de ambos permanece como decisión del usuario hasta
+que CHEC provea esa correspondencia.
 
 \begin{table}[H]
 \centering
-\caption{Apartados económicos conectados a variables revisables del modelo}
+\caption{Correspondencia declarada entre familias de actividad del contrato y variables
+revisables del modelo, según la tabla de términos del módulo de costos}
 \label{tab:costos}
 \small
-\begin{tabularx}{\textwidth}{L{3.2cm} L{3.4cm} X}
+\begin{tabularx}{\textwidth}{L{3.9cm} L{4.6cm} X}
 \toprule
-\textbf{Apartado} & \textbf{Variables cercanas} & \textbf{Orden de costo promedio (COP)} \\
+\textbf{Familia de actividad} & \textbf{Variables del modelo} & \textbf{Términos de búsqueda} \\
 \midrule
-Transformadores & \texttt{CNT\_TRF}, \texttt{CAPACIDAD\_NOMINAL} & 109.345 -- 696.655 \\
-Apoyos y postes & \texttt{ALTURA}, \texttt{VAL\_CRIT\_APOYO} & 24.960 -- 202.370 \\
-Puesta a tierra & \texttt{CANTIDAD\_TIERRA}, \texttt{DDT} & 118.348 -- 333.116 \\
-Vegetación & \texttt{NR\_T} & 166.112 -- 5.131.579 \\
-Crucetas y red primaria & \texttt{LONG\_CRUCETA}, \texttt{CONDUCTOR} & 3.565 -- 465.230 \\
-Inspección y mantenimiento & \texttt{TIPO}, \texttt{TIPO\_TAX}, \texttt{CNT\_VN} & 35.563 -- 50.804 \\
+Transformadores &
+\texttt{CNT\_TRF}, \texttt{CAPACIDAD\_NOMINAL}, \texttt{PROMEDIO\_KWH\_TRF}, \texttt{FID\_TRAFO} &
+transformador, bajantes, kVA \\
+\addlinespace
+Red primaria y conductores &
+\texttt{LONGITUD}, \texttt{CNT\_FASES}, \texttt{CONDUCTOR}, \texttt{NG\_RED} &
+red primaria, instalación por hilo, cable, cable de guarda \\
+\addlinespace
+Red secundaria &
+\texttt{CALIBRE\_NEUTRO} &
+red secundaria, cable, hilo \\
+\addlinespace
+Apoyos y postes &
+\texttt{ALTURA}, \texttt{VAL\_CRIT\_APOYO}, \texttt{COD\_APOYO\_FIN} &
+apoyo, poste, vestida de poste, retiro de apoyo \\
+\addlinespace
+Crucetas &
+\texttt{LONG\_CRUCETA} &
+cruceta, vestida de poste \\
+\addlinespace
+Puesta a tierra &
+\texttt{CANTIDAD\_TIERRA}, \texttt{DDT} &
+puesta a tierra primaria y secundaria, inspección \\
+\addlinespace
+Poda de vegetación &
+\texttt{NR\_T} &
+poda en redes rurales, poda en redes urbanas \\
+\addlinespace
+Inspección y mantenimiento &
+\texttt{TIPO}, \texttt{TIPO\_TAX}, \texttt{CNT\_VN} &
+inspección, protección, mantenimiento de redes \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-Los valores son referencias observadas en el archivo de costos. La cuantificación final
-depende de cantidades, alcance de obra, zona, disponibilidad operativa y validación
-contractual de CHEC.
+Los importes que el sistema despliega proceden en su totalidad del libro de precios vigente y
+se recalculan en cada ejecución; el presente informe no los reproduce, dado que la
+cuantificación final depende de cantidades, alcance de obra, zona, disponibilidad operativa y
+validación contractual de CHEC.
 
 \subsection{TabNet como contexto comparativo}
 
@@ -647,26 +728,26 @@ sensibilidad y comportamiento frente a datos tabulares y escenarios de criticida
 \section{Skills y comandos operativos}
 \label{sec:skills}
 
-\subsection{Qué es una skill y cómo se ejecuta}
+\subsection{Definición y ejecución de una skill}
 
 Una \emph{skill} es un contrato declarativo en Markdown, versionado en el repositorio bajo
-\texttt{.claude/skills/}, que describe a un agente qué debe hacer, con qué insumos, bajo qué
-restricciones y en qué forma exacta debe entregar el resultado. No es código ejecutable ni un
-prompt suelto: es la especificación que el entorno de agente carga antes de razonar.
+\texttt{.claude/skills/}, que especifica a un agente su tarea, sus insumos, sus restricciones
+y la forma exacta del resultado esperado. No constituye código ejecutable: es la
+especificación que el entorno de agente carga previamente al razonamiento.
 
-Esa separación es la que hace verificable el sistema. El cálculo lo realiza Python de forma
+Esta separación es la que hace verificable el sistema. El cálculo lo realiza Python de forma
 determinista y la skill gobierna únicamente la interpretación, sujeta a tres reglas
 transversales:
 
 \begin{itemize}
-  \item \textbf{Solo contexto entregado.} La skill puede citar fechas, variables, escenarios
-        y puntos críticos que el paquete de contexto contiene; nada más. Una fecha que no
-        recibió no puede aparecer en su salida.
+  \item \textbf{Restricción al contexto entregado.} La skill solo puede citar fechas,
+        variables, escenarios y puntos críticos contenidos en el paquete de contexto; una
+        referencia ausente de ese paquete no puede figurar en su salida.
   \item \textbf{Forma de salida fijada.} Cada skill de razonamiento declara un contrato JSON
         con secciones obligatorias, que se valida antes de integrarse al informe.
-  \item \textbf{Invocación por referencia.} Una skill que necesita a otra la invoca; nunca
-        copia su lógica. Así, un cambio en el motor de reporte se propaga a todos sus
-        consumidores sin sincronización manual.
+  \item \textbf{Invocación por referencia.} Una skill que requiere a otra la invoca en lugar
+        de replicar su lógica, de modo que una modificación del motor de reporte se propaga a
+        todos sus consumidores sin sincronización manual.
 \end{itemize}
 
 Las skills del proyecto se agrupan en cuatro familias, resumidas a continuación.
@@ -683,7 +764,7 @@ reciben un paquete de contexto ya calculado y devuelven un objeto JSON validado.
 \footnotesize
 \begin{tabularx}{\textwidth}{L{4.0cm} L{3.6cm} X}
 \toprule
-\textbf{Skill} & \textbf{Qué recibe} & \textbf{Qué produce} \\
+\textbf{Skill} & \textbf{Insumo} & \textbf{Producto} \\
 \midrule
 \texttt{historical} &
 Selección de circuito y ventana, serie diaria, puntos críticos, causas observadas, variables disponibles y faltantes, relaciones del grafo. &
@@ -719,11 +800,11 @@ Coordinan el flujo completo sobre el motor determinista. Son el punto de entrada
 \footnotesize
 \begin{tabularx}{\textwidth}{L{4.0cm} X L{3.8cm}}
 \toprule
-\textbf{Skill} & \textbf{Qué hace} & \textbf{Qué genera} \\
+\textbf{Skill} & \textbf{Alcance} & \textbf{Artefactos} \\
 \midrule
 \texttt{/report} &
 Único orquestador de un circuito. Ejecuta los nueve pasos: preparación determinista, despacho paralelo de \texttt{historical}, \texttt{inference} y \texttt{auto-simulator}, unión, contraste con \texttt{expert-alignment}, render y proyección. &
-Informe HTML del circuito, bajo \texttt{reports/} \texttt{interpretability/html/}, más los tres JSON validados. \\
+Informe HTML del circuito, bajo \texttt{reports/} \texttt{interpretability/html/}, con su apartado económico por ítems de contrato (Sección~\ref{sec:costos}), más los tres JSON validados. \\
 \addlinespace
 \texttt{/reporte-lote} &
 Invoca \texttt{/report} para cada circuito de un grupo de criticidad, precedido por el gráfico de agrupamiento de la flota. No duplica lógica: la delega. &
@@ -784,7 +865,7 @@ razonamiento. Se dividen en migración del dominio y publicación de tableros.
 \footnotesize
 \begin{tabularx}{\textwidth}{L{5.5cm} X}
 \toprule
-\textbf{Comando} & \textbf{Qué migra o publica} \\
+\textbf{Comando} & \textbf{Alcance de la migración o publicación} \\
 \midrule
 \multicolumn{2}{l}{\emph{Migración del dominio}} \\
 \midrule
@@ -804,10 +885,23 @@ razonamiento. Se dividen en migración del dominio y publicación de tableros.
 \end{tabularx}
 \end{table}
 
-Cada comando de publicación detecta y repara por su cuenta lo que falte --- si no hay datos
-en el Volume encadena la subida correspondiente --- y configura el permiso de lectura de la
-aplicación sin intervención manual. El único dato que solicitan es el nombre de la aplicación
-y la URL del espacio de trabajo.
+Cada comando de publicación verifica sus precondiciones y las resuelve de forma autónoma ---
+si no existen datos en el Volume encadena la subida correspondiente --- y configura el permiso
+de lectura de la aplicación sin intervención manual. Los únicos parámetros que solicitan son
+el nombre de la aplicación y la URL del espacio de trabajo destino.
+
+La Figura~\ref{fig:databricks} presenta el tablero AI/BI resultante de la migración del
+dominio.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.94\textwidth]{figures/informe/dashboard_databricks_1.png}
+\caption{Tablero AI/BI de Lakeview publicado por \texttt{/deploy-databricks-dashboard} sobre
+las tablas Delta y vistas migradas. Los filtros de circuito y rango de fechas encabezan el
+tablero; el panel de agrupamiento refleja el histórico completo y se declara explícitamente
+como no reactivo al filtro temporal, que sí gobierna la serie diaria y el mapa.}
+\label{fig:databricks}
+\end{figure}
 
 % ======================================================== 8. CUADERNOS =====
 \section{Cuadernos del flujo de trabajo}
@@ -818,11 +912,11 @@ El flujo activo son siete cuadernos numerados de corrido en
 las piezas de análisis, entrenamiento y tablero que lo sostienen. El pipeline original que
 entrenó el modelo M\_GCECDL permanece archivado en el subdirectorio de versiones anteriores.
 
-Los tres primeros cuadernos son independientes entre sí. La única dependencia dura es la
-geometría de agrupamiento que ajusta el panel de trayectorias por vano: los tres flujos que dependen
-del modelo la reutilizan en modo
-solo lectura y verifican su firma, de modo que un cambio de centroides falla de forma ruidosa
-en lugar de derivar en silencio.
+Los tres primeros cuadernos son independientes entre sí. La única dependencia estricta es la
+geometría de agrupamiento que ajusta el panel de trayectorias por vano: los tres flujos que
+dependen del modelo la reutilizan en modo solo lectura y verifican su firma criptográfica antes
+de usarla, de modo que una modificación de los centroides interrumpe la ejecución con un error
+explícito en lugar de propagarse a las clases derivadas.
 
 Los resultados parciales que acompañan a cada cuaderno son la salida real de su última
 ejecución sobre la ventana \mbox{2025-11-01} a \mbox{2026-04-30}: 159.470 eventos, 208
@@ -830,17 +924,16 @@ circuitos y 27.390 vanos.
 
 \subsection{Panel climático por vano}
 
-\textbf{A qué responde.} Cómo se comporta cada variable climática sobre los vanos de un
-circuito, y si su evolución acompaña o no a la del UITI observado.
+Este cuaderno caracteriza el comportamiento de las variables climáticas sobre los vanos de un
+circuito y su correspondencia temporal con el UITI observado. Para ello dibuja una nube por
+vano sobre el mapa geográfico, con seis variables seleccionables desde el propio navegador
+--- cuatro climáticas, más riesgo por vegetación y densidad de descargas ---, una serie de
+tiempo de doble eje que enfrenta el UITI diario del circuito contra la mediana diaria de la
+variable activa, y seis violines de distribución. La capa de UITI se superpone a la nube con
+su color umbralizado, de manera que la nube no la oculte.
 
-\textbf{Qué hace.} Dibuja una nube por vano sobre el mapa geográfico, con seis variables
-seleccionables desde el propio navegador --- cuatro climáticas más riesgo por vegetación y
-densidad de descargas ---, una serie de tiempo de doble eje que enfrenta el UITI diario del
-circuito contra la mediana diaria de la variable activa, y seis violines de distribución. La
-capa de UITI se dibuja sobre la nube y con su color umbralizado, para que la nube no la tape.
-
-\textbf{Qué genera.} Un panel HTML autocontenido, que el comando \texttt{/app-vano-clima}
-publica como aplicación.
+El resultado es un panel HTML autocontenido, que el comando \texttt{/app-vano-clima} publica
+como aplicación.
 
 \begin{figure}[H]
 \centering
@@ -866,17 +959,26 @@ geometria armada para 228 circuitos | 21,659 transformadores | 10,134 switches
 
 \subsection{Agrupamiento de circuitos y de vanos}
 
-\textbf{A qué responde.} Cuáles circuitos, y dentro de ellos cuáles vanos, concentran la
-criticidad de la red, y en qué proporción.
-
-\textbf{Qué hace.} Ajusta un agrupamiento $K$-medias en espacio logarítmico sobre UITI
+Este cuaderno cuantifica en qué circuitos, y dentro de ellos en qué vanos, se concentra la
+criticidad de la red. Ajusta un agrupamiento $K$-medias en espacio logarítmico sobre UITI
 acumulado y número de eventos, una sola vez y en un espacio fijo, y reutiliza esos centroides
-para los veintiún rangos temporales. Acompaña el resultado con densidades por variable, un
+para los veintiún rangos temporales. El resultado se acompaña de densidades por variable, un
 gráfico de dispersión interactivo etiquetado por vano, circuito y grupo, y el ranking de los
 diez circuitos con más vanos en clase Alto.
 
-\textbf{Qué genera.} Dos archivos de etiquetas --- uno por circuito y otro por vano --- y el
-panel HTML que publica \texttt{/app-agrupamiento-vanos-circuitos}.
+Produce dos archivos de etiquetas --- uno por circuito y otro por vano --- y el panel HTML que
+publica \texttt{/app-agrupamiento-vanos-circuitos}. Las Figuras~\ref{fig:nb02c}
+y~\ref{fig:nb02} presentan ambas granularidades.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.94\textwidth]{figures/cuadernos/nb02_circuitos.png}
+\caption{Agrupamiento de circuitos, render real sobre los 208 circuitos del período. El plano
+UITI acumulado contra número de eventos con sus densidades marginales, el reparto por grupo de
+criticidad --- 11 Bajo, 63 Medio, 87 Medio-Alto y 47 Alto --- y las distribuciones de ambas
+coordenadas por grupo.}
+\label{fig:nb02c}
+\end{figure}
 
 \begin{figure}[H]
 \centering
@@ -903,16 +1005,15 @@ KDE propio vs scipy: error relativo maximo 7.35e-16
 
 \subsection{Trayectorias de circuito por ventanas deslizantes}
 
-\textbf{A qué responde.} Si un circuito mejora, empeora o se mantiene a lo largo del período,
-y en qué ventana cambió.
+Este cuaderno establece si un circuito mejora, se deteriora o se mantiene a lo largo del
+período, y en qué ventana ocurre el cambio. Corta el período en once ventanas de treinta días
+que se solapan --- mes calendario más la ventana cruzada del 15 al 15 ---, asigna a cada celda
+circuito-ventana su grupo de criticidad y traza su recorrido entre grupos. Incluye el mapa
+geográfico del circuito, con los tramos sin eventos en gris, y señala la ventana activa sobre
+la serie.
 
-\textbf{Qué hace.} Corta el período en once ventanas de treinta días que se solapan --- mes
-calendario más la ventana cruzada del 15 al 15 ---, asigna a cada celda circuito-ventana su
-grupo de criticidad y traza su recorrido entre grupos. Incluye el mapa geográfico del
-circuito, con los tramos sin eventos en gris, y marca la ventana activa en la serie.
-
-\textbf{Qué genera.} El archivo de trayectorias por circuito y ventana, y el panel que
-publica \texttt{/app-trayectorias-circuitos}.
+Produce el archivo de trayectorias por circuito y ventana, junto con el panel que publica el
+comando \texttt{/app-trayectorias-circuitos}.
 
 \begin{figure}[H]
 \centering
@@ -938,16 +1039,14 @@ publica \texttt{/app-trayectorias-circuitos}.
 
 \subsection{Trayectorias y agrupamiento por vano}
 
-\textbf{A qué responde.} Lo mismo que el 03, pero en la unidad de intervención: qué le pasa a
-cada vano ventana a ventana.
+Este cuaderno traslada el análisis anterior a la unidad de intervención: la evolución de cada
+vano ventana a ventana. Construye las celdas vano-ventana y ajusta sobre ellas la geometría de
+agrupamiento, de la cual es el único propietario dentro del flujo: los cuadernos 05, 06 y 07 la
+reutilizan sin reajustarla y verifican su firma en cada uso. La interfaz permite resaltar hasta
+ocho vanos simultáneos sobre la nube, la serie y el mapa.
 
-\textbf{Qué hace.} Construye las celdas vano-ventana y ajusta sobre ellas la geometría de
-agrupamiento. Este cuaderno es el \textbf{dueño de esa geometría}: los cuadernos 05, 06 y 07
-la replican sin reajustarla, y su firma se verifica en cada uso. Permite resaltar hasta ocho
-vanos simultáneos sobre la nube, la serie y el mapa.
-
-\textbf{Qué genera.} El archivo de celdas vano-ventana, la geometría de referencia y el panel
-que publica \texttt{/app-trayectorias-vanos}.
+Produce el archivo de celdas vano-ventana, la geometría de referencia y el panel que publica
+\texttt{/app-trayectorias-vanos}.
 
 \begin{figure}[H]
 \centering
@@ -971,18 +1070,32 @@ extension fija -> eventos [1, 46] | UITI [0.00, 26,570]
 
 \subsection{Aprendizaje de instancias múltiples}
 
-\textbf{A qué responde.} Si es posible predecir el grupo de criticidad de una celda
-vano-ventana a partir de sus eventos, y si esa predicción supera a las alternativas simples.
+Este cuaderno determina si el grupo de criticidad de una celda vano-ventana es predecible a
+partir de sus eventos, y si esa predicción mejora las alternativas simples. Entrena y valida el
+modelo por bolsas descrito en la Sección~\ref{sec:modelado} con validación cruzada
+estratificada y agrupada por vano, y lo contrasta contra tres líneas base --- mayoritaria,
+estructural sin clima, y persistencia --- sobre el subconjunto de bolsas cuya clase observada
+varía entre ventanas. Su modo predeterminado es de visualización y se resuelve en segundos; el
+reentrenamiento completo, disponible bajo demanda, requiere aproximadamente cuarenta minutos.
 
-\textbf{Qué hace.} Entrena y valida el modelo por bolsas descrito en la Sección~\ref{sec:modelado},
-con validación cruzada estratificada y agrupada por vano, y lo contrasta contra tres líneas
-base --- mayoritaria, estructural sin clima, y persistencia --- sobre el subconjunto de bolsas
-cuya clase observada varía entre ventanas. Corre por defecto en modo visor, en segundos, y
-reentrena bajo demanda en aproximadamente cuarenta minutos.
+El cuaderno documenta además la estructura experta incorporada al artefacto entrenado, que la
+Figura~\ref{fig:nb05} reproduce: 80 variables y 64 aristas declaradas, con
+\texttt{COD\_CAUSA} como nodo de mayor grado y 14 variables de grado cero que el término de
+grafo no alcanza.
 
-\textbf{Resultado de la corrida de verificación.} Ejecutado en modo visor, reproduce en
-11 segundos las métricas del artefacto guardado y la comparación completa contra las tres
-líneas base:
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth]{figures/cuadernos/nb05_grafo_experto.png}
+\caption{Grafo experto fijo del artefacto entrenado, render real del cuaderno 05. Los nodos se
+dimensionan por grado y se colorean por modalidad --- estructural y climática ---; las
+14 variables sin aristas se disponen aparte, a la derecha, porque la propagación por el grafo
+no las modifica. Ninguna de estas aristas se aprende: lo único ajustable en el camino del grafo
+es la compuerta que las escala por bolsa.}
+\label{fig:nb05}
+\end{figure}
+
+Ejecutado en modo de visualización, reproduce en 11 segundos las métricas del artefacto
+guardado y la comparación completa contra las tres líneas base:
 
 \begin{Verbatim}[frame=single,framesep=3mm,fontsize=\scriptsize,baselinestretch=0.95]
                           arm  accuracy  macro_f1      n
@@ -1000,73 +1113,72 @@ Medio-Alto     0.8571  0.8453  0.8512    15220
 GLOBAL: accuracy=0.8535  macro-F1=0.8710  n=62,114  clases nunca predichas=[]
 \end{Verbatim}
 
-La lectura importa: el modelo supera a persistencia por 48,9 puntos y a la línea mayoritaria
-por 71,9. La única línea base competitiva es el bosque aleatorio estructural, y es contra
-ella que la barra preregistrada no se alcanza.
+El modelo supera a la línea de persistencia por 48,9 puntos de macro-F1 y a la mayoritaria por
+71,9. La única línea base competitiva es el bosque aleatorio estructural, y es frente a ella
+que la barra preregistrada no se alcanza.
 
-\textbf{Qué genera.} El artefacto del modelo entrenado y el conjunto de bolsas precalculado,
-que son los dos insumos obligatorios de los cuadernos 06 y 07. El resultado de validación se
-reporta en la Sección~\ref{sec:pruebas}: veredicto no alcanzado, con la brecha por debajo del
-ruido de entrenamiento medido.
+Produce el artefacto del modelo entrenado y el conjunto de bolsas precalculado, insumos
+obligatorios de los cuadernos 06 y 07. El resultado de validación se detalla en la
+Sección~\ref{sec:pruebas}: veredicto no alcanzado, con la brecha por debajo del ruido de
+entrenamiento medido.
 
 \subsection{Explicabilidad y simulador de riesgo por vano}
 
-\textbf{A qué responde.} Qué variable modificar, y hasta qué valor, para que un vano concreto
-descienda de grupo de criticidad.
+Este cuaderno identifica, para un vano concreto, qué variable modificar y hasta qué valor para
+que descienda de grupo de criticidad. Presenta un tablero de seis filas sobre un núcleo de
+cómputo vivo: el botón de diagnóstico señala los vanos más críticos de la ventana activa y
+enumera las modificaciones que los bajarían de grupo; los botones de intervención y de
+escenario abren los controles de esos vanos en el valor sugerido, cada uno con su mitad del
+plan; y el botón de simulación ejecuta el barrido y actualiza los dos mapas, el ranking de
+variables, el grafo de relevancia y los violines. Los mapas se disponen lado a lado y sin
+leyenda compartida, para preservar la distinción entre una predicción y un hecho observado.
 
-\textbf{Qué hace.} Presenta un tablero de seis filas sobre núcleo de cómputo vivo. El botón de
-diagnóstico marca los vanos más críticos de la ventana activa y lista qué los bajaría de
-grupo; los botones de intervención y de escenario abren los controles de esos vanos en el
-valor sugerido, cada uno con su mitad del plan; el botón de simulación ejecuta el barrido y
-actualiza los dos mapas, el ranking de variables, el grafo de relevancia y los violines. Los
-mapas van lado a lado y sin leyenda compartida, porque mezclarlos invitaría a leer una
-predicción como un hecho observado.
+Produce la comparación entre criticidad observada y simulada, el plan de intervención por vano
+y la estimación de costo asociada. El comando \texttt{/app-simulador-vano} lo publica como
+aplicación.
 
-\textbf{Qué genera.} La comparación entre criticidad observada y simulada, el plan de
-intervención por vano y la estimación de costo asociada. El comando
-\texttt{/app-simulador-vano} lo publica como aplicación.
-
-\textbf{Resultado medido que justifica su diseño.} Sobre vanos reales, el ranking por
-sensibilidad y el ranking por caída alcanzable no comparten ninguna de sus cinco primeras
-variables. Una optimización del cálculo del plan redujo su tiempo de respuesta de $2{,}75$ a
-$0{,}26$ segundos, y una revisión del arranque bajó el pico de memoria en 321\,MB.
+Dos mediciones sustentan su diseño. Sobre vanos reales, el ranking por sensibilidad y el
+ranking por caída alcanzable no comparten ninguna de sus cinco primeras variables, lo que
+justifica calcular el segundo en lugar de derivarlo del primero. En cuanto a desempeño, una
+optimización del cálculo del plan redujo su tiempo de respuesta de $2{,}75$ a $0{,}26$
+segundos, y una revisión del arranque disminuyó el pico de memoria en 321\,MB.
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.80\textwidth]{figures/cuadernos/nb06_simulador.png}
 \caption{Simulador por vano, render real tras ejecutar el diagnóstico del circuito y una
 simulación sobre los vanos que identificó. Arriba, criticidad observada contra criticidad
-simulada sobre el mismo circuito. En el centro, la serie por ventana y el top de variables que
-bajan el UITI de cada vano marcado. Debajo, la comparación medido contra simulado: en esta
-corrida el UITI acumulado baja $175{,}2 \pm 119{,}4$ en los tres vanos diagnosticados. La fila
-de costo queda vacía a propósito: se llena solo cuando el usuario marca actividades del
-contrato, porque el modelo no infiere qué actividad corresponde a qué variable.}
+simulada sobre el mismo circuito. En el centro, la serie por ventana y las variables de mayor
+efecto sobre el UITI de cada vano marcado. Debajo, la comparación entre valor medido y
+simulado: en esta corrida el UITI acumulado desciende $175{,}2 \pm 119{,}4$ en los tres vanos
+diagnosticados. La fila de costo permanece vacía por diseño y se completa únicamente cuando el
+usuario selecciona actividades del contrato, dado que el modelo no infiere la correspondencia
+entre actividad y variable.}
 \label{fig:nb06}
 \end{figure}
 
 \subsection{Relevancia de variables por lote}
 
-\textbf{A qué responde.} La misma pregunta del simulador anterior, pero para todas las celdas del
-conjunto de datos a la vez, que es lo que necesita una hoja de planeación.
+Este cuaderno resuelve la misma pregunta del simulador anterior sobre la totalidad de las
+celdas del conjunto de datos, que es la forma en que la requiere una hoja de planeación. Barre
+las celdas completas aprovechando que cada pasada del modelo devuelve un valor por bolsa:
+recorrer las 111.233 bolsas cuesta las mismas 197 pasadas que recorrer cinco. Para las celdas
+que ya se encuentran en el grupo más bajo la pregunta se invierte --- el ranking informativo
+pasa a ser de qué depende que se mantengan ---, y esa dirección se declara en una columna
+propia. Considera únicamente variables de intervención y de escenario; las refutadas, entre
+ellas las que se miden con posterioridad al evento que el modelo debe anticipar, quedan
+excluidas del análisis.
 
-\textbf{Qué hace.} Barre las celdas completas aprovechando que cada pasada del modelo devuelve
-un valor por bolsa: recorrer las 111.233 bolsas cuesta las mismas 197 pasadas que recorrer
-cinco. Invierte la pregunta para las celdas que ya están en el grupo más bajo, donde el
-ranking informativo es de qué depende que se mantengan, y declara esa dirección en una columna
-propia. Considera únicamente variables de intervención y de escenario; las refutadas ---
-como las que se miden después del evento que el modelo debe anticipar --- quedan fuera de todo
-el análisis.
+Produce un gráfico de barras por grupo de criticidad --- Alto, Medio-Alto y Medio --- con las
+diez variables que en promedio más reducen el UITI de ese grupo, y una hoja de cálculo
+distribuible con una fila por celda vano-ventana: su circuito, su grupo o la etiqueta de
+ausencia de eventos, y sus diez variables de mayor efecto.
 
-\textbf{Qué genera.} Un gráfico de barras por grupo de criticidad --- Alto, Medio-Alto y Medio
---- con las diez variables que en promedio más bajan el UITI de ese grupo, y una hoja de
-cálculo distribuible con una fila por celda vano-ventana: su circuito, su grupo o la etiqueta
-de ausencia de eventos, y su top de diez variables.
-
-\textbf{Corrida de verificación.} Sin interacción de punta a punta: 111.233 bolsas por 18
-controles, es decir 197 candidatos evaluados, en 361 segundos, más 15 segundos para escribir
-el libro de cálculo de 12,1\,MB en el equipo de referencia. El barrido completo del conjunto
-de datos cuesta las mismas 197 pasadas del modelo que barrer un puñado de vanos, que es lo que
-lo hace viable.
+La corrida de verificación se ejecuta sin interacción de punta a punta: 111.233 bolsas por 18
+controles, es decir 197 candidatos evaluados, en 361 segundos, más 15 segundos para escribir el
+libro de cálculo de 12,1\,MB en el equipo de referencia. La viabilidad del barrido completo
+descansa en ese costo constante: recorrer el conjunto de datos íntegro requiere las mismas
+197 pasadas del modelo que recorrer un grupo reducido de vanos.
 
 \begin{figure}[H]
 \centering
@@ -1119,19 +1231,20 @@ Diferencia observada & $-1{,}02$ puntos \\
 \end{tabularx}
 \end{table}
 
-El resultado se reporta sin atenuación, junto con los matices que un veredicto binario
-oculta. La exactitud global es $0{,}8535$ y ninguna clase queda abandonada; la clase Alto es
-la mejor del modelo, con F1 de $0{,}958$, y el error es casi siempre de vecino inmediato
---- confundir Bajo con Alto ocurre una vez en 13.323 casos ---, que es el perfil de error
-deseable para priorización operativa. El modelo supera a la línea base justamente en el grupo
-Bajo, donde la geometría es más ambigua.
+El resultado se reporta junto con los matices que un veredicto binario no recoge. La exactitud
+global es $0{,}8535$ y ninguna clase queda sin predicciones; la clase Alto registra el mejor
+desempeño del modelo, con F1 de $0{,}958$, y el error se concentra en clases contiguas --- la
+confusión entre Bajo y Alto ocurre una vez en 13.323 casos ---, perfil que resulta adecuado
+para priorización operativa. El modelo supera a la línea base en el grupo Bajo, donde la
+geometría presenta mayor ambigüedad.
 
-Sobre todo, la brecha es menor que el ruido del propio entrenamiento: dos corridas de
-configuración idéntica arrojaron $0{,}8012$ y $0{,}8710$, siete puntos de dispersión
-atribuibles al no determinismo de la ejecución en GPU, mientras que la línea base reprodujo
-su valor de forma idéntica en seis corridas. Con esa dispersión, la diferencia de $-1{,}02$
-puntos no constituye una conclusión sobre la calidad relativa de los modelos, y estabilizar
-el determinismo del entrenamiento pasa a ser un prerrequisito antes que una mejora opcional.
+La consideración determinante es que la brecha es menor que el ruido del propio entrenamiento:
+dos corridas de configuración idéntica arrojaron $0{,}8012$ y $0{,}8710$, siete puntos de
+dispersión atribuibles al no determinismo de la ejecución en GPU, mientras que la línea base
+reprodujo su valor de forma idéntica en seis corridas. Bajo esa dispersión, la diferencia de
+$-1{,}02$ puntos no permite concluir sobre la calidad relativa de los modelos, y la
+estabilización del determinismo del entrenamiento constituye un prerrequisito y no una mejora
+opcional.
 
 La publicación web cuenta con flujo de construcción Astro y despliegue por GitHub Pages, lo
 que permite presentar resultados a revisión técnica sin depender de una aplicación de
@@ -1150,11 +1263,10 @@ por separado como aplicaciones Databricks.
 \toprule
 \textbf{Entregable} & \textbf{Alcance} & \textbf{Enlace} \\
 \midrule
-Repositorio de informes & Organización autocontenida por periodo para los informes técnicos. & \url{https://github.com/jclugor/informe_chec_2026} \\
-Repositorio técnico & Modelo por bolsas, simulador por vano, relevancia por lote, agentes, costos y publicación web. & \url{https://github.com/jclugor/chec-local-uiti-vano-interpreter} \\
-Sitio público técnico & Publicación Astro con visualizaciones, arquitectura, modelo, agentes y resultados interactivos. & \url{https://jclugor.github.io/chec-local-uiti-vano-interpreter/} \\
+Repositorio técnico & Modelo por bolsas, simulador por vano, relevancia por lote, cuadernos del flujo, agentes, costos y publicación web. & \url{https://github.com/amalvarezme/chec-local-uiti-vano-interpreter} \\
+Sitio público técnico & Publicación Astro con visualizaciones, arquitectura, modelo, agentes y resultados interactivos. Se despliega por GitHub Pages desde el repositorio técnico. & \url{https://amalvarezme.github.io/chec-local-uiti-vano-interpreter/} \\
 Sitio base del proyecto & Página institucional del proyecto CHEC--UNAL. & \url{https://amalvarezme.github.io/CHECUNAL_2026/} \\
-Repositorio del tablero actual & Código del tablero Dash, servicios FastAPI y ruta de paridad Databricks reportada previamente. & \url{https://github.com/jclugor/dashboard_chec} \\
+Repositorio del tablero & Código del tablero Dash, servicios FastAPI y ruta de paridad Databricks reportada previamente. & \url{https://github.com/amalvarezme/dashboard_chec} \\
 \bottomrule
 \end{tabularx}
 \end{table}
