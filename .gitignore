@@ -77,6 +77,13 @@ openspec/
 # Climate skill runtime cache
 .clima_cache/
 
+# LaTeX impact report — local-only sources and build artifacts (~141 MB of figures).
+# Se excluye el contenido, no el directorio: git no puede re-incluir un archivo si su
+# directorio padre esta excluido. Solo el informe tecnico entregable queda versionado.
+Informe_Impacto_CHEC/*
+!Informe_Impacto_CHEC/informe_tecnico.tex
+!Informe_Impacto_CHEC/informe_tecnico.pdf
+
 # Never track compiled Python caches, even under the re-included .claude/skills/**
 .claude/skills/**/__pycache__/
 **/__pycache__/
