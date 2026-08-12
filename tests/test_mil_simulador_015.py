@@ -714,3 +714,61 @@ def test_no_entry_point_promotes_the_whole_instance_matrix():
         "promueve la matriz entera antes de indexar; indexa primero "
         f"(`np.asarray(X_inst[filas], dtype=...)`): {culpables}"
     )
+
+
+def test_plegar_rezagos_collapses_a_lag_family_into_one_node():
+    """El grafo del cuaderno 06 dibujaba 66 nodos, y 48 eran los 12 rezagos de cuatro
+    variables de clima. Con 64 aristas entre ellos, el anillo era casi todo decoracion
+    ilegible: 13,6 px de arco por nombre para una fuente de 10.
+
+    Plegar la familia deja 22 nodos. La relacion entre dos familias se queda con el
+    MAXIMO y no con la suma: sumar 144 pares de rezagos contra uno solo haria que el
+    clima dominara siempre por contar mas, no por moverse mas.
+    """
+    import numpy as np
+
+    from chec_local_interpreter.mil_simulador_015 import plegar_rezagos
+
+    nombres = ["temp_0", "temp_1", "ALTURA"]
+    matriz = np.zeros((3, 3))
+    matriz[0, 2] = matriz[2, 0] = 0.4
+    matriz[1, 2] = matriz[2, 1] = 0.9
+
+    plegada, plegados = plegar_rezagos(matriz, nombres)
+
+    assert plegados == ["temp", "ALTURA"]
+    assert plegada.shape == (2, 2)
+    assert plegada[0, 1] == pytest.approx(0.9)
+    assert plegada[1, 0] == pytest.approx(0.9)
+
+
+def test_plegar_rezagos_drops_the_edges_inside_a_family():
+    """`temp_0 -- temp_1` se vuelve un lazo sobre `temp`. Dibujarlo seria una arista de
+    un nodo a si mismo, que en un anillo es un punto: se descarta dejando la diagonal en
+    cero."""
+    import numpy as np
+
+    from chec_local_interpreter.mil_simulador_015 import plegar_rezagos
+
+    matriz = np.zeros((2, 2))
+    matriz[0, 1] = matriz[1, 0] = 0.7
+
+    plegada, plegados = plegar_rezagos(matriz, ["temp_0", "temp_1"])
+
+    assert plegados == ["temp"]
+    assert plegada.shape == (1, 1)
+    assert plegada[0, 0] == 0.0
+
+
+def test_plegar_rezagos_leaves_a_name_without_a_numeric_suffix_alone():
+    """`X2` y `TIPO_TAX` no son rezagos. Recortar por el ultimo `_` los convertiria en
+    `X` y `TIPO`, y `TIPO` ya existe: dos variables distintas se fundirian en una."""
+    import numpy as np
+
+    from chec_local_interpreter.mil_simulador_015 import plegar_rezagos
+
+    nombres = ["X2", "TIPO_TAX", "TIPO"]
+    plegada, plegados = plegar_rezagos(np.zeros((3, 3)), nombres)
+
+    assert plegados == nombres
+    assert plegada.shape == (3, 3)

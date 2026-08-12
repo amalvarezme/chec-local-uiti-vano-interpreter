@@ -785,6 +785,54 @@ def grafo_diferencia(
     }
 
 
+def plegar_rezagos(
+    matriz: np.ndarray, feature_names: Sequence[str]
+) -> tuple[np.ndarray, list[str]]:
+    """Colapsa cada familia de rezagos en UN nodo, y devuelve la matriz y los nombres.
+
+    El grafo del cuaderno 06 dibujaba 66 nodos, y 48 eran los doce rezagos de cuatro
+    variables de clima. Con solo 64 aristas, ese anillo era casi todo decoracion: 13,6 px
+    de arco por nombre para una fuente de 10 px, o sea nombres encimados. Plegado quedan
+    22 nodos y 62,7 px de arco, y el radio sube de 142,9 a 219,4 px porque los rotulos
+    dejan de comerse el rango del eje.
+
+    Una familia es `<nombre>_<numero>`: `temp_0 .. temp_11` son `temp`. El sufijo tiene
+    que ser TODO digitos -- `X2` y `TIPO_TAX` no son rezagos, y recortarlos por el ultimo
+    `_` los volveria `X` y `TIPO`, fundiendo `TIPO_TAX` con la variable `TIPO`, que existe
+    aparte.
+
+    La relacion entre dos familias se queda con el MAXIMO de las relaciones entre sus
+    miembros, no con la suma: sumar 144 pares de rezagos contra el unico par de dos
+    variables estaticas haria que el clima dominara por contar mas, no por moverse mas.
+
+    Las aristas DENTRO de una familia se descartan -- quedarian como un lazo de un nodo a
+    si mismo, que en una disposicion circular es un punto --, asi que la diagonal sale en
+    cero.
+    """
+    matriz = np.asarray(matriz, dtype=float)
+
+    def _familia(nombre: str) -> str:
+        cabeza, _, cola = str(nombre).rpartition("_")
+        return cabeza if cabeza and cola.isdigit() else str(nombre)
+
+    familias: list[str] = []
+    indice_de: dict[str, int] = {}
+    for nombre in feature_names:
+        familia = _familia(nombre)
+        if familia not in indice_de:
+            indice_de[familia] = len(familias)
+            familias.append(familia)
+
+    destino = [indice_de[_familia(n)] for n in feature_names]
+    plegada = np.zeros((len(familias), len(familias)), dtype=float)
+    for i, fi in enumerate(destino):
+        for j, fj in enumerate(destino):
+            if fi == fj:
+                continue
+            plegada[fi, fj] = max(plegada[fi, fj], abs(float(matriz[i, j])))
+    return plegada, familias
+
+
 def trazas_grafo(
     matriz: np.ndarray, feature_names: Sequence[str]
 ) -> dict[str, dict[str, list]]:
