@@ -1,6 +1,6 @@
 # Flujo detallado del proyecto — CHEC UITI_VANO Interpreter
 
-> Versión HTML: [`flujo-detallado.html`](./flujo-detallado.html) (mismo contenido). Para diagramas Mermaid interactivos y el historial de correcciones en vivo, ver [`project-flow-review.html`](./project-flow-review.html). Actualizado 2026-07-25, rama `main` (única rama del proyecto desde la consolidación de ramas de esa fecha).
+> Versión HTML: [`flujo-detallado.html`](./flujo-detallado.html) (mismo contenido). Actualizado 2026-07-25, rama `main` (única rama del proyecto desde la consolidación de ramas de esa fecha).
 >
 > Audiencia: ingeniería / mantenimiento del repo. Para una versión sin jerga técnica, ver [`flujo-resumen.md`](./flujo-resumen.md) / [`flujo-resumen.html`](./flujo-resumen.html).
 
@@ -160,5 +160,4 @@ que media familia reutilizaba: viven en las secciones **E1** y **E2** de
 - [`agents-guide.md`](./agents-guide.md) — arquitectura de 4 capas del framework de agentes (Skills vs. roles vs. playbooks de prompt).
 - [`report-runtime-contract.md`](./report-runtime-contract.md) — contrato de invocación de `/report` entre runtimes.
 - [`flujo-detallado.html`](./flujo-detallado.html) — este mismo documento en HTML.
-- [`project-flow-review.html`](./project-flow-review.html) — misma información con diagramas Mermaid interactivos y el historial de correcciones en vivo.
 - [`project-workflow.mmd`](./project-workflow.mmd) / [`report-family-workflow.mmd`](./report-family-workflow.mmd) — diagramas fuente de detalle (ingestión de datos → modelado ML → interpretación local → publicación; familia de comandos `/report`, respectivamente).
