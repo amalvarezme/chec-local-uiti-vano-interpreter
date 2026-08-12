@@ -2,6 +2,12 @@
 description: Publica el cuaderno 03 (trayectorias de circuito por ventanas deslizantes, con mapa geografico) como una Databricks App en una URL fija, detectando y reparando por su cuenta todo lo que falte — si no estan el CSV o los shapefiles en el Volume encadena /subir-datos-databricks, y configura el permiso de lectura de la app sin intervencion manual. Pregunta solo el nombre de la app y la URL del workspace destino.
 ---
 
+> **Read `.claude/commands/_contrato-despliegue-databricks.md` before anything else.** It is mandatory and it overrides what follows:
+> - **A. Run log** — open the bitacora *before* asking the user anything, record every numbered step as you finish it, and always close it. Its path and final state are part of the report back to the user.
+> - **B. Never abort** — a restriction gets recorded and worked around; the command runs to the end regardless. Wherever this file says "stop and report", rule B applies instead.
+> - **C. Unity Catalog target** — `workspace.default.chec-simulador` below is a default, not a requirement. Resolve it at runtime and substitute the resolved value into every path here.
+> - **D. Known restrictions** — D1–D9. If one shows up, do not re-diagnose it.
+
 Follow this exact sequence when `/app-trayectorias-circuitos` is invoked. It publishes `notebooks/project_flow/03_uiti_vano_trayectorias_circuitos.ipynb` as a browsable dashboard at a stable URL, and it is **self-healing**: it inspects the target workspace first and creates whatever is missing.
 
 This is the sibling of `/app-agrupamiento-vanos-circuitos`, which does the same for `02`. The two are **independent apps** with independent HTML artifacts — deploying one never touches the other. Read that command when something here is unclear about the shared mechanics; only the differences are spelled out below.
@@ -191,7 +197,7 @@ Submit a serverless job exactly as `/app-agrupamiento-vanos-circuitos` section 4
 
 Expect this leg to be slower than `02`'s: the job also reads three shapefiles from the Volume through the FUSE mount.
 
-**Verify by content, not by exit code.** Expect **~10.9 MB** (cell 7's stored output measures 10.98 MB; the app document runs slightly under it because it drops Jupyter's wrapper — the previous 10.47 MB figure predates the two-row layout and the sample counts in the titles). It is larger than `02`'s circuit board, now ~5.2 MB (it was ~7.0 MB until the clustering space was fixed: its embedded `COMBINACIONES` went from 168 keys to 21, i.e. 2.08 → 0.26 MB of `CTX`). `03`'s own size barely moved for the same change, because its eight geometries were a few KB — the split here is roughly plotly.js 4.9 MB plus a 6.1 MB `CTX`, of which `geo` is 3.0 MB and `uitiVentana` 2.4 MB. Download it and assert (all verified against cell 7, not guessed):
+**Verify by content, not by exit code.** Expect **~10.5 MB** (measured 2026-08-12 on a full local run: `reports/paneles/03_uiti_vano_trayectorias_circuitos.html` is 10.5 MB; the app document runs close to it, slightly under because it drops Jupyter's wrapper). **Treat the number as a sanity band, not an equality** — same reasoning as `/app-vano-clima` section 4: it scales with the base, so accept anything within roughly ±20% and only fail outright under 1 MB, which means the board came out empty. The content assertions below are what actually gate this step. It is larger than `02`'s circuit board, now ~6.1 MB (it was ~7.0 MB until the clustering space was fixed: its embedded `COMBINACIONES` went from 168 keys to 21, i.e. 2.08 → 0.26 MB of `CTX`). `03`'s own size barely moved for the same change, because its eight geometries were a few KB — the split here is roughly plotly.js 4.9 MB plus a 6.1 MB `CTX`, of which `geo` is 3.0 MB and `uitiVentana` 2.4 MB. Download it and assert (all verified against cell 7, not guessed):
 - exactly one `id="trayectorias-circuitos"` — that is `DIV_FIGURA`'s value, and it is **not** the same string as the `02` app's `agrupamiento-circuitos` div, so a copy-paste of that check would silently pass on the wrong artifact,
 - the panel controls `tr-circuito` and `tr-ventana` — those two and no others. There is **no** `tr-csv`: the CSV download button was removed from the board, and its reproducible replacement is cell 8, which writes the same table from the kernel. There are also **no** `tr-logx`, `tr-logy` or `tr-prep`: the clustering space is fixed (linear x, `log10` y, `minmax`) and `ESPACIOS` holds a single entry, so K-Means is fitted once instead of eight times. If any of those five ids appears, the staged copy is stale,
 - `Plotly.newPlot` present,
@@ -223,6 +229,8 @@ Fallback to the manual grant only if that fails — see section 6a there, includ
 **Poll `compute_status` to `ACTIVE` first** — deploying against a `STARTING` app fails with `Cannot deploy app <name> as it is not in RUNNING state`. Roughly 5 polls at 20 s on a fresh create; use `command sleep`, a bare foreground `sleep` is blocked. Then `databricks apps deploy <app-name> --source-code-path ... -p <profile>`.
 
 ## 8. Verify and report back
+- **The bitacora**: its path under `reports/despliegues/`, the final state `cerrar` printed (`COMPLETO`, `COMPLETO CON RESTRICCIONES` or `INCOMPLETO`), and the count of restrictions it holds. Do not soften that state in prose.
+- **Every restriction recorded, with who unblocks each one** — reproduce the `resumen` output. A run that ended INCOMPLETO reports what is still blocking, not just what worked.
 
 Require `compute_status: ACTIVE`, `app_status: RUNNING`, `active_deployment.status: SUCCEEDED`. Capture `url` verbatim.
 

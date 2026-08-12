@@ -53,13 +53,18 @@ in `historical`'s base explanations, EXCEPT within outputs validated by
 `validar_respuesta_inferencia`, where predictive analysis and final evidence report generation
 are fully permitted and encouraged.
 
-**Sanctioned exception**: `notebooks/databricks/` hosts a manual, one-time Databricks AI/BI PoC
-(circuit-clustering + geo-exploration dashboard) that imports and reuses
-`plotting.compute_circuit_criticality_groups` for exact parity with the local pipeline, but never
-modifies `report_pipeline.py`, any of the 5 LLM agent roles, or the local pipeline's runtime
-dependencies. It is a standalone, headless-run data-prep/dashboard script invoked via the
-Databricks CLI — not an automation pipeline, and not a reversal of this repo's notebook-to-Python
-migration for the local interpreter itself.
+**Sanctioned exception**: the `/subir-*-databricks` and `/app-*` commands under `.claude/commands/`
+perform a manual, on-demand migration to a Databricks workspace. They upload only the data that
+notebooks `01`-`06` and `/report` actually read, and publish those notebooks as Databricks Apps.
+They never modify `report_pipeline.py`, any of the 5 LLM agent roles, or the local pipeline's
+runtime dependencies. All of them follow
+`.claude/commands/_contrato-despliegue-databricks.md`. This is a standalone command tree driven by
+the Databricks CLI — not an automation pipeline, and not a reversal of this repo's
+notebook-to-Python migration for the local interpreter itself.
+
+The earlier Lakeview AI/BI PoC (`notebooks/databricks/`, `/deploy-databricks-dashboard`) was
+retired: Lakeview runs neither Python nor arbitrary JS, so it could never show the notebooks' real
+analysis. Nothing in this repo creates Delta tables, views or dashboards any more.
 
 ## Coding Style
 

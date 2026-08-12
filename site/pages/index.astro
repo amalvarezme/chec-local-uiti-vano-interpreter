@@ -5,8 +5,6 @@ import logoUnal from "../assets/site/logos/logo_unal_transparente.png";
 import metodologia from "../assets/site/results/metodologia_actual.svg";
 import dataIntelligenceEngine from "../assets/site/results/data_intelligence_engine.png";
 import databricksLogo from "../assets/site/results/databricks.png";
-import dashboardDatabricks1 from "../assets/site/results/dashboard_databricks_1.png";
-import dashboardDatabricks2 from "../assets/site/results/dashboard_databricks_2.png";
 import mgcecdlConfusionMatrix from "../assets/site/results/mgcecdl_confusion_matrix.png";
 import mgcecdlRocCurve from "../assets/site/results/mgcecdl_roc_curve.png";
 import mgcecdlModeImportance from "../assets/site/results/mgcecdl_mode_importance.png";
@@ -119,37 +117,37 @@ const databricksNotebookRows = [
 ];
 
 const databricksCommandRows = [
-  ["/deploy-databricks-dashboard", "Nada de data/ ni notebooks", "Construye/reconstruye tablas + vistas y publica el dashboard Lakeview"],
-  ["/subir-datos-databricks", "data/ completo + site/data/variables.json", "Sube al Volume; no toca tablas ni dashboard"],
-  ["/subir-notebooks-databricks", "Ambos paquetes fuente + los 9 notebooks (copias adaptadas)", "Sube al Workspace; no toca tablas ni dashboard"],
-  ["/subir-a-databricks", "Orquesta los tres comandos anteriores", "Tablas + reportes de interpretabilidad + dashboard, en una sola corrida"]
+  ["/subir-a-databricks", "Orquestador de todo el flujo B", "Datos -> cuaderno 05 al Workspace -> apps por prioridad -> commit y push de la bitacora"],
+  ["/subir-datos-databricks", "data/ completo + site/data/variables.json", "Sube al Volume lo que consumen los cuadernos 01-06 y /report"],
+  ["/subir-notebooks-databricks", "Los tres paquetes fuente + los cuadernos de project_flow (copias adaptadas)", "Sube al Workspace; nunca modifica el cuaderno del repositorio"],
+  ["/app-vano-clima, /app-agrupamiento-vanos-circuitos, /app-simulador-vano", "Cuadernos 01, 02 y 06", "Databricks Apps con URL fija; son la prioridad cuando el cupo es de 3"],
+  ["/app-trayectorias-circuitos, /app-trayectorias-vanos", "Cuadernos 03 y 04", "Se despliegan solo si el workspace admite mas de 3 apps"]
 ];
 
 const databricksDataObjectRows = [
-  ["indicadores_vano", "Tabla Delta", "CSV tipado con todas las columnas (incluida geometría X1/Y1/X2/Y2/FID_VANO/FID_TRAFO/FID_SW), vía uiti_vano_tables.py"],
-  ["circuit_clustering", "Tabla Delta", "Llama verbatim a plotting.compute_circuit_criticality_groups — mismos números que /agrupamiento-circuitos local"],
-  ["circuit_geo", "Tabla Delta", "Shapefile MVLINSEC.shp vía geopandas (construida, aún no usada por los widgets actuales del dashboard)"],
-  ["circuit_map_lines_equipment", "Vista", "UNION de vanos, transformadores y switches sobre indicadores_vano"],
-  ["circuit_daily_evolution", "Vista", "Serie diaria con ceros, sobre indicadores_vano"]
+  ["data/Indicadores_vano_v3.csv", "Archivo en el Volume", "566 MB, la base de eventos que leen los cuadernos 01-04 y 06"],
+  ["data/GEO/*.shp (+ sidecars)", "Archivos en el Volume", "MVLINSEC, GDBCHEC_TRANSFOR y SWITCHES; un .shp sin .shx/.dbf/.prj no sirve"],
+  ["data/models/mil_vano_ventana_v1.pt", "Archivo en el Volume", "Modelo MIL que leen los cuadernos 05 y 06"],
+  ["data/derived/bolsas_mil_full.joblib", "Archivo en el Volume", "199 MB de bolsas vano x ventana precalculadas"],
+  ["data/Variables_seleccion.xlsx", "Archivo en el Volume", "Diccionario de variables que usan los cuadernos 05, 06 y /report"]
 ];
 
 const databricksWidgetRows = [
-  ["clustering_scatter", "Dispersión log-log por criticidad, mismos números que circuit_clustering / /agrupamiento-circuitos."],
-  ["circuit_detail_table", "Tabla de detalle del circuito seleccionado."],
-  ["daily_line", "Combo de eventos diarios y UITI_VANO sobre circuit_daily_evolution."],
-  ["events_map / uiti_map", "Mapas Vega-Lite en capas sobre circuit_map_lines_equipment."]
+  ["Cuaderno 01 -> app", "Nube por vano sobre el mapa, 6 variables seleccionables, serie de doble eje y 6 violines."],
+  ["Cuaderno 02 -> app", "Agrupamiento de vanos por UITI acumulado y top 10 de circuitos en clase Alto."],
+  ["Cuaderno 06 -> app", "Simulador de riesgo por vano, servido con Voila sobre un kernel vivo."],
+  ["Cuadernos 03 y 04 -> app", "Trayectorias por ventanas deslizantes, a nivel de circuito y de vano."]
 ];
 
 const databricksMigrationSteps = [
-  ["0", "Preguntar al usuario", "Único input que pide el orquestador: la URL del workspace de Databricks destino."],
-  ["1", "Resolver perfil CLI + SQL warehouse", "Se resuelve una sola vez; los pasos siguientes lo reutilizan, nunca lo vuelven a derivar."],
-  ["2", "Reutilizar el gate de frescura de circuit_clustering", "Mismo chequeo de frescura que usa /deploy-databricks-dashboard cuando corre de forma independiente."],
-  ["3", "Reutilizar /subir-datos-databricks", "Delega la subida de data/ completo al Volume; no duplica su lógica."],
-  ["4", "Reutilizar /subir-notebooks-databricks", "Delega la subida de ambos paquetes fuente y los 9 notebooks al Workspace; no duplica su lógica."],
-  ["5", "Job condicional de tablas", "Construye o reconstruye tablas Delta + vistas: el mismo trabajo que hace /deploy-databricks-dashboard."],
-  ["6", "Subir reportes de interpretabilidad", "Descubrimiento en tiempo de ejecución, no una lista fija de archivos."],
-  ["7", "Publicar el dashboard Lakeview", "Último paso, después de que tablas y datos ya quedaron frescos."],
-  ["8", "Reportar al usuario", "Cierre de la corrida con el resumen de lo migrado."]
+  ["0", "Preguntar al usuario", "Unico input: la URL del workspace de Databricks destino. Los nombres de las apps usan su valor por defecto."],
+  ["1", "Resolver perfil CLI e identidad", "Secciones E1 y E2 del contrato compartido; se resuelve una sola vez."],
+  ["2", "Resolver el destino en Unity Catalog", "El catalogo se descubre en tiempo de ejecucion, nunca se asume."],
+  ["3", "Verificar los datos en el Volume", "Si estan, no sube nada. Si falta algo, delega en /subir-datos-databricks."],
+  ["4", "Importar el cuaderno 05 al Workspace", "Como cuaderno, no como app: es el registro legible del modelo MIL."],
+  ["5", "Descubrir el cupo de apps y desplegar", "Por prioridad: 01, 02 y 06 primero; 03 y 04 si el cupo alcanza."],
+  ["6", "Commit y push de la bitacora", "En una rama, nunca sobre main."],
+  ["7", "Reportar al usuario", "Ruta de la bitacora, estado final y toda restriccion con quien la desbloquea."]
 ];
 
 const databricksVolumeNotes = [
@@ -508,7 +506,7 @@ const cronograma = [
           </p>
         </div>
         <figure>
-          <img src={metodologia.src} alt="Metodología actual del simulador de criticidad CHEC: datos, preparación determinista, despacho paralelo de agentes (historical, inference, auto-simulator), alineación experta, render del reporte y vault; con /reporte-lote + /informe-gerencial como síntesis multi-circuito y Flujo B hacia Databricks Lakeview" />
+          <img src={metodologia.src} alt="Metodología actual del simulador de criticidad CHEC: datos, preparación determinista, despacho paralelo de agentes (historical, inference, auto-simulator), alineación experta, render del reporte y vault; con /reporte-lote + /informe-gerencial como síntesis multi-circuito y Flujo B hacia Databricks Apps" />
           <figcaption>Figura de avance: metodología del simulador de criticidad CHEC, según el flujo actual del pipeline <code>/report</code>.</figcaption>
         </figure>
       </section>
@@ -518,10 +516,12 @@ const cronograma = [
           <p class="eyebrow">Flujo B - Despliegue en nube CHEC</p>
           <h2>Databricks como copia independiente, no en vivo</h2>
           <p>
-            Databricks replica el mismo dominio (circuitos, vanos, clustering de criticidad, evolución diaria)
-            como un dashboard AI/BI de Lakeview respaldado por tablas y vistas Delta. No comparte runtime ni
-            credenciales con el pipeline local de reportes: un cambio en <code>plotting.py</code> no se refleja
-            en Databricks hasta que se re-ejecuta <code>uiti_vano_tables.py</code>.
+            Databricks recibe una copia de los datos que consumen los cuadernos <code>01</code>-<code>06</code>
+            y el comando <code>/report</code>, y publica esos cuadernos como Databricks Apps con URL fija.
+            No crea tablas Delta, vistas ni dashboards: el stack Lakeview se retiró porque no ejecuta Python
+            ni JS arbitrario, y por tanto nunca pudo mostrar el análisis real de los cuadernos. No comparte
+            runtime ni credenciales con el pipeline local: un cambio local no se refleja en Databricks hasta
+            que se vuelve a correr el despliegue.
           </p>
         </div>
 
@@ -570,60 +570,15 @@ const cronograma = [
         </div>
       </section>
 
-      <section id="prototipo-databricks" class="section prototype">
-        <div class="section-heading">
-          <p class="eyebrow">Dashboard Lakeview</p>
-          <h2>Explorador de circuito UITI_VANO</h2>
-          <p>
-            Dashboard AI/BI publicado por <code>/deploy-databricks-dashboard</code>, con 4 widgets respaldados
-            por las tablas y vistas Delta anteriores. Sin controles <code>bind</code> (sliders) y sin basemap en
-            los mapas geo son limitaciones permanentes de la plataforma Lakeview, no de este repositorio.
-          </p>
-        </div>
-
-        <div class="process-grid">
-          {databricksWidgetRows.map(([widget, descripcion]) => (
-            <article><strong>{widget}</strong><p>{descripcion}</p></article>
-          ))}
-        </div>
-
-        <div class="dashboard-shots">
-          <figure>
-            <img
-              src={dashboardDatabricks1.src}
-              alt="Dashboard Lakeview Explorador de circuito UITI_VANO: filtros de circuito y rango de fechas, dispersión de clustering de todos los circuitos y tabla de detalle del circuito seleccionado"
-            />
-            <figcaption>
-              <strong>Filtros + <code>clustering_scatter</code> + <code>circuit_detail_table</code>.</strong>
-              El panel de clustering refleja el snapshot histórico completo y no reacciona al filtro de fechas
-              (solo la línea diaria y los mapas lo hacen); la tabla de la derecha muestra criticidad, conteo de
-              eventos y suma de UITI_VANO del circuito seleccionado.
-            </figcaption>
-          </figure>
-          <figure>
-            <img
-              src={dashboardDatabricks2.src}
-              alt="Dashboard Lakeview Explorador de circuito UITI_VANO: evolución diaria de eventos y UITI_VANO, y mapas de vanos y equipos por eventos y por UITI_VANO"
-            />
-            <figcaption>
-              <strong><code>daily_line</code> + <code>events_map</code> / <code>uiti_map</code>.</strong>
-              Arriba, el combo de eventos diarios y UITI_VANO diario para el circuito y fechas seleccionados;
-              abajo, los mapas en capas de vanos y equipos (transformador/switch) coloreados por eventos y por
-              UITI_VANO sobre <code>circuit_map_lines_equipment</code>.
-            </figcaption>
-          </figure>
-        </div>
-      </section>
 
       <section id="migracion-databricks" class="section cloud">
         <div class="section-heading">
           <p class="eyebrow">Flujo B - Mecánica de la migración</p>
           <h2>Cómo funciona la migración, paso a paso</h2>
           <p>
-            <a href="#despliegue">#despliegue</a> explica qué es Databricks como copia independiente y
-            <a href="#prototipo-databricks">#prototipo-databricks</a> el dashboard resultante. Esta sección
-            reúne los 4 comandos con su detalle de uso, el orden real de <code>/subir-a-databricks</code> y
-            cómo cada paso interactúa con el Volume de Databricks.
+            <a href="#despliegue">#despliegue</a> explica qué es Databricks como copia independiente.
+            Esta sección reúne los comandos con su detalle de uso, el orden real de
+            <code>/subir-a-databricks</code> y cómo cada paso interactúa con el Volume de Databricks.
           </p>
         </div>
 
@@ -650,11 +605,12 @@ const cronograma = [
         </div>
 
         <div class="note-callout">
-          <strong>Los otros 3 comandos también corren solos.</strong>
-          <code>/subir-datos-databricks</code>, <code>/subir-notebooks-databricks</code> y
-          <code>/deploy-databricks-dashboard</code> no dependen de <code>/subir-a-databricks</code>: cada uno
-          resuelve por su cuenta el mismo perfil CLI / SQL warehouse y solo pide la URL del workspace destino
-          cuando se invoca de forma independiente, útil para una migración parcial.
+          <strong>Los demás comandos también corren solos.</strong>
+          <code>/subir-datos-databricks</code>, <code>/subir-notebooks-databricks</code> y los cinco
+          <code>/app-*</code> no dependen de <code>/subir-a-databricks</code>: cada uno resuelve por su
+          cuenta el mismo perfil CLI y solo pide la URL del workspace destino cuando se invoca de forma
+          independiente, útil para una migración parcial. Todos escriben en la misma bitácora cuando los
+          invoca el orquestador, y en una propia cuando se corren sueltos.
         </div>
 
         <div class="connection-intro">

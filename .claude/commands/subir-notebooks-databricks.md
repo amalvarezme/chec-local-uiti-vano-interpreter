@@ -1,6 +1,12 @@
 ---
-description: Sube/sincroniza los paquetes fuente (chec_local_interpreter, chec_impacto, scripts) y los 6 cuadernos activos de notebooks/project_flow/ al mismo Workspace de Databricks usado por /deploy-databricks-dashboard y /subir-a-databricks, ajustando únicamente sus celdas de arranque para que corran en Databricks sin generar archivos de site/, preguntando solo la URL del workspace destino.
+description: Sube/sincroniza los paquetes fuente (chec_local_interpreter, chec_impacto, scripts) y los 6 cuadernos activos de notebooks/project_flow/ al mismo Workspace de Databricks usado por /subir-a-databricks, ajustando únicamente sus celdas de arranque para que corran en Databricks sin generar archivos de site/, preguntando solo la URL del workspace destino.
 ---
+
+> **Read `.claude/commands/_contrato-despliegue-databricks.md` before anything else.** It is mandatory and it overrides what follows:
+> - **A. Run log** — open the bitacora *before* asking the user anything, record every numbered step as you finish it, and always close it. Its path and final state are part of the report back to the user.
+> - **B. Never abort** — a restriction gets recorded and worked around; the command runs to the end regardless. Wherever this file says "stop and report", rule B applies instead.
+> - **C. Unity Catalog target** — `workspace.default.chec-simulador` below is a default, not a requirement. Resolve it at runtime and substitute the resolved value into every path here.
+> - **D. Known restrictions** — D1–D9. If one shows up, do not re-diagnose it.
 
 Follow this exact sequence when `/subir-notebooks-databricks` is invoked. It is the standalone, single-source-of-truth command for getting the 6 **active** `notebooks/project_flow/*.ipynb` notebooks running in Databricks — useful on its own when only the notebooks or the source packages changed and neither `data/`, the tables/dashboard, nor the reports need to be touched. `/subir-a-databricks` reuses this exact command by cross-reference instead of duplicating this logic.
 
@@ -28,7 +34,7 @@ Do not ask about profile up front — resolve it automatically below. No warehou
 
 ## 1. Resolve profile and user identity (reuse, do not re-derive)
 
-Follow `.claude/commands/deploy-databricks-dashboard.md` **section 1** ("Resolve a CLI profile for that workspace") verbatim, using the workspace URL from step 0. Carry forward the resolved `<profile>` for every command below.
+Follow `.claude/commands/_contrato-despliegue-databricks.md` **section E1** (resolve the CLI profile) verbatim, using the workspace URL from step 0. Carry forward the resolved `<profile>` for every command below.
 
 - Matching profile found → use it.
 - No matching profile → tell the user to run `databricks auth login --host <workspace-url>` via the `!` prefix (interactive OAuth, cannot be run for them), then re-resolve.
@@ -59,7 +65,7 @@ Create the parent Workspace folder first — defensive, since `import-dir` has b
 databricks workspace mkdirs /Workspace/Users/<userName>/databricks-integration -p <profile>
 ```
 
-Same `import-dir --overwrite` pattern `/deploy-databricks-dashboard` section 4.3 already uses for `chec_local_interpreter` — repeat it here for that package AND add `chec_impacto` and `scripts` (which that command does not upload):
+Use `import-dir --overwrite` for `chec_local_interpreter` and add `chec_impacto` and `scripts` (which that command does not upload):
 
 ```
 databricks workspace import-dir src/chec_local_interpreter /Workspace/Users/<userName>/databricks-integration/chec_local_interpreter_src/chec_local_interpreter --overwrite -p <profile>
@@ -69,7 +75,7 @@ databricks workspace import-dir scripts /Workspace/Users/<userName>/databricks-i
 
 **`scripts/` is a third source root and it is not optional.** `src/chec_local_interpreter/ventanas_015.py` does `from scripts.extract_geometrias_014 import ...` at **module import time** (line 43), so `05` and `06` do not merely fail late at the geometry step — they fail on the import itself with `ModuleNotFoundError: No module named 'scripts'`. `scripts/` is a real package (it has `__init__.py`), which is why it uploads and imports like the other two. Its `sys.path` entry is part of the canonical shim block in step 4.
 
-If `import-dir` rejects a non-notebook file in any of the three, fall back to individual `databricks workspace import <target_path> --file <local_file> --language PYTHON --format RAW --overwrite -p <profile>` calls for the rejected files, same fallback `/deploy-databricks-dashboard` documents.
+If `import-dir` rejects a non-notebook file in any of the three, fall back to individual `databricks workspace import <target_path> --file <local_file> --language PYTHON --format RAW --overwrite -p <profile>` calls for the rejected files.
 
 `import-dir` has no exclude/filter mechanism — if any of the three local package trees has `__pycache__/*.pyc` from local runs, they get uploaded too (confirmed empirically: a run against a real workspace uploaded 106 stale `.pyc` files across the two `src/` packages this way; `scripts/` has its own `__pycache__` too). Clean them up right after the imports — do not leave them in the Workspace:
 ```
@@ -181,13 +187,15 @@ Confirm the output is empty before moving on.
 ## 5. Report back
 
 Tell the user, in their language:
+- **The bitacora**: its path under `reports/despliegues/`, the final state `cerrar` printed (`COMPLETO`, `COMPLETO CON RESTRICCIONES` or `INCOMPLETO`), and the count of restrictions it holds. Do not soften that state in prose.
+- **Every restriction recorded, with who unblocks each one** — reproduce the `resumen` output. A run that ended INCOMPLETO reports what is still blocking, not just what worked.
 - The profile and workspace this run used.
 - That the three source roots (`chec_local_interpreter`, `chec_impacto`, `scripts`) and `requirements.txt` were uploaded (or refreshed) at `/Workspace/Users/<userName>/databricks-integration/...`.
 - Which of the 6 active notebooks were uploaded, and that each is a shimmed copy — the originals under `notebooks/project_flow/` were never modified. Say explicitly that `notebooks/project_flow/old_version/` was not uploaded.
 - Confirmation that `git status --porcelain notebooks/project_flow/` was empty at the end of step 4.
 - That no `site`-named path was created in the Volume: none of the 6 active notebooks resolves one (see the audit table).
 - That every one of the 6 staged copies got its own `%pip install -q -r requirements.txt` first cell, so the first real run of each notebook in Databricks installs its dependencies instead of failing with a `ModuleNotFoundError` for whatever package the local environment silently already had.
-- That this run did not execute any notebook, touch any table, or touch the dashboard — if those are needed, point to `/subir-a-databricks` or `/deploy-databricks-dashboard`.
+- That this run did not execute any notebook, touch any table, — if the notebooks also need their data, point to `/subir-datos-databricks` or `/subir-a-databricks`.
 - **How to actually run one of these 6 notebooks afterward**: in the Databricks UI, attach it to compute — NOT a SQL Warehouse. A SQL Warehouse can only execute SQL cells; attaching one to a `project_flow` notebook fails immediately on the first cell (confirmed empirically: `Unsupported cell during execution. SQL warehouses only support executing SQL cells.`, thrown on the `%pip install` cell). SQL Warehouses are only for the dashboard/table-building SQL this command family already runs through the CLI — never for these notebooks.
 - **`06_uiti_vano_explicabilidad_simulador.ipynb` specifically needs a general-purpose (classic, "all-purpose") cluster, NOT Serverless.** Its whole panel is `ipywidgets` (the selector, the sliders, the "Simular" button). Databricks' own documentation states plainly: "A notebook using ipywidgets must be attached to a running cluster" — Serverless compute is excluded (confirmed via Databricks docs, 2026-07-24, after a live run of the archived `09_simulador` where the final widget silently failed to render on Serverless with no error at all). Databricks Runtime 13.0+ is required for ipywidgets GA support (11.0-12.2 LTS only had it in preview). The other 5 notebooks don't use ipywidgets and can still run on Serverless.
 - **`06` also needs a warm kernel to be worth anything**: it is the only one of the 6 with no exportable artifact. `02`, `03` and `04` each render a standalone HTML panel and have their own `/app-*` command that serves it at a stable URL; `01` renders its panel inline; `05` prints its evaluation. `06` renders nothing without a live kernel — do not promise the user a URL for it.

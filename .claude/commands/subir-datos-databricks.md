@@ -1,6 +1,12 @@
 ---
-description: Sube/sincroniza solo la carpeta local data/ (más el archivo site/data/variables.json que necesita el cuaderno 07, hoy archivado en old_version/) al mismo Volume de Databricks que usan /deploy-databricks-dashboard y /subir-a-databricks, preguntando solo la URL del workspace destino.
+description: Sube/sincroniza solo la carpeta local data/ (más el archivo site/data/variables.json que necesita el cuaderno 07, hoy archivado en old_version/) al mismo Volume de Databricks que usa /subir-a-databricks, preguntando solo la URL del workspace destino.
 ---
+
+> **Read `.claude/commands/_contrato-despliegue-databricks.md` before anything else.** It is mandatory and it overrides what follows:
+> - **A. Run log** — open the bitacora *before* asking the user anything, record every numbered step as you finish it, and always close it. Its path and final state are part of the report back to the user.
+> - **B. Never abort** — a restriction gets recorded and worked around; the command runs to the end regardless. Wherever this file says "stop and report", rule B applies instead.
+> - **C. Unity Catalog target** — `workspace.default.chec-simulador` below is a default, not a requirement. Resolve it at runtime and substitute the resolved value into every path here.
+> - **D. Known restrictions** — D1–D9. If one shows up, do not re-diagnose it.
 
 Follow this exact sequence when `/subir-datos-databricks` is invoked. It is the standalone, single-source-of-truth command for mirroring local `data/` into the Unity Catalog Volume `workspace.default.chec-simulador` — useful on its own when only the raw/data files changed and neither the source packages, the `project_flow` notebooks, the tables/dashboard, nor the reports need to be touched. `/subir-a-databricks` reuses this exact command by cross-reference instead of duplicating this logic.
 
@@ -15,7 +21,7 @@ Do not ask about profile or catalog up front — resolve those automatically bel
 
 ## 1. Resolve a CLI profile for that workspace (reuse, do not re-derive)
 
-Follow `.claude/commands/deploy-databricks-dashboard.md` **section 1** ("Resolve a CLI profile for that workspace") verbatim, using the workspace URL from step 0. Carry forward the resolved `<profile>` for every command below.
+Follow `.claude/commands/_contrato-despliegue-databricks.md` **section E1** (resolve the CLI profile) verbatim, using the workspace URL from step 0. Carry forward the resolved `<profile>` for every command below.
 
 - Matching profile found → use it.
 - No matching profile → tell the user to run `databricks auth login --host <workspace-url>` via the `!` prefix (interactive OAuth, cannot be run for them), then re-resolve.
@@ -24,7 +30,7 @@ No warehouse resolution is needed — this command never runs SQL.
 
 ## 2. Upload the `data/` tree to the Volume
 
-Mirror the full local `data/` directory to the Volume as-is — no format conversion, no Delta-table creation here (that stays the job of `notebooks/databricks/uiti_vano_tables.py`, reused unmodified by `/deploy-databricks-dashboard` and `/subir-a-databricks`):
+Mirror the full local `data/` directory to the Volume as-is — no format conversion, no Delta-table creation here (nothing in this repo creates Delta tables any more):
 
 ```
 databricks fs cp -r data dbfs:/Volumes/workspace/default/chec-simulador/data --overwrite -p <profile>
@@ -63,6 +69,8 @@ This is a plain data-file upload, not a `site/` folder mirror — nothing else u
 ## 4. Report back
 
 Tell the user, in their language:
+- **The bitacora**: its path under `reports/despliegues/`, the final state `cerrar` printed (`COMPLETO`, `COMPLETO CON RESTRICCIONES` or `INCOMPLETO`), and the count of restrictions it holds. Do not soften that state in prose.
+- **Every restriction recorded, with who unblocks each one** — reproduce the `resumen` output. A run that ended INCOMPLETO reports what is still blocking, not just what worked.
 - The profile and workspace this run used.
 - Confirmation that `data/` (minus the excluded files) and `site/data/variables.json` were uploaded to `dbfs:/Volumes/workspace/default/chec-simulador/data`.
-- That no tables, notebooks, or dashboard were touched by this run — if those are also needed, point to `/subir-notebooks-databricks`, `/subir-a-databricks`, or `/deploy-databricks-dashboard` as appropriate.
+- That no tables, notebooks, or dashboard were touched by this run — if those are also needed, point to `/subir-notebooks-databricks`, `/subir-a-databricks` as appropriate.

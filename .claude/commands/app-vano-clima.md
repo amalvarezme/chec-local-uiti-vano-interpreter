@@ -2,6 +2,12 @@
 description: Publica el cuaderno 01 (nube por vano sobre el mapa, con las 6 variables seleccionables, la serie de tiempo de doble eje y los 6 violines) como una Databricks App en una URL fija, detectando y reparando por su cuenta todo lo que falte — si no estan el CSV o los shapefiles en el Volume encadena /subir-datos-databricks, y configura el permiso de lectura de la app sin intervencion manual. Pregunta solo el nombre de la app y la URL del workspace destino.
 ---
 
+> **Read `.claude/commands/_contrato-despliegue-databricks.md` before anything else.** It is mandatory and it overrides what follows:
+> - **A. Run log** — open the bitacora *before* asking the user anything, record every numbered step as you finish it, and always close it. Its path and final state are part of the report back to the user.
+> - **B. Never abort** — a restriction gets recorded and worked around; the command runs to the end regardless. Wherever this file says "stop and report", rule B applies instead.
+> - **C. Unity Catalog target** — `workspace.default.chec-simulador` below is a default, not a requirement. Resolve it at runtime and substitute the resolved value into every path here.
+> - **D. Known restrictions** — D1–D9. If one shows up, do not re-diagnose it.
+
 Follow this exact sequence when `/app-vano-clima` is invoked. It publishes `notebooks/project_flow/01_uiti_vano_clima.ipynb` as a browsable dashboard at a stable URL, and it is **self-healing**: it inspects the target workspace first and creates whatever is missing, so it works against a workspace that has never been touched as well as against one that already has everything.
 
 This is the fourth member of the app family, after `/app-agrupamiento-vanos-circuitos` (`02`), `/app-trayectorias-circuitos` (`03`) and `/app-trayectorias-vanos` (`04`). Everything it does that is not specific to `01` is deliberately identical to those three, so read them as the reference when something here is terse.
@@ -20,7 +26,7 @@ If a step below finds a missing prerequisite, **do not ask whether to create it*
 
 ## 1. Resolve profile and identity
 
-Follow `.claude/commands/deploy-databricks-dashboard.md` **section 1** verbatim with the URL from step 0, then confirm with a real call:
+Follow `.claude/commands/_contrato-despliegue-databricks.md` **section E1** verbatim with the URL from step 0, then confirm with a real call:
 ```
 databricks current-user me -p <profile> -o json 2>/dev/null
 ```
@@ -78,7 +84,7 @@ databricks api post /api/2.1/unity-catalog/volumes -p <profile> --json '{
   "comment": "Datos y artefactos del proyecto CHEC UITI_VANO"
 }'
 ```
-If this fails on privileges, stop and report exactly that — do not silently pick another catalog or schema, since every command in this family hardcodes `workspace.default.chec-simulador`.
+If this fails on privileges, **do not stop** — this is contract rule B. Resolve the target with contract section C (the catalog is discovered, not hardcoded), record the deviation in the bitacora, and carry on. Only when no catalog anywhere grants `CREATE VOLUME` does this become a `bloqueante` restriction — and even then the run continues, so the report ends up listing every other wall too, not just the first one.
 
 ### 2b. Delegate the data upload — do not reimplement it
 
@@ -369,6 +375,8 @@ databricks apps deploy <app-name> --source-code-path /Workspace/Users/<userName>
 Expect `SUCCEEDED`, `mode: SNAPSHOT` and `"App started successfully"`. On anything else, pull `databricks apps logs <app-name> -p <profile>` before touching anything.
 
 ## 8. Verify and report back
+- **The bitacora**: its path under `reports/despliegues/`, the final state `cerrar` printed (`COMPLETO`, `COMPLETO CON RESTRICCIONES` or `INCOMPLETO`), and the count of restrictions it holds. Do not soften that state in prose.
+- **Every restriction recorded, with who unblocks each one** — reproduce the `resumen` output. A run that ended INCOMPLETO reports what is still blocking, not just what worked.
 
 ```
 databricks apps get <app-name> -o json -p <profile>
@@ -384,4 +392,4 @@ Tell the user, in their language:
 - **That this board is the heaviest of the four**, and why: ~28 MB uncompressed, ~6.5 MB over the wire once gzipped (it was 67 MB / 7.3 MB before the palette deduplication — gzip already exploited the repetition, so the win shows up mostly in what the browser has to `JSON.parse` and hold in memory, not on the wire). The first load after a cold start pays the download from the Volume plus one compression; every later load is served from memory. `/salud` answers without touching the Volume, so it separates an app failure from a permission failure.
 - **How the board is read**: the map is a 2x2 block; every vano with events that day gets its UITI quartile drawn over the black structure, and a vano with no events that day gets nothing but the black line. The translucent circles encode the **variable chosen in the panel** — six of them, four climate ones that the hourly-lag slider moves and two static per-vano ones (`NR_T`, vegetation risk, and `DDT`, ground discharges) for which that slider is disabled on purpose. Colour, not opacity, carries the value, over a per-variable scale with `cmin`/`cmax` fixed across the whole dataset, so a colour means the same thing in every circuit. Top right is the dual-axis series: daily circuit UITI on the left, daily median of the selected variable on the right, with the current day's point drawn at triple size. The six violins below describe the vano-events of the chosen day.
 - That `git status --porcelain` on the notebook was empty — the repo copy was never modified.
-- That no Delta table, view or Lakeview dashboard was created or touched; point to `/deploy-databricks-dashboard` if those are wanted.
+- That no Delta table, view or Lakeview dashboard was created or touched. The Lakeview dashboard and the Delta tables job were retired, so there is nothing to point to — this family no longer creates tables or views at all.

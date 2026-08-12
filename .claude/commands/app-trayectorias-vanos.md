@@ -2,6 +2,12 @@
 description: Publica el cuaderno 04 (agrupamiento y evolucion a nivel de vano por ventanas deslizantes, con mapa geografico y seleccion de vanos) como una Databricks App en una URL fija, detectando y reparando por su cuenta todo lo que falte — si no estan el CSV o los shapefiles en el Volume encadena /subir-datos-databricks, y configura el permiso de lectura de la app sin intervencion manual. Pregunta solo el nombre de la app y la URL del workspace destino.
 ---
 
+> **Read `.claude/commands/_contrato-despliegue-databricks.md` before anything else.** It is mandatory and it overrides what follows:
+> - **A. Run log** — open the bitacora *before* asking the user anything, record every numbered step as you finish it, and always close it. Its path and final state are part of the report back to the user.
+> - **B. Never abort** — a restriction gets recorded and worked around; the command runs to the end regardless. Wherever this file says "stop and report", rule B applies instead.
+> - **C. Unity Catalog target** — `workspace.default.chec-simulador` below is a default, not a requirement. Resolve it at runtime and substitute the resolved value into every path here.
+> - **D. Known restrictions** — D1–D9. If one shows up, do not re-diagnose it.
+
 Follow this exact sequence when `/app-trayectorias-vanos` is invoked. It publishes `notebooks/project_flow/04_uiti_vano_trayectorias_vano.ipynb` as a browsable dashboard at a stable URL, and it is **self-healing**: it inspects the target workspace first and creates whatever is missing, so it works against a workspace that has never been touched as well as against one that already has everything.
 
 This is the third member of the app family, after `/app-agrupamiento-vanos-circuitos` (`02`) and `/app-trayectorias-circuitos` (`03`). Everything it does that is not specific to `04` is deliberately identical to those two, so read them as the reference when something here is terse.
@@ -20,7 +26,7 @@ If a step below finds a missing prerequisite, **do not ask whether to create it*
 
 ## 1. Resolve profile and identity
 
-Follow `.claude/commands/deploy-databricks-dashboard.md` **section 1** verbatim with the URL from step 0, then confirm with a real call:
+Follow `.claude/commands/_contrato-despliegue-databricks.md` **section E1** verbatim with the URL from step 0, then confirm with a real call:
 ```
 databricks current-user me -p <profile> -o json 2>/dev/null
 ```
@@ -77,7 +83,7 @@ databricks api post /api/2.1/unity-catalog/volumes -p <profile> --json '{
   "comment": "Datos y artefactos del proyecto CHEC UITI_VANO"
 }'
 ```
-If this fails on privileges, stop and report exactly that — do not silently pick another catalog or schema, since every command in this family hardcodes `workspace.default.chec-simulador`.
+If this fails on privileges, **do not stop** — this is contract rule B. Resolve the target with contract section C (the catalog is discovered, not hardcoded), record the deviation in the bitacora, and carry on. Only when no catalog anywhere grants `CREATE VOLUME` does this become a `bloqueante` restriction — and even then the run continues, so the report ends up listing every other wall too, not just the first one.
 
 ### 2b. Delegate the data upload — do not reimplement it
 
@@ -220,7 +226,7 @@ with
 ```
 No cluster spec — serverless is fine, `04` uses no `ipywidgets`. Poll `databricks jobs get-run <run_id> -p <profile>` until terminal. On failure, surface the notebook's own error rather than retrying blindly. Expect this leg to be slower than `02`'s: the job also reads three shapefiles from the Volume through the FUSE mount, which is settled as working — confirmed on `03`'s real runs.
 
-**Verify by content, not by exit code.** Expect **~11.6 MB** (cell 7's stored output measures 11.64 MB locally; the app document runs slightly under it because it drops Jupyter's wrapper). It is the largest of the three apps: plotly.js is ~4.9 MB and `CTX` is ~6.7 MB, of which `geo` is 3.0 MB and `celdas` 2.8 MB. Download it and assert:
+**Verify by content, not by exit code.** Expect **~11.1 MB** (measured 2026-08-12 on a full local run: `reports/paneles/04_uiti_vano_trayectorias_vano.html` is 11.1 MB; the app document runs close to it, slightly under because it drops Jupyter's wrapper). **Treat the number as a sanity band, not an equality** — same reasoning as `/app-vano-clima` section 4: accept roughly ±20% and only fail outright under 1 MB, which means the board came out empty. The content assertions below are what actually gate this step. It is the largest of the three static apps: plotly.js is ~4.9 MB and `CTX` is ~6.7 MB, of which `geo` is 3.0 MB and `celdas` 2.8 MB. Download it and assert:
 ```
 databricks fs cp dbfs:/Volumes/workspace/default/chec-simulador/dashboards/trayectorias_vanos.html <scratch>/verif.html --overwrite -p <profile>
 ```
@@ -352,6 +358,8 @@ databricks apps deploy <app-name> --source-code-path /Workspace/Users/<userName>
 Expect `SUCCEEDED`, `mode: SNAPSHOT` and `"App started successfully"`. On anything else, pull `databricks apps logs <app-name> -p <profile>` before touching anything.
 
 ## 8. Verify and report back
+- **The bitacora**: its path under `reports/despliegues/`, the final state `cerrar` printed (`COMPLETO`, `COMPLETO CON RESTRICCIONES` or `INCOMPLETO`), and the count of restrictions it holds. Do not soften that state in prose.
+- **Every restriction recorded, with who unblocks each one** — reproduce the `resumen` output. A run that ended INCOMPLETO reports what is still blocking, not just what worked.
 
 ```
 databricks apps get <app-name> -o json -p <profile>
@@ -368,4 +376,4 @@ Tell the user, in their language:
 - **How the board is used**, since it is the least obvious of the three: pick a circuit, then mark vanos either from the checkbox list or **by clicking them on the map**; the bars and the violins describe only the marked vanos in the window chosen with the slider, and stay empty until something is marked. Up to 8 vanos get their own colour, arrows and evolution series.
 - That `uiti_ventanas_deslizantes.csv` also landed under `.../chec-simulador/reports/interpretability/artifacts/` as a side effect of cell 8.
 - That `git status --porcelain` on the notebook was empty — the repo copy was never modified.
-- That no Delta table, view or Lakeview dashboard was created or touched; point to `/deploy-databricks-dashboard` if those are wanted.
+- That no Delta table, view or Lakeview dashboard was created or touched. The Lakeview dashboard and the Delta tables job were retired, so there is nothing to point to — this family no longer creates tables or views at all.
