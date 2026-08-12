@@ -641,3 +641,74 @@ def test_the_column_layout_gets_info_buttons_too():
     assert set(selector.botones_info) == {"NR_T", "clima:prep"}
     selector.botones_info["NR_T"].click()
     assert "vegetacion" in selector.panel_info.value.lower()
+
+
+def test_the_checkboxes_share_one_layout_and_one_style_instead_of_one_each():
+    """Cada widget de ipywidgets arrastra al frontend su propio `LayoutModel` y su
+    propio `StyleModel`, ademas de si mismo.
+
+    Medido sobre el tablero del cuaderno 06: 1.587 modelos, de los cuales 592 eran
+    `LayoutModel` y 377 `StyleModel` -- el 61% del total -- y todos decian exactamente
+    lo mismo. Compartir UNA instancia los colapsa a uno por familia sin cambiar un
+    pixel de lo que se ve, y es estado que el visor ya no tiene que montar.
+    """
+    from chec_local_interpreter.vano_widgets import construir_selector_casillas
+
+    selector = construir_selector_casillas(
+        [("A", "a"), ("B", "b"), ("C", "c")],
+        info={"a": "Uno.", "b": "Dos.", "c": "Tres."},
+    )
+
+    assert len({id(c.layout) for c in selector.casillas.values()}) == 1
+    assert len({id(c.style) for c in selector.casillas.values()}) == 1
+    assert len({id(b.layout) for b in selector.botones_info.values()}) == 1
+    assert len({id(b.style) for b in selector.botones_info.values()}) == 1
+
+
+def test_the_column_layout_shares_them_too():
+    """El selector de VARIABLES del 06 se construye por columnas. Compartir solo en la
+    lista plana dejaria fuera al panel donde el usuario pidio los botones."""
+    from chec_local_interpreter.vano_widgets import construir_selector_casillas
+
+    selector = construir_selector_casillas(
+        columnas=[("Intervencion", [("A", "a"), ("B", "b")]),
+                  ("Escenario", [("C", "c")])],
+        info={"a": "Uno.", "b": "Dos.", "c": "Tres."},
+    )
+
+    assert len({id(c.layout) for c in selector.casillas.values()}) == 1
+    assert len({id(b.layout) for b in selector.botones_info.values()}) == 1
+
+
+def test_repopulating_closes_the_widgets_it_replaces():
+    """`poblar` corre en CADA cambio de circuito, y `Widget.widgets` guarda
+    referencias fuertes: sin cerrarlas, las casillas del circuito anterior seguian
+    vivas y el estado que el visor debe montar crecia con cada cambio, hasta que el
+    tablero dejaba de aparecer a mitad de sesion."""
+    from chec_local_interpreter.vano_widgets import construir_selector_casillas
+
+    selector = construir_selector_casillas(
+        [("A", "a")], info={"a": "Uno.", "b": "Dos."})
+    casilla_vieja = selector.casillas["a"]
+    boton_viejo = selector.botones_info["a"]
+
+    selector.poblar([("B", "b")])
+
+    assert casilla_vieja.comm is None, "la casilla reemplazada sigue viva"
+    assert boton_viejo.comm is None, "el boton reemplazado sigue vivo"
+    # Y lo nuevo tiene que quedar utilizable, no cerrado de rebote.
+    assert selector.casillas["b"].comm is not None
+    selector.botones_info["b"].click()
+    assert "Dos" in selector.panel_info.value
+
+
+def test_the_shared_layout_survives_a_repopulate():
+    """Compartir no puede romperse en el primer cambio de circuito: si `poblar`
+    volviera a crear un layout por casilla, la rebaja duraria hasta el primer clic."""
+    from chec_local_interpreter.vano_widgets import construir_selector_casillas
+
+    selector = construir_selector_casillas([("A", "a")])
+
+    selector.poblar([("B", "b"), ("C", "c"), ("D", "d")])
+
+    assert len({id(c.layout) for c in selector.casillas.values()}) == 1

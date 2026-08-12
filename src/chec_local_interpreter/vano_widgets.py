@@ -126,6 +126,24 @@ def _clase_selector():
             # ni se llena. `None` = sin tope, que es lo que heredan 01.4 y sus
             # hermanos, donde marcar cientos de vanos es el caso normal.
             self.maximo = maximo
+            # UN solo Layout y UN solo Style para todas las casillas, y otro par para
+            # todos los botones. Cada widget de ipywidgets manda al frontend su propio
+            # `LayoutModel` y su propio `StyleModel` ademas de si mismo: en el tablero
+            # del 06 eran 592 layouts y 377 estilos de 1.587 modelos -- el 61% --, y
+            # todos decian exactamente lo mismo. Compartir la instancia los colapsa a
+            # uno por familia sin cambiar un pixel, y es estado que el visor ya no
+            # tiene que montar. Se crean aqui y no en `poblar` para que la rebaja
+            # sobreviva a los cambios de circuito.
+            self._estilo_casilla = widgets.Checkbox.style.klass()
+            self._layout_casilla = widgets.Layout(width=ancho_casilla,
+                                                  margin="0 8px 0 0")
+            self._layout_casilla_columna = widgets.Layout(width=ancho_casilla,
+                                                          margin="0 0 0 0")
+            self._estilo_boton = widgets.ButtonStyle()
+            self._layout_boton = widgets.Layout(width="26px", min_width="26px",
+                                                margin="0 6px 0 0")
+            self._layout_renglon = widgets.Layout(align_items="center",
+                                                  margin="0 8px 0 0")
             self.caja = widgets.Box(
                 layout=widgets.Layout(
                     # `overflow` y no `overflow_y`: ipywidgets 8 saco los ejes
@@ -152,13 +170,30 @@ def _clase_selector():
             """
             boton = widgets.Button(
                 description="i", tooltip="Ver el detalle de este renglon",
-                layout=widgets.Layout(width="26px", min_width="26px", margin="0 6px 0 0"),
+                layout=self._layout_boton, style=self._estilo_boton,
             )
             boton.on_click(lambda _b, c=clave: self._mostrar_info(c))
             self.botones_info[clave] = boton
-            return widgets.HBox([boton, casilla],
-                                layout=widgets.Layout(align_items="center",
-                                                      margin="0 8px 0 0"))
+            return widgets.HBox([boton, casilla], layout=self._layout_renglon)
+
+        def _cerrar(self, widget):
+            """Cierra un widget y todo lo que cuelgue de el.
+
+            `Widget.widgets` guarda referencias FUERTES, asi que lo que `poblar`
+            reemplaza sigue vivo y sigue viajando en el estado que el visor monta,
+            aunque ya nadie lo vea. Un cambio de circuito no puede dejar residuo.
+
+            Baja por `children` y no por `layout` ni `style`: esos se COMPARTEN entre
+            todas las casillas, y cerrarlos con la primera dejaria mudas a las demas.
+            """
+            for hijo in getattr(widget, "children", ()):
+                self._cerrar(hijo)
+            if getattr(widget, "comm", None) is not None:
+                widget.close()
+
+        def _soltar_lo_anterior(self, hijos_previos):
+            for hijo in hijos_previos:
+                self._cerrar(hijo)
 
         def _mostrar_info(self, clave):
             # Un panel en blanco se lee como que el boton no funciona; se dice que no
@@ -177,6 +212,8 @@ def _clase_selector():
             it would leave keys ticked that the new option set does not have."""
             self._silencio = True
             try:
+                hijos_previos = tuple(self.caja.children)
+                self.botones_info = {}
                 self.casillas = {
                     clave: widgets.Checkbox(
                         value=False, description=etiqueta, indent=False,
@@ -186,8 +223,7 @@ def _clase_selector():
                         # asi que mezclar los dos deja columnas impredecibles. 96 px es
                         # el fid de 8 digitos a 12 px mas su casilla, como en 01.4; una
                         # variable con nombre largo pide su propio ancho.
-                        layout=widgets.Layout(width=self._ancho_casilla,
-                                              margin="0 8px 0 0"),
+                        layout=self._layout_casilla, style=self._estilo_casilla,
                     )
                     for etiqueta, clave in _pares_de_opciones(opciones)
                 }
@@ -196,6 +232,7 @@ def _clase_selector():
                 self.caja.children = (
                     tuple(self._con_boton(c, w) for c, w in self.casillas.items())
                     if self.info is not None else tuple(self.casillas.values()))
+                self._soltar_lo_anterior(hijos_previos)
             finally:
                 self._silencio = False
             self.value = ()
@@ -219,7 +256,9 @@ def _clase_selector():
             """
             self._silencio = True
             try:
+                hijos_previos = tuple(self.caja.children)
                 self.casillas = {}
+                self.botones_info = {}
                 cajas = []
                 for titulo_columna, opciones in columnas:
                     de_la_columna = []
@@ -227,8 +266,8 @@ def _clase_selector():
                         caja = widgets.Checkbox(
                             value=False, description=etiqueta, indent=False,
                             tooltip=self.tooltips.get(clave, ""),
-                            layout=widgets.Layout(width=self._ancho_casilla,
-                                                  margin="0 0 0 0"),
+                            layout=self._layout_casilla_columna,
+                            style=self._estilo_casilla,
                         )
                         caja.observe(self._al_cambiar_casilla, names="value")
                         self.casillas[clave] = caja
@@ -249,6 +288,7 @@ def _clase_selector():
                                               margin="0 12px 0 0"),
                     ))
                 self.caja.children = tuple(cajas)
+                self._soltar_lo_anterior(hijos_previos)
                 # Las columnas mandan el ancho; el `flex_flow` de fila corrida las
                 # apilaria de a una por renglon en cuanto la celda se estreche.
                 self.caja.layout.flex_flow = "row nowrap"
