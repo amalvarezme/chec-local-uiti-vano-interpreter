@@ -425,10 +425,15 @@ def test_the_figure_has_six_rows_with_the_bars_and_the_graph_in_their_own(fuente
     grafo centrado en las columnas 2-3. El grafo va a MEDIA fila y no a lo ancho porque
     es circular: a ancho completo queda un disco pequenio con dos franjas vacias.
 
-    El reparto de alturas se comprueba por su INVARIANTE y no por sus cifras. El grafo
-    es circular y su diametro lo fija la altura del panel, asi que su fila tiene que ser
-    con mucho la mas alta; clavar los seis numeros hacia fallar el test cada vez que se
-    reajusta el tamanio del grafo, que es justo lo que se quiere poder hacer.
+    El reparto de alturas se comprueba por su INVARIANTE y no por sus cifras: clavar los
+    seis numeros hacia fallar el test cada vez que se reajusta el grafo, que es justo lo
+    que se quiere poder hacer.
+
+    El invariante es que la fila del grafo sea la mas alta, y NO que lo sea por un factor
+    dado. El grafo ocupa las columnas 2-3 -- el 44,25% del ancho --, asi que por debajo de
+    unos 1.400 px de ventana su diametro lo fija el ANCHO y no la altura: subir la fila
+    mas alla de ese ancho no agranda el circulo, solo agrega banda blanca arriba y abajo.
+    Medido con la fila a 1.206 px: a 850 px de ventana sobraban 859 px de vacio.
     """
     assert "rows=6, cols=4," in fuente
     assert "[None, {'type': 'xy', 'colspan': 2}, None, None]" in fuente
@@ -442,8 +447,8 @@ def test_the_figure_has_six_rows_with_the_bars_and_the_graph_in_their_own(fuente
     fracciones = [float(v) for v in alturas.group(1).split(",")]
     assert len(fracciones) == 6
     assert abs(sum(fracciones) - 1.0) < 1e-6, f"las fracciones no suman 1: {fracciones}"
-    assert fracciones[-1] >= 3 * max(fracciones[:-1]), (
-        f"la fila del grafo tiene que dominar el alto: {fracciones}"
+    assert fracciones[-1] > max(fracciones[:-1]), (
+        f"la fila del grafo tiene que ser la mas alta: {fracciones}"
     )
 
     # Los violines ya no existen: los reemplazan dos barras por vano.
@@ -471,12 +476,18 @@ def test_the_circular_graph_keeps_its_aspect_at_any_screen_width(fuente):
     como una elipse aplastada 2,93 veces -- medido --, lo que ademas descuadra el giro
     radial de cada rotulo respecto de la direccion que se ve.
 
-    El rango en x va JUSTO a lo que ocupan los rotulos: con `scaleanchor` manda el eje
-    con menos pixeles por unidad, y con un rango ancho mandaba la x, asi que el circulo
-    se encogia con la ventana. Medido: con 6,4 unidades, por debajo de 1.400 px de
-    pantalla el radio caia de los 94,5 px que hacen falta para 66 nombres."""
+    El rango va JUSTO a lo que ocupan los rotulos, y por eso se DERIVA del mas largo en
+    vez de escribirse a ojo: es el numero que reparte el panel entre el anillo y sus
+    nombres. Cuanto menor, mayor el circulo -- y en cuanto se queda corto los nombres se
+    salen del panel y se montan sobre el anillo, que es como se veia con fuente 14.
+    """
     assert "scaleanchor=_EJE_X_GRAFO, scaleratio=1.0, row=6, col=2" in fuente
-    assert "range=[-1.95, 1.95], row=6, col=2" in fuente
+    assert "range=[-RANGO_GRAFO, RANGO_GRAFO], row=6, col=2" in fuente
+    rango = re.search(r"^RANGO_GRAFO = ([\d.]+)$", fuente, re.MULTILINE)
+    assert rango, "el rango del grafo tiene que ser una constante con su justificacion"
+    # Cota inferior: por debajo de `RADIO_ROTULO_GRAFO` el rango caeria DENTRO del anillo
+    # y no habria sitio ni para empezar a escribir los nombres.
+    assert float(rango.group(1)) > 1.05
 
 
 def test_the_node_labels_are_rotated_annotations_and_not_trace_text(fuente):
