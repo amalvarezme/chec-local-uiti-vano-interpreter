@@ -52,11 +52,14 @@ El repositorio cubre el flujo completo de interpretabilidad local para el análi
   agrega lógica de negocio ahí
 
 **Excepción sancionada — despliegue a Databricks:** el proyecto sí incluye una migración manual,
-bajo demanda, del dashboard AI/BI y de los activos locales hacia un workspace Databricks, vía 4
-comandos de Claude Code (`/deploy-databricks-dashboard`, `/subir-datos-databricks`,
-`/subir-notebooks-databricks`, `/subir-a-databricks`) y el PoC en `notebooks/databricks/`. Es un
-árbol de comandos aislado, sin equivalente en Pi, que nunca modifica `report_pipeline.py` ni los
-roles LLM. Detalle completo en [`docs/flujo-detallado.md`](docs/flujo-detallado.md#3-flujo-b--despliegue-a-databricks).
+bajo demanda, de los activos locales hacia un workspace Databricks, vía 3 comandos de Claude Code
+(`/subir-a-databricks`, que orquesta, más `/subir-datos-databricks` y
+`/subir-notebooks-databricks`) y los 5 comandos `/app-*` que publican los cuadernos como
+Databricks Apps. Todos comparten
+[`_contrato-despliegue-databricks.md`](.claude/commands/_contrato-despliegue-databricks.md).
+Es un árbol de comandos aislado, sin equivalente en Pi, que nunca modifica `report_pipeline.py`
+ni los roles LLM. Solo viajan los datos que consumen los cuadernos `01`-`06` y el comando
+`/report`: **no se crea ninguna tabla Delta, vista ni dashboard**. Detalle completo en [`docs/flujo-detallado.md`](docs/flujo-detallado.md#3-flujo-b--despliegue-a-databricks).
 
 ## Estructura del repositorio
 
@@ -73,7 +76,6 @@ roles LLM. Detalle completo en [`docs/flujo-detallado.md`](docs/flujo-detallado.
 | `reports/` | Artefactos locales de ejecución, reportes generados, insumos PDF, notas de `reports/vault/` |
 | `tests/` | Tests automatizados de contratos, pipelines y render |
 | `notebooks/project_flow/` | 6 cuadernos activos (`01`-`06`) del flujo actual, más `old_version/` con el pipeline MGCECDL original |
-| `notebooks/databricks/` | PoC manual, bajo demanda, del dashboard AI/BI en Databricks (excepción sancionada, ver alcance) |
 
 ## Instalación
 
@@ -138,10 +140,14 @@ Ejemplos:
 
 | Comando | Qué migra/reconstruye |
 |---|---|
-| `/deploy-databricks-dashboard` | Tablas base + vistas + dashboard Lakeview "Explorador de circuito UITI_VANO" |
+| `/subir-a-databricks` | **Orquestador**: datos → cuaderno `05` al Workspace → apps por prioridad (`01`, `02`, `06`; luego `03` y `04` si hay cupo) → commit y push de la bitácora |
 | `/subir-datos-databricks` | `data/` completo + `site/data/variables.json` al Volume |
-| `/subir-notebooks-databricks` | Los tres paquetes fuente + los 6 cuadernos activos de `project_flow/` (copias adaptadas) |
-| `/subir-a-databricks` | Orquesta los tres anteriores en una sola corrida |
+| `/subir-notebooks-databricks` | Los tres paquetes fuente + los cuadernos de `project_flow/` (copias adaptadas) |
+| `/app-vano-clima`, `/app-agrupamiento-vanos-circuitos`, `/app-simulador-vano`, `/app-trayectorias-circuitos`, `/app-trayectorias-vanos` | Publican los cuadernos `01`, `02`, `06`, `03` y `04` como Databricks Apps |
+
+Cada corrida deja una bitácora en `reports/despliegues/` con los pasos, los errores y las
+restricciones encontradas; una restricción de permisos no aborta la corrida, se registra y
+el comando sigue para que el reporte quede completo.
 
 Ver [`docs/flujo-detallado.md`](docs/flujo-detallado.md#3-flujo-b--despliegue-a-databricks) para el flujo completo, objetos de datos y limitaciones conocidas.
 

@@ -128,7 +128,7 @@
     <p>El proyecto sostiene <strong>dos flujos</strong> que comparten la misma fuente de verdad — el CSV <code>Indicadores_vano_v3.csv</code> y la función real <code>compute_circuit_criticality_groups</code> — pero terminan en destinos distintos y <strong>no comparten runtime ni credenciales</strong>:</p>
     <ul>
       <li><strong>Flujo A — pipeline local de reportes.</strong> Genera HTML por circuito (o por lote) usando agentes LLM de Claude Code, publicado opcionalmente a un vault Obsidian indexado con <code>graphify</code>.</li>
-      <li><strong>Flujo B — despliegue a Databricks.</strong> Replica el mismo dominio (circuitos, vanos, clustering de criticidad, evolución diaria) como un dashboard AI/BI de Databricks Lakeview respaldado por tablas/vistas Delta, y opcionalmente migra datos crudos, paquetes fuente, los 6 cuadernos activos de investigación y los reportes de interpretabilidad.</li>
+      <li><strong>Flujo B — despliegue a Databricks.</strong> Sube al Volume los datos que consumen los cuadernos <code>01</code>-<code>06</code> y el comando <code>/report</code>, importa el cuaderno <code>05</code> al Workspace y publica los demás como Databricks Apps. <strong>No crea tablas Delta, vistas ni dashboards</strong>: el stack Lakeview se retiró.</li>
     </ul>
     <div class="callout">
       Un cambio en <code>plotting.py</code> no se refleja en Databricks hasta que se re-ejecuta <code>uiti_vano_tables.py</code> — son copias de datos independientes, no una vista en vivo del mismo backend.
@@ -196,7 +196,6 @@
       <table>
         <thead><tr><th>Comando</th><th>Qué migra</th><th>Toca tablas/dashboard</th></tr></thead>
         <tbody>
-          <tr><td><code>/deploy-databricks-dashboard</code></td><td>Nada de <code>data/</code>/notebooks — solo construye/reconstruye tablas + vistas + publica el dashboard</td><td>Sí</td></tr>
           <tr><td><code>/subir-datos-databricks</code></td><td><code>data/</code> completo + <code>site/data/variables.json</code> al Volume</td><td>No</td></tr>
           <tr><td><code>/subir-notebooks-databricks</code></td><td>Los tres paquetes fuente (<code>chec_local_interpreter</code>, <code>chec_impacto</code>, <code>scripts</code>) + los 6 cuadernos activos (copias adaptadas); <code>old_version/</code> no se sube</td><td>No</td></tr>
           <tr><td><code>/subir-a-databricks</code></td><td>Orquesta los tres anteriores + tablas + reportes + dashboard en una sola corrida</td><td>Sí</td></tr>
@@ -236,16 +235,9 @@
       <li><strong>El Volume no persiste garantizado entre sesiones</strong> — un workspace verificado como poblado un día apareció vacío al día siguiente. Siempre verificar en vivo antes de asumir estado previo.</li>
     </ul>
 
-    <h3>Widgets del dashboard y limitaciones conocidas de Lakeview</h3>
-    <p><code>clustering_scatter</code> · <code>circuit_detail_table</code> · <code>daily_line</code> · <code>events_map</code> / <code>uiti_map</code> (mapas Vega-Lite en capas). Limitaciones permanentes de la plataforma:</p>
-    <ul>
-      <li><strong>Sin basemap</strong> en los mapas geo — <code>custom-vega-viz</code> solo soporta Vega-Lite, no Vega crudo.</li>
-      <li><strong>Sin controles <code>bind</code> (sliders)</strong> — Lakeview no los renderiza pese a aceptar el spec sin error.</li>
-    </ul>
-  </section>
-
-  <section>
-    <h2><span class="num">§4</span> Referencia rápida — todos los comandos</h2>
+    <h3>El stack Lakeview se retiró</h3>
+<p>El dashboard AI/BI y el job de tablas Delta ya no existen: se borraron <code>/deploy-databricks-dashboard</code> y <code>notebooks/databricks/</code>. Lakeview no ejecuta Python ni JS arbitrario, así que nunca pudo mostrar el análisis real de los cuadernos; las Databricks Apps sí, y son ahora el único camino de publicación. Lo único que sobrevivió de ese comando es la resolución del perfil de CLI y del SQL warehouse, hoy en las secciones <strong>E1</strong> y <strong>E2</strong> del contrato compartido.</p>
+<h2><span class="num">§4</span> Referencia rápida — todos los comandos</h2>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Comando</th><th>Flujo</th><th>Uso</th></tr></thead>
@@ -255,7 +247,6 @@
           <tr><td><code>/informe-gerencial</code></td><td>A</td><td><code>/informe-gerencial grupo=media</code></td></tr>
           <tr><td><code>/agrupamiento-circuitos</code></td><td>A</td><td><code>/agrupamiento-circuitos</code></td></tr>
           <tr><td><code>/limpiar-corridas</code></td><td>A</td><td><code>/limpiar-corridas</code></td></tr>
-          <tr><td><code>/deploy-databricks-dashboard</code></td><td>B</td><td>pide nombre + URL del workspace</td></tr>
           <tr><td><code>/subir-datos-databricks</code></td><td>B</td><td>pide URL del workspace</td></tr>
           <tr><td><code>/subir-notebooks-databricks</code></td><td>B</td><td>pide URL del workspace</td></tr>
           <tr><td><code>/subir-a-databricks</code></td><td>B</td><td>pide URL del workspace</td></tr>

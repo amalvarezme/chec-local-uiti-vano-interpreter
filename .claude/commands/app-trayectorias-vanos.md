@@ -26,7 +26,7 @@ If a step below finds a missing prerequisite, **do not ask whether to create it*
 
 ## 1. Resolve profile and identity
 
-Follow `.claude/commands/deploy-databricks-dashboard.md` **section 1** verbatim with the URL from step 0, then confirm with a real call:
+Follow `.claude/commands/_contrato-despliegue-databricks.md` **section E1** verbatim with the URL from step 0, then confirm with a real call:
 ```
 databricks current-user me -p <profile> -o json 2>/dev/null
 ```
@@ -376,4 +376,4 @@ Tell the user, in their language:
 - **How the board is used**, since it is the least obvious of the three: pick a circuit, then mark vanos either from the checkbox list or **by clicking them on the map**; the bars and the violins describe only the marked vanos in the window chosen with the slider, and stay empty until something is marked. Up to 8 vanos get their own colour, arrows and evolution series.
 - That `uiti_ventanas_deslizantes.csv` also landed under `.../chec-simulador/reports/interpretability/artifacts/` as a side effect of cell 8.
 - That `git status --porcelain` on the notebook was empty — the repo copy was never modified.
-- That no Delta table, view or Lakeview dashboard was created or touched; point to `/deploy-databricks-dashboard` if those are wanted.
+- That no Delta table, view or Lakeview dashboard was created or touched. The Lakeview dashboard and the Delta tables job were retired, so there is nothing to point to — this family no longer creates tables or views at all.

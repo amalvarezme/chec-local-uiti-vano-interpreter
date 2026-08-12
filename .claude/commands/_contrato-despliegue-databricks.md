@@ -1,16 +1,17 @@
 ---
-description: Shared contract for every Databricks deployment command in this repo (`/app-*`, `/subir-*-databricks`, `/deploy-databricks-dashboard`) — the run log, the never-abort rule, Unity Catalog target resolution, and the catalogue of restrictions already met in the field. Not invocable on its own.
+description: Shared contract for every Databricks deployment command in this repo (`/app-*`, `/subir-*-databricks`) — the run log, the never-abort rule, Unity Catalog target resolution, and the catalogue of restrictions already met in the field. Not invocable on its own.
 ---
 
 This file is an appendix, not a command. Every command in the family reads it
 **first** and follows it for the four concerns below. It exists because those
-concerns were previously copy-pasted into nine files and drifted.
+concerns were previously copy-pasted into every command file and drifted.
 
 Sections:
 - **A. The run log (bitacora)** — every run writes one Markdown report.
 - **B. Never abort** — a restriction is data to record, not a reason to stop.
 - **C. Resolving the Unity Catalog target** — the catalog is discovered, never assumed.
 - **D. Known restrictions** — what has already been hit, with the workaround.
+- **E. Profile and warehouse** — resolving the CLI profile and a SQL warehouse.
 
 ---
 
@@ -353,3 +354,48 @@ fake one in a test fixture). If it fires, the right move is to remove the secret
 from the commit, never to click the "allow secret" URL in the error. This is the
 backstop behind the redaction in section A, not a replacement for it: keep tokens
 out of `--salida` in the first place.
+
+## E. Resolving the CLI profile and the SQL warehouse
+
+These lived in `/deploy-databricks-dashboard` sections 1–2 and every other
+command cross-referenced them. That command is gone (the Lakeview dashboard and
+the Delta tables job were retired), so they live here now. Nothing about them
+changed.
+
+### E1. CLI profile
+
+```
+databricks auth profiles
+```
+Normalize the given URL (strip the trailing slash) and match it against the
+`Host` column.
+
+- **Match found** → use that profile (`-p <profile>`) for every command.
+- **No match** → tell the user no CLI profile is configured for that host and
+  ask them to run this themselves with the `!` prefix (interactive OAuth, it
+  cannot be run for them), then re-run `databricks auth profiles`:
+  ```
+  databricks auth login --host <workspace-url>
+  ```
+
+`databricks auth profiles` prints a `Valid` column — treat it as advisory only.
+An expired refresh token surfaces only on a real call:
+```
+databricks current-user me -p <profile> -o json 2>/dev/null
+```
+Take `userName` from it for every `/Workspace/Users/<userName>/…` path. Mind D7:
+never pipe `2>&1` into a JSON parser.
+
+### E2. SQL warehouse
+
+Only needed to run `SHOW GRANTS` through `/api/2.0/sql/statements` when
+verifying an app's volume permission (D3, D4). No other step needs it.
+
+```
+databricks warehouses list -p <profile>
+```
+Pick the first warehouse in `RUNNING` state. If none is running, pick the first
+available one regardless of state — it auto-starts on the first query. If the
+list is empty, **do not create one**: a warehouse has ongoing cost the user
+should choose to incur. Record it as a `limitante` restriction (the grant cannot
+be verified, though it may well have been applied) and continue.

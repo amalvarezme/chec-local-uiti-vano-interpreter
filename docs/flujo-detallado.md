@@ -9,7 +9,7 @@
 El proyecto sostiene **dos flujos** que comparten la misma fuente de verdad — el CSV `Indicadores_vano_v3.csv` y la función real `compute_circuit_criticality_groups` — pero terminan en destinos distintos y **no comparten runtime ni credenciales**:
 
 - **Flujo A — pipeline local de reportes.** Genera HTML por circuito (o por lote) usando agentes LLM de Claude Code, publicado opcionalmente a un vault Obsidian indexado con `graphify`.
-- **Flujo B — despliegue a Databricks.** Replica el mismo dominio (circuitos, vanos, clustering de criticidad, evolución diaria) como un dashboard AI/BI de Databricks Lakeview respaldado por tablas/vistas Delta, y opcionalmente migra datos crudos, paquetes fuente, los 6 cuadernos activos de investigación y los reportes de interpretabilidad.
+- **Flujo B — despliegue a Databricks.** Sube al Volume los datos que consumen los cuadernos `01`-`06` y el comando `/report`, importa el cuaderno `05` al Workspace y publica los demás como Databricks Apps. **No crea tablas Delta, vistas ni dashboards**: el stack Lakeview (`/deploy-databricks-dashboard`, `notebooks/databricks/`) se retiró.
 
 Un cambio en `plotting.py` no se refleja en Databricks hasta que se re-ejecuta `uiti_vano_tables.py` — son copias de datos independientes, no una vista en vivo del mismo backend.
 
@@ -93,7 +93,6 @@ Cuatro comandos cooperan, todos en `.claude/commands/`, todos reutilizando por r
 
 | Comando | Qué migra | Toca tablas/dashboard |
 |---|---|---|
-| `/deploy-databricks-dashboard` | Nada de `data/`/notebooks — solo construye/reconstruye tablas + vistas + publica el dashboard | Sí |
 | `/subir-datos-databricks` | `data/` completo + `site/data/variables.json` (única excepción fuera de `data/`) al Volume | No |
 | `/subir-notebooks-databricks` | Los tres paquetes fuente (`chec_local_interpreter`, `chec_impacto`, `scripts`) + los 6 cuadernos activos (copias adaptadas); `old_version/` NO se sube | No |
 | `/subir-a-databricks` | Orquesta los tres anteriores + tablas + reportes de interpretabilidad + dashboard en una sola corrida | Sí |
@@ -125,12 +124,17 @@ Ninguno de los cuatro comandos puede crear una ruta con nombre `site/` dentro de
 - **`06_uiti_vano_explicabilidad_simulador.ipynb` necesita un cluster clásico ("all-purpose"), no Serverless** — todo su panel es `ipywidgets`, y la documentación de Databricks es explícita: *"A notebook using ipywidgets must be attached to a running cluster"*, excluyendo Serverless. Los otros 5 activos sí funcionan en Serverless. La regla se descubrió con el archivado `09_simulador`, que la hereda.
 - **El Volume `chec-simulador` no persiste entre sesiones garantizado** — un workspace verificado como completamente poblado un día apareció vacío (0 tablas, sin Volume) al día siguiente. Siempre verificar en vivo (`SHOW TABLES`, `databricks fs ls`) antes de asumir estado previo.
 
-### 3.4 Widgets del dashboard publicado y limitaciones conocidas de Lakeview
+### 3.4 El stack Lakeview se retiró
 
-`clustering_scatter` (dispersión log-log por criticidad) · `circuit_detail_table` · `daily_line` (combo: eventos diarios + UITI_VANO) · `events_map` / `uiti_map` (mapas Vega-Lite en capas). Limitaciones permanentes de la plataforma (no bugs de este repo):
+El dashboard AI/BI "Explorador de circuito UITI_VANO" y el job de tablas Delta que lo respaldaba
+ya no existen: se borraron `/deploy-databricks-dashboard` y `notebooks/databricks/`. Lakeview no
+ejecuta Python ni JS arbitrario, así que nunca pudo mostrar el análisis real de los cuadernos
+(K-Means, contornos de Voronoi, los mapas MapLibre); las Databricks Apps sí, y son ahora el
+único camino de publicación.
 
-- **Sin basemap** en los mapas geo — Lakeview's `custom-vega-viz` solo soporta specs Vega-Lite, no Vega crudo (necesario para basemaps con proyección mercator).
-- **Sin controles `bind` (sliders)** — Lakeview no renderiza los controles interactivos `bind: scales`/`bind` de Vega-Lite pese a aceptar el spec sin error.
+Lo único que sobrevivió de ese comando es la resolución del perfil de CLI y del SQL warehouse,
+que media familia reutilizaba: viven en las secciones **E1** y **E2** de
+[`_contrato-despliegue-databricks.md`](../.claude/commands/_contrato-despliegue-databricks.md).
 
 ## 4. Referencia rápida — todos los comandos
 
@@ -141,10 +145,14 @@ Ninguno de los cuatro comandos puede crear una ruta con nombre `site/` dentro de
 | `/informe-gerencial` | A | `/informe-gerencial grupo=media` |
 | `/agrupamiento-circuitos` | A | `/agrupamiento-circuitos` |
 | `/limpiar-corridas` | A | `/limpiar-corridas` |
-| `/deploy-databricks-dashboard` | B | pide nombre + URL del workspace |
 | `/subir-datos-databricks` | B | pide URL del workspace |
 | `/subir-notebooks-databricks` | B | pide URL del workspace |
-| `/subir-a-databricks` | B | pide URL del workspace |
+| `/subir-a-databricks` | B | pide URL del workspace; orquesta datos → cuaderno `05` → apps → commit |
+| `/app-vano-clima` | B | publica el cuaderno `01` como app |
+| `/app-agrupamiento-vanos-circuitos` | B | publica el cuaderno `02` como app |
+| `/app-trayectorias-circuitos` | B | publica el cuaderno `03` como app |
+| `/app-trayectorias-vanos` | B | publica el cuaderno `04` como app |
+| `/app-simulador-vano` | B | publica el cuaderno `06` como app (Voila, kernel vivo) |
 
 ## 5. Más detalle
 

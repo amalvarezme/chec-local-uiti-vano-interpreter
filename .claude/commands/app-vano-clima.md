@@ -26,7 +26,7 @@ If a step below finds a missing prerequisite, **do not ask whether to create it*
 
 ## 1. Resolve profile and identity
 
-Follow `.claude/commands/deploy-databricks-dashboard.md` **section 1** verbatim with the URL from step 0, then confirm with a real call:
+Follow `.claude/commands/_contrato-despliegue-databricks.md` **section E1** verbatim with the URL from step 0, then confirm with a real call:
 ```
 databricks current-user me -p <profile> -o json 2>/dev/null
 ```
@@ -392,4 +392,4 @@ Tell the user, in their language:
 - **That this board is the heaviest of the four**, and why: ~28 MB uncompressed, ~6.5 MB over the wire once gzipped (it was 67 MB / 7.3 MB before the palette deduplication — gzip already exploited the repetition, so the win shows up mostly in what the browser has to `JSON.parse` and hold in memory, not on the wire). The first load after a cold start pays the download from the Volume plus one compression; every later load is served from memory. `/salud` answers without touching the Volume, so it separates an app failure from a permission failure.
 - **How the board is read**: the map is a 2x2 block; every vano with events that day gets its UITI quartile drawn over the black structure, and a vano with no events that day gets nothing but the black line. The translucent circles encode the **variable chosen in the panel** — six of them, four climate ones that the hourly-lag slider moves and two static per-vano ones (`NR_T`, vegetation risk, and `DDT`, ground discharges) for which that slider is disabled on purpose. Colour, not opacity, carries the value, over a per-variable scale with `cmin`/`cmax` fixed across the whole dataset, so a colour means the same thing in every circuit. Top right is the dual-axis series: daily circuit UITI on the left, daily median of the selected variable on the right, with the current day's point drawn at triple size. The six violins below describe the vano-events of the chosen day.
 - That `git status --porcelain` on the notebook was empty — the repo copy was never modified.
-- That no Delta table, view or Lakeview dashboard was created or touched; point to `/deploy-databricks-dashboard` if those are wanted.
+- That no Delta table, view or Lakeview dashboard was created or touched. The Lakeview dashboard and the Delta tables job were retired, so there is nothing to point to — this family no longer creates tables or views at all.

@@ -121,7 +121,7 @@ OAuth token, and a privilege the profile is not allowed to grant.
 
 ## 1. Resolve profile and identity
 
-Follow `.claude/commands/deploy-databricks-dashboard.md` **section 1** verbatim with the URL
+Follow `.claude/commands/_contrato-despliegue-databricks.md` **section E1** verbatim with the URL
 from step 0. Carry the resolved `<profile>` everywhere below.
 
 `databricks auth profiles` reports a `Valid` column, but treat it as advisory only — confirm

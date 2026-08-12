@@ -28,7 +28,6 @@ FAMILIA = (
     "app-trayectorias-circuitos.md",
     "app-trayectorias-vanos.md",
     "app-vano-clima.md",
-    "deploy-databricks-dashboard.md",
     "subir-a-databricks.md",
     "subir-datos-databricks.md",
     "subir-notebooks-databricks.md",
@@ -242,9 +241,37 @@ def test_el_orquestador_no_reabre_la_bitacora_de_los_delegados():
     assert "$RUTA_BITACORA" in texto
 
 
-def test_el_dashboard_lakeview_quedo_como_apendice_opcional():
-    """No se borro la capacidad: se saco del camino principal."""
+RETIRADOS = [
+    CMD_DIR / "deploy-databricks-dashboard.md",
+    PROJECT_ROOT / "notebooks" / "databricks",
+]
+
+
+@pytest.mark.parametrize("ruta", RETIRADOS, ids=lambda r: r.name)
+def test_el_stack_lakeview_quedo_borrado(ruta: Path):
+    """El dashboard Lakeview y el job de tablas se retiraron por completo."""
+    assert not ruta.exists(), f"{ruta} debio borrarse con el stack de Lakeview"
+
+
+@pytest.mark.parametrize("nombre", FAMILIA)
+def test_ningun_comando_referencia_el_comando_borrado(nombre: str):
+    """Media familia delegaba en sus secciones 1 y 2; ahora viven en el contrato."""
+    texto = _leer(CMD_DIR / nombre)
+    assert "deploy-databricks-dashboard.md" not in texto, (
+        f"{nombre} apunta a un comando que ya no existe"
+    )
+
+
+def test_el_perfil_y_el_warehouse_sobrevivieron_en_el_contrato():
+    """Lo unico del comando borrado que la familia todavia necesitaba."""
+    texto = _leer(CONTRATO)
+    assert "### E1. CLI profile" in texto
+    assert "databricks auth profiles" in texto
+    assert "### E2. SQL warehouse" in texto
+    assert "databricks warehouses list" in texto
+
+
+def test_el_orquestador_dice_que_el_stack_se_retiro():
     texto = _leer(ORQUESTADOR)
-    assert "Appendix (optional)" in texto
-    assert "deploy-databricks-dashboard.md" in texto
-    assert "not run unless the user asks" in texto
+    assert "Retired, not deferred" in texto
+    assert "Appendix (optional)" not in texto

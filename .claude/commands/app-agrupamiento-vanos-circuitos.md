@@ -10,9 +10,9 @@ description: Publica el tablero de VANOS del cuaderno 02 (agrupamiento de vanos 
 
 Follow this exact sequence when `/app-agrupamiento-vanos-circuitos` is invoked. It publishes the **vano board** of `notebooks/project_flow/02_uiti_vano_kmeans.ipynb` as a browsable dashboard at a stable URL (the notebook renders two boards; only that one is published — see edit 3), and it is **self-healing**: it inspects the target workspace first and creates whatever is missing, so it works against a workspace that has never been touched as well as against one that already has everything.
 
-**Why this is not a Lakeview dashboard.** `/deploy-databricks-dashboard` publishes `circuit_explorer_dashboard.lvdash.json`: SQL datasets plus declarative widgets. `02` is a different animal — it fits K-Means with scikit-learn (8 coordinate spaces, frozen over the full window), builds 23 Plotly traces on the circuit board and 25 on the vano board — the latter on a 6x4 grid, including a horizontal stacked bar of the top 10 circuits by vanos in the `Alto` class and a full-width per-circuit ranking over all 208 circuits, coloured by P50/P75/P97 risk range, both recomputed in the browser for the selected date range — and drives them from a hand-written HTML+JS panel (cells 6 and 13) that also builds a two-sheet `.xlsx` on the client. Lakeview executes neither Python nor arbitrary JS, so porting `02` would mean rewriting the analysis and losing the Voronoi partition contours, the marginal KDEs, the violins and the panel. This command therefore uses **Databricks Apps**, which hosts arbitrary Python web servers, and serves the notebook's own HTML verbatim.
+**Why this is not a Lakeview dashboard.** Lakeview publishes SQL datasets plus declarative widgets; that stack was retired from this repo for exactly the reason below. `02` is a different animal — it fits K-Means with scikit-learn (8 coordinate spaces, frozen over the full window), builds 23 Plotly traces on the circuit board and 25 on the vano board — the latter on a 6x4 grid, including a horizontal stacked bar of the top 10 circuits by vanos in the `Alto` class and a full-width per-circuit ranking over all 208 circuits, coloured by P50/P75/P97 risk range, both recomputed in the browser for the selected date range — and drives them from a hand-written HTML+JS panel (cells 6 and 13) that also builds a two-sheet `.xlsx` on the client. Lakeview executes neither Python nor arbitrary JS, so porting `02` would mean rewriting the analysis and losing the Voronoi partition contours, the marginal KDEs, the violins and the panel. This command therefore uses **Databricks Apps**, which hosts arbitrary Python web servers, and serves the notebook's own HTML verbatim.
 
-**What this command does NOT need.** Verified by reading the notebook: `02` reads exactly one file, `data/Indicadores_vano_v3.csv`, and imports neither `chec_impacto` nor `chec_local_interpreter`. It needs **no** Delta table, **no** view, **no** Lakeview dashboard, **no** shapefile, **no** model checkpoint, and **no** source package. Do not create or check any of those here — if they are absent, that is not this command's problem. `/deploy-databricks-dashboard` owns them.
+**What this command does NOT need.** Verified by reading the notebook: `02` reads exactly one file, `data/Indicadores_vano_v3.csv`, and imports neither `chec_impacto` nor `chec_local_interpreter`. It needs **no** Delta table, **no** view, **no** Lakeview dashboard, **no** shapefile, **no** model checkpoint, and **no** source package. Do not create or check any of those here — if they are absent, that is not this command's problem. Nothing in this repo creates them any more: the Lakeview dashboard and the tables job were retired.
 
 **Scope.** MUST NOT create or refresh any Delta table or view, MUST NOT touch the Lakeview dashboard, MUST NOT modify the file under `notebooks/project_flow/`, and MUST NOT create any `site`-named path inside the Volume.
 
@@ -26,7 +26,7 @@ If a step below finds a missing prerequisite, **do not ask whether to create it*
 
 ## 1. Resolve profile and identity
 
-Follow `.claude/commands/deploy-databricks-dashboard.md` **section 1** verbatim with the URL from step 0. Carry the resolved `<profile>` everywhere below.
+Follow `.claude/commands/_contrato-despliegue-databricks.md` **section E1** verbatim with the URL from step 0. Carry the resolved `<profile>` everywhere below.
 
 `databricks auth profiles` reports a `Valid` column, but treat it as advisory only — confirm with a real call, because an expired refresh token surfaces only there:
 ```
@@ -349,7 +349,7 @@ If the app already exists, do not fail — attach the same resource to it instea
 
 Only if the `uc_securable` route fails (the API rejects the body, or the `SHOW GRANTS` check above comes back empty), fall back to granting explicitly. **Measure first; do not blind-fire three grants.** On a workspace where the app's service principal already belongs to the all-users group, `USE CATALOG` and `USE SCHEMA` are inherited and only `READ VOLUME` is genuinely missing (confirmed empirically: 1 row on the catalog, 6 on the schema, 0 on the volume).
 
-Get `service_principal_client_id` from `databricks apps get <app-name> -o json -p <profile>`, resolve a warehouse per `deploy-databricks-dashboard` section 2, then check each object:
+Get `service_principal_client_id` from `databricks apps get <app-name> -o json -p <profile>`, resolve a warehouse per the shared contract section E2, then check each object:
 ```
 databricks api post /api/2.0/sql/statements -p <profile> --json '{"warehouse_id":"<warehouse_id>","statement":"SHOW GRANTS `<sp_client_id>` ON VOLUME workspace.default.`chec-simulador`","wait_timeout":"30s"}'
 ```
@@ -393,4 +393,4 @@ Tell the user, in their language:
 - That `/salud` answers without touching the Volume, so it distinguishes an app failure from a permission failure.
 - That the two label CSVs also landed under `.../chec-simulador/reports/interpretability/artifacts/` as a side effect of cells 7 and 14.
 - That `git status --porcelain notebooks/project_flow/` was empty — the repo notebook was never modified.
-- That no Delta table, view or Lakeview dashboard was created or touched; point to `/deploy-databricks-dashboard` if those are wanted.
+- That no Delta table, view or Lakeview dashboard was created or touched. The Lakeview dashboard and the Delta tables job were retired, so there is nothing to point to — this family no longer creates tables or views at all.
