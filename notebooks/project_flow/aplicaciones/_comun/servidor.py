@@ -22,11 +22,13 @@ from __future__ import annotations
 import gzip
 import http.server
 import mimetypes
+import os
 import re
 import socket
 import socketserver
+import subprocess
+import sys
 import threading
-import webbrowser
 from pathlib import Path
 
 # Un ano. Solo se aplica a archivos cuyo nombre contiene el hash de su contenido:
@@ -129,6 +131,31 @@ class _Servidor(socketserver.ThreadingTCPServer):
     daemon_threads = True
 
 
+def abrir_navegador(url: str) -> bool:
+    """Abre `url` en el navegador por defecto. Devuelve si lo consiguio.
+
+    En macOS se usa `/usr/bin/open` y NO el modulo `webbrowser`. `webbrowser` alli
+    resuelve a `MacOSXOSAScript`, que le habla al navegador por Apple Events: eso
+    exige el permiso de Automatizacion, macOS se lo pide a Terminal la primera vez, y
+    si nadie lo concede -- o el dialogo sale detras de otra ventana -- la llamada
+    falla sin decir nada y el tablero se queda servido pero sin abrir. `open` es el
+    lanzador del sistema y no pide ese permiso.
+    """
+    try:
+        if sys.platform == "darwin":
+            return subprocess.run(["/usr/bin/open", url], capture_output=True).returncode == 0
+        if os.name == "nt":
+            os.startfile(url)  # noqa: S606 -- el lanzador de Windows, sin shell
+            return True
+        import webbrowser
+
+        return webbrowser.open(url)
+    except Exception:
+        # Que no se pueda abrir el navegador no es motivo para tumbar el servidor: la
+        # URL esta impresa y se puede pegar a mano.
+        return False
+
+
 def puerto_libre(preferido: int = 8765) -> int:
     """Devuelve `preferido` si esta libre; si no, uno que el sistema asigne."""
     for candidato in (preferido, 0):
@@ -154,13 +181,18 @@ def servir(carpeta: Path, *, abrir: bool = True, puerto: int | None = None,
     # escuchar en 0.0.0.0 la publicaria a toda la red de la oficina sin decirlo.
     with _Servidor(("127.0.0.1", puerto), manejador) as servidor:
         url = f"http://127.0.0.1:{puerto}/"
-        print(f"\n  Tablero servido en {url}")
-        print("  Ctrl+C para detenerlo.\n")
+        print(f"\n  Tablero servido en  {url}")
         if abrir:
-            # En un hilo aparte: `webbrowser.open` bloquea unos segundos en macOS
-            # mientras el navegador arranca, y sin esto la primera peticion del propio
-            # navegador llegaria antes de que el servidor este atendiendo.
-            threading.Timer(0.3, webbrowser.open, args=(url,)).start()
+            # En un hilo aparte: lanzar el navegador tarda un momento, y sin esto su
+            # primera peticion podria llegar antes de que el servidor este atendiendo.
+            def _abrir() -> None:
+                if not abrir_navegador(url):
+                    # Decirlo. El fallo silencioso aqui deja al usuario mirando una
+                    # ventana de terminal sin saber que el tablero ya esta listo.
+                    print(f"  No se pudo abrir el navegador solo: copia {url} y pegalo.")
+
+            threading.Timer(0.3, _abrir).start()
+        print("  Deja esta ventana abierta mientras lo usas. Ctrl+C para detenerlo.\n")
         try:
             servidor.serve_forever()
         except KeyboardInterrupt:

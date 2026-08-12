@@ -19,6 +19,7 @@ import argparse
 import os
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 AQUI = Path(__file__).resolve().parent
@@ -125,12 +126,26 @@ def main() -> int:
         "--MappingKernelManager.cull_interval=60",
         "--MappingKernelManager.cull_connected=False",
     ]
-    if args.no_abrir:
-        # Voila abre el navegador por su cuenta; esto es lo que lo desactiva.
-        comando.append("--no-browser")
-    print(f"\n  Simulador servido en http://127.0.0.1:{puerto}/")
+    # Voila abre el navegador por su cuenta, pero con el modulo `webbrowser`, que en
+    # macOS le habla al navegador por Apple Events y falla en silencio si nadie
+    # concedio el permiso de Automatizacion. Se le quita ese trabajo y se usa el mismo
+    # lanzador que las otras dos aplicaciones, que ya evita ese camino.
+    comando.append("--no-browser")
+    url = f"http://127.0.0.1:{puerto}/"
+    print(f"\n  Simulador servido en  {url}")
     print("  El primer arranque tarda unos segundos mientras se carga el modelo.")
-    print("  Ctrl+C para detenerlo.\n")
+    print("  Deja esta ventana abierta mientras lo usas. Ctrl+C para detenerlo.\n")
+
+    if not args.no_abrir:
+        # Mas espera que en 01 y 02: aqui el navegador no puede llegar antes de que
+        # Voila levante su servidor, que primero arranca un kernel y ejecuta el
+        # cuaderno entero.
+        def _abrir() -> None:
+            if not servidor.abrir_navegador(url):
+                print(f"  No se pudo abrir el navegador solo: copia {url} y pegalo.")
+
+        threading.Timer(6.0, _abrir).start()
+
     try:
         return subprocess.run(comando, env=ambiente).returncode
     except KeyboardInterrupt:
