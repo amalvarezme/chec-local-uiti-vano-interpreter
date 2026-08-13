@@ -1,0 +1,125 @@
+# Cómo probar las aplicaciones en Windows
+
+Las aplicaciones locales se desarrollan en macOS y se usan también en Windows. Los tres
+fallos de Windows que aparecieron el 2026-08-13 —`signal.SIGKILL`, `SO_REUSEADDR` y los
+finales de línea de los `.bat`— **no se ven leyendo el código en un Mac**, y ninguno
+habría fallado en las pruebas de aquí. Esta nota es el plan para que no dependa de la
+suerte.
+
+Nada de esto está montado todavía. Es una propuesta con los números ya medidos.
+
+---
+
+## Nivel 1 — GitHub Actions en `windows-latest`
+
+Es lo barato y lo permanente. **Medido** el 2026-08-13:
+
+| | |
+|---|---|
+| pruebas que corren | 152 pasan, 8 se saltan |
+| dependencias | **solo `pytest`** — ni torch, ni geopandas, ni pandas |
+| datos | **ninguno**. No hace falta `git lfs pull` |
+| tiempo | 0,5 s de pruebas; ~1 min de reloj con checkout e instalación |
+
+Se comprobó simulando un clon limpio (moviendo los `panel/` fuera, que es lo que ve un
+runner: están en `.gitignore`).
+
+El job sería:
+
+```yaml
+# .github/workflows/windows.yml
+name: aplicaciones en Windows
+on: [push, pull_request]
+jobs:
+  pruebas:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install pytest
+      - run: >
+          pytest --noconftest -q
+          tests/test_windows_aplicaciones.py
+          tests/test_aplicaciones_locales.py
+          tests/test_huellas_aplicaciones.py
+```
+
+**`--noconftest` no es opcional, y conviene saber por qué.** `tests/conftest.py` tiene un
+fixture `autouse` que importa la pila de agent-tools (pandas, matplotlib, pdfplumber), y
+eso arrastra medio repositorio a unas pruebas que solo leen archivos. El arreglo limpio
+sería hacer esos imports perezosos; mientras tanto, la bandera.
+
+**Lo que este nivel atrapa**: constantes que en Windows no existen, opciones de socket que
+allí significan lo contrario, rutas, finales de línea. O sea: exactamente la clase de
+fallo que ya apareció una vez.
+
+**Lo que NO puede**: no hay escritorio. Ni doble clic, ni navegador, ni ventana de consola
+cerrándose sola.
+
+---
+
+## Nivel 2 — una Windows de verdad, para la mitad gráfica
+
+Hay cuatro cosas que solo se pueden ver con una pantalla delante:
+
+1. el doble clic en `iniciar.bat` abre una consola nueva;
+2. el navegador abre solo (`os.startfile`);
+3. el botón de cerrar del tablero cierra puerto, proceso **y** consola;
+4. *Cerrar todo* del menú se lleva las cinco aplicaciones sin dejar huérfanos.
+
+### Si es en una VM sobre este Mac
+
+El Mac es **arm64**, así que sería Windows 11 ARM64:
+
+| | licencia del hipervisor | fricción |
+|---|---|---|
+| **VMware Fusion** | gratis para uso personal | media — la recomendada |
+| **UTM** | gratis (QEMU) | alta, la instalación pide paciencia |
+| **Parallels Desktop** | ~USD 100/año | baja, descarga el ISO ARM solo |
+
+Las tres necesitan además una licencia de Windows para uso no evaluativo.
+
+> **La VM sería ARM y las máquinas de CHEC son x64.** Para lo que hay que probar aquí
+> —`cmd.exe`, sockets, señales, finales de línea, el doble clic— esa diferencia no
+> importa. Para las ruedas binarias de PyTorch y geopandas del **simulador**, sí. La VM
+> sirve para los cuatro tableros estáticos y el menú; el cuaderno 06 conviene verlo en
+> una x64 real.
+
+### O, más barato: la máquina de alguien en CHEC
+
+Es la que de verdad importa, y no cuesta licencia ni disco. Diez pasos:
+
+1. `git clone` y `git lfs pull`.
+2. Doble clic en `aplicaciones\01_clima\instalar.bat`. Termina sin error.
+3. Doble clic en `iniciar.bat`. **Se abre una consola nueva** y, tras la construcción, el
+   navegador en `http://127.0.0.1:8801/`.
+4. Botón **Cerrar tablero**. Se cierra la pestaña, el puerto queda libre y **la consola se
+   cierra sola**.
+5. Volver a dar doble clic. Abre en **el mismo 8801**, sin reconstruir, en menos de un
+   segundo.
+6. Mover la fecha de `data\Indicadores_vano_v3.csv` y abrir otra vez: tiene que imprimir
+   *«Reconstruyendo el tablero: cambio Indicadores_vano_v3.csv…»*.
+7. Doble clic en `aplicaciones\00_criticidad_chec\iniciar.bat`. El menú abre en 8800.
+8. Abrir dos tableros desde el menú. Cada uno en su puerto (8801, 8802) y en su pestaña.
+9. **Cerrar todo**. Los tres puertos quedan libres y no queda ningún `python.exe` vivo
+   (mirar el Administrador de tareas).
+10. Repetir el paso 7. Todo vuelve a abrir: ningún puerto quedó bloqueado.
+
+Si algo falla, lo útil es el número de puerto y el texto exacto de la consola.
+
+---
+
+## Lo que ya está cubierto sin Windows
+
+`tests/test_windows_aplicaciones.py` corre en macOS y comprueba, leyendo el código, que
+no se tomen decisiones que allí son imposibles o peligrosas:
+
+- nada de `SIGKILL`, `killpg`, `getpgid` ni `start_new_session` fuera de una rama que
+  pregunte por la plataforma;
+- `SO_REUSEADDR` y `allow_reuse_address`, siempre detrás de esa pregunta;
+- los seis pares de `.bat`, con su `cd /d "%~dp0"` y su `pause`;
+- los finales de línea, fijados en `.gitattributes`.
+
+No sustituye a correr en Windows, pero es lo que evita que el próximo cambio reabra
+exactamente el mismo agujero.
