@@ -131,15 +131,23 @@ detectan y avisan a gritos, y conviene saber cuáles son para no confundirlos co
 Casi nunca hace falta — para eso están las huellas —, pero si dudas:
 
 ```bash
-# un tablero estático (01, 02, 03, 04)
-cd aplicaciones/01_clima && python3 ../_comun/gestor.py construir
-
-# el simulador
+# macOS y Linux
+cd aplicaciones/01_clima     && python3 ../_comun/gestor.py construir   # 01, 02, 03, 04
 cd aplicaciones/06_simulador && python3 ../_comun/gestor.py iniciar --reconstruir
+```
+
+```bat
+REM Windows
+cd aplicaciones\01_clima     && py -3 ..\_comun\gestor.py construir
+cd aplicaciones\06_simulador && py -3 ..\_comun\gestor.py iniciar --reconstruir
 ```
 
 Detén antes cualquier instancia abierta: el simulador tiene su paquete mapeado en
 memoria.
+
+Todo lo de este documento vale igual en Windows; lo único que cambia son las órdenes.
+El doble clic allí es `iniciar.bat` — `Iniciar.app` es de macOS — y el entorno virtual
+vive en `.venv\Scripts\` en vez de `.venv/bin/`.
 
 Costos medidos en esta máquina:
 
