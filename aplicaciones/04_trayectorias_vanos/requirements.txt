@@ -1,0 +1,22 @@
+# Dependencias del visor del cuaderno 04 (agrupamiento y evolucion por vano).
+#
+# Solo hacen falta para CONSTRUIR el tablero: una vez construido, servirlo no usa
+# mas que la biblioteca estandar de Python. Por eso el entorno de esta aplicacion no
+# tiene torch, ni shap, ni jupyter.
+#
+# Las mismas que la 03, y por lo mismo: scikit-learn ajusta el K-Means en Python y el
+# navegador solo reordena opacidades; geopandas y shapely dibujan el mapa desde los
+# shapefiles de data/GEO. Cambia el nivel de detalle -- vano en vez de circuito --, no
+# la maquinaria.
+pandas>=3.0
+numpy>=2.4
+pyarrow>=24.0
+# Version EXACTA, no un minimo. De plotly.py sale el plotly.js que se empaqueta, y los
+# cuatro visores estaticos comparten ese archivo en el cache del navegador solo si los
+# cuatro producen el MISMO bundle. Con `>=`, instalarlos en semanas distintas da cuatro
+# versiones y cada una se descarga aparte. Para subirla, subela en los CUATRO a la vez.
+plotly==6.9.0
+geopandas>=1.1
+shapely>=2.1
+scikit-learn>=1.9
+ipython>=9.0

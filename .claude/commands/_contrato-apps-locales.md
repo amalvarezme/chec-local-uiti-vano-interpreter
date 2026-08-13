@@ -18,6 +18,8 @@ that a double-click cannot give.
 |---|---|---|
 | `/app-local-clima` | `01_clima` | **8801** |
 | `/app-local-agrupamiento-circuitos` | `02_agrupamiento_vanos` | **8802** |
+| `/app-local-trayectorias-circuitos` | `03_trayectorias_circuitos` | **8803** |
+| `/app-local-trayectorias-vanos` | `04_trayectorias_vanos` | **8804** |
 | `/app-local-simulador` | `06_simulador` | **8866** |
 
 The apps themselves pick a free port when launched by double-click, which is right for

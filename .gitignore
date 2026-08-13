@@ -92,9 +92,9 @@ Informe_Impacto_CHEC/*
 *.pyc
 
 # Aplicaciones locales (aplicaciones/): todo lo que producen
-# es artefacto de cada maquina y se regenera con instalar + iniciar. Los entornos
-# pesan 484 MB, 530 MB y 1,6 GB; el tablero de clima construido, 27,8 MB; el paquete
-# del simulador, 95,2 MB.
+# es artefacto de cada maquina y se regenera con instalar + iniciar. Los cinco entornos
+# pesan 484 MB, 530 MB, 633 MB, 633 MB y 1,6 GB; los tableros construidos van de 10,5 MB
+# a 27,8 MB; el paquete del simulador, 95,2 MB. En total mas de 4 GB que no son fuente.
 aplicaciones/*/.venv/
 aplicaciones/*/panel/
 aplicaciones/*/paquete/

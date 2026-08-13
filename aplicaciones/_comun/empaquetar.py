@@ -279,12 +279,19 @@ def _ajustar_titulo(html: str, titulo: str) -> str:
 # Boton de cerrar. Apaga el servidor que sirve ESTE tablero -- no los otros, que corren
 # en su propio proceso y su propio puerto.
 #
-# Despues de apagar NO se intenta `window.close()` a secas y ya: el navegador solo deja
-# cerrar por script las ventanas que abrio un script, y estas las abrio el sistema, asi
-# que la llamada se ignora en silencio y el usuario se queda mirando una pagina que
-# parece viva. Se intenta igual -- por si acaso --, y si sigue ahi al medio segundo se
-# tapa todo con un aviso que dice que ya se puede cerrar la pestana. Eso es honesto:
-# el servidor SI murio, lo unico que no se puede es cerrar la pestana por decreto.
+# Despues de apagar se llama a `window.close()`, y en el caso normal SI cierra la
+# pestana. Medido: abriendo por `/usr/bin/open`, que es el camino de `iniciar.command`,
+# la pestana se cierra sola. La regla real del navegador no es "solo se cierra lo que
+# abrio un script" sino que Chrome lo acepta mientras la pestana no tenga historial
+# propio -- y una recien abierta por el lanzador no lo tiene.
+#
+# El respaldo existe porque esa condicion se pierde facil: basta con que el usuario
+# haya navegado dentro de la pestana, y Firefox lo rechaza por defecto. Si a los 500 ms
+# sigue viva se tapa todo con el aviso de cerrado. Eso es honesto en los dos casos: el
+# servidor murio de todas formas, lo unico en duda era la pestana.
+#
+# El mismo razonamiento y la misma medida estan en `06_simulador/preparar.py`, que
+# cierra por la via del kernel de Voila en vez de por `fetch`.
 _BOTON_CERRAR = """
 <div id="cerrar-tablero" style="position:fixed;top:10px;right:12px;z-index:9999;">
   <button type="button" title="Detiene el servidor de este tablero"
@@ -307,8 +314,9 @@ _BOTON_CERRAR = """
           '<div style="font:16px/1.6 system-ui,-apple-system,sans-serif;padding:40px;' +
           'max-width:640px;margin:0 auto;color:#2b2b2b;">' +
           '<h1 style="font-size:20px;margin:0 0 12px;">Tablero cerrado</h1>' +
-          '<p>El servidor se detuvo. El navegador no permite cerrar por si sola una ' +
-          'pestana que no abrio un script, asi que cierrala tu.</p>' +
+          '<p>El servidor se detuvo. Esta pestana no se pudo cerrar sola ' +
+          '&mdash; pasa cuando ya se navego dentro de ella, o en Firefox &mdash;, ' +
+          'asi que cierrala tu.</p>' +
           '<p style="color:#666;">Para volver a abrirlo: <code>iniciar.command</code> ' +
           '(macOS) o <code>iniciar.bat</code> (Windows).</p></div>';
       }, 500);

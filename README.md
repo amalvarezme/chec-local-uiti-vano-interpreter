@@ -76,7 +76,7 @@ ni los roles LLM. Solo viajan los datos que consumen los cuadernos `01`-`06` y e
 | `reports/` | Artefactos locales de ejecución, reportes generados, insumos PDF, notas de `reports/vault/` |
 | `tests/` | Tests automatizados de contratos, pipelines y render |
 | `notebooks/` | `05` y `07`, más `old_version/` con los tableros `01`-`04`, `06` y el pipeline MGCECDL original |
-| `aplicaciones/` | Las tres aplicaciones locales de escritorio (macOS/Windows) construidas desde los cuadernos `01`, `02` y `06` |
+| `aplicaciones/` | Las cinco aplicaciones locales de escritorio (macOS/Windows) construidas desde los cuadernos `01`, `02`, `03`, `04` y `06` |
 
 ## Instalación
 
@@ -559,15 +559,15 @@ La carpeta se reorganizó el 2026-08-13: `project_flow/` desapareció y su conte
 | `07_relevancia_lote_por_vano.ipynb` | Barrido de relevancia por vano sobre un lote de circuitos |
 
 **Archivados en `notebooks/old_version/`.** Dos generaciones conviven ahí, y la primera
-**sigue siendo la fuente de las tres aplicaciones de escritorio** — archivar no es dejar de
+**sigue siendo la fuente de las cinco aplicaciones de escritorio** — archivar no es dejar de
 construir desde ellos. `aplicaciones/_comun/raiz.py` los apunta con `CUADERNOS_APPS`:
 
 | Cuaderno | Qué hace | Lo consume |
 |---|---|---|
 | `01_uiti_vano_clima.ipynb` | Panel climático: violines por variable y nube de rezagos horarios, 208 circuitos | `aplicaciones/01_clima` |
 | `02_uiti_vano_kmeans.ipynb` | Agrupamiento de circuitos y de vanos por UITI acumulado y número de eventos | `aplicaciones/02_agrupamiento_vanos` |
-| `03_uiti_vano_trayectorias_circuitos.ipynb` | Trayectorias de circuito por ventanas deslizantes, con mapa geográfico | `/app-trayectorias-circuitos` |
-| `04_uiti_vano_trayectorias_vano.ipynb` | Lo mismo a nivel de vano; **dueño de la geometría KMeans** que 05 y 06 replican | `scripts/extract_geometrias_014.py` |
+| `03_uiti_vano_trayectorias_circuitos.ipynb` | Trayectorias de circuito por ventanas deslizantes, con mapa geográfico | `aplicaciones/03_trayectorias_circuitos` |
+| `04_uiti_vano_trayectorias_vano.ipynb` | Lo mismo a nivel de vano; **dueño de la geometría KMeans** que 05 y 06 replican | `aplicaciones/04_trayectorias_vanos` y `scripts/extract_geometrias_014.py` |
 | `06_uiti_vano_explicabilidad_simulador.ipynb` | Explicabilidad y simulador de riesgo por vano (requiere kernel vivo) | `aplicaciones/06_simulador` |
 
 La única dependencia dura es la geometría de `04`: `05` y `06` la reutilizan vía

@@ -1,12 +1,14 @@
 # Aplicaciones locales
 
-Tres aplicaciones de escritorio que corren en macOS y en Windows, sin servidor y sin
+Cinco aplicaciones de escritorio que corren en macOS y en Windows, sin servidor y sin
 conexión, sobre los cuadernos de `notebooks/`.
 
 | carpeta | qué abre | cuaderno |
 |---|---|---|
 | [`01_clima/`](01_clima/) | nube por vano sobre el mapa, con las 6 variables, la serie de doble eje y los 6 violines | `01_uiti_vano_clima.ipynb` |
 | [`02_agrupamiento_vanos/`](02_agrupamiento_vanos/) | agrupamiento de vanos por UITI acumulado y número de eventos | `02_uiti_vano_kmeans.ipynb` |
+| [`03_trayectorias_circuitos/`](03_trayectorias_circuitos/) | trayectoria y agrupamiento de circuitos con ventana deslizante | `03_uiti_vano_trayectorias_circuitos.ipynb` |
+| [`04_trayectorias_vanos/`](04_trayectorias_vanos/) | lo mismo un nivel más abajo: agrupamiento y evolución por vano | `04_uiti_vano_trayectorias_vano.ipynb` |
 | [`06_simulador/`](06_simulador/) | simulador de riesgo por vano: *qué pasaría si* sobre el modelo MIL | `06_uiti_vano_explicabilidad_simulador.ipynb` |
 
 ## Cómo se usan
@@ -26,20 +28,24 @@ menos de un segundo.
 
 - **Python 3.10 o superior** en la máquina. macOS: `brew install python@3.11`.
   Windows: <https://www.python.org/downloads/> marcando *Add Python to PATH*.
-- El repositorio completo, con `data/` descargado (`git lfs pull`). Las tres
+- El repositorio completo, con `data/` descargado (`git lfs pull`). Las cinco
   aplicaciones **construyen** desde los datos del repositorio; solo la 06 los sigue
   necesitando después.
 - Un navegador. No hace falta Jupyter, ni VS Code, ni conexión a internet.
 
-## Por qué 01 y 02 son livianas y 06 no
+## Por qué 01, 02, 03 y 04 son livianas y 06 no
 
 No es una decisión de estilo, es lo que cada tablero necesita.
 
-**01 y 02 no necesitan Python en ejecución.** Sus cuadernos precomputan todo y
+**01, 02, 03 y 04 no necesitan Python en ejecución.** Sus cuadernos precomputan todo y
 entregan un documento HTML donde la interacción entera vive en JavaScript: cambiar de
-circuito, mover el rango de fechas o cambiar de variable no vuelve a llamar a nadie.
+circuito, mover la ventana deslizante o cambiar de variable no vuelve a llamar a nadie.
 La aplicación es entonces un **constructor** (se corre una vez) y un **servidor
 estático** (biblioteca estándar, sin dependencias).
+
+Los K-Means de 03 y 04 no son una excepción: se ajustan **al construir**, en Python, y
+lo que viaja al navegador son las coordenadas y las etiquetas ya resueltas. Mover la
+ventana reordena opacidades sobre puntos que ya existen.
 
 **06 sí.** Su botón *Simular* corre el modelo MIL de PyTorch sobre los vanos que el
 usuario marcó y con los valores que escribió: 26 variables sobre hasta 15 vanos. No
@@ -50,7 +56,7 @@ lo que pesa.
 
 Todos los números están medidos en esta máquina, no estimados.
 
-### 01 y 02 — el problema era el peso del documento
+### 01, 02, 03 y 04 — el problema era el peso del documento
 
 Los cuadernos escriben un HTML con todo dentro: la librería de gráficos, los datos y
 la lógica. El de clima pesa **27,8 MB** y el navegador lo volvía a bajar y a
@@ -59,18 +65,21 @@ reinterpretar entero en cada apertura.
 El constructor lo parte en tres piezas con el hash del contenido en el nombre, y el
 servidor entrega las versiones comprimidas que quedaron en disco:
 
-| | 01 clima | 02 vanos |
-|---|---|---|
-| documento original | 27,80 MB | 6,08 MB |
-| **primera apertura** (comprimido) | **6,37 MB** | **1,77 MB** |
-| primera apertura con la otra app ya abierta | 4,98 MB | **378 KB** |
-| **aperturas siguientes** | **17 KB** | **16 KB** |
+| | 01 clima | 02 vanos | 03 circuitos | 04 vanos |
+|---|---|---|---|---|
+| documento original | 27,80 MB | 6,08 MB | 10,46 MB | 11,13 MB |
+| **primera apertura** (comprimido) | **6,37 MB** | **1,77 MB** | **3,05 MB** | **2,81 MB** |
+| primera apertura con otra app ya abierta | 4,98 MB | **378 KB** | 1,65 MB | 1,41 MB |
+| **aperturas siguientes** | **17 KB** | **16 KB** | **18 KB** | **24 KB** |
+| construcción (una vez) | 25,0 s | — | 71,0 s | 71,0 s |
 
-Las aperturas siguientes bajan a 17 KB porque `plotly.js` y los datos se sirven como
-`immutable`: el navegador ni siquiera pregunta por ellos, solo revalida el armazón. Y
-`plotly.js` es **el mismo archivo con el mismo hash en las dos aplicaciones**, así que
-abrir una deja la otra ya cacheada — por eso `requirements.txt` fija la versión exacta
-de plotly en las dos, en vez de un mínimo.
+Las aperturas siguientes bajan a decenas de KB porque `plotly.js` y los datos se sirven
+como `immutable`: el navegador ni siquiera pregunta por ellos, solo revalida el armazón.
+Y `plotly.js` es **el mismo archivo con el mismo hash en las cuatro aplicaciones** —
+`plotly-3.7.0.8ef4c6ab13.js`, comprobado byte a byte —, así que abrir cualquiera deja a
+las otras tres ya cacheadas. Por eso `requirements.txt` fija la versión exacta de plotly
+en las cuatro, en vez de un mínimo: instalarlas en semanas distintas daría cuatro
+versiones y cada una se descargaría aparte.
 
 Además, los datos pasan de ser un literal de JavaScript dentro de un `<script>` a un
 `.json` que el navegador lee con su analizador nativo.
@@ -107,13 +116,25 @@ interfaz (59 trazas) y una simulación real idéntica hasta el décimo decimal.
 
 ## El botón de cerrar
 
-Los tres tableros traen arriba un botón que **detiene el servidor de ese tablero** — no
+Los cinco tableros traen arriba un botón que **detiene el servidor de ese tablero** — no
 los otros, que corren en su propio proceso y su propio puerto.
 
-Después de detenerlo, la página intenta cerrarse sola y casi siempre no puede: el
-navegador solo permite cerrar por script las ventanas que abrió un script, y estas las
-abrió el sistema. Cuando no puede, lo dice en pantalla en vez de quedarse con una página
-que parece viva. El servidor sí murió.
+Cerrar son tres cosas, y las tres están medidas contra el servidor real:
+
+1. **El proceso muere.** El botón manda un `POST` a `/apagar`; el servidor contesta
+   `200 cerrando` y se apaga desde otro hilo. El proceso termina con código 0 a los
+   **0,56 s**. Es `POST` y no `GET` a propósito: un `GET` que apaga el servidor lo
+   dispara el prefetch del propio navegador, y el tablero se cerraría solo.
+2. **El puerto queda libre.** Al salir se cierra el socket: `lsof` no devuelve nada y
+   el puerto se vuelve a reservar en el acto.
+3. **La pestaña se cierra sola**, en el caso normal. Medido abriendo por el mismo
+   camino que usa `iniciar.command`. La regla del navegador no es «solo se cierra lo
+   que abrió un script» sino que Chrome lo permite mientras la pestaña no tenga
+   historial propio — y una recién abierta por el lanzador no lo tiene.
+
+Esa tercera condición se pierde fácil: basta con haber navegado dentro de la pestaña, y
+Firefox lo rechaza por defecto. Cuando pasa, la página lo dice en pantalla en vez de
+quedarse con un tablero que parece vivo. El servidor murió igual.
 
 ## Estructura
 
@@ -124,13 +145,20 @@ aplicaciones/
 │   ├── entorno.py             entorno virtual por aplicación, macOS y Windows
 │   ├── cuaderno.py            ejecuta las celdas de un cuaderno sin kernel
 │   ├── empaquetar.py          parte el HTML en piezas cacheables
-│   ├── construccion.py        construcción compartida de 01 y 02
+│   ├── construccion.py        construcción compartida de los cuatro visores estáticos
 │   ├── servidor.py            servidor estático con compresión y caché
+│   ├── huellas.py             huellas de los insumos, para saber cuándo reconstruir
 │   └── raiz.py                localización del repositorio
 ├── 01_clima/
 ├── 02_agrupamiento_vanos/
+├── 03_trayectorias_circuitos/
+├── 04_trayectorias_vanos/
 └── 06_simulador/
 ```
+
+Las cuatro aplicaciones estáticas son casi sólo declaración: su `construir.py` nombra
+un cuaderno y un título, y `_comun/construccion.py` hace el resto. Agregar una quinta
+es copiar esos dos valores.
 
 Ninguna aplicación modifica su cuaderno. La 06 trabaja sobre una copia parcheada que
 vive dentro de su propia carpeta.

@@ -65,7 +65,9 @@ def main(argv: list[str] | None = None) -> int:
     if not (app / "requirements.txt").exists():
         raise SystemExit(
             f"{app} no parece una aplicacion de esta carpeta (no tiene requirements.txt).\n"
-            "Ejecuta el lanzador desde dentro de 01_clima, 02_agrupamiento_vanos o 06_simulador."
+            "Ejecuta el lanzador desde dentro de una de estas: 01_clima, "
+            "02_agrupamiento_vanos, 03_trayectorias_circuitos, 04_trayectorias_vanos "
+            "o 06_simulador."
         )
 
     if argumentos.accion == "estado":
