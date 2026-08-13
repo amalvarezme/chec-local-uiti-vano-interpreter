@@ -262,14 +262,41 @@ def display(*_a, **_k):  # noqa: A001
 # siempre junto a la figura, sin depender de en que orden queden las celdas.
 _BOTON_CERRAR = '''
 # --- Boton de cerrar (solo en la aplicacion, no en el cuaderno) ---------------------
-# Detiene el proceso de Voila, que es el servidor. Matar solo este kernel dejaria la
-# aplicacion en pie sirviendo una pagina muerta.
+# Cerrar es TRES cosas y hay que hacerlas en este orden: cerrar la pestania, apagar el
+# servidor y, con el, los kernels que cuelgan de el. El orden importa porque el segundo
+# paso mata al proceso que le esta hablando al navegador: si se apaga primero, el
+# mensaje que cierra la pestania nunca sale del kernel.
 _CERRAR_AVISO = widgets.HTML('')
+# `Output` y no un `HTML`: el JavaScript de un `HTML` no se ejecuta -- ipywidgets lo
+# mete por `innerHTML`, y el navegador no corre los `<script>` que llegan asi.
+_CERRAR_SALIDA = widgets.Output()
+
+# `window.close()` no siempre esta permitido: Chrome lo acepta cuando la pestania no
+# tiene historial propio -- que es el caso de la que abre `iniciar.command`, MEDIDO --,
+# pero lo rechaza si el usuario navego dentro de ella, y Firefox lo rechaza por defecto.
+# Por eso hay respaldo: si a los 400 ms la pestania sigue viva, se queda con el aviso de
+# cerrado a pantalla completa en vez de con el tablero muerto, que es lo que se veria si
+# esto se diera por hecho.
+_JS_CERRAR = """
+window.close();
+setTimeout(function () {
+  if (window.closed) { return; }
+  document.body.innerHTML =
+    "<div style='font:17px/1.7 system-ui;padding:80px 40px;color:#2b2b2b'>" +
+    "<b style='font-size:22px'>Simulador cerrado</b><br>" +
+    "El servidor se detuvo. Ya puedes cerrar esta pestana.<br>" +
+    "<span style='color:#666'>Para volver a abrirlo: iniciar.command (macOS) o " +
+    "iniciar.bat (Windows).</span></div>";
+}, 400);
+"""
 
 
 def _cerrar_aplicacion(_boton):
     import os
     import signal
+    import threading
+
+    from IPython.display import Javascript
 
     ruta = os.environ.get('ARCHIVO_PID_06')
     # El pid se lee del archivo que escribio `app.py`, NUNCA de `os.getppid()`: el
@@ -282,23 +309,26 @@ def _cerrar_aplicacion(_boton):
         return
     with open(ruta, encoding='utf-8') as f:
         pid = int(f.read().strip())
-    _CERRAR_AVISO.value = (
-        "<div style='font:16px/1.6 system-ui;padding:28px 8px;color:#2b2b2b'>"
-        "<b style='font-size:19px'>Simulador cerrado</b><br>El servidor se detuvo. "
-        "Ya puedes cerrar esta pestana.<br>"
-        "<span style='color:#666'>Para volver a abrirlo: iniciar.command (macOS) o "
-        "iniciar.bat (Windows).</span></div>")
     _BOTON_CERRAR_APP.disabled = True
-    os.kill(pid, signal.SIGTERM)
+    _CERRAR_AVISO.value = (
+        "<div style='font:16px/1.6 system-ui;padding:8px;color:#2b2b2b'>"
+        "<b>Cerrando el simulador...</b></div>")
+    with _CERRAR_SALIDA:
+        _display_real(Javascript(_JS_CERRAR))
+    # El SIGTERM va con retraso y en otro hilo. SIGTERM a Voila se lleva por delante a
+    # ESTE kernel -- comprobado: apaga los siete que llegaron a estar vivos a la vez --,
+    # asi que matarlo aqui mismo cortaria el mensaje de arriba antes de que salga por el
+    # socket y la pestania se quedaria abierta sobre un tablero sin servidor.
+    threading.Timer(0.8, os.kill, (pid, signal.SIGTERM)).start()
 
 
 _BOTON_CERRAR_APP = widgets.Button(
     description='Cerrar simulador', button_style='danger',
-    tooltip='Detiene el servidor de esta aplicacion',
+    tooltip='Cierra esta pestania y apaga el servidor de la aplicacion',
     layout=widgets.Layout(width='190px'))
 _BOTON_CERRAR_APP.on_click(_cerrar_aplicacion)
 _BARRA_CERRAR = widgets.HBox(
-    [_BOTON_CERRAR_APP, _CERRAR_AVISO],
+    [_BOTON_CERRAR_APP, _CERRAR_AVISO, _CERRAR_SALIDA],
     layout=widgets.Layout(width='100%', justify_content='flex-end', padding='4px 12px'))
 
 '''
