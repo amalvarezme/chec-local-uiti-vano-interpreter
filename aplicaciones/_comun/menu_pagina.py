@@ -182,14 +182,40 @@ function refrescar() {
 
 function cerrarTodo() {
   if (!window.confirm('Se apagan TODAS las aplicaciones abiertas y este menu.')) { return; }
-  fetch('/apagar-todo', { method: 'POST' }).catch(function () {}).then(function () {
-    document.body.innerHTML =
-      '<div class="cerrado"><h1>CriticidadCHEC cerrado</h1>' +
-      '<p>Se apagaron las aplicaciones y el menu. Ya puedes cerrar esta pestana.</p>' +
-      '<p style="color:__TENUE__">Para volver a abrirlo: iniciar.command (macOS) o ' +
-      'iniciar.bat (Windows).</p></div>';
-    window.close();
+  document.getElementById('cerrar-todo').disabled = true;
+  // Apagar cinco aplicaciones puede llevar unos segundos, y la respuesta no llega hasta
+  // que se sabe como acabaron. Sin este aviso la pagina se queda igual que estaba y el
+  // clic parece perdido.
+  document.getElementById('lista').innerHTML =
+    '<div class="tarjeta"><div class="texto">Cerrando las aplicaciones...</div></div>';
+  fetch('/apagar-todo', { method: 'POST' })
+    .then(function (r) { return r.json(); })
+    // El menu se apaga a si mismo justo despues de contestar, asi que una respuesta que
+    // se pierda por el camino no significa que fallara nada.
+    .catch(function () { return { cerrado: true, vivas: [] }; })
+    .then(despedirse);
+}
+
+function despedirse(resultado) {
+  // Los que no soltaron su puerto se nombran uno a uno, con la orden que los cierra. Es
+  // la ultima pantalla que el usuario ve del menu: lo que no se diga aqui, ya no se dice
+  // en ninguna parte -- el menu se acaba de apagar.
+  var aviso = '';
+  (resultado.vivas || []).forEach(function (app) {
+    aviso += '<p style="color:__ACENTO__"><b>' + app.titulo + '</b> sigue servida en el ' +
+      'puerto ' + app.puerto + '. No la lanzo este menu, asi que no se le mando ninguna ' +
+      'senal. Para cerrarla:<br><code>lsof -ti tcp:' + app.puerto +
+      ' -sTCP:LISTEN | xargs kill</code></p>';
   });
+  document.body.innerHTML =
+    '<div class="cerrado"><h1>CriticidadCHEC cerrado</h1>' +
+    '<p>Se apago el menu' + (aviso ? '' : ' y las aplicaciones que tenia abiertas') +
+    '. Ya puedes cerrar esta pestana.</p>' + aviso +
+    '<p style="color:__TENUE__">Para volver a abrirlo: iniciar.command (macOS) o ' +
+    'iniciar.bat (Windows).</p></div>';
+  // Solo si no hay nada que leer: cerrar la pestania encima de un aviso lo haria
+  // invisible, que es la forma mas silenciosa posible de perder un proceso vivo.
+  if (!aviso) { window.close(); }
 }
 
 document.getElementById('cerrar-todo').addEventListener('click', cerrarTodo);
