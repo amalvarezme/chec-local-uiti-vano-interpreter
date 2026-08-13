@@ -7,7 +7,7 @@ description: Abre en el navegador el tablero local de nube por vano y clima (cua
 > what to report, and the restrictions already met in the field.
 
 Opens the local dashboard built from
-`notebooks/project_flow/01_uiti_vano_clima.ipynb`: the per-vano cloud over the map with
+`notebooks/old_version/01_uiti_vano_clima.ipynb`: the per-vano cloud over the map with
 the 6 selectable variables, the dual-axis time series and the 6 violins, with all 208
 circuits inside and the selector switching between them live.
 
@@ -15,7 +15,7 @@ circuits inside and the selector switching between them live.
 
 | | |
 |---|---|
-| app folder | `notebooks/project_flow/aplicaciones/01_clima` |
+| app folder | `aplicaciones/01_clima` |
 | port | **8801** |
 | build output (contract check 3) | `01_clima/panel/index.html` |
 | build cost, if missing | **~25 s** — 15,5 s reading the 540 MB CSV, 7,4 s the shapefiles |
@@ -44,7 +44,7 @@ Only when the user asks, or when they say the data changed. It is not automatic:
 the simulator, this dashboard does not check whether its notebook moved.
 
 ```
-cd notebooks/project_flow/aplicaciones/01_clima && \
+cd aplicaciones/01_clima && \
   PYTHONUNBUFFERED=1 python3 ../_comun/gestor.py iniciar --puerto 8801 --reconstruir
 ```
 

@@ -271,7 +271,7 @@ import re  # noqa: E402
 NOTEBOOK = (
     Path(__file__).resolve().parents[1]
     / "notebooks"
-    / "project_flow"
+    / "old_version"
     / "06_uiti_vano_explicabilidad_simulador.ipynb"
 )
 

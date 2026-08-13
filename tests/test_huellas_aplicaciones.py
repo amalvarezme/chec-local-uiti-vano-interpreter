@@ -34,7 +34,7 @@ import pytest
 
 MODULO = (
     Path(__file__).resolve().parents[1]
-    / "notebooks" / "project_flow" / "aplicaciones" / "_comun" / "huellas.py"
+    / "aplicaciones" / "_comun" / "huellas.py"
 )
 
 

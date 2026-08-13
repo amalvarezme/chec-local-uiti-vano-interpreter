@@ -8,13 +8,13 @@ description: Publica el tablero de VANOS del cuaderno 02 (agrupamiento de vanos 
 > - **C. Unity Catalog target** — `workspace.default.chec-simulador` below is a default, not a requirement. Resolve it at runtime and substitute the resolved value into every path here.
 > - **D. Known restrictions** — D1–D9. If one shows up, do not re-diagnose it.
 
-Follow this exact sequence when `/app-agrupamiento-vanos-circuitos` is invoked. It publishes the **vano board** of `notebooks/project_flow/02_uiti_vano_kmeans.ipynb` as a browsable dashboard at a stable URL (the notebook renders two boards; only that one is published — see edit 3), and it is **self-healing**: it inspects the target workspace first and creates whatever is missing, so it works against a workspace that has never been touched as well as against one that already has everything.
+Follow this exact sequence when `/app-agrupamiento-vanos-circuitos` is invoked. It publishes the **vano board** of `notebooks/old_version/02_uiti_vano_kmeans.ipynb` as a browsable dashboard at a stable URL (the notebook renders two boards; only that one is published — see edit 3), and it is **self-healing**: it inspects the target workspace first and creates whatever is missing, so it works against a workspace that has never been touched as well as against one that already has everything.
 
 **Why this is not a Lakeview dashboard.** Lakeview publishes SQL datasets plus declarative widgets; that stack was retired from this repo for exactly the reason below. `02` is a different animal — it fits K-Means with scikit-learn (8 coordinate spaces, frozen over the full window), builds 23 Plotly traces on the circuit board and 25 on the vano board — the latter on a 6x4 grid, including a horizontal stacked bar of the top 10 circuits by vanos in the `Alto` class and a full-width per-circuit ranking over all 208 circuits, coloured by P50/P75/P97 risk range, both recomputed in the browser for the selected date range — and drives them from a hand-written HTML+JS panel (cells 6 and 13) that also builds a two-sheet `.xlsx` on the client. Lakeview executes neither Python nor arbitrary JS, so porting `02` would mean rewriting the analysis and losing the Voronoi partition contours, the marginal KDEs, the violins and the panel. This command therefore uses **Databricks Apps**, which hosts arbitrary Python web servers, and serves the notebook's own HTML verbatim.
 
 **What this command does NOT need.** Verified by reading the notebook: `02` reads exactly one file, `data/Indicadores_vano_v3.csv`, and imports neither `chec_impacto` nor `chec_local_interpreter`. It needs **no** Delta table, **no** view, **no** Lakeview dashboard, **no** shapefile, **no** model checkpoint, and **no** source package. Do not create or check any of those here — if they are absent, that is not this command's problem. Nothing in this repo creates them any more: the Lakeview dashboard and the tables job were retired.
 
-**Scope.** MUST NOT create or refresh any Delta table or view, MUST NOT touch the Lakeview dashboard, MUST NOT modify the file under `notebooks/project_flow/`, and MUST NOT create any `site`-named path inside the Volume.
+**Scope.** MUST NOT create or refresh any Delta table or view, MUST NOT touch the Lakeview dashboard, MUST NOT modify the file under `notebooks/`, and MUST NOT create any `site`-named path inside the Volume.
 
 ## 0. Ask the user for the two required inputs
 
@@ -94,7 +94,7 @@ If it is tiny, run `git lfs pull` first.
 
 ## 3. Stage and upload the shimmed copy of `02`
 
-**Hard invariant**: the modified notebook is a COPY in the scratch directory. `git status --porcelain notebooks/project_flow/` MUST be empty when this step ends.
+**Hard invariant**: the modified notebook is a COPY in the scratch directory. `git status --porcelain notebooks/` MUST be empty when this step ends.
 
 **Strip every code cell's `outputs` and `execution_count` first.** The repo file is now **97 KB** — the 8.84 MB of embedded `text/html` that used to sit in cells 6 and 13 was taken out of version control, since it is a regenerable artifact. Stripped, the staged copy measures **0.087 MB**. `databricks workspace import --format JUPYTER` enforces a 10 MB limit; with the repo copy this small the strip no longer decides whether the import fits, but keep it anyway — it costs nothing, and a future local run re-embeds those megabytes into the file the moment someone saves the notebook.
 
@@ -185,13 +185,13 @@ print(f'{SALIDA} -> {SALIDA.stat().st_size / 1024 / 1024:.2f} MB')
 Upload:
 ```
 databricks workspace mkdirs /Workspace/Users/<userName>/databricks-integration/project_flow -p <profile>
-databricks workspace import /Workspace/Users/<userName>/databricks-integration/project_flow/02_uiti_vano_kmeans --file <staged_copy> --format JUPYTER --overwrite -p <profile>
+databricks workspace import /Workspace/Users/<userName>/databricks-integration/old_version/02_uiti_vano_kmeans --file <staged_copy> --format JUPYTER --overwrite -p <profile>
 ```
 
 Then check the invariant. **Scope the hard assertion to `02` itself**, and treat anything else in the folder as informational — the user may well be editing a sibling notebook in Jupyter while this command runs, and a whole-folder check reports that as if this command had caused it (confirmed empirically: a run tripped on ` M 03_uiti_vano_trayectorias_circuitos.ipynb`, which was the user's own concurrent work):
 ```
-test -z "$(git status --porcelain notebooks/project_flow/02_uiti_vano_kmeans.ipynb)" && echo LIMPIO || echo MODIFICADO
-git status --porcelain notebooks/project_flow/
+test -z "$(git status --porcelain notebooks/old_version/02_uiti_vano_kmeans.ipynb)" && echo LIMPIO || echo MODIFICADO
+git status --porcelain notebooks/
 ```
 The first line MUST print `LIMPIO`; if it prints `MODIFICADO`, stop — something wrote to the repo copy. Report any other modified notebook from the second line as an observation, and do not touch it.
 
@@ -208,7 +208,7 @@ with
   "run_name": "agrupamiento-circuitos-html",
   "tasks": [{
     "task_key": "build_html",
-    "notebook_task": {"notebook_path": "/Workspace/Users/<userName>/databricks-integration/project_flow/02_uiti_vano_kmeans"}
+    "notebook_task": {"notebook_path": "/Workspace/Users/<userName>/databricks-integration/old_version/02_uiti_vano_kmeans"}
   }]
 }
 ```
@@ -392,5 +392,5 @@ Tell the user, in their language:
 - That the first page load is slow (~6.1 MB, ~1.8 MB gzipped from the Volume) and every later one is cached.
 - That `/salud` answers without touching the Volume, so it distinguishes an app failure from a permission failure.
 - That the two label CSVs also landed under `.../chec-simulador/reports/interpretability/artifacts/` as a side effect of cells 7 and 14.
-- That `git status --porcelain notebooks/project_flow/` was empty — the repo notebook was never modified.
+- That `git status --porcelain notebooks/` was empty — the repo notebook was never modified.
 - That no Delta table, view or Lakeview dashboard was created or touched. The Lakeview dashboard and the Delta tables job were retired, so there is nothing to point to — this family no longer creates tables or views at all.

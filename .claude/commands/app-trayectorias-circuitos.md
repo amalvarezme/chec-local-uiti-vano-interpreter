@@ -8,7 +8,7 @@ description: Publica el cuaderno 03 (trayectorias de circuito por ventanas desli
 > - **C. Unity Catalog target** — `workspace.default.chec-simulador` below is a default, not a requirement. Resolve it at runtime and substitute the resolved value into every path here.
 > - **D. Known restrictions** — D1–D9. If one shows up, do not re-diagnose it.
 
-Follow this exact sequence when `/app-trayectorias-circuitos` is invoked. It publishes `notebooks/project_flow/03_uiti_vano_trayectorias_circuitos.ipynb` as a browsable dashboard at a stable URL, and it is **self-healing**: it inspects the target workspace first and creates whatever is missing.
+Follow this exact sequence when `/app-trayectorias-circuitos` is invoked. It publishes `notebooks/old_version/03_uiti_vano_trayectorias_circuitos.ipynb` as a browsable dashboard at a stable URL, and it is **self-healing**: it inspects the target workspace first and creates whatever is missing.
 
 This is the sibling of `/app-agrupamiento-vanos-circuitos`, which does the same for `02`. The two are **independent apps** with independent HTML artifacts — deploying one never touches the other. Read that command when something here is unclear about the shared mechanics; only the differences are spelled out below.
 
@@ -30,7 +30,7 @@ A shapefile is not one file. `MVLINSEC.shp` is useless without at least `.shx` a
 
 Still **not** needed: no Delta table, no view, no Lakeview dashboard, no model checkpoint, no source package. `03` imports neither `chec_impacto` nor `chec_local_interpreter`.
 
-**Scope.** MUST NOT create or refresh any Delta table or view, MUST NOT touch the Lakeview dashboard, MUST NOT modify the file under `notebooks/project_flow/`, MUST NOT touch the `02` app or its HTML, and MUST NOT create any `site`-named path inside the Volume.
+**Scope.** MUST NOT create or refresh any Delta table or view, MUST NOT touch the Lakeview dashboard, MUST NOT modify the file under `notebooks/`, MUST NOT touch the `02` app or its HTML, and MUST NOT create any `site`-named path inside the Volume.
 
 ## 0. Ask the user for the two required inputs
 
@@ -73,7 +73,7 @@ Warn first that `data/Indicadores_vano_v3.csv` is **566 MB** (Git-LFS tracked) a
 
 **Hard invariant**: the modified notebook is a COPY in the scratch directory. Assert on `03` itself and report other modified notebooks as observations only:
 ```
-test -z "$(git status --porcelain notebooks/project_flow/03_uiti_vano_trayectorias_circuitos.ipynb)" && echo LIMPIO || echo MODIFICADO
+test -z "$(git status --porcelain notebooks/old_version/03_uiti_vano_trayectorias_circuitos.ipynb)" && echo LIMPIO || echo MODIFICADO
 ```
 Never write it as `git status --porcelain <path> && echo ok` — git exits 0 on a dirty tree.
 
@@ -188,12 +188,12 @@ The six names the template uses (`DIV_FIGURA`, `pd`, `df`, `CIRCUITOS`, `VENTANA
 Upload:
 ```
 databricks workspace mkdirs /Workspace/Users/<userName>/databricks-integration/project_flow -p <profile>
-databricks workspace import /Workspace/Users/<userName>/databricks-integration/project_flow/03_uiti_vano_trayectorias_circuitos --file <staged_copy> --format JUPYTER --overwrite -p <profile>
+databricks workspace import /Workspace/Users/<userName>/databricks-integration/old_version/03_uiti_vano_trayectorias_circuitos --file <staged_copy> --format JUPYTER --overwrite -p <profile>
 ```
 
 ## 4. Run the notebook once to generate the HTML
 
-Submit a serverless job exactly as `/app-agrupamiento-vanos-circuitos` section 4 does, pointing at `.../project_flow/03_uiti_vano_trayectorias_circuitos`, with `run_name: "trayectorias-circuitos-html"`. `03` uses no `ipywidgets`, so serverless is fine. Poll `databricks jobs get-run` until terminal; on failure surface the notebook's own error.
+Submit a serverless job exactly as `/app-agrupamiento-vanos-circuitos` section 4 does, pointing at `.../old_version/03_uiti_vano_trayectorias_circuitos`, with `run_name: "trayectorias-circuitos-html"`. `03` uses no `ipywidgets`, so serverless is fine. Poll `databricks jobs get-run` until terminal; on failure surface the notebook's own error.
 
 Expect this leg to be slower than `02`'s: the job also reads three shapefiles from the Volume through the FUSE mount.
 

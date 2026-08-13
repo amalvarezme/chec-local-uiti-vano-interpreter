@@ -5,8 +5,8 @@
 >
 > **Historical snapshot — do not treat as current-state documentation.** Several paths referenced below (`src/assets/site/`, `llm/skills/`, `core/01_pdf_discussion`, TabNet) have since moved or been removed. For the current project flow, see [`flujo-detallado.md`](./flujo-detallado.md) (technical) or [`flujo-resumen.md`](./flujo-resumen.md) (non-technical summary), updated 2026-07-24.
 >
-> **Notebook paths updated 2026-08-04.** `notebooks/project_flow/` was renumbered that day: the
-> MGCECDL notebooks referenced below moved to `notebooks/project_flow/old_version/` and the paths here
+> **Notebook paths updated 2026-08-04.** `notebooks/` was renumbered that day: the
+> MGCECDL notebooks referenced below moved to `notebooks/old_version/` and the paths here
 > were rewritten to point at where the files actually live, so nothing in this table is a dead link.
 > The numbering in the `#` column is the one from 2026-07-08 and is NOT the current numbering — the
 > active flow is now `01`-`06` and means different things. `01_climate.ipynb` no longer exists at all:
@@ -20,15 +20,15 @@ Notebook-first data-science + LLM-interpretability project for CHEC that analyze
 
 | # | Phase | Actor | Inputs | Outputs | Risks / problems found |
 |---|-------|-------|--------|---------|------------------------|
-| 1 | Climate enrichment | `notebooks/project_flow/01_climate.ipynb` | vano CSV + Open-Meteo API | climate-filled CSV | External API, no retry/caching contract documented |
-| 2 | Hyperparameter search | `notebooks/project_flow/old_version/02_mgcecdl_optuna_classification_search.ipynb` + `src/chec_impacto/training/mgcecdl.py` | processed data | `data/optuna/*.pkl`, `.journal` | Notebook internal title says "01"; `chec_impacto` has zero tests |
-| 3 | Model training | `notebooks/project_flow/old_version/03_mgcecdl_training.ipynb` (Colab GPU) | optuna journal, features, expert graph | `data/models/mgcecdl_classifier_best.zip` | GPU step assumes Colab; model zip in plain git (no LFS) |
-| 4 | Performance evaluation | `notebooks/project_flow/old_version/04_mgcecdl_performance.ipynb` + `interpretability/mgcecdl.py` | best model | confusion matrix / ROC / importance PNGs → `src/assets/site/results/` | Untested; outputs committed manually |
-| 5 | Per-circuit SHAP analysis | `notebooks/project_flow/old_version/05_mgcecdl_circuit_analysis.ipynb` + `interpretability/circuit_analysis.py` | model + filtered dataset | bar/radar/graph HTML | Docs reference `reports/mgcecdl-results/interactive_graphs/`, which does not exist → code always falls to fallback branch |
-| 6 | Document replication | `notebooks/project_flow/old_version/06_mgcecdl_document_replication.ipynb` | full dataset + model | 4 CSVs in `reports/mgcecdl-results/` | Directory gitignored except `.gitkeep`; outputs ephemeral |
-| 7 | Graph/adjacency generation | `notebooks/project_flow/old_version/07_graph_preserved_connections_uiti_vano.ipynb` + `chec_impacto/data/graph.py` | `variables.json`, `Variables_seleccion.xlsx` | `data/graphs/mgcecdl_*` + grafo HTMLs | Untested |
-| 8 | GEO exploration | `notebooks/project_flow/old_version/08_geo_network_exploration.ipynb` | `data/GEO/*.shp` + vano CSV | `reports/geo/geo_resumen_circuitos.csv`, circuit map HTML | Notebook internal title says "04" |
-| 10 | What-if simulator | `notebooks/project_flow/old_version/09_simulador.ipynb` + `simulator.py` | model + prioritized variables | interactive sensitivity | Covered by `test_simulator.py` |
+| 1 | Climate enrichment | `notebooks/01_climate.ipynb` | vano CSV + Open-Meteo API | climate-filled CSV | External API, no retry/caching contract documented |
+| 2 | Hyperparameter search | `notebooks/old_version/02_mgcecdl_optuna_classification_search.ipynb` + `src/chec_impacto/training/mgcecdl.py` | processed data | `data/optuna/*.pkl`, `.journal` | Notebook internal title says "01"; `chec_impacto` has zero tests |
+| 3 | Model training | `notebooks/old_version/03_mgcecdl_training.ipynb` (Colab GPU) | optuna journal, features, expert graph | `data/models/mgcecdl_classifier_best.zip` | GPU step assumes Colab; model zip in plain git (no LFS) |
+| 4 | Performance evaluation | `notebooks/old_version/04_mgcecdl_performance.ipynb` + `interpretability/mgcecdl.py` | best model | confusion matrix / ROC / importance PNGs → `src/assets/site/results/` | Untested; outputs committed manually |
+| 5 | Per-circuit SHAP analysis | `notebooks/old_version/05_mgcecdl_circuit_analysis.ipynb` + `interpretability/circuit_analysis.py` | model + filtered dataset | bar/radar/graph HTML | Docs reference `reports/mgcecdl-results/interactive_graphs/`, which does not exist → code always falls to fallback branch |
+| 6 | Document replication | `notebooks/old_version/06_mgcecdl_document_replication.ipynb` | full dataset + model | 4 CSVs in `reports/mgcecdl-results/` | Directory gitignored except `.gitkeep`; outputs ephemeral |
+| 7 | Graph/adjacency generation | `notebooks/old_version/07_graph_preserved_connections_uiti_vano.ipynb` + `chec_impacto/data/graph.py` | `variables.json`, `Variables_seleccion.xlsx` | `data/graphs/mgcecdl_*` + grafo HTMLs | Untested |
+| 8 | GEO exploration | `notebooks/old_version/08_geo_network_exploration.ipynb` | `data/GEO/*.shp` + vano CSV | `reports/geo/geo_resumen_circuitos.csv`, circuit map HTML | Notebook internal title says "04" |
+| 10 | What-if simulator | `notebooks/old_version/09_simulador.ipynb` + `simulator.py` | model + prioritized variables | interactive sensitivity | Covered by `test_simulator.py` |
 | 11 | Web export | `src/chec_local_interpreter/web_export.py` | artifacts/report HTML | copies into `src/assets/site/results/` + `interpretabilidad.json` | Duplicates the ~9 MB report into git a second time; untested |
 | 12 | Publish | `.github/workflows/deploy-pages.yml` | `src/pages/*`, site assets | GitHub Pages site | Only CI in the repo — Python tests and LLM evals never run in CI |
 

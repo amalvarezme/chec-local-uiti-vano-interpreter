@@ -8,7 +8,7 @@ description: Abre en el navegador el simulador local de riesgo por vano (cuadern
 > app's.
 
 Opens the local simulator built from
-`notebooks/project_flow/06_uiti_vano_explicabilidad_simulador.ipynb`: the historical map
+`notebooks/old_version/06_uiti_vano_explicabilidad_simulador.ipynb`: the historical map
 and the simulated-criticality one, selection of up to 15 vanos, the 26 simulable
 variables, the top variables per vano, the relevance graph and the cost of the plan.
 
@@ -23,7 +23,7 @@ precomputable space. Everything below follows from that.
 
 | | |
 |---|---|
-| app folder | `notebooks/project_flow/aplicaciones/06_simulador` |
+| app folder | `aplicaciones/06_simulador` |
 | port | **8866** |
 | build output (contract check 3) | `06_simulador/paquete/manifiesto.json` **and** `06_simulador/cuaderno/06_simulador.ipynb` |
 | build cost, if missing | **~8 s**, with a peak of 3,01 GB of RAM |
@@ -117,7 +117,7 @@ relaunching so `app.py` registers it again.
 ## Rebuilding by hand
 
 ```
-cd notebooks/project_flow/aplicaciones/06_simulador && \
+cd aplicaciones/06_simulador && \
   PYTHONUNBUFFERED=1 python3 ../_comun/gestor.py iniciar --puerto 8866 --reconstruir
 ```
 

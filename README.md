@@ -75,7 +75,8 @@ ni los roles LLM. Solo viajan los datos que consumen los cuadernos `01`-`06` y e
 | `.claude/commands/` | Comandos de mantenimiento y despliegue a Databricks (fuera de la familia de skills de reporte) |
 | `reports/` | Artefactos locales de ejecución, reportes generados, insumos PDF, notas de `reports/vault/` |
 | `tests/` | Tests automatizados de contratos, pipelines y render |
-| `notebooks/project_flow/` | 6 cuadernos activos (`01`-`06`) del flujo actual, más `old_version/` con el pipeline MGCECDL original |
+| `notebooks/` | `05` y `07`, más `old_version/` con los tableros `01`-`04`, `06` y el pipeline MGCECDL original |
+| `aplicaciones/` | Las tres aplicaciones locales de escritorio (macOS/Windows) construidas desde los cuadernos `01`, `02` y `06` |
 
 ## Instalación
 
@@ -142,7 +143,7 @@ Ejemplos:
 |---|---|
 | `/subir-a-databricks` | **Orquestador**: datos → cuaderno `05` al Workspace → apps por prioridad (`01`, `02`, `06`; luego `03` y `04` si hay cupo) → commit y push de la bitácora |
 | `/subir-datos-databricks` | `data/` completo + `site/data/variables.json` al Volume |
-| `/subir-notebooks-databricks` | Los tres paquetes fuente + los cuadernos de `project_flow/` (copias adaptadas) |
+| `/subir-notebooks-databricks` | Los tres paquetes fuente + los cuadernos de `notebooks/` (copias adaptadas) |
 | `/app-vano-clima`, `/app-agrupamiento-vanos-circuitos`, `/app-simulador-vano`, `/app-trayectorias-circuitos`, `/app-trayectorias-vanos` | Publican los cuadernos `01`, `02`, `06`, `03` y `04` como Databricks Apps |
 
 Cada corrida deja una bitácora en `reports/despliegues/` con los pasos, los errores y las
@@ -296,15 +297,15 @@ flowchart TD
     end
 
     subgraph LANE2[Modelado ML, M-GCECDL]
-        P1 --> P2[Búsqueda de hiperparámetros con Optuna<br/>project_flow/old_version/02_mgcecdl_optuna_classification_search.ipynb]
-        VARS[(variables.json /<br/>Variables_seleccion.xlsx)] --> P7[Construcción de grafo experto<br/>project_flow/old_version/07_graph_preserved_connections_uiti_vano.ipynb]
+        P1 --> P2[Búsqueda de hiperparámetros con Optuna<br/>old_version/02_mgcecdl_optuna_classification_search.ipynb]
+        VARS[(variables.json /<br/>Variables_seleccion.xlsx)] --> P7[Construcción de grafo experto<br/>old_version/07_graph_preserved_connections_uiti_vano.ipynb]
         P7 --> ADJ[(matriz de adyacencia + edges)]
-        P2 --> P3[Entrenamiento en Colab GPU<br/>project_flow/old_version/03_mgcecdl_training.ipynb]
+        P2 --> P3[Entrenamiento en Colab GPU<br/>old_version/03_mgcecdl_training.ipynb]
         ADJ --> P3
         P3 --> MODEL[(mgcecdl_classifier_best.zip)]
-        MODEL --> P4[Evaluación de desempeño<br/>project_flow/old_version/04_mgcecdl_performance.ipynb]
-        MODEL --> P5[Análisis SHAP por circuito<br/>project_flow/old_version/05_mgcecdl_circuit_analysis.ipynb]
-        MODEL --> P6[Replicación documental<br/>project_flow/old_version/06_mgcecdl_document_replication.ipynb]
+        MODEL --> P4[Evaluación de desempeño<br/>old_version/04_mgcecdl_performance.ipynb]
+        MODEL --> P5[Análisis SHAP por circuito<br/>old_version/05_mgcecdl_circuit_analysis.ipynb]
+        MODEL --> P6[Replicación documental<br/>old_version/06_mgcecdl_document_replication.ipynb]
     end
 
     subgraph LANE3[Interpretación local, agentes]
@@ -547,26 +548,34 @@ Las salidas LLM inválidas se guardan por separado con sus errores de validació
 
 ## Notebooks
 
-La carpeta `notebooks/project_flow/` se renumeró el 2026-08-04. Tiene dos grupos, y ninguno es el
-punto de entrada canónico del flujo de reporte.
+La carpeta se reorganizó el 2026-08-13: `project_flow/` desapareció y su contenido subió a
+`notebooks/`. Ninguno de los dos grupos es el punto de entrada canónico del flujo de reporte.
 
-**Activos** — el flujo actual, numerado de corrido:
+**En `notebooks/`** — lo que se ejecuta como cuaderno:
 
 | Cuaderno | Qué hace |
 |---|---|
-| `01_uiti_vano_clima.ipynb` | Panel climático: violines por variable y nube de rezagos horarios, 208 circuitos |
-| `02_uiti_vano_kmeans.ipynb` | Agrupamiento de circuitos y de vanos por UITI acumulado y número de eventos |
-| `03_uiti_vano_trayectorias_circuitos.ipynb` | Trayectorias de circuito por ventanas deslizantes, con mapa geográfico |
-| `04_uiti_vano_trayectorias_vano.ipynb` | Lo mismo a nivel de vano; **dueño de la geometría KMeans** que 05 y 06 replican |
 | `05_mil_vano_ventana.ipynb` | Aprendizaje de instancias múltiples sobre bolsas vano × ventana |
-| `06_uiti_vano_explicabilidad_simulador.ipynb` | Explicabilidad y simulador de riesgo por vano (requiere kernel vivo) |
+| `07_relevancia_lote_por_vano.ipynb` | Barrido de relevancia por vano sobre un lote de circuitos |
 
-Los tres primeros son independientes. La única dependencia dura es la geometría de `04`: `05` y `06`
-la reutilizan vía `chec_local_interpreter.ventanas_015`, que la extrae del archivo de `04` y verifica
-su sha1, de modo que un cambio de centroides falla ruidosamente en vez de derivar en silencio.
+**Archivados en `notebooks/old_version/`.** Dos generaciones conviven ahí, y la primera
+**sigue siendo la fuente de las tres aplicaciones de escritorio** — archivar no es dejar de
+construir desde ellos. `aplicaciones/_comun/raiz.py` los apunta con `CUADERNOS_APPS`:
 
-**Archivados en `notebooks/project_flow/old_version/`** — el pipeline MGCECDL que entrenó el modelo
-que `06` y el agente `inference` siguen cargando desde `data/models/`:
+| Cuaderno | Qué hace | Lo consume |
+|---|---|---|
+| `01_uiti_vano_clima.ipynb` | Panel climático: violines por variable y nube de rezagos horarios, 208 circuitos | `aplicaciones/01_clima` |
+| `02_uiti_vano_kmeans.ipynb` | Agrupamiento de circuitos y de vanos por UITI acumulado y número de eventos | `aplicaciones/02_agrupamiento_vanos` |
+| `03_uiti_vano_trayectorias_circuitos.ipynb` | Trayectorias de circuito por ventanas deslizantes, con mapa geográfico | `/app-trayectorias-circuitos` |
+| `04_uiti_vano_trayectorias_vano.ipynb` | Lo mismo a nivel de vano; **dueño de la geometría KMeans** que 05 y 06 replican | `scripts/extract_geometrias_014.py` |
+| `06_uiti_vano_explicabilidad_simulador.ipynb` | Explicabilidad y simulador de riesgo por vano (requiere kernel vivo) | `aplicaciones/06_simulador` |
+
+La única dependencia dura es la geometría de `04`: `05` y `06` la reutilizan vía
+`chec_local_interpreter.ventanas_015`, que la extrae del archivo de `04` y verifica su sha1, de
+modo que un cambio de centroides falla ruidosamente en vez de derivar en silencio.
+
+Y el pipeline MGCECDL original, que entrenó el modelo que `06` y el agente `inference` siguen
+cargando desde `data/models/`:
 
 - `old_version/02_mgcecdl_optuna_classification_search.ipynb`
 - `old_version/03_mgcecdl_training.ipynb`
@@ -577,8 +586,9 @@ que `06` y el agente `inference` siguen cargando desde `data/models/`:
 - `old_version/08_geo_network_exploration.ipynb`
 - `old_version/09_simulador.ipynb`
 
-Cuidado con la colisión: `02`-`06` significan cosas distintas en cada grupo. Un número suelto en este
-README se refiere siempre al grupo activo; los archivados se nombran con su archivo completo.
+Cuidado con la colisión: `02`-`06` significan cosas distintas en cada generación, y ahora comparten
+carpeta. Un número suelto en este README se refiere siempre al grupo `uiti_vano`; los MGCECDL se
+nombran con su archivo completo.
 
 El enriquecimiento climático que hacía el viejo `01_climate.ipynb` ya no vive en un cuaderno: lo hace
 el comando `/clima`, y `01_uiti_vano_clima.ipynb` solo lo visualiza.

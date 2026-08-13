@@ -7,7 +7,7 @@ description: Shared contract for the local desktop apps (`/app-local-*`) — pre
 > the three cannot drift apart.
 
 Every `/app-local-*` command opens one of the local dashboards built in
-`notebooks/project_flow/aplicaciones/`. Each app already has its own launchers
+`aplicaciones/`. Each app already has its own launchers
 (`iniciar.command` / `iniciar.bat`) for double-clicking from Finder or Explorer; these
 commands exist to do the same from the session, with the preflight and the diagnosis
 that a double-click cannot give.
@@ -62,7 +62,7 @@ reads `data/` again — say so rather than blocking on it.
 ### D1. Install the environment
 
 ```
-cd notebooks/project_flow/aplicaciones/<app folder> && python3 ../_comun/gestor.py instalar
+cd aplicaciones/<app folder> && python3 ../_comun/gestor.py instalar
 ```
 
 Takes minutes and downloads hundreds of MB (1,6 GB for the simulator). Tell the user
@@ -81,7 +81,7 @@ The server blocks until `Ctrl+C`. Running it in the foreground would freeze the
 session, so always launch it in the background, redirecting output to a log:
 
 ```
-cd notebooks/project_flow/aplicaciones/<app folder> && \
+cd aplicaciones/<app folder> && \
   PYTHONUNBUFFERED=1 python3 ../_comun/gestor.py iniciar --puerto <port> > /tmp/app-local-<app>.log 2>&1
 ```
 
@@ -138,7 +138,7 @@ Do not re-diagnose these.
 
 ## H. Never
 
-- Never modify the notebooks under `notebooks/project_flow/`. The simulator works on a
+- Never modify the notebooks under `notebooks/`. The simulator works on a
   patched **copy** inside its own folder; the other two only read theirs.
 - Never launch in the foreground, and never report an open dashboard without a `200`.
 - Never kill a process on the port that is not one of these apps.

@@ -39,16 +39,18 @@ Cada agente valida su propio JSON contra un esquema antes de aceptarlo; un JSON 
 
 > **Lección aprendida — aislamiento de graphify.** El paso 2.5 de `informe-gerencial` reconstruye el grafo del vault de forma completamente aislada después de un incidente de producción donde una actualización con alcance mal delimitado podó ~271 archivos no relacionados. `vault-circuito` sigue el mismo principio: su `/graphify --update` queda acotado únicamente a `reports/vault/graphify-out/graph.json`.
 
-### 2.3 Los cuadernos de `notebooks/project_flow/`
+### 2.3 Los cuadernos de `notebooks/`
 
-La carpeta se renumeró el 2026-08-04. Hoy tiene **6 cuadernos activos**, numerados de corrido, y una
-subcarpeta `old_version/` con los 8 del pipeline MGCECDL original.
+La carpeta se renumeró el 2026-08-04 y se reorganizó el 2026-08-13: `project_flow/` desapareció y su
+contenido subió a `notebooks/`. Hoy quedan **`05` y `07`** sueltos y una subcarpeta `old_version/` con
+**13**: los cinco tableros `uiti_vano` (`01`-`04` y `06`, que siguen siendo la fuente de las tres
+aplicaciones de `aplicaciones/`) y los 8 del pipeline MGCECDL original.
 
 Ninguno de los dos grupos es el punto de entrada del proyecto — ese es `/report`. Ver
 [`notebooks-project-flow.md`](./notebooks-project-flow.md) para el detalle celda por celda de los
 archivados (dependencias reales, gotchas, dónde caen los artefactos).
 
-**Activos** (`notebooks/project_flow/`):
+**Activos** (`notebooks/`):
 
 ```
 01_uiti_vano_clima                     panel climático (violines + nube de rezagos), 208 circuitos
@@ -67,7 +69,7 @@ Los tres primeros son independientes entre sí. La única dependencia dura es la
 archivo de `04` y verifica su sha1 — si alguien mueve los centroides de `04`, los dos fallan
 ruidosamente en vez de derivar en silencio.
 
-**Archivados** (`notebooks/project_flow/old_version/`), el pipeline MGCECDL que entrenó el modelo
+**Archivados** (`notebooks/old_version/`), el pipeline MGCECDL que entrenó el modelo
 que `06` y `report_pipeline.py` siguen cargando desde `data/models/`:
 
 ```

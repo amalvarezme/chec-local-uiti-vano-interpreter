@@ -26,7 +26,7 @@ from pathlib import Path
 
 import pytest
 
-NOTEBOOK_DIR = Path(__file__).resolve().parents[1] / "notebooks" / "project_flow"
+NOTEBOOK_DIR = Path(__file__).resolve().parents[1] / "notebooks" / "old_version"
 TABLEROS = {
     "03": "03_uiti_vano_trayectorias_circuitos",
     "04": "04_uiti_vano_trayectorias_vano",

@@ -8,13 +8,13 @@ description: Publica el cuaderno 01 (nube por vano sobre el mapa, con las 6 vari
 > - **C. Unity Catalog target** — `workspace.default.chec-simulador` below is a default, not a requirement. Resolve it at runtime and substitute the resolved value into every path here.
 > - **D. Known restrictions** — D1–D9. If one shows up, do not re-diagnose it.
 
-Follow this exact sequence when `/app-vano-clima` is invoked. It publishes `notebooks/project_flow/01_uiti_vano_clima.ipynb` as a browsable dashboard at a stable URL, and it is **self-healing**: it inspects the target workspace first and creates whatever is missing, so it works against a workspace that has never been touched as well as against one that already has everything.
+Follow this exact sequence when `/app-vano-clima` is invoked. It publishes `notebooks/old_version/01_uiti_vano_clima.ipynb` as a browsable dashboard at a stable URL, and it is **self-healing**: it inspects the target workspace first and creates whatever is missing, so it works against a workspace that has never been touched as well as against one that already has everything.
 
 This is the fourth member of the app family, after `/app-agrupamiento-vanos-circuitos` (`02`), `/app-trayectorias-circuitos` (`03`) and `/app-trayectorias-vanos` (`04`). Everything it does that is not specific to `01` is deliberately identical to those three, so read them as the reference when something here is terse.
 
 **Why Databricks Apps and not Lakeview.** Same reason as its three siblings: `01` builds **16 Plotly traces** in a 4x3 grid — a geographic map as a 2x2 block, a dual-axis time series and six violins — and drives all of it from a hand-written HTML+JS panel (cell 9) that swaps between every circuit in the base (208 today), 6 variables and 25 hourly lags entirely in the browser. Lakeview executes neither Python nor arbitrary JS.
 
-**Scope.** MUST NOT create or refresh any Delta table or view, MUST NOT touch the Lakeview dashboard, MUST NOT modify the file under `notebooks/project_flow/`, and MUST NOT create any `site`-named path inside the Volume.
+**Scope.** MUST NOT create or refresh any Delta table or view, MUST NOT touch the Lakeview dashboard, MUST NOT modify the file under `notebooks/`, and MUST NOT create any `site`-named path inside the Volume.
 
 ## 0. Ask the user for the two required inputs
 
@@ -94,7 +94,7 @@ Warn first: `data/Indicadores_vano_v3.csv` is **~566 MB today** (Git-LFS tracked
 
 ## 3. Stage and upload the shimmed copy of `01`
 
-**Hard invariant**: the modified notebook is a COPY in the scratch directory. `git status --porcelain notebooks/project_flow/01_uiti_vano_clima.ipynb` MUST be empty when this step ends.
+**Hard invariant**: the modified notebook is a COPY in the scratch directory. `git status --porcelain notebooks/old_version/01_uiti_vano_clima.ipynb` MUST be empty when this step ends.
 
 **Strip every code cell's `outputs` and `execution_count` first.** The repo file is **68 MB** on disk, essentially all of it cell 9's embedded `text/html`; stripped it is **0.086 MB** (measured). Both figures scale with the base, so treat them as orders of magnitude, not constants. `databricks workspace import --format JUPYTER` enforces a 10 MB limit, so an unstripped copy is 8x over the ceiling — this is the single difference between the upload working and failing outright, and `01` is by far the worst offender in the family.
 
@@ -200,13 +200,13 @@ The six names the template uses (`DIV_FIGURA`, `pd`, `df`, `CIRCUITOS`, `VARS_VI
 Upload:
 ```
 databricks workspace mkdirs /Workspace/Users/<userName>/databricks-integration/project_flow -p <profile>
-databricks workspace import /Workspace/Users/<userName>/databricks-integration/project_flow/01_uiti_vano_clima --file <staged_copy> --format JUPYTER --overwrite -p <profile>
+databricks workspace import /Workspace/Users/<userName>/databricks-integration/old_version/01_uiti_vano_clima --file <staged_copy> --format JUPYTER --overwrite -p <profile>
 ```
 
 Then check the invariant. **Scope the hard assertion to `01` itself** and treat anything else in the folder as informational — a sibling notebook may well be open in Jupyter while this runs:
 ```
-test -z "$(git status --porcelain notebooks/project_flow/01_uiti_vano_clima.ipynb)" && echo LIMPIO || echo MODIFICADO
-git status --porcelain notebooks/project_flow/
+test -z "$(git status --porcelain notebooks/old_version/01_uiti_vano_clima.ipynb)" && echo LIMPIO || echo MODIFICADO
+git status --porcelain notebooks/
 ```
 The first line MUST print `LIMPIO`. Do **not** write the check as `git status --porcelain <path> && echo ok`: `git status` exits 0 whether or not it printed anything.
 
@@ -221,7 +221,7 @@ with
   "run_name": "vano-clima-html",
   "tasks": [{
     "task_key": "build_html",
-    "notebook_task": {"notebook_path": "/Workspace/Users/<userName>/databricks-integration/project_flow/01_uiti_vano_clima"}
+    "notebook_task": {"notebook_path": "/Workspace/Users/<userName>/databricks-integration/old_version/01_uiti_vano_clima"}
   }]
 }
 ```

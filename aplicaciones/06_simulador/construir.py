@@ -16,7 +16,7 @@ if __name__ == "__main__":
     manifiesto = construir_paquete()
     print("[3/3] preparando la copia del cuaderno que lee el paquete")
     copia = preparar_copia()
-    print(f"      {copia.relative_to(AQUI.parents[3])}")
+    print(f"      {copia.relative_to(AQUI.parents[1])}")
     print()
     print(f"  Simulador listo. {manifiesto['n_bolsas']:,} bolsas | "
           f"{manifiesto['n_instancias']:,} instancias x {manifiesto['n_features']} features.")

@@ -20,7 +20,7 @@ import raiz as _raiz
 
 def construir_tablero(nombre_cuaderno: str, destino: Path, *, titulo: str) -> None:
     _raiz.verificar_repo()
-    ruta_cuaderno = _raiz.CUADERNOS / nombre_cuaderno
+    ruta_cuaderno = _raiz.CUADERNOS_APPS / nombre_cuaderno
     if not ruta_cuaderno.exists():
         raise SystemExit(f"No existe {ruta_cuaderno}")
 

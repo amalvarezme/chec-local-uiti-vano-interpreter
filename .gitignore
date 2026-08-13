@@ -91,13 +91,13 @@ Informe_Impacto_CHEC/*
 **/__pycache__/
 *.pyc
 
-# Aplicaciones locales (notebooks/project_flow/aplicaciones/): todo lo que producen
+# Aplicaciones locales (aplicaciones/): todo lo que producen
 # es artefacto de cada maquina y se regenera con instalar + iniciar. Los entornos
 # pesan 484 MB, 530 MB y 1,6 GB; el tablero de clima construido, 27,8 MB; el paquete
 # del simulador, 95,2 MB.
-notebooks/project_flow/aplicaciones/*/.venv/
-notebooks/project_flow/aplicaciones/*/panel/
-notebooks/project_flow/aplicaciones/*/paquete/
-notebooks/project_flow/aplicaciones/*/cuaderno/
+aplicaciones/*/.venv/
+aplicaciones/*/panel/
+aplicaciones/*/paquete/
+aplicaciones/*/cuaderno/
 # El pid del servidor de Voila, que la app escribe al arrancar y borra al salir.
-notebooks/project_flow/aplicaciones/*/.servidor.pid
+aplicaciones/*/.servidor.pid

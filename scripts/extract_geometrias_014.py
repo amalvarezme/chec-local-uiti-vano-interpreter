@@ -1,6 +1,6 @@
 """One-shot, read-only extraction of 01.4's KMeans geometry payload.
 
-01.4's cell 7 (`notebooks/project_flow/04_uiti_vano_trayectorias_vano.ipynb`)
+01.4's cell 7 (`notebooks/old_version/04_uiti_vano_trayectorias_vano.ipynb`)
 carries a large committed `display_data` output (`text/html`) whose embedded
 JS payload holds `espacios` (the 8 `(log_x, log_y, prep)` KMeans spaces),
 `grupos` (`["Bajo", "Medio", "Medio-Alto", "Alto"]`, pre-sorted ascending by
@@ -34,7 +34,7 @@ from typing import Mapping
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_NOTEBOOK_PATH = (
-    REPO_ROOT / "notebooks" / "project_flow" / "04_uiti_vano_trayectorias_vano.ipynb"
+    REPO_ROOT / "notebooks" / "old_version" / "04_uiti_vano_trayectorias_vano.ipynb"
 )
 DEFAULT_OUTPUT_PATH = REPO_ROOT / "data" / "derived" / "geometrias_014.json"
 CELDA_GEOMETRIA = 7

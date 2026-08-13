@@ -46,7 +46,7 @@ import cuaderno as _cuaderno  # noqa: E402
 import huellas as _huellas  # noqa: E402
 import raiz as _raiz  # noqa: E402
 
-CUADERNO = _raiz.CUADERNOS / "06_uiti_vano_explicabilidad_simulador.ipynb"
+CUADERNO = _raiz.CUADERNOS_APPS / "06_uiti_vano_explicabilidad_simulador.ipynb"
 PAQUETE = AQUI / "paquete"
 COPIA = AQUI / "cuaderno" / "06_simulador.ipynb"
 

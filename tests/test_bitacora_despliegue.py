@@ -45,7 +45,7 @@ def bitacora(tmp_path: Path) -> Path:
         "init",
         "--archivo", str(destino),
         "--comando", "/app-vano-clima",
-        "--cuaderno", "notebooks/project_flow/01_uiti_vano_clima.ipynb",
+        "--cuaderno", "notebooks/old_version/01_uiti_vano_clima.ipynb",
         "--workspace", "https://adb-418048194347500.0.azuredatabricks.net",
         "--app", "vano-clima",
         "--perfil", "azure-chec",

@@ -2,7 +2,7 @@
 
 `MGCECDLRegressor` is a new, additive sibling of `MGCECDLClassifier`
 (`src/chec_impacto/models/mgcecdl.py`) built for the VANO-level regression
-exploration in `notebooks/project_flow/02.1_mgcecdl_regression_embeddings.ipynb`.
+exploration in `notebooks/02.1_mgcecdl_regression_embeddings.ipynb`.
 It reuses `_BaseMGCECDL`'s modality encoders/decoders/reliability heads and
 replaces the per-modality classification heads with per-modality linear
 regression heads, fusing predictions via the same reliability-weighted

@@ -1,4 +1,4 @@
-"""Contract tests for the four `project_flow` dashboard notebooks (01-04).
+"""Contract tests for the four dashboard notebooks (01-04).
 
 These notebooks are the project's user-facing boards. They share one contract
 that is easy to break with an innocent-looking edit and expensive to notice --
@@ -31,7 +31,7 @@ from pathlib import Path
 
 import pytest
 
-NOTEBOOK_DIR = Path(__file__).resolve().parents[1] / "notebooks" / "project_flow"
+NOTEBOOK_DIR = Path(__file__).resolve().parents[1] / "notebooks" / "old_version"
 
 # `05` and `06` are deliberately excluded: they are ipywidgets/simulator
 # notebooks, not static HTML+JS boards, and do not share this contract.

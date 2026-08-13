@@ -7,7 +7,7 @@ description: Abre en el navegador el tablero local de agrupamiento por UITI acum
 > what to report, and the restrictions already met in the field.
 
 Opens the local dashboard built from
-`notebooks/project_flow/02_uiti_vano_kmeans.ipynb`: K-Means into 4 groups over
+`notebooks/old_version/02_uiti_vano_kmeans.ipynb`: K-Means into 4 groups over
 accumulated UITI and event count, with date-range calendars, the marginal densities, the
 per-group violins and the label CSV download.
 
@@ -35,7 +35,7 @@ standalone circuit-clustering chart.
 
 | | |
 |---|---|
-| app folder | `notebooks/project_flow/aplicaciones/02_agrupamiento_vanos` |
+| app folder | `aplicaciones/02_agrupamiento_vanos` |
 | port | **8802** |
 | build output (contract check 3) | `02_agrupamiento_vanos/panel/index.html` |
 | build cost, if missing | **~51 s** — the notebook reads the 540 MB CSV **twice**, once per circuit and once per vano |
@@ -60,7 +60,7 @@ standalone circuit-clustering chart.
 Only when the user asks, or when they say the data changed — it is not automatic.
 
 ```
-cd notebooks/project_flow/aplicaciones/02_agrupamiento_vanos && \
+cd aplicaciones/02_agrupamiento_vanos && \
   PYTHONUNBUFFERED=1 python3 ../_comun/gestor.py iniciar --puerto 8802 --reconstruir
 ```
 

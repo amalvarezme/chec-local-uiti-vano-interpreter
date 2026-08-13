@@ -1,10 +1,11 @@
-# Flujo de los notebooks MGCECDL (hoy en `notebooks/project_flow/old_version/`)
+# Flujo de los notebooks MGCECDL (hoy en `notebooks/old_version/`)
 
 > **Ubicación, desde el 2026-08-04.** Los 8 cuadernos MGCECDL que detalla este documento
 > (`02_mgcecdl_optuna_classification_search` … `09_simulador`) viven ahora en
-> `notebooks/project_flow/old_version/`. El flujo activo de `notebooks/project_flow/` son otros 6
-> cuadernos, numerados `01`-`06`, descritos en el README — y `02`-`06` significan cosas distintas
-> en cada grupo, así que acá los números se refieren siempre a los archivados.
+> `notebooks/old_version/`, junto a los cinco tableros `uiti_vano` (`01`-`04` y `06`) que se
+> archivaron ahí el 2026-08-13 al disolverse `project_flow/`. En `notebooks/` solo quedan `05` y
+> `07`, descritos en el README — y `02`-`06` significan cosas distintas en cada generación, así que
+> acá los números se refieren siempre a los MGCECDL.
 > `01_climate.ipynb` fue eliminado del repo: ese enriquecimiento lo hace el comando `/clima`.
 > El resto de este documento (dependencias reales, gotchas, artefactos) sigue siendo válido:
 > el contenido de los cuadernos no cambió, solo su carpeta.

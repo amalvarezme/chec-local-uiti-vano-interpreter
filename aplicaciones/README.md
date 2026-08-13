@@ -1,7 +1,7 @@
 # Aplicaciones locales
 
 Tres aplicaciones de escritorio que corren en macOS y en Windows, sin servidor y sin
-conexión, sobre los cuadernos de `notebooks/project_flow/`.
+conexión, sobre los cuadernos de `notebooks/`.
 
 | carpeta | qué abre | cuaderno |
 |---|---|---|

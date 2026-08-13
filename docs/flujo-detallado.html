@@ -166,9 +166,9 @@
       El paso 2.5 de <code>informe-gerencial</code> reconstruye el grafo del vault de forma completamente aislada después de un incidente de producción donde una actualización con alcance mal delimitado podó ~271 archivos no relacionados. <code>vault-circuito</code> sigue el mismo principio.
     </div>
 
-    <h3>Los cuadernos de <code>notebooks/project_flow/</code></h3>
-    <p>La carpeta se renumeró el 2026-08-04. Hoy tiene <strong>6 cuadernos activos</strong>, numerados de corrido, y una subcarpeta <code>old_version/</code> con los 8 del pipeline MGCECDL original. Ninguno de los dos grupos es el punto de entrada del proyecto — ese es <code>/report</code>. Ver <a href="./notebooks-project-flow.md"><code>notebooks-project-flow.md</code></a> para el detalle celda por celda de los archivados.</p>
-    <p><strong>Activos</strong> (<code>notebooks/project_flow/</code>):</p>
+    <h3>Los cuadernos de <code>notebooks/</code></h3>
+    <p>La carpeta se renumeró el 2026-08-04 y se reorganizó el 2026-08-13: <code>project_flow/</code> desapareció y su contenido subió a <code>notebooks/</code>. Hoy quedan <strong><code>05</code> y <code>07</code></strong> sueltos y una subcarpeta <code>old_version/</code> con <strong>13</strong>: los cinco tableros <code>uiti_vano</code> (<code>01</code>-<code>04</code> y <code>06</code>, que siguen siendo la fuente de las tres aplicaciones de <code>aplicaciones/</code>) y los 8 del pipeline MGCECDL original. Ninguno de los dos grupos es el punto de entrada del proyecto — ese es <code>/report</code>. Ver <a href="./notebooks-project-flow.md"><code>notebooks-project-flow.md</code></a> para el detalle celda por celda de los archivados.</p>
+    <p><strong>Activos</strong> (<code>notebooks/</code>):</p>
     <div class="pipeline">01_uiti_vano_clima                     panel climático (violines + nube de rezagos), 208 circuitos
 02_uiti_vano_kmeans                    agrupamiento de circuitos y de vanos por UITI acumulado
 03_uiti_vano_trayectorias_circuitos    trayectorias de circuito por ventanas deslizantes + mapa
@@ -178,7 +178,7 @@
    └→ 06_uiti_vano_explicabilidad_simulador   explicabilidad + simulador de riesgo,
                                        requiere kernel vivo (ipywidgets)</div>
     <p>Los tres primeros son independientes entre sí. La única dependencia dura es la geometría de <code>04</code>: <code>05</code> y <code>06</code> la reutilizan vía <code>chec_local_interpreter.ventanas_015</code>, que la extrae del archivo de <code>04</code> y verifica su sha1 — si alguien mueve los centroides, los dos fallan ruidosamente en vez de derivar en silencio.</p>
-    <p><strong>Archivados</strong> (<code>notebooks/project_flow/old_version/</code>), el pipeline MGCECDL que entrenó el modelo que <code>06</code> y <code>report_pipeline.py</code> siguen cargando desde <code>data/models/</code>:</p>
+    <p><strong>Archivados</strong> (<code>notebooks/old_version/</code>), el pipeline MGCECDL que entrenó el modelo que <code>06</code> y <code>report_pipeline.py</code> siguen cargando desde <code>data/models/</code>:</p>
     <div class="pipeline">02_optuna (búsqueda HP) → 03_training (modelo final)
                                  ├→ 04_performance (métricas + SHAP)
                                  ├→ 05_circuit_analysis (SHAP por circuito, ancestro de report_pipeline.py)
