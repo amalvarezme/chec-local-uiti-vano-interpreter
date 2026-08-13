@@ -105,6 +105,16 @@ en la caché del sistema operativo y no en la memoria del proceso.
 matriz de 288.632×80, los mismos 26 controles, los mismos 208 circuitos, la misma
 interfaz (59 trazas) y una simulación real idéntica hasta el décimo decimal.
 
+## El botón de cerrar
+
+Los tres tableros traen arriba un botón que **detiene el servidor de ese tablero** — no
+los otros, que corren en su propio proceso y su propio puerto.
+
+Después de detenerlo, la página intenta cerrarse sola y casi siempre no puede: el
+navegador solo permite cerrar por script las ventanas que abrió un script, y estas las
+abrió el sistema. Cuando no puede, lo dice en pantalla en vez de quedarse con una página
+que parece viva. El servidor sí murió.
+
 ## Estructura
 
 ```

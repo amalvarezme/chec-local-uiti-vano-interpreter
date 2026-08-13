@@ -30,10 +30,39 @@ Medido en esta máquina:
 | | |
 |---|---|
 | construcción del paquete (una vez) | **7,3 s**, con un pico de 3,01 GB |
-| paquete resultante | **95,2 MB** en 7 archivos |
+| paquete resultante | **95,2 MB** en 8 archivos |
 | primera carga de la página | **4 ms** (kernel precalentado) |
 | carga siguiente, con el kernel ya consumido | **6,0 s** |
 | entorno virtual | 1,6 GB (PyTorch es casi todo) |
+
+## Qué variables se pueden simular
+
+Sale de **`data/Variables_simular.xlsx`**, no de una lista escrita en el código. El
+archivo declara, por variable: el veredicto (si simularla significa algo y por qué), el
+rango, la unidad y — cuando existe — la **lista cerrada de valores posibles**.
+
+Esa última columna es la que decide el control:
+
+| en el archivo | en el panel | ejemplo |
+|---|---|---|
+| trae valores posibles | **selector** | `ALTURA` → 12, 16 o 18 m |
+| `numeric-entero` | **deslizador de enteros** | `CNT_FASES` → 1, 2 o 3 |
+| `numeric` | **deslizador continuo** | `DDT`, las cuatro familias climáticas |
+
+Medido sobre el archivo actual: **8 selectores, 3 deslizadores de enteros y 15
+continuos**. Antes, `ALTURA` se ofrecía como un deslizador continuo entre 4 y 25 e
+invitaba a simular un apoyo de 17,3 m que no existe en el inventario.
+
+Para cambiar un veredicto o un rango se edita el `.xlsx` y se reconstruye. No hay que
+tocar Python.
+
+> **Una fila del archivo está mal y el panel lo dice.** `CALIBRE_NEUTRO` lista
+> valores de `CONDUCTOR` (`2-ACSR-CUBIERTO`…), que el codificador del modelo no sabe
+> convertir. Ofrecerlos rompería la simulación, o peor, los codificaría como otra cosa
+> sin avisar. El cuaderno imprime el aviso y el panel usa las 20 categorías reales.
+
+La aplicación **no lee `data/`**: el archivo viaja dentro del paquete y `app.py` lo
+apunta por variable de entorno.
 
 ## Cómo está optimizado
 

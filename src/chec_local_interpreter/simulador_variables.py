@@ -42,8 +42,11 @@ to no hides a real one.
 from __future__ import annotations
 
 import math
+import os
 import re
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -61,162 +64,240 @@ VEREDICTOS: tuple[str, ...] = (
 # no hay que tocar, donde se lee como una lista de advertencias.
 _ORDEN = {veredicto: i for i, veredicto in enumerate(VEREDICTOS)}
 SIN_EVALUAR = "Sin evaluar"
-_MOTIVO_SIN_JUICIO = ("Sin veredicto en `JUICIO_SIMULACION`: agregarlo antes de ofrecer "
+_MOTIVO_SIN_JUICIO = ("Sin veredicto en `data/Variables_simular.xlsx`: agregarlo antes de ofrecer "
                       "esta variable como palanca.")
 
 # Veredicto y motivo por variable. La descripcion entre comillas de cada motivo es
 # la del diccionario del proyecto, `data/Variables_seleccion.xlsx`.
-JUICIO_SIMULACION: Mapping[str, tuple[str, str]] = {
-    # --- palancas: obra o mantenimiento que CHEC ejecuta -----------------------------
-    "NR_T": (
-        "Si -- intervencion",
-        "Es el nivel de riesgo por vegetacion asociada al vano, y bajarlo ES el plan "
-        "de poda. De todas las variables del modelo, es la que se mueve con la "
-        "cuadrilla de la semana entrante.",
-    ),
-    "CANTIDAD_TIERRA": (
-        "Si -- intervencion",
-        "Dice si el apoyo tiene puesta a tierra. Instalarla es una obra concreta y "
-        "acotada, asi que la simulacion se lee directamente como su beneficio "
-        "esperado.",
-    ),
-    "NG_RED": (
-        "Si -- intervencion",
-        "Indica si el vano posee guarda o neutro. Tenderlo es una obra de red "
-        "habitual, y el simulador estima que le pasa a la criticidad si se hace.",
-    ),
-    "CONDUCTOR": (
-        "Si -- intervencion",
-        "Es el conductor de fases del vano. Cambiarlo es un recambio programable, y "
-        "comparar dos conductores es una decision real de diseno.",
-    ),
-    "CALIBRE_NEUTRO": (
-        "Si -- intervencion",
-        "Es el calibre del neutro. Igual que el conductor, se cambia con obra y el "
-        "escenario se lee como la ganancia de subir de calibre.",
-    ),
-    "ALTURA": (
-        "Si -- intervencion",
-        "Es la altura del apoyo final del vano. Cambiar el apoyo por uno mas alto es "
-        "obra de red, y aleja el conductor de la vegetacion.",
-    ),
-    "LONG_CRUCETA": (
-        "Si -- intervencion",
-        "Es la longitud de la cruceta del apoyo final. Se cambia con la misma obra "
-        "que el apoyo y modifica la separacion entre fases.",
-    ),
-    "CNT_FASES": (
-        "Si -- intervencion",
-        "Es la cantidad de fases del vano. Cambiarla es una repotenciacion mayor, "
-        "pero es una decision de expansion que la empresa efectivamente toma.",
-    ),
-    "CAPACIDAD_NOMINAL": (
-        "Si -- intervencion",
-        "Es la capacidad del trafo del apoyo final. Cambiar el transformador es la "
-        "respuesta tipica a la sobrecarga y esta en el alcance del mantenimiento.",
-    ),
-    "TIPO": (
-        "Si -- intervencion",
-        "Es el tipo de equipo que protege al vano. Cambiar el esquema de proteccion "
-        "es una decision de operacion, no una propiedad fija del vano.",
-    ),
-    "VAL_CRIT_APOYO": (
-        "Si -- intervencion",
-        "Es la calificacion de criticidad por clase de apoyo, y la clase de apoyo se "
-        "cambia reponiendo la estructura. Cuidado con leerlo al reves: es una "
-        "clasificacion del activo, no la criticidad que el modelo predice.",
-    ),
-    # --- escenarios: nadie los controla, y ese es justamente el what-if --------------
-    "clima:prep": (
-        "Si -- escenario",
-        "Precipitacion acumulada en la hora previa, en los 12 rezagos a la vez. No se "
-        "interviene, pero preguntar que pasa bajo un aguacero es exactamente para lo "
-        "que existe el simulador.",
-    ),
-    "clima:temp": (
-        "Si -- escenario",
-        "Temperatura del aire a 2 m, en los 12 rezagos. Escenario ambiental: no es "
-        "una obra, es la condicion bajo la que se quiere anticipar la criticidad.",
-    ),
-    "clima:wind_gust_spd": (
-        "Si -- escenario",
-        "Velocidad maxima de rafaga a 10 m, en los 12 rezagos. Es el escenario de "
-        "vendaval, el mas util de la familia climatica para planear contingencias.",
-    ),
-    "clima:wind_spd": (
-        "Si -- escenario",
-        "Velocidad instantanea del viento a 10 m, en los 12 rezagos. Mismo caso que "
-        "la rafaga, en regimen sostenido en vez de pico.",
-    ),
-    "DDT": (
-        "Si -- escenario",
-        "Es la densidad de descargas a tierra promedio al ano del sitio. No se "
-        "interviene, pero describe la exposicion atmosferica y sirve para comparar "
-        "un vano con otro bajo la misma pregunta.",
-    ),
-    "PROMEDIO_KWH_TRF": (
-        "Si -- escenario",
-        "Es el consumo mensual promedio del trafo. Subirlo es el escenario de "
-        "crecimiento de demanda, que se proyecta y no se decide.",
-    ),
-    "PROMEDIO_KWH_VANO": (
-        "Si -- escenario",
-        "Es la energia mensual promedio que circula por el vano. Mismo escenario de "
-        "crecimiento de carga, medido sobre el vano en vez del trafo.",
-    ),
-    # --- limitados: una sola lectura los hace interpretables -------------------------
-    "FECHA_OPERACION_VANO": (
-        "Limitado",
-        "Es la fecha de entrada en operacion del vano, o sea su edad. Solo tiene "
-        "sentido en una direccion y con una lectura: adelantarla equivale a reponer "
-        "el activo. Atrasarla no corresponde a nada que se pueda hacer.",
-    ),
-    "FECHA_OPERACION_TRF": (
-        "Limitado",
-        "Es la fecha de entrada en operacion del trafo. Misma lectura unica que la "
-        "del vano: solo se interpreta como el recambio del transformador.",
-    ),
-    "LONGITUD": (
-        "Limitado",
-        "Es la longitud del vano. Solo cambia reconfigurando la red -- moviendo "
-        "apoyos --, asi que fuera de un proyecto de repotenciacion es geometria fija "
-        "y el escenario no corresponde a ninguna decision del dia a dia.",
-    ),
-    "CNT_VN": (
-        "Limitado",
-        "Es la cantidad de vanos que hay hasta el equipo que lo protege. Cambia solo "
-        "reubicando la proteccion, y esa obra mueve a la vez a todos los vanos del "
-        "tramo: simularlo para un vano aislado describe algo que no puede ocurrir "
-        "solo.",
-    ),
-    "TIPO_TAX": (
-        "Limitado",
-        "Es el tipo de taxonomia del vano. Describe lo que el vano ES y no una "
-        "palanca; solo se lee como comparar dos disenos distintos, nunca como una "
-        "intervencion sobre este vano.",
-    ),
-    # --- refutadas -------------------------------------------------------------------
-    "CNT_TRF": (
-        "No",
-        "El diccionario del proyecto lo define como la cantidad de trafos afectados "
-        "EN LA FALLA: se mide despues del evento que el modelo intenta anticipar. "
-        "Simularlo es circular, e invita a concluir que menos trafos afectados causan "
-        "menos criticidad, que es la flecha del analisis al reves.",
-    ),
-    "X2": (
-        "No",
-        "Es la coordenada X final del vano: su identidad geografica. Moverla no "
-        "corresponde a ninguna intervencion y ademas rompe en silencio el acople con "
-        "el clima, porque las series climaticas se consultaron EN esas coordenadas y "
-        "el vano movido se quedaria con el clima de otro lugar.",
-    ),
-    "Y2": (
-        "No",
-        "Es la coordenada Y final del vano: su identidad geografica. Mismo problema "
-        "que X2 -- no es una obra, y desacopla el vano del clima que se consulto en "
-        "ese punto.",
-    ),
+# --------------------------------------------------------------------------------
+# El catalogo de simulacion: que variables se ofrecen, con que rango y como
+# --------------------------------------------------------------------------------
+# Antes esto eran ~150 lineas de diccionario escrito a mano aqui mismo. Ahora sale de
+# `data/Variables_simular.xlsx`, y por dos razones concretas:
+#
+#  1. **Es una decision del negocio, no del codigo.** Cambiar el veredicto de una
+#     variable -- o el rango en que tiene sentido moverla -- no deberia exigir editar
+#     Python ni volver a desplegar nada.
+#  2. **Trae los valores posibles.** El modelo ve `ALTURA` como un numero entre 4 y 25,
+#     pero el inventario solo tiene apoyos de 12, 16 y 18 metros. Sin esa lista, el
+#     panel ofrecia un deslizador continuo e invitaba a simular un apoyo de 17,3 m que
+#     no existe. Con ella, se ofrece un selector cerrado.
+#
+# UNA sola fuente. No se conserva ninguna copia en el codigo: dos listas que tienen que
+# coincidir para siempre terminan no coincidiendo, y el dia que se separan nadie sabe
+# cual manda.
+
+RUTA_VARIABLES_SIMULAR = "data/Variables_simular.xlsx"
+HOJA_VARIABLES_SIMULAR = "Variables a simular ajustado"
+
+# La aplicacion del cuaderno 06 sirve un paquete congelado y no abre `data/`. Esta
+# variable de entorno es como se le dice donde quedo su copia del archivo.
+VARIABLE_ENTORNO_RUTA = "RUTA_VARIABLES_SIMULAR"
+
+_COLUMNAS_REQUERIDAS = (
+    "Variable", "Controla", "Tipo", "vmin", "vmax", "Unidad", "Opciones",
+    "Sentido de simular", "Por que",
+)
+
+# El archivo nombra las familias climaticas en palabras -- son cuatro controles de 12
+# rezagos cada uno --, y el catalogo de knobs las llama `clima:<codigo>`. Sin esta
+# traduccion las cuatro quedarian fuera y el panel las trataria como `Sin evaluar`,
+# que es justo lo contrario de lo que dice el archivo.
+_ID_POR_NOMBRE = {
+    "Precipitacion (12 lags)": "clima:prep",
+    "Temperatura (12 lags)": "clima:temp",
+    "Rafaga de viento (12 lags)": "clima:wind_gust_spd",
+    "Viento (12 lags)": "clima:wind_spd",
 }
+
+CONTROL_SELECTOR = "selector"
+CONTROL_DESLIZADOR = "deslizador"
+CONTROL_DESLIZADOR_ENTERO = "deslizador-entero"
+
+
+@dataclass(frozen=True)
+class VariableSimulable:
+    """Una fila del archivo, ya interpretada."""
+
+    knob_id: str
+    variable: str
+    controla: int
+    tipo: str
+    vmin: float | None
+    vmax: float | None
+    unidad: str
+    opciones: tuple[str, ...]
+    veredicto: str
+    motivo: str
+
+    @property
+    def control(self) -> str:
+        """Que control le corresponde en el panel.
+
+        La lista de valores posibles manda sobre el tipo: si el archivo declara cuales
+        son, el control es cerrado aunque el modelo vea un numero continuo. Es la
+        diferencia entre ofrecer los apoyos que existen y ofrecer cualquier altura.
+        """
+        if self.opciones:
+            return CONTROL_SELECTOR
+        if self.tipo == "numeric-entero":
+            return CONTROL_DESLIZADOR_ENTERO
+        return CONTROL_DESLIZADOR
+
+    @property
+    def opciones_numericas(self) -> bool:
+        """Si las opciones son numeros -- `12|16|18` -- y no texto -- `Ramal|Troncal`.
+
+        Decide que viaja al modelo: un numero tal cual, o una categoria que hay que
+        codificar antes.
+        """
+        if not self.opciones:
+            return False
+        return all(_es_numero(v) for v in self.opciones)
+
+    @property
+    def valores_numericos(self) -> tuple[float, ...]:
+        return tuple(float(v) for v in self.opciones) if self.opciones_numericas else ()
+
+
+def _es_numero(texto: str) -> bool:
+    try:
+        float(texto)
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
+def _texto(valor: object) -> str:
+    return "" if valor is None or (isinstance(valor, float) and math.isnan(valor)) \
+        else str(valor).strip()
+
+
+def _numero(valor: object) -> float | None:
+    if valor is None:
+        return None
+    try:
+        numero = float(valor)
+    except (TypeError, ValueError):
+        return None
+    return None if math.isnan(numero) else numero
+
+
+def ruta_variables_simular() -> Path:
+    """La ruta del archivo: la del entorno si esta puesta, o la del repositorio."""
+    del_entorno = os.environ.get(VARIABLE_ENTORNO_RUTA)
+    return Path(del_entorno) if del_entorno else Path(RUTA_VARIABLES_SIMULAR)
+
+
+# Cache por (ruta, fecha de modificacion). Leer el .xlsx cuesta decenas de
+# milisegundos, y `widget_for_knob` lo consulta una vez por control y por vano: sin
+# cache serian cientos de lecturas para pintar un panel. La fecha entra en la clave
+# para que editar el archivo se note sin reiniciar nada.
+_CACHE: dict[tuple[str, int], dict[str, VariableSimulable]] = {}
+
+
+def catalogo_simulacion(path: str | Path | None = None) -> dict[str, VariableSimulable]:
+    """`knob_id -> VariableSimulable`, leido de `Variables_simular.xlsx`."""
+    ruta = Path(path) if path is not None else ruta_variables_simular()
+    if not ruta.exists():
+        raise FileNotFoundError(
+            f"No se encontro {ruta}. Es el archivo que dice que variables se pueden "
+            "simular, con que rango y con que valores posibles; sin el, el panel no "
+            "sabe que ofrecer. Deberia estar en data/Variables_simular.xlsx."
+        )
+    clave = (str(ruta.resolve()), ruta.stat().st_mtime_ns)
+    if clave not in _CACHE:
+        _CACHE[clave] = _leer_catalogo(ruta)
+    return _CACHE[clave]
+
+
+def _leer_catalogo(ruta: Path) -> dict[str, VariableSimulable]:
+    tabla = pd.read_excel(ruta, sheet_name=HOJA_VARIABLES_SIMULAR)
+    columnas = {str(c).strip(): c for c in tabla.columns}
+    faltan = [c for c in _COLUMNAS_REQUERIDAS if c not in columnas]
+    if faltan:
+        raise ValueError(
+            f"A {ruta.name} le faltan columnas: {faltan}. Se esperan "
+            f"{list(_COLUMNAS_REQUERIDAS)}."
+        )
+
+    catalogo: dict[str, VariableSimulable] = {}
+    for _, fila in tabla.iterrows():
+        nombre = _texto(fila[columnas["Variable"]])
+        if not nombre:
+            continue
+        knob_id = _ID_POR_NOMBRE.get(nombre, nombre)
+        crudas = _texto(fila[columnas["Opciones"]])
+        # El separador es `|`, y en el archivo real hay espacios alrededor en unas
+        # filas y no en otras (`1CC | 1CFR` contra `12|16|18`). Se normaliza aqui para
+        # que la comparacion contra las categorias del modelo no falle por un espacio.
+        opciones = tuple(o.strip() for o in crudas.split("|") if o.strip()) if crudas else ()
+        controla = _numero(fila[columnas["Controla"]])
+        catalogo[knob_id] = VariableSimulable(
+            knob_id=knob_id,
+            variable=nombre,
+            controla=int(controla) if controla else 1,
+            tipo=_texto(fila[columnas["Tipo"]]) or "numeric",
+            vmin=_numero(fila[columnas["vmin"]]),
+            vmax=_numero(fila[columnas["vmax"]]),
+            unidad=_texto(fila[columnas["Unidad"]]),
+            opciones=opciones,
+            veredicto=_texto(fila[columnas["Sentido de simular"]]) or SIN_EVALUAR,
+            motivo=_texto(fila[columnas["Por que"]]),
+        )
+    return catalogo
+
+
+def incoherencias_del_catalogo(
+    knobs: Iterable[Knob],
+    catalogo: Mapping[str, VariableSimulable] | None = None,
+) -> list[str]:
+    """Opciones que el archivo ofrece y el modelo no sabe codificar.
+
+    No es un detalle de forma. Una categoria que el codificador no conoce falla en
+    mitad de una simulacion -- o, peor, se codifica como otra cosa sin aviso --, y el
+    usuario lee un resultado que corresponde a un vano distinto del que pidio.
+
+    Devuelve avisos en vez de lanzar: el panel sigue funcionando con las categorias que
+    el modelo si conoce, y el aviso queda a la vista de quien mantiene el archivo.
+    """
+    catalogo = catalogo_simulacion() if catalogo is None else catalogo
+    avisos: list[str] = []
+    for knob in knobs:
+        entrada = catalogo.get(knob.id)
+        if entrada is None or not entrada.opciones or knob.kind != "categorical":
+            continue
+        conocidas = set(knob.categories or ())
+        desconocidas = [o for o in entrada.opciones if o not in conocidas]
+        if desconocidas:
+            avisos.append(
+                f"{knob.id}: {len(desconocidas)} de {len(entrada.opciones)} opciones de "
+                f"{RUTA_VARIABLES_SIMULAR} no estan entre las categorias que el modelo "
+                f"sabe codificar y NO se ofrecen -- {desconocidas[:4]}"
+                f"{' ...' if len(desconocidas) > 4 else ''}. "
+                f"El panel usa las {len(conocidas)} categorias reales."
+            )
+    return avisos
+
+
+def opciones_ofrecidas(knob: Knob,
+                       entrada: VariableSimulable | None) -> tuple[str, ...]:
+    """Las opciones que el panel puede ofrecer de verdad para `knob`.
+
+    Es la interseccion entre lo que el archivo propone y lo que el modelo sabe
+    codificar. Si no queda ninguna -- el archivo se equivoco de variable entera --, se
+    cae a las categorias del modelo: quedarse sin control es peor que ofrecer la lista
+    completa, y `incoherencias_del_catalogo` ya lo reporto.
+    """
+    conocidas = tuple(knob.categories or ())
+    if entrada is None or not entrada.opciones:
+        return conocidas
+    if knob.kind != "categorical":
+        return entrada.opciones
+    validas = tuple(o for o in entrada.opciones if o in conocidas)
+    return validas or conocidas
+
+
 
 
 UNIDADES: Mapping[str, str] = {
@@ -376,7 +457,7 @@ def descripciones_de_variables(path: str | Path | None = None) -> dict[str, str]
 
     `NR_T` no le dice nada a quien opera la red. `Variables_seleccion.xlsx` ya trae el
     nombre en palabras de cada columna -- y es el MISMO documento que sustenta los
-    veredictos de `JUICIO_SIMULACION` --, asi que leerlo de ahi evita que el panel
+    veredictos de `Variables_simular.xlsx` --, asi que leerlo de ahi evita que el panel
     invente una segunda redaccion que se separa de la primera en cuanto alguien edita
     una sola.
 
@@ -411,7 +492,7 @@ def definicion_de_knob(knob: Knob, *, nombres: Mapping[str, str] | None = None) 
     """Que ES esta variable, en una linea, para el tooltip de su casilla.
 
     El panel del cuaderno 06 ofrece las variables como casillas, y en una casilla
-    solo cabe el nombre. El veredicto y el motivo de `JUICIO_SIMULACION` -- lo unico
+    solo cabe el nombre. El veredicto y el motivo de `Variables_simular.xlsx` -- lo unico
     que dice si mover esa variable representa una obra, un escenario o nada --
     vivian solo en la tabla de la celda 8, arriba y lejos del sitio donde se elige.
     Al pasar el mouse por la casilla se lee ahi mismo.
@@ -419,7 +500,9 @@ def definicion_de_knob(knob: Knob, *, nombres: Mapping[str, str] | None = None) 
     Se arma de la MISMA fuente que esa tabla y no de un texto aparte: dos redacciones
     de la misma decision se separan en cuanto alguien edita una sola.
     """
-    veredicto, motivo = JUICIO_SIMULACION.get(knob.id, (SIN_EVALUAR, _MOTIVO_SIN_JUICIO))
+    entrada = catalogo_simulacion().get(knob.id)
+    veredicto = entrada.veredicto if entrada is not None else SIN_EVALUAR
+    motivo = entrada.motivo if entrada is not None else _MOTIVO_SIN_JUICIO
     # El nombre en palabras VA PRIMERO: es lo que se lee al posar el mouse, y la sigla
     # ya esta escrita en la propia casilla.
     detallado = (nombres or {}).get(knob.id, "")
@@ -446,44 +529,55 @@ def definiciones_de_knobs(knobs: Iterable[Knob], *,
     return {knob.id: definicion_de_knob(knob, nombres=nombres) for knob in knobs}
 
 
-def _fila(knob: Knob) -> dict[str, object]:
-    veredicto, motivo = JUICIO_SIMULACION.get(knob.id, (SIN_EVALUAR, _MOTIVO_SIN_JUICIO))
-    limites = knob.bounds if knob.kind == "numeric" else None
+def _fila(knob: Knob, entrada: VariableSimulable | None) -> dict[str, object]:
+    veredicto = entrada.veredicto if entrada is not None else SIN_EVALUAR
+    motivo = entrada.motivo if entrada is not None else _MOTIVO_SIN_JUICIO
+    opciones = opciones_ofrecidas(knob, entrada)
     return {
         "Variable": knob.label,
         # Una familia climatica es UN control que mueve 12 features. Sin esta columna
         # "Precipitacion" se lee como una sola feature y su peso en el modelo parece
         # doce veces menor de lo que es.
-        "Controla": len(knob.feature_names),
-        "Tipo": knob.kind,
-        "vmin": None if limites is None else float(limites[0]),
-        "vmax": None if limites is None else float(limites[1]),
-        "Unidad": UNIDADES.get(knob.id, ""),
-        "Opciones": " | ".join(knob.categories) if knob.categories else "",
+        "Controla": entrada.controla if entrada is not None else len(knob.feature_names),
+        "Tipo": entrada.tipo if entrada is not None else knob.kind,
+        # Como se ofrece en el panel. Es la columna que explica por que `ALTURA` sale
+        # con tres opciones y no con un deslizador de 4 a 25.
+        "Control": entrada.control if entrada is not None else CONTROL_DESLIZADOR,
+        "vmin": None if entrada is None else entrada.vmin,
+        "vmax": None if entrada is None else entrada.vmax,
+        "Unidad": entrada.unidad if entrada is not None else "",
+        "Opciones": " | ".join(opciones),
         "Sentido de simular": veredicto,
         "Por que": motivo,
         "_orden": _ORDEN.get(veredicto, len(VEREDICTOS)),
     }
 
 
-def tabla_variables_simulables(knobs: Iterable[Knob]) -> pd.DataFrame:
-    """Notebook 06's variable table: one row per knob the panel can actually
-    move, with its range and the verdict on whether simulating it means
-    anything.
+def tabla_variables_simulables(
+    knobs: Iterable[Knob],
+    catalogo: Mapping[str, VariableSimulable] | None = None,
+) -> pd.DataFrame:
+    """La tabla de variables del cuaderno 06: una fila por control que el panel puede
+    mover, con su rango, como se ofrece y el veredicto sobre si simularlo significa
+    algo.
 
-    Constant knobs are left out -- they have a single observed value or a
-    single category, the panel already hides them, and a row whose range is a
-    point pads the table without telling anyone anything.
+    Los knobs constantes se dejan fuera -- tienen un unico valor observado o una unica
+    categoria, el panel ya los esconde, y una fila cuyo rango es un punto engorda la
+    tabla sin decirle nada a nadie.
 
-    Numeric knobs carry `vmin`/`vmax` from the knob's OWN bounds, which
-    `build_knobs` derives from the observed data. Reading them from a second
-    hand-written source could disagree with what the slider actually allows.
-    Categorical knobs leave the range empty and list their options instead: a
-    range over category codes invites reading 2 as "twice 1".
+    **El rango, la unidad y las opciones salen de `Variables_simular.xlsx`, no del
+    knob.** Es deliberado y es un cambio respecto de como estaba: los limites que
+    `build_knobs` deriva de los datos son los OBSERVADOS, y el archivo declara los que
+    tienen sentido simular. `NR_T` llega a 116 en la base y el archivo lo confirma; la
+    `ALTURA` va de 4 a 25 en los datos pero solo existen apoyos de 12, 16 y 18. Leer
+    las dos cosas de sitios distintos es como la tabla y el control terminan diciendo
+    cosas diferentes.
     """
-    filas = [_fila(knob) for knob in knobs if knob.kind != "constant"]
-    columnas = ["Variable", "Controla", "Tipo", "vmin", "vmax", "Unidad", "Opciones",
-                "Sentido de simular", "Por que"]
+    catalogo = catalogo_simulacion() if catalogo is None else catalogo
+    filas = [_fila(knob, catalogo.get(knob.id))
+             for knob in knobs if knob.kind != "constant"]
+    columnas = ["Variable", "Controla", "Tipo", "Control", "vmin", "vmax", "Unidad",
+                "Opciones", "Sentido de simular", "Por que"]
     if not filas:
         return pd.DataFrame(columns=columnas)
     tabla = pd.DataFrame(filas).sort_values(
@@ -497,22 +591,49 @@ VEREDICTOS_OFRECIDOS: tuple[str, ...] = ("Si -- intervencion", "Si -- escenario"
 _NOMBRE_GRUPO = {"Si -- intervencion": "Intervencion", "Si -- escenario": "Escenario"}
 
 
-GRUPO_POR_KNOB: Mapping[str, str] = {
-    knob_id: _NOMBRE_GRUPO[veredicto]
-    for knob_id, (veredicto, _motivo) in JUICIO_SIMULACION.items()
-    if veredicto in _NOMBRE_GRUPO
-}
-"""`knob_id -> "Intervencion" | "Escenario"` para los controles que el panel ofrece.
+def grupo_por_knob(
+    catalogo: Mapping[str, VariableSimulable] | None = None,
+) -> dict[str, str]:
+    """`knob_id -> "Intervencion" | "Escenario"` para los controles que el panel ofrece.
 
-Es lo que permite que el ranking de relevancia RESERVE sitio para los dos grupos. Sin
-la reserva, un ranking copado por las cuatro familias climaticas no deja ni una palanca
-que una cuadrilla pueda ejecutar, y el panel existe para sostener una orden de trabajo.
-"""
+    Es lo que permite que el ranking de relevancia RESERVE sitio para los dos grupos.
+    Sin la reserva, un ranking copado por las cuatro familias climaticas no deja ni una
+    palanca que una cuadrilla pueda ejecutar, y el panel existe para sostener una orden
+    de trabajo.
+    """
+    catalogo = catalogo_simulacion() if catalogo is None else catalogo
+    return {knob_id: _NOMBRE_GRUPO[e.veredicto]
+            for knob_id, e in catalogo.items() if e.veredicto in _NOMBRE_GRUPO}
 
 
-def _veredicto(knob: Knob, juicio: Mapping[str, tuple[str, str]] | None = None) -> str:
-    tabla = JUICIO_SIMULACION if juicio is None else juicio
-    return tabla.get(knob.id, (SIN_EVALUAR, ""))[0]
+def juicio_simulacion(
+    catalogo: Mapping[str, VariableSimulable] | None = None,
+) -> dict[str, tuple[str, str]]:
+    """`knob_id -> (veredicto, motivo)`, la forma que consumia el codigo anterior."""
+    catalogo = catalogo_simulacion() if catalogo is None else catalogo
+    return {knob_id: (e.veredicto, e.motivo) for knob_id, e in catalogo.items()}
+
+
+def __getattr__(nombre: str):
+    """`GRUPO_POR_KNOB` y `JUICIO_SIMULACION` siguen existiendo como nombres del modulo.
+
+    Se resuelven en el PRIMER ACCESO y no al importar, que es lo que permite que el
+    archivo sea la unica fuente sin convertir un `import` en una lectura de disco: hay
+    procesos que importan este modulo por sus utilidades de rotulado y no tienen por
+    que exigir el .xlsx.
+    """
+    if nombre == "GRUPO_POR_KNOB":
+        return grupo_por_knob()
+    if nombre == "JUICIO_SIMULACION":
+        return juicio_simulacion()
+    raise AttributeError(f"module {__name__!r} has no attribute {nombre!r}")
+
+
+def _veredicto(knob: Knob,
+               catalogo: Mapping[str, VariableSimulable] | None = None) -> str:
+    catalogo = catalogo_simulacion() if catalogo is None else catalogo
+    entrada = catalogo.get(knob.id)
+    return entrada.veredicto if entrada is not None else SIN_EVALUAR
 
 
 def knobs_simulables(knobs: Iterable[Knob]) -> list[Knob]:
@@ -554,7 +675,7 @@ def columnas_panel(
     knobs: Iterable[Knob],
     *,
     por_grupo: int = 2,
-    juicio: Mapping[str, tuple[str, str]] | None = None,
+    catalogo: Mapping[str, VariableSimulable] | None = None,
 ) -> list[tuple[str, list[Knob]]]:
     """Las columnas del selector de variables: `por_grupo` por cada veredicto que el
     panel ofrece, o sea cuatro -- dos de intervencion y dos de escenario.
@@ -574,7 +695,7 @@ def columnas_panel(
     columnas: list[tuple[str, list[Knob]]] = []
     knobs = list(knobs)
     for veredicto in VEREDICTOS_OFRECIDOS:
-        delgrupo = [k for k in knobs if _veredicto(k, juicio) == veredicto]
+        delgrupo = [k for k in knobs if _veredicto(k, catalogo) == veredicto]
         nombre = _NOMBRE_GRUPO[veredicto]
         # `-(-n // p)` es el techo de la division: la primera columna se queda con el
         # sobrante en vez de arrastrarlo hasta la ultima.

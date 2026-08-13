@@ -108,7 +108,14 @@ def main() -> int:
     # pasa por escrito: la RUTA del archivo se conoce antes de lanzar nada y viaja en
     # el entorno; el pid se escribe dentro en cuanto existe.
     archivo_pid = AQUI / ".servidor.pid"
-    ambiente = dict(os.environ, PAQUETE_06=str(PAQUETE), ARCHIVO_PID_06=str(archivo_pid))
+    ambiente = dict(
+        os.environ,
+        PAQUETE_06=str(PAQUETE),
+        ARCHIVO_PID_06=str(archivo_pid),
+        # El cuaderno hace `setdefault` sobre esta variable, asi que ponerla aqui es lo
+        # que manda la aplicacion a su copia del catalogo en vez de a `data/`.
+        RUTA_VARIABLES_SIMULAR=str(PAQUETE / "Variables_simular.xlsx"),
+    )
 
     comando = [
         str(voila), str(COPIA),

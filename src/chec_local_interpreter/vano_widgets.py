@@ -20,19 +20,68 @@ if TYPE_CHECKING:
     from chec_local_interpreter.vano_controls import Knob
 
 
-def widget_for_knob(knob: "Knob"):
-    """Build the ipywidgets control for `knob`: `FloatSlider` for numeric,
-    `Dropdown` for categorical, disabled `FloatText` for constant."""
+def widget_for_knob(knob: "Knob", *, catalogo=None):
+    """El control de `knob`, segun lo que declare `Variables_simular.xlsx`.
+
+    La forma del control ya no se deduce solo de si el knob es numerico o categorico.
+    El archivo del proyecto declara, por variable, si tiene una lista cerrada de
+    valores posibles, y esa lista manda:
+
+    ``selector``
+        Un `Dropdown`. Cubre las categoricas de texto -- conductor, tipo de apoyo -- y
+        tambien las numericas con valores discretos: el modelo ve `ALTURA` como un
+        numero entre 4 y 25, pero solo existen apoyos de 12, 16 y 18 metros, y un
+        deslizador continuo invita a simular uno de 17,3 m que no esta en el
+        inventario. En ese caso las opciones viajan como numeros, no como texto.
+
+    ``deslizador-entero``
+        Un `IntSlider`. Para lo que se cuenta: fases, nivel de riesgo por vegetacion,
+        calificacion de criticidad. Un deslizador continuo ahi ofrece 2,37 fases.
+
+    ``deslizador``
+        Un `FloatSlider`, el caso continuo de siempre.
+
+    Los limites salen del archivo cuando estan, y no de los del knob: los del knob son
+    los valores OBSERVADOS en la base, y el archivo declara el rango que tiene sentido
+    simular. Un knob sin entrada en el archivo conserva el control de antes.
+    """
     import ipywidgets as widgets
 
+    from chec_local_interpreter.simulador_variables import (
+        CONTROL_DESLIZADOR_ENTERO,
+        CONTROL_SELECTOR,
+        opciones_ofrecidas,
+    )
+
+    entrada = None if catalogo is None else catalogo.get(knob.id)
+
+    if entrada is not None and entrada.control == CONTROL_SELECTOR:
+        opciones = opciones_ofrecidas(knob, entrada)
+        if entrada.opciones_numericas:
+            # `(etiqueta, valor)`: se ve "12" y al modelo le llega 12.0. Sin esto, el
+            # override viajaria como la cadena "12" y la codificacion fallaria.
+            pares = [(o, float(o)) for o in opciones]
+            return widgets.Dropdown(options=pares, value=pares[0][1] if pares else None,
+                                    description=knob.label)
+        return widgets.Dropdown(options=list(opciones),
+                                value=opciones[0] if opciones else None,
+                                description=knob.label)
+
     if knob.kind == "categorical":
-        options = list(knob.categories or ())
+        options = list(opciones_ofrecidas(knob, entrada))
         value = knob.default if knob.default in options else (options[0] if options else None)
         return widgets.Dropdown(options=options, value=value, description=knob.label)
 
     if knob.kind == "numeric":
         lo, hi = knob.bounds
+        if entrada is not None and entrada.vmin is not None and entrada.vmax is not None:
+            lo, hi = float(entrada.vmin), float(entrada.vmax)
         value = lo if knob.default is None else float(knob.default)
+        value = min(max(value, lo), hi)
+        if entrada is not None and entrada.control == CONTROL_DESLIZADOR_ENTERO:
+            return widgets.IntSlider(
+                value=int(round(value)), min=int(lo), max=int(hi), step=1,
+                description=knob.label, continuous_update=False)
         step = knob.step or max((hi - lo) / 100.0, 1e-6)
         return widgets.FloatSlider(
             value=value,

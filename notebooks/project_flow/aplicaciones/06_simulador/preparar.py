@@ -110,7 +110,12 @@ def construir_paquete() -> dict:
 
     for origen in (_raiz.datos("derived", "geometrias_014.json"),
                    _raiz.datos("models", "mil_vano_ventana_v1.pt"),
-                   _raiz.datos("Actividades_mantenimiento_costos_2026.xlsx")):
+                   _raiz.datos("Actividades_mantenimiento_costos_2026.xlsx"),
+                   # Que variables se pueden simular, con que rango y con que valores
+                   # posibles. La aplicacion lo lee en cada arranque -- no queda
+                   # congelado en el paquete como los demas objetos --, asi que viaja
+                   # como archivo y `app.py` lo apunta por entorno.
+                   _raiz.datos("Variables_simular.xlsx")):
         shutil.copy2(origen, PAQUETE / origen.name)
 
     manifiesto = {
@@ -144,6 +149,7 @@ def _verificar_insumos() -> None:
     requeridos = {
         _raiz.datos("Indicadores_vano_v3.csv"): "la base de eventos",
         _raiz.datos("Variables_seleccion.xlsx"): "el diccionario de variables",
+        _raiz.datos("Variables_simular.xlsx"): "el catalogo de variables a simular",
         _raiz.datos("Actividades_mantenimiento_costos_2026.xlsx"): "el catalogo de costos",
         _raiz.datos("GEO", "MVLINSEC.shp"): "la geometria de los vanos",
         _raiz.datos("models", "mil_vano_ventana_v1.pt"): "el modelo MIL (cuaderno 05)",

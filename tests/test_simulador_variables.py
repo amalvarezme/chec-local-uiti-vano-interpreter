@@ -58,32 +58,60 @@ def _knob(knob_id, kind="numeric", bounds=(0.0, 10.0), categories=None, label=No
     )
 
 
-def test_the_table_carries_the_range_of_every_numeric_knob():
-    """vmin/vmax come from the knob's own bounds, which `build_knobs` already
-    derives from the observed data -- not from a second set of limits written
-    by hand, which could disagree with what the slider actually allows."""
+def _catalogo(veredictos: dict) -> dict:
+    """Un catalogo minimo `{knob_id: VariableSimulable}` para las pruebas de reparto."""
+    from chec_local_interpreter.simulador_variables import VariableSimulable
+
+    return {
+        knob_id: VariableSimulable(
+            knob_id=knob_id, variable=knob_id, controla=1, tipo="numeric",
+            vmin=None, vmax=None, unidad="", opciones=(), veredicto=v, motivo="x")
+        for knob_id, v in veredictos.items()
+    }
+
+
+def test_the_table_carries_the_declared_range_of_every_numeric_knob():
+    """vmin/vmax come from `data/Variables_simular.xlsx`, not from the knob's
+    observed bounds.
+
+    This reverses an earlier decision, on purpose. The knob's bounds are what
+    `build_knobs` SAW in the data; the file declares what is worth simulating,
+    and the two are not the same question: `ALTURA` spans 4 to 25 m in the base
+    but only 12, 16 and 18 m exist in the inventory. Reading the table from one
+    source and the slider from another is exactly how they end up disagreeing,
+    so both now read the file. A knob the file does not mention keeps its own
+    bounds in the control and is reported as `Sin evaluar`.
+    """
     tabla = tabla_variables_simulables([_knob("NR_T", bounds=(0.0, 3.0))])
 
     assert list(tabla.columns) == [
-        "Variable", "Controla", "Tipo", "vmin", "vmax", "Unidad", "Opciones",
-        "Sentido de simular", "Por que",
+        "Variable", "Controla", "Tipo", "Control", "vmin", "vmax", "Unidad",
+        "Opciones", "Sentido de simular", "Por que",
     ]
     fila = tabla.iloc[0]
     assert fila["Variable"] == "NR_T"
-    assert (fila["vmin"], fila["vmax"]) == (0.0, 3.0)
+    # 116 es lo que declara el archivo; 3.0 era el limite observado del knob.
+    assert (fila["vmin"], fila["vmax"]) == (0.0, 116.0)
     assert fila["Controla"] == 1
+    assert fila["Control"] == "deslizador-entero"
 
 
 def test_a_categorical_knob_reports_its_options_instead_of_a_range():
     """A range over a category code is meaningless -- the codes are labels,
-    not magnitudes, so `vmin`/`vmax` would invite reading 2 as "twice 1"."""
+    not magnitudes, so `vmin`/`vmax` would invite reading 2 as "twice 1".
+
+    `TIPO_TAX` and not `NG_RED`: the file gives NG_RED a real 0..1 range,
+    because it is a numeric flag presented as a closed selector. The variables
+    that carry no range are the textual ones.
+    """
     tabla = tabla_variables_simulables([
-        _knob("NG_RED", kind="categorical", bounds=None, categories=("Si", "No")),
+        _knob("TIPO_TAX", kind="categorical", bounds=None,
+              categories=("Ramal", "Troncal_linea")),
     ])
 
     fila = tabla.iloc[0]
     assert pd.isna(fila["vmin"]) and pd.isna(fila["vmax"])
-    assert fila["Opciones"] == "Si | No"
+    assert fila["Opciones"] == "Ramal | Troncal_linea"
 
 
 def test_a_climate_family_is_one_row_that_declares_its_twelve_lags():
@@ -319,10 +347,10 @@ def test_the_panel_is_laid_out_as_four_columns_two_per_group():
     una para saber en cual de las dos preguntas esta; en columnas, la posicion ya
     lo dice."""
     knobs = [_knob(f"I{i}") for i in range(5)] + [_knob(f"E{i}") for i in range(3)]
-    juicio = {f"I{i}": ("Si -- intervencion", "x") for i in range(5)}
-    juicio.update({f"E{i}": ("Si -- escenario", "x") for i in range(3)})
+    juicio = _catalogo({f"I{i}": "Si -- intervencion" for i in range(5)}
+                       | {f"E{i}": "Si -- escenario" for i in range(3)})
 
-    columnas = columnas_panel(knobs, juicio=juicio)
+    columnas = columnas_panel(knobs, catalogo=juicio)
 
     assert len(columnas) == 4
     assert [len(k) for _titulo, k in columnas] == [3, 2, 2, 1]
@@ -334,9 +362,9 @@ def test_the_panel_is_laid_out_as_four_columns_two_per_group():
 
 def test_the_first_column_of_each_group_carries_its_name():
     knobs = [_knob("I0"), _knob("E0")]
-    juicio = {"I0": ("Si -- intervencion", "x"), "E0": ("Si -- escenario", "x")}
+    juicio = _catalogo({"I0": "Si -- intervencion", "E0": "Si -- escenario"})
 
-    titulos = [t for t, _k in columnas_panel(knobs, juicio=juicio)]
+    titulos = [t for t, _k in columnas_panel(knobs, catalogo=juicio)]
 
     assert titulos[0].startswith("Intervencion")
     assert titulos[2].startswith("Escenario")
@@ -349,9 +377,9 @@ def test_the_split_puts_the_bigger_half_first_so_columns_stay_even():
     """Con 11 controles, 6 y 5 -- no 5 y 6. Una columna mas corta a la izquierda
     deja un escalon que se lee como si faltara algo."""
     knobs = [_knob(f"I{i}") for i in range(11)]
-    juicio = {f"I{i}": ("Si -- intervencion", "x") for i in range(11)}
+    juicio = _catalogo({f"I{i}": "Si -- intervencion" for i in range(11)})
 
-    columnas = columnas_panel(knobs, juicio=juicio)
+    columnas = columnas_panel(knobs, catalogo=juicio)
 
     assert [len(k) for _t, k in columnas[:2]] == [6, 5]
 
@@ -360,9 +388,9 @@ def test_an_empty_group_still_produces_its_two_columns():
     """El selector se arma una sola vez con cuatro columnas fijas. Si un grupo
     quedara sin columnas, las demas se correrian de sitio al cambiar de circuito."""
     knobs = [_knob("I0")]
-    juicio = {"I0": ("Si -- intervencion", "x")}
+    juicio = _catalogo({"I0": "Si -- intervencion"})
 
-    columnas = columnas_panel(knobs, juicio=juicio)
+    columnas = columnas_panel(knobs, catalogo=juicio)
 
     assert len(columnas) == 4
     assert [len(k) for _t, k in columnas] == [1, 0, 0, 0]
