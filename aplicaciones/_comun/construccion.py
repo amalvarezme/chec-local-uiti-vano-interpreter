@@ -1,21 +1,87 @@
-"""Construccion compartida de los dos visores de tablero (01 y 02).
+"""Construccion compartida de los cuatro visores de tablero (01, 02, 03 y 04).
 
-Los dos cuadernos terminan igual: escriben un documento HTML autocontenido en
+Los cuatro cuadernos terminan igual: escriben un documento HTML autocontenido en
 `reports/paneles/` y devuelven su ruta en `RUTA_PANEL`. Lo unico que cambia entre
 ellos es el archivo y el titulo, asi que el procedimiento vive aqui una sola vez.
 
 El cuaderno se ejecuta con una unica sustitucion, `ABRIR_EN_NAVEGADOR = False`: sin
 ella la construccion abriria el navegador con el documento de 27,8 MB antes de
 empaquetarlo, que es justo lo que estas aplicaciones existen para no hacer.
+
+## Por que aqui tambien se vigilan los insumos
+
+Un visor CONGELA el resultado del cuaderno en un HTML, igual que el simulador congela
+su paquete. Y tenia el mismo modo de fallo sin la misma defensa: su unica condicion
+para reconstruir era que faltara `index.html`. Se actualizaba
+`Indicadores_vano_v3.csv`, se abria el tablero, y el tablero seguia dibujando los datos
+viejos **sin dar ningun error**. Es la forma mas cara de equivocarse, porque las cifras
+se ven perfectamente bien.
+
+Asi que al construir se guarda la huella de cada insumo en el manifiesto y al arrancar
+se compara. Misma maquinaria que el simulador (`huellas.py`), mismas dos formas de
+huella y el mismo criterio: contenido para lo pequenio, marca para lo pesado.
+
+**La lista de insumos es UNA para los cuatro**, aunque el cuaderno 02 no abra ningun
+shapefile. Vigilar de mas cuesta una reconstruccion que no hacia falta -- 3 a 8 s, y
+solo el dia que alguien cambie un shapefile, que es casi nunca --; vigilar de menos
+cuesta un tablero que miente. La misma asimetria que ya gobierna la eleccion entre sha1
+y marca de tiempo, resuelta hacia el mismo lado.
 """
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 
 import cuaderno as _cuaderno
 import empaquetar as _empaquetar
+import huellas as _huellas
 import raiz as _raiz
+
+# Lo que le da forma al tablero sin ser un dato: el cuaderno y el codigo que lo ejecuta
+# y lo empaqueta. Va por contenido -- son unos cientos de KB -- y hace falta: un cambio
+# en el empaquetador o en el boton de cerrar no mueve ningun archivo de `data/`, asi que
+# sin estas lineas el visor seguiria sirviendo el HTML anterior. Ya paso al cambiar el
+# texto de reapertura en `empaquetar.py`.
+_CODIGO = (
+    Path(__file__).resolve(),
+    Path(__file__).resolve().parent / "empaquetar.py",
+    Path(__file__).resolve().parent / "cuaderno.py",
+)
+
+# Los datos. Por marca porque el CSV pesa 540 MB y los shapefiles otros 180: su sha1
+# costaria segundos en cada apertura, contra los milisegundos que tarda el tablero ya
+# construido en servirse.
+#
+# De cada shapefile se miran el `.shp` y el `.dbf`, por lo mismo que en el simulador: la
+# geometria vive en el primero y los atributos del join en el segundo.
+_DATOS = (
+    _raiz.datos("Indicadores_vano_v3.csv"),
+    *(_raiz.datos("GEO", f"{_nombre}.{_ext}")
+      for _nombre in ("MVLINSEC", "GDBCHEC_TRANSFOR", "SWITCHES")
+      for _ext in ("shp", "dbf")),
+)
+
+
+def huellas_actuales(nombre_cuaderno: str) -> dict:
+    """La huella de cada insumo de ese visor, ahora mismo."""
+    return _huellas.huellas_de_insumos(
+        por_contenido=(_raiz.CUADERNOS_APPS / nombre_cuaderno, *_CODIGO),
+        por_marca=_DATOS,
+    )
+
+
+def motivo_de_reconstruccion(destino: Path, nombre_cuaderno: str) -> str | None:
+    """Por que hay que reconstruir el visor de `destino`, o None si esta al dia.
+
+    Un tablero sin construir tambien es un motivo, y se dice con esas palabras: es lo
+    que ve quien abre la aplicacion por primera vez.
+    """
+    manifiesto = Path(destino) / "manifiesto.json"
+    if not (Path(destino) / "index.html").exists() or not manifiesto.exists():
+        return "todavia no esta construido"
+    guardadas = json.loads(manifiesto.read_text(encoding="utf-8")).get("insumos")
+    return _huellas.motivo_de_reconstruccion(guardadas, huellas_actuales(nombre_cuaderno))
 
 
 def construir_tablero(nombre_cuaderno: str, destino: Path, *, titulo: str) -> None:
@@ -46,7 +112,12 @@ def construir_tablero(nombre_cuaderno: str, destino: Path, *, titulo: str) -> No
         raise SystemExit(f"El cuaderno no dejo su tablero en {fuente}.")
 
     print(f"[2/2] empaquetando {fuente.name} ({fuente.stat().st_size / 1024**2:,.1f} MB)")
-    paquete = _empaquetar.empaquetar(fuente.read_text("utf-8"), destino, titulo=titulo)
+    # Las huellas se toman DESPUES de ejecutar el cuaderno, no antes: si alguien toca un
+    # insumo mientras el cuaderno corre, lo que se guarda tiene que ser lo que de verdad
+    # entro en el tablero. Tomarlas antes registraria un estado que el tablero no vio, y
+    # la siguiente apertura lo daria por al dia.
+    paquete = _empaquetar.empaquetar(fuente.read_text("utf-8"), destino, titulo=titulo,
+                                     insumos=huellas_actuales(nombre_cuaderno))
     print()
     print(paquete.resumen())
     print()

@@ -26,6 +26,7 @@ puertos distintos sin que ninguna sepa de la otra.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import sys
@@ -557,3 +558,94 @@ def test_cada_visor_prefiere_el_puerto_que_le_da_el_contrato(app: Path):
     assert encontrado, f"{app.name}/app.py no declara PUERTO"
     assert encontrado.group(1) == esperado, (
         f"{app.name} prefiere {encontrado.group(1)} y el contrato dice {esperado}")
+
+
+# ------------------------------------------------- los visores y sus datos de origen
+
+
+@pytest.mark.parametrize("app", ESTATICOS, ids=_ids(ESTATICOS))
+def test_el_visor_construido_registra_de_que_insumos_salio(app: Path):
+    """Sin esto, cambiar los datos no cambia el tablero y nadie se entera.
+
+    Los cuatro visores CONGELAN el resultado del cuaderno en un HTML. El simulador ya
+    guardaba la huella de sus insumos y se reconstruia solo; estos no guardaban
+    ninguna, y su unica condicion para reconstruir era que faltara `index.html`. O
+    sea: se actualizaba `Indicadores_vano_v3.csv`, se abria el tablero, y el tablero
+    seguia dibujando los datos viejos **sin dar ningun error** -- que es la forma mas
+    cara posible de equivocarse, porque las cifras se ven bien.
+    """
+    manifiesto = json.loads((app / "panel" / "manifiesto.json").read_text(encoding="utf-8"))
+    insumos = manifiesto.get("insumos")
+    assert insumos, f"{app.name}: el manifiesto no registra insumos"
+    assert "Indicadores_vano_v3.csv" in insumos, (
+        f"{app.name}: no vigila el dataset, que es lo que mas cambia")
+
+
+@pytest.mark.parametrize("app", ESTATICOS, ids=_ids(ESTATICOS))
+def test_un_visor_al_dia_no_se_reconstruye(app: Path):
+    """El otro lado del trato: vigilar no puede volverse reconstruir siempre. Un visor
+    tarda entre 4 y 8 s en construirse, y hacerlo en cada apertura anularia el motivo
+    de que exista el paquete."""
+    construccion = _comun("construccion")
+    assert construccion.motivo_de_reconstruccion(app / "panel", _cuaderno_de(app)) is None
+
+
+@pytest.mark.parametrize("app", ESTATICOS, ids=_ids(ESTATICOS))
+def test_mover_el_dataset_obliga_a_reconstruir_el_visor(app: Path):
+    """Se compara contra un manifiesto con la huella del CSV falseada, que es lo que
+    veria la aplicacion despues de que alguien actualice los datos."""
+    huellas = _comun("huellas")
+    construccion = _comun("construccion")
+
+    actuales = construccion.huellas_actuales(_cuaderno_de(app))
+    guardadas = dict(actuales)
+    guardadas["Indicadores_vano_v3.csv"] = {"bytes": 1, "mtime_ns": 1}
+
+    motivo = huellas.motivo_de_reconstruccion(guardadas, actuales)
+    assert motivo and "Indicadores_vano_v3.csv" in motivo
+
+
+def _cuaderno_de(app: Path) -> str:
+    """El cuaderno que declara `construir.py`, leido sin importarlo: importarlo tira
+    del `_comun` de la aplicacion y del cuaderno entero."""
+    texto = (app / "construir.py").read_text(encoding="utf-8")
+    return re.search(r'^CUADERNO\s*=\s*"([^"]+)"', texto, re.M).group(1)
+
+
+def test_todo_insumo_que_el_simulador_exige_esta_ademas_vigilado():
+    """El invariante que evita que este hueco vuelva a abrirse.
+
+    `_verificar_insumos` lista lo que hace falta para CONSTRUIR el paquete, y las dos
+    tuplas de huellas listan lo que se vigila para saber si hay que reconstruirlo. Que
+    una lista crezca y la otra no es exactamente como se cuela un tablero que sirve
+    datos viejos sin dar ningun error -- ya paso dos veces: con
+    `Variables_simular.xlsx` primero, y despues con `Variables_seleccion.xlsx`, que se
+    exigia y no se vigilaba aunque alimenta la celda 4, que si viaja congelada.
+    """
+    import ast
+
+    fuente = (APPS / "06_simulador" / "preparar.py").read_text(encoding="utf-8")
+    arbol = ast.parse(fuente)
+
+    def nombres_de(bloque: ast.AST) -> set[str]:
+        """Los nombres de archivo que aparecen como literales dentro del bloque."""
+        return {n.value for n in ast.walk(bloque)
+                if isinstance(n, ast.Constant) and isinstance(n.value, str)
+                and "." in n.value and "/" not in n.value and " " not in n.value}
+
+    exigidos, vigilados = set(), set()
+    for nodo in arbol.body:
+        if isinstance(nodo, ast.FunctionDef) and nodo.name == "_verificar_insumos":
+            exigidos = nombres_de(nodo)
+        if isinstance(nodo, ast.Assign) and any(
+                getattr(t, "id", "").startswith("INSUMOS_") for t in nodo.targets):
+            vigilados |= nombres_de(nodo)
+
+    assert exigidos, "no se pudo leer _verificar_insumos"
+    # Los shapefiles se nombran sin extension en la tupla, que la compone aparte.
+    vigilados |= {f"{n}.{e}" for n in ("MVLINSEC", "GDBCHEC_TRANSFOR", "SWITCHES")
+                  for e in ("shp", "dbf")}
+    sin_vigilar = {n for n in exigidos if n.endswith((".csv", ".xlsx", ".pt", ".joblib",
+                                                      ".json", ".shp"))} - vigilados
+    assert not sin_vigilar, (
+        f"exigidos para construir pero no vigilados: {sorted(sin_vigilar)}")

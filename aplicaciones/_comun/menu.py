@@ -91,6 +91,17 @@ ARCHIVO_PID = ".servidor.pid"
 _AISLAR_GRUPO = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if ES_WINDOWS
                  else {"start_new_session": True})
 
+# La escalada del apagado, y no es la misma en los dos sistemas.
+#
+# En POSIX son dos pasos: `SIGTERM` para que el hijo cierre por su cuenta y `SIGKILL`
+# para el que no ceda. En Windows **`SIGKILL` no existe** -- nombrarlo revienta con
+# `AttributeError` en mitad del apagado, con las aplicaciones ya a medio cerrar, que es
+# el peor sitio posible para descubrirlo. Y ademas sobra: alli la senal no viaja por
+# grupos, la reparte `taskkill /T /F`, que ya es forzoso y recorre el arbol entero. Un
+# solo paso hace lo que en POSIX hacen los dos.
+_ESCALADA = (((signal.SIGTERM, 5.0),) if ES_WINDOWS
+             else ((signal.SIGTERM, 3.0), (signal.SIGKILL, 2.0)))
+
 # Puerto del menu. Fijo, como los de las aplicaciones: es la URL que el usuario deja
 # en un marcador y la que los tableros necesitan para saber a donde volver.
 PUERTO_MENU = 8800
@@ -336,7 +347,7 @@ def _apagar_aplicacion(app: Aplicacion) -> bool:
         return True
 
     if app.proceso is not None:
-        for senal, plazo in ((signal.SIGTERM, 3.0), (signal.SIGKILL, 2.0)):
+        for senal, plazo in _ESCALADA:
             _senalar_al_grupo(app.proceso, senal)
             if _esperar_a_que_suelte(app, plazo):
                 return True

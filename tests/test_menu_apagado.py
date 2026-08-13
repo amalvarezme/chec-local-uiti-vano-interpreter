@@ -63,6 +63,13 @@ def _comun(nombre: str):
 
 menu = _comun("menu")
 
+# Los dobles de aqui se lanzan con `start_new_session` y se rematan con `killpg`, y
+# ninguno de los dos existe en Windows. Lo que se mide -- que el puerto quede libre --
+# vale igual alli, pero por otro camino (`taskkill /T`), y probarlo pide una maquina
+# Windows. Sin esta marca, esta suite no falla por lo que mide sino por el sistema.
+pytestmark = pytest.mark.skipif(os.name == "nt",
+                                reason="usa grupos de procesos POSIX; ver test_windows_aplicaciones.py")
+
 
 # --------------------------------------------------------------------------- ayudas
 

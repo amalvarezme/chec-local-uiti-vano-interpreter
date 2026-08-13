@@ -260,10 +260,19 @@ class _Manejador(http.server.BaseHTTPRequestHandler):
             super().log_message(formato, *args)
 
 
+# `SO_REUSEADDR` significa cosas OPUESTAS en los dos sistemas, asi que se pregunta.
+#
+# En POSIX permite volver a tomar un puerto que quedo en TIME_WAIT: sin ella, cerrar y
+# reabrir el tablero en menos de dos minutos falla con "Address already in use".
+#
+# En Windows permite que un SEGUNDO proceso se ate a un puerto que YA esta escuchando y
+# se lo robe -- sin error y sin aviso, con dos servidores repartiendose las peticiones
+# del mismo puerto. Alli vale mas el fallo ruidoso.
+_REUSAR_DIRECCION = os.name != "nt"
+
+
 class _Servidor(socketserver.ThreadingTCPServer):
-    # Sin esto, cerrar y volver a abrir la aplicacion en menos de dos minutos falla
-    # con "Address already in use" por el TIME_WAIT del socket anterior.
-    allow_reuse_address = True
+    allow_reuse_address = _REUSAR_DIRECCION
     daemon_threads = True
 
 
@@ -306,7 +315,11 @@ def puerto_libre(preferido: int = 8765) -> int:
     """
     for candidato in (preferido, 0):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            # La misma pregunta que arriba, dada la vuelta: en Windows la opcion haria
+            # que este sondeo diera por LIBRE un puerto que otra aplicacion esta
+            # sirviendo ahora mismo.
+            if _REUSAR_DIRECCION:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             try:
                 s.bind(("127.0.0.1", candidato))
             except OSError:

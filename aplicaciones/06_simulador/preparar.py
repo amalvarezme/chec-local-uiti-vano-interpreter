@@ -75,6 +75,12 @@ INSUMOS_POR_CONTENIDO = (
     _raiz.datos("models", "mil_vano_ventana_v1.pt"),
     _raiz.datos("Actividades_mantenimiento_costos_2026.xlsx"),
     _raiz.datos("Variables_simular.xlsx"),
+    # No viaja dentro del paquete, pero la celda 4 -- que si se congela -- lo lee para
+    # nombrar las variables. Se exigia para construir y no se vigilaba: editarlo dejaba
+    # a la aplicacion sirviendo los nombres anteriores, en silencio. El mismo error que
+    # `Variables_simular.xlsx`, un archivo mas alla; ahora hay una prueba que compara
+    # las dos listas para que no haya un tercero.
+    _raiz.datos("Variables_seleccion.xlsx"),
 )
 # Por MARCA lo pesado: 909 MB que hashear costaria segundos en CADA arranque, contra
 # los 0,3 s que tarda el paquete en cargar. Un `git lfs pull` puede provocar una

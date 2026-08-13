@@ -1,2 +1,10 @@
 data/Indicadores_vano_v3.csv filter=lfs diff=lfs merge=lfs -text
 data/GEO/** filter=lfs diff=lfs merge=lfs -text
+
+# Los lanzadores los ejecuta un interprete que SI se fija en el final de linea, y cual
+# les toca no puede depender del `core.autocrlf` de quien clone. `cmd.exe` tropieza con
+# archivos por lotes en LF, y `/bin/sh` no arranca un guion cuyo `#!` termina en CR.
+*.bat            text eol=crlf
+*.command        text eol=lf
+Iniciar.app/Contents/MacOS/iniciar      text eol=lf
+Iniciar.app/Contents/Resources/ventana  text eol=lf

@@ -11,7 +11,13 @@ from pathlib import Path
 
 AQUI = Path(__file__).resolve().parent
 sys.path.insert(0, str(AQUI.parent / "_comun"))
+sys.path.insert(0, str(AQUI))
 
+import construccion  # noqa: E402
+# Por el modulo y no por `runpy`: de el sale el nombre del cuaderno, que es lo
+# que hace falta para saber si el tablero sigue al dia. Importarlo no construye
+# nada -- eso vive detras de su `if __name__ == "__main__"`.
+import construir  # noqa: E402
 import servidor  # noqa: E402
 
 PANEL = AQUI / "panel"
@@ -40,9 +46,15 @@ def main() -> int:
                             help="URL de CriticidadCHEC, si fue el quien lanzo este tablero")
     args = analizador.parse_args()
 
-    if args.reconstruir or not (PANEL / "index.html").exists():
-        print("El tablero no esta construido todavia." if not args.reconstruir else
-              "Reconstruyendo el tablero.")
+    # Se pregunta por los INSUMOS, no solo por si existe el archivo. Un tablero
+    # construido con datos que ya cambiaron se ve perfectamente bien y dibuja cifras que
+    # ya no corresponden; que la aplicacion lo note sola es la unica defensa, porque
+    # nada mas en el sistema va a avisar. Cuesta unos milisegundos.
+    motivo = None if args.reconstruir else construccion.motivo_de_reconstruccion(
+        PANEL, construir.CUADERNO)
+    if args.reconstruir or motivo:
+        print(f"Reconstruyendo el tablero: {motivo}." if motivo
+              else "Reconstruyendo el tablero.")
         runpy.run_path(str(AQUI / "construir.py"), run_name="__main__")
 
     servidor.servir(PANEL, abrir=not args.no_abrir, puerto=args.puerto,

@@ -218,8 +218,14 @@ __CUERPO__
 """
 
 
-def empaquetar(html: str, destino: Path, *, titulo: str) -> Paquete:
-    """Parte `html` en armazon + plotly.js + datos, todo bajo `destino`."""
+def empaquetar(html: str, destino: Path, *, titulo: str,
+               insumos: dict | None = None) -> Paquete:
+    """Parte `html` en armazon + plotly.js + datos, todo bajo `destino`.
+
+    `insumos` son las huellas de lo que produjo este tablero. Se guardan en el
+    manifiesto para que la siguiente apertura sepa si siguen siendo las mismas; sin
+    ellas el tablero no tiene forma de enterarse de que los datos cambiaron.
+    """
     destino.mkdir(parents=True, exist_ok=True)
     for viejo in destino.glob("*"):
         if viejo.is_file():
@@ -264,6 +270,7 @@ def empaquetar(html: str, destino: Path, *, titulo: str) -> Paquete:
                 ],
                 "total_bytes": paquete.total_crudo,
                 "total_bytes_gzip": paquete.total_gzip,
+                **({"insumos": insumos} if insumos is not None else {}),
             },
             indent=1,
             ensure_ascii=False,
