@@ -220,10 +220,17 @@ def test_the_diagnostic_reports_the_two_halves_separately(fuente):
     assert "_mejores('Escenario', TOP_ESCENARIO_CIRCUITO)" in fuente
 
 
-def test_the_diagnostic_coerces_the_fid_to_text_before_looking_it_up(fuente):
-    """`DATOS_VENTANA` esta indexado por TEXTO y `VANOS_POR_CIRCUITO` puede traer los
-    fid como numero. Sin la coercion no coincide ninguno."""
-    assert "if str(f) in datos" in fuente
+def test_the_diagnostic_delegates_which_vanos_it_studies(fuente):
+    """QUE se diagnostica es una decision de negocio y no cableado de widgets: vive en
+    `ventanas_015.vanos_para_diagnostico`, que se prueba con datos (incluida la
+    coercion a texto de los fid, que `DATOS_VENTANA` necesita). La celda solo conecta
+    las dos fuentes -- las celdas de la ventana y los vanos del circuito -- con lo que
+    el usuario marco."""
+    assert "    vanos_para_diagnostico,\n" in fuente  # importada en la celda de arranque
+    cuerpo = fuente[fuente.index("def _diagnostico_del_circuito"):][:2600]
+    assert "elegidos = vanos_para_diagnostico(" in cuerpo
+    assert "DATOS_VENTANA[ventana_i], VANOS_POR_CIRCUITO.get(circuito, [])" in cuerpo
+    assert "marcados=marcados, maximo=TOP_VANOS_CIRCUITO" in cuerpo
 
 
 def test_the_framing_buttons_compute_the_view_at_click_time(fuente):
@@ -241,26 +248,44 @@ def test_the_framing_buttons_compute_the_view_at_click_time(fuente):
     assert "widgets.VBox([ESTILO, PANEL, ENCUADRES, fig]" in fuente
 
 
-def test_the_diagnostic_takes_alto_first_and_completes_with_medio_alto(fuente):
-    """La pregunta es por donde EMPEZAR, y un vano en Medio no es por donde se empieza
-    mientras queden vanos en Alto sin atender. Dentro de cada grupo manda el UITI, que
-    es lo que ordena la urgencia."""
-    assert "GRUPOS_DIAGNOSTICO = [3, 2]" in fuente
+def test_the_diagnostic_starts_from_what_the_user_marked(fuente):
+    """Lo marcado es una ENTRADA del diagnostico y no un estorbo: si el usuario ya toco
+    tres vanos en el mapa, esos tres son la orden de trabajo que tiene en la mano. El
+    boton completa la lista hasta el tope, no la reemplaza, y el tope del selector no
+    puede quedar por debajo del del diagnostico o la escritura se recortaria sola."""
+    assert "TOP_VANOS_CIRCUITO = 15" in fuente
+    assert "GRUPOS_DIAGNOSTICO" not in fuente  # ya no se filtra por grupo de criticidad
     cuerpo = fuente[fuente.index("def _diagnostico_del_circuito"):][:2600]
-    assert "clases.get(str(f)) == clase" in cuerpo
-    assert "peores.extend(por_grupo[clase][:TOP_VANOS_CIRCUITO - len(peores)])" in cuerpo
+    assert "circuito, ventana_i, marcados = _seleccion_actual()" in cuerpo
+    assert "marcados=marcados" in cuerpo
+
+
+def test_a_capped_diagnostic_says_how_many_vanos_it_left_out(fuente):
+    """Una lista de quince sobre un circuito con sesenta vanos con eventos se lee como
+    que el circuito tiene quince. El panel dice cuantos quedaron fuera y como llegar a
+    ellos -- marcandolos -- en vez de recortar en silencio."""
+    assert "pero quedan otros " in fuente
+    assert '<b>{_sel["restantes"]}</b> vanos con eventos en esta ventana' in fuente
+    # Y de donde salio la lista: cuantos puso el usuario y cuantos el relleno. "Los 15
+    # de mayor UITI" sobre una lista que el usuario marco entera seria falso -- los
+    # suyos entran por marcados y pueden ser los de MENOR UITI de la ventana.
+    assert "que marcaste" in fuente
+    assert "completados por mayor UITI" in fuente
+    assert "se completo con los " in fuente
 
 
 def test_a_short_diagnostic_says_how_many_it_found(fuente):
     """Sin el aviso, una lista de cuatro vanos se lee como que el circuito tiene cuatro
-    criticos, cuando lo que pasa es que no llegan a diez. Verificado sobre datos
-    reales: un circuito con 3 en Medio-Alto y ninguno en Alto lo dice, y otro sin
-    ninguno de los dos lo dice tambien."""
+    criticos, cuando lo que pasa es que no hay mas con eventos en esa ventana."""
     assert "Se identificaron " in fuente
-    assert "no tiene mas en Alto ni en Medio-Alto" in fuente
+    assert "no tiene mas con eventos en esta ventana" in fuente
     # El caso sin NINGUNO tiene su propio mensaje, que dice que no es un fallo.
-    assert "no hay ningun vano en " in fuente
+    assert "no hay ningun vano con " in fuente
     assert "No hay diagnostico que dar" in fuente
+    # Y un vano marcado SIN eventos se nombra en vez de desaparecer: el modelo no lo
+    # puede puntuar, y callarlo se lee como que el boton lo ignoro.
+    assert "Fuera del diagnostico: " in fuente
+    assert "marcados, pero sin " in fuente
 
 
 def test_the_apply_buttons_use_each_vano_own_value_and_not_the_average(fuente):
@@ -273,13 +298,14 @@ def test_the_apply_buttons_use_each_vano_own_value_and_not_the_average(fuente):
 
 def test_the_diagnosis_marks_the_vanos_it_identified(fuente):
     """Marcarlos es parte de la respuesta y no un paso aparte: el diagnostico nombra
-    diez vanos, y sin marcarlos hay que buscarlos a mano en la lista de casillas y
-    otra vez en el mapa, que es justo el trabajo que el boton venia a ahorrar.
+    hasta quince vanos, y sin marcarlos hay que buscarlos a mano en la lista de
+    casillas y otra vez en el mapa, que es justo el trabajo que el boton venia a
+    ahorrar.
 
     Al marcarlos, `vano_widget.observe(_redibujar_mapa_historico)` encierra cada uno
     en su recuadro sobre el mapa base. Verificado en vivo: 10 vanos marcados y 10
     recuadros."""
-    cuerpo = fuente[fuente.index("def _al_pedir_diagnostico"):][:1600]
+    cuerpo = fuente[fuente.index("def _al_pedir_diagnostico"):][:2200]
     assert "vano_widget.value = tuple(" in cuerpo
     assert "_ULTIMO_DIAGNOSTICO['vanos'][:MAX_VANOS_ANALISIS]" in cuerpo
     # Las VARIABLES no se tocan aqui: que vanos mirar y que moverles son dos

@@ -954,3 +954,62 @@ def fid_de_punto(customdata: Iterable[str] | None, point_inds: Iterable[int]) ->
                 return str(entrada[0]) if entrada else None
             return str(entrada)
     return None
+
+
+def vanos_para_diagnostico(
+    datos_ventana: Mapping[str, tuple[float, int]],
+    vanos_circuito: Iterable[Any],
+    *,
+    marcados: Iterable[Any] = (),
+    maximo: int = 15,
+) -> dict[str, Any]:
+    """Which vanos notebook 06's "Diagnostico" studies, and what it leaves out.
+
+    The rule, in the order it is applied:
+
+    1. **What the user marked wins** -- by checkbox or by clicking the vano on the
+       base map -- as long as that vano has a cell in the active window. Without a
+       cell the model has nothing to score, so it is named apart instead of padding
+       a list that cannot be answered.
+    2. **The rest of the room is filled by UITI**, highest first, from the vanos of
+       the circuit that do have events in that window and were not already marked.
+       With nothing marked that is exactly the circuit's top, which is the behaviour
+       the button was born with.
+    3. **What did not fit is counted.** A circuit with sixty vanos with events does
+       not fit in a work order, but a list that stops at `maximo` without saying so
+       reads as a circuit with `maximo` vanos with events.
+
+    `datos_ventana` is `DATOS_VENTANA[i]`: `{fid: (uiti_acumulado, eventos)}`, and it
+    only carries the cells that EXIST, so being in it is what "has events in this
+    window" means. Every fid is compared as text: the window data is keyed by text
+    and both the circuit list and the checkboxes can carry numbers.
+
+    Returns `vanos` as `(fid, uiti, eventos)` triples -- the marked ones first, then
+    the fill, each half sorted by descending UITI -- plus the three counts the panel
+    needs to explain itself: `marcados`, `completados`, `sin_eventos`, `restantes`
+    and `con_eventos`.
+    """
+    con_eventos = [str(f) for f in vanos_circuito if str(f) in datos_ventana]
+    del_circuito = set(con_eventos)
+    marcados_txt = list(dict.fromkeys(str(m) for m in marcados))
+
+    def _fila(fid: str) -> tuple[str, float, int]:
+        uiti, eventos = datos_ventana[fid]
+        return (fid, float(uiti), int(eventos))
+
+    def _por_uiti(fids: Iterable[str]) -> list[tuple[str, float, int]]:
+        return sorted((_fila(f) for f in fids), key=lambda t: -t[1])
+
+    elegidos = _por_uiti(f for f in marcados_txt if f in del_circuito)[: int(maximo)]
+    ya = {f for f, _u, _n in elegidos}
+    relleno = _por_uiti(f for f in del_circuito if f not in ya)[
+        : max(int(maximo) - len(elegidos), 0)
+    ]
+    return {
+        "vanos": [*elegidos, *relleno],
+        "marcados": [f for f, _u, _n in elegidos],
+        "completados": [f for f, _u, _n in relleno],
+        "sin_eventos": [f for f in marcados_txt if f not in del_circuito],
+        "restantes": len(del_circuito) - len(elegidos) - len(relleno),
+        "con_eventos": len(del_circuito),
+    }

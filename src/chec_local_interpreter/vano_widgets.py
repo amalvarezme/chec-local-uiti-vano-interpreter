@@ -480,12 +480,14 @@ def construir_selector_vanos(opciones=(), **kwargs):
     return construir_selector_casillas(opciones, **kwargs)
 
 
-MAX_VANOS_ANALISIS = 10
+MAX_VANOS_ANALISIS = 15
 """Cuantos vanos puede analizar a la vez el simulador del cuaderno 06.
 
-Diez y no cinco: el diagnostico del circuito estudia los diez vanos mas criticos
-y ofrece aplicarles la sugerencia de golpe, asi que un tope de cinco dejaria la
-mitad del diagnostico sin poder ejecutarse.
+Quince y no diez: el diagnostico ya no elige solo. Parte de los vanos que el
+usuario marco -- por casilla o tocandolos en el mapa -- y completa con los de
+mayor UITI de la ventana hasta este tope, y despues los deja MARCADOS para poder
+aplicarles la sugerencia de golpe. Un tope por debajo de `TOP_VANOS_CIRCUITO`
+recortaria el diagnostico en silencio justo al escribirlo en el selector.
 
 Lo que cinco protegia era la REJILLA -- cada vano recibe su propia columna de
 controles, y diez columnas de veintiseis controles no se leen ni se llenan --, y

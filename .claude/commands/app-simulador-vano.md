@@ -19,7 +19,7 @@ Every other `/app-*` command in this family exports the notebook's own HTML and 
 a Volume. That works because `01`–`04` compute everything up front and let the browser filter
 it. **`06` cannot**: its whole point is that clicking *Simular* runs a PyTorch MIL model on the
 bags the user selected, with the knob values the user typed. There is no precomputable answer —
-the input space is 26 simulable variables over up to 10 vanos. The panel is `ipywidgets` end to
+the input space is 26 simulable variables over up to 15 vanos. The panel is `ipywidgets` end to
 end (`go.FigureWidget`, `.observe`, `on_click`, an `asyncio` debounce), so it needs a **live
 Python kernel**, not a static document.
 
@@ -607,7 +607,27 @@ user to open the URL and confirm three things, because each fails differently:
   fixable from the Voila side — report it and stop, do not start a Dash rewrite without asking;
 - clicking **Simular** returns a result in a few seconds → the MIL model runs on the mapped
   matrix. Measured locally: 4,97 s for a full-circuit selection before the batching work, 1,41 s
-  for the plan afterwards.
+  for the plan afterwards;
+- clicking **Diagnostico** with nothing marked ticks up to **15** vanos and, on a circuit with
+  more vanos with events than that, prints how many were left out. Marking two vanos first and
+  pressing it again keeps those two and fills the rest — that is the selection rule below, and
+  it is the one piece of the panel that reads the user's marks as an *input*.
+
+### What "Diagnostico" studies, and why it matters here
+
+The button no longer describes the circuit's top and nothing else. Its rule — implemented in
+`ventanas_015.vanos_para_diagnostico`, unit-tested, and wired in notebook cell 13 — is:
+
+1. the vanos the user marked, by checkbox or by clicking them on the base map, as long as they
+   have a cell in the active window (without one the model has nothing to score);
+2. filled up to **15** with the highest-UITI vanos of that window that were not marked;
+3. whatever did not fit is **counted and said** in the panel, with the number of vanos with
+   events left out.
+
+Two consequences for this command: the selector cap is now 15 (`MAX_VANOS_ANALISIS`), so the
+figure carries 30 series traces instead of 20 and the grid pages 4 vanos at a time over up to
+four pages; and the per-session memory table above is unaffected — the cap changes how many
+bags one *click* scores, not what the bundle loads.
 
 ## 9. Report back
 

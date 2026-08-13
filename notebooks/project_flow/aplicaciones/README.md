@@ -42,7 +42,7 @@ La aplicación es entonces un **constructor** (se corre una vez) y un **servidor
 estático** (biblioteca estándar, sin dependencias).
 
 **06 sí.** Su botón *Simular* corre el modelo MIL de PyTorch sobre los vanos que el
-usuario marcó y con los valores que escribió: 26 variables sobre hasta 10 vanos. No
+usuario marcó y con los valores que escribió: 26 variables sobre hasta 15 vanos. No
 hay respuesta precomputable. Necesita un intérprete vivo, y por eso su entorno pesa
 lo que pesa.
 

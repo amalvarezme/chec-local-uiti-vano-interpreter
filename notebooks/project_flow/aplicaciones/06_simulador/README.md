@@ -2,12 +2,12 @@
 
 Simulador del cuaderno `06_uiti_vano_explicabilidad_simulador.ipynb`, como aplicación
 local para macOS y Windows: el mapa histórico y el de criticidad simulada, la
-selección de hasta 10 vanos, las 26 variables simulables, el top de variables por
+selección de hasta 15 vanos, las 26 variables simulables, el top de variables por
 vano, el grafo de relevancia y el costo del plan.
 
 Es la única de las tres que necesita **Python en ejecución**. El botón *Simular* corre
 el modelo MIL de PyTorch sobre los vanos marcados y con los valores escritos: 26
-variables sobre hasta 10 vanos no es un espacio precomputable.
+variables sobre hasta 15 vanos no es un espacio precomputable.
 
 ## Uso
 

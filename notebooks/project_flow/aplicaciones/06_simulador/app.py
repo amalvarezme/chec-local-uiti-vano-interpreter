@@ -12,7 +12,7 @@ mantener dos tableros que tienen que coincidir para siempre.
 
 Porque el boton "Simular" corre el modelo MIL de PyTorch sobre los vanos elegidos y
 con los valores que el usuario escribe. El espacio de entrada son 26 variables sobre
-hasta 10 vanos: no hay respuesta que precomputar. Necesita un interprete de Python
+hasta 15 vanos: no hay respuesta que precomputar. Necesita un interprete de Python
 vivo, y por eso esta aplicacion pesa lo que pesa y las otras dos no.
 """
 import argparse

@@ -1346,3 +1346,105 @@ def test_clases_de_series_gives_no_class_to_a_window_with_zero_events():
 
     assert clases == [[None, 0]]
     assert llamadas == [1]  # la ventana en cero no se manda a clasificar
+
+
+# --- Que vanos entran al diagnostico del cuaderno 06 -----------------------------------
+# El boton "Diagnostico" ya no describe SIEMPRE el top del circuito: parte de lo que el
+# usuario marco -- por casilla o por clic en el mapa -- y completa con los de mayor UITI
+# de la ventana hasta el tope. La regla vive aqui y no en la celda del cuaderno porque es
+# la decision de QUE se diagnostica, no cableado de widgets: se puede equivocar en
+# silencio y por eso se prueba con datos, no leyendo el fuente.
+
+
+def _datos_ventana():
+    """UITI y eventos por vano en UNA ventana, como los arma `DATOS_VENTANA`."""
+    return {
+        "V1": (10.0, 3),
+        "V2": (9.0, 2),
+        "V3": (8.0, 5),
+        "V4": (7.0, 1),
+        "V5": (6.0, 4),
+    }
+
+
+def test_el_diagnostico_sin_marcados_toma_el_top_por_uiti_y_cuenta_lo_que_deja_fuera():
+    """Sin nada marcado la pregunta es por donde empezar en el circuito, y la respuesta
+    son los de mayor UITI. Lo que no cabe se CUENTA: una lista de tres sobre un circuito
+    con cinco vanos con eventos se lee como que el circuito tiene tres."""
+    from chec_local_interpreter.ventanas_015 import vanos_para_diagnostico
+
+    elegidos = vanos_para_diagnostico(
+        _datos_ventana(), ["V1", "V2", "V3", "V4", "V5"], marcados=[], maximo=3)
+
+    assert [f for f, _u, _n in elegidos["vanos"]] == ["V1", "V2", "V3"]
+    assert elegidos["marcados"] == []
+    assert elegidos["completados"] == ["V1", "V2", "V3"]
+    assert elegidos["restantes"] == 2
+    assert elegidos["con_eventos"] == 5
+
+
+def test_el_diagnostico_no_recorta_cuando_el_circuito_tiene_menos_que_el_tope():
+    """Con menos vanos con eventos que el tope no queda nada fuera, y `restantes` en
+    cero es lo que apaga el aviso del panel."""
+    from chec_local_interpreter.ventanas_015 import vanos_para_diagnostico
+
+    elegidos = vanos_para_diagnostico(_datos_ventana(), ["V1", "V2"], maximo=15)
+
+    assert [f for f, _u, _n in elegidos["vanos"]] == ["V1", "V2"]
+    assert elegidos["restantes"] == 0
+
+
+def test_lo_marcado_manda_y_el_resto_se_completa_por_uiti():
+    """El vano que el usuario marco entra aunque no sea de los de mayor UITI -- es la
+    orden de trabajo que tiene en la mano --, y el cupo que sobra se llena con los mas
+    altos de la ventana, sin repetir los que ya estaban."""
+    from chec_local_interpreter.ventanas_015 import vanos_para_diagnostico
+
+    elegidos = vanos_para_diagnostico(
+        _datos_ventana(), ["V1", "V2", "V3", "V4", "V5"], marcados=["V5", "V4"], maximo=4)
+
+    assert [f for f, _u, _n in elegidos["vanos"]] == ["V4", "V5", "V1", "V2"]
+    assert elegidos["marcados"] == ["V4", "V5"]      # los del usuario, por UITI
+    assert elegidos["completados"] == ["V1", "V2"]   # el relleno, sin repetir
+    assert elegidos["restantes"] == 1                # V3 queda con eventos y fuera
+
+
+def test_un_vano_marcado_sin_eventos_se_nombra_y_no_gasta_cupo():
+    """Sin celda en la ventana el modelo no lo puede puntuar: entra a `sin_eventos` para
+    que el panel lo diga, y su lugar lo ocupa un vano que si se puede diagnosticar."""
+    from chec_local_interpreter.ventanas_015 import vanos_para_diagnostico
+
+    elegidos = vanos_para_diagnostico(
+        _datos_ventana(), ["V1", "V2", "V3", "V4", "V5", "V9"],
+        marcados=["V9", "V5"], maximo=3)
+
+    assert [f for f, _u, _n in elegidos["vanos"]] == ["V5", "V1", "V2"]
+    assert elegidos["sin_eventos"] == ["V9"]
+    assert elegidos["con_eventos"] == 5
+
+
+def test_marcar_mas_que_el_tope_deja_los_de_mayor_uiti_de_lo_marcado():
+    """El selector topa en el mismo numero, asi que este caso solo llega por codigo. Se
+    resuelve como el resto: manda el UITI, y lo que se cae se cuenta."""
+    from chec_local_interpreter.ventanas_015 import vanos_para_diagnostico
+
+    elegidos = vanos_para_diagnostico(
+        _datos_ventana(), ["V1", "V2", "V3", "V4", "V5"],
+        marcados=["V3", "V4", "V5"], maximo=2)
+
+    assert [f for f, _u, _n in elegidos["vanos"]] == ["V3", "V4"]
+    assert elegidos["completados"] == []
+    assert elegidos["restantes"] == 3
+
+
+def test_el_diagnostico_compara_los_fid_como_texto():
+    """`DATOS_VENTANA` esta indexado por TEXTO y tanto `VANOS_POR_CIRCUITO` como las
+    casillas pueden traer el fid como numero. Sin la coercion no coincide ninguno y el
+    diagnostico sale vacio sin decir por que."""
+    from chec_local_interpreter.ventanas_015 import vanos_para_diagnostico
+
+    elegidos = vanos_para_diagnostico(
+        {"7001": (5.0, 2), "7002": (4.0, 1)}, [7001, 7002], marcados=[7002], maximo=2)
+
+    assert [f for f, _u, _n in elegidos["vanos"]] == ["7002", "7001"]
+    assert elegidos["marcados"] == ["7002"]

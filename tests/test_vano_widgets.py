@@ -424,10 +424,11 @@ def test_the_flat_option_list_keeps_working_for_the_vano_selector():
 
 
 def test_the_analysis_cap_leaves_room_for_the_whole_circuit_diagnostic():
-    """El diagnostico del circuito estudia los diez vanos mas criticos y ofrece
-    aplicarles la sugerencia de golpe. Con el tope en cinco, la mitad del
-    diagnostico quedaba sin poder ejecutarse."""
-    assert MAX_VANOS_ANALISIS >= 10
+    """El diagnostico estudia hasta quince vanos -- los que el usuario marco, mas
+    los de mayor UITI de la ventana hasta completar -- y los deja MARCADOS para
+    poder aplicarles la sugerencia de golpe. Un tope mas bajo que ese numero
+    recortaria el diagnostico en silencio al escribirlo en el selector."""
+    assert MAX_VANOS_ANALISIS >= 15
 
 
 def test_the_grid_pages_at_fewer_vanos_than_the_cap():

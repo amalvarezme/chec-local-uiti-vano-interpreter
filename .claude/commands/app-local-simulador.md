@@ -9,14 +9,14 @@ description: Abre en el navegador el simulador local de riesgo por vano (cuadern
 
 Opens the local simulator built from
 `notebooks/project_flow/06_uiti_vano_explicabilidad_simulador.ipynb`: the historical map
-and the simulated-criticality one, selection of up to 10 vanos, the 26 simulable
+and the simulated-criticality one, selection of up to 15 vanos, the 26 simulable
 variables, the top variables per vano, the relevance graph and the cost of the plan.
 
 ## This one is not a static document
 
 The other two `/app-local-*` commands serve an HTML file. This one serves a **live
 Python kernel** through Voila, because *Simular* runs the PyTorch MIL model on the vanos
-the user marked with the values they typed — 26 variables over up to 10 vanos is not a
+the user marked with the values they typed — 26 variables over up to 15 vanos is not a
 precomputable space. Everything below follows from that.
 
 ## Parameters for the shared contract
@@ -58,6 +58,22 @@ Also run the guard tests before a build — the memory numbers rest on them:
 promoting to `float64`; the old form read all 88 MB on every click and turned the
 memory mapping into a private copy. If they fail, say so and do not claim the measured
 figures.
+
+## What "Diagnostico" studies
+
+The button reads the user's marks as an **input**, so what it returns depends on what is ticked
+when it is pressed:
+
+1. the marked vanos — by checkbox or by clicking them on the base map — that have a cell in the
+   active window (without one the model has nothing to score, and the panel names them apart);
+2. filled up to **15** with the highest-UITI vanos of that window;
+3. anything that did not fit is counted in the panel, so a capped list never reads as a circuit
+   with only 15 vanos with events.
+
+The rule lives in `ventanas_015.vanos_para_diagnostico` and is unit-tested; the notebook cell
+only wires it. If the user reports "the diagnostic ignored my selection", check that the vanos
+they marked have events in the active window before looking anywhere else — measured over 30
+circuits, only 21% of the vano checkboxes have a cell in a given window.
 
 ## It rebuilds itself, and that is deliberate
 
