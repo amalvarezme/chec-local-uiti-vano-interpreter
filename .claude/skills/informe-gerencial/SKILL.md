@@ -26,9 +26,10 @@ reference to [`report/SKILL.md`](../report/SKILL.md), never by copying its prose
 rendering the standalone circuit-clustering chart for the confirmed window right after that same
 checkpoint (step 1.5, reusing `agrupamiento-circuitos`'s own shared contract by reference, never a
 second confirmation), loading each sampled circuit's narrative content, and assembling the
-cross-circuit synthesis (common patterns,
-notable outliers, aggregate/fleet-level risk, recommended actions) plus one embedded full-fleet
-clustering scatter into a single HTML page. `report/SKILL.md` is never edited and a standalone
+cross-circuit synthesis (common patterns, notable outliers, aggregate/fleet-level risk, recommended
+actions) plus one embedded full-fleet clustering scatter and one radial causes/intervention-strategies
+graph (step 2.6, built from the agents' own run artifacts, no `graphify` involved) into a single HTML
+page. `report/SKILL.md` is never edited and a standalone
 `/report`/`/reporte-lote` invocation is completely unaffected by this Skill's existence.
 
 Canonical contract (pure Python, no LLM call anywhere in this module):
@@ -109,8 +110,8 @@ scatter itself.
   for a missing circuit in step 2 below, plus this Skill's own three additional direct CLI verbs: `python
   -m chec_local_interpreter.vault_note_contract render <circuito>` (step 2's new vault-population
   sub-step), `python -m chec_local_interpreter.graph_view_builder build ...` (step 2.5's new sub-step
-  2.5.6), and `python -m chec_local_interpreter.circuit_meta_graph build ...` (step 2.5's new sub-step
-  2.5.7). This Skill never gets a general shell — same structural guarantee as `report` and
+  2.5.6), and `python -m chec_local_interpreter.intervention_graph build ...` (step 2.6). This Skill
+  never gets a general shell — same structural guarantee as `report` and
   `reporte-lote` (`.claude/agents/rules/invariants.md`, Rule 1). No subprocess/shell string-building
   happens in Python anywhere in this flow: `report/SKILL.md`'s steps are invoked by-reference through
   the Skill tool, never assembled into a shell command from user-controlled text.
@@ -131,19 +132,19 @@ scatter itself.
     performs — but deliberately WITHOUT step 9's chained `/graphify` call. That duplicated projection is
     a direct Python/CLI render call, not a `/graphify` invocation, so this invariant ("step 2.5 is the
     ONLY place any LLM-assisted/graph tool is invoked") stays true; step 2.5's new sub-steps 2.5.6
-    (`graph_view_builder build`) and 2.5.7 (`circuit_meta_graph build`, see below) are likewise plain
-    CLI verbs — 2.5.6 over an already-refreshed `graph.json`, 2.5.7 over the already-written
-    `--graph-patterns` JSON, with `circuit_meta_graph.py` never importing or calling `graphify` at all
-    (design D1: it hand-authors its own HTML) — neither is a `/graphify` call itself, so neither
-    violates this invariant either.
+    (`graph_view_builder build`) and step 2.6 (`intervention_graph build`, see below) are likewise
+    plain CLI verbs — 2.5.6 over an already-refreshed `graph.json`, 2.6 over the run artifacts the
+    agents already wrote, with `intervention_graph.py` never importing or calling `graphify` at all
+    (it hand-authors its own HTML) — neither is a `/graphify` call itself, so neither violates this
+    invariant either.
 - **Read** — to inspect the contract's JSON output and the final rendered HTML path.
 - **Write** — scoped to step 2.5 only, to persist the agent-authored graph-patterns JSON to
   `reports/interpretability/runs/.informe-gerencial/graph-patterns.<grupo>.<win>.json`, the
   `graph_view_builder`-produced graph-view HTML to
   `reports/interpretability/runs/.informe-gerencial/graph-view.<grupo>.<win>.html`, and the
-  `circuit_meta_graph`-produced graph-circular HTML to
-  `reports/interpretability/runs/.informe-gerencial/graph-circular.<grupo>.<win>.html` before step 3
-  reads them back.
+  `intervention_graph`-produced radial HTML (plus its sibling `.resumen.json`) to
+  `reports/interpretability/runs/.informe-gerencial/grafo-intervencion.<grupo>.<win>.html` before step
+  3 reads them back.
 
 ## Run sequence
 
@@ -301,65 +302,76 @@ Given `grupo` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
       exit), alert and **continue** straight to step 3 with no `--graph-view` path — exactly the same
       alert-and-continue convention the graph-rebuild-fails row above already uses; the itemized
       graph-patterns list (if it built) still renders, only the embedded figure is omitted.
-   7. **Build the circular cross-circuit meta-graph figure** (new sub-step, runs after sub-step 2.5.6
-      above, regardless of whether that sub-step's own `graph_view_builder build` succeeded or
-      degraded — it only needs the same `--graph-patterns` JSON path sub-step 2.5.5 already wrote,
-      whether that write happened this run or a prior one; if step 2.5.5 never wrote a
-      `--graph-patterns` file this run — e.g. the skip condition in sub-step 1 fired, or the isolated
-      rebuild/query in sub-steps 2-3 failed outright — skip this sub-step entirely and proceed to step
-      3 with no `--graph-circular` path): run
-      `PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.circuit_meta_graph build --graph-patterns
-      reports/interpretability/runs/.informe-gerencial/graph-patterns.<grupo>.<fecha_inicio>_<fecha_fin>.json
-      --output
-      reports/interpretability/runs/.informe-gerencial/graph-circular.<grupo>.<fecha_inicio>_<fecha_fin>.html
-      --sampled <sampled circuits>`. This is a plain Python CLI invocation, never a `/graphify`
-      slash-command call (see the Allowed-tools carve-out note above) — it derives the two-node-type
-      (`circuit`, `pattern`) / two-edge-type (circuit-to-pattern, circuit-to-circuit) radial meta-graph
-      directly from the already-validated `--graph-patterns` JSON via `load_graph_patterns` reuse, with
-      NO further `graphify`/LLM call of any kind, and hand-authors its own fixed-position vis-network
-      HTML (`circuit_meta_graph._render_html`) rather than reusing `graphify.export.to_html`, which
-      cannot render fixed positions (design D1). On success, pass the written HTML path to step 3 as
-      `--graph-circular <path>`. On any failure (`execution_error`, `skipped_empty` from fewer than 2
-      sampled circuits, or a non-zero exit), alert and **continue** straight to step 3 with no
-      `--graph-circular` path — exactly the same alert-and-continue convention sub-step 2.5.6 already
-      uses; the itemized graph-patterns list and the community graph-view figure (if either or both
-      built) still render, only the circular figure is omitted — the report's toggle then falls back to
-      whichever single figure (or neither) is actually available, per `_graph_toggle_html`'s 3-way
-      degrade contract (see "Dual-Graph Toggle" below).
+2.6. **Build the radial causes/intervention-strategies figure (always attempted, independent of step
+   2.5).** Runs after step 2.5, but depends on NONE of it: no `graphify`, no `graph.json`, no
+   `--graph-patterns` JSON, no vault note. It reads the concepts the agents already wrote into each
+   sampled circuit's own run artifacts, so it renders on runs where step 2.5 failed outright:
+   `PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.intervention_graph build --sampled <sampled circuits>
+   --output
+   reports/interpretability/runs/.informe-gerencial/grafo-intervencion.<grupo>.<fecha_inicio>_<fecha_fin>.html`.
 
-3. **Load content, synthesize, and render the single HTML report.** Once step 2.5 has either produced a
-   graph-patterns path, a graph-view path, and/or a graph-circular path, or been skipped/failed on any
-   of those (never blocks on any one of them), run the shared contract's `render` verb:
-   `PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.informe_gerencial_contract render <grupo> [fecha_inicio fecha_fin] --runtime claude [--graph-patterns <path from step 2.5.5>] [--graph-view <path from step 2.5.6>] [--graph-circular <path from step 2.5.7>]`.
+   It writes TWO files: the figure at `--output`, and its sibling
+   `<output>.resumen.json`, which step 3 reads back automatically to NAME the causes and strategies
+   in text next to the figure. Pass only the figure path to step 3, as `--graph-intervencion <path>`;
+   the contract derives the sibling itself.
+
+   Report to the user the `causa_count`/`estrategia_count` from the printed outcome JSON, plus any
+   `circuitos_sin_corrida` — that list is the honest caveat for the figure (those circuits contributed
+   nothing to it). On any failure (`execution_error`, or `skipped_empty` from fewer than 2 sampled
+   circuits or no concept shared by 2 of them), alert and **continue** straight to step 3 with no
+   `--graph-intervencion` path; the section is then omitted entirely rather than rendered as a
+   placeholder. See "Radial causes/strategies graph (step 2.6)" below for what it draws and why.
+
+3. **Load content, synthesize, and render the single HTML report.** Once steps 2.5 and 2.6 have each
+   either produced their paths or been skipped/failed (it never blocks on any one of them), run the
+   shared contract's `render` verb:
+   `PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.informe_gerencial_contract render <grupo> [fecha_inicio fecha_fin] --runtime claude [--graph-patterns <path from step 2.5.5>] [--graph-view <path from step 2.5.6>] [--graph-intervencion <path from step 2.6>]`.
    This re-resolves the SAME deterministic group/window/sampling as step 1 (K-Means is
    `random_state=42`-seeded, so the sampled 12 are reproducible), then for each sampled circuit calls
    `load_circuit_content` (vault-note preferred, raw-JSON fallback per Content sourcing below),
    loads and re-validates `--graph-patterns` via `load_graph_patterns` (missing/omitted path -> `None`,
    malformed file -> `[]`, valid file -> filtered/recomputed pattern list, never raising regardless of
-   what step 2.5 produced), loads `--graph-view` and `--graph-circular` via the SAME `load_graph_view`
-   (missing/omitted path -> `None`, unreadable -> `None`, readable -> raw HTML text, never raising for
-   either), assembles the cross-circuit synthesis via `synthesize(...)` (Resumen ejecutivo del grupo,
+   what step 2.5 produced), loads `--graph-view` and `--graph-intervencion` via the SAME
+   `load_graph_view` (missing/omitted path -> `None`, unreadable -> `None`, readable -> raw HTML text,
+   never raising for either) plus the latter's sibling `.resumen.json` via `load_intervention_summary`,
+   assembles the cross-circuit synthesis via `synthesize(...)` (Resumen ejecutivo del grupo,
    Patrones comunes, Circuitos atípicos, Riesgo agregado, Acciones recomendadas, Anexo por circuito),
    renders the full HTML page via `render_managerial_report(...)` with the embedded full-fleet scatter
-   described above plus the "Patrones cross-circuito (grafo)" subsection (labeled "Interpretación
-   asistida por LLM (grafo)", visibly distinct from the deterministic "Patrones comunes"/"Cálculo
-   determinista" table) — including, when the itemized pattern list is populated, the embedded figure(s)
-   via `_graph_toggle_html` (see "Dual-Graph Toggle" below): both the circular and community graphs
-   behind a client-side toggle defaulting to the circular graph when both are available; a single figure
-   with no toggle when only one is available; a muted indicator that the figure is not available this
-   run when neither is — and persists the whole report to disk. Report the returned `output_html` path
-   to the user. This step runs exactly once per invocation and never asks the user anything further.
+   described above plus TWO independent graph sections — "Causas y estrategias de intervención"
+   (step 2.6's radial figure, labeled "Síntesis de los agentes") and "Patrones cross-circuito (grafo)"
+   (step 2.5's community figure, labeled "Interpretación asistida por LLM (grafo)"), both visibly
+   distinct from the deterministic "Patrones comunes"/"Cálculo determinista" table — and persists the
+   whole report to disk. Report the returned `output_html` path to the user. This step runs exactly
+   once per invocation and never asks the user anything further.
 
-## Dual-Graph Toggle
+## Radial causes/strategies graph (step 2.6)
 
-The final report embeds up to two graph figures side by side behind a plain client-side toggle,
-never a second confirmation and never a page reload (`informe_gerencial_contract._graph_toggle_html`):
+Three concentric rings, read from the outside in: **circuits** share **causes**, and each cause leads
+to the **intervention strategies** the alignment agent proposed
+(`src/chec_local_interpreter/intervention_graph.py`).
 
-| Condition | Rendered result |
-|---|---|
-| Both `--graph-circular` (step 2.5.7) and `--graph-view` (step 2.5.6) available | Both embed as sibling `<iframe srcdoc>` blocks behind a button pair; the circular graph is visible by default (it answers "which circuits relate to which" at a glance), the community graph starts hidden; switching only toggles `style.display`, no reload |
-| Only one of the two available | That one embeds alone, no toggle control shown |
-| Neither available | The existing muted "figura de grafo no disponible en esta corrida" indicator (independent of whether the itemized pattern list itself rendered) |
+| Ring | Node | Where it comes from |
+|---|---|---|
+| Outer | one sampled circuit | the sample itself |
+| Middle | a shared causal theme | `historical.out.json`'s `cause_hypothesis_note`, bucketed by the shared `informe_gerencial_contract.cause_themes` |
+| Inner | `<intervention family> · <VARIABLE>` | `expert-alignment.out.json`'s `variables_a_priorizar`: the family from the verb in `tipo_de_validacion_sugerida`, the variable verbatim |
+
+Only concepts present in **2 or more** sampled circuits get a node. There is deliberately no
+circuit-to-strategy edge — the figure's whole point is that an intervention is reached THROUGH a
+cause — and a strategy left with no cause edge is dropped rather than drawn floating. Clicking any
+node shows the agents' own sentences, verbatim, per circuit.
+
+**Why nodes are keyed on the canonical fields and not on the agents' prose.** Measured over the 37
+completed runs on disk: 205 of 206 `coincidencias`/`diferencias` themes are distinct strings, and 35
+of the 36 `tipo_de_validacion_sugerida` texts written for `CNT_TRF` are distinct. Grouping on those
+strings draws one node per circuit and shows no cross-circuit relation at all. What genuinely recurs
+is the canonical part — the variable code (`CNT_TRF` in 36 circuits, `CNT_VN` in 33), the priority,
+the causal theme. So the free text is preserved as evidence, never as an identity.
+
+**This step never touches `graphify`.** That is the point of separating it from step 2.5: the graph
+rebuild there has corrupted itself twice in production (see "Second resolved limitation" below), and
+under the previous dual-graph toggle a failed rebuild also took down the radial figure, which never
+needed it. The two sections now degrade independently.
 
 ## Content sourcing
 
@@ -390,7 +402,6 @@ above). It degrades independently of every other section:
 | The isolated vault-graph rebuild (step 2.5.2) fails outright or times out | Alert-and-**continue** straight to step 3 with no `--graph-patterns` path — the deterministic sections still render; subsection shows "análisis de grafo no disponible en esta corrida" |
 | `/graphify query` returns nothing meeting `soporte >= 2` | The written JSON has an empty `patterns` list; subsection shows "sin patrones recurrentes con soporte >= 2" explicitly (never a silent omission) |
 | `graph_view_builder build` (sub-step 2.5.6) fails, or the sub-graph has no matched nodes | Alert-and-**continue** straight to step 3 with no `--graph-view` path — the itemized pattern list still renders (independently of this failure), only the embedded community figure is omitted |
-| `circuit_meta_graph build` (sub-step 2.5.7) fails (`execution_error`, `skipped_empty`, or a non-zero exit) | Alert-and-**continue** straight to step 3 with no `--graph-circular` path — the itemized pattern list and the community graph-view figure (if either or both built) still render, only the circular figure is omitted; the toggle falls back to whichever single figure (or neither) remains available |
 
 **Resolved limitation (formerly documented as a known limitation, fixed by the isolation change
 above):** the previous design ran `/graphify reports/vault --update` as an incremental refresh
@@ -436,7 +447,8 @@ step now.
 | Isolated vault-graph rebuild (step 2.5.2) or `/graphify query` fails outright or times out | Step 2.5 (this Skill) | Alert-and-**continue** to step 3 with no `--graph-patterns` path — deterministic sections still render, subsection shows "análisis de grafo no disponible en esta corrida" |
 | `/graphify query` returns nothing meeting `soporte >= 2` | Step 2.5 (this Skill) | Empty `patterns` list written; subsection explicitly states no recurring pattern was found, never a silent omission |
 | `graph_view_builder build` fails (sub-step 2.5.6) | Step 2.5 (this Skill) | Alert-and-**continue** to step 3 with no `--graph-view` path — list-only rendering if patterns succeeded, no figure; deterministic sections unaffected |
-| `circuit_meta_graph build` fails (sub-step 2.5.7) | Step 2.5 (this Skill) | Alert-and-**continue** to step 3 with no `--graph-circular` path — pattern list and/or community figure (whichever succeeded) still render; toggle degrades to a single figure or the muted indicator; deterministic sections unaffected |
+| `intervention_graph build` fails, or no concept is shared by 2+ sampled circuits | Step 2.6 (this Skill) | Alert-and-**continue** to step 3 with no `--graph-intervencion` path — the section is omitted entirely; every other section, step 2.5's included, is unaffected |
+| Some sampled circuits have no completed run | Step 2.6 (this Skill) | They contribute nothing to the figure and are listed in `circuitos_sin_corrida`; report that list to the user as the figure's caveat |
 | A sampled circuit still has no content at render time | Step 3 (`load_circuit_content` returns `None`) | Annex entry marked "sin contenido disponible"; the report still renders for every other circuit |
 
 None of the rows above, nor any mid-run condition, turns into a second question back to the user —
@@ -493,21 +505,22 @@ the single checkpoint is step 1.4 only.
   [`src/chec_local_interpreter/vault_note_contract.py`](../../../src/chec_local_interpreter/vault_note_contract.py)
 - Scoped graph-view builder, invoked ONLY in step 2.5.6 (the sole direct `graphify.export.to_html`
   caller in this feature): [`src/chec_local_interpreter/graph_view_builder.py`](../../../src/chec_local_interpreter/graph_view_builder.py)
-- Circular meta-graph builder, invoked ONLY in step 2.5.7 (hand-authors its own fixed-position
-  vis-network HTML, never imports/calls `graphify`):
-  [`src/chec_local_interpreter/circuit_meta_graph.py`](../../../src/chec_local_interpreter/circuit_meta_graph.py)
+- Radial causes/strategies builder, invoked ONLY in step 2.6 (reads the agents' run artifacts
+  directly; hand-authors its own fixed-position vis-network HTML, never imports/calls `graphify`):
+  [`src/chec_local_interpreter/intervention_graph.py`](../../../src/chec_local_interpreter/intervention_graph.py)
 - Binding invariants (shared with every agent role/orchestrator above):
   `.claude/agents/rules/invariants.md`
 - Tests: `tests/test_informe_gerencial_contract.py` (sampling, group resolution, missing-run
   detection, content loading — including the vault-note/run-dir structured-fields bugfix,
   `load_graph_patterns` threshold/intersection/malformed-input handling, `resolve()`/
   `render_and_write()` status matrices, path-injection rejection, `synthesize`/`render_managerial_report`
-  section assembly including the dual-graph toggle assembly/degradation states, full-fleet-highlight
-  behavior, CLI verbs including `--graph-patterns`/`--graph-view`/`--graph-circular`),
+  section assembly including the independent intervention/community graph sections and their degradation states, full-fleet-highlight
+  behavior, CLI verbs including `--graph-patterns`/`--graph-view`/`--graph-intervencion`),
   `tests/test_graph_view_builder.py` (seed/bridge sub-graph predicate, per-circuit community grouping
   for the embedded figure's "Communities" panel — one toggleable group per sampled circuit plus a
   shared bucket for off-circuit bridge nodes, never graphify's own topic-based clustering —
-  oversize/malformed-input/never-raise behavior, CLI exit codes), `tests/test_circuit_meta_graph.py`
-  (meta-graph node/edge construction from `graph-patterns.<grupo>.<win>.json`, deterministic radial
-  layout/byte-identical repeat builds, `max_patterns` cap + hub-pattern dedup, never-raise degrade
-  behavior, `build` CLI exit codes)
+  oversize/malformed-input/never-raise behavior, CLI exit codes),
+  `tests/test_intervention_graph.py` (intervention-family classification, accent-insensitive cause
+  bucketing, min-support filtering, verbatim evidence, three-ring layout, no circuit-to-strategy edge,
+  no orphan strategy, byte-identical repeat builds, `</script>`-in-evidence escaping, never-raise
+  degrade behavior, `build` CLI exit codes)

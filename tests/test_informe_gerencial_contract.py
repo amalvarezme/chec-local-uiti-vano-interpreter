@@ -8,8 +8,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-import chec_local_interpreter.circuit_meta_graph as circuit_meta_graph
 import chec_local_interpreter.graph_view_builder as graph_view_builder
+import chec_local_interpreter.intervention_graph as intervention_graph
 import chec_local_interpreter.informe_gerencial_contract as informe_contract
 from chec_local_interpreter.informe_gerencial_contract import (
     detect_missing_runs,
@@ -1382,183 +1382,193 @@ def test_cli_render_accepts_graph_view_arg(monkeypatch, capsys, tmp_path):
     assert "srcdoc=" in written
 
 
+
+
 # ---------------------------------------------------------------------------
-# Dual-graph toggle: circular graph embed + CLI flag (Phase 4-5, PR2)
+# Causas y estrategias de intervención: sección propia, independiente del paso
+# de graphify (reemplaza el antiguo toggle de dos grafos)
 # ---------------------------------------------------------------------------
 
 
-_PATTERNS_FOR_TOGGLE = [{"tema": "fauna en vanos", "circuitos": ["MUYALTA_0", "MUYALTA_1"], "soporte": 2}]
+_RADIAL_HTML = "<html><body>grafo radial de causas</body></html>"
+_RESUMEN = {
+    "schema_version": "informe-gerencial-grafo-intervencion/v1",
+    "causas": [{"concepto": "clima/atmosférico", "soporte": 2, "circuitos": ["MUYALTA_0", "MUYALTA_1"]}],
+    "estrategias": [
+        {
+            "concepto": "Inspección en campo · CNT_TRF",
+            "soporte": 2,
+            "prioridad": "alta",
+            "circuitos": ["MUYALTA_0", "MUYALTA_1"],
+        }
+    ],
+    "circuitos_sin_corrida": [],
+}
 
 
-def test_graph_patterns_html_both_graphs_available_renders_toggle_circular_default_visible():
-    """Spec 'Dual-Graph Toggle', scenario 'Both graphs available': both
-    iframe srcdoc blocks embed, a client-side toggle control + inline script
-    are present, and the circular graph is the one visible on load (design
-    D4 -- circular answers the manager's cross-circuit question at a
-    glance; community graph starts hidden, reachable via the toggle).
-    """
-    view_html = "<html><body>vista de comunidad</body></html>"
-    circular_html = "<html><body>vista circular</body></html>"
+def test_la_seccion_de_intervencion_nombra_las_causas_y_las_estrategias():
+    html = informe_contract._intervention_graph_html(_RADIAL_HTML, _RESUMEN, n_sampled=2)
 
-    html = informe_contract._graph_patterns_html(
-        _PATTERNS_FOR_TOGGLE, view_html, circular_html, n_sampled=2
-    )
-
-    assert html.count("srcdoc=") == 2
-    assert "<script>" in html
-    # A visible client-side control (button/tab pair) to switch graphs.
-    assert "graph-toggle" in html
-    # Circular panel has no inline "display:none" (visible by default);
-    # community panel does (hidden until the reader toggles it).
-    circular_panel = re.search(r'<div id="graph-toggle-circular"[^>]*>', html)
-    community_panel = re.search(r'<div id="graph-toggle-community"[^>]*>', html)
-    assert circular_panel is not None and community_panel is not None
-    assert "display:none" not in circular_panel.group(0)
-    assert "display:none" in community_panel.group(0)
+    assert "Causas y estrategias de intervención" in html
+    assert "clima/atmosférico" in html
+    assert "Inspección en campo · CNT_TRF" in html
+    assert "prioridad alta" in html
+    assert "srcdoc=" in html
 
 
-def test_graph_patterns_html_switch_does_not_reload_page():
-    """Toggle script mutates DOM (`style.display`) only -- no `location`/
-    `href`/form-submit reload anywhere in the emitted script.
-    """
-    html = informe_contract._graph_patterns_html(
-        _PATTERNS_FOR_TOGGLE,
-        "<html><body>vista de comunidad</body></html>",
-        "<html><body>vista circular</body></html>",
-        n_sampled=2,
-    )
-
-    assert "location.href" not in html
-    assert "location.reload" not in html
-    assert "<form" not in html
+def test_la_seccion_de_intervencion_se_omite_si_no_hay_figura():
+    assert informe_contract._intervention_graph_html(None, _RESUMEN, n_sampled=2) == ""
 
 
-def test_graph_patterns_html_only_circular_available_single_graph_no_toggle():
-    """Spec 'Only one graph available': only the available figure embeds,
-    no toggle control shown.
-    """
-    html = informe_contract._graph_patterns_html(
-        _PATTERNS_FOR_TOGGLE, None, "<html><body>vista circular</body></html>", n_sampled=2
-    )
-
-    assert html.count("srcdoc=") == 1
-    assert "vista circular" in html
-    assert "graph-toggle-btn" not in html
-    assert "figura de grafo no disponible en esta corrida" not in html
+def test_la_seccion_de_intervencion_se_omite_con_un_solo_circuito():
+    assert informe_contract._intervention_graph_html(_RADIAL_HTML, _RESUMEN, n_sampled=1) == ""
 
 
-def test_graph_patterns_html_only_community_available_single_graph_no_toggle():
-    html = informe_contract._graph_patterns_html(
-        _PATTERNS_FOR_TOGGLE, "<html><body>vista de comunidad</body></html>", None, n_sampled=2
-    )
+def test_la_figura_se_dibuja_aunque_no_haya_resumen_legible():
+    html = informe_contract._intervention_graph_html(_RADIAL_HTML, None, n_sampled=2)
 
-    assert html.count("srcdoc=") == 1
-    assert "vista de comunidad" in html
-    assert "graph-toggle-btn" not in html
+    assert "srcdoc=" in html
+    assert "Causas compartidas" not in html
 
 
-def test_graph_patterns_html_neither_graph_available_muted_state_unaffected():
-    """Spec 'Neither graph available': same existing muted indicator as
-    before this change -- unaffected by the new toggle wiring.
-    """
-    html = informe_contract._graph_patterns_html(_PATTERNS_FOR_TOGGLE, None, None, n_sampled=2)
-
-    assert "figura de grafo no disponible en esta corrida" in html
-    assert "srcdoc=" not in html
-    assert "graph-toggle-btn" not in html
-
-
-def test_render_managerial_report_threads_graph_circular_html():
-    """`render_managerial_report` accepts `graph_circular_html` and threads
-    it into the assembled graph section alongside the existing
-    `graph_view_html`.
-    """
-    html = _render_report_html(
-        sampled=["MUYALTA_0", "MUYALTA_1"], graph_patterns=_PATTERNS_FOR_TOGGLE
-    )
-    # Baseline (no circular graph passed through the helper): single graph,
-    # no toggle -- confirms the parameter is genuinely optional/additive.
-    assert "graph-toggle-btn" not in html
-
-    raw_df = _four_tier_raw_df(per_tier=2)
-    sampled_records = _sampled_records([("MUYALTA_0", 40, 50000.0, "Muy Alta"), ("MUYALTA_1", 41, 51000.0, "Muy Alta")])
-    loaded_content = [None, None]
-    group = {"slug": "muy-alta", "label": "Muy Alta", "circuit_count": 2}
-    synthesis = synthesize(sampled_records, loaded_content, group)
-
-    html_with_both = render_managerial_report(
-        raw_df,
-        synthesis=synthesis,
-        group=group,
-        resolved_window={"fecha_inicio": "2026-01-01", "fecha_fin": "2026-12-31"},
-        sampled=["MUYALTA_0", "MUYALTA_1"],
-        graph_patterns=_PATTERNS_FOR_TOGGLE,
-        graph_view_html="<html><body>vista de comunidad</body></html>",
-        graph_circular_html="<html><body>vista circular</body></html>",
-    )
-
-    assert html_with_both.count("srcdoc=") == 2
-    assert "graph-toggle-btn" in html_with_both
-
-
-def test_render_and_write_loads_graph_circular_path_and_embeds(monkeypatch, tmp_path):
-    """`render_and_write(..., graph_circular_path=...)` loads the circular
-    HTML via the reused `load_graph_view` (never a new parser) and threads
-    it into the final report.
+def test_el_grafo_radial_no_depende_del_paso_de_graphify(monkeypatch, tmp_path):
+    """Es el punto de todo el cambio: con el paso de graphify caído
+    (`graph_patterns_path=None`, `graph_view_path=None`) la figura radial
+    sigue en el informe. El toggle anterior la habría perdido junto con él.
     """
     frame = _four_tier_raw_df(per_tier=2)
     monkeypatch.setattr(informe_contract, "load_dataset", lambda path: frame)
-    df_coords = _known_tier_df_coords_full()
-    monkeypatch.setattr(informe_contract, "resolve_group_dataframe", lambda *a, **k: df_coords)
+    monkeypatch.setattr(
+        informe_contract, "resolve_group_dataframe", lambda *a, **k: _known_tier_df_coords_full()
+    )
     monkeypatch.setattr(
         informe_contract,
         "load_circuit_content",
-        lambda circuito, **kwargs: {"circuito": circuito, "source": "vault_note", "content": f"Narrativa {circuito}"},
+        lambda circuito, **kwargs: {"circuito": circuito, "source": "vault_note", "content": "x"},
     )
-    output_root = tmp_path / "html"
-    graph_patterns_path = tmp_path / "graph-patterns.json"
-    _write_graph_patterns_json(
-        graph_patterns_path,
-        [{"tema": "fauna en vanos", "circuitos": ["MUYALTA_0", "MUYALTA_1", "MUYALTA_2"], "soporte": 3}],
-    )
-    graph_circular_path = tmp_path / "graph-circular.html"
-    graph_circular_path.write_text("<html><body>vista circular</body></html>", encoding="utf-8")
+    figura = tmp_path / "grafo-intervencion.html"
+    figura.write_text(_RADIAL_HTML, encoding="utf-8")
 
     request = informe_contract.normalize_request("muy-alta", "2026-01-01", "2026-01-02")
     outcome = informe_contract.render_and_write(
         request,
         data_path="data.csv",
-        output_root=output_root,
-        graph_patterns_path=graph_patterns_path,
-        graph_circular_path=graph_circular_path,
+        output_root=tmp_path / "html",
+        graph_patterns_path=None,
+        graph_view_path=None,
+        graph_intervencion_path=figura,
     )
 
     assert outcome.status == "success"
     written = Path(outcome.output_html).read_text(encoding="utf-8")
-    assert "vista circular" in written
-    assert "srcdoc=" in written
+    assert "grafo radial de causas" in written
+    assert "análisis de grafo no disponible" in written
 
 
-def test_cli_render_accepts_graph_circular_arg(monkeypatch, capsys, tmp_path):
+def test_el_contrato_y_el_constructor_derivan_el_mismo_archivo_de_resumen(tmp_path):
+    """Los dos calculan la ruta del `.resumen.json` por separado para no cerrar
+    un ciclo de imports; si se separan, el informe deja de nombrar las causas
+    sin que nada falle.
+    """
+    figura = tmp_path / "grafo-intervencion.muy-alta.html"
+
+    assert informe_contract._intervention_summary_path(figura) == intervention_graph.summary_path(
+        figura
+    )
+    assert informe_contract._intervention_summary_path(None) is None
+
+
+def test_e2e_el_constructor_real_alimenta_el_informe(monkeypatch, tmp_path):
+    """Cadena completa con código de producción, sin stubs de HTML: artefactos
+    de agentes en disco -> `intervention_graph build` -> `render_and_write`.
+    """
+    runs_root = tmp_path / "runs"
+    sampled = ["MUYALTA_0", "MUYALTA_1", "MUYALTA_2"]
+    for circuito in sampled:
+        run_dir = runs_root / canonical_circuit_identity(circuito) / "20260101T000000000000"
+        run_dir.mkdir(parents=True)
+        (run_dir / "historical.out.json").write_text(
+            json.dumps(
+                {
+                    "ok": True,
+                    "data": {
+                        "cause_hypothesis_note": "rafagas de viento elevadas sobre vanos recurrentes",
+                        "key_findings": [],
+                        "recommended_actions": [],
+                    },
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        (run_dir / "expert-alignment.out.json").write_text(
+            json.dumps(
+                {
+                    "ok": True,
+                    "data": {
+                        "variables_a_priorizar": [
+                            {
+                                "variable": "CNT_TRF",
+                                "prioridad": "alta",
+                                "justificacion": "mayor peso",
+                                "tipo_de_validacion_sugerida": "Revisar en campo los transformadores.",
+                            }
+                        ],
+                        "coincidencias": [],
+                        "diferencias": [],
+                        "sintesis_final": "s",
+                    },
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+    figura = tmp_path / "grafo-intervencion.muy-alta.2026-01-01_2026-01-02.html"
+    resultado = intervention_graph.build_intervention_graph(sampled, figura, runs_root=runs_root)
+    assert resultado.status == "success"
+    assert resultado.causa_count >= 1 and resultado.estrategia_count >= 1
+    assert intervention_graph.summary_path(figura).is_file()
+
     frame = _four_tier_raw_df(per_tier=2)
     monkeypatch.setattr(informe_contract, "load_dataset", lambda path: frame)
-    df_coords = _known_tier_df_coords_full()
-    monkeypatch.setattr(informe_contract, "resolve_group_dataframe", lambda *a, **k: df_coords)
+    monkeypatch.setattr(
+        informe_contract, "resolve_group_dataframe", lambda *a, **k: _known_tier_df_coords_full()
+    )
     monkeypatch.setattr(
         informe_contract,
         "load_circuit_content",
-        lambda circuito, **kwargs: {"circuito": circuito, "source": "vault_note", "content": f"Narrativa {circuito}"},
+        lambda circuito, **kwargs: {"circuito": circuito, "source": "vault_note", "content": "x"},
     )
-    output_root = tmp_path / "html"
-    graph_patterns_path = tmp_path / "graph-patterns.json"
-    _write_graph_patterns_json(
-        graph_patterns_path,
-        [{"tema": "fauna en vanos", "circuitos": ["MUYALTA_0", "MUYALTA_1", "MUYALTA_2"], "soporte": 3}],
+
+    request = informe_contract.normalize_request("muy-alta", "2026-01-01", "2026-01-02")
+    outcome = informe_contract.render_and_write(
+        request,
+        data_path="data.csv",
+        output_root=tmp_path / "html",
+        graph_intervencion_path=figura,
     )
-    graph_view_path = tmp_path / "graph-view.html"
-    graph_view_path.write_text("<html><body>vista de comunidad</body></html>", encoding="utf-8")
-    graph_circular_path = tmp_path / "graph-circular.html"
-    graph_circular_path.write_text("<html><body>vista circular</body></html>", encoding="utf-8")
+
+    assert outcome.status == "success"
+    written = Path(outcome.output_html).read_text(encoding="utf-8")
+    assert html_lib.escape(figura.read_text(encoding="utf-8")) in written
+    # El resumen escrito por el constructor real es el que nombra la sección.
+    assert "Inspección en campo · CNT_TRF" in written
+
+
+def test_cli_render_acepta_grafo_de_intervencion(monkeypatch, capsys, tmp_path):
+    frame = _four_tier_raw_df(per_tier=2)
+    monkeypatch.setattr(informe_contract, "load_dataset", lambda path: frame)
+    monkeypatch.setattr(
+        informe_contract, "resolve_group_dataframe", lambda *a, **k: _known_tier_df_coords_full()
+    )
+    monkeypatch.setattr(
+        informe_contract,
+        "load_circuit_content",
+        lambda circuito, **kwargs: {"circuito": circuito, "source": "vault_note", "content": "x"},
+    )
+    figura = tmp_path / "grafo-intervencion.html"
+    figura.write_text(_RADIAL_HTML, encoding="utf-8")
 
     exit_code = informe_contract.main(
         [
@@ -1569,194 +1579,55 @@ def test_cli_render_accepts_graph_circular_arg(monkeypatch, capsys, tmp_path):
             "--data-path",
             "data.csv",
             "--output-root",
-            str(output_root),
-            "--graph-patterns",
-            str(graph_patterns_path),
-            "--graph-view",
-            str(graph_view_path),
-            "--graph-circular",
-            str(graph_circular_path),
+            str(tmp_path / "html"),
+            "--graph-intervencion",
+            str(figura),
         ]
     )
 
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "success"
-    written = Path(payload["output_html"]).read_text(encoding="utf-8")
-    assert written.count("srcdoc=") == 2
-    assert "graph-toggle-btn" in written
+    assert "grafo radial de causas" in Path(payload["output_html"]).read_text(encoding="utf-8")
+
+
+def test_la_seccion_de_comunidades_sigue_embebiendo_su_figura():
+    """El grafo de comunidades (graphify) conserva su comportamiento previo,
+    ahora sin el toggle: lista + figura, o lista + indicador apagado.
+    """
+    patrones = [{"tema": "fauna en vanos", "circuitos": ["MUYALTA_0", "MUYALTA_1"], "soporte": 2}]
+
+    con_figura = informe_contract._graph_patterns_html(
+        patrones, "<html><body>comunidades</body></html>", n_sampled=2
+    )
+    sin_figura = informe_contract._graph_patterns_html(patrones, None, n_sampled=2)
+
+    assert con_figura.count("srcdoc=") == 1
+    assert "fauna en vanos" in con_figura
+    assert "figura de grafo no disponible en esta corrida" in sin_figura
+    assert "srcdoc=" not in sin_figura
 
 
 # ---------------------------------------------------------------------------
-# Phase 7: integration check -- SKILL step 2.5.5 -> 2.5.6/2.5.7 -> step 3
-# real pipeline functions chained together (no mocked graph-patterns/graph-
-# circular/graph-view HTML strings), confirming the wiring the SKILL.md
-# sub-step 2.5.7 runbook prose describes actually holds end to end.
+# Temas de causa: compartidos entre la prosa y la figura
 # ---------------------------------------------------------------------------
 
 
-def test_e2e_real_circuit_meta_graph_output_threads_into_render_and_write(monkeypatch, tmp_path):
-    """The SKILL runbook's 2.5.5 -> 2.5.7 -> step 3 chain, exercised for
-    real: a real `graph-patterns.<grupo>.<win>.json` file is fed to the REAL
-    `circuit_meta_graph.build_circuit_meta_graph` (production code, not a
-    hand-typed HTML stub), and that real output file is then loaded by
-    `render_and_write(..., graph_circular_path=...)` via the reused
-    `load_graph_view`. Only the circular graph is available this run (no
-    `graph_view_path`), so this also exercises the "only one graph
-    available -> single embed, no toggle" degrade state (spec "Dual-Graph
-    Toggle") using a REAL circular-graph payload instead of a stub string.
+def test_los_temas_de_causa_ignoran_los_acentos():
+    """El agente histórico escribe unas notas con acentos y otras sin ellos
+    para el mismo corpus; el bucketing no puede depender de eso.
     """
-    frame = _four_tier_raw_df(per_tier=2)
-    monkeypatch.setattr(informe_contract, "load_dataset", lambda path: frame)
-    df_coords = _known_tier_df_coords_full()
-    monkeypatch.setattr(informe_contract, "resolve_group_dataframe", lambda *a, **k: df_coords)
-    monkeypatch.setattr(
-        informe_contract,
-        "load_circuit_content",
-        lambda circuito, **kwargs: {"circuito": circuito, "source": "vault_note", "content": f"Narrativa {circuito}"},
-    )
-    sampled = ["MUYALTA_0", "MUYALTA_1", "MUYALTA_2"]
-
-    # Sub-step 2.5.5: the graph-patterns JSON the SKILL's own graphify-query
-    # parsing step would have written.
-    graph_patterns_path = tmp_path / "graph-patterns.muy-alta.2026-01-01_2026-01-02.json"
-    _write_graph_patterns_json(
-        graph_patterns_path,
-        [
-            {"tema": "fauna en vanos cercanos", "circuitos": sampled, "soporte": 3},
-            {"tema": "vegetacion recurrente", "circuitos": ["MUYALTA_0", "MUYALTA_1"], "soporte": 2},
-        ],
+    assert informe_contract.cause_themes("condiciones atmosféricas") == informe_contract.cause_themes(
+        "condiciones atmosfericas"
     )
 
-    # Sub-step 2.5.7: the REAL circuit_meta_graph CLI/builder, run exactly as
-    # the SKILL.md runbook prose describes (module import, not a subprocess
-    # -- same production entry point `build_circuit_meta_graph`).
-    graph_circular_path = tmp_path / "graph-circular.muy-alta.2026-01-01_2026-01-02.html"
-    circular_outcome = circuit_meta_graph.build_circuit_meta_graph(
-        graph_patterns_path, sampled, graph_circular_path
-    )
-    assert circular_outcome.status == "success"
-    assert circular_outcome.node_count > 0
-    assert graph_circular_path.is_file()
 
-    request = informe_contract.normalize_request("muy-alta", "2026-01-01", "2026-01-02")
-    outcome = informe_contract.render_and_write(
-        request,
-        data_path="data.csv",
-        output_root=tmp_path / "html",
-        graph_patterns_path=graph_patterns_path,
-        graph_circular_path=graph_circular_path,
-    )
+def test_la_prosa_y_la_figura_nombran_las_mismas_causas():
+    nota = "falla fisica en linea de media tension con rafagas elevadas"
+    contenido = [{"circuito": "A", "cause_hypothesis_note": nota}]
 
-    assert outcome.status == "success"
-    written = Path(outcome.output_html).read_text(encoding="utf-8")
-    # The real circular-graph HTML (produced by production code, never a
-    # stub) is embedded verbatim inside the report's iframe srcdoc.
-    real_circular_html = graph_circular_path.read_text(encoding="utf-8")
-    assert html_lib.escape(real_circular_html) in written
-    # A real node label from the meta-graph (a sampled circuit id) is
-    # present, proving the layout/render actually ran rather than the
-    # embed short-circuiting on an empty graph.
-    assert "MUYALTA_0" in real_circular_html
-    # Only one figure is available this run -> no toggle control, per the
-    # 3-way degrade contract.
-    assert written.count("srcdoc=") == 1
-    assert "graph-toggle-btn" not in written
-    assert "fauna en vanos cercanos" in written
+    de_la_prosa = set(informe_contract._cause_theme_counter(contenido))
+    de_la_figura = set(intervention_graph.cause_themes(nota))
 
-
-def test_e2e_real_circular_and_community_graphs_toggle_and_community_unaffected(monkeypatch, tmp_path):
-    """Both figures built for real this time: `circuit_meta_graph` (fully
-    real, no external dependency) AND `graph_view_builder.build_graph_view`
-    (real seed/bridge filtering; only its own `graphify.export.to_html` leaf
-    call is monkeypatched, exactly the same convention
-    `tests/test_graph_view_builder.py` already uses to keep this test
-    hermetic/fast without a live graphify invocation). Confirms: (1) both
-    real outputs thread through `render_and_write` into a toggle with the
-    circular graph visible by default, and (2) the community graph's own
-    embedded content is BYTE-IDENTICAL to what `build_graph_view` produced
-    standalone -- i.e. adding the circular graph never mutates or degrades
-    the existing community graph (task 7.2's "existing community graph
-    unaffected" acceptance criterion).
-    """
-    frame = _four_tier_raw_df(per_tier=2)
-    monkeypatch.setattr(informe_contract, "load_dataset", lambda path: frame)
-    df_coords = _known_tier_df_coords_full()
-    monkeypatch.setattr(informe_contract, "resolve_group_dataframe", lambda *a, **k: df_coords)
-    monkeypatch.setattr(
-        informe_contract,
-        "load_circuit_content",
-        lambda circuito, **kwargs: {"circuito": circuito, "source": "vault_note", "content": f"Narrativa {circuito}"},
-    )
-    sampled = ["MUYALTA_0", "MUYALTA_1", "MUYALTA_2"]
-
-    graph_patterns_path = tmp_path / "graph-patterns.muy-alta.2026-01-01_2026-01-02.json"
-    _write_graph_patterns_json(
-        graph_patterns_path,
-        [{"tema": "fauna en vanos cercanos", "circuitos": sampled, "soporte": 3}],
-    )
-
-    graph_circular_path = tmp_path / "graph-circular.muy-alta.2026-01-01_2026-01-02.html"
-    circular_outcome = circuit_meta_graph.build_circuit_meta_graph(
-        graph_patterns_path, sampled, graph_circular_path
-    )
-    assert circular_outcome.status == "success"
-
-    def _fake_to_html(G, communities, output, **kwargs):
-        Path(output).write_text(
-            f"<html><body>vista de comunidad ({len(list(G.nodes()))} nodos)</body></html>",
-            encoding="utf-8",
-        )
-
-    monkeypatch.setattr(graph_view_builder, "to_html", _fake_to_html)
-
-    graph_json_path = tmp_path / "graph.json"
-    nodes = [
-        {
-            "id": f"{canonical_circuit_identity(c)}_node",
-            "label": c,
-            "source_file": f"reports/vault/{canonical_circuit_identity(c)}.md",
-            "community": index,
-        }
-        for index, c in enumerate(sampled)
-    ]
-    links = [
-        {"source": f"{canonical_circuit_identity(sampled[0])}_node", "target": f"{canonical_circuit_identity(sampled[1])}_node"}
-    ]
-    graph_json_path.write_text(
-        json.dumps({"directed": False, "multigraph": False, "graph": {}, "nodes": nodes, "links": links}),
-        encoding="utf-8",
-    )
-
-    graph_view_path = tmp_path / "graph-view.muy-alta.2026-01-01_2026-01-02.html"
-    view_outcome = graph_view_builder.build_graph_view(graph_json_path, sampled, graph_view_path)
-    assert view_outcome.status == "success"
-    standalone_view_html = graph_view_path.read_text(encoding="utf-8")
-
-    request = informe_contract.normalize_request("muy-alta", "2026-01-01", "2026-01-02")
-    outcome = informe_contract.render_and_write(
-        request,
-        data_path="data.csv",
-        output_root=tmp_path / "html",
-        graph_patterns_path=graph_patterns_path,
-        graph_view_path=graph_view_path,
-        graph_circular_path=graph_circular_path,
-    )
-
-    assert outcome.status == "success"
-    written = Path(outcome.output_html).read_text(encoding="utf-8")
-
-    # Both real figures embedded, toggle control present.
-    assert written.count("srcdoc=") == 2
-    assert "graph-toggle-btn" in written
-
-    # Circular graph is visible by default, community graph starts hidden.
-    circular_panel = re.search(r'<div id="graph-toggle-circular"[^>]*>', written)
-    community_panel = re.search(r'<div id="graph-toggle-community"[^>]*>', written)
-    assert circular_panel is not None and "display:none" not in circular_panel.group(0)
-    assert community_panel is not None and "display:none" in community_panel.group(0)
-
-    # The community graph's embedded content is UNCHANGED by the circular
-    # graph's presence -- the same bytes `build_graph_view` wrote standalone
-    # are what ends up escaped inside the report's srcdoc.
-    assert html_lib.escape(standalone_view_html) in written
+    assert de_la_prosa == de_la_figura
+    assert "línea MT / falla física" in de_la_prosa

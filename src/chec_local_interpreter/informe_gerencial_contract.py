@@ -13,16 +13,18 @@ samples the top-12 most representative circuits (smallest `centroid_distance`
 to their assigned cluster centroid), detects any of them missing a prior
 `/report` run, and loads their narrative content.
 
-Content sourcing (Phase 3): vault-note-preferred with a raw-JSON fallback is
-the DESIGNED end state (`vault_note_contract.find_latest_run` /
-`load_run_narratives`, from the sibling `vault-circuito` change). That module
-is NOT YET present on this branch (its PRs are open but unmerged), so this
-file implements the fallback path -- reading `expert-alignment.out.json`
-directly from `reports/interpretability/runs/{canonical_circuit}/` -- as the
-PRIMARY path for now. `find_latest_run`/`load_circuit_content` are structured
-so that once `vault_note_contract` lands, swapping the local fallback
-implementations for the vault-note-preferred ones is a localized, additive
-change (same function names/signatures, no call-site churn).
+Content sourcing (Phase 3): vault-note-preferred, with the raw
+`expert-alignment.out.json` under
+`reports/interpretability/runs/{canonical_circuit}/` as the fallback -- both
+paths live in `load_circuit_content`.
+
+`find_latest_run` here deliberately does NOT delegate to the same-named
+`vault_note_contract.find_latest_run`, even though that module now exists.
+The two answer different questions: that one returns the newest run directory
+outright, this one returns the newest run whose OWN
+`expert-alignment.out.json` validates -- i.e. a run that actually finished.
+`detect_missing_runs` depends on that stricter reading, so a half-written run
+is reported as missing instead of silently passing as complete.
 """
 
 from __future__ import annotations
@@ -32,6 +34,7 @@ import html as html_lib
 import json
 import re
 import statistics
+import unicodedata
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -72,13 +75,43 @@ DEFAULT_CIRCUIT_HTML_ROOT = PROJECT_ROOT / "reports" / "interpretability" / "htm
 # from each circuit's own `cause_hypothesis_note` (historical agent output).
 # Substring matches only -- no inference, no invented causes -- just
 # cross-circuit tallying of themes the historical agent already wrote.
-_CAUSE_THEME_KEYWORDS: dict[str, tuple[str, ...]] = {
+#
+# Keywords are written WITHOUT accents on purpose: `cause_themes` strips
+# accents from the note before matching, because the historical agent writes
+# some notes accented ("condiciones atmosféricas") and others not
+# ("condiciones atmosfericas") for the same circuit corpus. Measured over the
+# 30 notes on disk: every one of them lands in at least one bucket.
+CAUSE_THEME_KEYWORDS: dict[str, tuple[str, ...]] = {
     "fauna": ("fauna", "animal"),
-    "conductor/vegetación": ("conductor", "vegetaci", "árbol", "arbol", "rama"),
-    "clima/atmosférico": ("atmosf", "clima", "viento", "lluvia", "precipita", "ráfaga", "rafaga"),
-    "protección/maniobra": ("protecci", "maniobra", "transformador"),
-    "topológico/recurrencia de vanos": ("topológic", "topologic", "recurrent", "vano"),
+    "conductor/vegetación": ("conductor", "vegetaci", "arbol", "rama"),
+    "clima/atmosférico": ("atmosf", "clima", "viento", "lluvia", "precipita", "rafaga"),
+    "línea MT / falla física": ("media tension", "linea mt", " rota", " roto"),
+    "protección/maniobra": ("protecci", "maniobra", "transformador", "seccionador"),
+    "topológico/recurrencia de vanos": ("topologic", "recurrent", "vano", "cluster"),
 }
+
+def _strip_accents(text: str) -> str:
+    decomposed = unicodedata.normalize("NFD", text.lower())
+    return "".join(char for char in decomposed if unicodedata.category(char) != "Mn")
+
+
+def cause_themes(text: str | None) -> list[str]:
+    """Bucket a free-text cause hypothesis into the shared `CAUSE_THEME_KEYWORDS`
+    themes, accent-insensitively.
+
+    Single-sourced on purpose: both this module's "Hipótesis de causa
+    recurrentes" prose and `intervention_graph`'s radial figure call it, so the
+    report's text and its figure can never name different causes for the same
+    note. Deterministic (declaration order), never raises.
+    """
+    if not text:
+        return []
+    normalized = _strip_accents(text)
+    return [
+        theme
+        for theme, keywords in CAUSE_THEME_KEYWORDS.items()
+        if any(keyword in normalized for keyword in keywords)
+    ]
 
 _SAFE_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -143,9 +176,9 @@ def find_latest_run(circuito: str, *, runs_root: str | Path | None = None) -> Pa
     """Find the newest run directory for `circuito` that has a validated own
     `expert-alignment.out.json` (a fully completed prior `/report` run).
 
-    Fallback implementation (see module docstring): once
-    `vault_note_contract.find_latest_run` exists on this branch, this
-    function can delegate to it directly under the same name/signature.
+    Not a delegate of `vault_note_contract.find_latest_run` despite the shared
+    name -- see the module docstring: that one takes the newest run dir as-is,
+    this one requires the run to have actually finished.
 
     Never raises -- returns `None` when there is no qualifying prior run,
     the circuit directory doesn't exist, or any entry is unreadable.
@@ -309,12 +342,9 @@ def load_circuit_content(
     """Load narrative content for `circuito`: vault note preferred, raw JSON
     run artifact as fallback (spec: "Content sourcing").
 
-    Vault-note path is NOT YET implemented against a real
-    `vault_note_contract` module (unmerged on this branch, see module
-    docstring) -- `reports/vault/{canonical}.md` is still checked first so
-    the preference order matches the design once that module lands, but for
-    now the raw-JSON fallback is this function's only working source.
-    Returns `None` when neither a vault note nor a prior run exists.
+    `reports/vault/{canonical}.md` is checked first; the raw run artifact is
+    the fallback. Returns `None` when neither a vault note nor a completed
+    prior run exists.
 
     Beyond the base `circuito`/`source`/`content` shape, the raw-JSON path
     also surfaces the richer technical signal already produced upstream by
@@ -323,8 +353,10 @@ def load_circuit_content(
     `cause_hypothesis_note`/`variable_groups_used`/`recommended_actions`
     (historical) -- so `synthesize()` can build technical, non-descriptive
     cross-circuit sections instead of re-deriving this from scratch. The
-    vault-note branch cannot yet populate these (unmerged module, see
-    above), so it degrades to empty/`None` for them.
+    vault-note branch populates the SAME fields from the same run artifacts
+    via `_structured_fields` whenever a run dir is still resolvable; when it
+    is not, only `cause_hypothesis_note` is recovered (parsed from the note's
+    own markdown section) and the rest stay empty rather than fabricated.
     """
     vroot = Path(vault_root) if vault_root is not None else DEFAULT_VAULT_ROOT
     canonical = canonical_circuit_identity(circuito)
@@ -698,21 +730,20 @@ def _variable_group_counter(loaded_content: Sequence[dict[str, Any] | None]) -> 
 
 
 def _cause_theme_counter(loaded_content: Sequence[dict[str, Any] | None]) -> Counter:
-    """Tally, once per circuit, which `_CAUSE_THEME_KEYWORDS` theme(s) appear
+    """Tally, once per circuit, which `CAUSE_THEME_KEYWORDS` theme(s) appear
     in its own `cause_hypothesis_note` (historical agent output) -- pure
     deterministic substring matching against text the historical agent
     already wrote, never an LLM call or an invented cause.
+
+    Delegates the bucketing to the shared `cause_themes` helper so this prose
+    and `intervention_graph`'s radial figure can never disagree.
     """
     counter: Counter = Counter()
     for content in loaded_content:
         if not content:
             continue
-        note = (content.get("cause_hypothesis_note") or "").lower()
-        if not note:
-            continue
-        for theme, keywords in _CAUSE_THEME_KEYWORDS.items():
-            if any(keyword in note for keyword in keywords):
-                counter[theme] += 1
+        for theme in cause_themes(content.get("cause_hypothesis_note")):
+            counter[theme] += 1
     return counter
 
 
@@ -1088,52 +1119,103 @@ def _report_reference_html(report_html: str | None) -> str:
     return _escape(Path(report_html).name)
 
 
-def _graph_toggle_html(graph_view_html: str | None, graph_circular_html: str | None) -> str:
-    """Embed the circular (`graph_circular_html`) and community
-    (`graph_view_html`) graph figures, per spec "Dual-Graph Toggle" / design
-    D4:
-    - both available -> both embed as sibling `<iframe srcdoc>` blocks
-      behind a plain client-side button pair + a small inline `<script>`
-      (no new JS framework -- static-HTML-report philosophy); switching
-      only mutates `style.display`, never reloads the page. The circular
-      graph is the one visible on load (design D4/spec: it answers the
-      manager's cross-circuit question at a glance); the community graph
-      starts hidden.
-    - exactly one available -> that one embeds alone, no toggle control.
-    - neither available -> the SAME muted "figure not available this run"
-      indicator this module already used before the toggle existed
-      (independent degradation from the patterns list itself).
+INTERVENTION_SUMMARY_SCHEMA_VERSION = "informe-gerencial-grafo-intervencion/v1"
+
+
+def _intervention_summary_path(graph_intervencion_path: str | Path | None) -> Path | None:
+    """Mirror of `intervention_graph.summary_path`, kept here rather than
+    imported for the same cycle reason `load_intervention_summary` documents.
+    A test pins the two against each other so they cannot drift.
     """
-    if graph_circular_html and graph_view_html:
-        circular_frame = _iframe_srcdoc(graph_circular_html)
-        community_frame = _iframe_srcdoc(graph_view_html)
-        return f"""
-<div class="graph-toggle-controls">
-<button type="button" id="graph-toggle-circular-btn" class="graph-toggle-btn graph-toggle-btn-active" onclick="mostrarGrafoCircuitos('circular')">Grafo circular</button>
-<button type="button" id="graph-toggle-community-btn" class="graph-toggle-btn" onclick="mostrarGrafoCircuitos('comunidad')">Grafo de comunidades</button>
-</div>
-<div id="graph-toggle-circular" class="graph-toggle-panel">{circular_frame}</div>
-<div id="graph-toggle-community" class="graph-toggle-panel" style="display:none;">{community_frame}</div>
-<script>
-function mostrarGrafoCircuitos(nombre) {{
-  document.getElementById('graph-toggle-circular').style.display = nombre === 'circular' ? '' : 'none';
-  document.getElementById('graph-toggle-community').style.display = nombre === 'comunidad' ? '' : 'none';
-  document.getElementById('graph-toggle-circular-btn').classList.toggle('graph-toggle-btn-active', nombre === 'circular');
-  document.getElementById('graph-toggle-community-btn').classList.toggle('graph-toggle-btn-active', nombre === 'comunidad');
-}}
-</script>
+    if graph_intervencion_path is None:
+        return None
+    destination = Path(graph_intervencion_path)
+    return destination.with_suffix(destination.suffix + ".resumen.json")
+
+
+def load_intervention_summary(path: str | Path | None) -> dict[str, Any] | None:
+    """Load the causes/strategies summary `intervention_graph build` writes
+    beside its HTML figure (`<figura>.resumen.json`).
+
+    File handoff rather than an import: `intervention_graph` already imports
+    THIS module, so importing it back would close a cycle. Pure I/O, never
+    raises (threat matrix: path injection via `--graph-intervencion`):
+    missing/unreadable/malformed -> `None`.
+    """
+    if path is None:
+        return None
+    candidate = Path(path)
+    if not candidate.is_file():
+        return None
+    try:
+        payload = json.loads(candidate.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if not isinstance(payload.get("causas"), list) or not isinstance(payload.get("estrategias"), list):
+        return None
+    return payload
+
+
+def _intervention_graph_html(
+    graph_intervencion_html: str | None,
+    summary: dict[str, Any] | None,
+    *,
+    n_sampled: int,
+) -> str:
+    """Render the "Causas y estrategias de intervención" section: the radial
+    figure plus the same causes/strategies written out as text.
+
+    Deliberately INDEPENDENT of the graph-patterns section below it. The two
+    answer different questions from different sources, and coupling them (as
+    the previous dual-graph toggle did) meant a failed `graphify` rebuild also
+    took down a figure that never needed `graphify` in the first place. Omitted
+    entirely when fewer than 2 circuits were sampled, or when the builder
+    produced nothing this run -- there is no muted placeholder, because a
+    section that only ever says "not available" is noise in a managerial
+    report.
+    """
+    if n_sampled < 2 or not graph_intervencion_html:
+        return ""
+
+    badge = (
+        '<p class="badge-agentes">Síntesis de los agentes '
+        "(histórico + alineamiento experto)</p>"
+    )
+    bloques = [badge]
+    if summary:
+        causas = summary.get("causas") or []
+        estrategias = summary.get("estrategias") or []
+        if causas:
+            filas = "".join(
+                f"<li><strong>{_escape(item.get('concepto'))}</strong> &mdash; "
+                f"{_escape(item.get('soporte'))} de {n_sampled} circuitos</li>"
+                for item in causas
+            )
+            bloques.append(f"<h3>Causas compartidas</h3><ul>{filas}</ul>")
+        if estrategias:
+            filas = "".join(
+                f"<li><strong>{_escape(item.get('concepto'))}</strong> &mdash; "
+                f"{_escape(item.get('soporte'))} de {n_sampled} circuitos, "
+                f"prioridad {_escape(item.get('prioridad') or 'sin definir')}</li>"
+                for item in estrategias
+            )
+            bloques.append(f"<h3>Estrategias de intervención propuestas</h3><ul>{filas}</ul>")
+    bloques.append(_iframe_srcdoc(graph_intervencion_html, height=680))
+
+    cuerpo = "\n".join(bloques)
+    return f"""
+<section class="report-section">
+<h2>Causas y estrategias de intervención</h2>
+{cuerpo}
+</section>
 """
-    if graph_circular_html:
-        return _iframe_srcdoc(graph_circular_html)
-    if graph_view_html:
-        return _iframe_srcdoc(graph_view_html)
-    return "<p class='muted'>figura de grafo no disponible en esta corrida.</p>"
 
 
 def _graph_patterns_html(
     graph_patterns: list[dict[str, Any]] | None,
     graph_view_html: str | None,
-    graph_circular_html: str | None = None,
     *,
     n_sampled: int,
 ) -> str:
@@ -1146,14 +1228,14 @@ def _graph_patterns_html(
     min-support (`graph_patterns == []`); otherwise the populated itemized
     pattern list, always carrying the visible LLM-assisted provenance badge
     (spec: "Provenance labeling of the graph subsection") -- PLUS, only when
-    the itemized list itself is populated, the embedded graph figure(s) via
-    `_graph_toggle_html` (spec: "Dual-Graph Toggle", design D4): both the
-    community (`graph_view_html`) and circular (`graph_circular_html`)
-    graphs when both are available, behind a client-side toggle defaulting
-    to the circular graph; a single figure with no toggle when only one is
-    available; the existing muted "figure not available this run" indicator
-    when neither is (independent degradation from the patterns list,
-    design D5/spec "Graceful degradation").
+    the itemized list itself is populated, the embedded community figure
+    (`graph_view_html`), or a muted "not available this run" indicator when
+    that figure failed to build (independent degradation from the list
+    itself).
+
+    The radial causes/strategies figure USED to share this section behind a
+    toggle; it now has its own (`_intervention_graph_html`) because it no
+    longer comes from `graphify` and must not degrade with it.
     """
     if n_sampled < 2:
         return ""
@@ -1172,7 +1254,11 @@ def _graph_patterns_html(
             for pattern in graph_patterns
         )
         body = f"<ul>{rows}</ul>"
-        body += _graph_toggle_html(graph_view_html, graph_circular_html)
+        body += (
+            _iframe_srcdoc(graph_view_html)
+            if graph_view_html
+            else "<p class='muted'>figura de grafo no disponible en esta corrida.</p>"
+        )
 
     return f"""
 <section class="report-section">
@@ -1231,6 +1317,8 @@ h2 { font-size: 1.2rem; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; }
 .annex-subitems li { margin: 2px 0; color: #334155; }
 .badge-llm { display: inline-block; background: #ede9fe; color: #5b21b6; border-radius: 999px; padding: 2px 10px; font-size: 0.75rem; font-weight: 600; margin: 0 0 8px; }
 .badge-deterministic { display: inline-block; background: #dcfce7; color: #166534; border-radius: 999px; padding: 2px 10px; font-size: 0.75rem; font-weight: 600; margin: 0 0 8px; }
+.badge-agentes { display: inline-block; background: #dbeafe; color: #1e40af; border-radius: 999px; padding: 2px 10px; font-size: 0.75rem; font-weight: 600; margin: 0 0 8px; }
+.report-section h3 { font-size: 0.95rem; color: #334155; margin: 14px 0 4px; }
 """
 
 
@@ -1243,7 +1331,8 @@ def render_managerial_report(
     sampled: Sequence[str],
     graph_patterns: list[dict[str, Any]] | None = None,
     graph_view_html: str | None = None,
-    graph_circular_html: str | None = None,
+    graph_intervencion_html: str | None = None,
+    intervention_summary: dict[str, Any] | None = None,
 ) -> str:
     """Render the single standalone HTML report (spec: "Single HTML output
     per invocation") -- resumen/patrones/outliers/riesgo/acciones sections
@@ -1267,8 +1356,11 @@ def render_managerial_report(
 
     label = group.get("label") or group.get("slug") or "grupo"
     circuit_count = group.get("circuit_count", len(sampled))
+    intervention_section_html = _intervention_graph_html(
+        graph_intervencion_html, intervention_summary, n_sampled=len(sampled)
+    )
     graph_section_html = _graph_patterns_html(
-        graph_patterns, graph_view_html, graph_circular_html, n_sampled=len(sampled)
+        graph_patterns, graph_view_html, n_sampled=len(sampled)
     )
 
     return f"""<!DOCTYPE html>
@@ -1293,7 +1385,7 @@ def render_managerial_report(
 <p class="badge-deterministic">Cálculo determinista</p>
 {_list_html(synthesis['patrones_comunes'])}
 </section>
-{graph_section_html}
+{intervention_section_html}{graph_section_html}
 <section class="report-section">
 <h2>Circuitos atípicos (outliers)</h2>
 {_outliers_html(synthesis['circuitos_atipicos'])}
@@ -1332,18 +1424,19 @@ def render_and_write(
     output_root: str | Path | None = None,
     graph_patterns_path: str | Path | None = None,
     graph_view_path: str | Path | None = None,
-    graph_circular_path: str | Path | None = None,
+    graph_intervencion_path: str | Path | None = None,
 ) -> InformeGerencialOutcome:
     """Full render pipeline: re-resolve the SAME deterministic group/window/
     sampling as `resolve()` (K-Means is seeded, so the sampled set is
     reproducible), load each sampled circuit's content, synthesize, render,
     and persist the HTML report.
 
-    `graph_circular_path` (the `circuit_meta_graph build` export, PR1) is
-    loaded via the SAME `load_graph_view` reused for `graph_view_path` --
-    both are raw, pre-rendered HTML text with an identical never-raise
-    degrade contract (design: "reuse `load_graph_view` for both files"), so
-    no new loader is needed.
+    `graph_intervencion_path` (the `intervention_graph build` figure) is loaded
+    via the SAME `load_graph_view` reused for `graph_view_path` -- both are
+    raw, pre-rendered HTML text with an identical never-raise degrade
+    contract, so no new loader is needed. Its sibling
+    `<figura>.resumen.json` is read alongside it, so the section can also
+    NAME the causes and strategies instead of only drawing them.
 
     Called by the SKILL runbook's final step, AFTER the confirmation gate has
     cleared and any missing `/report` runs have already been auto-triggered
@@ -1399,7 +1492,10 @@ def render_and_write(
     ]
     graph_patterns = load_graph_patterns(graph_patterns_path, sampled)
     graph_view_html = load_graph_view(graph_view_path)
-    graph_circular_html = load_graph_view(graph_circular_path)
+    graph_intervencion_html = load_graph_view(graph_intervencion_path)
+    intervention_summary = load_intervention_summary(
+        _intervention_summary_path(graph_intervencion_path)
+    )
 
     synthesis = synthesize(sampled_records, loaded_content, group)
     html = render_managerial_report(
@@ -1410,7 +1506,8 @@ def render_and_write(
         sampled=sampled,
         graph_patterns=graph_patterns,
         graph_view_html=graph_view_html,
-        graph_circular_html=graph_circular_html,
+        graph_intervencion_html=graph_intervencion_html,
+        intervention_summary=intervention_summary,
     )
 
     try:
@@ -1470,7 +1567,7 @@ def _build_parser() -> argparse.ArgumentParser:
     render_command.add_argument("--output-root")
     render_command.add_argument("--graph-patterns")
     render_command.add_argument("--graph-view")
-    render_command.add_argument("--graph-circular")
+    render_command.add_argument("--graph-intervencion")
 
     return parser
 
@@ -1522,7 +1619,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             output_root=args.output_root,
             graph_patterns_path=args.graph_patterns,
             graph_view_path=args.graph_view,
-            graph_circular_path=args.graph_circular,
+            graph_intervencion_path=args.graph_intervencion,
         )
         print(outcome.to_json_text())
         return 0 if outcome.status == "success" else 2
