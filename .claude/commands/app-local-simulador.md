@@ -77,12 +77,23 @@ circuits, only 21% of the vano checkboxes have a cell in a given window.
 
 ## It rebuilds itself, and that is deliberate
 
-Unlike the other two, `iniciar` checks whether notebook 06 changed since the package was
-built — the manifest stores its sha1 — and rebuilds on its own if so. Do not suppress
-this. A package frozen from old startup cells feeding a newer notebook is the one way
-the dashboard draws data that no longer corresponds **without raising any error**.
+Unlike the other two, `iniciar` checks whether **any of its inputs** changed since the
+package was built and rebuilds on its own if so. Do not suppress this. A package frozen
+from stale inputs feeding a newer notebook is the one way the dashboard draws data that
+no longer corresponds **without raising any error**.
 
-If it rebuilds, say why: *"notebook 06 changed since the last build"*.
+The manifest stores one fingerprint per input under `insumos`, in two forms
+(`_comun/huellas.py`): **sha1** for the small ones — the notebook and the four files
+copied into the package, ~1 MB, so a `git checkout` that only moves timestamps does not
+trigger a rebuild — and **bytes + mtime** for the heavy ones (the 540 MB CSV, the bolsas
+artifact, the three shapefiles with their `.dbf`). Hashing those 909 MB on every start
+would cost seconds against the 0,3 s the package takes to load; a timestamp fails safe,
+so at worst a `git lfs pull` buys one extra rebuild. The whole check costs **1 ms**,
+measured.
+
+If it rebuilds, say why — the reason names the input: *"cambio Variables_simular.xlsx
+desde la ultima construccion"*. A package built before this existed reports *"el paquete
+lo construyo una version anterior, que no registraba sus insumos"* and rebuilds once.
 
 ## What to tell the user when it opens
 

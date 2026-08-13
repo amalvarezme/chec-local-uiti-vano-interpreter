@@ -33,7 +33,6 @@ vez de producir un cuaderno que muere dentro del servidor sin dejar rastro util.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import shutil
 import sys
@@ -44,6 +43,7 @@ AQUI = Path(__file__).resolve().parent
 sys.path.insert(0, str(AQUI.parent / "_comun"))
 
 import cuaderno as _cuaderno  # noqa: E402
+import huellas as _huellas  # noqa: E402
 import raiz as _raiz  # noqa: E402
 
 CUADERNO = _raiz.CUADERNOS / "06_uiti_vano_explicabilidad_simulador.ipynb"
@@ -53,6 +53,44 @@ COPIA = AQUI / "cuaderno" / "06_simulador.ipynb"
 # Las celdas que solo derivan. De la 8 en adelante empieza el tablero, que la copia
 # conserva intacto.
 CELDAS_DE_ARRANQUE = range(0, 8)
+
+# --- De que depende el paquete ---------------------------------------------------
+# Todo lo que el paquete congela sale de aqui, y el manifiesto guarda la huella de
+# cada uno para que `iniciar` pueda decir si alguno se movio. Antes solo se registraba
+# el cuaderno, y editar `Variables_simular.xlsx` dejaba a la aplicacion sirviendo el
+# catalogo anterior sin dar ningun error.
+#
+# Por CONTENIDO lo pequenio -- el cuaderno y los cuatro archivos que viajan dentro del
+# paquete, ~1 MB en total --, porque su sha1 cuesta microsegundos y un `git checkout`
+# mueve la fecha de todo sin cambiar nada.
+INSUMOS_POR_CONTENIDO = (
+    CUADERNO,
+    _raiz.datos("derived", "geometrias_014.json"),
+    _raiz.datos("models", "mil_vano_ventana_v1.pt"),
+    _raiz.datos("Actividades_mantenimiento_costos_2026.xlsx"),
+    _raiz.datos("Variables_simular.xlsx"),
+)
+# Por MARCA lo pesado: 909 MB que hashear costaria segundos en CADA arranque, contra
+# los 0,3 s que tarda el paquete en cargar. Un `git lfs pull` puede provocar una
+# reconstruccion de mas; nunca una de menos.
+#
+# De cada shapefile se miran el `.shp` y el `.dbf`: la geometria vive en el primero y
+# los atributos con los que se hace el join -- `G3E_FID`, `CIRCUITO` -- en el segundo,
+# asi que mirar solo uno deja pasar la mitad de los cambios posibles.
+INSUMOS_POR_MARCA = (
+    _raiz.datos("Indicadores_vano_v3.csv"),
+    _raiz.datos("derived", "bolsas_mil_full.joblib"),
+    *(_raiz.datos("GEO", f"{_nombre}.{_ext}")
+      for _nombre in ("MVLINSEC", "GDBCHEC_TRANSFOR", "SWITCHES")
+      for _ext in ("shp", "dbf")),
+)
+
+
+def huellas_actuales() -> dict:
+    """La huella de cada insumo AHORA. La comparacion contra la guardada la hace
+    `huellas.motivo_de_reconstruccion`, y la usa el arranque de la aplicacion."""
+    return _huellas.huellas_de_insumos(
+        por_contenido=INSUMOS_POR_CONTENIDO, por_marca=INSUMOS_POR_MARCA)
 
 # Por debajo de esto, alguna celda produjo un objeto vacio en silencio. `X_inst.npy`
 # sola pesa 88 MB, asi que un paquete de 50 MB no es un paquete valido.
@@ -120,7 +158,10 @@ def construir_paquete() -> dict:
 
     manifiesto = {
         "construido_en": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "cuaderno_sha1": hashlib.sha1(CUADERNO.read_bytes()).hexdigest(),
+        # Reemplaza al `cuaderno_sha1` suelto de antes: son los MISMOS insumos que
+        # produjeron lo que hay en `paquete/`, y con `huellas_actuales()` al arrancar
+        # basta para saber si alguno se movio.
+        "insumos": huellas_actuales(),
         "n_bolsas": len(espacio["BAG_INDEX"].keys),
         "n_instancias": int(espacio["X_INST"].shape[0]),
         "n_features": len(espacio["FEATURES_MIL"]),

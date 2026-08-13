@@ -19,9 +19,12 @@ variables sobre hasta 15 vanos no es un espacio precomputable.
 `Ctrl+C` lo detiene. Opciones de `iniciar`: `--no-abrir`, `--puerto N`,
 `--reconstruir`.
 
-`iniciar` **reconstruye por su cuenta** si el cuaderno 06 cambió: el paquete guarda el
-sha1 del cuaderno con el que se construyó, y usar uno viejo con un cuaderno nuevo es
-la única forma de que el tablero dibuje datos que ya no corresponden sin dar error.
+`iniciar` **reconstruye por su cuenta** si cambió cualquiera de sus insumos: usar un
+paquete viejo con insumos nuevos es la única forma de que el tablero dibuje datos que ya
+no corresponden sin dar error. El manifiesto guarda una huella por insumo bajo
+`insumos` — sha1 para el cuaderno y los cuatro archivos que viajan dentro del paquete,
+bytes + fecha para los pesados (el CSV de 540 MB, las bolsas y los tres shapefiles) —, y
+al arrancar dice cuál se movió. La comprobación cuesta 1 ms.
 
 ## Qué tarda y cuánto pesa
 

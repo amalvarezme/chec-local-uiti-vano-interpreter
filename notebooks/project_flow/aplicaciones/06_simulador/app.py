@@ -27,10 +27,11 @@ sys.path.insert(0, str(AQUI))
 sys.path.insert(0, str(AQUI.parent / "_comun"))
 
 import entorno  # noqa: E402
+import huellas  # noqa: E402
+import preparar  # noqa: E402  -- por el modulo: `huellas_actuales` lee sus listas
 import servidor  # noqa: E402
 from preparar import (  # noqa: E402
     COPIA,
-    CUADERNO,
     NOMBRE_KERNEL,
     NOMBRE_KERNEL_VISIBLE,
     PAQUETE,
@@ -57,22 +58,25 @@ def _asegurar_kernel() -> None:
 
 
 def _hace_falta_construir() -> str | None:
-    """Devuelve el motivo por el que hay que (re)construir, o None si no hace falta."""
+    """Devuelve el motivo por el que hay que (re)construir, o None si no hace falta.
+
+    No es paranoia: el paquete congela objetos que salen de las celdas de arranque, y
+    el resto del cuaderno los consume suponiendo su forma. Un insumo editado con un
+    paquete viejo es la unica manera de que el tablero dibuje datos que ya no
+    corresponden sin que nada de error.
+
+    Se miran TODOS los insumos y no solo el cuaderno. Antes solo se comparaba su
+    sha1, y ajustar `data/Variables_simular.xlsx` -- que viaja copiado dentro del
+    paquete y decide que controles ofrece el panel -- dejaba a la aplicacion sirviendo
+    el catalogo anterior, en silencio.
+    """
     manifiesto = PAQUETE / "manifiesto.json"
     if not manifiesto.exists() or not COPIA.exists():
         return "todavia no esta construido"
-    import hashlib
     import json
 
-    sha_actual = hashlib.sha1(CUADERNO.read_bytes()).hexdigest()
-    sha_paquete = json.loads(manifiesto.read_text("utf-8")).get("cuaderno_sha1")
-    if sha_actual != sha_paquete:
-        # No es paranoia: el paquete congela objetos que salen de las celdas de
-        # arranque, y el resto del cuaderno los consume suponiendo su forma. Un
-        # cuaderno editado con un paquete viejo es la unica manera de que el tablero
-        # dibuje datos que ya no corresponden sin que nada de error.
-        return "el cuaderno 06 cambio desde la ultima construccion"
-    return None
+    guardadas = json.loads(manifiesto.read_text("utf-8")).get("insumos")
+    return huellas.motivo_de_reconstruccion(guardadas, preparar.huellas_actuales())
 
 
 def main() -> int:
