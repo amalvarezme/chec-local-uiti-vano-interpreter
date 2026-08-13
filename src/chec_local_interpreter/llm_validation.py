@@ -68,35 +68,20 @@ def _flatten_strings(value: Any) -> list[str]:
 
 
 def _context_dates(context: dict[str, Any]) -> set[str]:
-    dates = {
-        str(item.get("fecha_dia"))
-        for item in context.get("daily_series", [])
-        if isinstance(item, dict) and item.get("fecha_dia")
-    }
-    dates.update(
-        str(item.get("fecha_dia"))
-        for item in context.get("critical_points", [])
-        if isinstance(item, dict) and item.get("fecha_dia")
-    )
-    for item in context.get("critical_periods", []):
+    """Las fechas que el historiador puede citar sin inventar.
+
+    Salen de los extremos de cada VENTANA. Antes salian de la serie diaria y de los
+    puntos criticos, que es la rejilla que el informe dejo de tener: sin esta fuente el
+    universo se reduce a los dos extremos del periodo y el validador rechaza al agente
+    por citar correctamente el periodo de una ventana que el propio contexto le dio.
+    """
+    dates: set[str] = set()
+    for item in context.get("ventanas", []) or []:
         if not isinstance(item, dict):
             continue
-        if item.get("start_date"):
-            dates.add(str(item.get("start_date")))
-        if item.get("end_date"):
-            dates.add(str(item.get("end_date")))
-    dates.update(
-        str(item.get("d"))
-        for item in context.get("daily", [])
-        if isinstance(item, dict) and item.get("d")
-    )
-    # Also allow the overall analysis window start and end dates
-    window = context.get("window_summary")
-    if isinstance(window, dict):
-        if window.get("start_date"):
-            dates.add(str(window.get("start_date")))
-        if window.get("end_date"):
-            dates.add(str(window.get("end_date")))
+        for clave in ("desde", "hasta"):
+            if item.get(clave):
+                dates.add(str(item[clave]))
     metadata = context.get("metadata")
     if isinstance(metadata, dict):
         if metadata.get("start"):

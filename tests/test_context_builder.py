@@ -3,48 +3,61 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from chec_local_interpreter.attribution import enrich_critical_points
 from chec_local_interpreter.context_builder import _compute_circuit_characterization, build_context_package, vano_series_records, window_series_records
-from chec_local_interpreter.critical_points import build_daily_series, compute_daily_features, detect_point_reasons, rank_critical_points
 from chec_local_interpreter.plotting import CRITICALITY_GROUP_LABELS
+from chec_local_interpreter.ventanas_015 import construir_ventanas
 
 
 def test_context_package_includes_core_sections_and_missing_optional_columns():
     events = pd.DataFrame(
         {
             "CIRCUITO": ["C1", "C1"],
+            "FID_VANO": ["V1", "V1"],
             "FECHA": ["2026-01-01", "2026-01-02"],
             "UITI_VANO": [1.0, 10.0],
             "DESC_CAUSA": ["Vegetacion", "Vegetacion"],
         }
     )
-    daily = build_daily_series(events)
-    features = compute_daily_features(daily)
-    points = enrich_critical_points(events, rank_critical_points(features, detect_point_reasons(features), 12))
     context = build_context_package(
         events_df=events,
-        daily_df=daily,
-        critical_points=points,
-        critical_periods=[],
         selected_circuitos=["C1"],
         start_date="2026-01-01",
         end_date="2026-01-02",
     )
     assert context["selected_context"]["circuitos"] == ["C1"]
     assert context["selected_context"]["indicator"] == "UITI_VANO"
-    assert context["critical_points"]
+    assert context["ventanas"]
     assert context["domain"]["variable_groups"]
     assert "NR_T" in context["metadata"]["unavailable_cols"]
 
 
+def test_the_historian_context_no_longer_carries_critical_points_or_a_daily_series():
+    """El informe se apoya en el ranking del cuaderno 02 y en el diagnostico y la
+    simulacion del 06, y la unidad de los tres es la VENTANA. La deteccion de puntos
+    criticos ponia al historiador a describir DIAS: dos rejillas distintas sobre el
+    mismo periodo, que quien lee tiene que reconciliar de cabeza, y ninguna de las dos
+    coincide con la bolsa (vano, ventana) que el modelo puntua.
+    """
+    events = pd.DataFrame({
+        "CIRCUITO": ["C1", "C1"], "FID_VANO": ["V1", "V1"],
+        "FECHA": ["2026-01-01", "2026-01-02"], "UITI_VANO": [1.0, 10.0],
+    })
+
+    context = build_context_package(
+        events_df=events, selected_circuitos=["C1"],
+        start_date="2026-01-01", end_date="2026-01-02",
+    )
+
+    assert "critical_points" not in context
+    assert "critical_periods" not in context
+    assert "daily" not in context
+
+
 def test_missing_optional_columns_do_not_crash_context_generation():
-    events = pd.DataFrame({"CIRCUITO": ["C1"], "FECHA": ["2026-01-01"], "UITI_VANO": [1]})
-    daily = build_daily_series(events)
+    events = pd.DataFrame({"CIRCUITO": ["C1"], "FID_VANO": ["V1"],
+                           "FECHA": ["2026-01-01"], "UITI_VANO": [1]})
     context = build_context_package(
         events_df=events,
-        daily_df=daily,
-        critical_points=[],
-        critical_periods=[],
         selected_circuitos=["C1"],
         start_date="2026-01-01",
         end_date="2026-01-01",
@@ -170,15 +183,82 @@ def test_context_package_carries_the_window_series():
         {"CIRCUITO": ["C1", "C1"], "FID_VANO": ["V1", "V1"],
          "FECHA": ["2026-01-05", "2026-02-20"], "UITI_VANO": [2.0, 5.0]}
     )
-    daily = build_daily_series(eventos)
 
     paquete = build_context_package(
-        events_df=eventos, daily_df=daily, critical_points=[], critical_periods=[],
+        events_df=eventos,
         selected_circuitos=["C1"], start_date="2026-01-01", end_date="2026-03-01",
     )
 
     assert paquete["ventanas"], "el paquete del historiador tiene que traer las ventanas"
-    assert {"w", "uv", "n"} <= set(paquete["ventanas"][0])
+    assert {"w", "uv", "n", "desde", "hasta"} <= set(paquete["ventanas"][0])
+
+
+def test_the_window_grid_can_be_imposed_so_it_matches_the_bag_cache():
+    """Las etiquetas `V1`..`V11` NO son relativas al recorte: el cache de bolsas del
+    cuaderno 05 las fijo sobre el rango COMPLETO de la base. Derivarlas de los eventos
+    ya filtrados hace que la `V1` del historiador y la `V1` del modelo sean dos periodos
+    distintos con el mismo nombre, y nada en el informe lo delata.
+    """
+    completo = pd.date_range("2026-01-01", "2026-04-30", freq="D").to_series()
+    rejilla = construir_ventanas(completo)
+    # El circuito solo tiene eventos en marzo: por su cuenta, su primera ventana se
+    # llamaria V1, cuando en la rejilla completa es V5.
+    eventos = pd.DataFrame({
+        "CIRCUITO": ["C1"], "FID_VANO": ["V1"],
+        "FECHA": ["2026-03-05"], "UITI_VANO": [2.0],
+    })
+
+    propia = window_series_records(eventos, circuito="C1")
+    impuesta = window_series_records(eventos, circuito="C1", ventanas=rejilla)
+
+    assert [r["w"] for r in propia] == ["V1"], "por su cuenta el circuito se cree en V1"
+    assert [r["w"] for r in impuesta] == [v["etiqueta"] for v in rejilla]
+    # La rejilla SOLAPA a proposito -- mes completo y 15 a 15 --, asi que un evento cae
+    # en dos ventanas. Lo que importa aqui es CUALES: en la rejilla completa el 5 de
+    # marzo vive en V4 (15-feb a 14-mar) y V5 (marzo), nunca en V1 (enero).
+    con_eventos = {r["w"] for r in impuesta if r["n"] > 0}
+    assert con_eventos == {"V4", "V5"}
+    por_etiqueta = {r["w"]: r for r in impuesta}
+    assert por_etiqueta["V1"]["periodo"] == "2026-01-01 a 2026-01-31"
+    assert por_etiqueta["V5"]["desde"] == "2026-03-01"
+
+
+def test_the_context_declares_which_windows_the_report_studies():
+    """Las tres ventanas del estudio van declaradas: sin ellas el historiador recibe
+    once y elige por su cuenta cuales narrar, que es exactamente la decision que la
+    seleccion determinista existe para quitarle."""
+    eventos = pd.DataFrame(
+        {"CIRCUITO": ["C1", "C1"], "FID_VANO": ["V1", "V1"],
+         "FECHA": ["2026-01-05", "2026-02-20"], "UITI_VANO": [2.0, 5.0]}
+    )
+
+    paquete = build_context_package(
+        events_df=eventos, selected_circuitos=["C1"],
+        start_date="2026-01-01", end_date="2026-03-01",
+        ventanas_estudio=["V1", "V3"],
+    )
+
+    assert paquete["ventanas_estudio"] == ["V1", "V3"]
+    estudiadas = [r["w"] for r in paquete["ventanas"] if r["estudiada"]]
+    assert estudiadas == ["V1", "V3"]
+
+
+def test_the_summary_speaks_in_windows_because_that_is_the_unit_of_the_report():
+    """`nonzero_days` describia una rejilla diaria que ya no existe en el informe."""
+    eventos = pd.DataFrame(
+        {"CIRCUITO": ["C1", "C1"], "FID_VANO": ["V1", "V1"],
+         "FECHA": ["2026-01-05", "2026-02-20"], "UITI_VANO": [2.0, 5.0]}
+    )
+
+    resumen = build_context_package(
+        events_df=eventos, selected_circuitos=["C1"],
+        start_date="2026-01-01", end_date="2026-03-01",
+    )["summary"]
+
+    assert resumen["total_uv"] == pytest.approx(7.0)
+    assert resumen["ventanas_con_eventos"] >= 1
+    assert resumen["ventana_pico"]
+    assert "nonzero_days" not in resumen
 
 
 def test_vano_series_covers_every_window_for_each_identified_vano():
