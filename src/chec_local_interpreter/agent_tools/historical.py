@@ -47,8 +47,8 @@ from chec_local_interpreter.agent_tools.cli_support import dispatch as cli_dispa
 from chec_local_interpreter.circuit_identity import canonical_circuit_identity
 from chec_local_interpreter.llm_contracts import load_output_schema, render_prompt
 from chec_local_interpreter.llm_validation import (
-    allowed_critical_point_ids,
     allowed_dates,
+    allowed_ventanas,
     unavailable_columns,
     validar_provenance_base,
     validate_llm_response,
@@ -108,12 +108,11 @@ def build_context(payload: dict[str, Any]) -> dict[str, Any]:
         # enforces.
         "allowed": {
             "dates": sorted(allowed_dates(context)),
-            "critical_point_ids": sorted(allowed_critical_point_ids(context)),
             "unavailable_columns": sorted(unavailable_columns(context)),
             # Las etiquetas de ventana son citables: sin declararlas aqui el agente ve la
             # serie por ventana en `context` pero no puede nombrar una sola ventana sin
             # inventar un identificador fuera del universo permitido.
-            "ventanas": [str(v["w"]) for v in (context.get("ventanas") or [])],
+            "ventanas": sorted(allowed_ventanas(context)),
         },
     }
 

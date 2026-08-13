@@ -150,24 +150,28 @@ def extraer_fechas_informe(
     inference_validation_data: dict[str, Any] | None = None,
     context_package: dict[str, Any] | None = None,
     inference_context_package: dict[str, Any] | None = None,
-    critical_points: list[dict[str, Any]] | None = None,
     fecha_inicio: Any = None,
     fecha_fin: Any = None,
     fechas_interes: list[Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """Collect date points and intervals from the base, inference and context objects."""
+    """Collect date points and intervals from the base, inference and context objects.
+
+    `fechas_interes` son los extremos de las TRES ventanas que el informe estudia. Antes
+    entraban ademas los dias que la deteccion de puntos criticos señalaba, con la fuente
+    `critical_point` y el peso mas alto: la tabla de expertos se cruzaba contra dias que
+    ninguna otra parte del informe discutia.
+    """
     records: list[dict[str, Any]] = []
     records.extend(_extract_date_records_from_value(validation_data or {}, source="LLM1", peso=2.0))
     records.extend(_extract_date_records_from_value(inference_validation_data or {}, source="LLM2", peso=2.0))
     records.extend(_extract_date_records_from_value(context_package or {}, source="context", peso=0.75))
     records.extend(_extract_date_records_from_value(inference_context_package or {}, source="context", peso=0.75))
-    records.extend(_extract_date_records_from_value(critical_points or [], source="critical_point", peso=3.0))
 
     for value in fechas_interes or []:
         date = _date_text(value)
         if date:
             records.append({
-                "source": "critical_point",
+                "source": "ventana_estudiada",
                 "fecha_inicio": date,
                 "fecha_fin": date,
                 "descripcion": "FECHAS_INTERES",
@@ -576,44 +580,61 @@ def _extract_variable_name(value: Any) -> str | None:
 
 
 def _predictive_model_signals(inference_context_package: dict[str, Any] | None, *, limit: int = 40) -> list[dict[str, Any]]:
+    """Las senales del MIL que el comparador cruza contra la discusion experta.
+
+    Leia `top_variables` y `modos`, dos claves del camino MGCECDL que el contexto del MIL
+    nunca produce: desde el port, esta funcion devolvia SIEMPRE una lista vacia y el
+    comparador trabajaba sin una sola senal predictiva, sin que nada lo dijera.
+
+    Ahora lee lo que el contexto de verdad trae, y CONSERVA el grupo de cada variable.
+    Sin el, una racha de viento y una poda llegan al comparador como dos "variables
+    relevantes" indistinguibles, y la prioridad que salga puede recomendar algo que nadie
+    puede ejecutar.
+    """
     if not isinstance(inference_context_package, dict):
         return []
+    escenarios = inference_context_package.get("escenarios")
+    if not isinstance(escenarios, list):
+        return []
+
     signals: list[dict[str, Any]] = []
-    for scenario in inference_context_package.get("escenarios", []) if isinstance(inference_context_package.get("escenarios"), list) else []:
+    for scenario in escenarios:
         if not isinstance(scenario, dict):
             continue
-        scenario_name = str(scenario.get("nombre") or scenario.get("criterio") or "").strip()
-        for rank, item in enumerate(scenario.get("top_variables", []) if isinstance(scenario.get("top_variables"), list) else [], start=1):
-            variable = _extract_variable_name(item)
-            if variable:
-                signals.append({
-                    "variable": variable,
-                    "escenario": scenario_name,
-                    "rank": rank,
-                    "tipo_senal": "top_variable",
-                    "detalle": item if isinstance(item, dict) else str(item),
-                })
-        for mode in scenario.get("modos", []) if isinstance(scenario.get("modos"), list) else []:
-            if not isinstance(mode, dict):
-                continue
-            mode_name = str(mode.get("modo") or mode.get("nombre") or mode.get("grupo") or "").strip()
-            mode_variables = mode.get("variables") or mode.get("variables_asociadas") or mode.get("features") or []
-            if isinstance(mode_variables, list):
-                for variable in mode_variables[:10]:
-                    variable_name = _extract_variable_name(variable)
-                    if variable_name:
-                        signals.append({
-                            "variable": variable_name,
-                            "escenario": scenario_name,
-                            "modo": mode_name,
-                            "tipo_senal": "modo_grafo",
-                        })
-    graph_discussions = inference_context_package.get("graph_discussions") or inference_context_package.get("discusion_grafos")
-    if isinstance(graph_discussions, list):
-        for item in graph_discussions[:6]:
+        nombre = str(scenario.get("nombre") or "").strip()
+        ventana = str(scenario.get("ventana") or "").strip()
+        por_grupo = scenario.get("variables_por_grupo")
+        if isinstance(por_grupo, dict):
+            for grupo in ("Intervencion", "Escenario"):
+                for rank, fila in enumerate((por_grupo.get(grupo) or [])[:5], start=1):
+                    if not isinstance(fila, dict):
+                        continue
+                    variable = _extract_variable_name(fila.get("knob_id") or fila.get("label"))
+                    if not variable:
+                        continue
+                    signals.append({
+                        "variable": variable,
+                        "escenario": nombre,
+                        "ventana": ventana,
+                        "grupo": grupo,
+                        "rank": rank,
+                        "tipo_senal": "relevancia_hacia_uiti_minimo",
+                        "vanos_que_alcanzan_bajo": fila.get("n_vanos_alcanza"),
+                        "vanos_evaluados": fila.get("n_vanos"),
+                        "avance_mediano": fila.get("avance_mediano"),
+                        "valor_tipico": fila.get("valor_tipico"),
+                    })
+        simulacion = scenario.get("simulacion")
+        if isinstance(simulacion, dict) and simulacion.get("vanos"):
+            bajan = sum(1 for v in simulacion["vanos"]
+                        if isinstance(v, dict) and int(v.get("delta_grupo") or 0) < 0)
             signals.append({
-                "tipo_senal": "lectura_grafo",
-                "detalle": _truncate_text(item, 300),
+                "escenario": nombre,
+                "ventana": ventana,
+                "tipo_senal": "simulacion_intervencion",
+                "vanos_simulados": len(simulacion["vanos"]),
+                "vanos_que_bajan_de_grupo": bajan,
+                "palancas": list(simulacion.get("knobs_usados") or []),
             })
     return signals[:limit]
 

@@ -1,15 +1,14 @@
 # Constructor de Contexto Estructurado
 
 Construye el contexto estructurado antes de cualquier llamada al LLM. El código
-determinístico en Python selecciona los circuitos, el periodo, la serie diaria, los
-puntos críticos y los resúmenes de atribución.
+determinístico en Python selecciona los circuitos, el periodo, la rejilla de ventanas y
+las tres ventanas que el informe estudia.
 
 ## Entradas
 
 - Dataframe filtrado para los circuitos y la ventana de fechas seleccionados.
-- Serie diaria de `UITI_VANO`.
-- Puntos críticos seleccionados por código.
-- Resúmenes de atribución para cada punto crítico.
+- Serie de `UITI_VANO` por ventana, completa y con cero donde no hubo eventos.
+- Las tres ventanas que el informe estudia (`ventanas_estudio`).
 - Grupos de variables de dominio.
 - Reglas de relación.
 
@@ -24,7 +23,6 @@ reproducirse.
 - Incluye explícitamente en la metadata las variables opcionales no disponibles.
 - Mantén los IDs como cadenas de texto.
 - Resume las filas crudas en lugar de enviar el dataset completo cuando la ventana sea grande.
-- Incluye suficientes filas de eventos alrededor de cada punto crítico para permitir la interpretación.
-- Incluye la serie diaria en forma compacta.
+- Incluye la serie por ventana completa, sin recortar las ventanas en cero.
 - Incluye las reglas de protección dentro del paquete de contexto.
 - No agregues evidencia externa, documentos, almacenes vectoriales, modelos, máscaras, simulaciones ni material de reporte final.

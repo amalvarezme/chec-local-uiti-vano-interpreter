@@ -132,8 +132,8 @@ evitar "el grafo demuestra que...".
 
 En salidas JSON del cuaderno `02_local_uiti_vano_interpretability_v3.ipynb`, los grafos
 HTML recibidos deben sintetizarse en dos entradas generales de `discusion_grafos` cuando
-apliquen: `seccion="periodo_completo"` para los grafos del periodo completo y
-`seccion="puntos_criticos"` para los grafos de fechas o puntos criticos. Cada lectura debe
+apliquen: `seccion` es la ETIQUETA DE LA VENTANA (`V1`..`V11`) cuyo grafo diferencia se
+discute, una entrada por ventana estudiada. Cada lectura debe
 conectar variables o modos relevantes con asociaciones relativas del grafo estimado, sin
 repetir solo rutas de archivo y sin duplicar discusion por
 escenario.
@@ -142,8 +142,8 @@ La forma JSON obligatoria de esas lecturas es una lista de objetos:
 
 ```json
 [
-  {"seccion": "periodo_completo", "lectura": "..."},
-  {"seccion": "puntos_criticos", "lectura": "..."}
+  {"seccion": "V7", "lectura": "..."},
+  {"seccion": "V11", "lectura": "..."}
 ]
 ```
 

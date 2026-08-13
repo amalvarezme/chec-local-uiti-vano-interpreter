@@ -102,10 +102,11 @@ present" (it isn't — any `data_ref` supplied is held to the full resolvability
   evidence-bearing list, the analog of expert-alignment's per-item sections). `agent` must equal
   `historical`. `rule` must be one of the seven base playbook ids ported into
   `.claude/skills/historical/SKILL.md`: `01_structured_context_builder`,
-  `02_critical_point_interpreter`, `03_uiti_vano_behavior_explainer`,
+  `02_window_interpreter`, `03_uiti_vano_behavior_explainer`,
   `04_domain_grounding_guardrails`, `05_llm_output_validator`, `06_base_repair`,
   `07_base_output_contract`. `data_ref` entries resolve against the circuit's allowed dates,
-  critical-point ids, and domain variables (never a variable marked unavailable for that context).
+  window labels (`V1`..`V11`), and domain variables (never a variable marked unavailable for
+  that context).
 
 ## Rule 7 — Cautious Language Register
 

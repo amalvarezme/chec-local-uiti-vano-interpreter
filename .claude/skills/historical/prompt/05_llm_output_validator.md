@@ -6,7 +6,8 @@ Valida cada respuesta del LLM antes de presentarla como análisis.
 
 - Ser JSON válido.
 - Cumplir con `uiti_vano_explanation.output_schema.json`.
-- Incluir solo fechas presentes en `critical_points` o `daily_series`.
+- Incluir solo fechas presentes en los extremos (`desde`/`hasta`) de alguna ventana del contexto, o el inicio y fin del periodo.
+- Anclar cada evidencia a una `ventana` declarada en el contexto (`V1`..`V11`).
 - No referenciar columnas no disponibles como si estuvieran presentes.
 - No afirmar el uso de RAG, bitácoras operativas, revisión normativa, modelos predictivos, máscaras, simulaciones ni generación de reportes finales.
 - Incluir limitaciones.

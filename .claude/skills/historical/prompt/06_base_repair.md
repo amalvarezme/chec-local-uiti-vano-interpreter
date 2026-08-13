@@ -10,7 +10,7 @@ Este modo se usa solo cuando una respuesta anterior no validó.
 - Devuelve SOLO JSON válido.
 - No incluyas markdown, etiquetas `<think>`, comentarios ni texto antes o después del JSON.
 - Usa únicamente el contexto de reparación entregado.
-- Usa solo fechas y `critical_point_id` presentes en `critical_points` o `metadata.start` / `metadata.end`.
+- Usa solo etiquetas de `ventana` presentes en el contexto, y solo fechas de sus extremos o de `metadata.start` / `metadata.end`.
 - No menciones RAG, bitácoras, normativa, what-if, simulación, máscaras ni reporte final.
 - Si hay columnas opcionales no disponibles en `metadata`, inclúyelas en `data_gaps`.
 - Uno de esos ítems debe tratar `NR_T` y `DDT` si aparecen en el contexto.
@@ -44,7 +44,7 @@ Este modo se usa solo cuando una respuesta anterior no validó.
       "evidence": [
         {
           "date": "YYYY-MM-DD",
-          "critical_point_id": "cp-YYYY-MM-DD",
+          "ventana": "V7",
           "variable": "UITI_VANO",
           "summary": "..."
         }
@@ -52,7 +52,7 @@ Este modo se usa solo cuando una respuesta anterior no validó.
       "referenced_events": [
         {
           "date": "YYYY-MM-DD",
-          "critical_point_id": "cp-YYYY-MM-DD",
+          "ventana": "V7",
           "indicator_value": 0,
           "selection_reason": "..."
         }
@@ -63,9 +63,7 @@ Este modo se usa solo cuando una respuesta anterior no validó.
   ],
   "circuit_characterization": {
     "text": "...",
-    "top_vanos_percentile": {{TOP_VANOS_PERCENTILE}},
-    "p97_vanos_uiti_vano": [],
-    "p97_vanos_eventos": [],
+    "ventanas_estudiadas": ["V7"],
     "top_3_modes_related": [],
     "probable_justifications_rules": [
       {

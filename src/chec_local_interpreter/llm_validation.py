@@ -92,18 +92,18 @@ def _context_dates(context: dict[str, Any]) -> set[str]:
     return dates
 
 
-def _critical_point_ids(context: dict[str, Any]) -> set[str]:
-    ids = {
-        str(item.get("critical_point_id"))
-        for item in context.get("critical_points", [])
-        if isinstance(item, dict) and item.get("critical_point_id")
+def _ventanas(context: dict[str, Any]) -> set[str]:
+    """Las etiquetas de ventana citables (`V1`..`V11`).
+
+    Sustituye al universo de `cp-YYYY-MM-DD` que producia la deteccion de puntos
+    criticos. La evidencia del historiador se ancla ahora a la ventana, que es la unidad
+    del ranking del cuaderno 02 y de la bolsa que el modelo puntua.
+    """
+    return {
+        str(item.get("w"))
+        for item in context.get("ventanas", []) or []
+        if isinstance(item, dict) and item.get("w")
     }
-    ids.update(
-        str(item.get("critical_period_id"))
-        for item in context.get("critical_periods", [])
-        if isinstance(item, dict) and item.get("critical_period_id")
-    )
-    return ids
 
 
 def _unavailable_columns(context: dict[str, Any]) -> set[str]:
@@ -123,10 +123,7 @@ def _guardrail_errors(data: dict[str, Any], context: dict[str, Any]) -> list[str
         if date not in allowed_dates:
             errors.append(f"Referenced date outside context: {date}")
 
-    allowed_ids = _critical_point_ids(context)
-    for referenced in re.findall(r"\bcp-\d{4}-\d{2}-\d{2}\b", full_text_blob):
-        if referenced not in allowed_ids:
-            errors.append(f"Referenced critical_point_id outside context: {referenced}")
+    allowed_ventanas = _ventanas(context)
     for finding in data.get("key_findings", []):
         if not isinstance(finding, dict):
             continue
@@ -135,11 +132,11 @@ def _guardrail_errors(data: dict[str, Any], context: dict[str, Any]) -> list[str
                 if not isinstance(item, dict):
                     continue
                 item_date = item.get("date")
-                item_id = item.get("critical_point_id")
+                item_ventana = item.get("ventana")
                 if item_date and str(item_date) not in allowed_dates:
                     errors.append(f"Referenced date outside context: {item_date}")
-                if item_id and str(item_id) not in allowed_ids:
-                    errors.append(f"Referenced critical_point_id outside context: {item_id}")
+                if item_ventana and str(item_ventana) not in allowed_ventanas:
+                    errors.append(f"Referenced ventana outside context: {item_ventana}")
 
     unavailable = _unavailable_columns(context)
     for column in unavailable:
@@ -193,9 +190,9 @@ def allowed_dates(context: dict[str, Any]) -> set[str]:
     return _context_dates(context)
 
 
-def allowed_critical_point_ids(context: dict[str, Any]) -> set[str]:
-    """Public re-export of `_critical_point_ids` for reuse by the agent-tools CLI layer."""
-    return _critical_point_ids(context)
+def allowed_ventanas(context: dict[str, Any]) -> set[str]:
+    """Public re-export of `_ventanas` for reuse by the agent-tools CLI layer."""
+    return _ventanas(context)
 
 
 def unavailable_columns(context: dict[str, Any]) -> set[str]:
@@ -216,7 +213,7 @@ BASE_AGENT_ID = "historical"
 
 BASE_PROVENANCE_RULES = frozenset({
     "01_structured_context_builder",
-    "02_critical_point_interpreter",
+    "02_window_interpreter",
     "03_uiti_vano_behavior_explainer",
     "04_domain_grounding_guardrails",
     "05_llm_output_validator",
@@ -224,7 +221,7 @@ BASE_PROVENANCE_RULES = frozenset({
     "07_base_output_contract",
 })
 
-_CP_REF_RE = re.compile(r"^cp-\d{4}-\d{2}-\d{2}$")
+_VENTANA_REF_RE = re.compile(r"^[Vv]\d+$")
 _BASE_DATE_REF_RE = re.compile(r"^20\d{2}-\d{2}-\d{2}$")
 
 
@@ -249,23 +246,24 @@ def _validate_provenance_data_ref_base(
     ref: Any,
     *,
     allowed_dates_set: set[str],
-    allowed_critical_point_ids_set: set[str],
+    allowed_ventanas_set: set[str],
     allowed_variable_tokens: set[str],
     unavailable: set[str],
 ) -> str | None:
     """Resolve one base-agent `data_ref` entry against its allowed universe.
 
     Returns an error message naming the offending reference, or `None` if it
-    resolves. A `data_ref` entry is either a `cp-YYYY-MM-DD` critical-point
-    id, an ISO date (`YYYY-MM-DD`), or a domain variable name — fails closed
-    (rejected) for anything else, including a variable explicitly marked
-    unavailable for this context.
+    resolves. A `data_ref` entry is either a window label (`V1`..`V11`), an ISO
+    date (`YYYY-MM-DD`), or a domain variable name — fails closed (rejected)
+    for anything else, including a variable explicitly marked unavailable for
+    this context. El anclaje era `cp-YYYY-MM-DD` y se fue con la deteccion de
+    puntos criticos: la ventana es la unidad del resto del informe.
     """
     text = str(ref).strip()
 
-    if _CP_REF_RE.match(text):
-        if text not in allowed_critical_point_ids_set:
-            return f"provenance.data_ref cites an unknown critical_point_id: {text}"
+    if _VENTANA_REF_RE.match(text):
+        if text not in allowed_ventanas_set:
+            return f"provenance.data_ref cites an unknown ventana: {text}"
         return None
 
     if _BASE_DATE_REF_RE.match(text):
@@ -356,7 +354,7 @@ def validar_provenance_base(data: dict[str, Any], context: dict[str, Any]) -> di
     entry from the hermetic `BASE_PROVENANCE_RULES` allow-list.
     """
     allowed_dates_set = allowed_dates(context)
-    allowed_critical_point_ids_set = allowed_critical_point_ids(context)
+    allowed_ventanas_set = allowed_ventanas(context)
     allowed_variable_tokens = _allowed_variable_tokens(context)
     unavailable = unavailable_columns(context)
 
@@ -364,7 +362,7 @@ def validar_provenance_base(data: dict[str, Any], context: dict[str, Any]) -> di
         return _validate_provenance_data_ref_base(
             ref,
             allowed_dates_set=allowed_dates_set,
-            allowed_critical_point_ids_set=allowed_critical_point_ids_set,
+            allowed_ventanas_set=allowed_ventanas_set,
             allowed_variable_tokens=allowed_variable_tokens,
             unavailable=unavailable,
         )
@@ -409,7 +407,7 @@ def save_invalid_output(response_text: str, errors: list[str], output_dir: str |
 # `_MESES`/`_parse_fecha`/`_iso_fecha`/`_overlaps` and `COLUMNAS_FINALES` are
 # ported verbatim from `the retired PDF-discussion notebook`
 # (deprecated), prefixed with `_` to match this module's existing private-
-# helper convention (`_context_dates`, `_critical_point_ids`, ...).
+# helper convention (`_context_dates`, `_ventanas`, ...).
 # `validate_pdf_discussion_row` combines the notebook's `validate_llm_row`
 # with the `parsed["Circuito"] = circuito_pdf` forcing step the notebook
 # performs just before calling it, so the "never trust the LLM's own

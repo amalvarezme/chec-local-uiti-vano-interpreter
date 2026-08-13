@@ -19,7 +19,7 @@ La respuesta debe preservar el analisis y mantener una estructura apta para el r
 - Incluir los `modos` necesarios para explicar el escenario sin inventar modos.
 - No copiar `tabla_top_vanos` completa; sintetizar los patrones relevantes.
 - `discusion_grafos` debe incluir hasta dos lecturas generales: una para
-  `seccion="periodo_completo"` y otra para `seccion="puntos_criticos"` cuando existan
+  `seccion` igual a la etiqueta de cada ventana estudiada cuando existan
   grafos HTML en ambas secciones.
 - Cada lectura de `discusion_grafos` debe ser apta para renderizarse como viñeta del
   apartado correspondiente del reporte.
@@ -30,10 +30,10 @@ La respuesta debe preservar el analisis y mantener una estructura apta para el r
 - Cada conclusion o bloque presentado como items debe tener maximo 5 items; si hay mas
   informacion, priorizar la mas relevante para el reporte.
 - La presentacion final debe consolidar la discusion general en una sola conclusion con dos
-  aspectos: `Número de Eventos` y `UITI_VANO`. La seccion de puntos criticos debe seguir el
+  aspectos: `Número de Eventos` y `UITI_VANO`. La seccion de cada ventana debe seguir el
   mismo patron cuando existan ambos escenarios.
 - Incluir `hipotesis_modelo_predictivo` con dos listas de items:
-  `periodo_completo` y `puntos_criticos`. Cada lista debe tener maximo 5 items y debe
+  `ventanas_estudiadas` y `plan_de_intervencion`. Cada lista debe tener maximo 5 items y debe
   sintetizar la discusion general junto con la discusion de grafos correspondiente.
 
 ## Claves Requeridas
@@ -115,12 +115,12 @@ Usar placeholders solo como nombres de campos; los valores deben venir del conte
   ],
   "discusion_grafos": [
     {
-      "seccion": "periodo_completo",
-      "lectura": "<lectura_general_de_los_grafos_estimados_del_periodo_completo>"
+      "seccion": "V7",
+      "lectura": "<lectura_del_grafo_diferencia_de_esa_ventana>"
     },
     {
-      "seccion": "puntos_criticos",
-      "lectura": "<lectura_general_de_los_grafos_estimados_de_puntos_criticos>"
+      "seccion": "V11",
+      "lectura": "<lectura_del_grafo_diferencia_de_otra_ventana_estudiada>"
     }
   ],
   "coherencia_grafo_modelo": [
@@ -136,11 +136,11 @@ Usar placeholders solo como nombres de campos; los valores deben venir del conte
   "hallazgos": ["<hallazgos_principales>"],
   "limitaciones": ["<limitaciones>"],
   "hipotesis_modelo_predictivo": {
-    "periodo_completo": [
-      "<hipotesis_del_modelo_para_periodo_completo_basada_en_escenarios_y_grafos>"
+    "ventanas_estudiadas": [
+      "<hipotesis_del_modelo_sobre_las_tres_ventanas_estudiadas>"
     ],
-    "puntos_criticos": [
-      "<hipotesis_del_modelo_para_puntos_criticos_basada_en_escenarios_y_grafos>"
+    "plan_de_intervencion": [
+      "<hipotesis_sobre_la_obra_que_sostiene_el_cambio_de_grupo>"
     ]
   }
 }
@@ -164,16 +164,16 @@ Antes de entregar, verificar:
 - Si se reportan grafos HTML del cuaderno 05, incluir ruta, escenario y fuente
   `reconstruccion_mgcecdl_rbf`.
 - Si se reportan grafos HTML del cuaderno 05, incluir en `discusion_grafos` una lectura para
-  `periodo_completo` y otra para `puntos_criticos` cuando existan grafos en ambas secciones,
+  cada ventana estudiada cuando existan grafos en varias ventanas,
   con asociaciones relativas y modos, sin repetir una discusión por escenario.
 - `discusion_grafos` debe ser lista de objetos con claves `seccion` y `lectura`; no debe ser
-  un diccionario con claves `periodo_completo` y `puntos_criticos`.
-- No entregar el JSON final si `entregables.grafos_html` incluye grafos de periodo completo y
-  puntos criticos pero `discusion_grafos` no tiene ambas secciones como objetos de lista.
-- `hipotesis_modelo_predictivo.periodo_completo` integra hallazgos, escenarios del periodo
-  completo y grafos de periodo completo.
-- `hipotesis_modelo_predictivo.puntos_criticos` integra escenarios y grafos de puntos
-  criticos.
+  un diccionario con claves `ventanas_estudiadas` y `plan_de_intervencion`.
+- No entregar el JSON final si hay grafos de varias ventanas pero `discusion_grafos` no las
+  trae como objetos de lista.
+- `hipotesis_modelo_predictivo.ventanas_estudiadas` integra hallazgos, escenarios y grafos
+  diferencia de las tres ventanas del estudio.
+- `hipotesis_modelo_predictivo.plan_de_intervencion` integra las variables de INTERVENCION y
+  la simulacion de los vanos criticos. No mezclar aqui variables de escenario.
 - Cada escenario incluye criterio de seleccion.
 - Cada escenario distingue Top-N configurado de Top-N efectivo si ambos existen.
 - Cada variable top tiene modo CHEC o queda marcada como `modo_no_identificado`.

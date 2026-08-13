@@ -6,7 +6,7 @@ from chec_local_interpreter.config import agent_prompt_dir
 
 REQUIRED_SKILLS = (
     "01_structured_context_builder.md",
-    "02_critical_point_interpreter.md",
+    "02_window_interpreter.md",
     "03_uiti_vano_behavior_explainer.md",
     "04_domain_grounding_guardrails.md",
     "05_llm_output_validator.md",
@@ -16,7 +16,7 @@ REQUIRED_SKILLS = (
 
 INFERENCE_REQUIRED_SKILLS = (
     "01_structured_context_builder.md",
-    "02_circuit_scenario_interpreter.md",
+    "02_window_scenario_interpreter.md",
     "03_uiti_vano_behavior_explainer.md",
     "04_graph_connectivity_guardrails.md",
     "05_llm_output_validator.md",

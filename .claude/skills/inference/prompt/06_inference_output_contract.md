@@ -47,14 +47,14 @@ Devuelve un objeto JSON con estas claves:
   "contexto": {"circuito": "...", "periodo": {"inicio": "...", "fin": "..."}, "modelo": "..."},
   "entregables": {"grafos_html": [{"escenario": "...", "path": "..."}]},
   "escenarios": [{"nombre": "...", "interpretacion": "..."}],
-  "discusion_grafos": [{"seccion": "periodo_completo", "lectura": "..."}, {"seccion": "puntos_criticos", "lectura": "..."}],
+  "discusion_grafos": [{"seccion": "V7", "lectura": "..."}, {"seccion": "V11", "lectura": "..."}],
   "coherencia_grafo_modelo": ["..."],
   "hallazgos": ["..."],
   "limitaciones": ["..."],
   "inferencias_predictivas": [{"horizonte": "periodo analizado", "riesgo": "...", "justificacion_modelo": "..."}],
   "hipotesis_modelo_predictivo": {
-    "periodo_completo": ["..."],
-    "puntos_criticos": ["..."]
+    "ventanas_estudiadas": ["..."],
+    "plan_de_intervencion": ["..."]
   }
 }
 ```
@@ -72,20 +72,17 @@ Devuelve un objeto JSON con estas claves:
 Agregar en `discusion_grafos`:
 
 - `discusion_grafos` debe ser siempre un arreglo/lista de objetos. No usar un objeto tipo
-  `{"periodo_completo": "...", "puntos_criticos": "..."}`.
-- Una lectura con `seccion="periodo_completo"` cuando existan grafos HTML de periodo
-  completo.
-- Una lectura con `seccion="puntos_criticos"` cuando existan grafos HTML de fechas o puntos
-  criticos.
+  `{"V7": "...", "V11": "..."}`.
+- Una lectura por VENTANA estudiada, con `seccion` igual a su etiqueta (`V1`..`V11`),
+  cuando esa ventana tenga grafo diferencia.
 - Cada lectura puede cubrir dos aspectos internos: `Número de Eventos` y `UITI_VANO`.
 
 Cada lectura debe:
 
 - Conectar variables o modos relevantes con asociaciones del grafo.
 - Evitar repetir solo rutas de archivo.
-- Antes de responder, verificar que si `entregables.grafos_html` contiene rutas de periodo
-  completo y puntos criticos, entonces existen exactamente entradas equivalentes en
-  `discusion_grafos` para ambas secciones.
+- Antes de responder, verificar que exista una entrada de `discusion_grafos` por cada
+  ventana con grafo diferencia, y ninguna para una ventana que no lo tenga.
 
 ## Presentación Esperada en el Reporte
 
@@ -94,8 +91,8 @@ La discusion general del modelo debe consolidarse en una sola conclusion con dos
 - `Número de Eventos`: recurrencia o frecuencia.
 - `UITI_VANO`: severidad o impacto.
 
-La discusion de puntos criticos debe seguir el mismo patron: una sola conclusion con los
-dos aspectos cuando ambos existan.
+La discusion de cada ventana debe seguir el mismo patron: una sola conclusion con los dos
+aspectos cuando ambos existan.
 
 ## Inferencias predictivas
 
@@ -109,10 +106,12 @@ el mismo estilo ejecutivo de la hipótesis del agente de análisis histórico.
 
 Debe incluir:
 
-- `periodo_completo`: hipótesis para el periodo completo, basada en la discusión general de
-  `Número de Eventos`, `UITI_VANO`, hallazgos del modelo y discusión de grafos estimados.
-- `puntos_criticos`: hipótesis para las fechas o puntos críticos, basada en la discusión de
-  puntos críticos y los grafos estimados de puntos críticos.
+- `ventanas_estudiadas`: hipótesis sobre las tres ventanas del estudio, basada en la
+  relevancia hacia UITI mínimo de cada una, los hallazgos del modelo y los grafos
+  diferencia.
+- `plan_de_intervencion`: hipótesis sobre qué obra sostiene el cambio de grupo, basada en
+  las variables de **intervención** y en la simulación. No mezcles aquí variables de
+  escenario: una racha de viento no es un plan.
 
 Reglas:
 

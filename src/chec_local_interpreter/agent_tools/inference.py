@@ -51,7 +51,6 @@ from chec_local_interpreter.agent_tools._atomic_io import atomic_write_text as _
 from chec_local_interpreter.agent_tools.cli_support import dispatch as cli_dispatch
 from chec_local_interpreter.circuit_identity import canonical_circuit_identity
 from chec_local_interpreter.inference_validation import (
-    allowed_critical_point_ids,
     allowed_dates,
     allowed_scenario_names,
     allowed_ventanas,
@@ -107,7 +106,6 @@ def build_context(payload: dict[str, Any]) -> dict[str, Any]:
         # `validate` actually enforces.
         "allowed": {
             "dates": sorted(allowed_dates(context)),
-            "critical_point_ids": sorted(allowed_critical_point_ids(context)),
             "variables": sorted(allowed_variables(context)),
             "scenario_names": sorted(allowed_scenario_names(context)),
             # El escenario ES una ventana desde el port al MIL: sin declararlas, el

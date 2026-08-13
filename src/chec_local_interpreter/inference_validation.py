@@ -9,7 +9,7 @@ no guardrails, no provenance) with a two-stage gate reaching the same rigor as
 
     1. `validar_respuesta_inferencia_strict` — JSON-Schema conformance against
        `src/chec_local_interpreter/prompt_assets/inference.output_schema.json`, plus domain guardrails
-       (every date/`critical_point_id`-shaped and scenario-name token
+       (every date/window-label and scenario-name token
        referenced in the free text of the response must resolve against the
        circuit's own inference context).
     2. `validar_provenance_inferencia` — the additive, optional-per-item
@@ -46,7 +46,7 @@ INFERENCE_AGENT_ID = "inference"
 # (Phase 4).
 INFERENCE_PROVENANCE_RULES = frozenset({
     "01_structured_context_builder",
-    "02_circuit_scenario_interpreter",
+    "02_window_scenario_interpreter",
     "03_uiti_vano_behavior_explainer",
     "04_graph_connectivity_guardrails",
     "05_llm_output_validator",
@@ -55,10 +55,9 @@ INFERENCE_PROVENANCE_RULES = frozenset({
 
 _OUTPUT_SCHEMA_FILE = "inference.output_schema.json"
 
-_CP_REF_RE = re.compile(r"^cp-\d{4}-\d{2}-\d{2}$")
+_VENTANA_REF_RE = re.compile(r"^[Vv]\d+$")
 _DATE_REF_RE = re.compile(r"^20\d{2}-\d{2}-\d{2}$")
 _TEXT_DATE_RE = re.compile(r"\b20\d{2}-\d{2}-\d{2}\b")
-_TEXT_CP_REF_RE = re.compile(r"\bcp-\d{4}-\d{2}-\d{2}\b")
 
 
 def _load_schema() -> dict[str, Any]:
@@ -88,7 +87,7 @@ def _flatten_strings(value: Any) -> list[str]:
 
 # --- Public context accessors (reused by build_context/validate in
 # `agent_tools/inference.py`, mirroring historical's `allowed_dates`/
-# `allowed_critical_point_ids`/`unavailable_columns` re-exports). ---
+# `allowed_ventanas`/`unavailable_columns` re-exports). ---
 
 
 def allowed_dates(context: dict[str, Any]) -> set[str]:
@@ -113,19 +112,6 @@ def allowed_dates(context: dict[str, Any]) -> set[str]:
     if context.get("fecha_fin"):
         dates.add(str(context["fecha_fin"]))
     return dates
-
-
-def allowed_critical_point_ids(context: dict[str, Any]) -> set[str]:
-    """Derived `cp-YYYY-MM-DD` ids for every date in `allowed_dates`.
-
-    Unlike the historical/base context, the inference context package
-    (`circuit_analysis.construir_contexto_inferencia`) does not carry its own
-    explicit `critical_point_id` list — its dates of interest already
-    originate from the same critical points upstream, so the `cp-` id
-    universe is derived from `allowed_dates` using the same `cp-{date}`
-    convention historical/expert-alignment already use.
-    """
-    return {f"cp-{date}" for date in allowed_dates(context)}
 
 
 def allowed_variables(context: dict[str, Any]) -> set[str]:
@@ -200,11 +186,6 @@ def _guardrail_errors(data: dict[str, Any], context: dict[str, Any]) -> list[str
         if date not in dates_allowed:
             errors.append(f"Referenced date outside context: {date}")
 
-    cp_ids_allowed = allowed_critical_point_ids(context)
-    for cp_ref in _TEXT_CP_REF_RE.findall(full_text_blob):
-        if cp_ref not in cp_ids_allowed:
-            errors.append(f"Referenced critical_point_id outside context: {cp_ref}")
-
     scenario_names_allowed = allowed_scenario_names(context)
     for escenario in data.get("escenarios", []) or []:
         if not isinstance(escenario, dict):
@@ -252,13 +233,13 @@ def _validate_provenance_data_ref_inferencia(
     ref: Any,
     *,
     allowed_dates_set: set[str],
-    allowed_critical_point_ids_set: set[str],
+    allowed_ventanas_set: set[str],
     allowed_variable_tokens: set[str],
     allowed_scenario_names_set: set[str],
 ) -> str | None:
     """Resolve one inference-agent `data_ref` entry against its allowed universe.
 
-    A `data_ref` entry is either a `cp-YYYY-MM-DD` critical-point id, an ISO
+    A `data_ref` entry is either a window label (`V1`..`V11`), an ISO
     date, an exact scenario name (`context["escenarios"][*]["nombre"]`,
     matched verbatim since scenario names contain spaces/punctuation), or a
     `features` variable name (case-insensitive) — fails closed for anything
@@ -266,9 +247,9 @@ def _validate_provenance_data_ref_inferencia(
     """
     text = str(ref).strip()
 
-    if _CP_REF_RE.match(text):
-        if text not in allowed_critical_point_ids_set:
-            return f"provenance.data_ref cites an unknown critical_point_id: {text}"
+    if _VENTANA_REF_RE.match(text):
+        if text not in allowed_ventanas_set:
+            return f"provenance.data_ref cites an unknown ventana: {text}"
         return None
 
     if _DATE_REF_RE.match(text):
@@ -297,7 +278,7 @@ def validar_provenance_inferencia(data: dict[str, Any], context: dict[str, Any])
     the hermetic `INFERENCE_PROVENANCE_RULES` allow-list.
     """
     allowed_dates_set = allowed_dates(context)
-    allowed_critical_point_ids_set = allowed_critical_point_ids(context)
+    allowed_ventanas_set = allowed_ventanas(context)
     allowed_variable_tokens = allowed_variables(context)
     allowed_scenario_names_set = allowed_scenario_names(context)
 
@@ -305,7 +286,7 @@ def validar_provenance_inferencia(data: dict[str, Any], context: dict[str, Any])
         return _validate_provenance_data_ref_inferencia(
             ref,
             allowed_dates_set=allowed_dates_set,
-            allowed_critical_point_ids_set=allowed_critical_point_ids_set,
+            allowed_ventanas_set=allowed_ventanas_set,
             allowed_variable_tokens=allowed_variable_tokens,
             allowed_scenario_names_set=allowed_scenario_names_set,
         )
