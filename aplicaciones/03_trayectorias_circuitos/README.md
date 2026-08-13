@@ -10,7 +10,15 @@ gobernado por una ventana deslizante que reordena las opacidades en vivo.
 | macOS | Windows | qué hace |
 |---|---|---|
 | `instalar.command` | `instalar.bat` | una sola vez: crea el entorno e instala las dependencias |
-| `iniciar.command` | `iniciar.bat` | construye si hace falta, sirve el tablero y abre el navegador |
+| `Iniciar.app` (doble clic) o `iniciar.command` | `iniciar.bat` | construye si hace falta, sirve el tablero y abre el navegador |
+
+> **En macOS haz doble clic en `Iniciar.app`, no en `iniciar.command`.** Un `.command` lo
+> abre la aplicación que LaunchServices tenga atada a esa extensión, y eso lo fija cada
+> máquina: con Ghostty instalado, el doble clic se lleva el foco a la sesión que ya
+> tuvieras abierta y **no ejecuta nada** (Ghostty se declara *editor* de `.command`, no
+> *shell*). `Iniciar.app` no se puede desviar así, abre siempre una ventana nueva de
+> Terminal y la cierra sola cuando cierras el tablero. `iniciar.command` sigue ahí para
+> lanzarlo desde una terminal a propósito, y es el camino de Linux.
 
 `Ctrl+C` en la ventana lo detiene, y el botón **Cerrar tablero** de arriba a la derecha
 hace lo mismo desde el navegador.

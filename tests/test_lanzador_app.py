@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import os
 import plistlib
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -164,10 +165,17 @@ def test_el_doble_clic_pide_una_ventana_nueva_y_no_arranca_nada_todavia(dobles):
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="el bundle es de macOS")
-def test_el_perfil_de_ventana_manda_correr_el_guion_de_su_propio_bundle(dobles):
-    """El perfil es un plist con la ruta ABSOLUTA del guion de la ventana. Si apuntara a
-    otro bundle -- copiar y pegar entre las seis aplicaciones es lo natural aqui --, el
-    doble clic de una abriria otra, y las dos servirian en el puerto de la otra."""
+def test_el_perfil_de_ventana_acaba_llevando_al_guion_de_su_propio_bundle(dobles):
+    """La cadena entera: perfil -> trampolin -> guion de ESTE bundle.
+
+    El eslabon del medio existe porque `CommandString` con `RunCommandAsShell` no lo
+    interpreta ningun shell: se ejecuta tal cual, asi que una ruta con espacios no
+    arranca -- medido. El trampolin vive en `TMPDIR`, que no los tiene.
+
+    Y el ultimo eslabon importa por lo mismo que el resto de este archivo: si apuntara
+    al bundle de otra aplicacion -- copiar y pegar entre seis carpetas iguales es lo
+    natural aqui --, el doble clic de una abriria otra, en el puerto de otra.
+    """
     app = APPS / "01_clima"
     llamadas = dobles(app, EJECUTABLE)
 
@@ -176,11 +184,20 @@ def test_el_perfil_de_ventana_manda_correr_el_guion_de_su_propio_bundle(dobles):
     assert perfil, f"no se le paso ningun perfil a Terminal: {llamadas}"
     datos = plistlib.loads(Path(perfil[0]).read_bytes())
 
-    assert datos["CommandString"] == str(app / VENTANA)
     assert datos["type"] == "Window Settings"
-    # 0 es "cierra la ventana al terminar", que es la otra mitad de lo que se pidio: el
-    # boton de cerrar del tablero apaga puertos, proceso y ventana de una vez.
+    # Los dos, y medidos: sin `RunCommandAsShell` Terminal corre el comando dentro de un
+    # shell de login que sobrevive, y la ventana no se cierra nunca.
+    assert datos["RunCommandAsShell"] is True
     assert datos["shellExitAction"] == 0
+
+    trampolin = Path(datos["CommandString"])
+    assert " " not in str(trampolin), (
+        "el trampolin esta en una ruta con espacios, que es justo lo que no arranca")
+    assert trampolin.is_file() and os.access(trampolin, os.X_OK)
+    # El trampolin no lleva la ruta dentro -- para no tener que citarla -- sino el
+    # nombre del archivo que la contiene.
+    destino = Path(re.search(r'cat "([^"]+)"', trampolin.read_text(encoding="utf-8")).group(1))
+    assert destino.read_text(encoding="utf-8") == str(app / VENTANA)
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="el bundle es de macOS")

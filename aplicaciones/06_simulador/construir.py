@@ -20,4 +20,4 @@ if __name__ == "__main__":
     print()
     print(f"  Simulador listo. {manifiesto['n_bolsas']:,} bolsas | "
           f"{manifiesto['n_instancias']:,} instancias x {manifiesto['n_features']} features.")
-    print("  Arrancalo con iniciar.command (macOS) o iniciar.bat (Windows).")
+    print("  Arrancalo con Iniciar.app (macOS) o iniciar.bat (Windows).")

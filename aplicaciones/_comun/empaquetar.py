@@ -202,7 +202,7 @@ _PLANTILLA_CARGA = """
   if (location.protocol === 'file:') {
     aviso('Este tablero se tiene que abrir desde el servidor local, no con doble clic ' +
           'sobre el archivo: los datos se cargan aparte y el navegador bloquea esa lectura ' +
-          'sobre file://. Cierra esta pestana y usa iniciar.command (macOS) o iniciar.bat (Windows).');
+          'sobre file://. Cierra esta pestana y usa Iniciar.app (macOS) o iniciar.bat (Windows).');
     return;
   }
   fetch('__ARCHIVO_CTX__').then(function (r) {
@@ -321,7 +321,7 @@ _BOTON_CERRAR = """
           '&mdash; pasa cuando ya se navego dentro de ella, o en Firefox &mdash;, ' +
           'asi que cierrala tu.</p>' +
           '<p style="color:__TENUE__;">Para volver a abrirlo: ' +
-          '<code>iniciar.command</code> (macOS) o <code>iniciar.bat</code> ' +
+          '<code>Iniciar.app</code> (macOS) o <code>iniciar.bat</code> ' +
           '(Windows).</p></div>';
       }, 500);
     });

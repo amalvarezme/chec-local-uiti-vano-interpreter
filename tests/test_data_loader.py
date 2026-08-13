@@ -165,3 +165,43 @@ def test_loading_without_a_column_list_is_unchanged(tmp_path):
                   "prep_lag_0": ["0.1"]}).to_csv(csv, index=False)
 
     assert "prep_lag_0" in load_dataset(csv).columns
+
+
+def test_text_columns_are_backed_by_arrow_not_python_objects(tmp_path):
+    """`dtype=str` crea UN objeto Python por celda: 7,6 millones sobre el CSV real.
+
+    Medido: el frame ocupa 117 MB, pero la lectura retiene 2.713 MB -- los otros 2,6 GB
+    son heap que el asignador no devuelve al sistema, fragmentado por los objetos
+    temporales. Con `string[pyarrow]` el mismo frame retiene 157 MB.
+
+    `dtype='string'` es, ademas, lo que `dtype=str` pretendia expresar: columnas de
+    TEXTO. Que se guarden en un buffer contiguo en vez de en objetos sueltos no cambia
+    ni un valor.
+    """
+    import pandas as pd
+
+    csv = tmp_path / "datos.csv"
+    pd.DataFrame({"CIRCUITO": ["C1"], "FECHA": ["2026-01-01"],
+                  "UITI_VANO": ["1.5"]}).to_csv(csv, index=False)
+
+    frame = load_dataset(csv)
+
+    assert all(str(d) in {"string", "string[pyarrow]"} for d in frame.dtypes), frame.dtypes
+    assert frame["UITI_VANO"].iloc[0] == "1.5", "el valor sigue siendo el texto del archivo"
+
+
+def test_missing_cells_stay_missing_and_numeric_coercion_still_works(tmp_path):
+    """El cambio de respaldo mueve el marcador de ausente de `NaN` a `pd.NA`. Lo que el
+    flujo hace con esas celdas -- `pd.isna`, `to_numeric(errors='coerce')`, `fillna` --
+    tiene que seguir dando lo mismo, porque de ahi salen los ceros de la serie."""
+    import pandas as pd
+
+    csv = tmp_path / "datos.csv"
+    csv.write_text("CIRCUITO,FECHA,UITI_VANO\nC1,2026-01-01,\nC1,2026-01-02,2.5\n",
+                   encoding="utf-8")
+
+    frame = load_dataset(csv)
+
+    assert pd.isna(frame["UITI_VANO"].iloc[0])
+    valores = pd.to_numeric(frame["UITI_VANO"], errors="coerce").fillna(0.0)
+    assert valores.tolist() == [0.0, 2.5]

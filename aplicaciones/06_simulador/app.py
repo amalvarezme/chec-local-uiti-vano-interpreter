@@ -79,6 +79,14 @@ def _hace_falta_construir() -> str | None:
     return huellas.motivo_de_reconstruccion(guardadas, preparar.huellas_actuales())
 
 
+# El puerto que le da `.claude/commands/_contrato-apps-locales.md`. Solo se usa
+# cuando nadie pasa `--puerto`, o sea en el doble clic: los comandos y
+# CriticidadCHEC lo pasan siempre. Que cada tablero pida EL SUYO es lo que evita
+# que dos abiertos a la vez se peleen por un 8765 comun y el segundo acabe en un
+# puerto al azar, donde el menu ya no lo reconoce.
+PUERTO = 8866
+
+
 def main() -> int:
     analizador = argparse.ArgumentParser(description=__doc__)
     analizador.add_argument("--no-abrir", action="store_true")
@@ -101,7 +109,7 @@ def main() -> int:
         )
     _asegurar_kernel()
 
-    puerto = args.puerto or servidor.puerto_libre(8866)
+    puerto = args.puerto or servidor.puerto_libre(PUERTO)
     # El boton de cerrar del tablero corre DENTRO del kernel, y para detener la
     # aplicacion tiene que senalar al proceso de Voila, no al suyo: matar el kernel
     # dejaria el servidor en pie sirviendo una pagina muerta.

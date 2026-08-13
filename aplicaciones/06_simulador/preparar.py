@@ -332,7 +332,7 @@ setTimeout(function () {
     "<div style='font:17px/1.7 system-ui;padding:80px 40px;color:#2b2b2b'>" +
     "<b style='font-size:22px'>Simulador cerrado</b><br>" +
     "El servidor se detuvo. Ya puedes cerrar esta pestana.<br>" +
-    "<span style='color:#666'>Para volver a abrirlo: iniciar.command (macOS) o " +
+    "<span style='color:#666'>Para volver a abrirlo: Iniciar.app (macOS) o " +
     "iniciar.bat (Windows).</span></div>";
 }, 400);
 """

@@ -77,7 +77,7 @@ def main(argv: list[str] | None = None) -> int:
     if argumentos.accion == "instalar":
         entorno.crear(app, recrear=argumentos.recrear)
         print(f"\n  Entorno de {app.name} listo.")
-        print(f"  Siguiente paso: iniciar{'.bat' if entorno.ES_WINDOWS else '.command'}\n")
+        print(f"  Siguiente paso: {'iniciar.bat' if entorno.ES_WINDOWS else 'Iniciar.app'}\n")
         return 0
 
     if argumentos.accion == "construir":

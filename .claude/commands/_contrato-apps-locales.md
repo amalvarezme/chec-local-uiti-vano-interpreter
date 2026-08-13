@@ -7,10 +7,13 @@ description: Shared contract for the local desktop apps (`/app-local-*`) — pre
 > the three cannot drift apart.
 
 Every `/app-local-*` command opens one of the local dashboards built in
-`aplicaciones/`. Each app already has its own launchers
-(`iniciar.command` / `iniciar.bat`) for double-clicking from Finder or Explorer; these
-commands exist to do the same from the session, with the preflight and the diagnosis
-that a double-click cannot give.
+`aplicaciones/`. Each app already has its own launchers — `Iniciar.app` on macOS,
+`iniciar.bat` on Windows — for double-clicking from Finder or Explorer; these commands
+exist to do the same from the session, with the preflight and the diagnosis that a
+double-click cannot give.
+
+`iniciar.command` is still there, but it is the *terminal* path (and Linux's), not the
+double-click one. Why is restriction **R5**.
 
 ## A. Fixed port per app — never pick a free one
 
@@ -138,6 +141,25 @@ Do not re-diagnose these.
 - **R4 — the first request to the simulator is instant, the second is not.** It keeps
   one pre-executed kernel waiting: the first page load answers in 4 ms and the next one
   takes ~6 s while a new kernel starts. That is expected, not a fault.
+- **R5 — a `.command` file is opened by whatever LaunchServices has bound to it, and
+  that binding is per machine.** Measured with Ghostty installed: `open iniciar.command`
+  goes to Terminal.app and runs; `open -a Ghostty iniciar.command` runs **nothing** —
+  Ghostty claims `.command` with `CFBundleTypeRole = Editor`, so it just pulls focus to
+  the session already open. Nothing written *inside* the script can fix that, because
+  the script never runs. That is why the double-click entry is `Iniciar.app`: a bundle
+  cannot be opened *with* another app, it is launched. Do not "simplify" it back into a
+  `.command`.
+- **R6 — never drive Terminal.app with `osascript` from these launchers.** It needs the
+  Automation permission, and without it the call does not fail — it **hangs** waiting on
+  a dialog (measured: 19 s and counting, with a dead window on screen). Same trap as R1.
+  `Iniciar.app` writes a `.terminal` profile and hands it to `open`, which goes through
+  LaunchServices and asks for no permission. Two keys in that profile are load-bearing
+  and both were measured: `RunCommandAsShell` (false leaves the window open, because
+  Terminal runs the command *inside* a login shell that survives it) and
+  `shellExitAction = 0` (what closes the window when the dashboard closes). With
+  `RunCommandAsShell` true the `CommandString` is **not** parsed by a shell: `exec`,
+  quotes and spaces in the path all stop it from running, hence the trampoline script
+  the launcher writes into `TMPDIR`.
 
 ## H. Never
 

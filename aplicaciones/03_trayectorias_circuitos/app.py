@@ -17,6 +17,14 @@ import servidor  # noqa: E402
 PANEL = AQUI / "panel"
 
 
+# El puerto que le da `.claude/commands/_contrato-apps-locales.md`. Solo se usa
+# cuando nadie pasa `--puerto`, o sea en el doble clic: los comandos y
+# CriticidadCHEC lo pasan siempre. Que cada tablero pida EL SUYO es lo que evita
+# que dos abiertos a la vez se peleen por un 8765 comun y el segundo acabe en un
+# puerto al azar, donde el menu ya no lo reconoce.
+PUERTO = 8803
+
+
 def main() -> int:
     analizador = argparse.ArgumentParser(description=__doc__)
     analizador.add_argument("--no-abrir", action="store_true",
@@ -38,6 +46,7 @@ def main() -> int:
         runpy.run_path(str(AQUI / "construir.py"), run_name="__main__")
 
     servidor.servir(PANEL, abrir=not args.no_abrir, puerto=args.puerto,
+                    preferido=PUERTO,
                     verboso=args.verboso, menu=args.menu)
     return 0
 

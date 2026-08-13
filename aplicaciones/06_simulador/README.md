@@ -14,7 +14,15 @@ variables sobre hasta 15 vanos no es un espacio precomputable.
 | macOS | Windows | qué hace |
 |---|---|---|
 | `instalar.command` | `instalar.bat` | una sola vez: crea el entorno e instala las dependencias |
-| `iniciar.command` | `iniciar.bat` | construye si hace falta y sirve el simulador |
+| `Iniciar.app` (doble clic) o `iniciar.command` | `iniciar.bat` | construye si hace falta y sirve el simulador |
+
+> **En macOS haz doble clic en `Iniciar.app`, no en `iniciar.command`.** Un `.command` lo
+> abre la aplicación que LaunchServices tenga atada a esa extensión, y eso lo fija cada
+> máquina: con Ghostty instalado, el doble clic se lleva el foco a la sesión que ya
+> tuvieras abierta y **no ejecuta nada** (Ghostty se declara *editor* de `.command`, no
+> *shell*). `Iniciar.app` no se puede desviar así, abre siempre una ventana nueva de
+> Terminal y la cierra sola cuando cierras el tablero. `iniciar.command` sigue ahí para
+> lanzarlo desde una terminal a propósito, y es el camino de Linux.
 
 `Ctrl+C` lo detiene. Opciones de `iniciar`: `--no-abrir`, `--puerto N`,
 `--reconstruir`.

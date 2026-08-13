@@ -497,3 +497,63 @@ def test_el_javascript_que_se_agrega_encima_parsea(pieza: str):
         ruta = archivo.name
     hecho = subprocess.run(["node", "--check", ruta], capture_output=True, text=True)
     assert hecho.returncode == 0, hecho.stderr[:600]
+
+
+def test_puerto_libre_pregunta_lo_mismo_que_el_servidor():
+    """El sondeo no puede ser mas estricto que el servidor que va detras.
+
+    `_Servidor` pone `allow_reuse_address`, asi que toma sin problema un puerto que
+    quedo en TIME_WAIT -- que es exactamente el estado en el que queda el puerto justo
+    despues de cerrar el tablero. `puerto_libre` sondeaba SIN esa opcion, asi que
+    contestaba "ocupado" a un puerto que el servidor si habria tomado, y se iba a uno
+    aleatorio SIN DECIRLO: cerrar el tablero y volver a abrirlo lo mandaba a otra URL,
+    y el marcador del usuario dejaba de servir. Medido: `puerto_libre(57212)` devolvia
+    57214.
+    """
+    import socket
+
+    servidor = _comun("servidor")
+
+    # Se fabrica el TIME_WAIT: quien cierra primero la conexion se queda con el.
+    escucha = socket.socket()
+    escucha.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    escucha.bind(("127.0.0.1", 0))
+    puerto = escucha.getsockname()[1]
+    escucha.listen(1)
+    cliente = socket.create_connection(("127.0.0.1", puerto))
+    conexion, _ = escucha.accept()
+    conexion.close()
+    cliente.close()
+    escucha.close()
+
+    crudo = socket.socket()
+    try:
+        crudo.bind(("127.0.0.1", puerto))
+        pytest.skip("este sistema no dejo el puerto en TIME_WAIT; la prueba no aplica")
+    except OSError:
+        pass
+    finally:
+        crudo.close()
+
+    assert servidor.puerto_libre(puerto) == puerto
+
+
+@pytest.mark.parametrize("app", VISORES, ids=_ids(VISORES))
+def test_cada_visor_prefiere_el_puerto_que_le_da_el_contrato(app: Path):
+    """El puerto preferido tiene que ser el del contrato, y no un 8765 comun a todos.
+
+    Con el 8765 compartido pasaban dos cosas, las dos mudas: abrir DOS tableros por
+    doble clic mandaba el segundo a un puerto aleatorio, y un tablero abierto asi no lo
+    reconocia CriticidadCHEC -- que lo busca en el puerto del contrato --, con lo que el
+    menu levantaba una segunda copia de la misma aplicacion.
+    """
+    contrato = (RAIZ / ".claude" / "commands" / "_contrato-apps-locales.md").read_text(
+        encoding="utf-8")
+    declarados = dict(re.findall(r"\|\s*`([\w_]+)`\s*\|\s*\*\*(\d{4})\*\*\s*\|", contrato))
+    esperado = declarados[app.name]
+
+    codigo = (app / "app.py").read_text(encoding="utf-8")
+    encontrado = re.search(r"^PUERTO\s*=\s*(\d{4})", codigo, re.M)
+    assert encontrado, f"{app.name}/app.py no declara PUERTO"
+    assert encontrado.group(1) == esperado, (
+        f"{app.name} prefiere {encontrado.group(1)} y el contrato dice {esperado}")

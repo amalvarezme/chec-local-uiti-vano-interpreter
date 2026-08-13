@@ -293,9 +293,20 @@ def abrir_navegador(url: str) -> bool:
 
 
 def puerto_libre(preferido: int = 8765) -> int:
-    """Devuelve `preferido` si esta libre; si no, uno que el sistema asigne."""
+    """Devuelve `preferido` si esta libre; si no, uno que el sistema asigne.
+
+    El sondeo lleva `SO_REUSEADDR` porque el servidor que va detras lo lleva
+    (`_Servidor.allow_reuse_address`), y un sondeo mas estricto que el servidor miente:
+    decia "ocupado" de un puerto que el servidor si habria tomado.
+
+    Justo despues de cerrar un tablero, su puerto queda en TIME_WAIT. Sin esta opcion el
+    `bind` de prueba fallaba ahi, y volver a abrir el tablero se iba a un puerto
+    aleatorio SIN DECIRLO -- misma aplicacion, otra URL, y el marcador del usuario
+    apuntando a nada. Medido: `puerto_libre(57212)` devolvia 57214.
+    """
     for candidato in (preferido, 0):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             try:
                 s.bind(("127.0.0.1", candidato))
             except OSError:
@@ -305,8 +316,15 @@ def puerto_libre(preferido: int = 8765) -> int:
 
 
 def servir(carpeta: Path, *, abrir: bool = True, puerto: int | None = None,
-           verboso: bool = False, menu: str | None = None) -> None:
+           preferido: int = 8765, verboso: bool = False,
+           menu: str | None = None) -> None:
     """Sirve `carpeta` en 127.0.0.1 hasta que se interrumpa con Ctrl+C.
+
+    `puerto` lo fija quien llama -- los comandos `/app-local-*` y CriticidadCHEC lo
+    pasan siempre. `preferido` es para el doble clic, que no pasa ninguno: cada
+    aplicacion pide EL SUYO, el del contrato, y no un 8765 comun. Con el 8765 comun,
+    abrir dos tableros por doble clic mandaba el segundo a un puerto al azar, y ninguno
+    de los dos lo reconocia CriticidadCHEC, que los busca donde dice el contrato.
 
     `menu` es la URL de CriticidadCHEC cuando fue el quien lanzo este tablero. Con
     ella, el armazon sale con la barra de "Volver al menu" / "Cerrar todo" en vez del
@@ -322,7 +340,7 @@ def servir(carpeta: Path, *, abrir: bool = True, puerto: int | None = None,
         "piezas": piezas,
         "silencioso": not verboso,
     })
-    puerto = puerto or puerto_libre()
+    puerto = puerto or puerto_libre(preferido)
 
     # Solo 127.0.0.1: la aplicacion es local y no tiene ninguna autenticacion, asi que
     # escuchar en 0.0.0.0 la publicaria a toda la red de la oficina sin decirlo.

@@ -211,7 +211,7 @@ function despedirse(resultado) {
     '<div class="cerrado"><h1>CriticidadCHEC cerrado</h1>' +
     '<p>Se apago el menu' + (aviso ? '' : ' y las aplicaciones que tenia abiertas') +
     '. Ya puedes cerrar esta pestana.</p>' + aviso +
-    '<p style="color:__TENUE__">Para volver a abrirlo: iniciar.command (macOS) o ' +
+    '<p style="color:__TENUE__">Para volver a abrirlo: Iniciar.app (macOS) o ' +
     'iniciar.bat (Windows).</p></div>';
   // Solo si no hay nada que leer: cerrar la pestania encima de un aviso lo haria
   // invisible, que es la forma mas silenciosa posible de perder un proceso vivo.
