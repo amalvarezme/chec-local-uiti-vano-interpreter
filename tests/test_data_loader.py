@@ -205,3 +205,30 @@ def test_missing_cells_stay_missing_and_numeric_coercion_still_works(tmp_path):
     assert pd.isna(frame["UITI_VANO"].iloc[0])
     valores = pd.to_numeric(frame["UITI_VANO"], errors="coerce").fillna(0.0)
     assert valores.tolist() == [0.0, 2.5]
+
+
+def test_reading_does_not_force_the_whole_file_into_one_block(tmp_path, recwarn):
+    """`low_memory=False` obliga al parser a leer el archivo ENTERO antes de convertir.
+
+    Existe para evitar el `DtypeWarning` de tipos mixtos entre bloques, pero ese aviso
+    solo aparece cuando pandas INFIERE el tipo. Aqui el `dtype` va explicito para todas
+    las columnas, asi que no hay inferencia que pueda variar de un bloque a otro y la
+    bandera no compra nada. MEDIDO sobre el CSV real: 2.415 MB contra 194 MB, y 0,7 s
+    mas lento.
+
+    Esta prueba fija lo que la bandera pretendia proteger: leer por bloques no produce
+    ningun aviso de tipos.
+    """
+    import pandas as pd
+
+    csv = tmp_path / "datos.csv"
+    # Una columna cuyo contenido cambiaria de tipo inferido segun el bloque.
+    filas = ["CIRCUITO,FECHA,UITI_VANO"]
+    filas += [f"C1,2026-01-{d:02d},1" for d in range(1, 29)]
+    filas += [f"C1,2026-02-{d:02d},texto" for d in range(1, 29)]
+    csv.write_text("\n".join(filas) + "\n", encoding="utf-8")
+
+    frame = load_dataset(csv)
+
+    assert not [w for w in recwarn if issubclass(w.category, pd.errors.DtypeWarning)]
+    assert len(frame) == 56

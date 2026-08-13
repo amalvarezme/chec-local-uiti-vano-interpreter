@@ -1144,12 +1144,24 @@ def relevancia_hacia_uiti_minimo(
     return resultado
 
 
-MAX_FILAS_POR_PASADA = 400_000
+MAX_FILAS_POR_PASADA = 50_000
 """Cuantas filas como mucho arma `plan_hacia_clase_minima` en una sola pasada al modelo.
 
 Los ensayos de una ronda se apilan para puntuarlos juntos, y con una seleccion grande esa
 matriz crece con el numero de candidatos por el de instancias. El troceo no cambia el
 resultado -- cada ensayo vive en sus propias bolsas -- y evita pedir varios GB de golpe.
+
+Era 400.000. MEDIDO sobre una ventana real de 676 instancias y 162 ensayos:
+
+    400.000   11,3 s   pico +1.102 MB
+    100.000   11,1 s   pico    +26 MB
+     50.000   11,1 s   pico     +0 MB
+     10.000   11,4 s   pico     +0 MB
+
+El plan sale IDENTICO en los cuatro -- mismos pasos, mismo orden, misma clase final --,
+asi que 1,1 GB de pico no compraban nada. Y no es un intercambio: trocear mas fino sale
+igual o algo mas rapido, porque un tensor de 50.000 filas cabe en cache y uno de 400.000
+no. `test_el_troceo_no_cambia_el_plan_solo_el_pico_de_memoria` fija la invariante.
 """
 
 

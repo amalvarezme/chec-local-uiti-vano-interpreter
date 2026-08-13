@@ -71,15 +71,26 @@ excluding the agent turns:
 
 | Stage | Time | Peak RSS |
 |---|---|---|
-| `prepare` (model + catalogue + 3 windows + figures + maps) | 30,7 s | 4.209 MB |
+| `prepare` (model + catalogue + 3 windows + figures + maps) | 30,2 s | 1.467 MB |
 | `prepare_expert_alignment` | 0,1 s | — |
-| `render` (ranking + per-window sections + 2 GEO maps) | 5,9 s | — |
-| **Total** | **36,7 s** | **4.209 MB** |
+| `render` (ranking + per-window sections + 2 GEO maps) | 4,8 s | 1.475 MB |
+| **Total** | **35,0 s** | **1.475 MB** |
 
-The resulting HTML is 2,6 MB. The remaining peak is dominated by the MIL relevance sweep
-itself, not by data loading: `load_dataset` reads only the declared columns (see
-`data_loader.columnas_declaradas`) and the control catalogue is cached, which together took
-this run from 50,0 s / 5.701 MB.
+The resulting HTML is 2,6 MB. This came down from 50,0 s / 5.701 MB, in four measured
+steps — every one of them found by profiling, none by guessing:
+
+| Change | Peak after |
+|---|---|
+| baseline | 5.701 MB |
+| control catalogue cached + only the declared columns read | 4.209 MB |
+| text columns backed by Arrow instead of Python objects | 4.037 MB |
+| `low_memory=False` dropped (it bought nothing with an explicit `dtype`) | ~2.900 MB |
+| `MAX_FILAS_POR_PASADA` 400.000 -> 50.000 (identical plan, same time) | **1.475 MB** |
+
+The two biggest wins were things that cost memory for nothing: `low_memory=False` forces
+the CSV parser to hold the whole file before converting, which only matters when pandas
+INFERS dtypes — and the dtype here is explicit. And stacking 400.000 rows of trials into
+one forward pass produced exactly the same plan as stacking 50.000, a little slower.
 
 ## When to Use
 

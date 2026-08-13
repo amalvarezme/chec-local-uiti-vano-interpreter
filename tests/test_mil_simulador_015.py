@@ -772,3 +772,43 @@ def test_plegar_rezagos_leaves_a_name_without_a_numeric_suffix_alone():
 
     assert plegados == nombres
     assert plegada.shape == (3, 3)
+
+
+def test_el_troceo_no_cambia_el_plan_solo_el_pico_de_memoria():
+    """`MAX_FILAS_POR_PASADA` decide cuantos ensayos se apilan antes de puntuarlos.
+
+    No puede cambiar el resultado: cada ensayo vive en sus PROPIAS bolsas, asi que
+    puntuar diez juntos o diez por separado da los mismos u-hat por bolsa. Lo unico que
+    cambia es el tamanio del tensor que ve el modelo.
+
+    Medido sobre una ventana real de 676 instancias y 162 ensayos: con 400.000 el pico
+    era de 1.102 MB y con 50.000 es de 0 MB, en el mismo tiempo. Esta prueba es lo que
+    permite bajarlo sin temer que el plan se mueva.
+    """
+    import chec_local_interpreter.mil_simulador_015 as modulo
+
+    predictor = _PredictorFalso(_geometria())
+    X = np.array([[4.0, 1.0], [4.0, 1.0], [3.0, 1.0], [3.0, 1.0]], dtype=float)
+    seleccion = {
+        "n_bolsas": 2, "filas": np.array([0, 1, 2, 3]),
+        "instance_bag": np.array([0, 0, 1, 1]), "n_obs": np.array([2, 2]),
+        "fid": ["A", "B"],
+    }
+    knobs = [k for k in _knobs_numericos() if k.kind == "numeric"]
+
+    planes = []
+    for tope in (400_000, 8, 1):
+        original = modulo.MAX_FILAS_POR_PASADA
+        modulo.MAX_FILAS_POR_PASADA = tope
+        try:
+            planes.append(modulo.plan_hacia_clase_minima(
+                predictor, X, seleccion=seleccion, feature_names=["u_driver", "otra"],
+                knobs=knobs, puntos=3, max_pasos=2))
+        finally:
+            modulo.MAX_FILAS_POR_PASADA = original
+
+    def _huella(plan):
+        return {fid: [(p["knob_id"], str(p["valor"])) for p in e["pasos"]]
+                for fid, e in plan.items()}
+
+    assert _huella(planes[0]) == _huella(planes[1]) == _huella(planes[2])
