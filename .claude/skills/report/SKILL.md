@@ -64,6 +64,23 @@ consequences:
   intervention levers move in the simulation: a scenario control — rain, wind, temperature — is
   not something a crew executes, and presenting it next to pruning reads as equally actionable.
 
+## Measured cost of the deterministic path
+
+One real end-to-end run on `VBO23L15` (full date range, 3 studied windows, 15 vanos each),
+excluding the agent turns:
+
+| Stage | Time | Peak RSS |
+|---|---|---|
+| `prepare` (model + catalogue + 3 windows + figures + maps) | 30,7 s | 4.209 MB |
+| `prepare_expert_alignment` | 0,1 s | — |
+| `render` (ranking + per-window sections + 2 GEO maps) | 5,9 s | — |
+| **Total** | **36,7 s** | **4.209 MB** |
+
+The resulting HTML is 2,6 MB. The remaining peak is dominated by the MIL relevance sweep
+itself, not by data loading: `load_dataset` reads only the declared columns (see
+`data_loader.columnas_declaradas`) and the control catalogue is cached, which together took
+this run from 50,0 s / 5.701 MB.
+
 ## When to Use
 
 Load this Skill when the user asks for a full circuit report — `/report <circuito>` with optional
