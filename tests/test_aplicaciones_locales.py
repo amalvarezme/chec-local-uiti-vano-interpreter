@@ -573,8 +573,16 @@ def test_el_visor_construido_registra_de_que_insumos_salio(app: Path):
     sea: se actualizaba `Indicadores_vano_v3.csv`, se abria el tablero, y el tablero
     seguia dibujando los datos viejos **sin dar ningun error** -- que es la forma mas
     cara posible de equivocarse, porque las cifras se ven bien.
+
+    Se salta si el visor no esta construido: `panel/` esta en `.gitignore`, asi que un
+    clon recien hecho -- o un runner de CI -- no lo tiene, y ahi no hay nada que
+    comprobar todavia. Lo que no puede pasar es que la prueba falle por eso y se acabe
+    borrando la unica que vigila esto.
     """
-    manifiesto = json.loads((app / "panel" / "manifiesto.json").read_text(encoding="utf-8"))
+    ruta = app / "panel" / "manifiesto.json"
+    if not ruta.exists():
+        pytest.skip("este visor no esta construido en esta maquina")
+    manifiesto = json.loads(ruta.read_text(encoding="utf-8"))
     insumos = manifiesto.get("insumos")
     assert insumos, f"{app.name}: el manifiesto no registra insumos"
     assert "Indicadores_vano_v3.csv" in insumos, (
@@ -586,6 +594,8 @@ def test_un_visor_al_dia_no_se_reconstruye(app: Path):
     """El otro lado del trato: vigilar no puede volverse reconstruir siempre. Un visor
     tarda entre 4 y 8 s en construirse, y hacerlo en cada apertura anularia el motivo
     de que exista el paquete."""
+    if not (app / "panel" / "index.html").exists():
+        pytest.skip("este visor no esta construido en esta maquina")
     construccion = _comun("construccion")
     assert construccion.motivo_de_reconstruccion(app / "panel", _cuaderno_de(app)) is None
 
