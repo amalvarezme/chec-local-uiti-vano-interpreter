@@ -25,7 +25,7 @@ Un cambio en `plotting.py` no se refleja en Databricks hasta que se re-ejecuta `
 | `/agrupamiento-circuitos` | `/agrupamiento-circuitos` | Solo el scatter de clustering, sin reporte |
 | `/limpiar-corridas` | `/limpiar-corridas` (dry-run primero, confirmación explícita) | Borra artefactos desechables de corridas previas |
 
-Los cuatro agentes que hacen el razonamiento LLM (`historical`, `inference`, `auto-simulator`, `expert-alignment`) son los mismos en los tres comandos de reporte — `reporte-lote` e `informe-gerencial` nunca los reimplementan, solo re-invocan `.claude/skills/report/SKILL.md` por referencia.
+Los tres agentes que hacen el razonamiento LLM (`historical`, `inference`, `expert-alignment`) son los mismos en los tres comandos de reporte — `reporte-lote` e `informe-gerencial` nunca los reimplementan, solo re-invocan `.claude/skills/report/SKILL.md` por referencia.
 
 ### 2.2 Orquestación de `/report` (motor: `report_pipeline.py`)
 

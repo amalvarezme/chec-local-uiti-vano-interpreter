@@ -19,7 +19,7 @@ _UNSET = object()
 # ---------------------------------------------------------------------------
 
 
-def _minimal_raw_and_daily_df():
+def _minimal_raw_df():
     raw_df = pd.DataFrame(
         {
             "CIRCUITO": ["C1", "C1"],
@@ -28,14 +28,7 @@ def _minimal_raw_and_daily_df():
             "FID_VANO": ["V1", "V2"],
         }
     )
-    daily_df = pd.DataFrame(
-        {
-            "fecha_dia": pd.to_datetime(["2026-01-01", "2026-01-02"]),
-            "UITI_VANO": [10.0, 20.0],
-            "event_count": [1, 1],
-        }
-    )
-    return raw_df, daily_df
+    return raw_df
 
 
 def test_figure_html_embeds_persisted_png_path_as_base64_img(tmp_path):
@@ -43,7 +36,7 @@ def test_figure_html_embeds_persisted_png_path_as_base64_img(tmp_path):
     png_bytes = b"\x89PNG\r\n\x1a\n" + b"not-a-real-png-but-bytes-are-enough"
     png_path.write_bytes(png_bytes)
 
-    raw_df, daily_df = _minimal_raw_and_daily_df()
+    raw_df = _minimal_raw_df()
     inference_results = {
         "top_uiti_periodo": {
             "fig_barras": str(png_path),
@@ -56,8 +49,6 @@ def test_figure_html_embeds_persisted_png_path_as_base64_img(tmp_path):
     html_path = render_llm_analysis(
         validation_data={},
         raw_df=raw_df,
-        daily_df=daily_df,
-        critical_points=[],
         selected_circuitos=["TODOS"],
         inference_results=inference_results,
         inference_analysis={},
@@ -71,7 +62,7 @@ def test_figure_html_embeds_persisted_png_path_as_base64_img(tmp_path):
 
 
 def test_figure_html_nonexistent_png_path_falls_back_without_crash(tmp_path):
-    raw_df, daily_df = _minimal_raw_and_daily_df()
+    raw_df = _minimal_raw_df()
     inference_results = {
         "top_uiti_periodo": {
             "fig_barras": str(tmp_path / "does-not-exist.png"),
@@ -84,8 +75,6 @@ def test_figure_html_nonexistent_png_path_falls_back_without_crash(tmp_path):
     html_path = render_llm_analysis(
         validation_data={},
         raw_df=raw_df,
-        daily_df=daily_df,
-        critical_points=[],
         selected_circuitos=["TODOS"],
         inference_results=inference_results,
         inference_analysis={},
@@ -97,315 +86,133 @@ def test_figure_html_nonexistent_png_path_falls_back_without_crash(tmp_path):
     assert "<img" not in html
 
 
-def test_inference_layout_consolidates_general_discussion(tmp_path):
-    raw_df = pd.DataFrame(
-        {
-            "CIRCUITO": ["C1", "C1"],
-            "FECHA": ["2026-01-01", "2026-01-02"],
-            "UITI_VANO": [10.0, 20.0],
-            "FID_VANO": ["V1", "V2"],
-        }
-    )
-    daily_df = pd.DataFrame(
-        {
-            "fecha_dia": pd.to_datetime(["2026-01-01", "2026-01-02"]),
-            "UITI_VANO": [10.0, 20.0],
-            "event_count": [1, 1],
-        }
-    )
-    inference_results = {
-        "top_frecuencia_periodo": {"contexto": {"nombre": "Frecuencia periodo"}},
-        "top_uiti_periodo": {"contexto": {"nombre": "Severidad periodo"}},
-        "top_frecuencia_puntos_criticos": {"contexto": {"nombre": "Frecuencia puntos"}},
-        "top_uiti_puntos_criticos": {"contexto": {"nombre": "Severidad puntos"}},
-    }
-    inference_analysis = {
-        "hallazgos": ["Hallazgo general uno.", "Hallazgo general dos."],
-        "escenarios": [
-            {"nombre": "Frecuencia periodo", "interpretacion": "Frecuencia item uno. Frecuencia item dos."},
-            {"nombre": "Severidad periodo", "interpretacion": "Severidad item uno. Severidad item dos."},
-            {"nombre": "Frecuencia puntos", "interpretacion": "Frecuencia critica uno. Frecuencia critica dos."},
-            {"nombre": "Severidad puntos", "interpretacion": "Severidad critica uno. Severidad critica dos."},
-        ],
-        "discusion_grafos": [
-            {"seccion": "periodo_completo", "lectura": "Grafo periodo uno."},
-            {"seccion": "puntos_criticos", "lectura": "Grafo critico uno."},
-        ],
-        "hipotesis_modelo_predictivo": {
-            "periodo_completo": [
-                "El modelo sugiere que la recurrencia y la severidad del periodo se explican por señales combinadas de infraestructura y grafos."
-            ],
-            "puntos_criticos": [
-                "El modelo sugiere que los puntos críticos concentran señales consistentes entre variables priorizadas y grafos estimados."
-            ],
+def _resultado_de_ventana(ventana, nombre, png=None):
+    return {
+        "fig_serie": png,
+        "fig_barras": None,
+        "fig_uiti": None,
+        "fig_grafo": None,
+        "grafo_motivo": "",
+        "contexto": {
+            "nombre": nombre,
+            "ventana": ventana,
+            "periodo": "2026-01-01 a 2026-01-31",
+            "variables_por_grupo": {
+                "Intervencion": [
+                    {"knob_id": "ALTURA", "label": "Altura", "grupo": "Intervencion",
+                     "n_vanos": 10, "n_vanos_alcanza": 3, "avance_mediano": 0.42,
+                     "caida_mediana": 0.8, "valor_tipico": 18.0},
+                ],
+                "Escenario": [
+                    {"knob_id": "clima:wind_spd", "label": "Viento", "grupo": "Escenario",
+                     "n_vanos": 10, "n_vanos_alcanza": 7, "avance_mediano": 0.91,
+                     "caida_mediana": 1.9, "valor_tipico": 0.0},
+                ],
+            },
+            "simulacion": {
+                "knobs_usados": ["ALTURA"],
+                "vanos": [
+                    {"fid": "V1", "u_base": 90.0, "u_simulado": 12.0,
+                     "clase_base": 3, "clase_simulada": 1, "delta_grupo": -2,
+                     "pasos": [{"knob_id": "ALTURA", "valor": 18.0}]},
+                ],
+            },
         },
     }
 
-    html_path = render_llm_analysis(
+
+def test_inference_layout_renders_one_section_per_window(tmp_path):
+    """La seccion de figuras del modelo se renderizaba VACIA en todos los informes.
+
+    `_render_inference_layout` buscaba cuatro claves fijas del camino MGCECDL
+    (`top_uiti_periodo` y companía), pero `prepare` escribe los escenarios por VENTANA
+    desde el port al MIL. Ninguna coincidia, y el informe salia sin una sola figura del
+    modelo sin un solo mensaje.
+    """
+    raw_df = _minimal_raw_df()
+    inference_results = {
+        "V11": _resultado_de_ventana("V11", "C1 -- ventana V11"),
+        "V2": _resultado_de_ventana("V2", "C1 -- ventana V2"),
+    }
+    inference_analysis = {
+        "hallazgos": ["El circuito concentra su criticidad en dos ventanas."],
+        "escenarios": [
+            {"nombre": "C1 -- ventana V2", "interpretacion": "Lectura de la ventana V2."},
+            {"nombre": "C1 -- ventana V11", "interpretacion": "Lectura de la ventana V11."},
+        ],
+    }
+
+    html = render_llm_analysis(
         validation_data={},
         raw_df=raw_df,
-        daily_df=daily_df,
-        critical_points=[],
-        selected_circuitos=["TODOS"],
+        selected_circuitos=["C1"],
         inference_results=inference_results,
         inference_analysis=inference_analysis,
         output_dir=tmp_path,
-    )
-    html = html_path.read_text(encoding="utf-8")
+    ).read_text(encoding="utf-8")
 
-    assert html.count("Discusión general de inferencias del modelo") == 1
-    assert "Hallazgos generales del modelo de inferencia" not in html
-    assert "Discusión general de inferencias del modelo &mdash; Número de Eventos" not in html
-    assert "<h4>Número de Eventos</h4>" in html
-    assert "<h4>UITI_VANO</h4>" in html
-    assert "Hipótesis del modelo predictivo — período completo" in html
-    assert html.index("Hipótesis del modelo predictivo — período completo") > html.index("Discusión general de inferencias del modelo")
-    assert "Hipótesis del modelo predictivo — puntos críticos" in html
-    assert html.index("Hipótesis del modelo predictivo — puntos críticos") > html.index("Discusión de inferencias en puntos críticos")
-    assert html.count("Discusión de inferencias en puntos críticos") == 1
+    assert "Diagnostico y simulacion por ventana" in html
+    assert "Ventana V2" in html and "Ventana V11" in html
+    assert "Lectura de la ventana V2." in html
+    # Orden cronologico: V2 antes que V11, no el alfabetico de las etiquetas.
+    assert html.index("Ventana V2") < html.index("Ventana V11")
 
 
-def test_expert_alignment_tab_renders_auto_simulation_analysis():
-    table = pd.DataFrame(
-        [
-            {
-                "variable": "CNT_TRF",
-                "valor_original_base": 1.0,
-                "valor_minimo_usado": 0.0,
-                "valor_maximo_usado": 3.0,
-                "riesgo_base": 1.2,
-                "riesgo_base_etiqueta": "Riesgo bajo",
-                "riesgo_valor_minimo": 1.0,
-                "riesgo_valor_minimo_etiqueta": "Riesgo bajo",
-                "riesgo_valor_maximo": 1.5,
-                "riesgo_valor_maximo_etiqueta": "Riesgo alto",
-                "cambio_absoluto_minimo": -0.2,
-                "cambio_absoluto_maximo": 0.3,
-                "direccion_cambio_minimo": "disminuye riesgo",
-                "direccion_cambio_maximo": "aumenta riesgo",
-                "observacion": "CNT_TRF cambia el riesgo.",
-            },
-            {
-                "variable": "LONGITUD",
-                "valor_original_base": 10.0,
-                "valor_minimo_usado": 5.0,
-                "valor_maximo_usado": 20.0,
-                "riesgo_base": 2.1,
-                "riesgo_base_etiqueta": "Riesgo medio-alto (Q3)",
-                "riesgo_valor_minimo": 2.0,
-                "riesgo_valor_minimo_etiqueta": "Riesgo medio-alto (Q3)",
-                "riesgo_valor_maximo": 2.2,
-                "riesgo_valor_maximo_etiqueta": "Riesgo medio-alto (Q3)",
-                "cambio_absoluto_minimo": -0.1,
-                "cambio_absoluto_maximo": 0.1,
-                "direccion_cambio_minimo": "sin cambio relevante",
-                "direccion_cambio_maximo": "sin cambio relevante",
-                "observacion": "LONGITUD mantiene la clase.",
-            }
-        ]
-    )
-    analysis = {
-        "contexto": {"fuentes_usadas": ["Agente Descriptor", "Agente predictivo"]},
-        "coincidencias": [],
-        "diferencias": [],
-        "variables_a_priorizar": [
-            {
-                "variable": "CNT_TRF",
-                "prioridad": "Alta",
-                "fuentes_que_la_respaldan": ["Agente predictivo"],
-                "justificacion": "Variable sensible en simulación.",
-                "tipo_de_validacion_sugerida": "Revisión operativa",
-            }
-        ],
-        "sintesis_final": "Síntesis.",
-    }
-    auto_analysis = {
-        "resumen": ["Resumen del simulador con &#x27;Riesgo bajo (Q1)&#x27; legible."],
-        "variables_mas_sensibles": [
-            {"variable": "CNT_TRF", "lectura": "Mayor sensibilidad.", "mayor_cambio_abs": 0.3}
-        ],
-        "patrones_minimo_maximo": ["El mínimo baja y el máximo sube."],
-        "hallazgos_para_criticidad": ["Útil para revisar criticidad."],
-        "limitaciones": ["Una variable a la vez."],
-        "contexto_reutilizado": ["Variables priorizadas."],
-    }
-    cost_context = {
-        "disponible": True,
-        "metodo": "Coincidencia por tokens.",
-        "advertencias": [],
-        "coincidencias": [
-            {
-                "variable": "CNT_TRF",
-                "riesgo_base_etiqueta": "Riesgo bajo",
-                "riesgo_valor_minimo_etiqueta": "Riesgo bajo",
-                "riesgo_valor_maximo_etiqueta": "Riesgo alto",
-                "items_costo_cercanos": [
-                    {
-                        "item_costo": "SERVICIO DE INSTALACION DE TRANSFORMADOR TRIFASICO",
-                        "costo_promedio": 696655.0,
-                        "puntaje_cercania": 0.42,
-                    }
-                ],
-            }
-        ],
-    }
-    softmax_curves = {
-        "variables": [
-            {
-                "variable": "CNT_TRF",
-                "etiquetas_clase": [
-                    "Riesgo bajo (Q1)",
-                    "Riesgo medio-bajo (Q2)",
-                    "Riesgo medio-alto (Q3)",
-                    "Riesgo alto (Q4)",
-                ],
-                "filas": [
-                    {
-                        "valor_original": 0.0,
-                        "riesgo_ordinal_estimado": 0.2,
-                        "clase_estimacion": "Riesgo bajo (Q1)",
-                        "probabilidades": {
-                            "Riesgo bajo (Q1)": 0.9,
-                            "Riesgo medio-bajo (Q2)": 0.1,
-                            "Riesgo medio-alto (Q3)": 0.0,
-                            "Riesgo alto (Q4)": 0.0,
-                        },
-                    },
-                    {
-                        "valor_original": 3.0,
-                        "riesgo_ordinal_estimado": 2.6,
-                        "clase_estimacion": "Riesgo alto (Q4)",
-                        "probabilidades": {
-                            "Riesgo bajo (Q1)": 0.05,
-                            "Riesgo medio-bajo (Q2)": 0.05,
-                            "Riesgo medio-alto (Q3)": 0.2,
-                            "Riesgo alto (Q4)": 0.7,
-                        },
-                    },
-                ],
-                "mejor_escenario_menor_riesgo": {
-                    "valor_original": 0.0,
-                    "riesgo_ordinal_estimado": 0.2,
-                    "clase_estimacion": "Riesgo bajo (Q1)",
-                    "probabilidades": {
-                        "Riesgo bajo (Q1)": 0.9,
-                        "Riesgo medio-bajo (Q2)": 0.1,
-                        "Riesgo medio-alto (Q3)": 0.0,
-                        "Riesgo alto (Q4)": 0.0,
-                    },
-                },
-            },
-            {
-                "variable": "LONGITUD",
-                "etiquetas_clase": [
-                    "Riesgo bajo (Q1)",
-                    "Riesgo medio-bajo (Q2)",
-                    "Riesgo medio-alto (Q3)",
-                    "Riesgo alto (Q4)",
-                ],
-                "filas": [
-                    {
-                        "valor_original": 5.0,
-                        "riesgo_ordinal_estimado": 2.0,
-                        "clase_estimacion": "Riesgo medio-alto (Q3)",
-                        "probabilidades": {
-                            "Riesgo bajo (Q1)": 0.0,
-                            "Riesgo medio-bajo (Q2)": 0.2,
-                            "Riesgo medio-alto (Q3)": 0.7,
-                            "Riesgo alto (Q4)": 0.1,
-                        },
-                    }
-                ],
-                "mejor_escenario_menor_riesgo": {
-                    "valor_original": 5.0,
-                    "riesgo_ordinal_estimado": 2.0,
-                    "clase_estimacion": "Riesgo medio-alto (Q3)",
-                    "probabilidades": {
-                        "Riesgo bajo (Q1)": 0.0,
-                        "Riesgo medio-bajo (Q2)": 0.2,
-                        "Riesgo medio-alto (Q3)": 0.7,
-                        "Riesgo alto (Q4)": 0.1,
-                    },
-                },
-            },
-        ],
-        "metadata": {"variables_graficadas": ["CNT_TRF", "LONGITUD"], "warnings": []},
-    }
+def test_the_two_variable_groups_render_as_separate_tables(tmp_path):
+    """Una racha de viento junto a la poda en la misma tabla ordenada por caida de UITI
+    se lee como igual de accionable. Van en dos bloques, cada uno rotulado."""
+    html = render_llm_analysis(
+        validation_data={},
+        raw_df=_minimal_raw_df(),
+        selected_circuitos=["C1"],
+        inference_results={"V11": _resultado_de_ventana("V11", "C1 -- ventana V11")},
+        inference_analysis={},
+        output_dir=tmp_path,
+    ).read_text(encoding="utf-8")
 
-    html = render_expert_alignment_tab(
-        analysis,
-        automatic_simulation_table=table,
-        automatic_simulation_analysis=auto_analysis,
-        automatic_simulation_cost_context=cost_context,
-        automatic_simulation_softmax_curves=softmax_curves,
-    )
-
-    assert "Análisis automático de sensibilidad" in html
-    assert "CNT_TRF" in html
-    assert "LONGITUD" in html
-    assert html.index("Variables a priorizar") < html.index("Gráficas del simulador automático")
-    assert "Comparación breve del simulador" in html
-    assert "Clase de riesgo por variable priorizada" not in html
-    assert "Transiciones de categoría detectadas" not in html
-    assert "Escala ordinal usada en la gráfica" not in html
-    assert "Riesgo bajo -&gt; Riesgo alto" not in html
-    assert "Costos aproximados por ítems de contrato" in html
-    assert "referencias para discusión económica" in html
-    assert "no presupuestos cerrados ni causalidad de intervención" in html
-    assert "Contraste con variables priorizadas" in html
-    assert "CNT_TRF también aparece en las coincidencias de costos" in html
-    assert "Curvas softmax por clase" in html
-    assert "Probabilidad softmax promedio" in html
-    assert "Valores sugeridos por menor clase dominante" in html
-    assert "Estimación económica orientativa para menor riesgo" in html
-    assert "Estimación determinística de referencia" in html
-    assert "SERVICIO DE INSTALACION DE TRANSFORMADOR TRIFASICO" in html
-    assert "&#x27;" not in html
-    assert "&amp;#x27;" not in html
-    assert "Mayor sensibilidad" in html
+    assert "Variables de intervencion" in html
+    assert "Variables de escenario" in html
+    assert html.index("Variables de intervencion") < html.index("Variables de escenario")
+    # El valor viaja con la variable: la fila se lee como una instruccion.
+    assert "18" in html and "Altura" in html
+    assert "3 / 10" in html, "cuantos vanos alcanzan Bajo con esa sola variable"
 
 
-def test_expert_alignment_tab_cost_context_degrades_when_no_matches():
-    analysis = {
-        "contexto": {"fuentes_usadas": ["Agente Descriptor", "Agente predictivo"]},
-        "coincidencias": [],
-        "diferencias": [],
-        "variables_a_priorizar": [],
-        "sintesis_final": "Síntesis.",
-    }
-    table = pd.DataFrame([{"variable": "SIN_MATCH", "magnitud_max_cambio_abs": 0.1}])
-    cost_context = {
-        "disponible": False,
-        "advertencias": ["No se encontraron ítems de costo cercanos para las variables simuladas."],
-        "coincidencias": [],
-    }
+def test_the_reduction_scenario_shows_measured_against_simulated_with_its_group(tmp_path):
+    """Sin la clase, una caida de UITI no dice si el vano cambio de grupo, que es la
+    unidad en la que se decide."""
+    html = render_llm_analysis(
+        validation_data={},
+        raw_df=_minimal_raw_df(),
+        selected_circuitos=["C1"],
+        inference_results={"V11": _resultado_de_ventana("V11", "C1 -- ventana V11")},
+        inference_analysis={},
+        output_dir=tmp_path,
+    ).read_text(encoding="utf-8")
 
-    html = render_expert_alignment_tab(
-        analysis,
-        automatic_simulation_table=table,
-        automatic_simulation_cost_context=cost_context,
-    )
-
-    assert "Costos aproximados por ítems de contrato" in html
-    assert "No se encontraron ítems de costo cercanos" in html
-    assert "No hay coincidencias de costos disponibles para mostrar" in html
+    assert "Escenario de disminucion" in html
+    assert "Alto" in html and "Medio" in html
+    assert "Palancas movidas (solo intervencion): ALTURA" in html
 
 
-# ---------------------------------------------------------------------------
-# Real token usage instrumentation (SDD `reporte-perf-optimization`, item 4):
-# the report header must label the resolved token source
-# (measured/mixed/estimated) passed in via `token_source`, defaulting to
-# "estimated" for backward compatibility with callers that never pass it.
-# ---------------------------------------------------------------------------
+def test_an_empty_inference_results_leaves_the_section_out_without_crashing(tmp_path):
+    html = render_llm_analysis(
+        validation_data={},
+        raw_df=_minimal_raw_df(),
+        selected_circuitos=["C1"],
+        inference_results=None,
+        inference_analysis={},
+        output_dir=tmp_path,
+    ).read_text(encoding="utf-8")
+
+    assert "Diagnostico y simulacion por ventana" not in html
+    assert html.strip()
 
 
 def _render_with_tokens(tmp_path, *, tokens_input, tokens_output, token_source=None):
-    raw_df, daily_df = _minimal_raw_and_daily_df()
     kwargs = dict(
         validation_data={"hallazgos": ["algo"]},
-        raw_df=raw_df,
-        daily_df=daily_df,
-        critical_points=[],
+        raw_df=_minimal_raw_df(),
         selected_circuitos=["C1"],
         tokens_input=tokens_input,
         tokens_output=tokens_output,
@@ -460,12 +267,10 @@ def _render_with_totals(
     token_source=None,
     token_total_source=None,
 ):
-    raw_df, daily_df = _minimal_raw_and_daily_df()
+    raw_df = _minimal_raw_df()
     kwargs = dict(
         validation_data={"hallazgos": ["algo"]},
         raw_df=raw_df,
-        daily_df=daily_df,
-        critical_points=[],
         selected_circuitos=["C1"],
         tokens_input=tokens_input,
         tokens_output=tokens_output,
@@ -581,12 +386,10 @@ def _extract_header_h1(html: str) -> str:
 def _render_with_stage_breakdown(
     tmp_path, *, stage_breakdown=_UNSET, output_filename="reporte.html", token_source=None
 ):
-    raw_df, daily_df = _minimal_raw_and_daily_df()
+    raw_df = _minimal_raw_df()
     kwargs = dict(
         validation_data={"hallazgos": ["algo"]},
         raw_df=raw_df,
-        daily_df=daily_df,
-        critical_points=[],
         selected_circuitos=["C1"],
         tokens_total=5000,
         elapsed_seconds=753,
@@ -601,7 +404,7 @@ def _render_with_stage_breakdown(
     return html_path.read_text(encoding="utf-8")
 
 
-def test_header_shows_per_stage_rows_when_all_four_stages_measured(tmp_path):
+def test_header_shows_per_stage_rows_when_every_stage_is_measured(tmp_path):
     stage_breakdown = [
         {
             "stage": "historical",
@@ -618,17 +421,10 @@ def test_header_shows_per_stage_rows_when_all_four_stages_measured(tmp_path):
             "duration_source": "measured",
         },
         {
-            "stage": "auto-simulator",
+            "stage": "expert-alignment",
             "tokens_total": 500,
             "token_source": "estimated",
             "duration_seconds": 65.0,
-            "duration_source": "measured",
-        },
-        {
-            "stage": "expert-alignment",
-            "tokens_total": 1500,
-            "token_source": "measured",
-            "duration_seconds": 102.7,
             "duration_source": "measured",
         },
     ]
@@ -640,11 +436,9 @@ def test_header_shows_per_stage_rows_when_all_four_stages_measured(tmp_path):
     assert "1,000" in html and "medidos" in html
     assert "inference" in html
     assert "2,000" in html and "medidos/estimados" in html
-    assert "auto-simulator" in html
-    assert "500" in html and "aproximados" in html
     assert "expert-alignment" in html
-    assert "1,500" in html
-    for expected_duration in ("1m 17s", "2m 3s", "1m 5s", "1m 42s"):
+    assert "500" in html and "aproximados" in html
+    for expected_duration in ("1m 17s", "2m 3s", "1m 5s"):
         assert expected_duration in html
     # The pre-existing whole-run total line is preserved, not replaced.
     assert "Tokens totales (todas las etapas, incl. sub-agentes/corridas en paralelo) medidos: 5,000" in html

@@ -13,7 +13,7 @@ from chec_local_interpreter.agent_tools.inference import (
     validate,
 )
 from chec_local_interpreter.inference_validation import (
-    allowed_critical_point_ids,
+    allowed_ventanas,
     allowed_dates,
     allowed_scenario_names,
     allowed_variables,
@@ -101,7 +101,7 @@ def _valid_output(context: dict) -> dict:
             {"nombre": _ESCENARIO_NOMBRE, "interpretacion": "El escenario muestra concentracion en NR_T."}
         ],
         "discusion_grafos": [
-            {"seccion": "periodo_completo", "lectura": "NR_T se asocia con COD_CAUSA en el grafo experto."}
+            {"seccion": "V7", "lectura": "NR_T se asocia con COD_CAUSA en el grafo diferencia."}
         ],
         "coherencia_grafo_modelo": [
             "NR_T es coherente con una hipotesis operativa de riesgo por vegetacion."
@@ -116,8 +116,8 @@ def _valid_output(context: dict) -> dict:
             }
         ],
         "hipotesis_modelo_predictivo": {
-            "periodo_completo": ["El modelo es consistente con riesgo por vegetacion."],
-            "puntos_criticos": [],
+            "ventanas_estudiadas": ["El modelo es consistente con riesgo por vegetacion."],
+            "plan_de_intervencion": [],
         },
     }
 
@@ -127,7 +127,7 @@ def _valid_output_with_provenance(context: dict) -> dict:
     output["escenarios"][0]["provenance"] = {
         "data_ref": ["NR_T", "2026-01-10", _ESCENARIO_NOMBRE],
         "agent": "inference",
-        "rule": "02_circuit_scenario_interpreter",
+        "rule": "02_window_scenario_interpreter",
     }
     return output
 
@@ -164,9 +164,9 @@ def test_build_context_envelope_shape_matches_allowed_helpers():
     # `ventanas` entra al universo citable: el escenario ES una ventana desde el
     # port al MIL, y sin declararla el agente no puede nombrarla.
     assert set(envelope["allowed"].keys()) == {
-        "dates", "critical_point_ids", "variables", "scenario_names", "ventanas"}
+        "dates", "variables", "scenario_names", "ventanas"}
     assert sorted(envelope["allowed"]["dates"]) == sorted(allowed_dates(context))
-    assert sorted(envelope["allowed"]["critical_point_ids"]) == sorted(allowed_critical_point_ids(context))
+    assert sorted(envelope["allowed"]["ventanas"]) == sorted(allowed_ventanas(context))
     assert sorted(envelope["allowed"]["variables"]) == sorted(allowed_variables(context))
     assert sorted(envelope["allowed"]["scenario_names"]) == sorted(allowed_scenario_names(context))
 

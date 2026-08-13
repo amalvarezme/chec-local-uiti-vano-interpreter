@@ -223,300 +223,122 @@ Modos CHEC:
 
 ---
 
-# Skill: 02_circuit_scenario_interpreter.md
+# Skill: 02_window_scenario_interpreter.md
 
-# 02 - Intérprete de Escenarios de Circuito
+# 02 - Intérprete de Escenarios por Ventana
 
-Esta habilidad explica qué recibe el agente en cada escenario del análisis por circuito y cómo
-debe interpretarlo. El circuito, fechas, Top-N y cantidad de variables no son fijos:
-dependen de la selección del usuario y de los resultados del cuaderno.
+Esta habilidad explica qué recibe el agente en cada escenario y cómo debe interpretarlo.
 
-La interpretación debe usar el grafo de entrenamiento como marco principal. Las variables
-top no son etiquetas aisladas: cada una debe relacionarse, cuando sea posible, con su modo
-CHEC, su posición en el grafo, sus conexiones directas o preservadas y su camino conceptual
-hacia `UITI_VANO`.
-
-En el flujo MGCECDL actual, el cuaderno
-`notebooks/old_version/05_mgcecdl_circuit_analysis.ipynb` agrega un entregable adicional por
-escenario: un HTML de grafo estimado. Ese grafo no es la matriz experta original; se deriva
-de la capa de reconstrucción del modelo para las muestras del escenario y de una similitud
-RBF entre variables. Se usa para explorar asociaciones inducidas por el modelo.
+**Un escenario ES una ventana.** El informe estudia tres: la última con eventos del
+circuito, que describe cómo está hoy, y las dos de mayor influencia, que explican qué lo
+trajo hasta aquí. No son percentiles de filas ni recortes por severidad.
 
 ## Unidad de Análisis
 
-La unidad operativa es el `FID_VANO` dentro del circuito seleccionado. El agente recibe
-eventos filtrados para ese circuito-periodo y, a partir de ellos, tablas o resultados
-agregados por vano.
+La unidad es la **bolsa**: la celda `(vano, ventana)`. Es la unidad sobre la que el
+cuaderno 04 define la criticidad y sobre la que opera el simulador del cuaderno 06, así
+que el informe y el tablero responden con el mismo modelo y la misma unidad.
 
-Una tabla agregada por vano normalmente contiene:
+El modelo predice **`uiti_acumulado`, y solo eso**.
 
-- `FID_VANO`: identificador del vano.
-- `CIRCUITO`: circuito al que pertenece.
-- `UITI_VANO_PROM`: impacto promedio del vano en los eventos seleccionados.
-- `N_APARICIONES`: cantidad de eventos asociados al vano.
-- `RELEVANCIA_VARS`: ranking agregado de variables, si el dataframe ya incluye `_TOP_VARS`.
-- Variables originales del evento que permitan reconstruir contexto operativo, por ejemplo
-  `DURACION`, `TOT_USUS`, `PORC_APORTE_VANO`, equipo de proteccion, coordenadas o clima.
+El **conteo de eventos no es una salida del modelo**: es un eje del espacio K-Means que,
+junto con el UITI, fija la clase de la bolsa. Puedes citarlo como dato observado, pero
+nunca atribuírselo al modelo. Escribir "el modelo indica que esta variable eleva la
+frecuencia de eventos" es una frase plausible, imposible de distinguir de una correcta al
+leer el informe, y que el modelo no respalda. El validador la rechaza.
 
-Interpretacion base:
+## Qué trae cada escenario
 
-- `UITI_VANO_PROM` habla de severidad promedio.
-- `N_APARICIONES` habla de recurrencia.
-- La combinacion de ambas permite distinguir vanos severos, cronicos o ambas cosas.
-- El grafo permite explicar por que una variable puede ser coherente con severidad,
-  recurrencia o ambas: por ejemplo, rutas hacia usuarios/duracion se conectan mas
-  naturalmente con impacto, mientras que topologia, proteccion o clima pueden ayudar a
-  describir condiciones repetitivas del tramo o del periodo.
+- `ventana` y `nombre`: la etiqueta (`V1`..`V11`) y el nombre citable del escenario.
+- `n_vanos`: cuántos vanos del circuito tienen bolsa en esa ventana.
+- `relevancia.vanos`: por vano, su `u_base`, su `clase_base` y las variables que pueden
+  bajarle el UITI.
+- `variables_por_grupo`: ese mismo ranking, partido en **Intervención** y **Escenario**.
+- `vanos_criticos`: hasta 15 vanos, primero los del grupo Alto y luego Medio-Alto, cada uno
+  con el plan que lo baja de clase.
+- `simulacion`: qué le pasa al UITI y al grupo de esos vanos si se ejecuta el plan, más el
+  grafo diferencia.
 
-## Que devuelve un escenario explicado
+## Intervención contra Escenario
 
-La funcion de graficos/interpretacion puede devolver un objeto con:
+Es la distinción que sostiene el informe, y hay que respetarla al redactar.
 
-```python
-{
-  "eventos": df_eventos_con_TOP_VARS,
-  "borda": serie_feature_a_puntaje_borda_crudo,
-  "variables_normalizadas": serie_top_variables_score_0_1,
-  "modos_normalizados": serie_modos_score_0_1,
-  "graph_html_path": ruta_html_del_grafo_estimado_si_fue_generado
-}
-```
+- **Intervención**: poda, altura, conductor, calibre del neutro, puesta a tierra, número de
+  fases, capacidad, tipo de protección. Una cuadrilla las ejecuta. Es lo que puede
+  convertirse en una orden de trabajo.
+- **Escenario**: lluvia, viento, ráfaga, temperatura, consumo. Describen la condición en la
+  que ocurre el problema. **No se ejecutan.** No desaparecen del modelo: entran con el
+  valor observado de cada vano, que es lo que corresponde; lo único que no hacen es
+  moverse.
 
-Como leer cada campo:
+Una variable de escenario suele encabezar el ranking por caída de UITI. Presentarla junto
+a la poda como si fueran equivalentes produce una recomendación que nadie puede comprar.
+Nómbrala por lo que es.
 
-- `eventos`: filas reales usadas para explicar el escenario. Permite revisar cuantos eventos
-  sostienen la conclusion.
-- `borda`: puntaje acumulado por variable antes de normalizar. Sirve para ranking interno,
-  no para comparar escenarios con distinto numero de eventos.
-- `variables_normalizadas`: Top de variables en escala 0-1 dentro del escenario. Sirve para
-  narrar importancia relativa.
-- `modos_normalizados`: peso relativo de cada modo CHEC dentro del escenario.
-- `graph_html_path`: archivo interactivo guardado para el escenario. El notebook no debe
-  depender de verlo inline; basta con que el HTML quede en
-  `reports/mgcecdl-results/interactive_graphs/`.
+## Cómo leer el ranking de variables
 
-## Metodología Común
+Cada fila trae:
 
-Cada escenario sigue esta logica:
+- `n_vanos_alcanza` / `n_vanos`: en cuántos vanos **esa sola variable** basta para caer al
+  grupo Bajo. Es la magnitud que manda: una variable que baja mucho el UITI sin cruzar
+  ninguna frontera de grupo no cambia ninguna decisión.
+- `avance_mediano`: qué fracción del camino al grupo Bajo cubre esa sola variable. Es
+  `null` cuando el vano ya está en el grupo más bajo o cuando ese grupo es inalcanzable con
+  sus eventos: ahí no hay camino que medir.
+- `valor_tipico`: el valor que consigue el mínimo. Es lo que convierte la fila en una
+  instrucción ("lleva `ALTURA` a 18 m") en vez de un puntaje.
 
-1. Construir tabla por vano desde los eventos filtrados.
-2. Ordenar por el criterio del escenario.
-3. Calcular el Top-N efectivo segun vanos disponibles.
-4. Filtrar los eventos que pertenecen a esos vanos.
-5. Calcular SHAP por evento solo para la seleccion.
-6. Agregar variables por Borda ponderado.
-7. Normalizar variables y modos para graficar.
-8. Interpretar variable, modo y contexto operativo juntos.
-9. Contrastar cada variable top con el grafo: ruta directa, ruta preservada o sin ruta
-   documentada.
-10. Si existe, registrar el HTML del grafo estimado del escenario como entregable
-    interpretativo complementario.
+La relevancia se mide recorriendo el **interior** del rango de cada control, no solo sus
+extremos: 10 de los 15 controles numéricos tienen su mejor valor dentro del rango. Y se
+mide **con signo**, hacia el mínimo.
 
-## Relación Obligatoria con el Grafo
+En Medio-Alto y Alto **ninguna variable sola** alcanza el grupo Bajo. Cuando el plan
+necesita varios pasos, dilo: un ranking que insinúa lo contrario promete un cambio de grupo
+que una sola obra no consigue.
 
-Para cada escenario, el agente debe revisar:
+## Cómo leer la simulación
 
-- Si las variables top estan en `features`.
-- Si existen en el grafo alineado a la corrida.
-- Si tienen camino dirigido hacia `UITI_VANO` o hacia nodos cercanos como `UITI`,
-  `TOT_USUS`, `DURACION`, `PORC_APORTE_VANO` o `COD_CAUSA`.
-- Si la conexion es directa o preservada por nodos originales no retenidos.
-- Si la variable pertenece a un modo que conserva significado operativo aunque el modelo
-  solo haya usado un subconjunto.
-- Si el grafo mostrado proviene del cuaderno 05, leer sus aristas como asociaciones
-  estimadas por reconstruccion MGCECDL. Sus pesos estan normalizados por la conexion maxima
-  del grafo (`0-1`) y se presentan en notacion cientifica para evitar confundir valores muy
-  pequenos con ceros exactos.
+`simulacion` mueve **solo palancas de intervención**, sobre los vanos que el diagnóstico
+señaló. Trae, por vano, `u_base` contra `u_simulado` y `clase_base` contra `clase_simulada`.
 
-Si no hay ruta documentada, usar una frase explicita:
+- `delta_grupo` negativo: el vano baja de grupo. Es el resultado que sostiene la obra.
+- `delta_grupo` cero con caída de UITI: la obra mejora el vano sin cruzar la frontera.
+  Dilo así; presentarlo como un cambio de grupo sería falso.
+- `knobs_usados` vacío: no había palancas de intervención disponibles en esa ventana.
 
-```text
-No se encontró una relación documentada entre <variable> y UITI_VANO dentro del grafo
-disponible. Su relevancia debe leerse como comportamiento del modelo, no como explicación
-experta validada.
-```
+## Cómo leer el grafo diferencia
 
-## Escenario de severidad por UITI_VANO
+Es la **diferencia**, no el antes y el después. El grafo reconstruido es casi todo pesos
+fijos del experto — las compuertas del MIL solo los reescalan —, así que los dos grafos se
+ven iguales lado a lado y el efecto de la intervención, que es lo único que interesa,
+queda invisible. Por eso se muestra qué cambió.
 
-Criterio esperado:
+Se reconstruye de las compuertas del propio MIL, no de una aproximación RBF sobre otro
+modelo.
 
-```text
-ordenar por UITI_VANO_PROM descendente
-```
-
-Pregunta que responde:
-
-- Cuales vanos tienen mayor impacto promedio en el periodo analizado.
-- Que variables uso el modelo para explicar los eventos de esos vanos.
-
-Como interpretarlo:
-
-- Alto `UITI_VANO_PROM` no significa automaticamente alta frecuencia.
-- Si domina un modo de usuarios, duracion o proteccion, la lectura apunta a escala del
-  impacto operativo.
-- Si domina topologia, ubicacion o activos, la lectura apunta a condiciones estructurales
-  del tramo o su posicion.
-- Si domina clima/riesgo, hablar de condiciones asociadas al evento.
-
-## Escenario de recurrencia por frecuencia
-
-Criterio esperado:
-
-```text
-ordenar por N_APARICIONES descendente, usando UITI_VANO_PROM como desempate si existe
-```
-
-Pregunta que responde:
-
-- Cuales vanos aparecen mas veces en los eventos del periodo.
-- Si la recurrencia tiene los mismos patrones explicativos que la severidad.
-
-Como interpretarlo:
-
-- Alta frecuencia con bajo impacto promedio: comportamiento cronico pero contenido.
-- Alta frecuencia con alto impacto promedio: prioridad operativa fuerte.
-- Variables dominantes en este escenario pueden describir repeticion del patron, no
-  necesariamente magnitud del dano.
-
-## Escenario de Fechas de Interés
-
-Criterio esperado:
-
-```text
-filtrar eventos cuyo dia este en fechas_interes y luego ordenar por UITI_VANO_PROM
-```
-
-Pregunta que responde:
-
-- Que vanos explican los dias o puntos criticos definidos por el usuario o por otro modulo.
-- Que variables fueron mas relevantes para el modelo en esos eventos puntuales.
-
-Como interpretarlo:
-
-- Las fechas de interes son una ventana de foco.
-- Si una fecha no tiene eventos despues del filtro, no debe narrarse como evidencia.
-- Si el escenario concatena varias fechas, la interpretacion corresponde al conjunto de
-  fechas, no necesariamente a cada dia por separado.
-
-## Escenario de Frecuencia en Fechas de Interés
-
-Criterio esperado:
-
-```text
-filtrar eventos cuyo dia este en fechas_interes y luego ordenar por N_APARICIONES
-descendente, usando UITI_VANO_PROM como desempate si existe
-```
-
-Pregunta que responde:
-
-- Que vanos se repiten mas dentro de los dias criticos o fechas definidas.
-- Si la repeticion temporal puntual tiene el mismo soporte explicativo que la recurrencia
-  del periodo completo.
-- Que variables ayudan al modelo a describir vanos recurrentes en esas fechas.
-
-Como interpretarlo:
-
-- No equivale a severidad maxima; prioriza recurrencia dentro del subconjunto temporal.
-- Si coincide con alto `UITI_VANO_PROM`, hablar de doble prioridad: frecuencia puntual e
-  impacto promedio.
-- Si domina clima, riesgo o fecha, la lectura debe limitarse a condiciones asociadas a los
-  dias incluidos.
-- Si dominan topologia o proteccion, la interpretacion puede apuntar a tramos o equipos que
-  concentran repeticiones durante las fechas de interes.
-
-## Barras de variables
-
-Las barras representan variables ordenadas por importancia relativa dentro del escenario.
-El flujo es:
-
-```text
-Kernel SHAP por evento -> abs(SHAP) -> Top-K por evento -> Borda ponderado -> min-max 0-1
-```
-
-Lectura correcta:
-
-- Barra alta: variable consistentemente importante para la salida del modelo en ese
-  escenario.
-- Barra presente pero baja: variable secundaria dentro del Top-K.
-- Scores cercanos no deben sobre-interpretarse como diferencias fuertes.
-- Una barra alta debe explicarse junto con el grafo: modo, ruta, tipo de conexion y
-  significado operativo.
-- Si una variable climatica aparece con lag, interpretar el sufijo horario: `lag_0` es la
-  condicion mas cercana al evento; lags mayores son contexto previo.
-
-## Radar por modos
-
-El radar agrupa variables en modos CHEC y normaliza los puntajes a 0-1 dentro del mismo
-escenario.
-
-Lectura correcta:
-
-- Modo dominante: familia que concentra la explicacion del modelo.
-- Modo bajo: familia con poca participacion relativa.
-- Comparar modos dentro del escenario es valido.
-- Comparar valores crudos entre escenarios no es valido si cambia la cantidad de eventos.
-- Un modo dominante no significa que todas sus variables sean relevantes. Revisar las
-  variables concretas que aportan al modo.
-- Si un modo original tiene pocas variables retenidas por seleccion, aclarar que la lectura
-  corresponde al subconjunto disponible.
-
-## Grafo HTML estimado por escenario
-
-El grafo HTML del cuaderno 05 es la tercera salida del analisis por escenario, junto con
-las barras y el radar. Reglas de lectura:
-
-- El archivo se guarda como HTML interactivo; no es obligatorio renderizarlo dentro del
-  notebook.
-- Los nodos son las variables top del escenario y su tamano/color responde al puntaje
-  normalizado de importancia.
-- Las aristas se calculan desde la matriz estimada por el modelo para las muestras del
-  escenario, usando reconstrucciones MGCECDL y similitud RBF.
-- Se muestra una sola arista por par de variables, sin doble direccion ni flechas.
-- El peso mostrado en tooltip ya esta normalizado por el maximo del grafo y se escribe en
-  notacion cientifica, por ejemplo `1.000e+00` o `6.667e-03`.
-- Un peso muy pequeno indica asociacion debil relativa dentro del grafo, no ausencia
-  absoluta.
-
-## Lectura operativa por familias
-
-- Evento, impacto e indicadores: duracion, usuarios, causa e indicadores cercanos al
-  objetivo; coherente con escenarios de severidad.
-- Proteccion y maniobra: equipo que opera, tipo de proteccion, vanos protegidos y usuarios
-  bajo proteccion; sugiere revisar selectividad, cobertura o tiempos de aislamiento.
-- Topologia y configuracion espacial: circuito, vano, coordenadas, distancia a proteccion y
-  aporte relativo; sugiere revisar posicion del tramo y concentracion de impacto.
-- Caracteristicas fisicas y electricas del vano: longitud, fases, conductor, neutro,
-  tipo de red, consumo y antiguedad; sugiere revisar condicion fisica/configuracion del
-  tramo.
-- Activos: apoyo final y transformador: apoyo, clase, norma, puesta a tierra, transformador,
-  capacidad, usuarios y consumo; sugiere revisar activos asociados y concentracion de carga.
-- Entorno, riesgo y clima: vegetacion, descargas y clima con lags; sugiere condiciones
-  ambientales asociadas o predictivas.
+Si el grafo falta, el escenario trae `grafo_motivo`. Dilo en vez de callarlo: un panel
+ausente sin explicación se lee como "la intervención no movió nada", que es lo contrario de
+"no hay vanos suficientes para reconstruirlo".
 
 ## Forma recomendada de respuesta
 
-Para cada escenario, el agente debe explicar:
+Para cada ventana, explica:
 
-- Que recibio: eventos, vanos, criterio, Top-N efectivo.
-- Que variable o grupo domina.
-- Que modo CHEC domina.
-- Que significa electricamente.
-- Que limitacion aplica.
+- Qué recibió: ventana, periodo, número de vanos, cuántos críticos.
+- Qué palanca de **intervención** manda, y con qué valor.
+- Qué condición de **escenario** acompaña, nombrada como tal.
+- Qué consigue la simulación: cuántos vanos bajan de grupo y cuántos no.
+- Qué limitación aplica.
 
-Usar siempre lenguaje de modelo:
-
-```text
-El modelo asigno mayor relevancia a...
-```
+Usa siempre lenguaje de modelo: "el modelo asignó mayor relevancia a…", "es consistente
+con…", "podría estar asociado con…", "requiere validación".
 
 ## Si falta contexto
 
-Cuando un resultado menciona una variable, relacion o modo no documentado, el agente debe
-decirlo. Frases permitidas:
+Cuando un resultado menciona una variable o relación no documentada, dilo:
 
-- "No se encontro una definicion explicita para esta variable."
-- "La relacion entre estos elementos no esta documentada en los archivos disponibles."
-- "Esta interpretacion debe tratarse como una hipotesis hasta que sea validada con
+- "No se encontró una definición explícita para esta variable."
+- "Esta interpretación debe tratarse como una hipótesis hasta que sea validada con
   conocimiento experto."
 
 ---
@@ -657,8 +479,8 @@ evitar "el grafo demuestra que...".
 
 En salidas JSON del cuaderno `02_local_uiti_vano_interpretability_v3.ipynb`, los grafos
 HTML recibidos deben sintetizarse en dos entradas generales de `discusion_grafos` cuando
-apliquen: `seccion="periodo_completo"` para los grafos del periodo completo y
-`seccion="puntos_criticos"` para los grafos de fechas o puntos criticos. Cada lectura debe
+apliquen: `seccion` es la ETIQUETA DE LA VENTANA (`V1`..`V11`) cuyo grafo diferencia se
+discute, una entrada por ventana estudiada. Cada lectura debe
 conectar variables o modos relevantes con asociaciones relativas del grafo estimado, sin
 repetir solo rutas de archivo y sin duplicar discusion por
 escenario.
@@ -667,8 +489,8 @@ La forma JSON obligatoria de esas lecturas es una lista de objetos:
 
 ```json
 [
-  {"seccion": "periodo_completo", "lectura": "..."},
-  {"seccion": "puntos_criticos", "lectura": "..."}
+  {"seccion": "V7", "lectura": "..."},
+  {"seccion": "V11", "lectura": "..."}
 ]
 ```
 
@@ -1246,7 +1068,7 @@ La respuesta debe preservar el analisis y mantener una estructura apta para el r
 - Incluir los `modos` necesarios para explicar el escenario sin inventar modos.
 - No copiar `tabla_top_vanos` completa; sintetizar los patrones relevantes.
 - `discusion_grafos` debe incluir hasta dos lecturas generales: una para
-  `seccion="periodo_completo"` y otra para `seccion="puntos_criticos"` cuando existan
+  `seccion` igual a la etiqueta de cada ventana estudiada cuando existan
   grafos HTML en ambas secciones.
 - Cada lectura de `discusion_grafos` debe ser apta para renderizarse como viñeta del
   apartado correspondiente del reporte.
@@ -1257,10 +1079,10 @@ La respuesta debe preservar el analisis y mantener una estructura apta para el r
 - Cada conclusion o bloque presentado como items debe tener maximo 5 items; si hay mas
   informacion, priorizar la mas relevante para el reporte.
 - La presentacion final debe consolidar la discusion general en una sola conclusion con dos
-  aspectos: `Número de Eventos` y `UITI_VANO`. La seccion de puntos criticos debe seguir el
+  aspectos: `Número de Eventos` y `UITI_VANO`. La seccion de cada ventana debe seguir el
   mismo patron cuando existan ambos escenarios.
 - Incluir `hipotesis_modelo_predictivo` con dos listas de items:
-  `periodo_completo` y `puntos_criticos`. Cada lista debe tener maximo 5 items y debe
+  `ventanas_estudiadas` y `plan_de_intervencion`. Cada lista debe tener maximo 5 items y debe
   sintetizar la discusion general junto con la discusion de grafos correspondiente.
 
 ## Claves Requeridas
@@ -1342,12 +1164,12 @@ Usar placeholders solo como nombres de campos; los valores deben venir del conte
   ],
   "discusion_grafos": [
     {
-      "seccion": "periodo_completo",
-      "lectura": "<lectura_general_de_los_grafos_estimados_del_periodo_completo>"
+      "seccion": "V7",
+      "lectura": "<lectura_del_grafo_diferencia_de_esa_ventana>"
     },
     {
-      "seccion": "puntos_criticos",
-      "lectura": "<lectura_general_de_los_grafos_estimados_de_puntos_criticos>"
+      "seccion": "V11",
+      "lectura": "<lectura_del_grafo_diferencia_de_otra_ventana_estudiada>"
     }
   ],
   "coherencia_grafo_modelo": [
@@ -1363,11 +1185,11 @@ Usar placeholders solo como nombres de campos; los valores deben venir del conte
   "hallazgos": ["<hallazgos_principales>"],
   "limitaciones": ["<limitaciones>"],
   "hipotesis_modelo_predictivo": {
-    "periodo_completo": [
-      "<hipotesis_del_modelo_para_periodo_completo_basada_en_escenarios_y_grafos>"
+    "ventanas_estudiadas": [
+      "<hipotesis_del_modelo_sobre_las_tres_ventanas_estudiadas>"
     ],
-    "puntos_criticos": [
-      "<hipotesis_del_modelo_para_puntos_criticos_basada_en_escenarios_y_grafos>"
+    "plan_de_intervencion": [
+      "<hipotesis_sobre_la_obra_que_sostiene_el_cambio_de_grupo>"
     ]
   }
 }
@@ -1391,16 +1213,16 @@ Antes de entregar, verificar:
 - Si se reportan grafos HTML del cuaderno 05, incluir ruta, escenario y fuente
   `reconstruccion_mgcecdl_rbf`.
 - Si se reportan grafos HTML del cuaderno 05, incluir en `discusion_grafos` una lectura para
-  `periodo_completo` y otra para `puntos_criticos` cuando existan grafos en ambas secciones,
+  cada ventana estudiada cuando existan grafos en varias ventanas,
   con asociaciones relativas y modos, sin repetir una discusión por escenario.
 - `discusion_grafos` debe ser lista de objetos con claves `seccion` y `lectura`; no debe ser
-  un diccionario con claves `periodo_completo` y `puntos_criticos`.
-- No entregar el JSON final si `entregables.grafos_html` incluye grafos de periodo completo y
-  puntos criticos pero `discusion_grafos` no tiene ambas secciones como objetos de lista.
-- `hipotesis_modelo_predictivo.periodo_completo` integra hallazgos, escenarios del periodo
-  completo y grafos de periodo completo.
-- `hipotesis_modelo_predictivo.puntos_criticos` integra escenarios y grafos de puntos
-  criticos.
+  un diccionario con claves `ventanas_estudiadas` y `plan_de_intervencion`.
+- No entregar el JSON final si hay grafos de varias ventanas pero `discusion_grafos` no las
+  trae como objetos de lista.
+- `hipotesis_modelo_predictivo.ventanas_estudiadas` integra hallazgos, escenarios y grafos
+  diferencia de las tres ventanas del estudio.
+- `hipotesis_modelo_predictivo.plan_de_intervencion` integra las variables de INTERVENCION y
+  la simulacion de los vanos criticos. No mezclar aqui variables de escenario.
 - Cada escenario incluye criterio de seleccion.
 - Cada escenario distingue Top-N configurado de Top-N efectivo si ambos existen.
 - Cada variable top tiene modo CHEC o queda marcada como `modo_no_identificado`.
@@ -1599,14 +1421,14 @@ Devuelve un objeto JSON con estas claves:
   "contexto": {"circuito": "...", "periodo": {"inicio": "...", "fin": "..."}, "modelo": "..."},
   "entregables": {"grafos_html": [{"escenario": "...", "path": "..."}]},
   "escenarios": [{"nombre": "...", "interpretacion": "..."}],
-  "discusion_grafos": [{"seccion": "periodo_completo", "lectura": "..."}, {"seccion": "puntos_criticos", "lectura": "..."}],
+  "discusion_grafos": [{"seccion": "V7", "lectura": "..."}, {"seccion": "V11", "lectura": "..."}],
   "coherencia_grafo_modelo": ["..."],
   "hallazgos": ["..."],
   "limitaciones": ["..."],
   "inferencias_predictivas": [{"horizonte": "periodo analizado", "riesgo": "...", "justificacion_modelo": "..."}],
   "hipotesis_modelo_predictivo": {
-    "periodo_completo": ["..."],
-    "puntos_criticos": ["..."]
+    "ventanas_estudiadas": ["..."],
+    "plan_de_intervencion": ["..."]
   }
 }
 ```
@@ -1624,20 +1446,17 @@ Devuelve un objeto JSON con estas claves:
 Agregar en `discusion_grafos`:
 
 - `discusion_grafos` debe ser siempre un arreglo/lista de objetos. No usar un objeto tipo
-  `{"periodo_completo": "...", "puntos_criticos": "..."}`.
-- Una lectura con `seccion="periodo_completo"` cuando existan grafos HTML de periodo
-  completo.
-- Una lectura con `seccion="puntos_criticos"` cuando existan grafos HTML de fechas o puntos
-  criticos.
+  `{"V7": "...", "V11": "..."}`.
+- Una lectura por VENTANA estudiada, con `seccion` igual a su etiqueta (`V1`..`V11`),
+  cuando esa ventana tenga grafo diferencia.
 - Cada lectura puede cubrir dos aspectos internos: `Número de Eventos` y `UITI_VANO`.
 
 Cada lectura debe:
 
 - Conectar variables o modos relevantes con asociaciones del grafo.
 - Evitar repetir solo rutas de archivo.
-- Antes de responder, verificar que si `entregables.grafos_html` contiene rutas de periodo
-  completo y puntos criticos, entonces existen exactamente entradas equivalentes en
-  `discusion_grafos` para ambas secciones.
+- Antes de responder, verificar que exista una entrada de `discusion_grafos` por cada
+  ventana con grafo diferencia, y ninguna para una ventana que no lo tenga.
 
 ## Presentación Esperada en el Reporte
 
@@ -1646,8 +1465,8 @@ La discusion general del modelo debe consolidarse en una sola conclusion con dos
 - `Número de Eventos`: recurrencia o frecuencia.
 - `UITI_VANO`: severidad o impacto.
 
-La discusion de puntos criticos debe seguir el mismo patron: una sola conclusion con los
-dos aspectos cuando ambos existan.
+La discusion de cada ventana debe seguir el mismo patron: una sola conclusion con los dos
+aspectos cuando ambos existan.
 
 ## Inferencias predictivas
 
@@ -1661,10 +1480,12 @@ el mismo estilo ejecutivo de la hipótesis del agente de análisis histórico.
 
 Debe incluir:
 
-- `periodo_completo`: hipótesis para el periodo completo, basada en la discusión general de
-  `Número de Eventos`, `UITI_VANO`, hallazgos del modelo y discusión de grafos estimados.
-- `puntos_criticos`: hipótesis para las fechas o puntos críticos, basada en la discusión de
-  puntos críticos y los grafos estimados de puntos críticos.
+- `ventanas_estudiadas`: hipótesis sobre las tres ventanas del estudio, basada en la
+  relevancia hacia UITI mínimo de cada una, los hallazgos del modelo y los grafos
+  diferencia.
+- `plan_de_intervencion`: hipótesis sobre qué obra sostiene el cambio de grupo, basada en
+  las variables de **intervención** y en la simulación. No mezcles aquí variables de
+  escenario: una racha de viento no es un plan.
 
 Reglas:
 
@@ -1707,7 +1528,7 @@ Reglas:
   "graph_html_paths": [],
   "escenarios": [
     {
-      "nombre": "Top P97 por UITI_VANO — período completo",
+      "nombre": "DON23L13 -- ventana V7",
       "criterio": "UITI_VANO_PROM",
       "fechas_interes": [],
       "n_eventos": 10,

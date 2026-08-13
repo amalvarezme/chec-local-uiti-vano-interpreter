@@ -7,7 +7,7 @@ from chec_impacto.interpretability.circuit_analysis import validar_respuesta_inf
 from chec_local_interpreter.inference_validation import (
     INFERENCE_AGENT_ID,
     INFERENCE_PROVENANCE_RULES,
-    allowed_critical_point_ids,
+    allowed_ventanas,
     allowed_dates,
     allowed_scenario_names,
     allowed_variables,
@@ -15,7 +15,7 @@ from chec_local_interpreter.inference_validation import (
     validar_respuesta_inferencia_strict,
 )
 
-_ESCENARIO_NOMBRE = "Top P97 por UITI_VANO — período completo"
+_ESCENARIO_NOMBRE = "DON23L13 -- ventana V7"
 
 
 def _context() -> dict:
@@ -29,8 +29,11 @@ def _context() -> dict:
         "top_k_vars": 20,
         "filtro_uiti_max": None,
         "ventana_climatica_horas": 12,
-        "modelo": "mgcecdl_clasificacion",
-        "modelo_tipo": "mgcecdl_clasificacion",
+        "modelo": "MIL por bolsas (cuaderno 05)",
+        "modelo_tipo": "mil_bolsas",
+        "unidad": "bolsa (vano, ventana)",
+        "metrica": "uiti_acumulado",
+        "ventanas": ["V7", "V11"],
         "n_eventos": 10,
         "n_vanos": 5,
         "n_features": 2,
@@ -94,13 +97,13 @@ def _valid_response(context: dict) -> dict:
             {"nombre": _ESCENARIO_NOMBRE, "interpretacion": "El escenario muestra concentracion en NR_T."}
         ],
         "discusion_grafos": [
-            {"seccion": "periodo_completo", "lectura": "NR_T se asocia con COD_CAUSA en el grafo experto."}
+            {"seccion": "V7", "lectura": "NR_T se asocia con COD_CAUSA en el grafo diferencia."}
         ],
         "coherencia_grafo_modelo": [
             "NR_T es coherente con una hipotesis operativa de riesgo por vegetacion."
         ],
         "hallazgos": ["NR_T aparece como variable relevante en el periodo."],
-        "limitaciones": ["Kernel SHAP explica comportamiento del modelo."],
+        "limitaciones": ["La relevancia explica comportamiento del modelo, no causalidad."],
         "inferencias_predictivas": [
             {
                 "horizonte": "periodo analizado",
@@ -109,8 +112,8 @@ def _valid_response(context: dict) -> dict:
             }
         ],
         "hipotesis_modelo_predictivo": {
-            "periodo_completo": ["El modelo es consistente con riesgo por vegetacion."],
-            "puntos_criticos": [],
+            "ventanas_estudiadas": ["El modelo es consistente con riesgo por vegetacion."],
+            "plan_de_intervencion": [],
         },
     }
 
@@ -120,10 +123,10 @@ def _valid_response_with_provenance(context: dict) -> dict:
     response["escenarios"][0]["provenance"] = {
         "data_ref": ["NR_T", "2026-01-10", _ESCENARIO_NOMBRE],
         "agent": "inference",
-        "rule": "02_circuit_scenario_interpreter",
+        "rule": "02_window_scenario_interpreter",
     }
     response["discusion_grafos"][0]["provenance"] = {
-        "data_ref": ["cp-2026-01-10"],
+        "data_ref": ["V7"],
         "agent": "inference",
         "rule": "04_graph_connectivity_guardrails",
     }
@@ -143,10 +146,10 @@ def test_allowed_dates_includes_top_level_and_scenario_fechas_interes():
     assert "2026-01-31" in dates
 
 
-def test_allowed_critical_point_ids_derived_from_dates():
-    context = _context()
-    ids = allowed_critical_point_ids(context)
-    assert "cp-2026-01-10" in ids
+def test_allowed_ventanas_from_context():
+    """El escenario ES una ventana desde el port al MIL, asi que el ancla de una cita es
+    su etiqueta y no un `cp-YYYY-MM-DD` derivado de un dia."""
+    assert allowed_ventanas(_context()) == {"V7", "V11"}
 
 
 def test_allowed_variables_from_features():
@@ -201,18 +204,17 @@ def test_schema_allows_empty_escenarios_r1_r3_gap_shape():
     assert result["ok"], result["errors"]
 
 
-def test_response_citing_critical_point_id_outside_allowed_fails():
-    """Regression case vs the old weak validator: a response that would pass
-    the legacy escenarios/discusion_grafos-name-only check but references a
-    critical_point id outside the allowed context must be rejected."""
+def test_response_citing_a_date_outside_the_studied_windows_fails():
+    """Caso de regresion frente al validador debil: una respuesta que pasaria el chequeo
+    de solo-nombres pero cita una fecha fuera del contexto tiene que rechazarse."""
     context = _context()
     response = _valid_response(context)
-    response["hallazgos"].append("Ver punto critico cp-2099-12-31 para mas detalle.")
+    response["hallazgos"].append("Ver el evento del 2099-12-31 para mas detalle.")
 
     result = validar_respuesta_inferencia_strict(json.dumps(response, ensure_ascii=False), context)
 
     assert not result["ok"]
-    assert any("cp-2099-12-31" in error for error in result["errors"])
+    assert any("2099-12-31" in error for error in result["errors"])
 
 
 def test_response_with_date_outside_allowed_fails():
@@ -240,12 +242,12 @@ def test_response_citing_fabricated_scenario_name_fails():
 def test_weak_check_regression_prevented_old_validator_passes_new_one_rejects():
     """Direct comparison: build a response that the OLD, weak
     `circuit_analysis.validar_respuesta_inferencia` (name-completeness-only)
-    would accept, but which cites a critical_point id outside the allowed
-    context — the new strict validator must reject it."""
+    would accept, but which cites a date outside the allowed context — the new
+    strict validator must reject it."""
     context = _context()
     response = _valid_response(context)
     response["discusion_grafos"] = {
-        "periodo_completo": "Lectura general del periodo completo, ver cp-2099-12-31.",
+        "V7": "Lectura general de la ventana, ver el evento del 2099-12-31.",
     }
 
     old_result = validar_respuesta_inferencia(json.dumps(response, ensure_ascii=False), context)
@@ -271,7 +273,7 @@ def test_validation_is_side_effect_free_on_input_context():
 def test_provenance_rule_allow_list_is_hermetic():
     assert INFERENCE_PROVENANCE_RULES == {
         "01_structured_context_builder",
-        "02_circuit_scenario_interpreter",
+        "02_window_scenario_interpreter",
         "03_uiti_vano_behavior_explainer",
         "04_graph_connectivity_guardrails",
         "05_llm_output_validator",
@@ -312,15 +314,15 @@ def test_validar_provenance_inferencia_fails_on_unknown_date():
     assert any("2099-12-31" in error for error in result["errors"])
 
 
-def test_validar_provenance_inferencia_fails_on_unknown_critical_point_id():
+def test_validar_provenance_inferencia_fails_on_unknown_ventana():
     context = _context()
     response = _valid_response_with_provenance(context)
-    response["discusion_grafos"][0]["provenance"]["data_ref"] = ["cp-2099-12-31"]
+    response["discusion_grafos"][0]["provenance"]["data_ref"] = ["V99"]
 
     result = validar_provenance_inferencia(response, context)
 
     assert not result["ok"]
-    assert any("cp-2099-12-31" in error for error in result["errors"])
+    assert any("V99" in error for error in result["errors"])
 
 
 def test_validar_provenance_inferencia_fails_when_agent_does_not_match():

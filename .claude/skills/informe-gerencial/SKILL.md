@@ -79,8 +79,8 @@ This Skill has exactly **one** interactive checkpoint, and it fires only when ne
   `/reporte-lote` uses once its own single checkpoint clears.
 - If ANY sampled circuit has no prior run, state the missing **count** and the **list of missing
   circuit names** to the user **once**, and require explicit confirmation before auto-triggering
-  `report/SKILL.md`'s Run-sequence steps 2-8 ONLY (including its sub-step 4b, the auto-simulator
-  dispatch — nine distinct actions in total per that Skill's own numbering; step 9, the
+  `report/SKILL.md`'s Run-sequence steps 2-8 ONLY (the three agent dispatches included;
+  step 9, the
   vault-note-plus-chained-`/graphify` projection, is deliberately excluded here — see step 2's own
   vault-population sub-step below) for those circuits only. If the user declines, **stop here** — do
   not trigger any missing pipeline and do not proceed to synthesis.

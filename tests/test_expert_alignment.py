@@ -50,13 +50,14 @@ def test_extraer_fechas_informe_collects_multiple_sources():
     records = extraer_fechas_informe(
         validation_data={"key_findings": [{"evidence": [{"date": "2026-01-02"}]}]},
         inference_validation_data={"contexto": {"periodo": {"inicio": "2026-01-01", "fin": "2026-01-10"}}},
-        critical_points=[{"fecha_dia": "2026-01-05", "critical_point_id": "cp-2026-01-05"}],
         fecha_inicio="2026-01-01",
         fecha_fin="2026-01-31",
-        fechas_interes=["2026-01-06"],
+        # Los extremos de las ventanas estudiadas, que es de donde salen las fechas de
+        # interes desde que se retiro la deteccion de puntos criticos.
+        fechas_interes=["2026-01-01", "2026-01-31"],
     )
-    assert {"LLM1", "LLM2", "critical_point", "context"}.issubset({item["source"] for item in records})
-    assert any(item["fecha_inicio"] == "2026-01-05" and item["peso"] == 3.0 for item in records)
+    assert {"LLM1", "LLM2", "ventana_estudiada", "context"}.issubset({item["source"] for item in records})
+    assert any(item["fecha_inicio"] == "2026-01-31" and item["peso"] == 3.0 for item in records)
 
 
 def test_seleccionar_top_coincidencias_temporales_prefers_overlap_and_circuit():

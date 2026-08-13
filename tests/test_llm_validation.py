@@ -7,7 +7,7 @@ from chec_local_interpreter.llm_contracts import PROMPT_VERSION, load_output_sch
 from chec_local_interpreter.llm_validation import (
     BASE_AGENT_ID,
     BASE_PROVENANCE_RULES,
-    allowed_critical_point_ids,
+    allowed_ventanas,
     allowed_dates,
     unavailable_columns,
     validar_provenance_base,
@@ -18,23 +18,17 @@ from chec_local_interpreter.llm_validation import (
 def _context(unavailable: list[str] | None = None) -> dict:
     return {
         "metadata": {"unavailable_optional_columns": unavailable or []},
-        "daily_series": [{"fecha_dia": "2026-01-01"}, {"fecha_dia": "2026-01-02"}],
-        "critical_points": [
-            {
-                "critical_point_id": "cp-2026-01-02",
-                "fecha_dia": "2026-01-02",
-                "metrics": {"UITI_VANO": 10.0},
-                "selection_reason": "Punto critico entregado por codigo.",
-            }
+        # La serie por VENTANA es el universo citable del historiador: de sus extremos
+        # salen las fechas permitidas y de su etiqueta, las ventanas.
+        "ventanas": [
+            {"w": "V1", "periodo": "2026-01-01 a 2026-01-31",
+             "desde": "2026-01-01", "hasta": "2026-01-31",
+             "uv": 10.0, "n": 2, "vanos": 1, "estudiada": True},
+            {"w": "V2", "periodo": "2026-01-15 a 2026-02-14",
+             "desde": "2026-01-15", "hasta": "2026-02-14",
+             "uv": 0.0, "n": 0, "vanos": 0, "estudiada": False},
         ],
-        "critical_periods": [
-            {
-                "critical_period_id": "period-2026-01-01-2026-01-02",
-                "start_date": "2026-01-01",
-                "end_date": "2026-01-02",
-                "summary": "Periodo critico entregado por codigo.",
-            }
-        ],
+        "ventanas_estudio": ["V1"],
     }
 
 
@@ -48,21 +42,21 @@ def _valid_output() -> dict:
         "key_findings": [
             {
                 "title": "Punto dominante",
-                "text": "El punto cp-2026-01-02 concentra el comportamiento del periodo.",
+                "text": "La ventana V1 concentra el comportamiento del periodo.",
                 "evidence": [
                     {
-                        "date": "2026-01-02",
-                        "critical_point_id": "cp-2026-01-02",
+                        "date": "2026-01-01",
+                        "ventana": "V1",
                         "variable": "UITI_VANO",
-                        "summary": "Punto critico entregado por codigo.",
+                        "summary": "Ventana entregada por codigo.",
                     }
                 ],
                 "referenced_events": [
                     {
-                        "date": "2026-01-02",
-                        "critical_point_id": "cp-2026-01-02",
+                        "date": "2026-01-01",
+                        "ventana": "V1",
                         "indicator_value": 10.0,
-                        "selection_reason": "Punto critico entregado por codigo.",
+                        "selection_reason": "Ventana entregada por codigo.",
                     }
                 ],
                 "variable_groups_used": ["Evento/Impacto"],
@@ -71,15 +65,14 @@ def _valid_output() -> dict:
         ],
         "circuit_characterization": {
             "text": "Characterization text.",
-            "p97_vanos_uiti_vano": ["V1"],
-            "p97_vanos_eventos": ["V2"],
+            "ventanas_estudiadas": ["V1"],
             "top_3_modes_related": ["Mode1"],
             "probable_justifications_rules": ["Rule1"]
         },
-        "period_synthesis": "El comportamiento del periodo se concentra en el punto critico entregado.",
+        "period_synthesis": "El comportamiento del periodo se concentra en la ventana entregada.",
         "data_gaps": [],
         "limitations": ["Solo se usa la informacion estructurada disponible."],
-        "recommended_actions": ["Revisar los eventos fuente del punto critico."],
+        "recommended_actions": ["Revisar los eventos fuente de la ventana."],
     }
 
 
@@ -117,22 +110,25 @@ def test_date_outside_context_fails():
     assert any("Referenced date outside context" in error for error in result.errors)
 
 
-def test_critical_period_id_from_context_passes():
+def test_any_declared_ventana_from_context_passes():
     output = _valid_output()
-    output["key_findings"][0]["evidence"][0]["date"] = "2026-01-01"
-    output["key_findings"][0]["evidence"][0]["critical_point_id"] = "period-2026-01-01-2026-01-02"
-    output["key_findings"][0]["referenced_events"][0]["date"] = "2026-01-02"
-    output["key_findings"][0]["referenced_events"][0]["critical_point_id"] = "period-2026-01-01-2026-01-02"
+    output["key_findings"][0]["evidence"][0]["date"] = "2026-01-15"
+    output["key_findings"][0]["evidence"][0]["ventana"] = "V2"
+    output["key_findings"][0]["referenced_events"][0]["date"] = "2026-02-14"
+    output["key_findings"][0]["referenced_events"][0]["ventana"] = "V2"
     result = validate_llm_response(json.dumps(output), _context(), load_output_schema())
     assert result.ok, result.errors
 
 
-def test_unknown_critical_period_id_fails():
+def test_unknown_ventana_fails():
+    """El universo de ventanas citables es el que el contexto declara. Sin esta guarda el
+    agente puede anclar un hallazgo a una ventana que este circuito no tiene, y el informe
+    la presenta como si la tuviera."""
     output = _valid_output()
-    output["key_findings"][0]["evidence"][0]["critical_point_id"] = "period-2026-02-01-2026-02-02"
+    output["key_findings"][0]["evidence"][0]["ventana"] = "V9"
     result = validate_llm_response(json.dumps(output), _context(), load_output_schema())
     assert not result.ok
-    assert any("Referenced critical_point_id outside context" in error for error in result.errors)
+    assert any("Referenced ventana outside context" in error for error in result.errors)
 
 
 def test_unavailable_column_referenced_as_present_fails():
@@ -164,14 +160,14 @@ def _base_context(unavailable: list[str] | None = None) -> dict:
 
 def _finding_with_provenance(data_ref: list[str]) -> dict:
     return {
-        "title": "Punto dominante",
-        "text": "El punto concentra el comportamiento del periodo.",
+        "title": "Ventana dominante",
+        "text": "La ventana concentra el comportamiento del periodo.",
         "evidence": [
             {
-                "date": "2026-01-02",
-                "critical_point_id": "cp-2026-01-02",
+                "date": "2026-01-01",
+                "ventana": "V1",
                 "variable": "UITI_VANO",
-                "summary": "Punto critico entregado por codigo.",
+                "summary": "Ventana entregada por codigo.",
             }
         ],
         "referenced_events": [],
@@ -187,8 +183,8 @@ def _finding_with_provenance(data_ref: list[str]) -> dict:
 
 def test_public_context_accessors_exist_and_match_internal_helpers():
     context = _base_context()
-    assert allowed_dates(context) == {"2026-01-01", "2026-01-02"}
-    assert allowed_critical_point_ids(context) == {"cp-2026-01-02", "period-2026-01-01-2026-01-02"}
+    assert allowed_dates(context) == {"2026-01-01", "2026-01-31", "2026-01-15", "2026-02-14"}
+    assert allowed_ventanas(context) == {"V1", "V2"}
     assert unavailable_columns(context) == set()
     assert unavailable_columns(_base_context(["NR_T"])) == {"NR_T"}
 
@@ -197,7 +193,7 @@ def test_base_agent_id_and_provenance_rules_are_hermetic():
     assert BASE_AGENT_ID == "historical"
     assert BASE_PROVENANCE_RULES == {
         "01_structured_context_builder",
-        "02_critical_point_interpreter",
+        "02_window_interpreter",
         "03_uiti_vano_behavior_explainer",
         "04_domain_grounding_guardrails",
         "05_llm_output_validator",
@@ -217,7 +213,7 @@ def test_validar_provenance_base_passes_when_absent():
 
 def test_validar_provenance_base_passes_when_every_data_ref_resolves():
     context = _base_context()
-    data = {"key_findings": [_finding_with_provenance(["2026-01-02", "cp-2026-01-02", "UITI_VANO"])]}
+    data = {"key_findings": [_finding_with_provenance(["2026-01-01", "V1", "UITI_VANO"])]}
     result = validar_provenance_base(data, context)
     assert result["ok"], result["errors"]
 
@@ -230,12 +226,12 @@ def test_validar_provenance_base_fails_closed_on_unresolvable_date():
     assert any("2099-12-31" in error for error in result["errors"])
 
 
-def test_validar_provenance_base_fails_closed_on_unresolvable_critical_point_id():
+def test_validar_provenance_base_fails_closed_on_unresolvable_ventana():
     context = _base_context()
-    data = {"key_findings": [_finding_with_provenance(["cp-2099-12-31"])]}
+    data = {"key_findings": [_finding_with_provenance(["V99"])]}
     result = validar_provenance_base(data, context)
     assert not result["ok"]
-    assert any("cp-2099-12-31" in error for error in result["errors"])
+    assert any("V99" in error for error in result["errors"])
 
 
 def test_validar_provenance_base_fails_closed_on_unavailable_variable():

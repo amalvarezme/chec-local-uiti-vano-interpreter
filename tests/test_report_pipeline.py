@@ -169,7 +169,11 @@ def test_prepare_happy_path_no_dates_uses_full_circuit_range(tmp_path):
     assert state["circuito"] == "C1"
     assert state["fecha_inicio"] == "2026-01-01"
     assert state["fecha_fin"] == "2026-01-10"
-    assert state["critical_points"], "expected at least one critical point from the spike day"
+    # `ventanas_estudio` sustituye a `critical_points`: sin artefacto del MIL (la fixture
+    # autouse apunta a un directorio de modelo vacio) la seleccion queda vacia, que es la
+    # forma correcta del hueco -- no hay modelo con el que elegir ventanas.
+    assert state["ventanas_estudio"] == []
+    assert "critical_points" not in state
 
     historical_context = _read_json(run_dir / "historical.bc.json")
     # graph_knowledge is retired at the source (informe-gerencial-graph-noise-
@@ -184,19 +188,23 @@ def test_prepare_happy_path_no_dates_uses_full_circuit_range(tmp_path):
     assert inference_context["fecha_fin"] == "2026-01-10"
 
 
-def test_prepare_multi_month_window_scales_critical_point_budget_above_floor(tmp_path):
-    """The month-scaled budget (7, for a 7-calendar-month window), not the
-    fixed floor of 5, must bound `critical_points` when enough candidates
-    qualify (proves the fixed floor no longer applies for longer windows)."""
+def test_prepare_builds_the_window_grid_from_the_full_range_not_the_slice(tmp_path):
+    """Las etiquetas `V1`..`Vn` las fija el rango COMPLETO de la base, no el recorte del
+    informe: es la misma rejilla con la que el cuaderno 05 construyo el cache de bolsas.
+    Derivarlas del subconjunto filtrado hacia que la `V1` del historiador y la `V1` del
+    modelo fueran dos periodos distintos con el mismo nombre."""
     data_path = _write_multi_month_fixture_dataset(tmp_path)
 
     run_dir = prepare(
-        "C1", "2026-01-01", "2026-07-31", data_path=data_path, runs_root=tmp_path / "runs"
+        "C1", "2026-01-01", "2026-03-31", data_path=data_path, runs_root=tmp_path / "runs"
     )
 
-    state = _read_json(run_dir / "l1_state.json")
-    assert len(state["critical_points"]) == min(7, len(_MULTI_MONTH_SPIKE_DAYS))
-    assert len(state["critical_points"]) > 5
+    ventanas = _read_json(run_dir / "historical.bc.json")["ventanas"]
+    # La base cubre enero..julio, asi que la rejilla tiene mas ventanas que el recorte.
+    assert len(ventanas) > 6
+    assert ventanas[0]["desde"] == "2026-01-01"
+    # Y las de fuera del recorte estan, en cero: una ventana sin eventos es un dato.
+    assert any(v["uv"] == 0.0 for v in ventanas)
 
 
 
@@ -485,11 +493,11 @@ def test_prepare_expert_alignment_pools_fechas_informe_from_all_sources(tmp_path
     bc = _read_json(run_dir / "expert-alignment.bc.json")
     assert bc["fechas_informe"], "fechas_informe must be pooled, not left empty"
     sources = {record["source"] for record in bc["fechas_informe"]}
-    # At minimum the critical-point-derived date and the global report window
-    # must be present — confirms pooling from critical points + period bounds,
-    # not just a hardcoded empty list.
-    assert "critical_point" in sources
+    # El periodo global del informe confirma que la agrupacion ocurre y no devuelve una
+    # lista vacia fija. Las fechas de las ventanas estudiadas entran como
+    # `ventana_estudiada` cuando hay modelo; esta fixture apunta a un modelo vacio.
     assert "context" in sources
+    assert "critical_point" not in sources
 
 
 def test_prepare_expert_alignment_missing_pdf_file_degrades_gracefully(tmp_path):
@@ -620,14 +628,18 @@ _GOLDEN_DIR = Path(__file__).parent / "golden" / "reporte_graph_reuse"
 
 
 def test_prepare_expert_alignment_pdf_only_output_matches_pre_wiring_golden_byte_for_byte(tmp_path):
-    """Task 4.11/4.12: the strongest form of the byte-identical no-op guard --
-    `expert-alignment.bc.json` for a PDF-only fixture (real PDF matches, no
-    prior run) must match, BYTE FOR BYTE, a golden file captured from the
-    actual pre-wiring code (`git show 2b59bb5:...` -- the last commit before
-    this PR's Phase 3/4 changes), verified via a `git worktree` diff during
-    development. If this test ever fails, the bug is in the new no-op path
-    (Phase 3/4 wiring), NOT in this golden fixture -- do not update the
-    golden to match a changed no-op output; fix the regression instead."""
+    """The byte-identical no-op guard: `expert-alignment.bc.json` for a PDF-only fixture
+    (real PDF matches, no prior run) must match a committed golden BYTE FOR BYTE.
+
+    What it locks is the PRIOR-REPORT no-op path: a run with no qualifying prior run must
+    produce exactly the PDF-only output, with no extra key and no extra match. If this
+    test fails, the bug is in that no-op path -- do not update the golden to paper over a
+    changed no-op.
+
+    The golden was regenerated ONCE, deliberately, when critical-point detection was
+    retired: `fechas_informe` used to carry `critical_point`-sourced records with weight
+    3.0, and those dates no longer exist anywhere in the flow. That is a change of input,
+    not a regression of the no-op path this test guards."""
     run_dir = _prepare_with_canned_agent_outputs(tmp_path)
     xlsx_path = _write_pdf_discussions_xlsx(
         tmp_path / "tabla_pdfs_intervalo_test.xlsx",

@@ -349,7 +349,7 @@ def prepare_pdf_discussion_batch(
     (skipping circuit-less PDFs), builds Markdown, keeps only candidate
     sections (`is_candidate_section`), and writes ONE
     `{stem}.bc-input.json` payload per PDF under `run_dir` -- mirroring the
-    `auto-simulator.bc.json` convention (D2). A PDF is sub-split into
+    `<role>.bc.json` convention (D2). A PDF is sub-split into
     multiple `{stem}.bc-input.json` / `{stem}.bc-input.{n}.json` payloads
     only when its concatenated candidate Markdown exceeds `max_batch_chars`
     (one agent invocation per PDF otherwise -- see design's token-efficiency

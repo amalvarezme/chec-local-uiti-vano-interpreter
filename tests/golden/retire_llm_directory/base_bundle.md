@@ -3,15 +3,14 @@
 # Constructor de Contexto Estructurado
 
 Construye el contexto estructurado antes de cualquier llamada al LLM. El código
-determinístico en Python selecciona los circuitos, el periodo, la serie diaria, los
-puntos críticos y los resúmenes de atribución.
+determinístico en Python selecciona los circuitos, el periodo, la rejilla de ventanas y
+las tres ventanas que el informe estudia.
 
 ## Entradas
 
 - Dataframe filtrado para los circuitos y la ventana de fechas seleccionados.
-- Serie diaria de `UITI_VANO`.
-- Puntos críticos seleccionados por código.
-- Resúmenes de atribución para cada punto crítico.
+- Serie de `UITI_VANO` por ventana, completa y con cero donde no hubo eventos.
+- Las tres ventanas que el informe estudia (`ventanas_estudio`).
 - Grupos de variables de dominio.
 - Reglas de relación.
 
@@ -26,29 +25,45 @@ reproducirse.
 - Incluye explícitamente en la metadata las variables opcionales no disponibles.
 - Mantén los IDs como cadenas de texto.
 - Resume las filas crudas en lugar de enviar el dataset completo cuando la ventana sea grande.
-- Incluye suficientes filas de eventos alrededor de cada punto crítico para permitir la interpretación.
-- Incluye la serie diaria en forma compacta.
+- Incluye la serie por ventana completa, sin recortar las ventanas en cero.
 - Incluye las reglas de protección dentro del paquete de contexto.
 - No agregues evidencia externa, documentos, almacenes vectoriales, modelos, máscaras, simulaciones ni material de reporte final.
 
 ---
 
-# Skill: 02_critical_point_interpreter.md
+# Skill: 02_window_interpreter.md
 
-# Intérprete de Puntos Críticos
+# Intérprete de Ventanas
 
-El LLM interpreta los puntos críticos seleccionados por código determinístico. No debe
-seleccionar ni modificar esos puntos.
+El LLM interpreta la serie por VENTANA que el código determinístico ya construyó, y en
+particular las ventanas que el informe estudia. No debe seleccionar ni modificar ventanas.
+
+La ventana es la unidad de todo el flujo: el ranking del cuaderno 02 ordena circuitos por
+sus vanos críticos en una ventana, la bolsa que el modelo puntúa es una celda
+`(vano, ventana)`, y el diagnóstico y la simulación del cuaderno 06 operan sobre ella.
+Describir el periodo por días obligaría a quien lee a traducir entre dos rejillas que no
+coinciden.
 
 ## Reglas
 
-- No agregues, elimines ni reordenes puntos críticos.
-- Usa `criticality_types`, `selection_reason`, `criticality_score`, agregados diarios y resúmenes de atribución.
-- Describe por qué cada punto es relevante para el comportamiento de `UITI_VANO` a nivel del periodo.
-- Relaciona la interpretación del punto con grupos de variables cuando estén disponibles.
+- No agregues, elimines ni reordenes ventanas. `context.ventanas` es la serie completa y
+  `context.ventanas_estudio` nombra las que el informe discute.
+- Las ventanas **se solapan a propósito**: la rejilla son los meses completos más los
+  cortes de 15 a 15. Un evento cae en dos ventanas, y eso no es un error de los datos.
+- Una ventana en cero es un dato, no un hueco: dice que no hubo eventos, no que no se
+  midió. "Cinco ventanas tranquilas seguidas" es una lectura legítima.
+- Usa `uv` (UITI acumulado), `n` (eventos) y `vanos` de cada ventana, más el resumen del
+  periodo y los grupos de variables cuando estén disponibles.
+- Describe por qué cada ventana estudiada es relevante para el comportamiento de
+  `UITI_VANO` en el periodo.
 - Distingue entre "observado en los datos" y "factor contribuyente plausible".
-- Cita la evidencia por fecha y `critical_point_id` cuando un hallazgo dependa de un punto crítico.
+- Cita la evidencia por `ventana` (`V1`..`V11`) y, cuando corresponda, por la fecha de uno
+  de sus extremos. Las únicas fechas citables son las que el contexto declara en `desde` y
+  `hasta` de cada ventana, más el inicio y el fin del periodo.
 - No inventes variables faltantes, etiquetas de eventos ni columnas no disponibles.
+- No señales vanos concretos como críticos: ese es el diagnóstico del modelo, que trabaja
+  sobre la misma ventana y además dice **qué mover**. Dos listas de vanos importantes por
+  métodos distintos dejan a quien lee sin saber cuál seguir.
 
 ---
 
@@ -73,18 +88,18 @@ Produce el análisis final en español como JSON estructurado.
 ## Reglas
 
 - Enfócate en `UITI_VANO`.
-- Explica el comportamiento en el tiempo, no solo días aislados.
+- Explica el comportamiento en el tiempo sobre la rejilla de VENTANAS, no sobre días aislados.
 - Agrupa los hallazgos por mecanismos dominantes cuando sea posible: evento/impacto, protección, topología, características físicas/eléctricas, activos y entorno/riesgo/clima.
-- Incluye fechas y valores críticos.
+- Incluye las ventanas estudiadas con sus periodos y valores.
 - En la propiedad `cause_hypothesis_note`, estima la posible causa raíz basándote en las justificaciones técnicas (`ContextoProyectoSimuladorCHEC.md`), las variables analizadas, la cantidad de eventos y el impacto en `UITI_VANO`. Ajusta tus análisis para que las justificaciones sean más detalladas, resaltando explícitamente cuáles columnas o variables específicas guardan mayor relación con las causas propuestas.
 - **Análisis de Vegetación y DDT (OBLIGATORIO):** Es MANDATORIO analizar e incluir siempre la influencia de `NR_T` (nivel de riesgo de vegetación cercana al vano) y `DDT` (Densidad de Descargas a Tierra). Ambas variables SIEMPRE están presentes en los datos del estudio. Debes:
-  1. Evaluar el nivel de `NR_T` en los puntos críticos y discutir explícitamente si la vegetación pudo contribuir a los eventos o al deterioro de `UITI_VANO`.
+  1. Evaluar el nivel de `NR_T` en las ventanas estudiadas y discutir explícitamente si la vegetación pudo contribuir a los eventos o al deterioro de `UITI_VANO`.
   2. Correlacionar `DDT` con las demás variables climáticas disponibles (precipitación, viento, nubosidad, etc.) y evaluar explícitamente su impacto en la frecuencia de eventos y en la severidad de `UITI_VANO`.
   3. Destacar, con lenguaje de evidencia tabular, si `NR_T` y `DDT` refuerzan o contradicen las hipótesis de causa raíz.
   4. **NUNCA** afirmar que los datos de DDT o vegetación (`NR_T`) no están disponibles; siempre están en la tabla analizada.
 - Evita afirmaciones sin soporte.
 - Evita mencionar RAG, revisión documental, bitácoras operativas, inferencia de modelos predictivos, máscaras, simulación o reportes finales.
-- Usa todos los puntos críticos proporcionados como evidencia, pero sintetiza un diagnóstico consolidado a nivel del periodo.
+- Usa las ventanas estudiadas como evidencia, pero sintetiza un diagnóstico consolidado a nivel del periodo.
 
 ---
 
@@ -140,7 +155,8 @@ Valida cada respuesta del LLM antes de presentarla como análisis.
 
 - Ser JSON válido.
 - Cumplir con `uiti_vano_explanation.output_schema.json`.
-- Incluir solo fechas presentes en `critical_points` o `daily_series`.
+- Incluir solo fechas presentes en los extremos (`desde`/`hasta`) de alguna ventana del contexto, o el inicio y fin del periodo.
+- Anclar cada evidencia a una `ventana` declarada en el contexto (`V1`..`V11`).
 - No referenciar columnas no disponibles como si estuvieran presentes.
 - No afirmar el uso de RAG, bitácoras operativas, revisión normativa, modelos predictivos, máscaras, simulaciones ni generación de reportes finales.
 - Incluir limitaciones.
@@ -169,7 +185,7 @@ Este modo se usa solo cuando una respuesta anterior no validó.
 - Devuelve SOLO JSON válido.
 - No incluyas markdown, etiquetas `<think>`, comentarios ni texto antes o después del JSON.
 - Usa únicamente el contexto de reparación entregado.
-- Usa solo fechas y `critical_point_id` presentes en `critical_points` o `metadata.start` / `metadata.end`.
+- Usa solo etiquetas de `ventana` presentes en el contexto, y solo fechas de sus extremos o de `metadata.start` / `metadata.end`.
 - No menciones RAG, bitácoras, normativa, what-if, simulación, máscaras ni reporte final.
 - Si hay columnas opcionales no disponibles en `metadata`, inclúyelas en `data_gaps`.
 - Uno de esos ítems debe tratar `NR_T` y `DDT` si aparecen en el contexto.
@@ -203,7 +219,7 @@ Este modo se usa solo cuando una respuesta anterior no validó.
       "evidence": [
         {
           "date": "YYYY-MM-DD",
-          "critical_point_id": "cp-YYYY-MM-DD",
+          "ventana": "V7",
           "variable": "UITI_VANO",
           "summary": "..."
         }
@@ -211,7 +227,7 @@ Este modo se usa solo cuando una respuesta anterior no validó.
       "referenced_events": [
         {
           "date": "YYYY-MM-DD",
-          "critical_point_id": "cp-YYYY-MM-DD",
+          "ventana": "V7",
           "indicator_value": 0,
           "selection_reason": "..."
         }
@@ -222,9 +238,7 @@ Este modo se usa solo cuando una respuesta anterior no validó.
   ],
   "circuit_characterization": {
     "text": "...",
-    "top_vanos_percentile": {{TOP_VANOS_PERCENTILE}},
-    "p97_vanos_uiti_vano": [],
-    "p97_vanos_eventos": [],
+    "ventanas_estudiadas": ["V7"],
     "top_3_modes_related": [],
     "probable_justifications_rules": [
       {
@@ -269,11 +283,11 @@ Tu tarea es producir un diagnóstico descriptivo del circuito y periodo seleccio
 ## Alcance
 
 - Trabaja solo sobre los pasos 1 a 3 del flujo local:
-  selección de circuito o vano, identificación determinística de puntos de interés y
-  diagnóstico semántico preliminar.
+  selección de circuito o vano, rejilla determinística de ventanas y diagnóstico
+  semántico preliminar.
 - Usa solo el paquete JSON de contexto estructurado, las descripciones de variables, los
   modos de variables y las reglas de relación incluidas en el contexto.
-- No detectes nuevos puntos críticos ni cambies los puntos entregados por el código.
+- No selecciones ni cambies las ventanas entregadas por el código.
 - No uses ni menciones RAG, bitácoras, normativa, almacenes vectoriales, modelos predictivos,
   máscaras de relevancia, simulaciones, escenarios what-if ni reportes finales.
 
@@ -285,7 +299,7 @@ Tu tarea es producir un diagnóstico descriptivo del circuito y periodo seleccio
 - La respuesta debe ser compacta, con todos los arreglos y el objeto raíz completamente
   cerrados. Antes de finalizar, verifica que el JSON pueda parsearse sin reparar.
 - El objeto debe cumplir el esquema entregado en el prompt.
-- Usa solo los `critical_point_id` presentes en el contexto. Si no aplica, usa `null`.
+- Usa solo las etiquetas de `ventana` presentes en el contexto. Si no aplica, usa `null`.
 - Antes de responder, verifica que todos los campos requeridos por el esquema existan con la
   forma exacta solicitada. No reemplaces listas de objetos por diccionarios ni diccionarios
   por listas aunque el contenido parezca equivalente.
@@ -319,7 +333,7 @@ El objeto de salida debe incluir, en el nivel raíz, exactamente estas claves
     {
       "title": "<titulo_hallazgo>",
       "text": "<texto_hallazgo>",
-      "evidence": [{"date": "<fecha>", "critical_point_id": "<id_o_null>", "variable": "<variable>", "summary": "<resumen>"}],
+      "evidence": [{"date": "<fecha>", "ventana": "<etiqueta_o_null>", "variable": "<variable>", "summary": "<resumen>"}],
       "referenced_events": [],
       "variable_groups_used": ["<grupo_variable>"],
       "confidence": "<alta_media_o_baja>"
@@ -327,9 +341,7 @@ El objeto de salida debe incluir, en el nivel raíz, exactamente estas claves
   ],
   "circuit_characterization": {
     "text": "<sintesis_criticidad>",
-    "top_vanos_percentile": "<percentil>",
-    "p97_vanos_uiti_vano": ["<vano>"],
-    "p97_vanos_eventos": ["<vano>"],
+    "ventanas_estudiadas": ["<etiqueta_de_ventana>"],
     "probable_justifications_rules": [
       {
         "modo": "<modo>",
@@ -351,7 +363,7 @@ todas las respuestas, no solo mencionarse como estilo narrativo.
 ## Diagnóstico Requerido
 
 Analiza el comportamiento de `UITI_VANO` para los circuitos y periodo seleccionados.
-Usa los puntos críticos entregados como evidencia y produce un diagnóstico consolidado
+Usa las ventanas estudiadas como evidencia y produce un diagnóstico consolidado
 del periodo.
 
 Conecta la caracterización del circuito con la evolución temporal de `events` y
@@ -360,10 +372,9 @@ Conecta la caracterización del circuito con la evolución temporal de `events` 
 El campo `circuit_characterization` debe incluir:
 
 - `text`: síntesis de criticidad del circuito.
-- `top_vanos_percentile`, `p97_vanos_uiti_vano` y `p97_vanos_eventos`: copiar el percentil
-  configurado y los vanos top por percentil del contexto.
+- `ventanas_estudiadas`: copiar `ventanas_estudio` del contexto, sin agregar ni quitar.
 - `probable_justifications_rules`: ítems con relaciones descriptivas de
-  variables que pueden aportar a los puntos críticos y vanos más afectados.
+  variables que pueden aportar al comportamiento observado en las ventanas estudiadas.
 
 Cada ítem de `probable_justifications_rules` debe incluir:
 
@@ -372,11 +383,11 @@ Cada ítem de `probable_justifications_rules` debe incluir:
 - `justificacion_fisico_logica`: justificación técnica eléctrica, física o climática,
   basada estrictamente en las reglas del contexto.
 - `analisis_causas`: explicación de cómo esas conexiones son compatibles con los
-  valores observados en puntos críticos.
+  valores observados en las ventanas estudiadas.
 
-Usa los valores de `top_rows` en los días críticos, correlacionando modos de clima,
-infraestructura y variables físicas/eléctricas. Reporta `FID_VANO` cuando esté presente
-en el contexto.
+Correlaciona los modos de clima, infraestructura y variables físicas/eléctricas con lo
+observado en cada ventana estudiada. No señales vanos concretos como críticos: ese es el
+diagnóstico del modelo, que trabaja sobre la misma ventana y además dice qué mover.
 
 ## Vegetación y DDT
 
@@ -386,7 +397,7 @@ disponibles en el contexto.
 
 Evalúa:
 
-- Si `NR_T` en los puntos críticos sugiere que la vegetación pudo contribuir a eventos o
+- Si `NR_T` en las ventanas estudiadas sugiere que la vegetación pudo contribuir a eventos o
   deterioro de `UITI_VANO`.
 - Si `DDT` es compatible con una mayor frecuencia de eventos o valores elevados de `UITI_VANO`.
 
@@ -403,8 +414,8 @@ no inventes observaciones.
 - Mantén una redacción clara y organizada para que el reporte HTML conserve su estilo
   ejecutivo.
 - Cada conclusión o bloque presentado como ítems debe tener máximo 5 ítems. Si hay más
-  hallazgos posibles, prioriza los de mayor soporte en fechas, puntos críticos, variables
-  y reglas del contexto.
+  hallazgos posibles, prioriza los de mayor soporte en ventanas, variables y reglas del
+  contexto.
 - Los campos narrativos que son cadenas (`period_synthesis`, `cause_hypothesis_note`,
   `text`, `analisis_causas`) deben ser párrafos cerrados. No conviertas un campo de texto
   en un desarrollo indefinido; usa los arreglos de ítems para distribuir hallazgos.

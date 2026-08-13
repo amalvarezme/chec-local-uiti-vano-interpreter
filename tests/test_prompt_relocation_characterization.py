@@ -66,24 +66,18 @@ def _historical_basic_context() -> dict:
             "unavailable_cols": [],
         },
         "selected_context": {"circuitos": ["DON23L13"], "indicator": "UITI_VANO"},
-        "summary": {"events": 2, "nonzero_days": 2, "total_uv": 15.0},
-        "daily": [
-            {"d": "2026-01-01", "uv": 5.0, "n": 1, "dur": 1.0},
-            {"d": "2026-01-02", "uv": 10.0, "n": 1, "dur": 2.0},
+        "summary": {"events": 2, "ventanas": 2, "ventanas_con_eventos": 1,
+                    "total_uv": 15.0, "ventana_pico": "V1",
+                    "periodo_pico": "2026-01-01 a 2026-01-31", "uv_pico": 15.0},
+        "ventanas": [
+            {"w": "V1", "periodo": "2026-01-01 a 2026-01-31",
+             "desde": "2026-01-01", "hasta": "2026-01-31",
+             "uv": 15.0, "n": 2, "vanos": 1, "estudiada": True},
+            {"w": "V2", "periodo": "2026-01-15 a 2026-02-14",
+             "desde": "2026-01-15", "hasta": "2026-02-14",
+             "uv": 0.0, "n": 0, "vanos": 0, "estudiada": False},
         ],
-        "critical_points": [
-            {
-                "critical_point_id": "cp-2026-01-02",
-                "fecha_dia": "2026-01-02",
-                "rank": 1,
-                "score": 2.0,
-                "types": ["top_contribution_day"],
-                "selection_reason": "El dia aporta una fraccion alta del UITI_VANO total.",
-                "metrics": {"UITI_VANO": 10.0},
-                "daily_aggregates": {"events": 1},
-            }
-        ],
-        "critical_periods": [],
+        "ventanas_estudio": ["V1"],
         "domain": {
             "variable_groups": {
                 "Entorno/Riesgo": {"variables": ["NR_T", "DDT"]},
@@ -95,25 +89,21 @@ def _historical_basic_context() -> dict:
 
 
 def _historical_gaps_context() -> dict:
-    """Edge-case variant: multiple circuits, unavailable columns, a critical
-    period present (exercises a different branch of the same templates)."""
+    """Edge-case variant: multiple circuits, unavailable columns, and a second
+    studied window (exercises a different branch of the same templates)."""
     context = _historical_basic_context()
     context["metadata"]["circuitos"] = ["DON23L13", "DON23L14"]
     context["metadata"]["unavailable_cols"] = ["NR_T"]
-    context["critical_periods"] = [
-        {
-            "critical_period_id": "period-2026-01-01-2026-01-02",
-            "start_date": "2026-01-01",
-            "end_date": "2026-01-02",
-            "selection_reason": "Periodo sostenido de UITI_VANO elevado.",
-        }
-    ]
+    context["ventanas"][1]["estudiada"] = True
+    context["ventanas"][1]["uv"] = 3.5
+    context["ventanas"][1]["n"] = 1
+    context["ventanas_estudio"] = ["V1", "V2"]
     return context
 
 
 # --- Fixtures: inference (inferencia profile) ----------------------------
 
-_ESCENARIO_NOMBRE = "Top P97 por UITI_VANO — período completo"
+_ESCENARIO_NOMBRE = "DON23L13 -- ventana V7"
 
 
 def _inference_basic_context() -> dict:

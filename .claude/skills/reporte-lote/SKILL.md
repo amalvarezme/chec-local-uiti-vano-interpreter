@@ -137,7 +137,7 @@ Given `grupo` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
    `fecha_inicio`/`fecha_fin` for `report/SKILL.md`'s own step-1 outputs. Do **not** run
    `report/SKILL.md`'s step 1 (its own argument validation/preflight/checkpoint) for any circuit —
    this Skill's step 1 above already replaced it for the whole batch. Every other instruction in
-   `report/SKILL.md`'s steps 2-9 — `prepare`, the historical/inference/auto-simulator dispatch and
+   `report/SKILL.md`'s steps 2-9 — `prepare`, the historical/inference dispatch and
    its parallel-dispatch rule, the per-stage `record-usage`/`record-duration` capture,
    `prepare_expert_alignment`, `expert-alignment`, `render`, and the step-9 vault-note +
    `/graphify --update` chain (`vault-circuito/SKILL.md`) — applies to each circuit's run unchanged

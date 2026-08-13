@@ -19,11 +19,12 @@ Este proyecto carga un dataset estructurado ancho, filtra por circuitos y fechas
 El repositorio cubre el flujo completo de interpretabilidad local para el análisis de circuitos CHEC:
 
 - resolución determinista de circuito y ventana de fechas;
-- detección determinista de puntos críticos sobre `UITI_VANO`;
+- selección determinista de las tres ventanas que el informe estudia (la última con
+  eventos del circuito más las dos de mayor influencia);
 - construcción de contexto estructurado para razonamiento nativo de agentes;
-- diagnóstico descriptivo histórico (`historical`);
-- interpretación del modelo predictivo con MGCECDL + SHAP (`inference`);
-- discusión automática de sensibilidad mínimo/máximo (`auto-simulator`);
+- diagnóstico descriptivo histórico sobre la serie por ventana (`historical`);
+- interpretación del modelo MIL por bolsas del cuaderno 05 (`inference`), con las
+  variables separadas en intervención y escenario;
 - alineación contra reportes PDF expertos (`expert-alignment`);
 - extracción de tabla base de discusiones desde PDFs (`pdf-discussion-extraction`);
 - render del reporte HTML local completo;
@@ -48,7 +49,7 @@ El repositorio cubre el flujo completo de interpretabilidad local para el análi
 - llamadas Python a Gemini, OpenAI u otros proveedores LLM hospedados
 - publicación automática como efecto colateral de generar un reporte
 - Databricks **dentro de** `src/chec_local_interpreter` o de los 5 roles LLM (`historical`,
-  `inference`, `expert-alignment`, `auto-simulator`, `pdf-discussion-extraction`) — nunca se
+  `inference`, `expert-alignment`, `pdf-discussion-extraction`) — nunca se
   agrega lógica de negocio ahí
 
 **Excepción sancionada — despliegue a Databricks:** el proyecto sí incluye una migración manual,
@@ -131,7 +132,6 @@ Ejemplos:
 | Análisis histórico | flujo canónico `historical` de Claude | `/skill:historical` + `.pi/agents/historical.md` |
 | Análisis de inferencia | flujo canónico `inference` de Claude | `/skill:inference` + `.pi/agents/inference.md` |
 | Alineación experta | flujo canónico `expert-alignment` de Claude | `/skill:expert-alignment` + `.pi/agents/expert-alignment.md` |
-| Simulador automático | flujo canónico `auto-simulator` de Claude | `/skill:auto-simulator` + `.pi/agents/auto-simulator.md` |
 | Extracción de discusiones PDF | flujo canónico `pdf-discussion-extraction` de Claude | `/skill:pdf-discussion-extraction` + `.pi/agents/pdf-discussion-extraction.md` |
 | Reporte por lote | `/reporte-lote <grupo> [fecha_inicio fecha_fin]` | `/skill:reporte-lote <grupo> [fecha_inicio fecha_fin]` |
 | Informe gerencial | `/informe-gerencial <grupo> [fecha_inicio fecha_fin]` | `/skill:informe-gerencial <grupo> [fecha_inicio fecha_fin]` |
@@ -192,7 +192,7 @@ Esta capa:
 
 - resuelve solicitudes;
 - valida entradas;
-- detecta puntos críticos;
+- selecciona las ventanas del estudio;
 - construye envelopes de contexto;
 - ejecuta simulaciones locales;
 - valida respuestas de agentes;
@@ -232,13 +232,11 @@ Estos adaptadores traducen la sintaxis del runtime al contrato local compartido 
    - Produce el diagnóstico descriptivo/base del comportamiento de `UITI_VANO`.
 
 3. **`inference`**
-   - Interpreta con cautela las señales predictivas de MGCECDL/SHAP.
+   - Interpreta con cautela el modelo MIL por bolsas del cuaderno 05: la relevancia hacia
+     UITI mínimo de cada ventana, separada en variables de intervención y de escenario, el
+     diagnóstico de hasta 15 vanos y la simulación de intervención con su grafo diferencia.
 
-4. **`auto-simulator`**
-   - Interpreta escenarios automáticos de sensibilidad mínimo/máximo.
-   - Es la única etapa que puede degradarse y omitirse sin romper el reporte completo.
-
-5. **`expert-alignment`**
+4. **`expert-alignment`**
    - Compara los resultados de histórico + inferencia contra la evidencia de discusión de PDFs expertos.
 
 ## Resumen del workflow del reporte
@@ -248,7 +246,7 @@ Estos adaptadores traducen la sintaxis del runtime al contrato local compartido 
 1. Resolver argumentos y preflight.
 2. Confirmar una sola vez la ventana final circuito/fechas.
 3. Ejecutar `prepare()`.
-4. Despachar `historical`, `inference` y `auto-simulator`.
+4. Despachar `historical` e `inference`.
 5. Validar salidas.
 6. Ejecutar `prepare_expert_alignment()`.
 7. Ejecutar `expert-alignment`.
@@ -257,8 +255,8 @@ Estos adaptadores traducen la sintaxis del runtime al contrato local compartido 
 
 ### Detalle del workflow del reporte
 
-- `historical`, `inference` y `auto-simulator` son independientes.
-- cuando el runtime lo soporta, esas tres etapas deben correr en paralelo;
+- `historical` e `inference` son independientes.
+- cuando el runtime lo soporta, esas dos etapas deben correr en paralelo;
 - `expert-alignment` depende de salidas validadas de `historical` e `inference`;
 - `render()` fusiona todas las salidas validadas en un único artefacto HTML;
 - la generación del reporte es local por diseño;
@@ -309,24 +307,21 @@ flowchart TD
     end
 
     subgraph LANE3[Interpretación local, agentes]
-        CSV --> D1[Detección de puntos críticos<br/>critical_points.py]
+        CSV --> D1[Ranking de circuitos por vanos críticos<br/>ranking_circuitos.py]
         D1 --> D2[Constructor de contexto estructurado<br/>context_builder.py]
         D2 --> CHK{"Resolver circuito + ventana de fechas<br/>alerta+y detener si es inválido<br/>una sola confirmación con el usuario"}
         CHK -- "no encontrado / cero eventos" --> STOP0([Alerta y detener, sin crear run_dir])
 
         subgraph REPORTE["Skill /report, punto de entrada principal<br/>report_pipeline.py"]
             direction TB
-            CHK -- "confirmado una vez" --> RP0["prepare()<br/>puntos críticos + contexto +<br/>simulador de escenarios MGCECDL/SHAP +<br/>simulador automático mínimo/máximo"]
+            CHK -- "confirmado una vez" --> RP0["prepare()<br/>3 ventanas + contexto +<br/>diagnóstico y simulación MIL del cuaderno 06"]
             MODEL --> RP0
-            RP0 --> FORK{{"fork, despacho paralelo obligatorio<br/>historical / inference / auto-simulator"}}
+            RP0 --> FORK{{"fork, despacho paralelo obligatorio<br/>historical / inference"}}
             FORK --> A1[Agente: historical]
             FORK --> A2[Agente: inference]
-            FORK --> A4[Agente: auto-simulator<br/>omitido si falta bc.json]
             A1 --> G1{"¿Schema + provenance válidos?"}
             A2 --> G1
             G1 -- "no, reintentos agotados" --> STOP1([Detener la ejecución de este circuito])
-            A4 --> G3{"¿validate() OK?"}
-            G3 -- "no, agotado" --> SKIP3[Omitir auto-simulator]
             G1 -- sí --> JOIN{{join}}
             G3 -- sí --> JOIN
             SKIP3 --> JOIN
@@ -378,7 +373,7 @@ ningún agente ni skill — solo hace mantenimiento sobre los artefactos que los
 
 | Comando | Tipo | Invoca | Contrato L1 |
 |---|---|---|---|
-| `/report` | Skill orquestador | Agentes `historical`, `inference`, `auto-simulator`, `expert-alignment`; skill `vault-circuito` (paso 9) → `graphify` incremental | `report_pipeline.py` |
+| `/report` | Skill orquestador | Agentes `historical`, `inference`, `expert-alignment`; skill `vault-circuito` (paso 9) → `graphify` incremental | `report_pipeline.py` |
 | `/reporte-lote` | Skill de lote | `report` (pasos 2-9 completos, por circuito); `agrupamiento-circuitos` (paso 1.5) | `batch_report_contract.py` |
 | `/informe-gerencial` | Skill de síntesis | `report` (solo pasos 2-8, circuitos faltantes); `agrupamiento-circuitos`; `graphify` (rebuild completo aislado, paso 2.5) | `informe_gerencial_contract.py`, `graph_view_builder.py` |
 | `/agrupamiento-circuitos` | Skill standalone | Ninguno — expone el contrato que los dos anteriores reutilizan | `circuit_clustering_contract.py` |
@@ -399,11 +394,10 @@ flowchart TB
 
     subgraph REPORT["Skill report — orquestador de UN circuito"]
         direction TB
-        RP_PREPARE["prepare()<br/>puntos criticos + contexto +<br/>simulador MGCECDL-SHAP + auto-min-max"]
+        RP_PREPARE["prepare()<br/>3 ventanas + contexto +<br/>diagnostico y simulacion MIL"]
         RP_FORK{{"fork paralelo obligatorio"}}
         AG_HIST["Agente historical"]
         AG_INF["Agente inference"]
-        AG_AUTO["Agente auto-simulator<br/>(omitido si falta bc.json)"]
         RP_JOIN{{join}}
         RP_PEA["prepare_expert_alignment()"]
         AG_EXP["Agente expert-alignment"]
@@ -412,7 +406,6 @@ flowchart TB
         RP_PREPARE --> RP_FORK
         RP_FORK --> AG_HIST --> RP_JOIN
         RP_FORK --> AG_INF --> RP_JOIN
-        RP_FORK --> AG_AUTO --> RP_JOIN
         RP_JOIN --> RP_PEA --> AG_EXP --> RP_RENDER --> VAULT
     end
     CMD_REPORT --> RP_PREPARE
@@ -532,7 +525,6 @@ Artefactos típicos:
 
 - `structured_context_<timestamp>.json`
 - `llm_prompt_<timestamp>.md`
-- `critical_points_<timestamp>.csv`
 - `uiti_vano_timeseries_<timestamp>.png`
 - `llm_analysis_<timestamp>.json` opcional
 - `inference_llm_analysis_<timestamp>.json` opcional

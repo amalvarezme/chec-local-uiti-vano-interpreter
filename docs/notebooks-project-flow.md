@@ -148,13 +148,13 @@ de fechas), llamando a `simulate_feature_class_transitions`.
 
 **Distinción confirmada por código, no asumida:** este notebook **no** es el notebook retirado que
 menciona `.claude/skills/report/SKILL.md` (el que cubría el "simulador automático mínimo/máximo",
-fases 9-11, ahora cubierto por el agente `auto-simulator`). Ese notebook retirado llamaba a
+fases 9-11, ahora cubierto por la relevancia hacia UITI minimo del cuaderno 06). Ese notebook retirado llamaba a
 `simulate_automatic_minmax_sensitivity` (todas las variables, escenario base vs. mín/máx); `09` llama
 a una función distinta, `simulate_feature_class_transitions` (barrido manual de una sola variable), y
 no tiene sección de mínimo/máximo automático. Ambas funciones conviven en
 `src/chec_local_interpreter/simulator.py` — son dos herramientas genuinamente distintas que comparten
 módulo. `09_simulador.ipynb` sigue vigente como herramienta exploratoria manual, no reemplazada por
-el agente `auto-simulator`.
+la relevancia hacia UITI minimo del cuaderno 06.
 
 ## Hallazgos consolidados (riesgos a tener en cuenta)
 

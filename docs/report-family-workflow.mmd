@@ -13,11 +13,10 @@ flowchart TB
 
     subgraph REPORT["Skill report — orquestador de UN circuito"]
         direction TB
-        RP_PREPARE["prepare()<br/>puntos criticos + contexto +<br/>simulador MGCECDL-SHAP + auto-min-max"]
+        RP_PREPARE["prepare()<br/>3 ventanas + contexto +<br/>diagnostico y simulacion MIL"]
         RP_FORK{{"fork paralelo obligatorio"}}
         AG_HIST["Agente historical"]
         AG_INF["Agente inference"]
-        AG_AUTO["Agente auto-simulator<br/>(omitido si falta bc.json)"]
         RP_JOIN{{join}}
         RP_PEA["prepare_expert_alignment()"]
         AG_EXP["Agente expert-alignment"]
@@ -26,7 +25,6 @@ flowchart TB
         RP_PREPARE --> RP_FORK
         RP_FORK --> AG_HIST --> RP_JOIN
         RP_FORK --> AG_INF --> RP_JOIN
-        RP_FORK --> AG_AUTO --> RP_JOIN
         RP_JOIN --> RP_PEA --> AG_EXP --> RP_RENDER --> VAULT
     end
     CMD_REPORT --> RP_PREPARE

@@ -48,6 +48,22 @@ best value. Its content now travels inside each scenario's relevance table, so t
 agents** and the report no longer carries two tables answering the same question by different
 methods.
 
+**Critical-point detection is retired too, and with it the report's second time grid.** The report
+is built from exactly two sources: notebook 02's circuit ranking and notebook 06's diagnosis and
+simulation. Both speak in WINDOWS (`V1`..`V11`, the same grid notebook 05 used to build the bag
+cache), so the historian describing DAYS meant a second partition of the same period that nobody
+reconciles and that does not line up with the `(vano, ventana)` bag the model scores. Three
+consequences:
+
+- **The report studies THREE windows, not eleven.** The circuit's last window with events (how it
+  stands today) plus the two with the most critical bags (what brought it here). Selection is
+  deterministic and costs 6 ms — it reads observed `(n_obs, UITI)` against notebook 01.4's
+  geometry, never a model forward pass.
+- **The diagnosis covers at most 15 vanos per window**, first the Alto group and then Medio-Alto.
+- **Each window's variable ranking is split into `Intervencion` and `Escenario`.** Only
+  intervention levers move in the simulation: a scenario control — rain, wind, temperature — is
+  not something a crew executes, and presenting it next to pruning reads as equally actionable.
+
 ## When to Use
 
 Load this Skill when the user asks for a full circuit report — `/report <circuito>` with optional
@@ -142,11 +158,16 @@ Given `circuito (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
    `ReportPipelineError` (circuit not found, or zero events in the resolved window) before writing
    anything — report the error to the user and stop; do not invoke any agent.
 
-   As of this change, `prepare` also builds the MIL inference layer (read-only: it loads
-   `mil_vano_ventana_v1.pt` and the bag cache, never trains). Outcomes:
+   `prepare` also builds the MIL inference layer (read-only: it loads `mil_vano_ventana_v1.pt`
+   and the bag cache, never trains) and resolves the control catalogue through
+   `mil_inferencia.catalogo_de_controles`, a small on-disk cache keyed by the source files'
+   size/mtime. Building that catalogue from scratch costs 3,40 s and a 2.257 MB peak, MEASURED,
+   to produce 18 knobs; the cache reloads it in 0,80 s and 182 MB. A corrupt, stale or unwritable
+   cache degrades to "this run pays for it in full", never to a run that fails. Outcomes:
 
-   - **Healthy**: model and bag cache both load; one scenario per window the circuit actually
-     has, each with its per-vano relevance towards minimum UITI and its critical-vano diagnosis.
+   - **Healthy**: model and bag cache both load; one scenario per STUDIED window (three at most),
+     each with its per-vano relevance towards minimum UITI split by lever group, its
+     critical-vano diagnosis (≤15) and its intervention simulation.
    - **No model artifact**: `escenarios: []` and `sin_artefacto_de_modelo: true`. The context
      still declares model, unit and metric — a report that cannot tell "the model found nothing"
      from "there was no model" is worse than one that stays silent about the model.
@@ -351,28 +372,34 @@ already completed — dispatch it alone, immediately once both are done, without
    error. The whole-run "Tiempo total de ejecución" line above is computed separately from the
    run_dir timestamp and does not depend on this sidecar.
 
-   Reads all three validated outputs and calls `plotting.render_llm_analysis`, now also merging in
-   the 5 `automatic_simulation_*` kwargs (table, agent analysis, cost context, softmax curves,
-   vano-risk table) when `run_dir/auto_simulation_assets.json` and/or
-   absent (no crash either way, same degrade shape as the inference-simulator sidecar below).
-   Raises `ReportPipelineError` if the expert-alignment output is missing/invalid; no HTML is
-   written in that case.
+   Reads all three validated outputs and calls `plotting.render_llm_analysis`. Raises
+   `ReportPipelineError` if the expert-alignment output is missing/invalid; no HTML is written in
+   that case.
 
    `render` stays model-free in the ML-inference sense: it never reloads the MIL model or
-   recomputes SHAP (the `llm_model` kwarg above is unrelated — it just labels which *agent* produced
-   the report, not a model `render` itself calls). If `prepare` persisted
-   `run_dir/inference_render_assets.json` (the healthy-run case above), `render` resolves every
-   figure/graph path in it against `run_dir` and passes a populated `inference_results` mapping into
-   `plotting.render_llm_analysis`, so the bars/radar/estimated-graph section actually renders. If the
-   sidecar is absent (no trained model, or every scenario was skipped), `inference_results` stays
-   `None` — the inference-figures section is empty, same as before this change, and this is never a
-   crash or a `ReportPipelineError`.
+   recomputes anything (the `llm_model` kwarg above is unrelated — it just labels which *agent*
+   produced the report). If `prepare` persisted `run_dir/inference_render_assets.json` (the
+   healthy-run case above), `render` reads back BOTH of its halves:
 
-   `render` also now passes the *full*, unfiltered multi-circuit dataset (loaded fresh from
+   - `figuras`: one entry per STUDIED window, whose four figure paths resolve against `run_dir`
+     and become the `inference_results` mapping. `_render_inference_layout` iterates that mapping
+     **by window**. It used to look up four fixed MGCECDL-era keys (`top_uiti_periodo` and
+     company) that `prepare` stopped writing when the model moved to the MIL: none matched, and
+     the model's whole figure section rendered EMPTY in every report without a single message.
+   - `mapas`: the base and simulated per-vano classes of the last window with events, which
+     become the two GEO maps. Both layers come from the same u-hat, so the only difference
+     between the two maps is the intervention. They used to show "events" and "accumulated UITI"
+     — two descriptive views of the same past, with nothing to compare.
+
+   A missing sidecar leaves both `None`: the figure section is empty and the maps are omitted.
+   Never a crash, never a `ReportPipelineError`.
+
+   `render` also passes the *full*, unfiltered multi-circuit dataset (loaded fresh from
    `state["data_path"]`, before the single-circuit `filter_events` call) into
-   `plotting.render_llm_analysis` as `all_circuits_df`, so the circuit-clustering chart benchmarks
-   the studied circuit against the whole fleet (colored by risk cluster, studied circuit highlighted
-   with an "X") instead of only ever showing one point.
+   `plotting.render_llm_analysis` as `all_circuits_df`, so notebook 02's ranking places the
+   studied circuit against the whole fleet — its position by vanos in Medio-Alto + Alto, its risk
+   band, and its bar outlined. Recolouring that bar would lie about the band it falls in, which is
+   the very fact the figure exists to give.
 8. **Report the result** — tell the user the returned HTML `Path`. `/report` is local-only by
    design: it never touches `site/assets/site/results/`, so a run never changes what the published
    GitHub Pages site shows. Publishing a specific report there is a deliberate, separate action —

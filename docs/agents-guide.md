@@ -133,7 +133,7 @@ selection stays entirely upstream — Rule 2) and emits this envelope on stdout:
   "prompt": "the full prompt string, from render_prompt(..., skill_bundle=assemble_skill_bundle(profile=\"base\"))",
   "allowed": {
     "dates": ["2026-01-01", "2026-01-02", "..."],
-    "critical_point_ids": ["cp-2026-01-02", "..."],
+    "ventanas": ["V1", "V7", "V11"],
     "unavailable_columns": ["..."]
   }
 }
@@ -162,7 +162,7 @@ Each item in `key_findings` MAY carry:
 the context's `domain.variable_groups` variable universe (never a variable marked unavailable for
 that context). `agent` must equal `historical`. `rule` must be one of the seven base playbook ids
 ported into `.claude/skills/historical/SKILL.md`: `01_structured_context_builder`,
-`02_critical_point_interpreter`, `03_uiti_vano_behavior_explainer`, `04_domain_grounding_guardrails`,
+`02_window_interpreter`, `03_uiti_vano_behavior_explainer`, `04_domain_grounding_guardrails`,
 `05_llm_output_validator`, `06_base_repair`, `07_base_output_contract`. Omitting `provenance` never
 fails validation (it's additive, not required).
 
@@ -282,12 +282,12 @@ governed by this framework (that frozen function itself is untouched and still c
 - Rules (binding invariants, shared with expert-alignment): [`.claude/agents/rules/invariants.md`](../.claude/agents/rules/invariants.md)
 - Claude Code Skill: [`.claude/skills/historical/SKILL.md`](../.claude/skills/historical/SKILL.md)
   — ports `.claude/skills/historical/prompt/01_structured_context_builder.md`,
-  `02_critical_point_interpreter.md`, `03_uiti_vano_behavior_explainer.md`,
+  `02_window_interpreter.md`, `03_uiti_vano_behavior_explainer.md`,
   `04_domain_grounding_guardrails.md`, `05_llm_output_validator.md`, `06_base_repair.md`, and
   `07_base_output_contract.md`.
 - L1 deterministic Python: `src/chec_local_interpreter/context_builder.py`,
   `src/chec_local_interpreter/llm_contracts.py`, `src/chec_local_interpreter/llm_validation.py`
-  (`validar_provenance_base` and the public `allowed_dates`/`allowed_critical_point_ids`/
+  (`validar_provenance_base` and the public `allowed_dates`/`allowed_ventanas`/
   `unavailable_columns` accessors)
 - L2 CLI: `src/chec_local_interpreter/agent_tools/historical.py`
 
@@ -297,12 +297,12 @@ governed by this framework (that frozen function itself is untouched and still c
 - Rules (binding invariants, shared with expert-alignment/historical): [`.claude/agents/rules/invariants.md`](../.claude/agents/rules/invariants.md)
 - Claude Code Skill: [`.claude/skills/inference/SKILL.md`](../.claude/skills/inference/SKILL.md)
   — ports `.claude/skills/inference/prompt/01_structured_context_builder.md`,
-  `02_circuit_scenario_interpreter.md`, `03_uiti_vano_behavior_explainer.md`,
+  `02_window_scenario_interpreter.md`, `03_uiti_vano_behavior_explainer.md`,
   `04_graph_connectivity_guardrails.md`, `05_llm_output_validator.md`, and
   `06_inference_output_contract.md`.
 - L1 deterministic Python: `src/chec_local_interpreter/inference_validation.py`
   (`validar_respuesta_inferencia_strict`, `validar_provenance_inferencia`, and the public
-  `allowed_dates`/`allowed_critical_point_ids`/`allowed_variables`/`allowed_scenario_names`
+  `allowed_dates`/`allowed_ventanas`/`allowed_variables`/`allowed_scenario_names`
   accessors), `src/chec_local_interpreter/prompt_assets/inference.output_schema.json`
 - L2 CLI: `src/chec_local_interpreter/agent_tools/inference.py`
 - Frozen boundary: the L1/L2 layers above never import the frozen
@@ -336,7 +336,7 @@ runtimes:
 This report entry point is **not** a fourth entry in the "Agent roles" table above — it does not
 itself author or validate one persona's JSON output, so it does not fit that table's L1/L2/L3/L4
 shape. It is a thin runtime adapter over a shared contract that sequences the existing agent roles
-(`historical` -> `inference` -> `auto-simulator` -> `expert-alignment`, with the first three
+(`historical` -> `inference` -> `expert-alignment`, with the first two
 parallel-capable where supported) around a pure-Python, LLM-call-free orchestrator, and produces the
 final local HTML report.
 
@@ -371,7 +371,7 @@ deliberately no `verify-duration` counterpart to `verify-usage` — duration nev
 the strict fail-closed token-verification path. At render time, `report_pipeline.render()` resolves
 both sidecars per stage and passes a `stage_breakdown` list into
 `plotting.render_llm_analysis`, which renders it as a per-stage table (Etapa / Tokens / Tiempo) for
-each of `historical`/`inference`/`auto-simulator`/`expert-alignment`, shown beneath the pre-existing
+each of `historical`/`inference`/`expert-alignment`, shown beneath the pre-existing
 whole-run totals line (`tokens_total` + `elapsed_seconds`) — the whole-run line is preserved
 unchanged, not replaced. Both sidecars are optional and backward-compatible: their absence in older
 `run_dir`s renders identically to before this accounting existed.
@@ -411,7 +411,6 @@ Claude role plus Claude skill for the full contract.
 | Historical analysis | `.claude/skills/historical/SKILL.md` | `/skill:historical` -> `.pi/skills/historical/SKILL.md` |
 | Inference analysis | `.claude/skills/inference/SKILL.md` | `/skill:inference` -> `.pi/skills/inference/SKILL.md` |
 | Expert alignment | `.claude/skills/expert-alignment/SKILL.md` | `/skill:expert-alignment` -> `.pi/skills/expert-alignment/SKILL.md` |
-| Auto simulator | `.claude/skills/auto-simulator/SKILL.md` | `/skill:auto-simulator` -> `.pi/skills/auto-simulator/SKILL.md` |
 | PDF discussion extraction | `.claude/skills/pdf-discussion-extraction/SKILL.md` | `/skill:pdf-discussion-extraction` -> `.pi/skills/pdf-discussion-extraction/SKILL.md` |
 | Batch report | `/reporte-lote` -> `.claude/skills/reporte-lote/SKILL.md` | `/skill:reporte-lote` -> `.pi/skills/reporte-lote/SKILL.md` |
 | Managerial report | `/informe-gerencial` -> `.claude/skills/informe-gerencial/SKILL.md` | `/skill:informe-gerencial` -> `.pi/skills/informe-gerencial/SKILL.md` |
@@ -423,7 +422,6 @@ Claude role plus Claude skill for the full contract.
 | `historical` | `.claude/agents/historical.md` | `.pi/agents/historical.md` |
 | `inference` | `.claude/agents/inference.md` | `.pi/agents/inference.md` |
 | `expert-alignment` | `.claude/agents/expert-alignment.md` | `.pi/agents/expert-alignment.md` |
-| `auto-simulator` | `.claude/agents/auto-simulator.md` | `.pi/agents/auto-simulator.md` |
 | `pdf-discussion-extraction` | `.claude/agents/pdf-discussion-extraction.md` | `.pi/agents/pdf-discussion-extraction.md` |
 
 In Pi, the intended flow is: invoke the thin `/skill:<name>` wrapper, then let that wrapper defer to

@@ -39,8 +39,11 @@ def _base_domain_context() -> dict:
 
 def _base_context(unavailable: list[str] | None = None) -> dict:
     return {
-        "daily_series": [{"fecha_dia": "2026-01-01"}, {"fecha_dia": "2026-01-02"}],
-        "critical_points": [{"fecha_dia": "2026-01-02", "critical_point_id": "cp-2026-01-02"}],
+        "ventanas": [
+            {"w": "V1", "periodo": "2026-01-01 a 2026-01-31",
+             "desde": "2026-01-01", "hasta": "2026-01-31",
+             "uv": 10.0, "n": 2, "vanos": 1, "estudiada": True},
+        ],
         "critical_periods": [
             {
                 "critical_period_id": "period-2026-01-01-2026-01-02",
@@ -81,7 +84,7 @@ def test_char_base_absent_provenance_passes():
 
 def test_char_base_currently_passing_case():
     context = _base_context()
-    data = {"key_findings": [_base_finding(["2026-01-02", "cp-2026-01-02", "UITI_VANO"])]}
+    data = {"key_findings": [_base_finding(["2026-01-01", "V1", "UITI_VANO"])]}
     result = validar_provenance_base(data, context)
     assert result == {"ok": True, "errors": []}
 
@@ -123,13 +126,13 @@ def test_char_base_unresolvable_date():
     }
 
 
-def test_char_base_unresolvable_critical_point_id():
+def test_char_base_unresolvable_ventana():
     context = _base_context()
-    data = {"key_findings": [_base_finding(["cp-2099-12-31"])]}
+    data = {"key_findings": [_base_finding(["V99"])]}
     result = validar_provenance_base(data, context)
     assert result == {
         "ok": False,
-        "errors": ["key_findings: provenance.data_ref cites an unknown critical_point_id: cp-2099-12-31"],
+        "errors": ["key_findings: provenance.data_ref cites an unknown ventana: V99"],
     }
 
 
@@ -180,7 +183,7 @@ def _ea_context(predictive: list[str] | None = None) -> dict:
     return {
         "periodo_informe": {"inicio": "2026-01-01", "fin": "2026-01-31"},
         "fechas_informe": [
-            {"source": "critical_point", "fecha_inicio": "2026-01-10", "fecha_fin": "2026-01-10"}
+            {"source": "ventana_estudiada", "fecha_inicio": "2026-01-10", "fecha_fin": "2026-01-10"}
         ],
         "llm1_analysis": {},
         "llm2_inference_analysis": {},

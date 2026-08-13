@@ -1882,7 +1882,7 @@ def render_llm_analysis(
             )
         if stage_breakdown:
             # Per-stage breakdown (design #327 ADR-2): one row per agent
-            # stage (historical/inference/auto-simulator/expert-alignment)
+            # stage (historical/inference/expert-alignment)
             # from `report_pipeline._resolve_stage_breakdown`. Additive --
             # placed AFTER the whole-run tokens_total/elapsed_seconds block
             # above, never replacing it. Reuses the SAME

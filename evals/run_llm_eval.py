@@ -20,33 +20,33 @@ def _load_json(path: Path) -> dict:
 
 
 def _valid_output(context: dict) -> dict:
-    point = context["critical_points"][0]
+    ventana = context["ventanas"][0]
     return {
         "source": "llm",
         "prompt_version": PROMPT_VERSION,
         "headline": "Concentracion de UITI_VANO en el periodo analizado",
         "section_title": "Hallazgos del periodo",
         "executive_summary": [
-            "La evidencia tabular muestra que el comportamiento del periodo se concentra en los puntos criticos entregados."
+            "La evidencia tabular muestra que el comportamiento del periodo se concentra en las ventanas estudiadas."
         ],
         "key_findings": [
             {
-                "title": "Dia dominante del periodo",
-                "text": "El punto critico entregado concentra el mayor aporte de UITI_VANO dentro de la ventana.",
+                "title": "Ventana dominante del periodo",
+                "text": "La ventana estudiada concentra el mayor aporte de UITI_VANO del periodo.",
                 "evidence": [
                     {
-                        "date": point["fecha_dia"],
-                        "critical_point_id": point["critical_point_id"],
+                        "date": ventana["desde"],
+                        "ventana": ventana["w"],
                         "variable": "UITI_VANO",
-                        "summary": point["selection_reason"],
+                        "summary": "La ventana concentra el aporte de UITI_VANO del periodo.",
                     }
                 ],
                 "referenced_events": [
                     {
-                        "date": point["fecha_dia"],
-                        "critical_point_id": point["critical_point_id"],
-                        "indicator_value": float(point["metrics"]["UITI_VANO"]),
-                        "selection_reason": point["selection_reason"],
+                        "date": ventana["desde"],
+                        "ventana": ventana["w"],
+                        "indicator_value": float(ventana["uv"]),
+                        "selection_reason": "Ventana estudiada por el informe.",
                     }
                 ],
                 "variable_groups_used": ["Evento/Impacto"],
@@ -55,8 +55,7 @@ def _valid_output(context: dict) -> dict:
         ],
         "circuit_characterization": {
             "text": "Characterization text.",
-            "p97_vanos_uiti_vano": ["V1"],
-            "p97_vanos_eventos": ["V2"],
+            "ventanas_estudiadas": ["V1"],
             "top_3_modes_related": ["Mode1"],
             "probable_justifications_rules": ["Rule1"]
         },
@@ -135,32 +134,32 @@ def _valid_historical_output(context: dict) -> dict:
     call, no real `claude` subprocess, everything checked through the same
     code-level validators the L2 CLI's `validate` verb runs (two-stage:
     schema/guardrails then provenance)."""
-    point = context["critical_points"][0]
+    ventana = context["ventanas"][0]
     return {
         "source": "llm",
         "prompt_version": PROMPT_VERSION,
         "headline": "Concentracion de UITI_VANO en el periodo analizado",
         "section_title": "Hallazgos del periodo",
         "executive_summary": [
-            "La evidencia tabular muestra que el comportamiento del periodo se concentra en el punto critico entregado."
+            "La evidencia tabular muestra que el comportamiento del periodo se concentra en la ventana estudiada."
         ],
         "key_findings": [
             {
-                "title": "Dia dominante del periodo",
-                "text": "El punto critico entregado concentra el mayor aporte de UITI_VANO dentro de la ventana.",
+                "title": "Ventana dominante del periodo",
+                "text": "La ventana estudiada concentra el mayor aporte de UITI_VANO del periodo.",
                 "evidence": [
                     {
-                        "date": point["fecha_dia"],
-                        "critical_point_id": point["critical_point_id"],
+                        "date": ventana["desde"],
+                        "ventana": ventana["w"],
                         "variable": "UITI_VANO",
-                        "summary": point["selection_reason"],
+                        "summary": "La ventana concentra el aporte de UITI_VANO del periodo.",
                     }
                 ],
                 "referenced_events": [],
                 "variable_groups_used": ["Evento/Impacto"],
                 "confidence": "media",
                 "provenance": {
-                    "data_ref": [point["fecha_dia"], point["critical_point_id"], "UITI_VANO"],
+                    "data_ref": [ventana["desde"], ventana["w"], "UITI_VANO"],
                     "agent": "historical",
                     "rule": "03_uiti_vano_behavior_explainer",
                 },
@@ -168,15 +167,14 @@ def _valid_historical_output(context: dict) -> dict:
         ],
         "circuit_characterization": {
             "text": "Characterization text.",
-            "p97_vanos_uiti_vano": ["V1"],
-            "p97_vanos_eventos": ["V2"],
+            "ventanas_estudiadas": ["V1"],
             "top_3_modes_related": ["Mode1"],
             "probable_justifications_rules": ["Rule1"],
         },
-        "period_synthesis": "El periodo se explica principalmente por la concentracion de UITI_VANO en el punto ya detectado por el codigo.",
+        "period_synthesis": "El periodo se explica principalmente por la concentracion de UITI_VANO en la ventana estudiada.",
         "data_gaps": [],
         "limitations": ["El analisis usa solo datos estructurados disponibles en la ventana seleccionada."],
-        "recommended_actions": ["Revisar las filas fuente asociadas al punto critico detectado."],
+        "recommended_actions": ["Revisar las filas fuente asociadas a la ventana estudiada."],
     }
 
 
@@ -186,7 +184,6 @@ def _assert_prompt_contents(prompt: str, context: dict, schema: dict) -> list[st
         "UITI_VANO",
         "included_steps",
         "excluded_steps",
-        "do_not_detect_new_points",
         "RAG",
         "bitacoras",
         "normativa",
@@ -195,7 +192,7 @@ def _assert_prompt_contents(prompt: str, context: dict, schema: dict) -> list[st
         "what_if",
         "reporte_final",
         "uiti-vano-explanation-v1",
-        "critical_points",
+        "ventanas",
     ]
     for item in required:
         if item not in prompt:

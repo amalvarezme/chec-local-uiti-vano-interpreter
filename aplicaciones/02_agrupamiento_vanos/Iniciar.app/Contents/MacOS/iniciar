@@ -1,0 +1,61 @@
+#!/bin/sh
+# Lanzador de doble clic de macOS. Un `.app` y no el `iniciar.command` de al lado, por
+# una razon medida: un `.command` lo abre la aplicacion que LaunchServices tenga atada a
+# esa extension, y esa atadura la fija cada maquina, no el repositorio. Ghostty se
+# declara manejador de `.command` con rol de EDITOR y NO los ejecuta -- el doble clic le
+# pasa el foco a la sesion que ya estaba abierta y no arranca nada. Y ahi no hay arreglo
+# posible dentro del script, porque el script no llega a correr. Un `.app` no se puede
+# desviar asi: LaunchServices lo LANZA.
+#
+# El archivo hace dos papeles, y se distinguen por CHEC_EN_VENTANA:
+#
+#   sin la variable  es el doble clic. Abre una ventana NUEVA de Terminal que vuelve a
+#                    llamarlo con la variable puesta, y sale. Nunca se mete en la sesion
+#                    en la que alguien este trabajando.
+#   con la variable  ya esta dentro de esa ventana. Arranca la aplicacion y, cuando la
+#                    aplicacion termina -- su boton de cerrar, o Ctrl+C --, cierra la
+#                    ventana que abrio.
+#
+# Terminal.app y no el terminal preferido del usuario, a proposito: es el unico que esta
+# en todos los macOS y el unico con el que se puede tanto ABRIR la ventana como CERRARLA
+# despues. Eso ultimo es la mitad de lo que este lanzador promete.
+
+YO="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+APP="$(cd "$(dirname "$0")/../../.." && pwd)"
+
+if [ -z "$CHEC_EN_VENTANA" ]; then
+    osascript - "$YO" <<'FIN'
+on run argv
+    tell application "Terminal"
+        activate
+        do script ("CHEC_EN_VENTANA=1 " & quoted form of (item 1 of argv))
+    end tell
+end run
+FIN
+    exit 0
+fi
+
+cd "$APP" || exit 1
+python3 ../_comun/gestor.py iniciar "$@"
+SALIDA=$?
+
+# Y ahora la ventana. Se busca por el tty de este proceso y no por el numero de ventana:
+# el usuario pudo abrir, cerrar y reordenar ventanas mientras el tablero servia, y el
+# numero de entonces ya no significa nada. El tty no cambia en toda la vida de la sesion.
+#
+# Se llama siempre, aunque no haya tty -- corriendo fuera de una ventana no encuentra
+# ninguna que coincida y no hace nada. Preguntar antes solo anadiria una rama que en la
+# maquina del usuario nunca se toma y que en las pruebas esconderia justo esta.
+osascript - "$(tty)" <<'FIN' 2>/dev/null
+on run argv
+    tell application "Terminal"
+        repeat with v in windows
+            try
+                if tty of (selected tab of v) is (item 1 of argv) then close v
+            end try
+        end repeat
+    end tell
+end run
+FIN
+
+exit $SALIDA

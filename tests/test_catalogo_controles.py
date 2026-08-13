@@ -142,3 +142,42 @@ def test_the_catalogue_carries_everything_the_relevance_sweep_needs(tmp_path, fu
         datos, variables, cache_path=tmp_path / "knobs.joblib")
 
     assert {"knobs", "grupos", "label_encoders", "max_values_imputed"} <= set(vars(catalogo))
+
+
+def test_a_catalogue_that_cannot_be_built_degrades_to_an_empty_one(tmp_path, fuentes, monkeypatch):
+    """Una base incompatible con `Variables_seleccion.xlsx` no puede tumbar la corrida.
+
+    `procesar_dataset_completo` levanta `ValueError` cuando el CSV no trae las columnas
+    que el archivo declara. Sin esta guarda, una corrida CON modelo sobre una base asi
+    revienta en `prepare`, mientras que la misma corrida SIN modelo sale entera: el
+    informe se caia por la pieza que existe para hacerlo mas completo.
+
+    El hueco ya tiene forma declarada: un catalogo vacio hace que la relevancia devuelva
+    `sin_controles: true`, que el informe SI sabe presentar -- "no se le paso el
+    catalogo" en vez de "ninguna variable mueve este vano".
+    """
+    datos, variables = fuentes
+
+    def _explota(data_path, variables_path):
+        raise ValueError("Estas variables seleccionadas no existen en el dataset")
+
+    monkeypatch.setattr(mil_inferencia, "_construir_catalogo_controles", _explota)
+
+    catalogo = mil_inferencia.catalogo_de_controles(
+        datos, variables, cache_path=tmp_path / "knobs.joblib")
+
+    assert catalogo.knobs == []
+    assert catalogo.grupos == {}
+
+
+def test_a_degraded_catalogue_is_never_cached(tmp_path, fuentes, monkeypatch):
+    """Cachear el catalogo vacio dejaria el informe sin palancas para siempre, incluso
+    despues de arreglar la base."""
+    datos, variables = fuentes
+    cache = tmp_path / "knobs.joblib"
+    monkeypatch.setattr(mil_inferencia, "_construir_catalogo_controles",
+                        lambda d, v: (_ for _ in ()).throw(ValueError("incompatible")))
+
+    mil_inferencia.catalogo_de_controles(datos, variables, cache_path=cache)
+
+    assert not cache.exists()

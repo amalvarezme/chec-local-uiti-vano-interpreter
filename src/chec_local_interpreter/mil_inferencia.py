@@ -16,6 +16,7 @@ frecuencia sigue en el informe, pero como dato descriptivo del historiador.
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -187,7 +188,23 @@ def catalogo_de_controles(
         except Exception:  # noqa: BLE001 - joblib truncado, pickle de otra version, permisos
             pass
 
-    catalogo = _construir_catalogo_controles(data_path, variables_path)
+    try:
+        catalogo = _construir_catalogo_controles(data_path, variables_path)
+    except Exception as exc:  # noqa: BLE001 - base incompatible con Variables_seleccion.xlsx
+        # Sin esta guarda, una corrida CON modelo sobre una base incompatible revienta,
+        # mientras que la misma corrida SIN modelo sale entera: el informe se caia por la
+        # pieza que existe para hacerlo mas completo. El hueco ya tiene forma declarada --
+        # un catalogo vacio produce `sin_controles: true` en la relevancia, que el informe
+        # sabe presentar como "no se le paso el catalogo" y no como "ninguna variable
+        # mueve este vano". NO se cachea: dejaria el informe sin palancas para siempre,
+        # incluso despues de arreglar la base.
+        warnings.warn(
+            f"No se pudo construir el catalogo de controles: {exc}. El informe sale sin "
+            "palancas simulables para esta corrida.",
+            stacklevel=2,
+        )
+        return CatalogoControles(knobs=[], grupos={}, label_encoders={},
+                                 max_values_imputed={})
     try:
         destino.parent.mkdir(parents=True, exist_ok=True)
         joblib.dump({"clave": clave, "catalogo": catalogo}, destino, compress=3)

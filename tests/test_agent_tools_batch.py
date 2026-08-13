@@ -821,24 +821,18 @@ def _sample_historical_context(circuito: str = "DON23L13") -> dict:
             "unavailable_cols": [],
         },
         "selected_context": {"circuitos": [circuito], "indicator": "UITI_VANO"},
-        "summary": {"events": 2, "nonzero_days": 2, "total_uv": 15.0},
-        "daily": [
-            {"d": "2026-01-01", "uv": 5.0, "n": 1, "dur": 1.0},
-            {"d": "2026-01-02", "uv": 10.0, "n": 1, "dur": 2.0},
+        "summary": {"events": 2, "ventanas": 2, "ventanas_con_eventos": 1,
+                    "total_uv": 15.0, "ventana_pico": "V1",
+                    "periodo_pico": "2026-01-01 a 2026-01-31", "uv_pico": 15.0},
+        "ventanas": [
+            {"w": "V1", "periodo": "2026-01-01 a 2026-01-31",
+             "desde": "2026-01-01", "hasta": "2026-01-31",
+             "uv": 15.0, "n": 2, "vanos": 1, "estudiada": True},
+            {"w": "V2", "periodo": "2026-01-15 a 2026-02-14",
+             "desde": "2026-01-15", "hasta": "2026-02-14",
+             "uv": 0.0, "n": 0, "vanos": 0, "estudiada": False},
         ],
-        "critical_points": [
-            {
-                "critical_point_id": "cp-2026-01-02",
-                "fecha_dia": "2026-01-02",
-                "rank": 1,
-                "score": 2.0,
-                "types": ["top_contribution_day"],
-                "selection_reason": "El dia aporta una fraccion alta del UITI_VANO total.",
-                "metrics": {"UITI_VANO": 10.0},
-                "daily_aggregates": {"events": 1},
-            }
-        ],
-        "critical_periods": [],
+        "ventanas_estudio": ["V1"],
         "domain": {
             "variable_groups": {
                 "Entorno/Riesgo": {"variables": ["NR_T", "DDT"]},
@@ -860,14 +854,14 @@ def _valid_historical_response(circuito: str = "DON23L13") -> dict:
         "executive_summary": ["La evidencia tabular muestra un punto dominante."],
         "key_findings": [
             {
-                "title": "Punto dominante",
-                "text": "El punto concentra el comportamiento del periodo.",
+                "title": "Ventana dominante",
+                "text": "La ventana concentra el comportamiento del periodo.",
                 "evidence": [
                     {
-                        "date": "2026-01-02",
-                        "critical_point_id": "cp-2026-01-02",
+                        "date": "2026-01-01",
+                        "ventana": "V1",
                         "variable": "UITI_VANO",
-                        "summary": "El dia aporta una fraccion alta del UITI_VANO total.",
+                        "summary": "La ventana aporta una fraccion alta del UITI_VANO total.",
                     }
                 ],
                 "referenced_events": [],
@@ -877,15 +871,14 @@ def _valid_historical_response(circuito: str = "DON23L13") -> dict:
         ],
         "circuit_characterization": {
             "text": "Characterization text.",
-            "p97_vanos_uiti_vano": ["V1"],
-            "p97_vanos_eventos": ["V2"],
+            "ventanas_estudiadas": ["V1"],
             "top_3_modes_related": ["Mode1"],
             "probable_justifications_rules": ["Rule1"],
         },
-        "period_synthesis": "El comportamiento del periodo se concentra en el punto critico.",
+        "period_synthesis": "El comportamiento del periodo se concentra en la ventana estudiada.",
         "data_gaps": [],
         "limitations": ["Solo se usa la informacion estructurada disponible."],
-        "recommended_actions": ["Revisar los eventos fuente del punto critico."],
+        "recommended_actions": ["Revisar los eventos fuente de la ventana estudiada."],
     }
 
 

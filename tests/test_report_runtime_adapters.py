@@ -123,7 +123,7 @@ def test_runtime_adapters_forbid_ambiguous_generic_worker_dispatch():
 
     assert "one explicit task per role" in content
     assert "Never launch multiple identical workers" in content
-    assert "historical" in content and "inference" in content and "auto-simulator" in content
+    assert all(rol in content for rol in ("historical", "inference", "expert-alignment"))
 
 
 def test_runtime_adapters_reject_read_only_workers_for_role_authoring():

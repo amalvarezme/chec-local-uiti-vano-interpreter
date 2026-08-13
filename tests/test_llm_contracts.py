@@ -84,7 +84,7 @@ def test_output_schema_declares_optional_per_finding_provenance():
     assert provenance_schema["properties"]["data_ref"]["minItems"] == 1
     assert set(provenance_schema["properties"]["rule"]["enum"]) == {
         "01_structured_context_builder",
-        "02_critical_point_interpreter",
+        "02_window_interpreter",
         "03_uiti_vano_behavior_explainer",
         "04_domain_grounding_guardrails",
         "05_llm_output_validator",
