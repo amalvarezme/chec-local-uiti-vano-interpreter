@@ -1,4 +1,4 @@
-"""Pure-Python orchestrator for the `/reporte` pipeline (Slice B).
+"""Pure-Python orchestrator for the `/report` pipeline.
 
 Splits the end-to-end report flow into resumable stages so the interactive
 Claude Code agent Skills (historical, inference, expert-alignment) sit
@@ -7,27 +7,34 @@ Every stage here is deterministic and reads/writes plain JSON under a
 per-run directory ("run_dir") on disk — no LLM call ever happens in this
 module.
 
+**La unidad del informe es la VENTANA.** Las tres etapas con agente, el ranking
+del cuaderno 02 y el diagnostico y la simulacion del 06 hablan de la misma
+rejilla `V1`..`V11`, la que el cuaderno 05 uso para construir el cache de
+bolsas. Aqui vivia ademas una deteccion de puntos criticos que ponia al
+historiador a describir DIAS: una segunda rejilla sobre el mismo periodo que
+nadie reconcilia y que no coincide con la bolsa (vano, ventana) que el modelo
+puntua. Se retiro con el camino MGCECDL.
+
 Stages:
     prepare(circuito, fecha_inicio=None, fecha_fin=None, *, data_path=None)
         Loads/filters the dataset for one circuit, defaults the date range
         via `data_loader.circuit_date_range` when either bound is missing,
-        runs critical-point detection, and writes the two raw context
-        payloads (`historical.bc.json`, `inference.bc.json`) plus an
-        `l1_state.json` bookkeeping file under a fresh run_dir. Also loads
-        the MIL bag model once and runs the inference layer and the
-        automatic min/max sensitivity simulator (`auto-simulator.bc.json` +
-        `auto_simulation_assets.json`), both degrading to a no-op when no
-        model artifact is available. Fails fast with `ReportPipelineError`
-        if the circuit does not exist or the resolved window has zero
-        events — no context is built and no run_dir is created in either
-        case.
+        selects the THREE windows the report studies (the circuit's last one
+        with events plus the two most influential), and writes the two raw
+        context payloads (`historical.bc.json`, `inference.bc.json`) plus an
+        `l1_state.json` bookkeeping file under a fresh run_dir. Also loads the
+        MIL bag model once and runs the inference layer, degrading to a no-op
+        when no model artifact is available. Fails fast with
+        `ReportPipelineError` if the circuit does not exist or the resolved
+        window has zero events — no context is built and no run_dir is created
+        in either case.
 
     prepare_expert_alignment(run_dir, *, pdf_discussions_path=None)
         Reads the historical and inference agents' VALIDATED outputs
         (`historical.out.json`, `inference.out.json` — written by the
         interactive Skills after `agent_tools.*.validate` returns `ok:
-        true`), pools report dates from them plus the circuit's critical
-        points, matches the already-extracted PDF-discussion xlsx table
+        true`), pools report dates from them plus the three studied
+        windows' periods, matches the already-extracted PDF-discussion xlsx table
         (`reports/analysis-documents/tabla_pdfs_intervalo_*.xlsx` — built by
         the separate, out-of-scope agent-native PDF-discussion batch runbook,
         `chec_local_interpreter.pdf_discussion_pipeline` plus
@@ -44,13 +51,11 @@ Stages:
     render(run_dir, *, output_dir=None)
         Reads all three validated outputs (historical, inference,
         expert-alignment) from the run_dir and calls
-        `plotting.render_llm_analysis`, merging in the 5
-        `automatic_simulation_*` kwargs from the optional auto-simulator
-        sidecar/agent-output files when present (all `None` otherwise, same
-        degrade shape as the inference-simulator sidecar), returning the
-        HTML `Path`. Fails fast with `ReportPipelineError` if the
-        expert-alignment output is missing/invalid — `render_llm_analysis`
-        is never called in that case.
+        `plotting.render_llm_analysis`, resolving the per-window figures and
+        the base/simulated map classes from the optional render sidecar when
+        present (`None` otherwise), returning the HTML `Path`. Fails fast with
+        `ReportPipelineError` if the expert-alignment output is missing or
+        invalid — `render_llm_analysis` is never called in that case.
 
 `runs_root` (on `prepare`), `pdf_discussions_path` (on
 `prepare_expert_alignment`), and `output_dir` (on `render`) are additive,
@@ -61,13 +66,11 @@ the design's proposed locations when omitted.
 
 from __future__ import annotations
 
-import io
 import json
 import math
 import os
 import warnings
-from contextlib import redirect_stdout
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Sequence
@@ -75,50 +78,31 @@ from typing import Any, Sequence
 import matplotlib
 
 # Force a non-interactive backend BEFORE any transitive import below pulls in
-# `matplotlib.pyplot` (e.g. `chec_impacto.data`/`chec_impacto.interpretability
-# .circuit_analysis`, whose `graficar_barras_y_radar` calls `plt.show()`
-# twice per scenario). Without this, running this pipeline outside pytest
+# `matplotlib.pyplot`. Without this, running this pipeline outside pytest
 # (only `tests/conftest.py` sets `matplotlib.use("Agg")`, for test isolation)
 # would try to pop GUI windows or hang on a headless/server environment.
 # Must run before the first `import matplotlib.pyplot` anywhere in the
 # process, since the backend is resolved on first use.
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402 (must follow matplotlib.use("Agg"))
-import numpy as np
-import pandas as pd
 
-from chec_impacto.data import preparar_splits_estratificados, procesar_dataset_completo
-from chec_impacto.interpretability.circuit_analysis import (
-    KernelShapTopVarsExtractor,
-    agrupar_por_vano,
-    construir_contexto_escenario_inferencia,
-    construir_modos_chec,
-    graficar_barras_y_radar,
-)
-from chec_impacto.training import (
-    predict_classification,
-    resolve_training_device,
-)
 from chec_local_interpreter.agent_output import ReportPipelineError, load_validated_agent_output
-from chec_local_interpreter.attribution import enrich_critical_points
 from chec_local_interpreter.circuit_identity import canonical_circuit_identity
 from chec_local_interpreter.mil_inferencia import (
     METRICA as _METRICA_MIL,
     UNIDAD as _UNIDAD_MIL,
+    aplicar_catalogo,
     cargar_recursos_mil,
+    catalogo_de_controles,
     construir_contexto_inferencia_mil,
-    knobs_desde_datos,
+    mapas_de_escenario,
+    seleccionar_ventanas_reporte,
+    ventana_de_mapas,
 )
 from chec_local_interpreter.mil_figuras import figuras_de_escenario
 from chec_local_interpreter.config import (
-    CriticalityThresholds,
     DEFAULT_DATA_PATH,
-    DEFAULT_MODEL_BASENAME,
     DEFAULT_MODEL_DIR,
-    DEFAULT_OPTUNA_STUDY_PATH,
     DEFAULT_VARIABLES_SELECCION_PATH,
-    SHAP_RANDOM_STATE,
-    _modelo_mas_reciente,
     project_root,
 )
 from chec_local_interpreter.context_builder import (
@@ -126,14 +110,7 @@ from chec_local_interpreter.context_builder import (
     save_json_artifact,
     vano_series_records,
 )
-from chec_local_interpreter.critical_points import (
-    build_daily_series,
-    compute_daily_features,
-    detect_critical_periods,
-    detect_point_reasons,
-    rank_critical_points,
-    scaled_max_critical_points,
-)
+from chec_local_interpreter.ventanas_015 import construir_ventanas
 from chec_local_interpreter.data_loader import (
     available_circuits,
     circuit_date_range,
@@ -150,34 +127,9 @@ from chec_local_interpreter.expert_alignment import (
     seleccionar_top_coincidencias_temporales,
 )
 from chec_local_interpreter.plotting import render_llm_analysis
-from chec_local_interpreter.simulator import (
-    simulate_automatic_minmax_sensitivity,
-    simulate_suggested_vano_risk,
-    simulate_top_softmax_curves,
-)
 
-# Mirrors the notebook's own defaults (`TOP_N_VANOS`/`TOP_K_VARS`/
-# `FILTRO_UITI_MAX`/`VENTANA_CLIMATICA_HORAS` in
-# `the retired interactive notebook`), preserved
-# for parity since this change does not introduce a new tuning surface.
-# `TOP_N_VANOS` is interpreted as a percentile (97 => vanos with metric >=
-# P97) and is deliberately passed as BOTH `top_n_vanos` and
-# `top_vanos_percentile`, matching the notebook's own call.
-_TOP_N_VANOS_PERCENTILE = 97
-_TOP_K_VARS = 20
-_FILTRO_UITI_MAX = None
-_VENTANA_CLIMATICA_HORAS = 12
-
-# Kernel SHAP tuning, mirrors the same notebook cell's
-# `SHAP_BACKGROUND_SIZE`/`SHAP_NSAMPLES`/`SHAP_BATCH_SIZE` defaults.
-# `SHAP_RANDOM_STATE` itself lives in `config.py` (task 1.1) and is threaded
-# explicitly into every `KernelShapTopVarsExtractor(...)` call below (task 2.2).
-_SHAP_BACKGROUND_SIZE = 40
-_SHAP_NSAMPLES = 80
-_SHAP_BATCH_SIZE = 512
-
-# No automatic simulator in this change: `escenarios` is always empty and
-# `modelo` is a fixed placeholder label rather than a real model name.
+# `escenarios` vacio y una etiqueta fija en vez de un nombre de modelo real: es la forma
+# que toma el contexto cuando no hay artefacto del MIL en disco.
 _NO_SIMULATOR_MODEL_LABEL = "sin_simulador_automatico"
 
 DEFAULT_RUNS_ROOT = project_root() / "reports" / "interpretability" / "runs"
@@ -228,55 +180,6 @@ def _new_run_dir(circuito: str, *, runs_root: str | Path | None = None) -> Path:
     run_dir.mkdir(parents=True, exist_ok=True)
     return run_dir
 
-
-
-
-
-@dataclass
-class SharedInferenceInputs:
-    """`procesar_dataset_completo` calculado UNA vez por corrida de `prepare()`.
-
-    De aqui salen el catalogo de controles del informe y los codificadores que la
-    simulacion necesita, sin que cada consumidor rehaga el dataset.
-
-    Aqui vivia ademas un escalador MinMax reajustado en cada corrida, con su propia
-    advertencia de que podia diverger EN SILENCIO de la distribucion con la que se
-    entreno el modelo si el CSV cambiaba. Se fue con MGCECDL: el modelo MIL puntua
-    sobre la matriz de instancias RAW, asi que no hay escalado que pueda desalinearse.
-    """
-
-    datos: dict[str, Any]
-
-def _prepare_shared_inference_inputs(
-    source_path: str | Path,
-    variables_path: str | Path,
-) -> SharedInferenceInputs:
-    """Compute `procesar_dataset_completo` ONCE, for `prepare()` to thread
-    into both simulators via `shared_inputs` (design item 3). The stratified-
-    split MinMax scaler fit itself is NOT computed here -- it is deferred to
-    `SharedInferenceInputs.splits`'s first access (Judgment Day round 1 fix),
-    so a circuit/window with zero surviving events never pays that cost (see
-    `SharedInferenceInputs`'s own docstring for the full rationale).
-
-    Uses the same deterministic parameters `_compute_inference_scenarios`/
-    `_run_automatic_simulator` each used to recompute independently
-    (`_FILTRO_UITI_MAX`, `_VENTANA_CLIMATICA_HORAS`).
-    """
-    source_path = Path(source_path)
-    variables_path = Path(variables_path)
-
-    with redirect_stdout(io.StringIO()):
-        datos = procesar_dataset_completo(
-            path_clima=source_path,
-            path_variables_seleccion=variables_path,
-            use_sampling=False,
-            min_samples_per_codigo=5,
-            target="UITI_VANO",
-            filtro_uiti_max=_FILTRO_UITI_MAX,
-            ventana_climatica_horas=_VENTANA_CLIMATICA_HORAS,
-        )
-
-    return SharedInferenceInputs(datos=datos)
 
 
 
@@ -429,67 +332,55 @@ def prepare(
     # directory to persist figures into.
     run_dir = _new_run_dir(circuito, runs_root=runs_root)
 
-    daily_df = build_daily_series(events_df)
-    feature_df = compute_daily_features(daily_df)
-    thresholds = CriticalityThresholds()
-    reasons = detect_point_reasons(feature_df, thresholds)
-    critical_points = rank_critical_points(feature_df, reasons, scaled_max_critical_points(start, end))
-    critical_points = enrich_critical_points(events_df, critical_points)
-    critical_periods = detect_critical_periods(feature_df, thresholds)
+    # La rejilla de ventanas sale del rango COMPLETO de la base, no del recorte del
+    # informe: es la misma con la que el cuaderno 05 construyo el cache de bolsas.
+    # Derivarla de los eventos ya filtrados hacia que la `V1` del historiador y la `V1`
+    # del modelo fueran dos periodos distintos con el mismo nombre.
+    rejilla = construir_ventanas(frame["FECHA"])
 
-    # Graphify enrichment failure is handled INSIDE build_context_package
-    # (existing degrade-to-string behavior) — deliberately not wrapped here
-    # so that existing degradation path is neither shadowed nor duplicated
-    # (task 6.8).
-    historical_context = build_context_package(
-        events_df=events_df,
-        daily_df=daily_df,
-        critical_points=critical_points,
-        critical_periods=critical_periods,
-        selected_circuitos=[circuito],
-        start_date=start,
-        end_date=end,
-        raw_df=events_df,
-    )
-
-    fechas_interes = [point["fecha_dia"] for point in critical_points]
-    # Loaded ONCE here and threaded into both simulators (design D2): the
-    # inference/SHAP simulator and the automatic min/max simulator each used
     # El modelo del informe es el MIL por bolsas del cuaderno 05, el mismo que responde
-    # el tablero del 06. Antes era MGCECDL por fila: dos modelos contestando la misma
-    # pregunta, y un vano podia salir critico en uno y no en el otro sin que nada lo
-    # explicara. El catalogo de controles se construye del mismo dataset y se hereda del
-    # panel, para que informe y tablero ofrezcan las MISMAS palancas.
-    # La ruta sale de `DEFAULT_MODEL_DIR` y no de una constante propia: es el mismo
-    # directorio que el camino anterior consultaba, asi que apuntarlo a otro sitio
-    # sigue significando "esta corrida no tiene modelo" -- que es como se prueba el
-    # degradado y como se aisla una corrida de los artefactos del repo.
+    # el tablero del 06. El catalogo de controles se hereda del panel, para que informe y
+    # tablero ofrezcan las MISMAS palancas.
+    # La ruta sale de `DEFAULT_MODEL_DIR` y no de una constante propia: apuntarlo a otro
+    # sitio significa "esta corrida no tiene modelo", que es como se prueba el degradado
+    # y como se aisla una corrida de los artefactos del repo.
     recursos_mil = cargar_recursos_mil(
         ruta_modelo=Path(DEFAULT_MODEL_DIR) / NOMBRE_MODELO_MIL
     )
-    # Computed ONCE here and threaded into both simulators (design item 3):
-    # `_run_inference_simulator`/`_compute_inference_scenarios` and
-    # `_run_automatic_simulator` each used to independently recompute
-    # `procesar_dataset_completo` + re-fit the MinMax scaler with
-    # byte-identical parameters. Guarded by `model is not None` (mirrors the
-    # R3 no-op both simulators already degrade to) so a run with no trained
-    # model artifact never pays this cost for nothing.
-    shared_inputs = (
-        _prepare_shared_inference_inputs(source_path, DEFAULT_VARIABLES_SELECCION_PATH)
-        if recursos_mil is not None
-        else None
+    if recursos_mil is not None:
+        aplicar_catalogo(recursos_mil, catalogo_de_controles(
+            source_path, DEFAULT_VARIABLES_SELECCION_PATH))
+
+    # Las TRES ventanas que el informe estudia: la ultima con eventos del circuito, mas
+    # las dos de mayor influencia. Recorrer las once producia once escenarios que nadie
+    # lee enteros y que el agente tiene que resumir a ojo.
+    ventanas_estudio = (
+        seleccionar_ventanas_reporte(recursos_mil, circuito=circuito)
+        if recursos_mil is not None else []
     )
-    if recursos_mil is not None and shared_inputs is not None:
-        recursos_mil.knobs, recursos_mil.grupos_por_knob = knobs_desde_datos(
-            shared_inputs.datos
-        )
-        recursos_mil.label_encoders = shared_inputs.datos.get("label_encoders", {})
-        recursos_mil.max_values_imputed = shared_inputs.datos.get("max_values_imputed", {})
+    # Los periodos de esas ventanas son el universo de fechas citables. Antes lo eran los
+    # dias de los puntos criticos.
+    _periodos = {str(v["etiqueta"]): v for v in rejilla}
+    fechas_interes = [
+        f for w in ventanas_estudio
+        for f in _fechas_de_ventana(_periodos.get(w))
+    ]
+
+    historical_context = build_context_package(
+        events_df=events_df,
+        selected_circuitos=[circuito],
+        start_date=start,
+        end_date=end,
+        ventanas=rejilla,
+        ventanas_estudio=ventanas_estudio,
+        raw_df=events_df,
+    )
 
     # Sin artefacto del modelo el informe sigue saliendo, con la parte predictiva vacia:
-    # la misma forma de hueco que tenia el camino anterior (R3), para que la falta de un
-    # `.pt` no tumbe el diagnostico historico, que no lo necesita.
+    # la misma forma de hueco que tenia el camino anterior, para que la falta de un `.pt`
+    # no tumbe el diagnostico historico, que no lo necesita.
     render_assets: dict[str, Any] = {}
+    mapas: dict[str, Any] | None = None
     if recursos_mil is None:
         inference_context = _contexto_inferencia_vacio(circuito, start, end, fechas_interes)
     else:
@@ -499,7 +390,13 @@ def prepare(
             fecha_inicio=start,
             fecha_fin=end,
             fechas_interes=fechas_interes,
+            ventanas=ventanas_estudio,
         )
+        inference_context["ventanas_estudio"] = list(ventanas_estudio)
+        inference_context["periodos_ventana"] = {
+            w: str(_periodos[w]["periodo"]) for w in ventanas_estudio if w in _periodos
+        }
+
         # La serie completa de los vanos que el diagnostico señalo. Verlos solo en la
         # ventana en que salieron criticos no distingue un problema cronico de uno que
         # aparecio el mes pasado, y esas dos cosas se atienden distinto.
@@ -509,7 +406,7 @@ def prepare(
             for c in e.get("vanos_criticos", [])
         ))
         inference_context["series_vanos_identificados"] = vano_series_records(
-            events_df, circuito=circuito, fids=_identificados
+            events_df, circuito=circuito, fids=_identificados, ventanas=rejilla
         )
 
         # Los cuatro paneles por escenario. Se dibujan aqui y no en `render` porque
@@ -535,24 +432,33 @@ def prepare(
                     stacklevel=2,
                 )
 
+        # Los dos mapas describen UNA ventana: la ultima con eventos del circuito. Ahi la
+        # pregunta es "como esta hoy y como quedaria intervenido", que es lo que sostiene
+        # una orden de trabajo; un mapa del periodo entero mezcla seis meses de estados.
+        _ventana_mapas = ventana_de_mapas(recursos_mil, circuito=circuito)
+        _escenario_mapas = next(
+            (e for e in inference_context["escenarios"] if e["ventana"] == _ventana_mapas),
+            None,
+        )
+        if _escenario_mapas is not None:
+            mapas = mapas_de_escenario(_escenario_mapas)
+            mapas["periodo"] = str(_periodos.get(_ventana_mapas, {}).get("periodo", ""))
+
     save_json_artifact(historical_context, run_dir / "historical.bc.json")
     save_json_artifact(inference_context, run_dir / "inference.bc.json")
-    if render_assets:
-        # Only written when the simulator actually produced something to
-        # persist -- `render()` (task 3.4) treats an absent sidecar as
-        # "no inference figures for this run" (R1/R3 gap), never a crash.
+
+    # Los dos sidecars de render, en UN solo archivo. `render` los lee de vuelta y no
+    # vuelve a cargar el modelo ni a recalcular nada. Un fallo de disco escribiendolo
+    # ocurre DESPUES de que el diagnostico ya esta calculado y de que los dos `.bc.json`
+    # ya estan en disco: dejarlo propagar tumbaria una corrida por lo demas completa, asi
+    # que degrada a "esta corrida sale sin figuras", que es lo que `render` ya tolera.
+    if render_assets or mapas:
         try:
-            save_json_artifact(render_assets, run_dir / "inference_render_assets.json")
+            save_json_artifact(
+                {"figuras": render_assets, "mapas": mapas},
+                run_dir / "inference_render_assets.json",
+            )
         except OSError as exc:
-            # A disk-full/permission-revoked failure writing this sidecar
-            # happens AFTER `_run_inference_simulator` already succeeded
-            # (features/escenarios computed, PNGs/HTML already on disk) and
-            # AFTER `historical.bc.json`/`inference.bc.json` are already
-            # written above -- letting it propagate would crash an otherwise
-            # fully successful run. `_build_inference_results` already
-            # tolerates an absent sidecar (returns `None`, no crash), so this
-            # degrades to "no inference figures for this run" instead of
-            # aborting `prepare()`.
             warnings.warn(
                 "No se pudo escribir el sidecar de activos de render para "
                 f"'{circuito}': {exc}. La ejecución continúa sin figuras de "
@@ -560,34 +466,29 @@ def prepare(
                 stacklevel=2,
             )
 
-    # Runs AFTER `inference.bc.json` is persisted above: `_run_automatic_
-    # simulator` reads it back to derive its candidate variable list (see
-    # its own docstring for why -- D1/D2). Degrades to a no-op (returns
-    # `None`, writes nothing) when `model is None`, mirroring the inference
-    # simulator's own R3 gap. `shared_inputs` (design item 3) is the SAME
-    # object passed to `_run_inference_simulator` above, guaranteeing this
-    # simulator's `feature_scaler` is object-identical to the inference
-    # simulator's.
-    # Aqui corria el simulador automatico, un barrido min-max sobre MGCECDL. Se jubila
-    # con el modelo: ese barrido es exactamente lo que `relevancia_hacia_uiti_minimo`
-    # sustituyo en el cuaderno 06 -- con signo, y mirando el INTERIOR del rango y no
-    # solo los extremos, que es donde 10 de los 15 controles numericos tienen su mejor
-    # valor --, asi que su contenido ya viaja en la relevancia de cada escenario. El
-    # flujo pasa de cuatro agentes a tres y el informe deja de traer dos tablas que
-    # contestaban lo mismo con distinto metodo.
-
     save_json_artifact(
         {
             "circuito": circuito,
             "fecha_inicio": start,
             "fecha_fin": end,
             "data_path": str(source_path),
-            "critical_points": critical_points,
-            "critical_periods": critical_periods,
+            "ventanas_estudio": list(ventanas_estudio),
         },
         run_dir / "l1_state.json",
     )
     return run_dir
+
+
+def _fechas_de_ventana(ventana: Any) -> list[str]:
+    """Los dos extremos de una ventana, en ISO. Es el universo de fechas que el agente
+    puede citar: antes lo eran los dias de los puntos criticos."""
+    if not ventana:
+        return []
+    import pandas as pd
+
+    desde = pd.Timestamp(ventana["desde"]).date().isoformat()
+    hasta = (pd.Timestamp(ventana["hasta_excl"]) - pd.Timedelta(days=1)).date().isoformat()
+    return [desde, hasta]
 
 def prepare_expert_alignment(
     run_dir: str | Path,
@@ -624,10 +525,14 @@ def prepare_expert_alignment(
     inference_data = _load_validated_agent_output(run_dir, "inference")
     inference_context = _read_json(run_dir / "inference.bc.json")
 
+    # Las fechas de interes salen de las TRES ventanas estudiadas, no de los dias que la
+    # deteccion de puntos criticos señalaba: es la misma rejilla sobre la que trabajan el
+    # historiador, el modelo y la simulacion, asi que la tabla de expertos se cruza contra
+    # los periodos que el informe de verdad discute.
     fechas_informe = extraer_fechas_informe(
         validation_data=historical_data,
         inference_validation_data=inference_data,
-        critical_points=state["critical_points"],
+        fechas_interes=inference_context.get("fechas_interes", []),
         fecha_inicio=state["fecha_inicio"],
         fecha_fin=state["fecha_fin"],
     )
@@ -676,22 +581,34 @@ def prepare_expert_alignment(
     save_json_artifact(context, run_dir / "expert-alignment.bc.json")
     return run_dir
 
-def _build_inference_results(run_dir: Path) -> dict[str, Any] | None:
-    """Read `run_dir/inference_render_assets.json` (task 3.2's sidecar) if
-    present and rebuild the `inference_results` mapping `render_llm_analysis`
-    expects: scenario key -> `{fig_barras, fig_radar, grafo_interactivo,
-    contexto}`, every figure/graph path resolved to absolute against
-    `run_dir`.
+def _read_render_sidecar(run_dir: Path) -> dict[str, Any]:
+    """El sidecar de activos de render, o un envoltorio vacio.
 
-    Returns `None` (no crash) when the sidecar is absent -- the simulator
-    either never ran (R3) or every scenario was skipped (R1), so there is
-    nothing to render.
+    Un sidecar ausente NO es un fallo: significa que esta corrida no tiene modelo o que
+    ningun escenario produjo figuras. `render` tiene que seguir componiendo el informe.
     """
     sidecar_path = run_dir / "inference_render_assets.json"
     if not sidecar_path.exists():
+        return {}
+    try:
+        contenido = _read_json(sidecar_path)
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+        return {}
+    return contenido if isinstance(contenido, dict) else {}
+
+
+def _build_inference_results(run_dir: Path) -> dict[str, Any] | None:
+    """Rebuild the per-WINDOW `inference_results` mapping `render_llm_analysis` expects:
+    window label -> `{fig_serie, fig_barras, fig_uiti, fig_grafo, contexto}`, every figure
+    path resolved to absolute against `run_dir`.
+
+    Returns `None` (no crash) when the sidecar is absent -- the simulator either never ran
+    or every scenario was skipped, so there is nothing to render.
+    """
+    render_assets = _read_render_sidecar(run_dir).get("figuras") or {}
+    if not render_assets:
         return None
 
-    render_assets = _read_json(sidecar_path)
     inference_bc = _read_json(run_dir / "inference.bc.json")
     escenarios_by_nombre = {
         escenario.get("nombre"): escenario
@@ -744,7 +661,9 @@ def _detect_llm_runtime() -> tuple[str, str]:
         return "Claude Code", model_override
     return "Desconocido", model_override
 
-TOKEN_USAGE_STAGES = ("historical", "inference", "auto-simulator", "expert-alignment")
+# Las TRES etapas con agente. `auto-simulator` se jubilo con el barrido min-max de
+# MGCECDL: su contenido viaja ahora en la relevancia de cada escenario.
+TOKEN_USAGE_STAGES = ("historical", "inference", "expert-alignment")
 
 def _validate_usage_measurement(*, total: Any = None, input: Any = None, output: Any = None) -> dict[str, int]:
     provided_total = total is not None
@@ -873,7 +792,7 @@ def _resolve_token_usage(run_dir: Path) -> tuple[int, int, int, str, str]:
     `token_usage.json` (optional -- written by the invoking agent after each
     Skill call whose runtime exposes usage, see `.claude/skills/report/
     SKILL.md` steps 3/4/4b/6) maps stage name
-    (`"historical"`/`"inference"`/`"auto-simulator"`/`"expert-alignment"`) to
+    (`"historical"`/`"inference"`/`"expert-alignment"`) to
     EITHER `{"input": int, "output": int}` (a real input/output split) OR
     `{"total": int}` (a single combined count, for stages dispatched via
     Claude Code's `Agent` tool as real sub-agents, whose completion
@@ -937,7 +856,7 @@ def _resolve_token_usage(run_dir: Path) -> tuple[int, int, int, str, str]:
     split_measured_count = 0
     total_measured_count = 0
 
-    for stage in ("historical", "inference", "auto-simulator", "expert-alignment"):
+    for stage in TOKEN_USAGE_STAGES:
         bc_path = run_dir / f"{stage}.bc.json"
         chars_in = len(bc_path.read_text(encoding="utf-8")) if bc_path.exists() else None
 
@@ -1064,7 +983,7 @@ def _resolve_stage_breakdown(run_dir: Path) -> list[dict[str, Any]]:
     joined from `_resolve_stage_timing` and is measured-or-absent, never
     estimated (design ADR-1/ADR-3).
 
-    A stage entirely absent from `run_dir` (e.g. `auto-simulator` skipped)
+    A stage entirely absent from `run_dir` (e.g. a stage that never ran)
     is OMITTED from the returned list rather than errored or shown as a
     failed row -- same "considered stage" gate `_resolve_token_usage` uses.
     """
@@ -1228,7 +1147,6 @@ def render(
         start_date=state["fecha_inicio"],
         end_date=state["fecha_fin"],
     )
-    daily_df = build_daily_series(events_df)
 
     detected_provider, detected_model = _detect_llm_runtime()
     resolved_input, resolved_output, resolved_total, resolved_source, resolved_total_source = _resolve_token_usage(run_dir)
@@ -1265,6 +1183,9 @@ def render(
         "start_date": state["fecha_inicio"],
         "end_date": state["fecha_fin"],
         "inference_results": _build_inference_results(run_dir),
+        # Las clases base y simulada de la ultima ventana, para los dos mapas. Salen del
+        # sidecar y no de una recomputacion: `render` nunca vuelve a cargar el modelo.
+        "mapas_ventana": _read_render_sidecar(run_dir).get("mapas"),
         "inference_analysis": inference_data,
         "expert_alignment_analysis": expert_alignment_data,
         "expert_alignment_matches": None,
@@ -1286,8 +1207,6 @@ def render(
     return render_llm_analysis(
         historical_data,
         events_df,
-        daily_df,
-        state["critical_points"],
         [state["circuito"]],
         **kwargs,
     )
