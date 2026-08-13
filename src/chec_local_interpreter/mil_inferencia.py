@@ -37,8 +37,13 @@ MAX_PASOS_PLAN = 4
 # entran: la pregunta es por donde empezar, y un vano en Medio no es por donde se
 # empieza mientras queden vanos en Alto sin atender.
 GRUPOS_DIAGNOSTICO = (3, 2)
-TOP_VANOS_DIAGNOSTICO = 10
+TOP_VANOS_DIAGNOSTICO = 15
 TOP_VARIABLES = 10
+
+# El informe estudia TRES ventanas, no las once que tiene el cache de bolsas. Recorrerlas
+# todas cuesta ~3,6 s por ventana y produce once escenarios que nadie lee enteros; tres
+# es lo que sostiene el relato "como esta hoy y que lo trajo hasta aqui".
+VENTANAS_REPORTE = 3
 
 METRICA = "uiti_acumulado"
 UNIDAD = "bolsa (vano, ventana)"
@@ -124,6 +129,128 @@ def knobs_desde_datos(datos: Mapping[str, Any]) -> tuple[list[Any], dict[str, st
                         if k.id in GRUPO_POR_KNOB}
 
 
+RUTA_CATALOGO_CONTROLES = PROJECT_ROOT / "data" / "derived" / "catalogo_controles_mil.joblib"
+_VERSION_CATALOGO = 1
+
+
+@dataclass
+class CatalogoControles:
+    """Los controles del informe y lo que hace falta para moverlos.
+
+    Los cuatro campos viajan juntos porque el barrido los necesita juntos: sin
+    `label_encoders` un control categorico no se puede expandir y
+    `relevancia_hacia_uiti_minimo` lo salta EN SILENCIO, dejando al conductor y al
+    calibre del neutro fuera del ranking sin decir por que.
+    """
+
+    knobs: list[Any]
+    grupos: dict[str, str]
+    label_encoders: Mapping[str, Any]
+    max_values_imputed: Mapping[str, Any]
+
+
+def catalogo_de_controles(
+    data_path: str | Path,
+    variables_path: str | Path,
+    *,
+    cache_path: str | Path | None = None,
+) -> CatalogoControles:
+    """El catalogo de controles, cacheado en disco entre corridas.
+
+    Construirlo cuesta `procesar_dataset_completo` sobre el CSV entero -- MEDIDO: 2,3 s
+    y un pico de 2,3 GB -- para producir 18 knobs con sus encoders y sus maximos
+    imputados. Ese resultado cabe en 2,6 KB, no depende del circuito ni de la ventana, y
+    solo cambia cuando cambian los archivos fuente. Pagarlo en cada `/report` es leer la
+    base completa para consultar una tabla de 18 filas.
+
+    El cache se invalida por (tamano, fecha de modificacion) de los archivos fuente. Un
+    cache que sobrevive a un cambio del CSV es peor que no tener cache: el informe
+    seguiria describiendo rangos de una base que ya no existe y nada lo diria.
+
+    Cualquier falla del cache -- corrupto, de una version anterior, o un directorio de
+    solo lectura -- degrada a "esta corrida lo paga entero", nunca a un informe que no
+    sale.
+    """
+    import joblib
+
+    data_path = Path(data_path)
+    variables_path = Path(variables_path)
+    destino = Path(cache_path) if cache_path is not None else RUTA_CATALOGO_CONTROLES
+    clave = _clave_catalogo(data_path, variables_path)
+
+    if destino.exists():
+        try:
+            guardado = joblib.load(destino)
+            if (isinstance(guardado, dict) and guardado.get("clave") == clave
+                    and isinstance(guardado.get("catalogo"), CatalogoControles)):
+                return guardado["catalogo"]
+        except Exception:  # noqa: BLE001 - joblib truncado, pickle de otra version, permisos
+            pass
+
+    catalogo = _construir_catalogo_controles(data_path, variables_path)
+    try:
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump({"clave": clave, "catalogo": catalogo}, destino, compress=3)
+    except Exception:  # noqa: BLE001 - no poder escribir el cache no es un fallo del informe
+        pass
+    return catalogo
+
+
+def _clave_catalogo(data_path: Path, variables_path: Path) -> tuple:
+    """Identidad de las fuentes del catalogo, incluida la tabla que declara que se
+    puede simular: los grupos Intervencion/Escenario salen de ella, asi que editarla
+    tiene que invalidar el cache igual que editar el CSV."""
+    from chec_local_interpreter.simulador_variables import ruta_variables_simular
+
+    def _huella(ruta: Path) -> tuple:
+        try:
+            estado = ruta.stat()
+            return (str(ruta), estado.st_size, estado.st_mtime_ns)
+        except OSError:
+            return (str(ruta), None, None)
+
+    return (_VERSION_CATALOGO, _huella(data_path), _huella(variables_path),
+            _huella(Path(ruta_variables_simular())))
+
+
+def _construir_catalogo_controles(
+    data_path: Path, variables_path: Path
+) -> CatalogoControles:
+    """La construccion cara: el dataset completo, una sola vez, para 18 filas."""
+    import io
+    from contextlib import redirect_stdout
+
+    from chec_impacto.data import procesar_dataset_completo
+
+    with redirect_stdout(io.StringIO()):
+        datos = procesar_dataset_completo(
+            path_clima=Path(data_path),
+            path_variables_seleccion=Path(variables_path),
+            use_sampling=False,
+            min_samples_per_codigo=5,
+            target="UITI_VANO",
+            filtro_uiti_max=None,
+            ventana_climatica_horas=12,
+        )
+
+    knobs, grupos = knobs_desde_datos(datos)
+    return CatalogoControles(
+        knobs=knobs,
+        grupos=grupos,
+        label_encoders=datos.get("label_encoders", {}),
+        max_values_imputed=datos.get("max_values_imputed", {}),
+    )
+
+
+def aplicar_catalogo(recursos: RecursosMIL, catalogo: CatalogoControles) -> RecursosMIL:
+    """Cuelga el catalogo de los recursos, que es como el barrido lo consume."""
+    recursos.knobs = list(catalogo.knobs)
+    recursos.grupos_por_knob = dict(catalogo.grupos)
+    recursos.label_encoders = catalogo.label_encoders
+    recursos.max_values_imputed = catalogo.max_values_imputed
+    return recursos
+
+
 def _seleccion(recursos: RecursosMIL, *, circuito: str, ventana: str) -> dict[str, Any]:
     from chec_local_interpreter.mil_simulador_015 import seleccionar_bolsas
 
@@ -199,6 +326,103 @@ def relevancia_de_circuito(
             ],
         }
     return {**cabecera, "vanos": vanos}
+
+
+GRUPO_INTERVENCION = "Intervencion"
+GRUPO_ESCENARIO = "Escenario"
+GRUPO_SIN_CLASIFICAR = "Sin clasificar"
+GRUPOS_VARIABLES = (GRUPO_INTERVENCION, GRUPO_ESCENARIO, GRUPO_SIN_CLASIFICAR)
+
+
+def resumen_variables_por_grupo(
+    relevancia: Mapping[str, Any]
+) -> dict[str, list[dict[str, Any]]]:
+    """Que variables ayudan mas a bajar de grupo, separadas en obra y escenario.
+
+    Dos bloques y no una lista: el informe sustenta una ORDEN DE TRABAJO, y una racha de
+    viento presentada junto a la poda en la misma tabla ordenada por caida de UITI se lee
+    como igual de accionable. La climatica no desaparece -- describe el escenario en que
+    ocurre el problema, que es informacion real --, pero va rotulada como lo que es.
+
+    Dentro de cada bloque manda `n_vanos_alcanza`: en cuantos vanos ESA SOLA variable
+    basta para caer al grupo mas bajo. Ordenar por caida de UITI responde a "que baja mas
+    el numero", que no es la pregunta: una variable que baja mucho sin cruzar ninguna
+    frontera de grupo no cambia ninguna decision.
+
+    `avance` viene como `None` cuando el vano ya esta en el grupo mas bajo o cuando ese
+    grupo es inalcanzable con sus eventos -- ahi no hay camino que medir. Esos vanos se
+    EXCLUYEN de la mediana en vez de contar como cero: un cero dice "esta variable no
+    avanza nada" y lo que pasa es que no hay nada que avanzar.
+    """
+    acumulado: dict[str, dict[str, Any]] = {}
+    for entrada in (relevancia or {}).get("vanos", {}).values():
+        ya_en_minima = bool(entrada.get("ya_en_clase_minima"))
+        for fila in entrada.get("variables", []) or []:
+            knob_id = str(fila.get("knob_id"))
+            registro = acumulado.setdefault(knob_id, {
+                "knob_id": knob_id,
+                "label": fila.get("label") or knob_id,
+                "grupo": fila.get("grupo") or GRUPO_SIN_CLASIFICAR,
+                "n_vanos": 0,
+                "n_vanos_alcanza": 0,
+                "_avances": [],
+                "_caidas": [],
+                "_valores": [],
+            })
+            registro["n_vanos"] += 1
+            if fila.get("alcanza") and not ya_en_minima:
+                registro["n_vanos_alcanza"] += 1
+            avance = fila.get("avance")
+            if isinstance(avance, (int, float)) and not isinstance(avance, bool):
+                registro["_avances"].append(float(avance))
+            caida = fila.get("caida")
+            if isinstance(caida, (int, float)) and not isinstance(caida, bool):
+                registro["_caidas"].append(float(caida))
+            if fila.get("valor_optimo") is not None:
+                registro["_valores"].append(fila["valor_optimo"])
+
+    salida: dict[str, list[dict[str, Any]]] = {g: [] for g in GRUPOS_VARIABLES}
+    for registro in acumulado.values():
+        salida.setdefault(registro["grupo"], []).append({
+            "knob_id": registro["knob_id"],
+            "label": registro["label"],
+            "grupo": registro["grupo"],
+            "n_vanos": registro["n_vanos"],
+            "n_vanos_alcanza": registro["n_vanos_alcanza"],
+            "avance_mediano": _mediana(registro["_avances"]),
+            "caida_mediana": _mediana(registro["_caidas"]),
+            "valor_tipico": _valor_mas_repetido(registro["_valores"]),
+        })
+
+    for filas in salida.values():
+        filas.sort(key=lambda f: (-f["n_vanos_alcanza"],
+                                  -(f["avance_mediano"] or 0.0),
+                                  -(f["caida_mediana"] or 0.0),
+                                  f["knob_id"]))
+    return salida
+
+
+def _mediana(valores: Sequence[float]) -> float | None:
+    return float(np.median(np.asarray(valores, dtype=float))) if len(valores) else None
+
+
+def _valor_mas_repetido(valores: Sequence[Any]) -> Any:
+    """El valor que consigue el minimo en MAS vanos, para que la fila se lea como una
+    instruccion ("lleva ALTURA a 18 m") y no como un puntaje.
+
+    La moda y no la media: la mitad de los controles son categoricos o enteros, y el
+    promedio de 12 y 18 son 15 metros de apoyo que no existen.
+    """
+    if not len(valores):
+        return None
+    conteo: dict[Any, int] = {}
+    for valor in valores:
+        clave = valor.item() if isinstance(valor, (np.floating, np.integer)) else valor
+        try:
+            conteo[clave] = conteo.get(clave, 0) + 1
+        except TypeError:  # un valor no hashable no puede ser moda de nada
+            return valores[0]
+    return max(conteo.items(), key=lambda par: par[1])[0]
 
 
 def diagnostico_de_circuito(
@@ -291,6 +515,114 @@ def _orden_ventana(etiqueta: str) -> tuple[int, str]:
     return (int(resto), "") if resto.isdigit() else (10**9, str(etiqueta))
 
 
+def influencia_por_ventana(
+    recursos: RecursosMIL, *, circuito: str
+) -> list[dict[str, Any]]:
+    """Cuanto pesa cada ventana del circuito, medido sobre DATO OBSERVADO.
+
+    Por ventana: cuantas bolsas caen en clase critica (Alto o Medio-Alto) y cuanto UITI
+    acumulan. La clase sale de `asignar_clase` sobre el par (n_obs observado, UITI
+    observado) y la geometria del 01.4 -- la misma regla que usa el tablero del 06 --,
+    NO de una pasada del modelo. Es deliberado: elegir tres ventanas entre once no puede
+    costar once evaluaciones del modelo, que es justo lo que la seleccion existe para
+    evitar.
+
+    Devuelve una entrada por ventana, en orden cronologico.
+    """
+    keys = recursos.bag_index.keys
+    de_este = np.asarray(keys["CIRCUITO"].astype(str) == str(circuito))
+    if not de_este.any():
+        return []
+
+    etiquetas = np.asarray(keys["VENTANA"].astype(str))[de_este]
+    n_obs = np.asarray(recursos.bag_index.counts, dtype=np.float64)[de_este]
+    uiti = np.asarray(getattr(recursos.bag_index, "y", np.zeros(len(de_este))),
+                      dtype=np.float64)[de_este]
+
+    clases = _clases_observadas(recursos, n_obs, uiti)
+
+    salida: list[dict[str, Any]] = []
+    for ventana in sorted(set(etiquetas.tolist()), key=_orden_ventana):
+        en_ventana = etiquetas == ventana
+        criticas = (
+            int(np.isin(clases[en_ventana], list(GRUPOS_DIAGNOSTICO)).sum())
+            if clases is not None else 0
+        )
+        salida.append({
+            "ventana": str(ventana),
+            "n_bolsas": int(en_ventana.sum()),
+            "n_bolsas_criticas": criticas,
+            "uiti_total": float(uiti[en_ventana].sum()),
+        })
+    return salida
+
+
+def _clases_observadas(
+    recursos: RecursosMIL, n_obs: np.ndarray, uiti: np.ndarray
+) -> np.ndarray | None:
+    """La clase de cada bolsa, o `None` si el artefacto no expone su geometria.
+
+    Sin geometria no hay clase que asignar, y el ranking cae a UITI acumulado. Se
+    devuelve `None` en vez de inventar una clase 0 para todas: eso haria que TODAS las
+    ventanas empataran en cero bolsas criticas y el desempate por UITI pareciera la
+    regla principal cuando en realidad es el respaldo.
+    """
+    geometria = getattr(recursos.modelo, "geometria", None)
+    if geometria is None:
+        return None
+    from chec_impacto.models.criticality_assignment import asignar_clase
+
+    clases, _ = asignar_clase(n_obs, uiti, geometria)
+    return np.asarray(clases)
+
+
+def ventana_de_mapas(recursos: RecursosMIL, *, circuito: str) -> str | None:
+    """La ventana que describen los dos mapas: base y simulado.
+
+    Es la ULTIMA con eventos del circuito. `ventanas_de_circuito` ya lista solo las
+    ventanas en que el circuito tiene bolsas, asi que la ultima de esa lista es, por
+    construccion, la mas cercana a hoy con eventos: un circuito sin actividad en la
+    ventana mas reciente del calendario no necesita un caso aparte que busque hacia
+    atras -- esa ventana simplemente no esta en su lista.
+    """
+    disponibles = ventanas_de_circuito(recursos, circuito=circuito)
+    return disponibles[-1] if disponibles else None
+
+
+def seleccionar_ventanas_reporte(
+    recursos: RecursosMIL, *, circuito: str, cuantas: int = VENTANAS_REPORTE
+) -> list[str]:
+    """Las ventanas que el informe estudia: la ultima, mas las de mayor influencia.
+
+    La ultima entra SIEMPRE. Es el estado actual del circuito, y un informe que la deja
+    fuera porque hubo meses peores describe un pasado: la pregunta operativa es "como
+    esta hoy y que lo trajo hasta aqui".
+
+    Las demas se ordenan por bolsas en clase critica y se desempatan por UITI acumulado.
+    El conteo de bolsas criticas va primero porque es la magnitud en la que se decide una
+    intervencion -- cuantos vanos hay que atender --, mientras que el UITI total lo puede
+    inflar un solo vano muy malo.
+
+    Devuelve en orden CRONOLOGICO, que es el orden en que se lee el informe.
+    """
+    disponibles = ventanas_de_circuito(recursos, circuito=circuito)
+    if not disponibles:
+        return []
+
+    ultima = disponibles[-1]
+    seleccion = {ultima}
+    faltan = max(0, int(cuantas) - 1)
+    if faltan:
+        influencia = [i for i in influencia_por_ventana(recursos, circuito=circuito)
+                      if i["ventana"] != ultima]
+        influencia.sort(
+            key=lambda i: (-i["n_bolsas_criticas"], -i["uiti_total"],
+                           _orden_ventana(i["ventana"])))
+        seleccion.update(i["ventana"] for i in influencia[:faltan])
+
+    return sorted(seleccion, key=_orden_ventana)
+
+
 def escenarios_de_circuito(
     recursos: RecursosMIL,
     *,
@@ -331,6 +663,10 @@ def escenarios_de_circuito(
             "unidad": UNIDAD,
             "n_vanos": len(relevancia["vanos"]),
             "relevancia": relevancia,
+            # El corte intervencion/escenario va DENTRO del escenario: las palancas que
+            # sirven en una ventana no son las que sirven en otra, y una sola tabla para
+            # las tres ventanas borraria justo esa diferencia.
+            "variables_por_grupo": resumen_variables_por_grupo(relevancia),
             "vanos_criticos": criticos,
             # La simulacion del informe mueve SOLO palancas de intervencion: es lo que
             # sustenta una orden de trabajo. Trae el UITI medido contra el estimado y el
@@ -397,7 +733,62 @@ def construir_contexto_inferencia_mil(
     }
 
 
-GRUPO_INTERVENCION = "Intervencion"
+def mapas_de_escenario(escenario: Mapping[str, Any]) -> dict[str, Any]:
+    """Los dos mapas de la ventana: como esta el circuito y como quedaria intervenido.
+
+    Cubre TODOS los vanos de la ventana, no solo los quince del diagnostico: el mapa es
+    del circuito, y dejar el resto en blanco se lee como "sin datos" cuando lo que pasa
+    es que no hacia falta intervenirlos.
+
+    Las dos clases salen de la MISMA fuente -- el u-hat del modelo sobre la geometria del
+    01.4 --, y el mapa base toma su clase de `clase_base`. Pintar el izquierdo con UITI
+    observado y el derecho con prediccion haria que los dos mapas difirieran por el
+    cambio de fuente ademas de por la obra, y no habria forma de saber cuanto de la
+    diferencia es la intervencion.
+
+    Funcion pura sobre el escenario que `escenarios_de_circuito` ya construyo: no vuelve
+    a cargar el modelo ni a evaluar nada.
+    """
+    relevancia = (escenario or {}).get("relevancia", {}) or {}
+    base_idx = {
+        str(fid): int(entrada.get("clase_base", 0))
+        for fid, entrada in (relevancia.get("vanos", {}) or {}).items()
+    }
+
+    simulado_idx = dict(base_idx)
+    intervenidos: list[str] = []
+    for fila in ((escenario or {}).get("simulacion", {}) or {}).get("vanos", []) or []:
+        fid = str(fila.get("fid"))
+        if fid not in base_idx:
+            continue
+        simulado_idx[fid] = int(fila.get("clase_simulada", base_idx[fid]))
+        intervenidos.append(fid)
+
+    def _capa(indices: Mapping[str, int]) -> dict[str, Any]:
+        return {
+            # `valor` es lo que colorea la linea y `clase` lo que la rotula: el mapa
+            # necesita las dos, y derivar el rotulo del numero en el renderizador
+            # obligaria a repetir alli el vocabulario de criticidad.
+            "valor": {fid: int(idx) for fid, idx in indices.items()},
+            "clase": {fid: _nombre_clase(idx) for fid, idx in indices.items()},
+        }
+
+    return {
+        "ventana": str((escenario or {}).get("ventana", "")),
+        "base": _capa(base_idx),
+        "simulado": _capa(simulado_idx),
+        "intervenidos": sorted(intervenidos),
+        "n_vanos": len(base_idx),
+    }
+
+
+def _nombre_clase(indice: Any) -> str:
+    from chec_impacto.models.criticality_assignment import GRUPOS
+
+    try:
+        return GRUPOS[int(indice)]
+    except (TypeError, ValueError, IndexError):
+        return "Sin clase"
 
 
 def knobs_de_intervencion(recursos: RecursosMIL) -> list[Any]:

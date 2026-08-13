@@ -24,19 +24,28 @@ from chec_local_interpreter.mil_inferencia import (
     construir_contexto_inferencia_mil,
     diagnostico_de_circuito,
     escenarios_de_circuito,
+    influencia_por_ventana,
     knobs_desde_datos,
+    mapas_de_escenario,
     relevancia_de_circuito,
     resumen_de_modelo,
+    resumen_variables_por_grupo,
+    seleccionar_ventanas_reporte,
     simulacion_de_circuito,
+    ventana_de_mapas,
     ventanas_de_circuito,
 )
 
 
 class _BagIndexFalso:
-    def __init__(self, keys, offsets, counts):
+    def __init__(self, keys, offsets, counts, y=None):
         self.keys = keys
         self.offsets = np.asarray(offsets, dtype=np.int64)
         self.counts = np.asarray(counts, dtype=np.int64)
+        # `y` es el UITI acumulado OBSERVADO de cada bolsa. Va aqui y no en una
+        # pasada del modelo porque la clase de criticidad la fija el par
+        # (n_obs observado, UITI observado) sobre la geometria del 01.4.
+        self.y = np.zeros(len(self.counts)) if y is None else np.asarray(y, dtype=float)
 
 
 class _PredictorFalso:
@@ -95,6 +104,113 @@ def _recursos():
         label_encoders={},
         max_values_imputed={},
     )
+
+
+def _recursos_multiventana():
+    """Un circuito con cinco ventanas de actividad muy distinta.
+
+    Las clases salen del par (n_obs observado, UITI observado) sobre la geometria de
+    `_geometria`, cuyos centroides estan en la diagonal: `counts=3, y=3` cae en la
+    clase 3 (Alto) y `counts=1, y=0` en la 0 (Bajo).
+
+        V1  tranquila            0 bolsas criticas   UITI 0
+        V2  la peor              2 bolsas criticas   UITI 6
+        V3  critica pero menor   2 bolsas criticas   UITI 4
+        V4  tranquila            0 bolsas criticas   UITI 0
+        V5  ULTIMA, tranquila    0 bolsas criticas   UITI 1
+    """
+    ventanas = ["V1", "V2", "V3", "V4", "V5"]
+    y = [0.0, 0.0, 3.0, 3.0, 2.0, 2.0, 0.0, 0.0, 1.0, 0.0]
+    counts = [1, 1, 3, 3, 2, 2, 1, 1, 1, 1]
+    keys = pd.DataFrame({
+        "CIRCUITO": ["C1"] * 10,
+        "FID_VANO": ["V1", "V2"] * 5,
+        "VENTANA": [v for v in ventanas for _ in range(2)],
+    })
+    offsets = np.cumsum([0] + counts)
+    X = np.zeros((int(offsets[-1]), 2), dtype=np.float32)
+    return RecursosMIL(
+        modelo=_PredictorFalso(_geometria()),
+        X_inst=X,
+        features=["u_driver", "otra"],
+        bag_index=_BagIndexFalso(keys=keys, offsets=offsets, counts=counts, y=y),
+        knobs=[_knob("u_driver")],
+    )
+
+
+# --- Las tres ventanas que el informe estudia --------------------------------------------
+
+
+def test_the_report_studies_the_last_window_plus_the_two_most_critical_ones():
+    """El informe no recorre las once ventanas: estudia tres.
+
+    La ultima SIEMPRE entra -- es el estado actual del circuito, y un informe que no lo
+    incluye describe un pasado --, y las otras dos son las de mayor influencia de UITI,
+    ordenadas por bolsas en clase critica. Aqui V5 entra por ser la ultima aunque no
+    tenga ninguna bolsa critica, y V2/V3 por ser las dos criticas.
+    """
+    recursos = _recursos_multiventana()
+
+    assert seleccionar_ventanas_reporte(recursos, circuito="C1") == ["V2", "V3", "V5"]
+
+
+def test_the_selected_windows_come_back_in_chronological_order():
+    """El orden de lectura del informe es el del tiempo. Devolverlas por criticidad
+    dejaria la ultima ventana -- el estado actual -- en medio del relato."""
+    recursos = _recursos_multiventana()
+
+    seleccion = seleccionar_ventanas_reporte(recursos, circuito="C1")
+
+    assert seleccion == sorted(seleccion, key=lambda v: int(v.lstrip("V")))
+
+
+def test_the_last_window_is_never_dropped_for_a_more_critical_one():
+    """Si las tres mas criticas fueran otras, la ultima seguiria entrando: la pregunta
+    del informe es 'como esta hoy y que lo trajo hasta aqui', no 'cuales fueron los
+    tres peores momentos del año'."""
+    recursos = _recursos_multiventana()
+    # V5 pasa a ser la mas tranquila posible y aun asi entra.
+    recursos.bag_index.y = np.zeros_like(recursos.bag_index.y)
+    recursos.bag_index.y[2:6] = [3.0, 3.0, 2.0, 2.0]
+
+    assert "V5" in seleccionar_ventanas_reporte(recursos, circuito="C1")
+
+
+def test_a_circuit_with_fewer_windows_than_asked_returns_what_it_has():
+    """Un circuito con una sola ventana con eventos es un caso real, no un fallo:
+    rellenar hasta tres inventaria ventanas sin bolsas, que el informe presentaria como
+    'el modelo no encontro nada' cuando lo que no hubo fueron eventos."""
+    recursos = _recursos()
+
+    assert seleccionar_ventanas_reporte(recursos, circuito="C1") == ["W1"]
+    assert seleccionar_ventanas_reporte(recursos, circuito="NO_EXISTE") == []
+
+
+def test_the_map_window_is_the_last_one_that_actually_has_events():
+    """Los dos mapas -- base y simulado -- describen UNA ventana, y tiene que ser la
+    mas cercana a hoy con eventos en el circuito. `ventanas_de_circuito` ya solo lista
+    ventanas con bolsas, asi que la ultima de esa lista ES esa ventana: no hay que
+    buscar hacia atras ni tratar el hueco como un caso aparte."""
+    recursos = _recursos_multiventana()
+
+    assert ventana_de_mapas(recursos, circuito="C1") == "V5"
+    assert ventana_de_mapas(recursos, circuito="NO_EXISTE") is None
+
+
+def test_window_influence_counts_critical_bags_from_observed_data_not_the_model():
+    """La clase de una bolsa la fija el par (n_obs observado, UITI observado) sobre la
+    geometria del 01.4. Calcularla con una pasada del modelo costaria una evaluacion por
+    ventana para elegir ventanas, que es justo lo que la seleccion existe para evitar.
+    """
+    recursos = _recursos_multiventana()
+    llamadas_antes = recursos.modelo.llamadas
+
+    influencia = {i["ventana"]: i for i in influencia_por_ventana(recursos, circuito="C1")}
+
+    assert recursos.modelo.llamadas == llamadas_antes, "elegir ventanas no evalua el modelo"
+    assert influencia["V2"]["n_bolsas_criticas"] == 2
+    assert influencia["V2"]["uiti_total"] == pytest.approx(6.0)
+    assert influencia["V1"]["n_bolsas_criticas"] == 0
 
 
 def test_relevance_is_measured_on_uiti_and_never_on_event_count():
@@ -277,6 +393,173 @@ def test_the_inference_context_survives_a_circuit_with_no_bags():
     assert contexto["escenarios"] == []
     assert contexto["ventanas"] == []
     assert contexto["modelo_tipo"] == "mil_bolsas"
+
+
+# --- Variables de intervencion contra variables de escenario ------------------------------
+
+
+def _relevancia_de_prueba():
+    """Tres vanos, tres palancas: una de obra que sirve, una de obra que no alcanza y
+    una climatica que baja mucho pero no se puede ejecutar."""
+    def _fila(knob_id, grupo, caida, avance, alcanza, valor):
+        return {"knob_id": knob_id, "label": knob_id, "grupo": grupo,
+                "valor_optimo": valor, "u_base": 10.0, "u_min": 1.0,
+                "caida": caida, "avance": avance, "alcanza": alcanza}
+
+    return {
+        "metrica": "uiti_acumulado",
+        "vanos": {
+            "V1": {"u_base": 10.0, "clase_base": 3, "ya_en_clase_minima": False,
+                   "n_obs_observado": 3, "variables": [
+                       _fila("PODA", "Intervencion", 1.0, 1.0, True, 5.0),
+                       _fila("ALTURA", "Intervencion", 0.2, 0.2, False, 18.0),
+                       _fila("clima:wind_spd", "Escenario", 2.0, 1.0, True, 0.5),
+                   ]},
+            "V2": {"u_base": 8.0, "clase_base": 2, "ya_en_clase_minima": False,
+                   "n_obs_observado": 2, "variables": [
+                       _fila("PODA", "Intervencion", 0.8, 0.9, True, 5.0),
+                       _fila("ALTURA", "Intervencion", 0.1, 0.1, False, 18.0),
+                   ]},
+            "V3": {"u_base": 0.4, "clase_base": 0, "ya_en_clase_minima": True,
+                   "n_obs_observado": 1, "variables": [
+                       _fila("ALTURA", "Intervencion", 0.3, None, False, 16.0),
+                   ]},
+        },
+    }
+
+
+def test_variables_are_split_between_what_a_crew_can_execute_and_what_it_cannot():
+    """El informe sustenta una ORDEN DE TRABAJO. Presentar la racha de viento junto a la
+    poda en una sola lista ordenada por caida deja arriba la que nadie puede comprar, y
+    quien lee no tiene como distinguirlas: las dos aparecen como 'lo que mas baja el
+    UITI'. Van en dos bloques declarados."""
+    resumen = resumen_variables_por_grupo(_relevancia_de_prueba())
+
+    assert set(resumen) >= {"Intervencion", "Escenario"}
+    assert [v["knob_id"] for v in resumen["Escenario"]] == ["clima:wind_spd"]
+    assert {v["knob_id"] for v in resumen["Intervencion"]} == {"PODA", "ALTURA"}
+
+
+def test_the_ranking_leads_with_what_actually_changes_the_group_not_what_drops_most():
+    """La pregunta del informe no es 'que baja mas el UITI' sino 'que cambia de grupo a
+    riesgo bajo'. ALTURA baja el UITI en los tres vanos y no cambia de grupo en ninguno;
+    PODA lo cambia en dos. PODA va primero."""
+    intervencion = resumen_variables_por_grupo(_relevancia_de_prueba())["Intervencion"]
+
+    assert intervencion[0]["knob_id"] == "PODA"
+    assert intervencion[0]["n_vanos_alcanza"] == 2
+    assert intervencion[1]["n_vanos_alcanza"] == 0
+
+
+def test_a_vano_already_in_the_lowest_group_never_counts_as_a_variable_reaching_it():
+    """V3 ya esta en el grupo mas bajo: ninguna variable lo lleva ahi, porque no hay
+    camino que recorrer. Contarlo inflaria el merito de ALTURA con un vano que no
+    necesitaba intervencion."""
+    intervencion = resumen_variables_por_grupo(_relevancia_de_prueba())["Intervencion"]
+    altura = next(v for v in intervencion if v["knob_id"] == "ALTURA")
+
+    assert altura["n_vanos"] == 3
+    assert altura["n_vanos_alcanza"] == 0
+    # `avance` es None en V3 (no hay camino): promediarlo como cero hundiria la variable
+    # por un vano que no aporta informacion sobre ella.
+    assert altura["avance_mediano"] == pytest.approx(0.15)
+
+
+def test_the_summary_carries_the_value_so_it_reads_as_an_instruction():
+    """'Sube ALTURA' no es una orden de trabajo; 'lleva ALTURA a 18 m' si. El valor que
+    consigue el minimo viaja con la variable."""
+    intervencion = resumen_variables_por_grupo(_relevancia_de_prueba())["Intervencion"]
+    poda = next(v for v in intervencion if v["knob_id"] == "PODA")
+
+    assert poda["valor_tipico"] == 5.0
+
+
+def test_a_relevance_without_vanos_yields_both_groups_empty_not_a_crash():
+    resumen = resumen_variables_por_grupo({"vanos": {}})
+
+    assert resumen["Intervencion"] == []
+    assert resumen["Escenario"] == []
+
+
+def test_each_scenario_carries_its_own_split_of_the_two_groups():
+    """El corte por grupo va DENTRO del escenario, no una vez por informe: las palancas
+    que sirven en enero no son las que sirven en abril, y una sola lista para las tres
+    ventanas borraria justo esa diferencia."""
+    recursos = _recursos()
+    recursos.grupos_por_knob = {"u_driver": "Intervencion"}
+
+    escenario = escenarios_de_circuito(recursos, circuito="C1")[0]
+
+    assert "variables_por_grupo" in escenario
+    assert [v["knob_id"] for v in escenario["variables_por_grupo"]["Intervencion"]] == ["u_driver"]
+    assert escenario["variables_por_grupo"]["Escenario"] == []
+
+
+# --- Los dos mapas de la ultima ventana: base contra intervenido --------------------------
+
+
+def _escenario_de_mapas():
+    return {
+        "ventana": "V11",
+        "relevancia": {"vanos": {
+            "A": {"u_base": 9.0, "clase_base": 3, "ya_en_clase_minima": False,
+                  "n_obs_observado": 3, "variables": []},
+            "B": {"u_base": 4.0, "clase_base": 2, "ya_en_clase_minima": False,
+                  "n_obs_observado": 2, "variables": []},
+            "C": {"u_base": 0.2, "clase_base": 0, "ya_en_clase_minima": True,
+                  "n_obs_observado": 1, "variables": []},
+        }},
+        "simulacion": {"vanos": [
+            {"fid": "A", "u_base": 9.0, "u_simulado": 1.0,
+             "clase_base": 3, "clase_simulada": 1, "delta_grupo": -2, "pasos": []},
+        ]},
+    }
+
+
+def test_the_two_maps_cover_every_vano_of_the_window_not_only_the_intervened_ones():
+    """El mapa es del CIRCUITO, no de los quince vanos del diagnostico. Dibujar solo los
+    intervenidos dejaria el resto del circuito en blanco, que se lee como 'sin datos'
+    cuando lo que pasa es que no hacia falta intervenirlos."""
+    mapas = mapas_de_escenario(_escenario_de_mapas())
+
+    assert set(mapas["base"]["clase"]) == {"A", "B", "C"}
+    assert set(mapas["simulado"]["clase"]) == {"A", "B", "C"}
+    assert mapas["ventana"] == "V11"
+
+
+def test_both_maps_read_the_class_from_the_model_so_the_only_difference_is_the_work():
+    """Las dos clases salen de la MISMA fuente -- el u-hat del modelo sobre la geometria
+    del 01.4 --, y el mapa base usa `clase_base` de la propia simulacion. Si el izquierdo
+    pintara UITI observado y el derecho prediccion, los dos mapas diferirian por el
+    cambio de fuente y no por la intervencion, que es lo unico que se quiere ver."""
+    mapas = mapas_de_escenario(_escenario_de_mapas())
+
+    assert mapas["base"]["clase"]["A"] == "Alto"
+    assert mapas["simulado"]["clase"]["A"] == "Medio"
+    # Un vano sin intervencion se pinta igual en los dos: la diferencia es la obra.
+    assert mapas["base"]["clase"]["B"] == mapas["simulado"]["clase"]["B"] == "Medio-Alto"
+    assert mapas["base"]["valor"]["A"] == 3 and mapas["simulado"]["valor"]["A"] == 1
+
+
+def test_the_maps_declare_which_vanos_were_intervened():
+    """Sin la lista, un lector que ve dos mapas casi iguales no puede distinguir 'la
+    intervencion no movio nada' de 'no se intervino casi nada'."""
+    mapas = mapas_de_escenario(_escenario_de_mapas())
+
+    assert mapas["intervenidos"] == ["A"]
+
+
+def test_a_scenario_without_simulation_still_yields_a_base_map():
+    """Un circuito cuyo diagnostico no señalo ningun vano critico sigue teniendo un mapa
+    base que decir: el simulado sale identico al base y la lista de intervenidos vacia,
+    que es la lectura correcta -- no hay nada que intervenir."""
+    escenario = _escenario_de_mapas()
+    escenario["simulacion"] = {"vanos": []}
+
+    mapas = mapas_de_escenario(escenario)
+
+    assert mapas["intervenidos"] == []
+    assert mapas["base"]["clase"] == mapas["simulado"]["clase"]
 
 
 # --- La simulacion del informe: solo lo que una cuadrilla puede ejecutar ------------------
