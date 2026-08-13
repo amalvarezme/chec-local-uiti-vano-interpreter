@@ -171,6 +171,28 @@ def test_cerrar_con_paso_fallido_da_incompleto(bitacora: Path):
     assert "INCOMPLETO" in bitacora.read_text(encoding="utf-8")
 
 
+def test_cerrar_con_paso_omitido_da_incompleto(bitacora: Path):
+    """Un paso `omitido` dice que el objetivo del comando no se cumplio, y para
+    eso existe INCOMPLETO. El titular es lo que se lee: una corrida que se quedo
+    a medias no puede encabezarse COMPLETO por el hecho de no haber tropezado
+    con ningun permiso -- no tropezo porque no llego a intentarlo."""
+    _run("paso", "--archivo", str(bitacora), "--id", "1", "--titulo", "a", "--estado", "ok")
+    _run("paso", "--archivo", str(bitacora), "--id", "2", "--titulo", "t", "--estado", "omitido")
+    _run("cerrar", "--archivo", str(bitacora))
+    assert "| Estado final | **INCOMPLETO** |" in bitacora.read_text(encoding="utf-8")
+
+
+def test_lo_omitido_pesa_mas_que_una_restriccion(bitacora: Path):
+    """Los tres estados finales estan ordenados, no son etiquetas sueltas.
+    COMPLETO CON RESTRICCIONES significa "se cumplio el objetivo, con rodeos";
+    si ademas quedaron pasos sin correr, no se cumplio, y gana INCOMPLETO."""
+    _run("restriccion", "--archivo", str(bitacora), "--id", "R1",
+         "--titulo", "t", "--impacto", "i", "--severidad", "limitante")
+    _run("paso", "--archivo", str(bitacora), "--id", "1", "--titulo", "t", "--estado", "omitido")
+    _run("cerrar", "--archivo", str(bitacora))
+    assert "| Estado final | **INCOMPLETO** |" in bitacora.read_text(encoding="utf-8")
+
+
 def test_el_resumen_cuenta_cada_estado(bitacora: Path):
     _run("paso", "--archivo", str(bitacora), "--id", "1", "--titulo", "a", "--estado", "ok")
     _run("paso", "--archivo", str(bitacora), "--id", "2", "--titulo", "b", "--estado", "ok")

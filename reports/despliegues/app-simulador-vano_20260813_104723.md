@@ -5,8 +5,8 @@
 | Comando | /app-simulador-vano |
 | Cuaderno | notebooks/old_version/06_uiti_vano_explicabilidad_simulador.ipynb |
 | Inicio | 2026-08-13 10:47:23 |
-| Cierre | 2026-08-13 11:14:27 |
-| Estado final | **COMPLETO** |
+| Cierre | 2026-08-13 11:18:55 |
+| Estado final | **INCOMPLETO** |
 
 ## Resumen
 

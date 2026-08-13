@@ -118,7 +118,10 @@ def _estado_final(datos: dict) -> str:
     if not datos.get("cierre"):
         return "EN CURSO"
     estados = [p["estado"] for p in datos["pasos"]]
-    if "fallo" in estados:
+    # `omitido` pesa igual que `fallo`: los dos dicen que el comando no hizo lo
+    # que venia a hacer. Que no haya tropezado con ningun permiso no lo vuelve
+    # COMPLETO -- no tropezo porque no llego a intentarlo.
+    if "fallo" in estados or "omitido" in estados:
         return "INCOMPLETO"
     if datos["restricciones"] or "restriccion" in estados or "degradado" in estados:
         return "COMPLETO CON RESTRICCIONES"
