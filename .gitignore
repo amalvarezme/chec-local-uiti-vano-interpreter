@@ -8,6 +8,7 @@ __pycache__/
 data/*
 !data/.gitkeep
 !data/Variables_seleccion.xlsx
+!data/Variables_simular.xlsx
 !data/nb12_additional_variables.txt
 !data/Indicadores_vano_v3.csv
 !data/COSTOS ITEMS CONTRATOS.xlsx
