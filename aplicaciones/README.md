@@ -153,6 +153,35 @@ Esa tercera condición se pierde fácil: basta con haber navegado dentro de la p
 Firefox lo rechaza por defecto. Cuando pasa, la página lo dice en pantalla en vez de
 quedarse con un tablero que parece vivo. El servidor murió igual.
 
+## La paleta
+
+Los cinco cuadernos emiten su propio CSS y todos usan los mismos ocho colores: fondo
+blanco, texto casi negro y una familia rosa/roja que sale de la escala `Reds` con la
+que se pintan los datos. Un botón de acción y el extremo caliente de un mapa son
+literalmente el mismo rojo.
+
+| token | valor | papel |
+|---|---|---|
+| `FONDO` | `#fff` | fondo de página |
+| `TEXTO` | `#2b2b2b` | texto principal (no `#000`: sobre blanco cansa) |
+| `ACENTO` | `rgb(203,24,29)` | botones, filo izquierdo de los paneles |
+| `ACENTO_OSCURO` | `rgb(165,15,21)` | sólo `:hover` |
+| `PANEL` | `#fdf7f6` | fondo de los bloques de control |
+| `BORDE` | `#e4c4c0` | bordes de bloque |
+| `BORDE_FUERTE` | `#c9a9a5` | bordes de controles que se tocan |
+| `TENUE` | `#7a5c58` | avisos y notas al pie |
+
+Lo que se agrega **después** de los cuadernos —el botón de cerrar, la barra del menú, la
+página de CriticidadCHEC— no sale de ellos, así que puede desentonar sin que nadie lo
+note: cada pieza se ve bien por separado y sólo canta cuando están juntas. Por eso vive
+en `_comun/paleta.py`, y por eso hay dos pruebas: una comprueba que cada token aparece
+de verdad en el CSS que emiten los cuadernos, y otra que esas tres piezas no usan ni un
+color de su cosecha.
+
+El menú **no** sigue `prefers-color-scheme`. Los tableros fijan fondo blanco y lo
+ignoran; un menú que se pusiera oscuro de noche mandaría al usuario a un tablero blanco
+de un clic.
+
 ## Estructura
 
 ```
@@ -166,6 +195,7 @@ aplicaciones/
 │   ├── servidor.py            servidor estático con compresión y caché
 │   ├── menu.py                servidor de control: lanza y apaga las otras cinco
 │   ├── menu_pagina.py         la página del menú, sin dependencias
+│   ├── paleta.py              los ocho colores que comparten los tableros
 │   ├── huellas.py             huellas de los insumos, para saber cuándo reconstruir
 │   └── raiz.py                localización del repositorio
 ├── 00_criticidad_chec/

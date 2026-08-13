@@ -31,6 +31,8 @@ import sys
 import threading
 from pathlib import Path
 
+import paleta as _paleta
+
 # Ruta del boton de cerrar. Vive aqui y no en el empaquetador porque los dos extremos
 # -- el boton que la llama y el servidor que la atiende -- tienen que coincidir.
 RUTA_APAGADO = "/apagar"
@@ -102,14 +104,16 @@ def _catalogo(carpeta: Path) -> dict[str, _Pieza]:
 # esa condicion y se veria exactamente igual.
 _BARRA_MENU = """
 <div id="barra-menu" style="position:fixed;top:10px;right:12px;z-index:10000;
-     display:flex;gap:8px;font:13px/1 system-ui,-apple-system,'Segoe UI',sans-serif;">
+     display:flex;gap:8px;font:13px/1 __FUENTE__;font-weight:600;">
   <button type="button" id="bm-volver" title="Apaga este tablero y vuelve al menu"
-    style="padding:7px 13px;border:1px solid #1565c0;border-radius:6px;background:#fff;
-           color:#1565c0;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.18);"
+    style="font:inherit;padding:6px 12px;border:1px solid __BORDE_FUERTE__;
+           border-radius:4px;background:__FONDO__;color:__TEXTO__;cursor:pointer;
+           box-shadow:0 1px 3px rgba(0,0,0,.12);"
     >&larr; Volver al menu</button>
   <button type="button" id="bm-todo" title="Apaga TODAS las aplicaciones y el menu"
-    style="padding:7px 13px;border:1px solid #c62828;border-radius:6px;background:#fff;
-           color:#c62828;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.18);"
+    style="font:inherit;padding:6px 12px;border:1px solid __ACENTO__;
+           border-radius:4px;background:__FONDO__;color:__ACENTO__;cursor:pointer;
+           box-shadow:0 1px 3px rgba(0,0,0,.12);"
     >Cerrar todo</button>
 </div>
 <script>
@@ -124,8 +128,9 @@ _BARRA_MENU = """
 
   function despedirse(texto) {
     document.body.innerHTML =
-      '<div style="font:16px/1.6 system-ui,-apple-system,sans-serif;padding:40px;' +
-      'max-width:640px;margin:0 auto;color:#2b2b2b;">' +
+      '<div style="font:16px/1.6 __FUENTE_JS__;padding:40px;max-width:640px;' +
+      'margin:0 auto;color:__TEXTO__;border-left:__FILO__;background:__PANEL__;' +
+      'border-radius:6px;">' +
       '<h1 style="font-size:20px;margin:0 0 12px;">' + texto + '</h1>' +
       '<p>Ya puedes cerrar esta pestana.</p></div>';
   }
@@ -180,6 +185,7 @@ def _con_barra_de_menu(html: bytes, menu: str) -> bytes:
         raise SystemExit(
             "El tablero no tiene </body>; no se pudo insertar la barra del menu.")
     barra = _BARRA_MENU.replace("__MENU__", menu).replace("__RUTA__", RUTA_APAGADO)
+    barra = _paleta.aplicar(barra)
     return texto.replace("</body>", barra + "</body>", 1).encode("utf-8")
 
 

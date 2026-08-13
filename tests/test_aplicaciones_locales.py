@@ -379,3 +379,121 @@ def test_inyectar_el_boton_falla_si_no_encuentra_donde_ponerlo():
         sys.path.pop(0)
     with pytest.raises(ValueError, match="boton de cerrar"):
         empaquetar._inyectar_boton_cerrar("<html>sin cierre")
+
+
+# --------------------------------------------------------------------- paleta
+
+# Los cuadernos que emiten CSS propio. El 06 queda fuera: su tablero son widgets y su
+# estilo lo pone `vano_widgets.py`, no una hoja embebida.
+CUADERNOS_CON_CSS = (
+    "01_uiti_vano_clima",
+    "02_uiti_vano_kmeans",
+    "03_uiti_vano_trayectorias_circuitos",
+    "04_uiti_vano_trayectorias_vano",
+)
+
+
+def _css_de_los_cuadernos() -> str:
+    import json
+    partes = []
+    for nombre in CUADERNOS_CON_CSS:
+        nb = json.loads((CUADERNOS / f"{nombre}.ipynb").read_text(encoding="utf-8"))
+        partes += ["".join(c["source"]) for c in nb["cells"] if c["cell_type"] == "code"]
+    return "\n".join(partes)
+
+
+@pytest.mark.parametrize("token", sorted(_comun("paleta").TOKENS))
+def test_cada_color_de_la_paleta_sale_de_los_cuadernos(token: str):
+    """Los cuadernos son la FUENTE de la paleta; `_comun/paleta.py` solo la copia para
+    que las piezas agregadas despues -- el boton de cerrar, la barra del menu, la pagina
+    de CriticidadCHEC -- no inventen la suya.
+
+    Esta prueba es la que sostiene esa afirmacion. Sin ella, `paleta.py` seria otra
+    copia mas, libre de separarse en silencio: cada pieza se ve bien por separado y el
+    desajuste solo canta cuando estan juntas, que es justo cuando ya nadie las revisa.
+    """
+    paleta = _comun("paleta")
+    assert paleta.TOKENS[token] in _css_de_los_cuadernos(), (
+        f"{token} = {paleta.TOKENS[token]} no aparece en el CSS de ningun cuaderno")
+
+
+@pytest.mark.parametrize("pieza", ["boton", "barra", "menu"])
+def test_lo_que_se_agrega_encima_no_usa_colores_de_su_cosecha(pieza: str):
+    """Las tres piezas que el usuario ve por encima de los tableros. Un azul de
+    Material o un verde de GitHub aqui no rompen nada -- por eso se cuelan --, solo
+    hacen que el conjunto se vea ensamblado de trozos."""
+    import re
+
+    servidor = _comun("servidor")
+    piezas = {
+        "boton": lambda: _comun("empaquetar")._inyectar_boton_cerrar(
+            "<html><body>x</body></html>"),
+        "barra": lambda: servidor._con_barra_de_menu(
+            b"<html><body>x</body></html>", "http://127.0.0.1:8800/").decode("utf-8"),
+        "menu": lambda: _comun("menu_pagina").pagina(),
+    }
+    texto = piezas[pieza]()
+    permitidos = set(_comun("paleta").TOKENS.values())
+    usados = set(re.findall(r"#[0-9a-fA-F]{3,6}\b|rgb\([^)]+\)", texto))
+    assert not (usados - permitidos), f"colores fuera de la paleta: {sorted(usados - permitidos)}"
+    assert not re.findall(r"__[A-Z_]+__", texto), "quedaron marcadores sin resolver"
+
+
+def test_el_menu_no_sigue_el_tema_del_sistema():
+    """Los cinco tableros fijan fondo blanco y no responden a `prefers-color-scheme`.
+    Un menu que si lo hiciera se pondria oscuro de noche y mandaria al usuario a un
+    tablero blanco de un clic, que es el salto que este trabajo vino a quitar."""
+    pagina = _comun("menu_pagina").pagina()
+    assert "prefers-color-scheme" not in pagina
+    assert "color-scheme" not in pagina
+    assert f"background: {_comun('paleta').FONDO}" in pagina
+
+
+def _guiones_emitidos() -> dict[str, str]:
+    """El JavaScript de las tres piezas que se agregan encima de los tableros."""
+    servidor = _comun("servidor")
+    piezas = {
+        "boton suelto": _comun("empaquetar")._inyectar_boton_cerrar(
+            "<html><body>x</body></html>"),
+        "barra del menu": servidor._con_barra_de_menu(
+            b"<html><body>x</body></html>", "http://127.0.0.1:8800/").decode("utf-8"),
+        "pagina del menu": _comun("menu_pagina").pagina(),
+    }
+    import re
+    return {n: "\n".join(re.findall(r"<script>(.*?)</script>", h, re.S))
+            for n, h in piezas.items()}
+
+
+@pytest.mark.parametrize("pieza", ["boton suelto", "barra del menu", "pagina del menu"])
+def test_la_paleta_no_se_cuela_sin_escapar_en_una_cadena_de_javascript(pieza: str):
+    """`FUENTE` vale `system-ui, -apple-system, 'Segoe UI', sans-serif` -- con comillas
+    SIMPLES. Sustituida dentro de una cadena de JavaScript delimitada por comillas
+    simples, la cierra antes de tiempo y el guion entero deja de parsear.
+
+    Paso de verdad al pintar el menu con la paleta, y el sintoma no se parece a un
+    error: la pagina se dibuja, el estilo se ve bien y la lista de aplicaciones
+    sencillamente nunca se llena. Por eso existe `FUENTE_JS`, y por eso esta prueba
+    mira el JS emitido y no el codigo fuente."""
+    paleta = _comun("paleta")
+    js = _guiones_emitidos()[pieza]
+    assert paleta.FUENTE not in js, (
+        "la fuente entro sin escapar en el JavaScript: usa __FUENTE_JS__ ahi")
+
+
+@pytest.mark.parametrize("pieza", ["boton suelto", "barra del menu", "pagina del menu"])
+def test_el_javascript_que_se_agrega_encima_parsea(pieza: str):
+    """La red de seguridad de la de arriba: comprueba el resultado en vez del sintoma
+    concreto, asi que atrapa tambien la proxima forma de romperlo. Se salta donde no
+    haya node, porque no es una dependencia del proyecto."""
+    import shutil
+    import subprocess
+    import tempfile
+
+    if not shutil.which("node"):
+        pytest.skip("no hay node para validar el JavaScript")
+    with tempfile.NamedTemporaryFile("w", suffix=".js", encoding="utf-8",
+                                     delete=False) as archivo:
+        archivo.write(_guiones_emitidos()[pieza])
+        ruta = archivo.name
+    hecho = subprocess.run(["node", "--check", ruta], capture_output=True, text=True)
+    assert hecho.returncode == 0, hecho.stderr[:600]

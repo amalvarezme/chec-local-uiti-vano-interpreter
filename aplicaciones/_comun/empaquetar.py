@@ -49,6 +49,7 @@ from pathlib import Path
 
 # La ruta del apagado se toma del servidor que la atiende, no se repite aqui: si los
 # dos extremos no coinciden, el boton contesta 404 y no apaga nada.
+import paleta as _paleta
 from servidor import RUTA_APAGADO as _RUTA_APAGADO
 
 # `include_plotlyjs=True` de plotly incrusta la libreria como primer <script> del
@@ -295,9 +296,10 @@ def _ajustar_titulo(html: str, titulo: str) -> str:
 _BOTON_CERRAR = """
 <div id="cerrar-tablero" style="position:fixed;top:10px;right:12px;z-index:9999;">
   <button type="button" title="Detiene el servidor de este tablero"
-    style="font:13px/1 system-ui,-apple-system,'Segoe UI',sans-serif;padding:7px 13px;
-           border:1px solid #c62828;border-radius:6px;background:#fff;color:#c62828;
-           cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.18);">Cerrar tablero</button>
+    style="font:13px/1 __FUENTE__;font-weight:600;padding:6px 12px;
+           border:1px solid __ACENTO__;border-radius:4px;background:__FONDO__;
+           color:__ACENTO__;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.12);"
+    >Cerrar tablero</button>
 </div>
 <script>
 (function () {
@@ -311,14 +313,16 @@ _BOTON_CERRAR = """
       window.close();
       setTimeout(function () {
         document.body.innerHTML =
-          '<div style="font:16px/1.6 system-ui,-apple-system,sans-serif;padding:40px;' +
-          'max-width:640px;margin:0 auto;color:#2b2b2b;">' +
+          '<div style="font:16px/1.6 __FUENTE_JS__;padding:40px;max-width:640px;' +
+          'margin:0 auto;color:__TEXTO__;border-left:__FILO__;background:__PANEL__;' +
+          'border-radius:6px;">' +
           '<h1 style="font-size:20px;margin:0 0 12px;">Tablero cerrado</h1>' +
           '<p>El servidor se detuvo. Esta pestana no se pudo cerrar sola ' +
           '&mdash; pasa cuando ya se navego dentro de ella, o en Firefox &mdash;, ' +
           'asi que cierrala tu.</p>' +
-          '<p style="color:#666;">Para volver a abrirlo: <code>iniciar.command</code> ' +
-          '(macOS) o <code>iniciar.bat</code> (Windows).</p></div>';
+          '<p style="color:__TENUE__;">Para volver a abrirlo: ' +
+          '<code>iniciar.command</code> (macOS) o <code>iniciar.bat</code> ' +
+          '(Windows).</p></div>';
       }, 500);
     });
   });
@@ -331,5 +335,5 @@ def _inyectar_boton_cerrar(html: str) -> str:
     marca = "</body>"
     if marca not in html:
         raise ValueError("El documento no tiene </body>; no se pudo insertar el boton de cerrar.")
-    boton = _BOTON_CERRAR.replace("__RUTA__", _RUTA_APAGADO)
+    boton = _paleta.aplicar(_BOTON_CERRAR.replace("__RUTA__", _RUTA_APAGADO))
     return html.replace(marca, boton + marca, 1)

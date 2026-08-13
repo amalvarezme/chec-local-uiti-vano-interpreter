@@ -22,45 +22,57 @@ contesta que la aplicacion ya responde se le pone la URL encima.
 """
 from __future__ import annotations
 
-_ESTILO = """
-:root { color-scheme: light dark; }
+from string import Template
+
+import paleta as _paleta
+
+# Sin `color-scheme` ni bloque de modo oscuro, a proposito. Los cinco tableros fijan
+# `background:#fff` y no responden al tema del sistema; un menu que si lo hiciera se
+# volveria oscuro y mandaria al usuario a un tablero blanco de un clic. La armonia aqui
+# vale mas que atender una preferencia que los tableros ignoran.
+_ESTILO = Template("""
 * { box-sizing: border-box; }
-body { margin: 0; font: 15px/1.55 system-ui, -apple-system, 'Segoe UI', sans-serif;
-       background: #f4f5f7; color: #1f2328; }
-@media (prefers-color-scheme: dark) {
-  body { background: #14171a; color: #e6e6e6; }
-  .tarjeta { background: #1d2125 !important; border-color: #2f3742 !important; }
-  .desc { color: #9aa4b2 !important; }
-  header p { color: #9aa4b2 !important; }
-}
-.envoltura { max-width: 880px; margin: 0 auto; padding: 32px 20px 60px; }
+body { margin: 0; padding: 12px; font: 15px/1.55 $FUENTE;
+       background: $FONDO; color: $TEXTO; }
+.envoltura { max-width: 880px; margin: 0 auto; padding: 20px 8px 60px; }
 header { display: flex; align-items: flex-start; justify-content: space-between;
-         gap: 20px; margin-bottom: 26px; }
+         gap: 20px; margin-bottom: 22px; }
 h1 { font-size: 25px; margin: 0 0 4px; letter-spacing: -.01em; }
-header p { margin: 0; color: #59636e; font-size: 14px; }
-.tarjeta { display: flex; align-items: center; gap: 16px; background: #fff;
-           border: 1px solid #d8dee4; border-radius: 10px; padding: 15px 18px;
-           margin-bottom: 11px; }
+header p { margin: 0; color: $TENUE; font-size: 13px; max-width: 52ch; }
+
+/* El filo izquierdo rojo es el gesto que repiten los cinco tableros en sus paneles de
+   control. Cada aplicacion del menu es una tarjeta con ese mismo filo, asi que la
+   pagina se lee como parte de la familia y no como una portada de otro sitio. */
+.tarjeta { display: flex; align-items: center; gap: 16px; background: $PANEL;
+           border: 1px solid $BORDE; border-left: $FILO; border-radius: 6px;
+           padding: 13px 16px; margin-bottom: 9px; }
 .texto { flex: 1; min-width: 0; }
 .titulo { font-weight: 600; margin-bottom: 2px; }
-.desc { color: #59636e; font-size: 13.5px; }
-.punto { width: 9px; height: 9px; border-radius: 50%; flex: none; background: #b9c0c8; }
-.punto.corriendo { background: #2da44e; }
-.punto.preparando { background: #d29922; }
-.punto.fallo { background: #cf222e; }
-button { font: inherit; font-size: 13.5px; padding: 7px 15px; border-radius: 6px;
-         border: 1px solid #d8dee4; background: #f6f8fa; color: #1f2328;
-         cursor: pointer; white-space: nowrap; }
-button:hover:not(:disabled) { background: #eef1f4; }
+.desc { color: $TENUE; font-size: 12px; }
+.punto { width: 9px; height: 9px; border-radius: 50%; flex: none;
+         background: $BORDE_FUERTE; }
+.punto.corriendo { background: $ACENTO; }
+.punto.preparando { background: $BORDE_FUERTE; box-shadow: 0 0 0 3px $BORDE; }
+.punto.fallo { background: $ACENTO_OSCURO; }
+
+button { font: inherit; font-size: 13px; font-weight: 600; padding: 6px 12px;
+         border-radius: 4px; border: 1px solid $BORDE_FUERTE; background: $FONDO;
+         color: $TEXTO; cursor: pointer; white-space: nowrap; }
+button:hover:not(:disabled) { background: $PANEL; }
 button:disabled { opacity: .55; cursor: default; }
-button.principal { border-color: #1f883d; background: #1f883d; color: #fff; }
-button.principal:hover:not(:disabled) { background: #1a7f37; }
-button.peligro { border-color: #cf222e; background: #fff; color: #cf222e; }
-button.peligro:hover:not(:disabled) { background: #fff5f5; }
-.avisos { min-height: 20px; font-size: 13px; color: #59636e; margin-top: 3px; }
-.pie { margin-top: 26px; font-size: 13px; color: #59636e; }
+/* Rojo lleno para la accion principal, igual que los botones de los tableros. */
+button.principal { border-color: $ACENTO; background: $ACENTO; color: $FONDO; }
+button.principal:hover:not(:disabled) { background: $ACENTO_OSCURO;
+                                        border-color: $ACENTO_OSCURO; }
+/* "Cerrar todo" va en rojo perfilado y no relleno: es destructivo, pero no es la
+   accion que uno viene a hacer. El relleno se reserva para "Abrir". */
+button.peligro { border-color: $ACENTO; background: $FONDO; color: $ACENTO; }
+button.peligro:hover:not(:disabled) { background: $PANEL; }
+
+.pie { margin-top: 22px; font-size: 12px; color: $TENUE; }
 .cerrado { padding: 60px 20px; text-align: center; }
-"""
+.cerrado h1 { margin-bottom: 10px; }
+""").substitute(_paleta.TOKENS, FUENTE=_paleta.FUENTE, FILO=_paleta.FILO)
 
 _GUION = """
 var APPS = [];
@@ -119,13 +131,19 @@ function abrir(app) {
   // permiso para cerrarla desde "Volver al menu".
   var pestania = window.open('', 'app-' + app.clave);
   if (pestania) {
+    // Esta pagina la ve el usuario durante minutos la primera vez, asi que lleva la
+    // misma paleta: llegar al tablero no puede sentirse como cambiar de aplicacion.
     pestania.document.write(
       '<!doctype html><meta charset=utf-8><title>' + app.titulo + '</title>' +
-      '<body style="font:16px/1.7 system-ui;padding:60px 40px;color:#2b2b2b">' +
+      '<body style="font:16px/1.7 __FUENTE_JS__;padding:60px 40px;' +
+      'background:__FONDO__;color:__TEXTO__">' +
+      '<div style="border-left:__FILO__;background:__PANEL__;padding:16px 20px;' +
+      'border-radius:6px;max-width:52ch">' +
       '<b style="font-size:20px">Preparando ' + app.titulo + '</b>' +
       '<p id=p>Un momento...</p>' +
-      '<p style="color:#666">La primera vez hay que crear su entorno y construir su ' +
-      'tablero. Puede tardar varios minutos. No cierres esta pestana.</p>');
+      '<p style="color:__TENUE__;font-size:13px">La primera vez hay que crear su ' +
+      'entorno y construir su tablero. Puede tardar varios minutos. No cierres esta ' +
+      'pestana.</p></div>');
   }
   mandar('abrir', app.clave, function () { seguir(app.clave, pestania); });
 }
@@ -168,7 +186,7 @@ function cerrarTodo() {
     document.body.innerHTML =
       '<div class="cerrado"><h1>CriticidadCHEC cerrado</h1>' +
       '<p>Se apagaron las aplicaciones y el menu. Ya puedes cerrar esta pestana.</p>' +
-      '<p style="color:#59636e">Para volver a abrirlo: iniciar.command (macOS) o ' +
+      '<p style="color:__TENUE__">Para volver a abrirlo: iniciar.command (macOS) o ' +
       'iniciar.bat (Windows).</p></div>';
     window.close();
   });
@@ -180,6 +198,10 @@ refrescar();
 // propio boton o con Ctrl+C en su ventana, y el menu tiene que enterarse.
 setInterval(refrescar, 2500);
 """
+# Los marcadores se resuelven con `paleta.aplicar` y no con un bucle propio: un bucle
+# propio es lo que dejo `__FUENTE_JS__` sin resolver cuando se agrego ese token, porque
+# la lista de aqui no se entero. La resolucion vive en un solo sitio por eso.
+_GUION = _paleta.aplicar(_GUION)
 
 
 def pagina() -> str:
