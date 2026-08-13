@@ -97,3 +97,5 @@ notebooks/project_flow/aplicaciones/*/.venv/
 notebooks/project_flow/aplicaciones/*/panel/
 notebooks/project_flow/aplicaciones/*/paquete/
 notebooks/project_flow/aplicaciones/*/cuaderno/
+# El pid del servidor de Voila, que la app escribe al arrancar y borra al salir.
+notebooks/project_flow/aplicaciones/*/.servidor.pid
