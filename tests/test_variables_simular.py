@@ -152,14 +152,33 @@ def test_las_opciones_de_texto_no_se_confunden_con_numeros(tmp_path):
     assert entrada.opciones_numericas is False
 
 
-def test_el_archivo_real_no_ofrece_ningun_deslizador_continuo_sobre_una_lista_cerrada():
-    """Las cuatro variables que el proyecto declara con valores discretos --
-    ALTURA, CANTIDAD_TIERRA, LONG_CRUCETA y NG_RED -- tienen que salir como selector
-    pese a que el modelo las ve como numeros."""
+def test_el_archivo_real_no_ofrece_ningun_deslizador_continuo_sobre_una_variable_entera():
+    """Un deslizador continuo sobre una variable que solo toma enteros ofrece 2,37
+    fases o media puesta a tierra: un escenario que no existe y que el modelo puntua
+    igual, sin avisar de nada.
+
+    Cuales son enteras no se opina, se MIDE sobre la matriz de instancias del modelo
+    (288.632 filas): estas diez toman unicamente valores enteros. `LONG_CRUCETA`
+    (0,4 | 2,3 | 3,5 m) y `CAPACIDAD_NOMINAL` (0,5 | 37,5 kVA) no, y por eso siguen
+    siendo continuas -- la regla es la evidencia, no el nombre de la variable.
+
+    Sustituye a una prueba que exigia `selector` con lista cerrada para ALTURA,
+    CANTIDAD_TIERRA, LONG_CRUCETA y NG_RED. Esa lista la contradicen los datos: la
+    base trae 20 alturas distintas entre 4 y 25 m, no las tres del inventario que el
+    archivo viejo declaraba.
+    """
     catalogo = catalogo_simulacion(RUTA_REAL)
-    for nombre in ("ALTURA", "CANTIDAD_TIERRA", "LONG_CRUCETA", "NG_RED"):
-        assert catalogo[nombre].control == "selector", nombre
-        assert catalogo[nombre].opciones_numericas is True, nombre
+    enteras = ("ALTURA", "CANTIDAD_TIERRA", "CNT_FASES", "NG_RED", "NR_T",
+               "VAL_CRIT_APOYO", "CNT_VN", "CNT_TRF", "FECHA_OPERACION_TRF",
+               "FECHA_OPERACION_VANO")
+    for nombre in enteras:
+        assert catalogo[nombre].control == "deslizador-entero", nombre
+        # Y su rango declarado tiene que ser entero, o `IntSlider(min=int(vmin))`
+        # recortaria el limite sin decirlo.
+        assert float(catalogo[nombre].vmin).is_integer(), nombre
+        assert float(catalogo[nombre].vmax).is_integer(), nombre
+    for nombre in ("LONG_CRUCETA", "CAPACIDAD_NOMINAL", "DDT", "LONGITUD"):
+        assert catalogo[nombre].control == "deslizador", nombre
 
 
 # --------------------------------------------------------------------------------
@@ -196,22 +215,48 @@ def test_sin_incoherencias_no_hay_avisos(tmp_path):
     assert incoherencias_del_catalogo([knob], catalogo_simulacion(ruta)) == []
 
 
-def test_el_archivo_real_solo_tiene_la_incoherencia_conocida():
-    """Fija el estado del archivo. Si aparece otra, esta prueba lo dice en vez de que
-    se descubra con una simulacion fallida."""
+def test_el_archivo_real_ya_no_tiene_ninguna_incoherencia():
+    """Fija el estado del archivo. Si aparece una, esta prueba lo dice en vez de que
+    se descubra con una simulacion fallida.
+
+    Las cuatro listas del archivo coinciden EXACTAMENTE con lo que el codificador del
+    modelo sabe traducir. Las categorias de abajo no son un ejemplo: son las que trae
+    `mil_vano_ventana_v1.pt` a traves de su catalogo de knobs -- 30 conductores, 20
+    calibres, 12 tipos de apoyo y 6 taxonomias --, comprobadas contra el modelo real.
+    Se escriben aqui y no se cargan del artefacto porque el modelo y su paquete son
+    binarios de varios megabytes que no viajan con las pruebas.
+
+    Antes esta prueba fijaba UNA incoherencia conocida en `CALIBRE_NEUTRO`. El archivo
+    ajustado la corrigio, asi que lo que se fija ahora es la ausencia: cualquier opcion
+    nueva que el modelo no sepa codificar vuelve a poner esta prueba en rojo.
+    """
     catalogo = catalogo_simulacion(RUTA_REAL)
     knobs = [
-        _knob("CALIBRE_NEUTRO", "categorical", categories=("0", "1/0", "1/4")),
+        _knob("CALIBRE_NEUTRO", "categorical",
+              categories=("0", "1/0", "1/4", "10", "11", "134.6", "2", "2/0", "250",
+                          "266.8", "3/0", "3/8", "336.4", "350", "4", "4/0", "500",
+                          "6", "795", "OPGW")),
         _knob("CONDUCTOR", "categorical",
-              categories=("2-ACSR-CUBIERTO", "2-ACSR-DESNUDO", "2-AL-AISLADO",
-                          "2-CU-AISLADO", "1/0-ACSR-CUBIERTO", "1/0-ACSR-DESNUDO",
-                          "1/0-AL-AISLADO", "1/0-CU-AISLADO", "2/0-ACSR-CUBIERTO",
-                          "2/0-ACSR-DESNUDO", "2/0-AL-AISLADO", "2/0-CU-AISLADO",
-                          "3/0-ACSR-DESNUDO", "4/0-ACSR-CUBIERTO", "4/0-ACSR-DESNUDO",
-                          "4/0-AL-AISLADO", "4/0-CU-AISLADO")),
+              categories=("1/0-ACSR-CUBIERTO", "1/0-ACSR-DESNUDO", "1/0-AL-AISLADO",
+                          "1/0-AL-DESNUDO", "1/0-CU-AISLADO", "2-ACSR-CUBIERTO",
+                          "2-ACSR-DESNUDO", "2-AL-AISLADO", "2-AL-DESNUDO",
+                          "2-CU-AISLADO", "2/0-ACSR-CUBIERTO", "2/0-ACSR-DESNUDO",
+                          "2/0-AL-AISLADO", "2/0-CU-AISLADO", "250-AL-AISLADO",
+                          "266.8-ACSR-DESNUDO", "3/0-ACSR-DESNUDO",
+                          "336.4-ACSR-DESNUDO", "350-AL-AISLADO", "350-CU-AISLADO",
+                          "4-ACSR-DESNUDO", "4/0-ACSR-CUBIERTO", "4/0-ACSR-DESNUDO",
+                          "4/0-AL-AISLADO", "4/0-CU-AISLADO", "500-CU-AISLADO",
+                          "556.5-AL-AISLADO", "6-ACSR-DESNUDO", "6-CU-DESNUDO",
+                          "8-CU-DESNUDO")),
+        _knob("TIPO", "categorical",
+              categories=("1CC", "1CFR", "2CC", "2CFR", "2CR", "2RL", "3CC", "3CFR",
+                          "3CR", "3IG", "3RG", "3RL")),
+        _knob("TIPO_TAX", "categorical",
+              categories=("Ramal", "Ramal_propuesto", "Troncal_linea",
+                          "Troncal_propuesta", "Troncal_ramal",
+                          "Troncal_ramal_propuesto")),
     ]
-    avisos = incoherencias_del_catalogo(knobs, catalogo)
-    assert len(avisos) == 1 and "CALIBRE_NEUTRO" in avisos[0]
+    assert incoherencias_del_catalogo(knobs, catalogo) == []
 
 
 # --------------------------------------------------------------------------------

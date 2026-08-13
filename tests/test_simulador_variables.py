@@ -76,11 +76,15 @@ def test_the_table_carries_the_declared_range_of_every_numeric_knob():
 
     This reverses an earlier decision, on purpose. The knob's bounds are what
     `build_knobs` SAW in the data; the file declares what is worth simulating,
-    and the two are not the same question: `ALTURA` spans 4 to 25 m in the base
-    but only 12, 16 and 18 m exist in the inventory. Reading the table from one
+    and the two are not the same question: `NR_T` reaches 116 in the file and a
+    given selection of bags may only span 0 to 3. Reading the table from one
     source and the slider from another is exactly how they end up disagreeing,
     so both now read the file. A knob the file does not mention keeps its own
     bounds in the control and is reported as `Sin evaluar`.
+
+    `Control` also comes from the file's `Tipo`: `NR_T` is declared
+    `numeric-entero` -- every value it takes in the base is a whole number,
+    measured over the 288.632 instances -- so the panel gives it an `IntSlider`.
     """
     tabla = tabla_variables_simulables([_knob("NR_T", bounds=(0.0, 3.0))])
 
