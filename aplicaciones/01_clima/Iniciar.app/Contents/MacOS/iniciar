@@ -27,19 +27,27 @@
 # en pantalla. Es la misma trampa que la restriccion R1 del contrato de `/app-local-*`.
 # Abrir un documento con `open` no pasa por Apple Events y no pide ningun permiso.
 #
-# El perfil trae `shellExitAction = 0`, que es lo que CIERRA la ventana en cuanto la
-# aplicacion termina: el boton de cerrar del tablero apaga puertos, proceso y ventana de
-# una vez. Que un fallo no se lleve por delante su propio mensaje de error lo resuelve
-# el guion de la ventana, que se para a que lo lean.
+# El perfil trae `shellExitAction = 0` y `RunCommandAsShell`, y hacen falta LOS DOS para
+# que la ventana se cierre sola al terminar. Medido: con `RunCommandAsShell` en falso,
+# Terminal corre el comando DENTRO de un shell de login, asi que el comando acaba, el
+# shell sigue vivo y la ventana se queda abierta. En verdadero el comando ES la sesion
+# -- de ahi tambien el `exec` --, y al acabar la ventana se cierra.
+#
+# Esa es la otra mitad de lo que promete el lanzador: cerrar el tablero apaga puertos,
+# proceso y ventana de una vez. Que un fallo no se lleve por delante su propio mensaje
+# de error lo resuelve el guion de la ventana, que se para a que lo lean.
 
 AQUI="$(cd "$(dirname "$0")" && pwd)"
 APP="$(cd "$AQUI/../../.." && pwd)"
 VENTANA="$(cd "$AQUI/.." && pwd)/Resources/ventana"
 
-# La ruta viaja dentro de un XML, asi que los dos caracteres que romperian el plist se
-# escapan. Una carpeta con un `&` en el nombre es rara, pero el fallo que provocaria
-# -- un perfil ilegible y una ventana que no abre -- no diria por que.
-VENTANA_XML=$(printf '%s' "$VENTANA" | sed 's/&/\&amp;/g; s/</\&lt;/g')
+# El comando del perfil lo interpreta un shell -- `RunCommandAsShell` --, asi que la
+# ruta va entre comillas: la carpeta del repositorio la elige quien lo clona y puede
+# llevar espacios. Y como ademas viaja dentro de un XML, se escapan los dos caracteres
+# que romperian el plist. Una ruta con comillas dobles o `$` no esta contemplada; el
+# fallo seria una ventana que no abre y no diria por que.
+COMANDO="exec \"$VENTANA\""
+COMANDO_XML=$(printf '%s' "$COMANDO" | sed 's/&/\&amp;/g; s/</\&lt;/g')
 PERFIL="${TMPDIR:-/tmp}/chec-$(basename "$APP")-ventana.terminal"
 
 cat > "$PERFIL" <<PLIST
@@ -52,9 +60,9 @@ cat > "$PERFIL" <<PLIST
 	<key>type</key>
 	<string>Window Settings</string>
 	<key>CommandString</key>
-	<string>$VENTANA_XML</string>
+	<string>$COMANDO_XML</string>
 	<key>RunCommandAsShell</key>
-	<false/>
+	<true/>
 	<key>shellExitAction</key>
 	<integer>0</integer>
 </dict>

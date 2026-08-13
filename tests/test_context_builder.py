@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+import json
+import tempfile
+from pathlib import Path
+
 import pandas as pd
 import pytest
 
-from chec_local_interpreter.context_builder import _compute_circuit_characterization, build_context_package, vano_series_records, window_series_records
+from chec_local_interpreter.context_builder import _compute_circuit_characterization, build_context_package, save_json_artifact, vano_series_records, window_series_records
 from chec_local_interpreter.plotting import CRITICALITY_GROUP_LABELS
 from chec_local_interpreter.ventanas_015 import construir_ventanas
+
+
+def tmp_ruta() -> Path:
+    return Path(tempfile.mkdtemp()) / "artefacto.json"
 
 
 def test_context_package_includes_core_sections_and_missing_optional_columns():
@@ -287,3 +295,49 @@ def test_vano_series_without_fids_is_empty():
                             "FECHA": ["2026-01-05"], "UITI_VANO": [1.0]})
 
     assert vano_series_records(eventos, circuito="C1", fids=[]) == []
+
+
+# --- Persistir el artefacto no puede perder una corrida ya calculada ----------------------
+
+
+def test_saving_an_artifact_coerces_numpy_values_instead_of_losing_the_run():
+    """`json.dumps` no sabe escribir un tipo de numpy y levanta `TypeError`.
+
+    Eso ocurre al FINAL de `prepare`, cuando el diagnostico y la simulacion ya estan
+    calculados: la corrida entera se pierde por un escalar. Y el modelo produce numpy en
+    cada paso, asi que basta con que una sola clave nueva olvide un `float(...)` para que
+    el informe deje de salir -- exactamente lo que paso con la matriz del grafo.
+
+    Coercionar aqui es la guarda de ultimo recurso, no una excusa para no convertir en el
+    origen: los tipos que SI se pueden representar viajan como el numero que son.
+    """
+    import numpy as np
+
+    destino = tmp_ruta()
+    payload = {
+        "entero": np.int64(7),
+        "flotante": np.float32(1.5),
+        "booleano": np.bool_(True),
+        "arreglo": np.array([1.0, 2.0]),
+        "anidado": {"lista": [np.float64(3.25)]},
+    }
+
+    ruta = save_json_artifact(payload, destino)
+    leido = json.loads(ruta.read_text(encoding="utf-8"))
+
+    assert leido["entero"] == 7
+    assert leido["flotante"] == pytest.approx(1.5)
+    assert leido["booleano"] is True
+    assert leido["arreglo"] == [1.0, 2.0]
+    assert leido["anidado"]["lista"][0] == pytest.approx(3.25)
+
+
+def test_saving_an_artifact_still_fails_on_something_genuinely_unrepresentable():
+    """La guarda coerciona numpy, no cualquier cosa: un objeto sin representacion JSON
+    sigue siendo un error, porque escribirlo como su `repr` metería basura en el contexto
+    del agente sin que nada lo dijera."""
+    class Opaco:
+        pass
+
+    with pytest.raises(TypeError):
+        save_json_artifact({"x": Opaco()}, tmp_ruta())

@@ -778,6 +778,13 @@ def compactar_grafo_del_escenario(
         return
 
     matriz = grafo.pop("matriz", None)
+    # `colapso` trae ademas `per_edge_variance`: un arreglo con la varianza de CADA
+    # arista. Es diagnostico del estimador del grafo, no algo que el agente pueda citar,
+    # y viaja como ndarray. Se queda el resumen escalar que ese mismo diccionario trae.
+    colapso = grafo.get("colapso")
+    if isinstance(colapso, dict):
+        grafo["colapso"] = {k: v for k, v in colapso.items() if k != "per_edge_variance"}
+
     aristas: list[dict[str, Any]] = []
     if matriz is not None and not grafo.get("voided"):
         m = np.asarray(matriz, dtype=float)

@@ -252,10 +252,35 @@ def build_context_package(
     return context
 
 
+def _json_seguro(valor: Any) -> Any:
+    """Convierte un tipo de numpy en su equivalente de Python.
+
+    Guarda de ULTIMO recurso, no una excusa para no convertir en el origen. La razon es
+    donde falla: `json.dumps` levanta `TypeError` al final de `prepare`, cuando el
+    diagnostico y la simulacion ya estan calculados, asi que la corrida entera se pierde
+    por un escalar. Y todo lo que produce el modelo es numpy, de modo que basta con que
+    una clave nueva olvide un `float(...)` para que el informe deje de salir -- que es
+    exactamente lo que ocurrio con la matriz del grafo diferencia.
+
+    Lo que NO se puede representar sigue siendo un error: escribirlo como su `repr`
+    meteria basura en el contexto del agente sin que nada lo dijera.
+    """
+    import numpy as np
+
+    if isinstance(valor, np.ndarray):
+        return valor.tolist()
+    if isinstance(valor, np.generic):
+        return valor.item()
+    raise TypeError(f"Object of type {type(valor).__name__} is not JSON serializable")
+
+
 def save_json_artifact(payload: dict[str, Any], path: str | Path) -> Path:
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    target.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, default=_json_seguro),
+        encoding="utf-8",
+    )
     return target
 
 

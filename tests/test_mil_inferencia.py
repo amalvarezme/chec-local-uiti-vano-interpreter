@@ -689,3 +689,18 @@ def test_a_scenario_without_a_difference_graph_is_left_alone():
     compactar_grafo_del_escenario(escenario, features=["A"], top=5)
 
     assert escenario["simulacion"]["grafo_diferencia"] is None
+
+
+def test_the_per_edge_variance_diagnostic_never_reaches_the_agent_context():
+    """`colapso` trae la varianza de CADA arista: diagnostico del estimador del grafo,
+    no algo que el agente pueda citar, y ademas un `ndarray`. Se queda el resumen
+    escalar que el mismo diccionario ya trae."""
+    escenario = {"simulacion": {"grafo_diferencia": {
+        "voided": False, "matriz": np.zeros((2, 2)), "n_vanos": 5,
+        "colapso": {"variance": 0.31, "per_edge_variance": np.array([0.1, 0.5])},
+    }}}
+
+    compactar_grafo_del_escenario(escenario, features=["A", "B"], top=5)
+
+    colapso = escenario["simulacion"]["grafo_diferencia"]["colapso"]
+    assert colapso == {"variance": 0.31}
