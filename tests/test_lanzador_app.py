@@ -16,20 +16,27 @@ Lo peor de ese fallo es donde deja el arreglo: si el script no llega a ejecutars
 de lo que se escriba DENTRO del script puede salvarlo. Por eso el lanzador es un bundle.
 LaunchServices no "abre" un `.app` con la aplicacion de otro: lo LANZA.
 
-## Los dos papeles del mismo archivo
+## Los dos archivos, y por que son dos
 
-`Contents/MacOS/iniciar` se llama a si mismo una vez, y se distingue por `CHEC_EN_VENTANA`:
+  1. `Contents/MacOS/iniciar` -- lo que corre el doble clic. NO arranca la aplicacion:
+     escribe un perfil de ventana de Terminal (`.terminal`, un plist) y se lo pasa a
+     Terminal.app. Asi la ventana es siempre NUEVA, nunca la sesion en la que uno
+     estuviera trabajando.
+  2. `Contents/Resources/ventana` -- lo que corre YA DENTRO de esa ventana: arranca la
+     aplicacion y, si termina con error, se para a que lean el mensaje.
 
-  1. **Sin la variable** -- es el doble clic. Abre una ventana NUEVA de Terminal que
-     vuelve a lanzarlo con la variable puesta, y sale. Nunca reutiliza la sesion en la
-     que uno este trabajando.
-  2. **Con la variable** -- ya esta dentro de esa ventana. Arranca la aplicacion, y
-     cuando la aplicacion termina -- porque se pulso su boton de cerrar, o Ctrl+C --
-     cierra la ventana que abrio.
+Son dos archivos y no uno con un interruptor porque asi no hay forma de que el papel 1
+se llame a si mismo: una ventana que abre otra ventana sin parar es un fallo que en una
+maquina se ve, pero en una prueba automatica no.
 
-Las dos ramas se comprueban aqui con dobles de `osascript` y de `python3` en el PATH, que
-apuntan como los llamaron. Sin eso, la unica forma de probarlo seria a ojo delante de una
-pantalla, que es como estos dos papeles se cruzaron en primer lugar.
+Y no se usa `osascript` en ninguno de los dos, tambien por algo medido: pedirle a
+Terminal por AppleScript que abra o cierre una ventana exige el permiso de
+Automatizacion, y sin el la llamada no falla -- se queda COLGADA esperando un dialogo.
+Es la misma trampa que la restriccion R1 del contrato. `open` no pasa por Apple Events.
+
+Las dos ramas se comprueban con dobles de `open` y de `python3` en el PATH, que apuntan
+como los llamaron. Sin eso, la unica forma de probarlo seria a ojo delante de una
+pantalla, que es donde estos dos papeles se cruzaron en primer lugar.
 """
 
 from __future__ import annotations
@@ -51,6 +58,7 @@ IDS = [d.name for d in TODAS]
 
 BUNDLE = "Iniciar.app"
 EJECUTABLE = f"{BUNDLE}/Contents/MacOS/iniciar"
+VENTANA = f"{BUNDLE}/Contents/Resources/ventana"
 PLIST = f"{BUNDLE}/Contents/Info.plist"
 
 
@@ -61,6 +69,7 @@ PLIST = f"{BUNDLE}/Contents/Info.plist"
 def test_cada_aplicacion_trae_su_lanzador_de_doble_clic(app: Path):
     assert (app / PLIST).is_file(), f"{app.name} no tiene {PLIST}"
     assert (app / EJECUTABLE).is_file(), f"{app.name} no tiene {EJECUTABLE}"
+    assert (app / VENTANA).is_file(), f"{app.name} no tiene {VENTANA}"
 
 
 @pytest.mark.parametrize("app", TODAS, ids=IDS)
@@ -68,7 +77,8 @@ def test_el_ejecutable_del_bundle_tiene_permiso_de_ejecucion(app: Path):
     """Sin el bit de ejecucion macOS no lanza el bundle: da "la aplicacion esta
     danada". Git conserva ese bit, asi que perderlo es cosa de quien cree el archivo,
     y no se nota hasta que alguien hace doble clic en otra maquina."""
-    assert os.access(app / EJECUTABLE, os.X_OK), f"{app.name}/{EJECUTABLE} no es ejecutable"
+    for pieza in (EJECUTABLE, VENTANA):
+        assert os.access(app / pieza, os.X_OK), f"{app.name}/{pieza} no es ejecutable"
 
 
 @pytest.mark.parametrize("app", TODAS, ids=IDS)
@@ -95,10 +105,11 @@ def test_los_identificadores_no_se_repiten():
     assert len(set(identificadores.values())) == len(identificadores), identificadores
 
 
-def test_los_seis_lanzadores_son_el_mismo_archivo():
+@pytest.mark.parametrize("pieza", [EJECUTABLE, VENTANA])
+def test_los_seis_lanzadores_son_el_mismo_archivo(pieza: str):
     """Seis copias del mismo script es exactamente como una se queda atras. Si algun dia
     una necesita algo propio, esa diferencia tiene que ser deliberada y romper aqui."""
-    textos = {app.name: (app / EJECUTABLE).read_bytes() for app in TODAS}
+    textos = {app.name: (app / pieza).read_bytes() for app in TODAS}
     assert len(set(textos.values())) == 1, (
         "los lanzadores se separaron: " + ", ".join(textos))
 
@@ -108,30 +119,27 @@ def test_los_seis_lanzadores_son_el_mismo_archivo():
 
 @pytest.fixture
 def dobles(tmp_path):
-    """Pone un `osascript` y un `python3` de mentira delante en el PATH.
+    """Pone un `open` y un `python3` de mentira delante en el PATH.
 
-    Los dos apuntan como los llamaron en un archivo y no hacen nada mas. Es lo que
-    permite comprobar las dos ramas del lanzador sin abrir ninguna ventana.
+    Los dos apuntan como los llamaron -- con su directorio de trabajo -- en un archivo, y
+    no hacen nada mas. Es lo que permite comprobar los dos papeles sin abrir ninguna
+    ventana ni arrancar ningun tablero.
     """
     binarios = tmp_path / "bin"
     binarios.mkdir()
     registro = tmp_path / "llamadas.txt"
-    for nombre in ("osascript", "python3"):
+    for nombre in ("open", "python3"):
         doble = binarios / nombre
         doble.write_text(
             "#!/bin/sh\n"
             f'{{ echo "=== {nombre}"; echo "cwd: $(pwd)"; '
-            'for a in "$@"; do echo "arg: $a"; done; '
-            'echo "--- entrada"; cat; } >> ' + f'"{registro}"\n',
+            'for a in "$@"; do echo "arg: $a"; done; } >> ' + f'"{registro}"\n',
             encoding="utf-8")
         doble.chmod(0o755)
 
-    def correr(app: Path, *, en_ventana: bool):
+    def correr(app: Path, pieza: str):
         ambiente = dict(os.environ, PATH=f"{binarios}:{os.environ['PATH']}")
-        ambiente.pop("CHEC_EN_VENTANA", None)
-        if en_ventana:
-            ambiente["CHEC_EN_VENTANA"] = "1"
-        hecho = subprocess.run([str(app / EJECUTABLE)], env=ambiente,
+        hecho = subprocess.run([str(app / pieza)], env=ambiente,
                                capture_output=True, text=True, timeout=30)
         assert hecho.returncode == 0, hecho.stderr
         return registro.read_text(encoding="utf-8") if registro.exists() else ""
@@ -140,46 +148,61 @@ def dobles(tmp_path):
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="el bundle es de macOS")
-def test_el_doble_clic_abre_una_ventana_nueva_y_no_arranca_nada_todavia(dobles):
-    """La rama que arregla el fallo: aunque el doble clic acabe en una sesion que ya
-    estaba abierta, lo unico que se hace ahi es pedir una ventana NUEVA."""
+def test_el_doble_clic_pide_una_ventana_nueva_y_no_arranca_nada_todavia(dobles):
+    """El papel 1 completo. Que NO arranque la aplicacion es la mitad del arreglo: es lo
+    que garantiza que el tablero no acabe corriendo dentro de la sesion en la que el
+    usuario estaba trabajando, pase lo que pase con las ataduras de LaunchServices."""
     app = APPS / "01_clima"
-    llamadas = dobles(app, en_ventana=False)
+    llamadas = dobles(app, EJECUTABLE)
 
-    assert "=== osascript" in llamadas, "no pidio ninguna ventana"
-    assert "do script" in llamadas, "no pidio una ventana NUEVA de Terminal"
-    assert "CHEC_EN_VENTANA=1" in llamadas, (
-        "la ventana nueva tiene que recibir la marca, o volveria a abrir otra sin parar")
-    assert str(app / EJECUTABLE) in llamadas, "no se pasa a si mismo por ruta absoluta"
+    assert "=== open" in llamadas, "no pidio ninguna ventana"
+    assert "arg: -a\narg: Terminal\n" in llamadas, (
+        "tiene que forzar Terminal.app por nombre: el manejador por defecto de la "
+        "maquina es justo lo que no se puede dar por bueno")
     assert "=== python3" not in llamadas, (
-        "arranco la aplicacion en la sesion equivocada: eso es justo lo que se corrige")
+        "arranco la aplicacion en la sesion equivocada: eso es lo que se corrige")
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="el bundle es de macOS")
-def test_dentro_de_la_ventana_arranca_la_aplicacion_y_luego_cierra_la_ventana(dobles):
+def test_el_perfil_de_ventana_manda_correr_el_guion_de_su_propio_bundle(dobles):
+    """El perfil es un plist con la ruta ABSOLUTA del guion de la ventana. Si apuntara a
+    otro bundle -- copiar y pegar entre las seis aplicaciones es lo natural aqui --, el
+    doble clic de una abriria otra, y las dos servirian en el puerto de la otra."""
     app = APPS / "01_clima"
-    llamadas = dobles(app, en_ventana=True)
+    llamadas = dobles(app, EJECUTABLE)
 
-    assert "=== python3" in llamadas, "no arranco la aplicacion"
-    assert "arg: ../_comun/gestor.py" in llamadas
-    assert "arg: iniciar" in llamadas
-    # Y despues, no antes: cerrar la ventana mientras la aplicacion sirve la mataria.
-    assert llamadas.index("=== python3") < llamadas.index("=== osascript"), (
-        "cerro la ventana antes de que la aplicacion terminara")
-    assert "close" in llamadas.split("=== osascript", 1)[1], (
-        "no cierra la ventana al terminar: el usuario cierra el tablero y le queda una "
-        "ventana de terminal muerta, que es lo que se pidio evitar")
+    perfil = [l[5:] for l in llamadas.splitlines()
+              if l.startswith("arg: ") and l.endswith(".terminal")]
+    assert perfil, f"no se le paso ningun perfil a Terminal: {llamadas}"
+    datos = plistlib.loads(Path(perfil[0]).read_bytes())
+
+    assert datos["CommandString"] == str(app / VENTANA)
+    assert datos["type"] == "Window Settings"
+    # 0 es "cierra la ventana al terminar", que es la otra mitad de lo que se pidio: el
+    # boton de cerrar del tablero apaga puertos, proceso y ventana de una vez.
+    assert datos["shellExitAction"] == 0
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="el bundle es de macOS")
 @pytest.mark.parametrize("app", TODAS, ids=IDS)
-def test_cada_lanzador_arranca_la_aplicacion_de_su_propia_carpeta(app: Path, dobles):
-    """El gestor deduce la aplicacion del directorio de trabajo, asi que un lanzador que
-    no se situe en su carpeta arrancaria otra -- o ninguna. En el bundle el riesgo es
-    mayor que en el `.command`: el ejecutable esta tres niveles mas abajo."""
-    llamadas = dobles(app, en_ventana=True)
-    # El gestor se llama por ruta RELATIVA, asi que el directorio de trabajo es lo unico
-    # que decide que aplicacion arranca. Se comprueba donde estaba parado al llamarlo.
-    assert f"cwd: {app}\n" in llamadas.split("=== python3", 1)[1], (
-        f"{app.name}: el lanzador no se situo en su carpeta antes de llamar al gestor")
+def test_dentro_de_la_ventana_se_arranca_la_aplicacion_de_esa_carpeta(app: Path, dobles):
+    """El papel 2. El gestor deduce que aplicacion es del directorio de trabajo, asi que
+    el `cd` es lo unico que decide cual arranca -- y aqui el guion esta tres niveles por
+    debajo de su carpeta, un nivel mas que el `.command` de siempre."""
+    llamadas = dobles(app, VENTANA)
+
+    assert "=== python3" in llamadas, "no arranco la aplicacion"
     assert "arg: ../_comun/gestor.py" in llamadas
+    assert "arg: iniciar" in llamadas
+    assert f"cwd: {app}\n" in llamadas.split("=== python3", 1)[1], (
+        f"{app.name}: no se situo en su carpeta antes de llamar al gestor")
+
+
+def test_el_guion_de_la_ventana_se_para_cuando_la_aplicacion_falla():
+    """Con `shellExitAction = 0` la ventana se cierra en cuanto el guion termina. Si un
+    fallo saliera derecho, la ventana se cerraria encima de su propio mensaje de error y
+    el doble clic no dejaria ni rastro de lo que paso -- que es el peor sitio posible
+    para perder un error, porque no hay ninguna terminal a la que volver a mirar."""
+    guion = (APPS / "01_clima" / VENTANA).read_text(encoding="utf-8")
+    assert "read -r" in guion, "no espera a que lean el error antes de cerrarse"
+    assert "-ne 0" in guion, "no distingue el fallo de la salida normal"

@@ -21,6 +21,7 @@ import pytest
 from chec_local_interpreter.mil_inferencia import (
     RecursosMIL,
     _aristas_del_modelo,
+    compactar_grafo_del_escenario,
     construir_contexto_inferencia_mil,
     diagnostico_de_circuito,
     escenarios_de_circuito,
@@ -629,3 +630,62 @@ def test_the_difference_graph_is_read_from_the_attribute_the_model_actually_has(
     assert _aristas_del_modelo(recursos.modelo) is not None
     # Y en el sitio viejo NO esta, que es lo que hacia fallar la lectura.
     assert getattr(getattr(recursos.modelo.model, "base", None), "edge_index", None) is None
+
+
+# --- El grafo diferencia no cabe en el contexto del agente --------------------------------
+
+
+def test_the_difference_graph_matrix_never_reaches_the_agent_context():
+    """La matriz es de `n_features x n_features` -- 6.400 numeros con el modelo real.
+
+    El agente no puede leer una matriz cruda, y ademas ni siquiera es serializable: un
+    `ndarray` dentro de `inference.bc.json` revienta `json.dumps` y tumba la corrida
+    entera al escribir el artefacto. Lo que el agente necesita son las aristas que MAS se
+    movieron, que es lo mismo que dibuja el panel.
+    """
+    escenario = {
+        "ventana": "V1",
+        "simulacion": {
+            "grafo_diferencia": {
+                "voided": False,
+                "matriz": np.array([[0.0, 0.9, 0.1],
+                                    [0.9, 0.0, 0.5],
+                                    [0.1, 0.5, 0.0]]),
+                "n_vanos": 7,
+                "colapso": 0.2,
+            }
+        },
+    }
+
+    compactar_grafo_del_escenario(escenario, features=["A", "B", "C"], top=2)
+
+    grafo = escenario["simulacion"]["grafo_diferencia"]
+    assert "matriz" not in grafo
+    assert grafo["n_vanos"] == 7
+    assert [a["movimiento"] for a in grafo["aristas"]] == [0.9, 0.5]
+    assert grafo["aristas"][0]["entre"] == ["A", "B"]
+    # Y lo que queda tiene que poder escribirse a disco.
+    import json
+    json.dumps(escenario)
+
+
+def test_a_voided_difference_graph_says_so_instead_of_vanishing():
+    """Un grafo anulado -- menos de tres vanos -- se declara. Borrarlo se lee como que la
+    intervencion no movio nada, que es lo contrario de 'no se pudo estimar'."""
+    escenario = {"simulacion": {"grafo_diferencia": {
+        "voided": True, "matriz": None, "n_vanos": 2, "colapso": 1.0}}}
+
+    compactar_grafo_del_escenario(escenario, features=["A"], top=5)
+
+    grafo = escenario["simulacion"]["grafo_diferencia"]
+    assert grafo["voided"] is True
+    assert grafo["aristas"] == []
+    assert grafo["n_vanos"] == 2
+
+
+def test_a_scenario_without_a_difference_graph_is_left_alone():
+    escenario = {"simulacion": {"grafo_diferencia": None}}
+
+    compactar_grafo_del_escenario(escenario, features=["A"], top=5)
+
+    assert escenario["simulacion"]["grafo_diferencia"] is None

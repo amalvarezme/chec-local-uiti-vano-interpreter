@@ -92,6 +92,7 @@ from chec_local_interpreter.mil_inferencia import (
     UNIDAD as _UNIDAD_MIL,
     aplicar_catalogo,
     cargar_recursos_mil,
+    compactar_grafo_del_escenario,
     catalogo_de_controles,
     construir_contexto_inferencia_mil,
     mapas_de_escenario,
@@ -431,6 +432,12 @@ def prepare(
                     f"'{_escenario.get('nombre')}': {exc}. El informe sale sin ellas.",
                     stacklevel=2,
                 )
+            # DESPUES de dibujar: el panel necesita la matriz entera, el agente no. Se
+            # cambia por las quince aristas que mas se movieron -- lo mismo que el panel
+            # muestra -- porque una matriz de 80x80 dentro del contexto son 6.400 numeros
+            # que nadie puede leer y que, ademas, no son serializables.
+            compactar_grafo_del_escenario(
+                _escenario, features=inference_context.get("features", []))
 
         # Los dos mapas describen UNA ventana: la ultima con eventos del circuito. Ahi la
         # pregunta es "como esta hoy y como quedaria intervenido", que es lo que sostiene

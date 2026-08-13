@@ -1,0 +1,23 @@
+#!/bin/sh
+# Esto ya corre DENTRO de la ventana nueva que abrio `Contents/MacOS/iniciar`. Ver ahi
+# por que hay dos archivos en vez de uno.
+#
+# Al salir de aqui, Terminal cierra la ventana -- lo pide el `shellExitAction` del
+# perfil. Por eso un fallo se para a que lo lean: si no, la ventana se cerraria sobre su
+# propio mensaje de error y el doble clic no dejaria ni rastro de lo que paso.
+
+APP="$(cd "$(dirname "$0")/../../.." && pwd)"
+cd "$APP" || exit 1
+
+# El gestor deduce que aplicacion es del directorio de trabajo, de ahi el `cd` de arriba.
+python3 ../_comun/gestor.py iniciar "$@"
+SALIDA=$?
+
+if [ "$SALIDA" -ne 0 ]; then
+    echo ""
+    echo "  La aplicacion termino con error (codigo $SALIDA)."
+    echo "  Lee el mensaje de arriba y pulsa Intro para cerrar esta ventana."
+    read -r _
+fi
+
+exit 0

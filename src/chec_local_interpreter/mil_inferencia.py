@@ -750,6 +750,59 @@ def construir_contexto_inferencia_mil(
     }
 
 
+TOP_ARISTAS_CONTEXTO = 15
+
+
+def compactar_grafo_del_escenario(
+    escenario: dict[str, Any], *, features: Sequence[str], top: int = TOP_ARISTAS_CONTEXTO
+) -> None:
+    """Sustituye la MATRIZ del grafo diferencia por las aristas que mas se movieron.
+
+    La matriz es `n_features x n_features` -- 6.400 numeros con el modelo real -- y va
+    dentro del contexto que recibe el agente. Dos problemas, y el segundo tumba la
+    corrida:
+
+    1. El agente no puede leer una matriz cruda. Lo que puede citar son las relaciones
+       que la intervencion movio, que es exactamente lo que dibuja el panel.
+    2. Un `ndarray` no es serializable: `json.dumps` levanta `TypeError` al escribir
+       `inference.bc.json` y se pierde la corrida entera despues de haberla calculado.
+
+    Muta el escenario EN SITIO y se llama despues de dibujar las figuras, que si
+    necesitan la matriz completa.
+    """
+    simulacion = (escenario or {}).get("simulacion")
+    if not isinstance(simulacion, dict):
+        return
+    grafo = simulacion.get("grafo_diferencia")
+    if not isinstance(grafo, dict):
+        return
+
+    matriz = grafo.pop("matriz", None)
+    aristas: list[dict[str, Any]] = []
+    if matriz is not None and not grafo.get("voided"):
+        m = np.asarray(matriz, dtype=float)
+        # Solo el triangulo superior: la matriz es simetrica y la arista (A,B) es la
+        # misma que la (B,A). Recorrerla entera duplicaria cada relacion en el ranking.
+        filas, columnas = np.triu_indices(m.shape[0], k=1)
+        pesos = m[filas, columnas]
+        for i in np.argsort(-pesos)[: int(top)]:
+            if pesos[i] <= 0:
+                break
+            a, b = int(filas[i]), int(columnas[i])
+            aristas.append({
+                "entre": [_nombre_feature(features, a), _nombre_feature(features, b)],
+                "movimiento": round(float(pesos[i]), 6),
+            })
+    grafo["aristas"] = aristas
+
+
+def _nombre_feature(features: Sequence[str], indice: int) -> str:
+    try:
+        return str(features[indice])
+    except (IndexError, TypeError):
+        return f"feature_{indice}"
+
+
 def mapas_de_escenario(escenario: Mapping[str, Any]) -> dict[str, Any]:
     """Los dos mapas de la ventana: como esta el circuito y como quedaria intervenido.
 

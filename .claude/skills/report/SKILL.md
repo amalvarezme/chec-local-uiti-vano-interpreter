@@ -174,9 +174,9 @@ Given `circuito (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
    - **Circuit with no bags in a window**: that window simply produces no scenario. A quiet
      circuit is a real outcome, not a failure.
 
-**Steps 3, 4, and 4b are independent of one another** — `historical`, `inference`, and
-each read their own `*.bc.json` envelope and write their own distinct
-`*.out.json` file, sharing no mutable state. On any runtime where the invoking tool supports
+**Steps 3 and 4 are independent of one another** — `historical` and `inference` each read
+their own `*.bc.json` envelope and write their own distinct `*.out.json` file, sharing no
+mutable state. On any runtime where the invoking tool supports
 dispatching independent calls together (e.g. Claude Code issuing independent Agent/Skill calls in
 one turn), they **MUST** be issued that way — parallel dispatch is the default behavior, not an
 option to weigh or ask the user about. Do not fall back to running them one at a time "to be safe"
@@ -201,10 +201,10 @@ report the stalled role.
 
 **Scratch-file collision avoidance (mandatory on EVERY `/report` run, not just multi-circuit
 batches).** A runtime's scratchpad directory is shared per session, not per dispatched agent. This
-bites even a single circuit's own steps 3/4/4b: those three roles are dispatched *concurrently by
-design* (see above — parallel dispatch is the default, not optional), so `historical`, `inference`,
-for the SAME circuit are live agents writing to the same scratchpad at
-the same time. A `circuito`-only prefix is not enough to separate them — confirmed in production:
+bites even a single circuit's own steps 3/4: those two roles are dispatched *concurrently by
+design* (see above — parallel dispatch is the default, not optional), so `historical` and
+`inference` for the SAME circuit are live agents writing to the same scratchpad at the same
+time. A `circuito`-only prefix is not enough to separate them — confirmed in production:
 one circuit's `inference` agent had its own `<circuito>_envelope.json` silently overwritten by that
 same circuit's concurrently-running `historical` agent, and in a multi-circuit
 `informe-gerencial` batch the same failure mode recurred across circuits despite per-circuit
@@ -218,8 +218,8 @@ Every dispatch prompt for a role-authoring task MUST instruct the agent to:
    roles.
 2. Re-read back any scratch file immediately after writing it, and confirm its content actually
    matches what it just wrote (e.g. check the envelope's own role-specific key shape:
-   `historical.bc.json`'s ten-key schema vs. `inference.bc.json`'s nine-key schema vs.
-   `inference.bc.json`'s schema) before relying on it for the next step. This
+   `historical.bc.json`'s window-series schema vs. `inference.bc.json`'s scenario schema)
+   before relying on it for the next step. This
    self-check is what let agents recover from a live collision in production; skipping it lets a
    silently-clobbered file poison the rest of that role's work.
 
@@ -232,7 +232,7 @@ never trust a sub-agent's self-report of success without that direct check, sinc
 leave the target file holding another role's content even when the reporting agent believes its own
 `validate` passed.
 
-Either way, all of steps 3 and 4 must complete successfully before step 5. Only `expert-alignment`
+Either way, both of steps 3 and 4 must complete successfully before step 5. Only `expert-alignment`
 (steps 5-6) has an ordering dependency: it requires BOTH `historical` and `inference` to have
 already completed — dispatch it alone, immediately once both are done, without pausing for input.
 
@@ -325,7 +325,7 @@ already completed — dispatch it alone, immediately once both are done, without
    silently degrades the report header, it never raises. The report header then shows
    `"<Provider> (<model>)"`, e.g. `"Claude Code (claude-sonnet-5)"`, plus an input/output token line
    whose source is labeled `medidos` (measured), `medidos/estimados` (mixed), or `aproximados`
-   (estimated) — see the optional `token_usage.json` sidecar note after step 4b below. Beneath that
+   (estimated) — see the optional `token_usage.json` sidecar note after step 4 below. Beneath that
    preserved whole-run total line, the header now also shows a per-stage breakdown (tokens + tiempo
    for each of historical/inference/expert-alignment), sourced from the capture
    calls above plus the new `stage_timing.json` sidecar (see the "Per-stage duration sidecar" note
@@ -338,7 +338,7 @@ already completed — dispatch it alone, immediately once both are done, without
 
 **Optional: real token counts.** If your runtime exposes actual per-call token usage (input/output
    tokens for the historical/inference/expert-alignment Skill invocations in steps
-   3/4/4b/6), write it to `run_dir/token_usage.json` before calling `render` in step 7 — a JSON object
+   3/4/6), write it to `run_dir/token_usage.json` before calling `render` in step 7 — a JSON object
    mapping stage name to `{"input": <int>, "output": <int>}`, e.g. `{"historical": {"input": 1500,
    "output": 400}, "inference": {"input": 2100, "output": 600}}`. Partial coverage is fine (any stage
    you omit falls back to the char/4 estimate for that stage only, and the header shows
@@ -364,7 +364,7 @@ already completed — dispatch it alone, immediately once both are done, without
    exists only as an optional explicit override for callers with a better/external timer; you do not
    need to compute or pass it in the normal flow.
 
-   **Per-stage duration sidecar.** The `record-duration` calls above (steps 3/4/4b/6) accumulate
+   **Per-stage duration sidecar.** The `record-duration` calls above (steps 3/4/6) accumulate
    into an optional `run_dir/stage_timing.json` (one `{"duration_seconds": <float>}` entry per
    stage) — the timing counterpart to `token_usage.json`. It is fully additive and independent:
    `render` reads it to show a per-stage "Tiempo" column alongside the per-stage "Tokens" column;

@@ -1,61 +1,66 @@
 #!/bin/sh
-# Lanzador de doble clic de macOS. Un `.app` y no el `iniciar.command` de al lado, por
-# una razon medida: un `.command` lo abre la aplicacion que LaunchServices tenga atada a
-# esa extension, y esa atadura la fija cada maquina, no el repositorio. Ghostty se
-# declara manejador de `.command` con rol de EDITOR y NO los ejecuta -- el doble clic le
-# pasa el foco a la sesion que ya estaba abierta y no arranca nada. Y ahi no hay arreglo
-# posible dentro del script, porque el script no llega a correr. Un `.app` no se puede
-# desviar asi: LaunchServices lo LANZA.
+# Lanzador de doble clic de macOS. Existe -- en vez de bastar con el `iniciar.command`
+# de al lado -- por una razon medida en esta maquina:
 #
-# El archivo hace dos papeles, y se distinguen por CHEC_EN_VENTANA:
+#   open iniciar.command              -> Terminal.app abre una ventana y lo EJECUTA.
+#   open -a Ghostty iniciar.command  -> no ejecuta nada. Ghostty se declara manejador
+#                                       de `.command` en su Info.plist con
+#                                       CFBundleTypeRole = Editor -- editor, no shell --
+#                                       y lo unico que hace es llevarse el foco a la
+#                                       sesion que ya estuviera abierta.
 #
-#   sin la variable  es el doble clic. Abre una ventana NUEVA de Terminal que vuelve a
-#                    llamarlo con la variable puesta, y sale. Nunca se mete en la sesion
-#                    en la que alguien este trabajando.
-#   con la variable  ya esta dentro de esa ventana. Arranca la aplicacion y, cuando la
-#                    aplicacion termina -- su boton de cerrar, o Ctrl+C --, cierra la
-#                    ventana que abrio.
+# Cual de las dos ocurre no lo decide el repositorio: lo decide la atadura de
+# LaunchServices de cada maquina, que ademas se puede cambiar sin querer desde el
+# "Abrir con" del Finder. Y cuando toca la mala, no hay arreglo posible DENTRO del
+# script, porque el script no llega a correr. Un `.app` no se puede desviar asi:
+# LaunchServices no lo abre con otra aplicacion, lo LANZA.
 #
-# Terminal.app y no el terminal preferido del usuario, a proposito: es el unico que esta
-# en todos los macOS y el unico con el que se puede tanto ABRIR la ventana como CERRARLA
-# despues. Eso ultimo es la mitad de lo que este lanzador promete.
-
-YO="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
-APP="$(cd "$(dirname "$0")/../../.." && pwd)"
-
-if [ -z "$CHEC_EN_VENTANA" ]; then
-    osascript - "$YO" <<'FIN'
-on run argv
-    tell application "Terminal"
-        activate
-        do script ("CHEC_EN_VENTANA=1 " & quoted form of (item 1 of argv))
-    end tell
-end run
-FIN
-    exit 0
-fi
-
-cd "$APP" || exit 1
-python3 ../_comun/gestor.py iniciar "$@"
-SALIDA=$?
-
-# Y ahora la ventana. Se busca por el tty de este proceso y no por el numero de ventana:
-# el usuario pudo abrir, cerrar y reordenar ventanas mientras el tablero servia, y el
-# numero de entonces ya no significa nada. El tty no cambia en toda la vida de la sesion.
+# Lo que hace este archivo son dos cosas, y ninguna es arrancar la aplicacion:
 #
-# Se llama siempre, aunque no haya tty -- corriendo fuera de una ventana no encuentra
-# ninguna que coincida y no hace nada. Preguntar antes solo anadiria una rama que en la
-# maquina del usuario nunca se toma y que en las pruebas esconderia justo esta.
-osascript - "$(tty)" <<'FIN' 2>/dev/null
-on run argv
-    tell application "Terminal"
-        repeat with v in windows
-            try
-                if tty of (selected tab of v) is (item 1 of argv) then close v
-            end try
-        end repeat
-    end tell
-end run
-FIN
+#   1. escribe un perfil de ventana de Terminal (un `.terminal`, que es un plist) cuyo
+#      comando es el guion de al lado, `Contents/Resources/ventana`;
+#   2. se lo pasa a Terminal.app y se va.
+#
+# Se hace asi y no con `osascript` a proposito. Pedirle a Terminal por AppleScript que
+# abra una ventana exige el permiso de Automatizacion, y sin el la llamada no falla: se
+# QUEDA COLGADA esperando un dialogo -- medido, 19 s y subiendo, con la ventana muerta
+# en pantalla. Es la misma trampa que la restriccion R1 del contrato de `/app-local-*`.
+# Abrir un documento con `open` no pasa por Apple Events y no pide ningun permiso.
+#
+# El perfil trae `shellExitAction = 0`, que es lo que CIERRA la ventana en cuanto la
+# aplicacion termina: el boton de cerrar del tablero apaga puertos, proceso y ventana de
+# una vez. Que un fallo no se lleve por delante su propio mensaje de error lo resuelve
+# el guion de la ventana, que se para a que lo lean.
 
-exit $SALIDA
+AQUI="$(cd "$(dirname "$0")" && pwd)"
+APP="$(cd "$AQUI/../../.." && pwd)"
+VENTANA="$(cd "$AQUI/.." && pwd)/Resources/ventana"
+
+# La ruta viaja dentro de un XML, asi que los dos caracteres que romperian el plist se
+# escapan. Una carpeta con un `&` en el nombre es rara, pero el fallo que provocaria
+# -- un perfil ilegible y una ventana que no abre -- no diria por que.
+VENTANA_XML=$(printf '%s' "$VENTANA" | sed 's/&/\&amp;/g; s/</\&lt;/g')
+PERFIL="${TMPDIR:-/tmp}/chec-$(basename "$APP")-ventana.terminal"
+
+cat > "$PERFIL" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>name</key>
+	<string>CriticidadCHEC</string>
+	<key>type</key>
+	<string>Window Settings</string>
+	<key>CommandString</key>
+	<string>$VENTANA_XML</string>
+	<key>RunCommandAsShell</key>
+	<false/>
+	<key>shellExitAction</key>
+	<integer>0</integer>
+</dict>
+</plist>
+PLIST
+
+# `-a Terminal` y no el manejador por defecto: es justamente lo que hace que esto no se
+# lo pueda quedar otro terminal, que es todo el motivo de que este bundle exista.
+exec open -a Terminal "$PERFIL"
