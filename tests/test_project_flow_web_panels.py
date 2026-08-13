@@ -24,6 +24,7 @@ execution, so this stays fast):
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 from pathlib import Path
@@ -49,6 +50,19 @@ NO_CSV_BOARDS = ["03", "04"]
 def _source(name: str) -> str:
     notebook = json.loads((NOTEBOOK_DIR / f"{name}.ipynb").read_text(encoding="utf-8"))
     return "\n".join("".join(cell["source"]) for cell in notebook["cells"])
+
+
+def _arbol(name: str) -> ast.Module:
+    """El arbol sintactico del cuaderno, solo con sus celdas de CODIGO.
+
+    Sirve para acotar un bloque por su estructura en vez de partir el texto por una
+    marca. Las celdas de texto se dejan fuera a proposito: `_source` las incluye
+    -- las comprobaciones de redaccion las necesitan -- y ninguna es Python valido.
+    """
+    notebook = json.loads((NOTEBOOK_DIR / f"{name}.ipynb").read_text(encoding="utf-8"))
+    codigo = "\n".join("".join(cell["source"]) for cell in notebook["cells"]
+                       if cell["cell_type"] == "code")
+    return ast.parse(codigo)
 
 
 @pytest.fixture(scope="module")
@@ -663,6 +677,13 @@ def test_board_06_warns_when_the_frontend_cannot_mount_the_figure_widget():
 
     Avisa y NO interrumpe: el soporte depende de la version de la extension Jupyter de
     VS Code, asi que a alguien le puede funcionar, y abortar seria peor que el aviso.
+
+    La guarda se recorta con `ast` y no partiendo el texto. Antes se buscaba una linea
+    de 78 iguales como separador, y en el cuaderno esa linea no esta escrita: esta
+    CALCULADA (`'=' * 78`). El corte no encontraba nada, se quedaba con el resto del
+    cuaderno entero y la prueba fallaba por un `raise` de otra celda -- una que
+    ademas debe existir. El arbol acota el bloque exacto, y ninguna reescritura de
+    los `print` de al lado lo puede mover.
     """
     src = _source("06_uiti_vano_explicabilidad_simulador")
 
@@ -670,11 +691,19 @@ def test_board_06_warns_when_the_frontend_cannot_mount_the_figure_widget():
     assert "anywidget" in src, "el aviso confirma el respaldo en vez de suponerlo"
     assert "jupyter lab" in src, "un aviso sin salida deja al usuario igual de atascado"
 
-    bloque = src[src.index("_EN_VSCODE"):]
-    cuerpo = bloque.split("=" * 78)[0]
-    assert "raise" not in cuerpo and "sys.exit" not in cuerpo, (
+    guardas = [
+        nodo
+        for nodo in ast.walk(_arbol("06_uiti_vano_explicabilidad_simulador"))
+        if isinstance(nodo, ast.If) and "_EN_VSCODE" in ast.dump(nodo.test)
+    ]
+    assert len(guardas) == 1, "la guarda del aviso tiene que ser una sola"
+    cuerpo = list(ast.walk(guardas[0]))
+    assert not any(isinstance(nodo, ast.Raise) for nodo in cuerpo), (
         "la guarda no puede abortar: bloquearia a quien SI ve el tablero"
     )
+    assert not any(
+        isinstance(nodo, ast.Attribute) and nodo.attr == "exit" for nodo in cuerpo
+    ), "la guarda no puede abortar: bloquearia a quien SI ve el tablero"
 
 
 def test_board_04_draws_its_equipment_on_top_like_boards_01_and_03():
