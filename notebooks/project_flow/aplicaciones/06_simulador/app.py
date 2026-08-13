@@ -134,13 +134,21 @@ def main() -> int:
         # Uno, no mas: cada kernel en espera ocupa memoria sin que nadie lo mire, y
         # esta aplicacion es de un usuario en una portatil, no un servidor compartido.
         "--pool_size=1",
-        # Recicla el kernel de una pestania CERRADA a los 10 minutos. `cull_connected`
+        # Recicla el kernel de una pestania CERRADA a los tres minutos. `cull_connected`
         # se deja en False a proposito, al reves que en el despliegue de servidor: alli
         # interesa recuperar memoria de una pestania olvidada, pero aqui mataria la
         # sesion de alguien que dejo el tablero abierto leyendolo, y el tablero se
         # quedaria mudo sin decir por que.
-        "--MappingKernelManager.cull_idle_timeout=600",
-        "--MappingKernelManager.cull_interval=60",
+        #
+        # Tres minutos y no diez: cada kernel de esta aplicacion pesa ~780 MB residentes
+        # (medido), y cada recarga de la pagina levanta uno nuevo sin cerrar el anterior.
+        # Con el plazo de diez minutos se llego a SIETE kernels vivos a la vez -- 5,4 GB
+        # en una portatil -- solo por recargar la pestania mientras se probaba. El plazo
+        # sigue siendo holgado frente al otro caso que importa: una desconexion pasajera
+        # -- la tapa del portatil, el wifi -- recupera su kernel al volver si vuelve
+        # dentro de esos tres minutos.
+        "--MappingKernelManager.cull_idle_timeout=180",
+        "--MappingKernelManager.cull_interval=30",
         "--MappingKernelManager.cull_connected=False",
     ]
     # Voila abre el navegador por su cuenta, pero con el modulo `webbrowser`, que en
