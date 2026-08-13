@@ -115,6 +115,7 @@ from chec_local_interpreter.ventanas_015 import construir_ventanas
 from chec_local_interpreter.data_loader import (
     available_circuits,
     circuit_date_range,
+    columnas_declaradas,
     filter_events,
     load_dataset,
 )
@@ -256,7 +257,7 @@ def preflight(
         )
 
     source_path = Path(data_path) if data_path is not None else DEFAULT_DATA_PATH
-    frame = load_dataset(source_path)
+    frame = load_dataset(source_path, columns=columnas_declaradas())
 
     if circuito not in available_circuits(frame):
         raise ReportPipelineError(f"Circuit not found in dataset: {circuito!r}")
@@ -309,7 +310,7 @@ def prepare(
         )
 
     source_path = Path(data_path) if data_path is not None else DEFAULT_DATA_PATH
-    frame = load_dataset(source_path)
+    frame = load_dataset(source_path, columns=columnas_declaradas())
 
     if circuito not in available_circuits(frame):
         raise ReportPipelineError(f"Circuit not found in dataset: {circuito!r}")
@@ -1147,7 +1148,7 @@ def render(
     inference_data = _load_validated_agent_output(run_dir, "inference")
     expert_alignment_data = _load_validated_agent_output(run_dir, "expert-alignment")
 
-    frame = load_dataset(state["data_path"])
+    frame = load_dataset(state["data_path"], columns=columnas_declaradas())
     events_df = filter_events(
         frame,
         selected_circuitos=[state["circuito"]],

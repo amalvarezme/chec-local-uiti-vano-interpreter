@@ -2,53 +2,67 @@
 # Lanzador de doble clic de macOS. Existe -- en vez de bastar con el `iniciar.command`
 # de al lado -- por una razon medida en esta maquina:
 #
-#   open iniciar.command              -> Terminal.app abre una ventana y lo EJECUTA.
-#   open -a Ghostty iniciar.command  -> no ejecuta nada. Ghostty se declara manejador
-#                                       de `.command` en su Info.plist con
+#   open iniciar.command             -> Terminal.app abre una ventana y lo EJECUTA.
+#   open -a Ghostty iniciar.command  -> no ejecuta nada. Ghostty se declara manejador de
+#                                       `.command` en su Info.plist con
 #                                       CFBundleTypeRole = Editor -- editor, no shell --
 #                                       y lo unico que hace es llevarse el foco a la
 #                                       sesion que ya estuviera abierta.
 #
 # Cual de las dos ocurre no lo decide el repositorio: lo decide la atadura de
-# LaunchServices de cada maquina, que ademas se puede cambiar sin querer desde el
-# "Abrir con" del Finder. Y cuando toca la mala, no hay arreglo posible DENTRO del
-# script, porque el script no llega a correr. Un `.app` no se puede desviar asi:
-# LaunchServices no lo abre con otra aplicacion, lo LANZA.
+# LaunchServices de cada maquina, que ademas se cambia sin querer desde el "Abrir con"
+# del Finder. Y cuando toca la mala no hay arreglo posible DENTRO del script, porque el
+# script no llega a correr. Un `.app` no se puede desviar asi: LaunchServices no lo abre
+# con otra aplicacion, lo LANZA.
 #
-# Lo que hace este archivo son dos cosas, y ninguna es arrancar la aplicacion:
+# Aqui no se arranca ninguna aplicacion. Se escribe un perfil de ventana de Terminal --
+# un `.terminal`, que es un plist -- y se le da a Terminal.app.
 #
-#   1. escribe un perfil de ventana de Terminal (un `.terminal`, que es un plist) cuyo
-#      comando es el guion de al lado, `Contents/Resources/ventana`;
-#   2. se lo pasa a Terminal.app y se va.
-#
-# Se hace asi y no con `osascript` a proposito. Pedirle a Terminal por AppleScript que
-# abra una ventana exige el permiso de Automatizacion, y sin el la llamada no falla: se
-# QUEDA COLGADA esperando un dialogo -- medido, 19 s y subiendo, con la ventana muerta
-# en pantalla. Es la misma trampa que la restriccion R1 del contrato de `/app-local-*`.
+# Nada de `osascript`, tambien por algo medido: pedirle a Terminal por AppleScript que
+# abra o cierre una ventana exige el permiso de Automatizacion, y sin el la llamada no
+# falla, se QUEDA COLGADA esperando un dialogo (19 s y subiendo, con la ventana muerta
+# en pantalla). Es la misma trampa que la restriccion R1 del contrato de `/app-local-*`.
 # Abrir un documento con `open` no pasa por Apple Events y no pide ningun permiso.
 #
-# El perfil trae `shellExitAction = 0` y `RunCommandAsShell`, y hacen falta LOS DOS para
-# que la ventana se cierre sola al terminar. Medido: con `RunCommandAsShell` en falso,
-# Terminal corre el comando DENTRO de un shell de login, asi que el comando acaba, el
-# shell sigue vivo y la ventana se queda abierta. En verdadero el comando ES la sesion
-# -- de ahi tambien el `exec` --, y al acabar la ventana se cierra.
+# El perfil lleva `RunCommandAsShell` y `shellExitAction = 0`, y hacen falta los DOS para
+# que la ventana se cierre sola cuando el tablero se cierra -- que es la otra mitad de lo
+# que este lanzador promete. Medido, uno por uno:
 #
-# Esa es la otra mitad de lo que promete el lanzador: cerrar el tablero apaga puertos,
-# proceso y ventana de una vez. Que un fallo no se lleve por delante su propio mensaje
-# de error lo resuelve el guion de la ventana, que se para a que lo lean.
+#   RunCommandAsShell falso  Terminal corre el comando DENTRO de un shell de login: el
+#                            comando acaba, el shell sigue vivo, la ventana se queda.
+#   RunCommandAsShell cierto el comando ES la sesion, y al acabar la ventana se cierra.
+#
+# Y con el cierto, `CommandString` NO lo interpreta ningun shell: se ejecuta tal cual.
+# Medido: con `exec` delante no arranca, entre comillas tampoco, y una ruta con espacios
+# no arranca. De ahi el trampolin de abajo -- un guion de dos lineas en una carpeta sin
+# espacios -- que es lo unico que se le pasa a Terminal.
 
 AQUI="$(cd "$(dirname "$0")" && pwd)"
 APP="$(cd "$AQUI/../../.." && pwd)"
 VENTANA="$(cd "$AQUI/.." && pwd)/Resources/ventana"
+CLAVE="$(basename "$APP")"
 
-# El comando del perfil lo interpreta un shell -- `RunCommandAsShell` --, asi que la
-# ruta va entre comillas: la carpeta del repositorio la elige quien lo clona y puede
-# llevar espacios. Y como ademas viaja dentro de un XML, se escapan los dos caracteres
-# que romperian el plist. Una ruta con comillas dobles o `$` no esta contemplada; el
-# fallo seria una ventana que no abre y no diria por que.
-COMANDO="exec \"$VENTANA\""
-COMANDO_XML=$(printf '%s' "$COMANDO" | sed 's/&/\&amp;/g; s/</\&lt;/g')
-PERFIL="${TMPDIR:-/tmp}/chec-$(basename "$APP")-ventana.terminal"
+# Una carpeta temporal SIN espacios, que es la condicion que impone `CommandString`.
+# En macOS `TMPDIR` es `/var/folders/...` y no los lleva, pero comprobarlo cuesta una
+# linea y el fallo que evita -- una ventana que no abre y no dice por que -- cuesta una
+# tarde.
+TEMP="${TMPDIR:-/tmp}"
+case "$TEMP" in *" "*) TEMP=/tmp ;; esac
+
+DESTINO="$TEMP/chec-$CLAVE-destino"
+TRAMPOLIN="$TEMP/chec-$CLAVE-ventana.sh"
+PERFIL="$TEMP/chec-$CLAVE-ventana.terminal"
+
+# La ruta real va en un archivo aparte, no dentro del trampolin. Asi no hay que citarla
+# ni escaparla: una carpeta con espacios, comillas o `&` en el nombre -- la elige quien
+# clona el repositorio, no nosotros -- pasa entera sin tocar nada.
+printf '%s' "$VENTANA" > "$DESTINO"
+cat > "$TRAMPOLIN" <<FIN
+#!/bin/sh
+# Generado por Iniciar.app en cada arranque. No se edita: se reescribe.
+exec "\$(cat "$DESTINO")"
+FIN
+chmod +x "$TRAMPOLIN"
 
 cat > "$PERFIL" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -60,7 +74,7 @@ cat > "$PERFIL" <<PLIST
 	<key>type</key>
 	<string>Window Settings</string>
 	<key>CommandString</key>
-	<string>$COMANDO_XML</string>
+	<string>$TRAMPOLIN</string>
 	<key>RunCommandAsShell</key>
 	<true/>
 	<key>shellExitAction</key>

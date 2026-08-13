@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Sequence
 
 import pandas as pd
 
@@ -28,21 +28,52 @@ def resolve_columns(frame: pd.DataFrame) -> ColumnResolution:
     return ColumnResolution(required=required, optional=optional, unavailable_optional=unavailable)
 
 
-def _read_csv(path: Path) -> pd.DataFrame:
-    return pd.read_csv(path, dtype=str, low_memory=False)
+def columnas_declaradas() -> list[str]:
+    """Las columnas que el flujo del informe declara usar.
+
+    Son las requeridas, las opcionales y los identificadores. Las OPCIONALES entran
+    aunque el informe no las lea directamente: `resolve_columns` reporta como
+    `unavailable_optional` las que faltan, y ese reporte alimenta un guardrail que
+    prohibe citarlas. Dejarlas fuera de la lectura las marcaria ausentes cuando el
+    archivo si las trae, y el informe perderia variables reales sin decirlo.
+
+    Lo que queda fuera son los ~220 rezagos climaticos. Solo los necesita el constructor
+    del catalogo de controles, que lee el CSV por su cuenta y esta cacheado.
+    """
+    return list(dict.fromkeys([*REQUIRED_COLUMNS, *ID_COLUMNS, *OPTIONAL_COLUMNS]))
 
 
-def load_dataset(path: str | Path) -> pd.DataFrame:
+def _read_csv(path: Path, columns: Sequence[str] | None = None) -> pd.DataFrame:
+    if columns is None:
+        return pd.read_csv(path, dtype=str, low_memory=False)
+    # La cabecera primero: `usecols` revienta si se pide una columna que el archivo no
+    # trae, y una opcional ausente es un caso NORMAL -- es justo lo que
+    # `unavailable_optional` existe para reportar.
+    presentes = set(pd.read_csv(path, nrows=0).columns)
+    pedidas = [c for c in columns if c in presentes]
+    return pd.read_csv(path, dtype=str, low_memory=False, usecols=pedidas or None)
+
+
+def load_dataset(path: str | Path, *, columns: Sequence[str] | None = None) -> pd.DataFrame:
+    """Carga el dataset de eventos.
+
+    `columns` recorta la lectura a las columnas declaradas. Sin el, el comportamiento es
+    el de siempre -- todas las columnas --, que es lo que siguen recibiendo los demas
+    consumidores. Con el, MEDIDO sobre el CSV real: 273 columnas y 3.688 MB de pico
+    bajan a las ~50 que el flujo del informe declara.
+    """
     source = Path(path)
     if not source.exists():
         raise FileNotFoundError(f"Dataset not found: {source}")
     suffix = source.suffix.lower()
     if suffix == ".csv":
-        frame = _read_csv(source)
+        frame = _read_csv(source, columns)
     elif suffix == ".parquet":
-        frame = pd.read_parquet(source)
+        frame = pd.read_parquet(source, columns=list(columns) if columns else None)
     elif suffix in {".xlsx", ".xls"}:
         frame = pd.read_excel(source, dtype=str)
+        if columns is not None:
+            frame = frame[[c for c in frame.columns if c in set(columns)]]
     else:
         raise ValueError(f"Unsupported dataset format: {suffix}")
 
