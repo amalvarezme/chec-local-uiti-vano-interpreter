@@ -1,6 +1,6 @@
 """Contrato de las aplicaciones locales de `aplicaciones/`.
 
-Las cinco aplicaciones no comparten codigo por herencia sino por convencion: el
+Las seis aplicaciones no comparten codigo por herencia sino por convencion: el
 gestor descubre la carpeta desde el directorio de trabajo, busca `requirements.txt`
 para reconocerla, y vuelve a lanzar `construir.py` o `app.py` con el interprete del
 entorno de esa carpeta. Nada de eso esta declarado en ningun sitio, asi que una
@@ -12,14 +12,21 @@ Estas pruebas fijan esa convencion sobre las carpetas REALES. No construyen ning
 tablero -- eso cuesta minutos y lee 540 MB --; comprueban que las piezas estan y que
 apuntan a donde dicen.
 
-El boton de cerrar tiene su propia prueba porque son DOS extremos que tienen que
-coincidir y viven en archivos distintos: la ruta que el boton llama (`empaquetar`) y
-la ruta que el servidor atiende (`servidor`). Si se separan, el boton deja de apagar
-nada y el sintoma es un tablero que parece cerrarse y deja el proceso vivo.
+Los botones de cerrar tienen pruebas propias porque en los tres casos son DOS extremos
+que viven en archivos distintos y solo funcionan si coinciden:
+
+  - el boton suelto llama a una ruta (`empaquetar`) que atiende otro modulo (`servidor`);
+  - la barra del menu lleva horneada la URL del menu, que decide `menu.py`;
+  - los puertos del catalogo del menu tienen que ser los del contrato de `/app-local-*`.
+
+Cuando uno de esos pares se separa el sintoma es siempre el mismo y siempre mudo: algo
+que parece cerrarse y deja el proceso vivo, o dos instancias de la misma aplicacion en
+puertos distintos sin que ninguna sepa de la otra.
 """
 
 from __future__ import annotations
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -30,11 +37,11 @@ RAIZ = Path(__file__).resolve().parents[1]
 APPS = RAIZ / "aplicaciones"
 CUADERNOS = RAIZ / "notebooks" / "old_version"
 
-# Las piezas sin las cuales el lanzador no llega a ninguna parte. `preparar.py` no
-# esta: solo lo tiene el simulador, que congela un paquete en vez de un HTML.
+# Las piezas sin las cuales el lanzador no llega a ninguna parte, en CUALQUIER
+# aplicacion. `preparar.py` no esta: solo lo tiene el simulador, que congela un paquete
+# en vez de un HTML.
 PIEZAS = (
     "app.py",
-    "construir.py",
     "requirements.txt",
     "README.md",
     "iniciar.command",
@@ -42,6 +49,12 @@ PIEZAS = (
     "instalar.command",
     "instalar.bat",
 )
+
+# CriticidadCHEC es de otra especie: no dibuja ningun tablero, no ejecuta ningun
+# cuaderno y no tiene dependencias. Gobierna a las demas. Separarlo aqui es lo que
+# permite que las pruebas de los visores sigan siendo exigentes en vez de aflojarse
+# hasta que el menu tambien pase.
+MENU = "00_criticidad_chec"
 
 
 def _aplicaciones() -> list[Path]:
@@ -56,18 +69,36 @@ def _ids(rutas: list[Path]) -> list[str]:
 
 
 TODAS = _aplicaciones()
+VISORES = [a for a in TODAS if a.name != MENU]
+# Los que empaquetan un HTML estatico. El simulador queda fuera: sirve el cuaderno con
+# un kernel vivo y no empaqueta plotly.js ni tiene `panel/`.
+ESTATICOS = [a for a in VISORES if a.name != "06_simulador"]
 
 
-def test_estan_las_cinco_aplicaciones():
+def test_estan_las_seis_aplicaciones():
     """Fija la lista. Sin esto, las pruebas parametrizadas de abajo pasarian
     triunfalmente sobre una carpeta vacia si alguien renombrara `aplicaciones/`."""
     assert _ids(TODAS) == [
+        "00_criticidad_chec",
         "01_clima",
         "02_agrupamiento_vanos",
         "03_trayectorias_circuitos",
         "04_trayectorias_vanos",
         "06_simulador",
     ]
+
+
+@pytest.mark.parametrize("app", VISORES, ids=_ids(VISORES))
+def test_cada_visor_trae_su_constructor(app: Path):
+    """Solo los visores construyen algo. El menu no tiene `construir.py` a proposito:
+    lo que abre son las otras aplicaciones, cada una con el suyo."""
+    assert (app / "construir.py").is_file()
+
+
+def test_el_menu_no_construye_nada():
+    """Al reves que la de arriba, y por eso va aparte: si algun dia el menu apareciera
+    con un `construir.py`, seria que se le colgo trabajo que no le toca."""
+    assert not (APPS / MENU / "construir.py").exists()
 
 
 @pytest.mark.parametrize("app", TODAS, ids=_ids(TODAS))
@@ -92,8 +123,8 @@ def test_los_lanzadores_llaman_al_gestor_de_la_carpeta_de_al_lado(app: Path):
         assert f"_comun\\gestor.py {orden}" in bat, f"{app.name}/{nombre}.bat"
 
 
-@pytest.mark.parametrize("app", TODAS, ids=_ids(TODAS))
-def test_cada_aplicacion_nombra_un_cuaderno_que_existe(app: Path):
+@pytest.mark.parametrize("app", VISORES, ids=_ids(VISORES))
+def test_cada_visor_nombra_un_cuaderno_que_existe(app: Path):
     """El nombre del cuaderno se resuelve contra `CUADERNOS_APPS` en tiempo de
     ejecucion, asi que uno renombrado o archivado no rompe nada hasta que alguien
     intenta construir -- y para entonces ya creo el entorno virtual y espero. Aqui
@@ -121,15 +152,31 @@ def test_cada_aplicacion_nombra_un_cuaderno_que_existe(app: Path):
 
 
 @pytest.mark.parametrize("app", TODAS, ids=_ids(TODAS))
-def test_cada_aplicacion_declara_sus_dependencias_con_comentarios(app: Path):
+def test_cada_aplicacion_justifica_su_requirements(app: Path):
     """`requirements.txt` de estas aplicaciones no es una lista de paquetes sino la
     justificacion de por que cada entorno pesa lo que pesa. Un archivo sin una sola
     linea de comentario es la senal de que alguien lo copio de otra aplicacion sin
     revisar si esas dependencias son las suyas."""
     lineas = (app / "requirements.txt").read_text(encoding="utf-8").splitlines()
     assert any(l.lstrip().startswith("#") for l in lineas), f"{app.name}/requirements.txt"
-    assert any(l.strip() and not l.lstrip().startswith("#") for l in lineas), (
-        f"{app.name}/requirements.txt no declara ningun paquete")
+
+
+@pytest.mark.parametrize("app", VISORES, ids=_ids(VISORES))
+def test_cada_visor_declara_al_menos_un_paquete(app: Path):
+    """El menu queda fuera: no tiene dependencias y su archivo existe solo para que el
+    gestor reconozca la carpeta. Un visor sin paquetes, en cambio, no podria ni
+    ejecutar su cuaderno."""
+    lineas = (app / "requirements.txt").read_text(encoding="utf-8").splitlines()
+    assert any(l.strip() and not l.lstrip().startswith("#") for l in lineas)
+
+
+def test_el_menu_no_arrastra_dependencias():
+    """Es su rasgo de diseno, no un descuido. El menu lanza a las otras como procesos
+    hijos precisamente para no tener que importarlas: hacerlo le costaria la UNION de
+    las cinco listas -- torch incluido -- solo para dibujar un menu."""
+    lineas = (APPS / MENU / "requirements.txt").read_text(encoding="utf-8").splitlines()
+    paquetes = [l for l in lineas if l.strip() and not l.lstrip().startswith("#")]
+    assert paquetes == [], f"el menu declara {paquetes}"
 
 
 def test_plotly_va_clavado_en_los_tableros_que_comparten_su_bundle():
@@ -138,9 +185,7 @@ def test_plotly_va_clavado_en_los_tableros_que_comparten_su_bundle():
     navegador SOLO si producen bytes identicos, y eso exige la misma version exacta.
     Con `>=`, instalarlos en semanas distintas da cuatro copias de ~4,7 MB."""
     versiones = {}
-    for app in TODAS:
-        if app.name == "06_simulador":
-            continue      # no empaqueta plotly.js: sirve el cuaderno con un kernel vivo
+    for app in ESTATICOS:
         texto = (app / "requirements.txt").read_text(encoding="utf-8")
         clavada = re.search(r"^plotly==([\d.]+)$", texto, re.M)
         assert clavada, f"{app.name} no clava la version de plotly"
@@ -167,6 +212,160 @@ def test_el_boton_de_cerrar_llama_a_la_ruta_que_el_servidor_atiende():
         "propio navegador y el tablero se cerraria solo")
     assert 'id="cerrar-tablero"' in html
     assert "window.close()" in html
+
+
+def _comun(nombre: str):
+    sys.path.insert(0, str(APPS / "_comun"))
+    try:
+        return __import__(nombre)
+    finally:
+        sys.path.pop(0)
+
+
+def test_el_menu_gobierna_a_todos_los_visores_y_solo_a_ellos():
+    """Una aplicacion nueva que no entre al catalogo existe pero es invisible desde el
+    menu, y nadie lo nota hasta que alguien la busca ahi. Al reves, una entrada que
+    apunte a una carpeta borrada revienta al pulsar Abrir, no al arrancar."""
+    catalogo = _comun("menu").catalogo()
+    assert sorted(a.carpeta.name for a in catalogo.values()) == _ids(VISORES)
+    for app in catalogo.values():
+        assert app.carpeta.is_dir(), f"{app.clave} apunta a {app.carpeta}"
+
+
+def test_los_puertos_del_menu_son_los_que_fija_el_contrato():
+    """Los mismos puertos que `/app-local-*`, y no por estetica: si el menu abriera
+    clima en otro puerto, una instancia lanzada a mano y otra lanzada desde el menu
+    convivirian sin verse, cada una construyendo y sirviendo por su lado."""
+    contrato = (RAIZ / ".claude" / "commands" / "_contrato-apps-locales.md").read_text(
+        encoding="utf-8")
+    declarados = dict(re.findall(r"\|\s*`([\w_]+)`\s*\|\s*\*\*(\d{4})\*\*\s*\|", contrato))
+    assert declarados, "no se pudieron leer los puertos del contrato"
+    for app in _comun("menu").catalogo().values():
+        assert declarados.get(app.carpeta.name) == str(app.puerto), (
+            f"{app.carpeta.name}: el menu usa {app.puerto} y el contrato "
+            f"{declarados.get(app.carpeta.name)}")
+
+
+def test_la_barra_del_menu_quita_el_boton_de_cerrar_suelto():
+    """Los dos juntos son una trampa: el suelto apaga el servidor y deja la pestana
+    abierta sobre un tablero muerto, que es peor que volver al menu y peor que cerrar
+    todo. Cuando hay menu, manda la barra."""
+    servidor = _comun("servidor")
+    empaquetar = _comun("empaquetar")
+    html = empaquetar._inyectar_boton_cerrar("<html><body>x</body></html>")
+    assert 'id="cerrar-tablero"' in html
+
+    con_barra = servidor._con_barra_de_menu(html.encode("utf-8"),
+                                            "http://127.0.0.1:8800/").decode("utf-8")
+    assert 'id="bm-volver"' in con_barra
+    assert 'id="bm-todo"' in con_barra
+    # El boton suelto sigue en el documento, pero el guion de la barra lo retira al
+    # cargar: quitarlo del HTML exigiria volver a parsear el armazon entero.
+    assert "getElementById('cerrar-tablero')" in con_barra
+    assert ".remove()" in con_barra
+    # La URL del menu tiene que viajar literal: es lo que usa `sendBeacon` para llegar
+    # al `/apagar-todo` del otro puerto.
+    assert "var MENU = 'http://127.0.0.1:8800/';" in con_barra
+    assert "sendBeacon(MENU + 'apagar-todo'" in con_barra
+
+
+def test_la_barra_falla_si_no_encuentra_donde_ponerse():
+    servidor = _comun("servidor")
+    with pytest.raises(SystemExit, match="barra del menu"):
+        servidor._con_barra_de_menu(b"<html>sin cierre", "http://127.0.0.1:8800/")
+
+
+class _Trasto:
+    """Doble de un widget: guarda como lo construyeron y no hace nada mas."""
+
+    def __init__(self, *args, **kwargs):
+        self.kwargs = kwargs
+        self.hijos = args[0] if args else []
+        self.disabled = False
+        self.value = ""
+
+    def on_click(self, _funcion):
+        pass
+
+
+def _ejecutar_bloque_de_cierre(menu: str) -> dict:
+    """Ejecuta el bloque que el simulador inyecta, con widgets de mentira.
+
+    Es la unica manera barata de probar esta rama: la de verdad exige Voila, un kernel
+    y PyTorch cargado. Lo que se decide aqui -- que botones existen -- se decide al
+    ejecutar el bloque, antes de que nada de eso importe.
+    """
+    import types
+
+    preparar = _cargar_preparar()
+    widgets = types.SimpleNamespace(
+        HTML=_Trasto, Output=_Trasto, Button=_Trasto, HBox=_Trasto, Layout=_Trasto)
+    espacio = {"widgets": widgets, "_JS_CERRAR": "window.close();"}
+    entorno_previo = os.environ.get("MENU_CRITICIDAD")
+    if menu:
+        os.environ["MENU_CRITICIDAD"] = menu
+    else:
+        os.environ.pop("MENU_CRITICIDAD", None)
+    try:
+        exec(compile(preparar._BOTON_CERRAR, "cierre", "exec"), espacio)  # noqa: S102
+    finally:
+        if entorno_previo is None:
+            os.environ.pop("MENU_CRITICIDAD", None)
+        else:
+            os.environ["MENU_CRITICIDAD"] = entorno_previo
+    return espacio
+
+
+def _cargar_preparar():
+    sys.path.insert(0, str(APPS / "_comun"))
+    sys.path.insert(0, str(APPS / "06_simulador"))
+    try:
+        return __import__("preparar")
+    finally:
+        sys.path.pop(0)
+        sys.path.pop(0)
+
+
+def test_el_simulador_sin_menu_trae_solo_su_boton_de_cerrar():
+    espacio = _ejecutar_bloque_de_cierre("")
+    botones = [b.kwargs.get("description") for b in espacio["_BOTONES_CIERRE"]]
+    assert botones == ["Cerrar simulador"]
+
+
+def test_el_simulador_lanzado_desde_el_menu_cambia_su_boton_por_los_dos_del_menu():
+    """El simulador no lo sirve `servidor.py` sino Voila, asi que no recibe la barra
+    inyectada: sus botones son widgets y la decision se toma dentro del kernel, leyendo
+    la variable de entorno que le pasa el menu."""
+    espacio = _ejecutar_bloque_de_cierre("http://127.0.0.1:8800/")
+    botones = [b.kwargs.get("description") for b in espacio["_BOTONES_CIERRE"]]
+    assert botones == ["Volver al menu", "Cerrar todo"]
+    # "Cerrar simulador" no puede sobrevivir: haria lo mismo que "Volver al menu" pero
+    # dejando la pestania sobre un tablero muerto.
+    assert "_BOTON_CERRAR_APP" not in espacio
+    # La URL del menu tiene que quedar HORNEADA en el JavaScript: se resuelve al
+    # ejecutar el bloque, no cuando alguien pulsa.
+    assert "http://127.0.0.1:8800/" in espacio["_JS_VOLVER"]
+    assert 'sendBeacon("http://127.0.0.1:8800/" + "apagar-todo"' in espacio["_JS_CERRAR_TODO"]
+
+
+def test_la_barra_del_simulador_lleva_siempre_el_aviso_y_la_salida():
+    """`_CERRAR_SALIDA` es un `Output` y no un `HTML` por una razon que se pierde facil:
+    el JavaScript de un `HTML` no se ejecuta -- ipywidgets lo mete por `innerHTML` --,
+    asi que sin el `Output` ningun boton podria cerrar la pestania."""
+    for menu in ("", "http://127.0.0.1:8800/"):
+        espacio = _ejecutar_bloque_de_cierre(menu)
+        hijos = espacio["_BARRA_CERRAR"].hijos
+        assert espacio["_CERRAR_AVISO"] in hijos
+        assert espacio["_CERRAR_SALIDA"] in hijos
+
+
+def test_preparar_se_vigila_a_si_mismo_como_insumo():
+    """`preparar.py` ESCRIBE la copia parcheada del cuaderno. Sin el en la lista de
+    insumos, cambiar un bloque inyectado -- la barra de cierre, el silenciador -- no
+    mueve ninguna otra huella, y la aplicacion seguiria sirviendo la copia vieja sin
+    dar ningun error. Es el mismo fallo que se corrigio con `Variables_simular.xlsx`."""
+    preparar = _cargar_preparar()
+    assert any(p.name == "preparar.py" for p in preparar.INSUMOS_POR_CONTENIDO)
 
 
 def test_inyectar_el_boton_falla_si_no_encuentra_donde_ponerlo():

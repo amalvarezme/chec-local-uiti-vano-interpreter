@@ -65,6 +65,12 @@ CELDAS_DE_ARRANQUE = range(0, 8)
 # mueve la fecha de todo sin cambiar nada.
 INSUMOS_POR_CONTENIDO = (
     CUADERNO,
+    # Este mismo archivo. No aporta nada al paquete, pero es quien ESCRIBE la copia
+    # parcheada del cuaderno: cambiar un bloque inyectado aqui -- el silenciador, la
+    # barra de cierre -- no mueve ningun otro insumo, asi que sin esta linea la
+    # aplicacion seguiria sirviendo la copia vieja y el cambio no llegaria nunca.
+    # Mismo error que se corrigio con `Variables_simular.xlsx`, un nivel mas arriba.
+    Path(__file__).resolve(),
     _raiz.datos("derived", "geometrias_014.json"),
     _raiz.datos("models", "mil_vano_ventana_v1.pt"),
     _raiz.datos("Actividades_mantenimiento_costos_2026.xlsx"),
@@ -332,7 +338,32 @@ setTimeout(function () {
 """
 
 
-def _cerrar_aplicacion(_boton):
+import os as _os_cierre
+
+# La pone CriticidadCHEC en el entorno cuando es el quien lanza el simulador. Vacia
+# cuando alguien arranca la aplicacion por su cuenta, y entonces la barra es la de
+# siempre: no hay menu al que volver.
+_MENU_CRITICIDAD = _os_cierre.environ.get('MENU_CRITICIDAD', '')
+
+# Volver al menu: se cierra la pestania igual que arriba, pero si no se puede se NAVEGA
+# al menu en vez de dejar un aviso de despedida. Deja al usuario donde pidio ir.
+_JS_VOLVER = """
+window.close();
+setTimeout(function () {
+  if (window.closed) { return; }
+  window.location = "__MENU__";
+}, 400);
+""".replace('__MENU__', _MENU_CRITICIDAD)
+
+# Cerrar todo: el aviso al menu sale por `sendBeacon` y no por `fetch` porque el menu
+# vive en otro puerto -- otro origen -- y ademas esta pestania se esta cerrando; un
+# `fetch` a medio camino se cancelaria con ella y el menu se quedaria en pie.
+_JS_CERRAR_TODO = """
+navigator.sendBeacon("__MENU__" + "apagar-todo", "");
+""".replace('__MENU__', _MENU_CRITICIDAD) + _JS_CERRAR
+
+
+def _cerrar_aplicacion(_boton, _js=None):
     import os
     import signal
     import threading
@@ -350,12 +381,13 @@ def _cerrar_aplicacion(_boton):
         return
     with open(ruta, encoding='utf-8') as f:
         pid = int(f.read().strip())
-    _BOTON_CERRAR_APP.disabled = True
+    for _b in _BOTONES_CIERRE:
+        _b.disabled = True
     _CERRAR_AVISO.value = (
         "<div style='font:16px/1.6 system-ui;padding:8px;color:#2b2b2b'>"
         "<b>Cerrando el simulador...</b></div>")
     with _CERRAR_SALIDA:
-        _display_real(Javascript(_JS_CERRAR))
+        _display_real(Javascript(_js or _JS_CERRAR))
     # El SIGTERM va con retraso y en otro hilo. SIGTERM a Voila se lleva por delante a
     # ESTE kernel -- comprobado: apaga los siete que llegaron a estar vivos a la vez --,
     # asi que matarlo aqui mismo cortaria el mensaje de arriba antes de que salga por el
@@ -363,13 +395,33 @@ def _cerrar_aplicacion(_boton):
     threading.Timer(0.8, os.kill, (pid, signal.SIGTERM)).start()
 
 
-_BOTON_CERRAR_APP = widgets.Button(
-    description='Cerrar simulador', button_style='danger',
-    tooltip='Cierra esta pestania y apaga el servidor de la aplicacion',
-    layout=widgets.Layout(width='190px'))
-_BOTON_CERRAR_APP.on_click(_cerrar_aplicacion)
+_BOTONES_CIERRE = []
+
+if _MENU_CRITICIDAD:
+    # Lanzado desde el menu: las dos acciones que ofrece la barra de los otros cuatro
+    # tableros. El "Cerrar simulador" suelto no aparece porque haria lo mismo que
+    # "Volver al menu" pero dejando la pestania sobre un tablero muerto.
+    _BOTON_VOLVER = widgets.Button(
+        description='Volver al menu',
+        tooltip='Apaga el simulador y vuelve a CriticidadCHEC',
+        layout=widgets.Layout(width='170px'))
+    _BOTON_VOLVER.on_click(lambda b: _cerrar_aplicacion(b, _JS_VOLVER))
+    _BOTON_TODO = widgets.Button(
+        description='Cerrar todo', button_style='danger',
+        tooltip='Apaga TODAS las aplicaciones y el menu',
+        layout=widgets.Layout(width='130px'))
+    _BOTON_TODO.on_click(lambda b: _cerrar_aplicacion(b, _JS_CERRAR_TODO))
+    _BOTONES_CIERRE = [_BOTON_VOLVER, _BOTON_TODO]
+else:
+    _BOTON_CERRAR_APP = widgets.Button(
+        description='Cerrar simulador', button_style='danger',
+        tooltip='Cierra esta pestania y apaga el servidor de la aplicacion',
+        layout=widgets.Layout(width='190px'))
+    _BOTON_CERRAR_APP.on_click(_cerrar_aplicacion)
+    _BOTONES_CIERRE = [_BOTON_CERRAR_APP]
+
 _BARRA_CERRAR = widgets.HBox(
-    [_BOTON_CERRAR_APP, _CERRAR_AVISO, _CERRAR_SALIDA],
+    [*_BOTONES_CIERRE, _CERRAR_AVISO, _CERRAR_SALIDA],
     layout=widgets.Layout(width='100%', justify_content='flex-end', padding='4px 12px'))
 
 '''

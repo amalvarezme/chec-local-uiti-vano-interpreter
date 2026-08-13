@@ -1,0 +1,10 @@
+# CriticidadCHEC no tiene dependencias, y eso es deliberado.
+#
+# El menu no dibuja ningun tablero ni ejecuta ningun cuaderno: lanza las otras cinco
+# aplicaciones como procesos hijos, cada una con su propio entorno. Si importara
+# cualquiera de ellas necesitaria la UNION de sus cinco listas -- torch incluido,
+# 1,6 GB -- solo para poder abrir un menu.
+#
+# Por eso su entorno pesa ~20 MB en vez de cientos, y por eso este archivo esta vacio
+# de paquetes. No lo esta de proposito: `instalar` lo necesita para reconocer la
+# carpeta como una aplicacion, y borrarlo rompe el lanzador.

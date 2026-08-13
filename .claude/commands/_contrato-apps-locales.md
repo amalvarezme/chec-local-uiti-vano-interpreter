@@ -16,6 +16,7 @@ that a double-click cannot give.
 
 | command | app folder | port |
 |---|---|---|
+| `/app-local-criticidad` | `00_criticidad_chec` | **8800** |
 | `/app-local-clima` | `01_clima` | **8801** |
 | `/app-local-agrupamiento-circuitos` | `02_agrupamiento_vanos` | **8802** |
 | `/app-local-trayectorias-circuitos` | `03_trayectorias_circuitos` | **8803** |

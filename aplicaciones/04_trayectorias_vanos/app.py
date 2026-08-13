@@ -25,6 +25,11 @@ def main() -> int:
     analizador.add_argument("--reconstruir", action="store_true",
                             help="vuelve a ejecutar el cuaderno aunque el tablero ya exista")
     analizador.add_argument("--verboso", action="store_true", help="registra cada peticion")
+    # La pasa CriticidadCHEC cuando es el quien lanza este tablero. Sin ella el
+    # tablero se sirve igual, con su boton de cerrar suelto: la barra del menu solo
+    # tiene sentido si hay un menu al que volver.
+    analizador.add_argument("--menu", default=None,
+                            help="URL de CriticidadCHEC, si fue el quien lanzo este tablero")
     args = analizador.parse_args()
 
     if args.reconstruir or not (PANEL / "index.html").exists():
@@ -32,7 +37,8 @@ def main() -> int:
               "Reconstruyendo el tablero.")
         runpy.run_path(str(AQUI / "construir.py"), run_name="__main__")
 
-    servidor.servir(PANEL, abrir=not args.no_abrir, puerto=args.puerto, verboso=args.verboso)
+    servidor.servir(PANEL, abrir=not args.no_abrir, puerto=args.puerto,
+                    verboso=args.verboso, menu=args.menu)
     return 0
 
 

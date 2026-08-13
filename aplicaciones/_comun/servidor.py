@@ -44,21 +44,31 @@ _CACHE_REVALIDAR = "no-cache"
 
 
 class _Pieza:
-    __slots__ = ("ruta", "tipo", "cache", "etag", "gz", "tam")
+    __slots__ = ("ruta", "tipo", "cache", "etag", "gz", "tam", "crudo")
 
-    def __init__(self, ruta: Path, inmutable: bool):
+    def __init__(self, ruta: Path, inmutable: bool, datos: bytes | None = None):
         self.ruta = ruta
         tipo, _ = mimetypes.guess_type(ruta.name)
         self.tipo = tipo or "application/octet-stream"
         self.cache = _CACHE_INMUTABLE if inmutable else _CACHE_REVALIDAR
-        datos = ruta.read_bytes()
+        # `datos` solo llega cuando la pieza no es el archivo de disco tal cual -- hoy,
+        # el armazon con la barra del menu inyectada. En ese caso hay que guardar el
+        # crudo en memoria: releerlo del disco devolveria la version sin barra.
+        self.crudo = datos
+        if datos is None:
+            datos = ruta.read_bytes()
         self.tam = len(datos)
         self.etag = f'"{hash((ruta.name, self.tam)) & 0xFFFFFFFF:08x}"'
         # Solo el comprimido queda en memoria (6,5 MB para el tablero mas pesado).
         # El crudo se lee de disco si algun cliente no acepta gzip, que en la practica
         # no pasa: todos los navegadores desde 2010 lo anuncian.
         gz = ruta.parent / f"{ruta.name}.gz"
-        self.gz = gz.read_bytes() if gz.exists() else gzip.compress(datos, 6, mtime=0)
+        if self.crudo is None and gz.exists():
+            self.gz = gz.read_bytes()
+        else:
+            # Con la barra inyectada el `.gz` de disco ya no corresponde: se recomprime.
+            # Son 69 KB de armazon, no los 4,6 MB de plotly.
+            self.gz = gzip.compress(datos, 6, mtime=0)
 
 
 # Convencion del empaquetador: el hash del contenido va justo antes de la extension.
@@ -79,6 +89,98 @@ def _catalogo(carpeta: Path) -> dict[str, _Pieza]:
         raise SystemExit(f"{carpeta} no contiene index.html; falta construir el tablero.")
     piezas["/"] = piezas["/index.html"]
     return piezas
+
+
+# Barra que se inyecta SOLO cuando el tablero fue lanzado desde CriticidadCHEC. No
+# viene empaquetada en el `index.html` porque depende de la URL del menu, que no se
+# conoce hasta que alguien arranca el menu y le toca un puerto.
+#
+# `window.close()` aqui es fiable, y por un motivo distinto al del boton suelto: el
+# menu abre estas pestanias con `window.open()`, y una ventana que abrio un script SI
+# la puede cerrar un script, sin la condicion del historial propio. El respaldo se
+# queda igualmente, porque una pestania duplicada a mano por el usuario ya no cumple
+# esa condicion y se veria exactamente igual.
+_BARRA_MENU = """
+<div id="barra-menu" style="position:fixed;top:10px;right:12px;z-index:10000;
+     display:flex;gap:8px;font:13px/1 system-ui,-apple-system,'Segoe UI',sans-serif;">
+  <button type="button" id="bm-volver" title="Apaga este tablero y vuelve al menu"
+    style="padding:7px 13px;border:1px solid #1565c0;border-radius:6px;background:#fff;
+           color:#1565c0;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.18);"
+    >&larr; Volver al menu</button>
+  <button type="button" id="bm-todo" title="Apaga TODAS las aplicaciones y el menu"
+    style="padding:7px 13px;border:1px solid #c62828;border-radius:6px;background:#fff;
+           color:#c62828;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.18);"
+    >Cerrar todo</button>
+</div>
+<script>
+(function () {
+  // El boton suelto de cerrar sobra cuando hay menu: haria lo mismo que "Volver" pero
+  // dejando la pestania abierta sobre un tablero muerto, que es peor que cualquiera de
+  // las dos cosas que ofrece la barra.
+  var suelto = document.getElementById('cerrar-tablero');
+  if (suelto) { suelto.remove(); }
+
+  var MENU = '__MENU__';
+
+  function despedirse(texto) {
+    document.body.innerHTML =
+      '<div style="font:16px/1.6 system-ui,-apple-system,sans-serif;padding:40px;' +
+      'max-width:640px;margin:0 auto;color:#2b2b2b;">' +
+      '<h1 style="font-size:20px;margin:0 0 12px;">' + texto + '</h1>' +
+      '<p>Ya puedes cerrar esta pestana.</p></div>';
+  }
+
+  function apagarme() {
+    // El servidor puede morir antes de contestar; eso es exito, no fallo.
+    return fetch('__RUTA__', { method: 'POST' }).catch(function () {});
+  }
+
+  document.getElementById('bm-volver').addEventListener('click', function () {
+    document.getElementById('barra-menu').remove();
+    apagarme().then(function () {
+      window.close();
+      setTimeout(function () {
+        if (window.closed) { return; }
+        // No se pudo cerrar la pestania: se vuelve al menu por navegacion, que deja al
+        // usuario donde pidio ir en vez de en una pagina de despedida.
+        window.location = MENU;
+      }, 400);
+    });
+  });
+
+  document.getElementById('bm-todo').addEventListener('click', function () {
+    if (!window.confirm('Se apagan TODAS las aplicaciones y el menu.')) { return; }
+    document.getElementById('barra-menu').remove();
+    // `sendBeacon` y no `fetch`: el menu vive en otro puerto, o sea otro origen, y una
+    // respuesta cruzada exigiria CORS. Aqui no hace falta leer nada -- solo que el
+    // POST salga --, y `sendBeacon` sale incluso mientras la pestania se cierra.
+    navigator.sendBeacon(MENU + 'apagar-todo', '');
+    apagarme().then(function () {
+      window.close();
+      setTimeout(function () {
+        if (window.closed) { return; }
+        despedirse('Todo cerrado');
+      }, 400);
+    });
+  });
+})();
+</script>
+"""
+
+
+def _con_barra_de_menu(html: bytes, menu: str) -> bytes:
+    """Inserta la barra del menu antes de `</body>`.
+
+    Falla ruidosamente si no encuentra donde ponerla. Un tablero servido sin barra se
+    veria bien y dejaria al usuario sin manera de volver ni de cerrar desde el
+    navegador, que es justo lo que el menu promete.
+    """
+    texto = html.decode("utf-8")
+    if "</body>" not in texto:
+        raise SystemExit(
+            "El tablero no tiene </body>; no se pudo insertar la barra del menu.")
+    barra = _BARRA_MENU.replace("__MENU__", menu).replace("__RUTA__", RUTA_APAGADO)
+    return texto.replace("</body>", barra + "</body>", 1).encode("utf-8")
 
 
 class _Manejador(http.server.BaseHTTPRequestHandler):
@@ -128,7 +230,10 @@ class _Manejador(http.server.BaseHTTPRequestHandler):
             return
 
         acepta_gzip = "gzip" in (self.headers.get("Accept-Encoding") or "")
-        datos = pieza.gz if acepta_gzip else pieza.ruta.read_bytes()
+        if acepta_gzip:
+            datos = pieza.gz
+        else:
+            datos = pieza.crudo if pieza.crudo is not None else pieza.ruta.read_bytes()
 
         self.send_response(200)
         self.send_header("Content-Type", pieza.tipo)
@@ -194,10 +299,21 @@ def puerto_libre(preferido: int = 8765) -> int:
 
 
 def servir(carpeta: Path, *, abrir: bool = True, puerto: int | None = None,
-           verboso: bool = False) -> None:
-    """Sirve `carpeta` en 127.0.0.1 hasta que se interrumpa con Ctrl+C."""
+           verboso: bool = False, menu: str | None = None) -> None:
+    """Sirve `carpeta` en 127.0.0.1 hasta que se interrumpa con Ctrl+C.
+
+    `menu` es la URL de CriticidadCHEC cuando fue el quien lanzo este tablero. Con
+    ella, el armazon sale con la barra de "Volver al menu" / "Cerrar todo" en vez del
+    boton de cerrar suelto.
+    """
+    piezas = _catalogo(carpeta)
+    if menu:
+        armazon = piezas["/index.html"]
+        piezas["/index.html"] = piezas["/"] = _Pieza(
+            armazon.ruta, inmutable=False,
+            datos=_con_barra_de_menu(armazon.ruta.read_bytes(), menu))
     manejador = type("Manejador", (_Manejador,), {
-        "piezas": _catalogo(carpeta),
+        "piezas": piezas,
         "silencioso": not verboso,
     })
     puerto = puerto or puerto_libre()

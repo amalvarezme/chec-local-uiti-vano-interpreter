@@ -1,7 +1,19 @@
 # Aplicaciones locales
 
 Cinco aplicaciones de escritorio que corren en macOS y en Windows, sin servidor y sin
-conexión, sobre los cuadernos de `notebooks/`.
+conexión, sobre los cuadernos de `notebooks/` — más un menú que las gobierna.
+
+## Empieza por aquí
+
+| carpeta | qué es |
+|---|---|
+| [`00_criticidad_chec/`](00_criticidad_chec/) | **CriticidadCHEC** — el menú: abre, vigila y cierra las otras cinco desde una sola ventana |
+
+Se puede usar cualquiera de las cinco por su cuenta, exactamente igual que antes. El
+menú no las reemplaza: usa sus mismos puertos, así que reconoce una que ya estuviera
+abierta a mano en vez de duplicarla.
+
+## Los cinco tableros
 
 | carpeta | qué abre | cuaderno |
 |---|---|---|
@@ -114,10 +126,15 @@ en la caché del sistema operativo y no en la memoria del proceso.
 matriz de 288.632×80, los mismos 26 controles, los mismos 208 circuitos, la misma
 interfaz (59 trazas) y una simulación real idéntica hasta el décimo decimal.
 
-## El botón de cerrar
+## Los botones de cerrar
 
-Los cinco tableros traen arriba un botón que **detiene el servidor de ese tablero** — no
-los otros, que corren en su propio proceso y su propio puerto.
+Un tablero abierto **por su cuenta** trae arriba un botón *Cerrar tablero* que detiene
+su servidor — no los otros, que corren en su propio proceso y su propio puerto.
+
+Un tablero abierto **desde CriticidadCHEC** trae en su lugar dos: *Volver al menú*, que
+lo apaga y cierra su pestaña dejando el menú a la vista, y *Cerrar todo*, que apaga las
+cinco aplicaciones y el menú. El botón suelto desaparece cuando hay menú, porque haría
+lo mismo que *Volver* pero dejando la pestaña sobre un tablero muerto.
 
 Cerrar son tres cosas, y las tres están medidas contra el servidor real:
 
@@ -147,8 +164,11 @@ aplicaciones/
 │   ├── empaquetar.py          parte el HTML en piezas cacheables
 │   ├── construccion.py        construcción compartida de los cuatro visores estáticos
 │   ├── servidor.py            servidor estático con compresión y caché
+│   ├── menu.py                servidor de control: lanza y apaga las otras cinco
+│   ├── menu_pagina.py         la página del menú, sin dependencias
 │   ├── huellas.py             huellas de los insumos, para saber cuándo reconstruir
 │   └── raiz.py                localización del repositorio
+├── 00_criticidad_chec/
 ├── 01_clima/
 ├── 02_agrupamiento_vanos/
 ├── 03_trayectorias_circuitos/

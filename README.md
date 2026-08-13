@@ -76,7 +76,7 @@ ni los roles LLM. Solo viajan los datos que consumen los cuadernos `01`-`06` y e
 | `reports/` | Artefactos locales de ejecución, reportes generados, insumos PDF, notas de `reports/vault/` |
 | `tests/` | Tests automatizados de contratos, pipelines y render |
 | `notebooks/` | `05` y `07`, más `old_version/` con los tableros `01`-`04`, `06` y el pipeline MGCECDL original |
-| `aplicaciones/` | Las cinco aplicaciones locales de escritorio (macOS/Windows) construidas desde los cuadernos `01`, `02`, `03`, `04` y `06` |
+| `aplicaciones/` | Las cinco aplicaciones locales de escritorio (macOS/Windows) construidas desde los cuadernos `01`, `02`, `03`, `04` y `06`, más `CriticidadCHEC`, el menú que las gobierna |
 
 ## Instalación
 
