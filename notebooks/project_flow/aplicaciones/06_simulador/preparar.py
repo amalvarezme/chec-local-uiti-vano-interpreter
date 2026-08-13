@@ -218,6 +218,85 @@ X_INST = np.load(PAQUETE / 'X_inst.npy', mmap_mode='r')
 FEATURES_MIL = list(_cat['features_mil'])
 BAG_INDEX = _cat['bag_index']"""
 
+# --- Silenciar la salida de las celdas en la aplicacion ---------------------------
+# El camino obvio para esto es marcar las celdas y pasarle a Voila
+# `--TagRemovePreprocessor.remove_all_outputs_tags`. NO FUNCIONA, y se comprobo: ese
+# preprocesador borra las salidas que el cuaderno YA TRAE GUARDADAS, y las de la
+# aplicacion se generan en vivo al ejecutarse. Con la marca puesta y el flag pasado, la
+# pagina seguia abriendo con "Geometria 01.4 verificada...", "70 features..." y
+# "MIL cargado...".
+#
+# Asi que se silencia en el origen: `print` y `display` se sustituyen por funciones que
+# no hacen nada, y la unica llamada que SI tiene que mostrar algo -- la del tablero --
+# se reescribe para usar la referencia real, guardada antes de sustituirlas. Es
+# determinista y no depende de que ningun preprocesador se comporte de una manera.
+#
+# Es seguro porque el cuaderno no usa `widgets.Output`: se verifico que ningun `print`
+# alimenta un area de salida de la interfaz. Si algun dia se agrega uno, esto lo
+# silenciaria y habria que exceptuarlo.
+_SILENCIO = '''
+# --- Solo en la aplicacion: el tablero es lo unico que se muestra -------------------
+# Las celdas de abajo informan de lo que van cargando, y eso es util en el cuaderno y
+# ruido en la aplicacion. Se guarda la referencia real de `display` porque la celda del
+# tablero la necesita para mostrarse.
+_display_real = display
+
+
+def print(*_a, **_k):  # noqa: A001 -- sombrea el print del cuaderno a proposito
+    pass
+
+
+def display(*_a, **_k):  # noqa: A001
+    pass
+
+'''
+
+# --- Boton de cerrar, solo en la aplicacion --------------------------------------
+# Entra dentro del propio tablero y no como una celda aparte: asi Voila lo pinta
+# siempre junto a la figura, sin depender de en que orden queden las celdas.
+_BOTON_CERRAR = '''
+# --- Boton de cerrar (solo en la aplicacion, no en el cuaderno) ---------------------
+# Detiene el proceso de Voila, que es el servidor. Matar solo este kernel dejaria la
+# aplicacion en pie sirviendo una pagina muerta.
+_CERRAR_AVISO = widgets.HTML('')
+
+
+def _cerrar_aplicacion(_boton):
+    import os
+    import signal
+
+    ruta = os.environ.get('ARCHIVO_PID_06')
+    # El pid se lee del archivo que escribio `app.py`, NUNCA de `os.getppid()`: el
+    # padre de un kernel es una suposicion sobre como jupyter_client lo lanzo, y
+    # mandar SIGTERM a un pid supuesto puede matar un proceso que no es la aplicacion.
+    if not ruta or not os.path.exists(ruta):
+        _CERRAR_AVISO.value = (
+            "<p style='color:#c62828;font:14px system-ui'>No se encontro el proceso de "
+            "la aplicacion. Cierrala desde la terminal con Ctrl+C.</p>")
+        return
+    with open(ruta, encoding='utf-8') as f:
+        pid = int(f.read().strip())
+    _CERRAR_AVISO.value = (
+        "<div style='font:16px/1.6 system-ui;padding:28px 8px;color:#2b2b2b'>"
+        "<b style='font-size:19px'>Simulador cerrado</b><br>El servidor se detuvo. "
+        "Ya puedes cerrar esta pestana.<br>"
+        "<span style='color:#666'>Para volver a abrirlo: iniciar.command (macOS) o "
+        "iniciar.bat (Windows).</span></div>")
+    _BOTON_CERRAR_APP.disabled = True
+    os.kill(pid, signal.SIGTERM)
+
+
+_BOTON_CERRAR_APP = widgets.Button(
+    description='Cerrar simulador', button_style='danger',
+    tooltip='Detiene el servidor de esta aplicacion',
+    layout=widgets.Layout(width='190px'))
+_BOTON_CERRAR_APP.on_click(_cerrar_aplicacion)
+_BARRA_CERRAR = widgets.HBox(
+    [_BOTON_CERRAR_APP, _CERRAR_AVISO],
+    layout=widgets.Layout(width='100%', justify_content='flex-end', padding='4px 12px'))
+
+'''
+
 _CARGA_GEO = """# Trazas de mapa del paquete. En el cuaderno esto son tres `gpd.read_file` sobre
 # 180 MB de shapefiles que se reducen a estas listas de coordenadas redondeadas a
 # cinco decimales; la aplicacion no vuelve a hacer esa reduccion ni importa geopandas.
@@ -256,7 +335,8 @@ def preparar_copia() -> Path:
             "        sys.path.insert(0, str(_path_a_agregar))\n"
             "\n"
             "# Todo lo que el cuaderno derivaba al arrancar viene ya resuelto de aqui.\n"
-            "PAQUETE = Path(os.environ['PAQUETE_06']).resolve()\n",
+            "PAQUETE = Path(os.environ['PAQUETE_06']).resolve()\n"
+            + _SILENCIO,
             etiqueta="1: PAQUETE",
         )
 
@@ -331,9 +411,50 @@ def preparar_copia() -> Path:
             etiqueta="7: knobs",
         )
 
+    # --- celda 16: boton de cerrar dentro del tablero ------------------------------
+    def celda16(f: str) -> str:
+        return _reemplazar(
+            f,
+            "APP = widgets.VBox([ESTILO, PANEL, ENCUADRES, fig], "
+            "layout=widgets.Layout(width='100%'))",
+            _BOTON_CERRAR
+            + "APP = widgets.VBox([_BARRA_CERRAR, ESTILO, PANEL, ENCUADRES, fig], "
+              "layout=widgets.Layout(width='100%'))",
+            etiqueta="16: boton de cerrar",
+        )
+
+    def celda16_mostrar(f: str) -> str:
+        # La unica salida que la aplicacion SI muestra.
+        return _reemplazar(f, "display(APP)", "_display_real(APP)",
+                           etiqueta="16: mostrar el tablero")
+
     for indice, funcion in ((1, celda1), (3, celda3), (4, celda4),
-                            (5, celda5), (6, celda6), (7, celda7)):
+                            (5, celda5), (6, celda6), (7, celda7), (16, celda16),
+                            (16, celda16_mostrar)):
         parchear(indice, funcion)
+
+    # --- La aplicacion muestra el TABLERO, nada mas --------------------------------
+    # El cuaderno explica: la pregunta que responde el ranking, la matematica de la
+    # busqueda del grupo Bajo, como leer cada panel. Eso es lo que lo hace util como
+    # cuaderno y es justo lo que sobra en una aplicacion, donde el usuario viene a
+    # operar el tablero y no a leer su derivacion. En el cuaderno del repositorio todo
+    # eso se conserva intacto; aqui se retira de dos formas:
+    #
+    #  1. Las celdas de texto se eliminan.
+    #  2. La salida de las celdas de codigo -- los `print` de la carga, la tabla de
+    #     variables, el catalogo de costos -- se silencia en el origen (ver _SILENCIO).
+    #     La entrada ya la esconde Voila por su cuenta.
+    #
+    # Se hace DESPUES de parchear, porque los parches indexan por la numeracion
+    # original del cuaderno y eliminar celdas la corre.
+    celdas[:] = [c for c in celdas if c["cell_type"] != "markdown"]
+
+    mostrar = [c for c in celdas if "_display_real(APP)" in "".join(c["source"])]
+    if len(mostrar) != 1:
+        raise SystemExit(
+            f"Se esperaba exactamente una celda que muestre el tablero, y hay "
+            f"{len(mostrar)}. El cuaderno 06 cambio."
+        )
 
     # Salidas fuera: la copia del repositorio pesa 261 KB, y una ejecutada local
     # reincrusta megabytes de imagenes y de estado de widgets.

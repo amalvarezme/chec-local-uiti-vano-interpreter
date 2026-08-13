@@ -47,6 +47,10 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+# La ruta del apagado se toma del servidor que la atiende, no se repite aqui: si los
+# dos extremos no coinciden, el boton contesta 404 y no apaga nada.
+from servidor import RUTA_APAGADO as _RUTA_APAGADO
+
 # `include_plotlyjs=True` de plotly incrusta la libreria como primer <script> del
 # documento y la abre siempre con este banner de licencia. Es la marca que permite
 # reconocerla sin adivinar por tamano.
@@ -241,6 +245,7 @@ def empaquetar(html: str, destino: Path, *, titulo: str) -> Paquete:
         1,
     )
     armazon = _ajustar_titulo(armazon, titulo)
+    armazon = _inyectar_boton_cerrar(armazon)
 
     paquete = Paquete(destino=destino, version_plotly=version)
     paquete.piezas.append(_escribir(destino, "index.html", armazon.encode("utf-8"), comprimir=True))
@@ -269,3 +274,54 @@ def empaquetar(html: str, destino: Path, *, titulo: str) -> Paquete:
 
 def _ajustar_titulo(html: str, titulo: str) -> str:
     return re.sub(r"<title>.*?</title>", f"<title>{titulo}</title>", html, count=1, flags=re.S)
+
+
+# Boton de cerrar. Apaga el servidor que sirve ESTE tablero -- no los otros, que corren
+# en su propio proceso y su propio puerto.
+#
+# Despues de apagar NO se intenta `window.close()` a secas y ya: el navegador solo deja
+# cerrar por script las ventanas que abrio un script, y estas las abrio el sistema, asi
+# que la llamada se ignora en silencio y el usuario se queda mirando una pagina que
+# parece viva. Se intenta igual -- por si acaso --, y si sigue ahi al medio segundo se
+# tapa todo con un aviso que dice que ya se puede cerrar la pestana. Eso es honesto:
+# el servidor SI murio, lo unico que no se puede es cerrar la pestana por decreto.
+_BOTON_CERRAR = """
+<div id="cerrar-tablero" style="position:fixed;top:10px;right:12px;z-index:9999;">
+  <button type="button" title="Detiene el servidor de este tablero"
+    style="font:13px/1 system-ui,-apple-system,'Segoe UI',sans-serif;padding:7px 13px;
+           border:1px solid #c62828;border-radius:6px;background:#fff;color:#c62828;
+           cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.18);">Cerrar tablero</button>
+</div>
+<script>
+(function () {
+  var caja = document.getElementById('cerrar-tablero');
+  caja.querySelector('button').addEventListener('click', function () {
+    if (!window.confirm('Se detiene el servidor de este tablero. Para volver a abrirlo hay que iniciarlo de nuevo.')) { return; }
+    fetch('__RUTA__', { method: 'POST' }).catch(function () {
+      // El servidor puede morir antes de contestar; eso es exito, no fallo.
+    }).then(function () {
+      caja.remove();
+      window.close();
+      setTimeout(function () {
+        document.body.innerHTML =
+          '<div style="font:16px/1.6 system-ui,-apple-system,sans-serif;padding:40px;' +
+          'max-width:640px;margin:0 auto;color:#2b2b2b;">' +
+          '<h1 style="font-size:20px;margin:0 0 12px;">Tablero cerrado</h1>' +
+          '<p>El servidor se detuvo. El navegador no permite cerrar por si sola una ' +
+          'pestana que no abrio un script, asi que cierrala tu.</p>' +
+          '<p style="color:#666;">Para volver a abrirlo: <code>iniciar.command</code> ' +
+          '(macOS) o <code>iniciar.bat</code> (Windows).</p></div>';
+      }, 500);
+    });
+  });
+})();
+</script>
+"""
+
+
+def _inyectar_boton_cerrar(html: str) -> str:
+    marca = "</body>"
+    if marca not in html:
+        raise ValueError("El documento no tiene </body>; no se pudo insertar el boton de cerrar.")
+    boton = _BOTON_CERRAR.replace("__RUTA__", _RUTA_APAGADO)
+    return html.replace(marca, boton + marca, 1)

@@ -31,6 +31,10 @@ import sys
 import threading
 from pathlib import Path
 
+# Ruta del boton de cerrar. Vive aqui y no en el empaquetador porque los dos extremos
+# -- el boton que la llama y el servidor que la atiende -- tienen que coincidir.
+RUTA_APAGADO = "/apagar"
+
 # Un ano. Solo se aplica a archivos cuyo nombre contiene el hash de su contenido:
 # si cambian, cambia la URL, asi que no hay forma de servir algo viejo.
 _CACHE_INMUTABLE = "public, max-age=31536000, immutable"
@@ -87,6 +91,27 @@ class _Manejador(http.server.BaseHTTPRequestHandler):
 
     def do_HEAD(self) -> None:  # noqa: N802
         self._responder(cuerpo=False)
+
+    def do_POST(self) -> None:  # noqa: N802
+        """Unica ruta que escribe algo: el boton de cerrar del tablero.
+
+        Es POST y no GET a proposito. Un GET que apaga el servidor lo dispara
+        cualquier cosa que recorra enlaces -- el prefetch del propio navegador, sin ir
+        mas lejos --, y el tablero se cerraria solo sin que nadie tocara nada.
+        """
+        if self.path.split("?", 1)[0] != RUTA_APAGADO:
+            self.send_error(404, "No encontrado")
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", "8")
+        self.end_headers()
+        self.wfile.write(b"cerrando")
+        # `shutdown()` desde el hilo que atiende la peticion se bloquea a si mismo:
+        # espera a que el bucle de servicio termine, y ese bucle esta esperando a que
+        # esta peticion termine. Va en un hilo aparte, y con un respiro para que la
+        # respuesta llegue completa antes de que el socket se cierre.
+        threading.Timer(0.2, self.server.shutdown).start()
 
     def _responder(self, *, cuerpo: bool) -> None:
         ruta = self.path.split("?", 1)[0].split("#", 1)[0]
@@ -195,5 +220,8 @@ def servir(carpeta: Path, *, abrir: bool = True, puerto: int | None = None,
         print("  Deja esta ventana abierta mientras lo usas. Ctrl+C para detenerlo.\n")
         try:
             servidor.serve_forever()
+            # Se llega aqui cuando el boton de cerrar del tablero llamo a `shutdown()`.
+            # Ctrl+C no pasa por aqui: sale por la excepcion de abajo.
+            print("  Cerrado desde el tablero.")
         except KeyboardInterrupt:
             print("\n  Detenido.")

@@ -98,7 +98,17 @@ def main() -> int:
     _asegurar_kernel()
 
     puerto = args.puerto or servidor.puerto_libre(8866)
-    ambiente = dict(os.environ, PAQUETE_06=str(PAQUETE))
+    # El boton de cerrar del tablero corre DENTRO del kernel, y para detener la
+    # aplicacion tiene que senalar al proceso de Voila, no al suyo: matar el kernel
+    # dejaria el servidor en pie sirviendo una pagina muerta.
+    #
+    # El kernel no puede deducir ese pid. `os.getppid()` daria el padre, que hoy es
+    # Voila pero es una suposicion sobre como jupyter_client lanza los kernels, y
+    # mandar SIGTERM a un pid supuesto puede matar un proceso ajeno. Asi que se le
+    # pasa por escrito: la RUTA del archivo se conoce antes de lanzar nada y viaja en
+    # el entorno; el pid se escribe dentro en cuanto existe.
+    archivo_pid = AQUI / ".servidor.pid"
+    ambiente = dict(os.environ, PAQUETE_06=str(PAQUETE), ARCHIVO_PID_06=str(archivo_pid))
 
     comando = [
         str(voila), str(COPIA),
@@ -146,11 +156,20 @@ def main() -> int:
 
         threading.Timer(6.0, _abrir).start()
 
+    # Popen y no `run`: hace falta el pid de Voila para dejarselo al boton de cerrar.
+    proceso = subprocess.Popen(comando, env=ambiente)
+    archivo_pid.write_text(str(proceso.pid), encoding="utf-8")
     try:
-        return subprocess.run(comando, env=ambiente).returncode
+        return proceso.wait()
     except KeyboardInterrupt:
+        proceso.terminate()
+        proceso.wait()
         print("\n  Detenido.")
         return 0
+    finally:
+        # El pid de un proceso muerto se reasigna, asi que un archivo olvidado apunta
+        # tarde o temprano a otra cosa. Se borra pase lo que pase.
+        archivo_pid.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
