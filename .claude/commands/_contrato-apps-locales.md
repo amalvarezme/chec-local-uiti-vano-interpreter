@@ -168,6 +168,19 @@ Do not re-diagnose these.
   `RunCommandAsShell` true the `CommandString` is **not** parsed by a shell: `exec`,
   quotes and spaces in the path all stop it from running, hence the trampoline script
   the launcher writes into `TMPDIR`.
+- **R7 — the trampoline's name must include a fingerprint of the app's absolute PATH,
+  and it must carry its target inside, quoted.** Both halves fixed a real failure. The
+  folder is called `06_simulador` in the main clone *and* in every git worktree, so
+  naming the temp files after the folder alone made two checkouts write the **same**
+  file — last one wins. Measured on the user's machine: the simulator's trampoline
+  pointed into `...-worktrees/simulador-apagado/`, a worktree already deleted; the
+  double click exited 126 and, because `shellExitAction` closes the window on exit, all
+  you saw was a flash. The target used to live in a *second* file so it would not need
+  quoting; that second file is exactly the one that went stale. A trampoline is a shell
+  script, so the path fits inside in single quotes (escaping any it contains) — verified
+  against a path holding both a quote and spaces. And it **checks the target exists
+  before jumping**, printing what is missing and waiting: a window that closes on its
+  own error message leaves nothing to read.
 
 ## H. Never
 

@@ -34,8 +34,8 @@
 #
 # Y con el cierto, `CommandString` NO lo interpreta ningun shell: se ejecuta tal cual.
 # Medido: con `exec` delante no arranca, entre comillas tampoco, y una ruta con espacios
-# no arranca. De ahi el trampolin de abajo -- un guion de dos lineas en una carpeta sin
-# espacios -- que es lo unico que se le pasa a Terminal.
+# no arranca. De ahi el trampolin de abajo -- un guion en una carpeta sin espacios -- que
+# es lo unico que se le pasa a Terminal.
 
 AQUI="$(cd "$(dirname "$0")" && pwd)"
 APP="$(cd "$AQUI/../../.." && pwd)"
@@ -49,18 +49,45 @@ CLAVE="$(basename "$APP")"
 TEMP="${TMPDIR:-/tmp}"
 case "$TEMP" in *" "*) TEMP=/tmp ;; esac
 
-DESTINO="$TEMP/chec-$CLAVE-destino"
-TRAMPOLIN="$TEMP/chec-$CLAVE-ventana.sh"
-PERFIL="$TEMP/chec-$CLAVE-ventana.terminal"
+# El nombre lleva una huella del CAMINO y no solo la carpeta de la aplicacion, y esto
+# arreglo un fallo real. La carpeta se llama `06_simulador` tanto en el clon principal
+# como en cualquier worktree de git, asi que las dos copias escribian EL MISMO archivo y
+# la ultima que corriera se lo quedaba. Medido en la maquina del usuario: el trampolin
+# del simulador apuntaba a `...-worktrees/simulador-apagado/.../ventana`, un worktree ya
+# borrado; el doble clic salia con 126 y, como el perfil cierra la ventana al terminar,
+# lo unico que se veia era un parpadeo.
+#
+# `cksum` y no `shasum`: esta en cualquier POSIX y aqui no hace falta resistir a nadie,
+# solo distinguir dos rutas.
+HUELLA="$(printf '%s' "$APP" | cksum | cut -d' ' -f1)"
 
-# La ruta real va en un archivo aparte, no dentro del trampolin. Asi no hay que citarla
-# ni escaparla: una carpeta con espacios, comillas o `&` en el nombre -- la elige quien
-# clona el repositorio, no nosotros -- pasa entera sin tocar nada.
-printf '%s' "$VENTANA" > "$DESTINO"
+TRAMPOLIN="$TEMP/chec-$CLAVE-$HUELLA-ventana.sh"
+PERFIL="$TEMP/chec-$CLAVE-$HUELLA-ventana.terminal"
+
+# La ruta va DENTRO del trampolin, entrecomillada. Antes viajaba en un segundo archivo
+# para no tener que citarla, y ese archivo es exactamente el que se quedo viejo: un
+# puntero mas es una cosa mas que se puede desincronizar. Un trampolin es un guion de
+# shell, asi que la ruta cabe dentro con comillas simples -- escapando las que traiga --
+# y una carpeta con espacios, comillas o `&` pasa igual de entera que antes.
+CITADA="$(printf '%s' "$VENTANA" | sed "s/'/'\\\\''/g")"
+
+# Y comprueba su destino ANTES de saltar. Sin esto, un destino ausente sale con 126 y la
+# ventana se cierra encima del error: el usuario ve un parpadeo y no tiene donde leer
+# nada. Un mensaje que se puede leer separa "esto se rompio" de "estoy abriendo un acceso
+# directo a una copia que ya borre".
 cat > "$TRAMPOLIN" <<FIN
 #!/bin/sh
 # Generado por Iniciar.app en cada arranque. No se edita: se reescribe.
-exec "\$(cat "$DESTINO")"
+VENTANA='$CITADA'
+if [ ! -x "\$VENTANA" ]; then
+    printf '\n  No se encontro el arranque de esta aplicacion:\n\n    %s\n\n' "\$VENTANA"
+    printf '  Suele pasar al abrir un acceso directo a una copia del repositorio que ya\n'
+    printf '  se borro. Abre Iniciar.app desde la carpeta del repositorio de ahora.\n\n'
+    printf '  Pulsa Intro para cerrar esta ventana.\n'
+    read -r _
+    exit 1
+fi
+exec "\$VENTANA"
 FIN
 chmod +x "$TRAMPOLIN"
 
