@@ -22,23 +22,27 @@ data/*
 !data/optuna/
 !data/optuna/**
 
-reports/interpretability/artifacts/*
-!reports/interpretability/artifacts/.gitkeep
-reports/interpretability/published/**
-!reports/interpretability/published/.gitkeep
-reports/interpretability/runs/
+# Corridas de /report y /reporte-lote. El HTML no se versiona: son cientos de MB
+# regenerables, y `reports/vault/*.md` ya conserva lo que hay que conservar de cada
+# corrida -- la narrativa validada.
+reports/reportescircuitos/runs/
+reports/reportescircuitos/artifacts/*
+!reports/reportescircuitos/artifacts/.gitkeep
+reports/reportescircuitos/published/**
+!reports/reportescircuitos/published/.gitkeep
+reports/reportescircuitos/html/*
+!reports/reportescircuitos/html/.gitkeep
+# Informes gerenciales: mismo criterio, y ademas sintetizan corridas que ya estan.
+reports/informesgerenciales/*
+!reports/informesgerenciales/.gitkeep
 reports/graphify/*
 !reports/graphify/.gitkeep
-reports/mgcecdl-results/*
-!reports/mgcecdl-results/.gitkeep
-reports/legacy-model-assets/*
-!reports/legacy-model-assets/.gitkeep
-reports/geo/*
-!reports/geo/.gitkeep
 reports/vault/*
 !reports/vault/.gitkeep
 !reports/vault/*.md
-# paneles autocontenidos que exportan los cuadernos (decenas de MB por corrida)
+# Paneles autocontenidos que exportan los cuadernos 01-04 (decenas de MB por corrida).
+# No es una carpeta de corridas de /report: es la salida de esos cuadernos y la entrada
+# del constructor de las aplicaciones locales, que la vuelve a crear en cada build.
 reports/paneles/*
 !reports/paneles/.gitkeep
 # bitacoras de despliegue: el .md se conserva (es el reporte de restricciones que

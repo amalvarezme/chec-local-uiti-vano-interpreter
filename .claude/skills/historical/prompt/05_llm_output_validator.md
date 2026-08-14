@@ -15,7 +15,7 @@ Valida cada respuesta del LLM antes de presentarla como análisis.
 
 ## Si la Validación Falla
 
-- Guarda la salida cruda inválida en `reports/interpretability/artifacts/invalid_llm_output_<timestamp>.txt`.
-- Guarda los errores de validación en `reports/interpretability/artifacts/llm_validation_errors_<timestamp>.json`.
+- Guarda la salida cruda inválida en `reports/reportescircuitos/artifacts/invalid_llm_output_<timestamp>.txt`.
+- Guarda los errores de validación en `reports/reportescircuitos/artifacts/llm_validation_errors_<timestamp>.json`.
 - No presentes la salida inválida como análisis final.
 - Imprime un mensaje claro en el notebook explicando que el prompt y el contexto fueron guardados para revisión manual.

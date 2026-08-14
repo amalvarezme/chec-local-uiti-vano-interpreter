@@ -116,7 +116,7 @@ one.
 | Exit code | Meaning | What it means for the caller |
 |---|---|---|
 | `0` | Both the schema validator and the provenance validator passed. | The response is a valid report; publish it. |
-| `1` | A validation failure — schema, provenance, or both (errors are combined). | Not a valid report. The raw response and errors were saved under the agent's own artifacts root (`reports/interpretability/artifacts/{circuito}/` for expert-alignment, `reports/interpretability/artifacts/historical/{circuito}/` for the historical agent). Retry with the errors fed back into the prompt, up to the retry limit. Never present this output as final. |
+| `1` | A validation failure — schema, provenance, or both (errors are combined). | Not a valid report. The raw response and errors were saved under the agent's own artifacts root (`reports/reportescircuitos/artifacts/{circuito}/` for expert-alignment, `reports/reportescircuitos/artifacts/historical/{circuito}/` for the historical agent). Retry with the errors fed back into the prompt, up to the retry limit. Never present this output as final. |
 | `2` | The request to `validate` (or `build-context`) itself was malformed (invalid/empty JSON on stdin, a non-object payload, or a missing required field). | This is a wiring/integration defect in how the CLI was invoked — not a content problem with the report. Do not retry it as if it were a validation failure; it means something is wrong with how the agent (or batch runner) is calling the tool. |
 | `3` | An unexpected error — anything else, including a genuinely unanticipated failure while reading/parsing stdin (e.g. non-UTF-8 bytes) or while running the verb's own handler. | The full traceback is logged to stderr only; stdout still contains exactly one JSON document (`{"ok": false, "errors": [...]}`), via the shared `agent_tools/cli_support.py::dispatch` contract both CLIs delegate to. Treat this as an infrastructure/bug signal, not a content problem with the report. |
 
@@ -170,7 +170,7 @@ The historical agent's `validate` verb runs a **two-stage gate**: the schema/gua
 (`validate_llm_response`, reused unmodified) first, then — only if that passes — the additive
 provenance validator (`validar_provenance_base`), combining both error lists. Exit code `0`
 requires both stages to pass; failure artifacts are written under
-`reports/interpretability/artifacts/historical/{circuito}/`.
+`reports/reportescircuitos/artifacts/historical/{circuito}/`.
 
 ## How to run headless
 
@@ -209,7 +209,7 @@ python -m chec_local_interpreter.agent_tools.batch \
     {
       "circuito": "DON23L13",
       "status": "ok",
-      "artifact_paths": ["reports/interpretability/published/expert-alignment/DON23L13.json"],
+      "artifact_paths": ["reports/reportescircuitos/published/expert-alignment/DON23L13.json"],
       "tool_version": "expert-alignment-agent-tools/0.1.0",
       "timestamp": "20260709T120000Z",
       "retries": 0
@@ -217,7 +217,7 @@ python -m chec_local_interpreter.agent_tools.batch \
     {
       "circuito": "OTHER01",
       "status": "FAILED",
-      "artifact_paths": ["reports/interpretability/artifacts/OTHER01/invalid_....json"],
+      "artifact_paths": ["reports/reportescircuitos/artifacts/OTHER01/invalid_....json"],
       "tool_version": "expert-alignment-agent-tools/0.1.0",
       "timestamp": "20260709T120005Z",
       "retries": 2,
@@ -239,7 +239,7 @@ or `inference`) the batch runner uses, defaulting to `expert-alignment`.
 
 | Status | Meaning |
 |---|---|
-| `ok` | The response passed `validate` (schema + provenance) and was published under `reports/interpretability/published/{agent_role}/{circuito}.json`. |
+| `ok` | The response passed `validate` (schema + provenance) and was published under `reports/reportescircuitos/published/{agent_role}/{circuito}.json`. |
 | `FAILED` | A validation failure after exhausting retries, an unhandled/unexpected error while building context or invoking the agent, or an infrastructure issue like a missing agent command / invocation timeout — a normal run failure, not published. |
 | `AGENT_ERROR` | The agent subprocess itself exited non-zero (auth error, crash) — an infrastructure failure distinct from a validation failure; it does not consume the retry budget, and `error` carries the captured stderr. |
 | `SKIPPED_DUPLICATE` | Input hygiene: this `circuito` was already processed earlier in the same batch (by on-disk publish identity, case/punctuation-insensitive) — skipped to avoid silently overwriting the first run's published report. Not a run failure. |

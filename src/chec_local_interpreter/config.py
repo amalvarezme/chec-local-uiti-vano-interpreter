@@ -5,7 +5,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DATA_PATH = PROJECT_ROOT / "data" / "Indicadores_vano_v3.csv"
-DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "reports" / "interpretability" / "artifacts"
+DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "reports" / "reportescircuitos" / "artifacts"
 
 # MGCECDL/SHAP simulator artifacts (read-only: never trained/searched by this
 # project's runtime code, only loaded from what already exists on disk).

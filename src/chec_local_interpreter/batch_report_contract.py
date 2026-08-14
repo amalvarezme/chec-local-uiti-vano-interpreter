@@ -39,7 +39,7 @@ GROUP_SLUG_TO_LABEL: dict[str, str] = dict(zip(GROUP_SLUGS, CRITICALITY_GROUP_LA
 ALL_GROUPS_SLUG = "todos"
 VALID_GROUP_SLUGS: tuple[str, ...] = (*GROUP_SLUGS, ALL_GROUPS_SLUG)
 
-DEFAULT_RUNS_ROOT = PROJECT_ROOT / "reports" / "interpretability" / "runs" / "_batch"
+DEFAULT_RUNS_ROOT = PROJECT_ROOT / "reports" / "reportescircuitos" / "runs" / "_batch"
 
 _SAFE_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 

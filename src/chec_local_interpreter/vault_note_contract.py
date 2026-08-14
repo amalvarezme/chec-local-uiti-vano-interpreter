@@ -31,7 +31,7 @@ from chec_local_interpreter.config import PROJECT_ROOT
 
 SCHEMA_VERSION = "vault-note-contract/v1"
 
-DEFAULT_RUNS_ROOT = PROJECT_ROOT / "reports" / "interpretability" / "runs"
+DEFAULT_RUNS_ROOT = PROJECT_ROOT / "reports" / "reportescircuitos" / "runs"
 DEFAULT_VAULT_ROOT = PROJECT_ROOT / "reports" / "vault"
 
 HISTORICAL_FILENAME = "historical.out.json"

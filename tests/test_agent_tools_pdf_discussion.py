@@ -299,7 +299,7 @@ def test_validate_writes_rejected_rows_artifact_under_artifacts_root(tmp_path):
     assert stdout_data["artifact_path"]
 
     safe_name = canonical_circuit_identity("DON23L13")
-    artifact_dir = tmp_path / "reports" / "interpretability" / "artifacts" / "pdf-discussion-extraction" / safe_name
+    artifact_dir = tmp_path / "reports" / "reportescircuitos" / "artifacts" / "pdf-discussion-extraction" / safe_name
     assert artifact_dir.is_dir()
     artifact_files = list(artifact_dir.glob("*.json"))
     assert artifact_files

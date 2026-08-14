@@ -11,7 +11,7 @@ Este proyecto carga un dataset estructurado ancho, filtra por circuitos y fechas
 1. Crear el entorno.
 2. Colocar el dataset en `data/` o configurar `DATA_PATH`.
 3. Ejecutar el comando nativo del runtime que estés usando.
-4. Revisar el HTML local generado en `reports/interpretability/html/`.
+4. Revisar el HTML local generado en `reports/reportescircuitos/html/`.
 5. Publicar por separado solo si querés llevar el resultado a GitHub Pages.
 
 ## Qué hace este proyecto
@@ -501,7 +501,7 @@ El Excel resultante contiene exactamente:
 
 Las salidas estructuradas del intérprete local se guardan en:
 
-- `reports/interpretability/artifacts/`
+- `reports/reportescircuitos/artifacts/`
 
 Artefactos típicos:
 
@@ -516,7 +516,7 @@ Artefactos típicos:
 
 Los reportes HTML generados por `render()` se guardan en:
 
-- `reports/interpretability/html/`
+- `reports/reportescircuitos/html/`
 
 Las salidas LLM inválidas se guardan por separado con sus errores de validación y nunca se presentan como análisis final.
 

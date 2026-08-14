@@ -25,7 +25,7 @@ Verbs:
                     `validar_provenance_inferencia`, combining both error
                     lists. On failure, writes the raw output plus errors
                     under
-                    `reports/interpretability/artifacts/inference/{circuito}/`.
+                    `reports/reportescircuitos/artifacts/inference/{circuito}/`.
 
 Both verbs read exactly one JSON document from stdin and write exactly one
 JSON document to stdout, via the shared `agent_tools.cli_support.dispatch`
@@ -65,7 +65,7 @@ TOOL_VERSION = "inference-agent-tools/0.1.0"
 # Namespaced under its own `inference` segment, same convention as
 # `agent_tools.historical.ARTIFACTS_ROOT`, so this agent's failure artifacts
 # can never collide with historical's or expert-alignment's.
-ARTIFACTS_ROOT = Path("reports/interpretability/artifacts/inference")
+ARTIFACTS_ROOT = Path("reports/reportescircuitos/artifacts/inference")
 
 
 def _circuito_from_context(context: Any) -> str:
@@ -155,7 +155,7 @@ def validate(payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
 
     Returns `(result, exit_code)`. On failure, writes the raw response and
     combined errors under
-    `reports/interpretability/artifacts/inference/{circuito}/` and never
+    `reports/reportescircuitos/artifacts/inference/{circuito}/` and never
     returns `ok: true`.
     """
     response_text = payload["response_text"]

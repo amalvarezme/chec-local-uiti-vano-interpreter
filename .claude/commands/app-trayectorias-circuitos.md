@@ -109,7 +109,7 @@ with
 ```python
 REPO_ROOT = Path('/Volumes/workspace/default/chec-simulador')
 ```
-Aliasing the same name keeps all five downstream paths resolving untouched: cell 2's `leer_eventos()` CSV read, cell 5's `REPO_ROOT / 'data' / 'GEO' / 'MVLINSEC.shp'` and `REPO_ROOT / 'data' / 'GEO' / nombre_shp`, cell 7's `reports/paneles/` export, and cell 8's `reports/interpretability/artifacts/` CSV write. Leave every import and constant alone, including `_norm_id` — it lives in cell 2 and both the CSV and the geometry path call it, so moving or duplicating it would silently break the vano↔geometry join.
+Aliasing the same name keeps all five downstream paths resolving untouched: cell 2's `leer_eventos()` CSV read, cell 5's `REPO_ROOT / 'data' / 'GEO' / 'MVLINSEC.shp'` and `REPO_ROOT / 'data' / 'GEO' / nombre_shp`, cell 7's `reports/paneles/` export, and cell 8's `reports/reportescircuitos/artifacts/` CSV write. Leave every import and constant alone, including `_norm_id` — it lives in cell 2 and both the CSV and the geometry path call it, so moving or duplicating it would silently break the vano↔geometry join.
 
 Then, in the same cell, replace:
 ```python
@@ -241,6 +241,6 @@ Tell the user, in their language:
 - Whether the volume permission came from `uc_securable` or a manual grant.
 - **How to refresh**: re-run the step 4 job, then hit `/?refresh=1`. No redeploy.
 - That the first load is slow (~10.5 MB gzipped) and later ones are cached, and that `/salud` answers without touching the Volume so it separates an app failure from a permission failure.
-- That `uiti_ventanas_deslizantes.csv` also landed under `.../chec-simulador/reports/interpretability/artifacts/` as a side effect of cell 8.
+- That `uiti_ventanas_deslizantes.csv` also landed under `.../chec-simulador/reports/reportescircuitos/artifacts/` as a side effect of cell 8.
 - That the `02` app, if deployed, was untouched — the two are independent.
 - That no Delta table, view or Lakeview dashboard was created or touched.

@@ -29,7 +29,7 @@ def _isolate_agent_tools_artifacts_root(tmp_path, monkeypatch):
     invoking agent's cwd is the repo root). In-process tests that call
     `validate()`/writer functions directly share pytest's own cwd, so
     without this redirect a failing/invalid payload leaks stub files into
-    the tracked `reports/interpretability/artifacts/` tree.
+    the tracked `reports/reportescircuitos/artifacts/` tree.
 
     Subprocess-based tests (`_run_cli(..., cwd=tmp_path)`) spawn a separate
     Python process this fixture cannot reach; they already isolate via the
@@ -43,7 +43,7 @@ def _isolate_agent_tools_artifacts_root(tmp_path, monkeypatch):
         pdf_discussion,
     )
 
-    artifacts_root = tmp_path / "reports" / "interpretability" / "artifacts"
+    artifacts_root = tmp_path / "reports" / "reportescircuitos" / "artifacts"
     monkeypatch.setattr(historical, "ARTIFACTS_ROOT", artifacts_root / "historical")
     monkeypatch.setattr(inference, "ARTIFACTS_ROOT", artifacts_root / "inference")
     monkeypatch.setattr(expert_alignment, "ARTIFACTS_ROOT", artifacts_root)

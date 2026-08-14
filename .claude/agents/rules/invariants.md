@@ -45,7 +45,7 @@ No agent output is a valid report until it passes the L2 `validate` verb with ex
 `validate` is the single gate: it runs the schema validator first and, only if that succeeds, the
 additive provenance validator, combining both error lists. An output that has not exited `validate`
 at `0` must never be presented as a final report — on failure, the raw response and errors are
-saved under `reports/interpretability/artifacts/{circuito}/` for later review, not published.
+saved under `reports/reportescircuitos/artifacts/{circuito}/` for later review, not published.
 
 ## Rule 4 — Prohibited Components
 

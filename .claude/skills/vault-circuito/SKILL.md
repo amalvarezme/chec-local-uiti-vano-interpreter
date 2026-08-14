@@ -39,7 +39,7 @@ via the CLI verb directly (see Related artifacts).
 Takes exactly one argument: `circuito` — the same circuit id already validated and confirmed by the
 invoking `/report` run's own step 1. No dates: this step always projects the invoking run's OWN
 just-completed `run_dir` implicitly, via `find_latest_run(circuito)` (max-timestamp subdir under
-`reports/interpretability/runs/{canonical circuit id}/`), which is guaranteed to resolve to that same
+`reports/reportescircuitos/runs/{canonical circuit id}/`), which is guaranteed to resolve to that same
 run since it is the run that just wrote the 3 `*.out.json` files consumed here.
 
 ## Allowed tools

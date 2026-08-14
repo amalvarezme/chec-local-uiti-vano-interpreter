@@ -17,7 +17,7 @@ import pytest
 from chec_local_interpreter import intervention_graph as ig
 
 # ---------------------------------------------------------------------------
-# Fixtures: a fake runs tree shaped exactly like reports/interpretability/runs
+# Fixtures: a fake runs tree shaped exactly like reports/reportescircuitos/runs
 # ---------------------------------------------------------------------------
 
 

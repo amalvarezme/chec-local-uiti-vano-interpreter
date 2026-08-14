@@ -22,7 +22,7 @@ Verbs:
     validate        Reads `{response_text, context}` from stdin JSON, runs
                     the existing validator, and on failure writes the raw
                     output plus errors under
-                    `reports/interpretability/artifacts/{circuito}/`.
+                    `reports/reportescircuitos/artifacts/{circuito}/`.
 
 Both verbs read exactly one JSON document from stdin and write exactly one
 JSON document to stdout, via the shared `agent_tools.cli_support.dispatch`
@@ -62,8 +62,8 @@ TOOL_VERSION = "expert-alignment-agent-tools/0.1.0"
 
 # Relative to the invocation cwd. Callers (e.g. the headless batch runner) are
 # expected to run this CLI from the repo root so failure artifacts land under
-# the repo's own reports/interpretability/artifacts/ directory.
-ARTIFACTS_ROOT = Path("reports/interpretability/artifacts")
+# the repo's own reports/reportescircuitos/artifacts/ directory.
+ARTIFACTS_ROOT = Path("reports/reportescircuitos/artifacts")
 
 
 def build_context(payload: dict[str, Any]) -> dict[str, Any]:
@@ -150,7 +150,7 @@ def validate(payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
     since the provenance validator has nothing to check.
 
     Returns `(result, exit_code)`. On failure, writes the raw response and
-    combined errors under `reports/interpretability/artifacts/{circuito}/`
+    combined errors under `reports/reportescircuitos/artifacts/{circuito}/`
     and never returns `ok: true`.
     """
     response_text = payload["response_text"]

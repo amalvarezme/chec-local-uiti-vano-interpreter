@@ -1,5 +1,5 @@
 """Regression guard: pytest MUST NOT write into the tracked
-`reports/interpretability/artifacts/` tree.
+`reports/reportescircuitos/artifacts/` tree.
 
 `historical.validate()` / `inference.validate()` write failure artifacts
 under a module-level `ARTIFACTS_ROOT` resolved relative to the process cwd.
@@ -22,7 +22,7 @@ from pathlib import Path
 from chec_local_interpreter.agent_tools import historical, inference
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-TRACKED_ARTIFACTS_ROOT = PROJECT_ROOT / "reports" / "interpretability" / "artifacts"
+TRACKED_ARTIFACTS_ROOT = PROJECT_ROOT / "reports" / "reportescircuitos" / "artifacts"
 
 
 def _invalid_payload() -> dict:

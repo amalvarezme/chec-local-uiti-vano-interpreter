@@ -27,6 +27,14 @@ scoped exception is how a per-circuit failure is handled inside this loop (see "
 override" below); `report/SKILL.md` itself is never edited and a standalone `/report` invocation is
 completely unaffected by this Skill's existence.
 
+## Where a batch lands
+
+Each circuit's run goes exactly where `/report` puts it — `reports/reportescircuitos/runs/` —
+because the batch IS `/report` repeated, not a separate product. What belongs to the batch
+itself (its manifest and state) lives under `reports/reportescircuitos/runs/_batch/`, so a
+cleanup that targets the circuit runs finds both in one tree.
+
+
 ## When to Use
 
 Load this Skill when the user wants `/report` run for a whole criticality tier or the whole fleet in

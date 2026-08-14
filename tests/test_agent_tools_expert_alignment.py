@@ -216,7 +216,7 @@ def test_validate_verb_rejects_invalid_response_and_writes_artifact(tmp_path):
     assert stdout_data["ok"] is False
     assert stdout_data["errors"]
 
-    artifact_dir = tmp_path / "reports" / "interpretability" / "artifacts" / "DON23L13"
+    artifact_dir = tmp_path / "reports" / "reportescircuitos" / "artifacts" / "DON23L13"
     assert artifact_dir.is_dir()
     artifact_files = list(artifact_dir.glob("*.json"))
     assert artifact_files, "expected a failure artifact file under the circuit's artifacts dir"
@@ -284,7 +284,7 @@ def test_validate_cli_rejects_response_with_invalid_provenance(tmp_path):
     assert stdout_data["ok"] is False
     assert any("9999-12-31" in error for error in stdout_data["errors"])
 
-    artifact_dir = tmp_path / "reports" / "interpretability" / "artifacts" / "DON23L13"
+    artifact_dir = tmp_path / "reports" / "reportescircuitos" / "artifacts" / "DON23L13"
     assert artifact_dir.is_dir()
     assert list(artifact_dir.glob("*.json")), "expected a failure artifact for the provenance violation"
 
@@ -324,7 +324,7 @@ def test_validate_verb_sanitizes_path_traversal_in_circuito(tmp_path):
     escape_dir = tmp_path / "evil-outside-artifacts"
     assert not escape_dir.exists(), "circuito path traversal escaped the artifacts root"
 
-    artifacts_root = (tmp_path / "reports" / "interpretability" / "artifacts").resolve()
+    artifacts_root = (tmp_path / "reports" / "reportescircuitos" / "artifacts").resolve()
     stdout_data = json.loads(result.stdout)
     assert stdout_data["ok"] is False
     artifact_path = Path(stdout_data["artifact_path"]).resolve()
@@ -345,7 +345,7 @@ def test_validate_verb_sanitizes_absolute_path_in_circuito(tmp_path):
     result = _run_cli("validate", validate_payload, tmp_path)
 
     assert result.returncode == 1
-    artifacts_root = (tmp_path / "reports" / "interpretability" / "artifacts").resolve()
+    artifacts_root = (tmp_path / "reports" / "reportescircuitos" / "artifacts").resolve()
     stdout_data = json.loads(result.stdout)
     artifact_path = Path(stdout_data["artifact_path"]).resolve()
     assert artifacts_root in artifact_path.parents
@@ -444,7 +444,7 @@ def test_write_failure_artifact_is_atomic_and_never_leaves_a_partial_file(tmp_pa
     with pytest.raises(OSError):
         agent_tools_module._write_failure_artifact("ATOMICCKT", "raw response text", ["some error"])
 
-    artifact_dir = tmp_path / "reports" / "interpretability" / "artifacts" / "ATOMICCKT"
+    artifact_dir = tmp_path / "reports" / "reportescircuitos" / "artifacts" / "ATOMICCKT"
     if artifact_dir.exists():
         assert list(artifact_dir.glob("*")) == [], "no partial/truncated artifact file must be left behind"
 

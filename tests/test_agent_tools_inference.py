@@ -224,7 +224,7 @@ def test_validate_cli_rejects_response_missing_required_key_and_writes_artifact_
     assert stdout_data["ok"] is False
     assert stdout_data["errors"]
 
-    artifact_dir = tmp_path / "reports" / "interpretability" / "artifacts" / "inference" / "DON23L13"
+    artifact_dir = tmp_path / "reports" / "reportescircuitos" / "artifacts" / "inference" / "DON23L13"
     assert artifact_dir.is_dir()
     artifact_files = list(artifact_dir.glob("*.json"))
     assert artifact_files, "expected a failure artifact under the inference-namespaced artifacts root"
@@ -247,7 +247,7 @@ def test_validate_cli_rejects_response_with_unresolvable_provenance_and_does_not
     assert stdout_data["ok"] is False
     assert any("9999-12-31" in error for error in stdout_data["errors"])
 
-    artifact_dir = tmp_path / "reports" / "interpretability" / "artifacts" / "inference" / "DON23L13"
+    artifact_dir = tmp_path / "reports" / "reportescircuitos" / "artifacts" / "inference" / "DON23L13"
     assert artifact_dir.is_dir()
     assert list(artifact_dir.glob("*.json"))
 
@@ -256,7 +256,7 @@ def test_validate_verb_schema_failure_short_circuits_provenance_check(tmp_path, 
     """Isolates cwd to `tmp_path` first, matching `test_agent_tools_batch.py`'s
     convention: this test deliberately triggers `validate()`'s failure-artifact
     writer, and must never write into the tracked
-    `reports/interpretability/artifacts/` tree (subsumed by the autouse
+    `reports/reportescircuitos/artifacts/` tree (subsumed by the autouse
     `conftest.py` fixture, kept explicit here for local readability)."""
     monkeypatch.chdir(tmp_path)
     context = _sample_context()

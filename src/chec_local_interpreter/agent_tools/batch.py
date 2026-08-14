@@ -17,7 +17,7 @@ Per design's Failure handling section:
     - Validation fail -> retry up to `MAX_VALIDATION_RETRIES` with the
       validator's errors fed back into the prompt (repair pattern).
     - Still failing -> the L2 `validate` verb has already written the raw
-      output + errors under `reports/interpretability/artifacts/{circuito}/`;
+      output + errors under `reports/reportescircuitos/artifacts/{circuito}/`;
       the circuit is marked FAILED in the run manifest and the batch
       continues to the next circuit (it never aborts).
     - Invalid output is NEVER written to the published report path.
@@ -86,7 +86,7 @@ DEFAULT_AGENT_COMMAND: tuple[str, ...] = ("claude", "-p")
 # role-namespaced under this root (`PUBLISHED_REPORTS_ROOT / agent.role`);
 # no consumer should hardcode this string directly (pinned by
 # `tests/test_agent_tools_batch.py::test_no_other_source_module_hardcodes_the_flat_published_path`).
-PUBLISHED_REPORTS_ROOT = Path("reports/interpretability/published")
+PUBLISHED_REPORTS_ROOT = Path("reports/reportescircuitos/published")
 
 
 @dataclass(frozen=True)

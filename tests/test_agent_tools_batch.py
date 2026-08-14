@@ -164,7 +164,7 @@ def test_run_circuit_retries_then_fails_and_never_publishes_invalid_output(tmp_p
     for artifact_path in entry["artifact_paths"]:
         assert Path(artifact_path).is_file()
 
-    published_dir = tmp_path / "reports" / "interpretability" / "published" / "expert-alignment"
+    published_dir = tmp_path / "reports" / "reportescircuitos" / "published" / "expert-alignment"
     assert not published_dir.exists(), "invalid output must never be written to the published report path"
 
 
@@ -235,7 +235,7 @@ def test_run_batch_marks_duplicate_circuito_and_keeps_first_run_only(tmp_path, m
     assert statuses == ["ok", "SKIPPED_DUPLICATE"]
     assert len(calls) == 1, "the duplicate must never trigger a second agent invocation"
 
-    published_path = tmp_path / "reports" / "interpretability" / "published" / "expert-alignment" / "DUPCKT.json"
+    published_path = tmp_path / "reports" / "reportescircuitos" / "published" / "expert-alignment" / "DUPCKT.json"
     assert published_path.is_file()
     assert json.loads(published_path.read_text())["sintesis_final"]
 
@@ -264,7 +264,7 @@ def test_run_batch_dedup_catches_raw_values_that_sanitize_to_the_same_filename(t
     assert statuses == ["ok", "SKIPPED_DUPLICATE"]
     assert len(calls) == 1, "the sanitize-collision duplicate must never trigger a second agent invocation"
 
-    published_dir = tmp_path / "reports" / "interpretability" / "published" / "expert-alignment"
+    published_dir = tmp_path / "reports" / "reportescircuitos" / "published" / "expert-alignment"
     assert [p.name for p in published_dir.glob("*.json")] == ["BBB.json"]
 
 
@@ -338,7 +338,7 @@ def test_run_batch_dedup_and_publish_share_the_same_canonical_filename_identity(
     statuses = [entry["status"] for entry in manifest["circuits"]]
     assert statuses == ["ok", "SKIPPED_DUPLICATE"]
 
-    published_dir = tmp_path / "reports" / "interpretability" / "published" / "expert-alignment"
+    published_dir = tmp_path / "reports" / "reportescircuitos" / "published" / "expert-alignment"
     published_files = list(published_dir.glob("*.json"))
     assert len(published_files) == 1
 
@@ -676,7 +676,7 @@ def test_publish_report_is_atomic_and_never_leaves_a_partial_file(tmp_path, monk
     into place; if the replace itself fails, the pre-existing file (if any)
     must be untouched."""
     monkeypatch.chdir(tmp_path)
-    published_dir = tmp_path / "reports" / "interpretability" / "published" / "expert-alignment"
+    published_dir = tmp_path / "reports" / "reportescircuitos" / "published" / "expert-alignment"
     published_dir.mkdir(parents=True)
     report_path = published_dir / "ATOMICCKT.json"
     report_path.write_text('{"existing": "valid"}')
@@ -794,7 +794,7 @@ def test_cli_agent_flag_selects_the_registered_agent_spec(tmp_path, monkeypatch)
     exit_code = batch_module.main(["--circuits", str(circuits_file), "--agent", "expert-alignment"])
 
     assert exit_code == 0
-    published_path = tmp_path / "reports" / "interpretability" / "published" / "expert-alignment" / "OKCKT.json"
+    published_path = tmp_path / "reports" / "reportescircuitos" / "published" / "expert-alignment" / "OKCKT.json"
     assert published_path.is_file()
 
 
@@ -944,6 +944,6 @@ def test_no_other_source_module_hardcodes_the_flat_published_path():
     offenders = [
         str(path)
         for path in src_root.rglob("*.py")
-        if path.name not in allowed_names and "reports/interpretability/published" in path.read_text()
+        if path.name not in allowed_names and "reports/reportescircuitos/published" in path.read_text()
     ]
     assert offenders == []

@@ -52,7 +52,7 @@ Verified by reading the notebook — do not re-derive it:
 | `scipy`, `scikit-learn` | — | **NO**, `01` fits nothing |
 | `chec_impacto`, `chec_local_interpreter` | — | **NO**, `01` imports neither |
 
-It reads exactly two things from the Volume: `data/Indicadores_vano_v3.csv` and the three shapefiles under `data/GEO/`. It needs **no** Delta table, **no** view, **no** Lakeview dashboard, **no** model checkpoint and **no** source package. It also writes **no** side artifact — unlike `04`, which drops a CSV under `reports/interpretability/artifacts/`.
+It reads exactly two things from the Volume: `data/Indicadores_vano_v3.csv` and the three shapefiles under `data/GEO/`. It needs **no** Delta table, **no** view, **no** Lakeview dashboard, **no** model checkpoint and **no** source package. It also writes **no** side artifact — unlike `04`, which drops a CSV under `reports/reportescircuitos/artifacts/`.
 
 A shapefile is not one file. `MVLINSEC.shp` is useless without at least `.shx` and `.dbf`, and without `.prj` geopandas cannot resolve the CRS. That is why step 2b delegates the upload instead of copying single files.
 

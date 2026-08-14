@@ -118,7 +118,7 @@ with
 ```python
 REPO_ROOT = Path('/Volumes/workspace/default/chec-simulador')
 ```
-The name is deliberately preserved, so cell 2's and cell 10's `REPO_ROOT / 'data' / 'Indicadores_vano_v3.csv'`, plus cells 7 and 14's `REPO_ROOT / 'reports' / 'interpretability' / 'artifacts'` CSV writes, all keep resolving with zero downstream edits. Leave every import (including the now-unused `from IPython.display import HTML, display`) and every constant untouched.
+The name is deliberately preserved, so cell 2's and cell 10's `REPO_ROOT / 'data' / 'Indicadores_vano_v3.csv'`, plus cells 7 and 14's `REPO_ROOT / 'reports' / 'reportescircuitos' / 'artifacts'` CSV writes, all keep resolving with zero downstream edits. Leave every import (including the now-unused `from IPython.display import HTML, display`) and every constant untouched.
 
 **Edit 2b — cell 2**: turn the browser off.
 ```python
@@ -391,6 +391,6 @@ Tell the user, in their language:
 - **How to refresh**: re-run step 4's job, then hit `/?refresh=1`. No redeploy — the app carries no data.
 - That the first page load is slow (~6.1 MB, ~1.8 MB gzipped from the Volume) and every later one is cached.
 - That `/salud` answers without touching the Volume, so it distinguishes an app failure from a permission failure.
-- That the two label CSVs also landed under `.../chec-simulador/reports/interpretability/artifacts/` as a side effect of cells 7 and 14.
+- That the two label CSVs also landed under `.../chec-simulador/reports/reportescircuitos/artifacts/` as a side effect of cells 7 and 14.
 - That `git status --porcelain notebooks/` was empty — the repo notebook was never modified.
 - That no Delta table, view or Lakeview dashboard was created or touched. The Lakeview dashboard and the Delta tables job were retired, so there is nothing to point to — this family no longer creates tables or views at all.

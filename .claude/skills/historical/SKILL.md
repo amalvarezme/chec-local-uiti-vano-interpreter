@@ -152,7 +152,7 @@ Every response is validated before being presented as an analysis. A valid respo
 - Includes data gaps when optional variables are missing.
 
 If validation fails, the raw invalid output and validation errors are saved for review under
-`reports/interpretability/artifacts/historical/{circuito}/` (this Skill's own agent-namespaced
+`reports/reportescircuitos/artifacts/historical/{circuito}/` (this Skill's own agent-namespaced
 artifacts root — see `.claude/agents/rules/invariants.md`, Rule 3) — the invalid output is never
 presented as the final analysis.
 

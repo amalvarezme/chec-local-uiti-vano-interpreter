@@ -35,6 +35,18 @@ page. `report/SKILL.md` is never edited and a standalone
 Canonical contract (pure Python, no LLM call anywhere in this module):
 [`informe_gerencial_contract.py`](../../../src/chec_local_interpreter/informe_gerencial_contract.py).
 
+## Where the managerial report lands
+
+`reports/informesgerenciales/` — its own root, not a subfolder of the circuit runs. It used
+to live in `reports/reportescircuitos/html/informe-gerencial/`, hanging off the circuits'
+HTML, which is exactly where nobody looks for it and where a cleanup of the circuit reports
+took it along without being able to choose otherwise.
+
+What it READS stays where the circuits write it: `reports/reportescircuitos/runs/` for the
+runs it synthesises, `reports/reportescircuitos/html/` for their reports, and
+`reports/vault/` for the notes. This report is a synthesis; it produces no run of its own.
+
+
 ## When to Use
 
 Load this Skill when the user wants a single, synthesized, cross-circuit managerial view of a
@@ -139,11 +151,11 @@ scatter itself.
     invariant either.
 - **Read** — to inspect the contract's JSON output and the final rendered HTML path.
 - **Write** — scoped to step 2.5 only, to persist the agent-authored graph-patterns JSON to
-  `reports/interpretability/runs/.informe-gerencial/graph-patterns.<grupo>.<win>.json`, the
+  `reports/reportescircuitos/runs/.informe-gerencial/graph-patterns.<grupo>.<win>.json`, the
   `graph_view_builder`-produced graph-view HTML to
-  `reports/interpretability/runs/.informe-gerencial/graph-view.<grupo>.<win>.html`, and the
+  `reports/reportescircuitos/runs/.informe-gerencial/graph-view.<grupo>.<win>.html`, and the
   `intervention_graph`-produced radial HTML (plus its sibling `.resumen.json`) to
-  `reports/interpretability/runs/.informe-gerencial/grafo-intervencion.<grupo>.<win>.html` before step
+  `reports/reportescircuitos/runs/.informe-gerencial/grafo-intervencion.<grupo>.<win>.html` before step
   3 reads them back.
 
 ## Run sequence
@@ -281,7 +293,7 @@ Given `grupo` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
       contract's own `load_graph_patterns` re-validates and re-filters this on read, so a
       generously-inclusive parse here is safe, never a correctness requirement on this step alone.
    5. **Write the file** to
-      `reports/interpretability/runs/.informe-gerencial/graph-patterns.<grupo>.<fecha_inicio>_<fecha_fin>.json`
+      `reports/reportescircuitos/runs/.informe-gerencial/graph-patterns.<grupo>.<fecha_inicio>_<fecha_fin>.json`
       (creating the `.informe-gerencial/` directory if absent), then pass that exact path to step 3 as
       `--graph-patterns <path>`.
    6. **Build the scoped graph-view figure** (new sub-step, runs after the JSON write above, regardless
@@ -289,7 +301,7 @@ Given `grupo` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
       step 2.5.2's rebuild already produced on disk, whether from this run or a prior one): run
       `PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.graph_view_builder build --graph-json
       reports/vault/graphify-out/graph.json --output
-      reports/interpretability/runs/.informe-gerencial/graph-view.<grupo>.<fecha_inicio>_<fecha_fin>.html
+      reports/reportescircuitos/runs/.informe-gerencial/graph-view.<grupo>.<fecha_inicio>_<fecha_fin>.html
       --sampled <sampled circuits that have a vault note>`. This is a plain Python CLI invocation, never
       a `/graphify` slash-command call (see the Allowed-tools carve-out note above) — it reads the
       isolated vault graph directly via `graphify.export.to_html`, isolated inside that module only,
@@ -308,7 +320,7 @@ Given `grupo` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
    sampled circuit's own run artifacts, so it renders on runs where step 2.5 failed outright:
    `PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.intervention_graph build --sampled <sampled circuits>
    --output
-   reports/interpretability/runs/.informe-gerencial/grafo-intervencion.<grupo>.<fecha_inicio>_<fecha_fin>.html`.
+   reports/reportescircuitos/runs/.informe-gerencial/grafo-intervencion.<grupo>.<fecha_inicio>_<fecha_fin>.html`.
 
    It writes TWO files: the figure at `--output`, and its sibling
    `<output>.resumen.json`, which step 3 reads back automatically to NAME the causes and strategies
@@ -377,7 +389,7 @@ needed it. The two sections now degrade independently.
 
 For each sampled circuit, `load_circuit_content` prefers `reports/vault/{circuito}.md` as the
 narrative source; if absent, it falls back to the raw `expert-alignment.out.json` run artifact under
-`reports/interpretability/runs/{circuito}/`. If neither exists (e.g. step 2's auto-trigger failed for
+`reports/reportescircuitos/runs/{circuito}/`. If neither exists (e.g. step 2's auto-trigger failed for
 that circuit), the circuit still appears in the report's Anexo section, marked as having no content
 available — the report is never blocked by one circuit's missing content. When a vault note is used
 AND a prior run directory is resolvable, `cause_hypothesis_note`/`variable_groups_used`/

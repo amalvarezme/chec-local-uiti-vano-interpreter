@@ -117,7 +117,7 @@ with
 ```python
 REPO_ROOT = Path('/Volumes/workspace/default/chec-simulador')
 ```
-Aliasing the same name keeps every downstream path resolving untouched: cell 2's `leer_eventos()` CSV read, cell 5's three `REPO_ROOT / 'data' / 'GEO' / ...` shapefile reads, cell 7's `reports/paneles/` export, and cell 8's `reports/interpretability/artifacts/` write. Leave every import and constant alone.
+Aliasing the same name keeps every downstream path resolving untouched: cell 2's `leer_eventos()` CSV read, cell 5's three `REPO_ROOT / 'data' / 'GEO' / ...` shapefile reads, cell 7's `reports/paneles/` export, and cell 8's `reports/reportescircuitos/artifacts/` write. Leave every import and constant alone.
 
 Then, in the same cell, replace:
 ```python
@@ -374,6 +374,6 @@ Tell the user, in their language:
 - **How to refresh**: re-run step 4's job, then hit `/?refresh=1`. No redeploy — the app carries no data.
 - That the first page load is slow (~11.6 MB gzipped from the Volume) and every later one is cached, and that `/salud` answers without touching the Volume so it separates an app failure from a permission failure.
 - **How the board is used**, since it is the least obvious of the three: pick a circuit, then mark vanos either from the checkbox list or **by clicking them on the map**; the bars and the violins describe only the marked vanos in the window chosen with the slider, and stay empty until something is marked. Up to 8 vanos get their own colour, arrows and evolution series.
-- That `uiti_ventanas_deslizantes.csv` also landed under `.../chec-simulador/reports/interpretability/artifacts/` as a side effect of cell 8.
+- That `uiti_ventanas_deslizantes.csv` also landed under `.../chec-simulador/reports/reportescircuitos/artifacts/` as a side effect of cell 8.
 - That `git status --porcelain` on the notebook was empty — the repo copy was never modified.
 - That no Delta table, view or Lakeview dashboard was created or touched. The Lakeview dashboard and the Delta tables job were retired, so there is nothing to point to — this family no longer creates tables or views at all.

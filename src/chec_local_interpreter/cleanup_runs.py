@@ -32,13 +32,15 @@ CONFIRM_PHRASE = "BORRAR TODO"
 #                        (possibly .gitkeep-only), only its contents are removed.
 # must_survive=False -> categories 9-10: root dir may be removed entirely.
 CATEGORIES: tuple[tuple[str, str, bool], ...] = (
-    ("runs", "reports/interpretability/runs", True),
-    ("artifacts", "reports/interpretability/artifacts", True),
-    ("published", "reports/interpretability/published", True),
-    ("html", "reports/interpretability/html", True),
+    ("runs", "reports/reportescircuitos/runs", True),
+    ("artifacts", "reports/reportescircuitos/artifacts", True),
+    ("published", "reports/reportescircuitos/published", True),
+    ("html", "reports/reportescircuitos/html", True),
+    # El informe gerencial tiene raiz propia y por lo tanto categoria propia: colgaba
+    # del `html/` de los circuitos, asi que se borraba con ellos sin poder elegirlo. Es
+    # el artefacto mas pesado por corrida y el que mas sentido tiene conservar aparte.
+    ("informes-gerenciales", "reports/informesgerenciales", True),
     ("graphify", "reports/graphify", True),
-    ("mgcecdl-results", "reports/mgcecdl-results", True),
-    ("legacy-model-assets", "reports/legacy-model-assets", True),
     ("vault", "reports/vault", True),
     ("graphify-workspace-outputs", "outputs/graphify_workspace", False),
     ("notebooks-graphify-workspace-outputs", "notebooks/outputs/graphify_workspace", False),

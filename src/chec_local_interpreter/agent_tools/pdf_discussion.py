@@ -29,7 +29,7 @@ Verbs:
                      `validate_pdf_discussion_row` (UNCHANGED, imported not
                      redefined) -- a bad row never rejects the whole batch.
                      On any rejection or non-empty `descartes`, writes both
-                     under `reports/interpretability/artifacts/pdf-discussion-extraction/{circuito_pdf}/`.
+                     under `reports/reportescircuitos/artifacts/pdf-discussion-extraction/{circuito_pdf}/`.
 
 Both verbs read exactly one JSON document from stdin and write exactly one
 JSON document to stdout, via the shared `agent_tools.cli_support.dispatch`
@@ -61,7 +61,7 @@ TOOL_VERSION = "pdf-discussion-agent-tools/0.2.0"
 # `agent_tools.historical.ARTIFACTS_ROOT`. Namespaced under its own
 # `pdf-discussion-extraction` segment so this agent's failure artifacts can
 # never collide with another agent's. Unchanged from the pre-batch CLI.
-ARTIFACTS_ROOT = Path("reports/interpretability/artifacts/pdf-discussion-extraction")
+ARTIFACTS_ROOT = Path("reports/reportescircuitos/artifacts/pdf-discussion-extraction")
 
 _TEMPLATE_PATH = agent_prompt_dir("pdf-discussion-extraction") / "01_pdf_discussion_extractor.md"
 
@@ -178,7 +178,7 @@ def validate(payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
         rejected wholesale for containing some invalid rows.
 
     On any rejection or non-empty `descartes`, writes both under
-    `reports/interpretability/artifacts/pdf-discussion-extraction/{circuito_pdf}/`
+    `reports/reportescircuitos/artifacts/pdf-discussion-extraction/{circuito_pdf}/`
     and reports that path via `artifact_path` (`None` when there was nothing
     to persist).
     """

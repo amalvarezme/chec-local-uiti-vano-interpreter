@@ -134,7 +134,7 @@ from chec_local_interpreter.plotting import render_llm_analysis
 # que toma el contexto cuando no hay artefacto del MIL en disco.
 _NO_SIMULATOR_MODEL_LABEL = "sin_simulador_automatico"
 
-DEFAULT_RUNS_ROOT = project_root() / "reports" / "interpretability" / "runs"
+DEFAULT_RUNS_ROOT = project_root() / "reports" / "reportescircuitos" / "runs"
 
 # Directory conventionally populated by the (out-of-scope in this change)
 # PDF-discussion *extraction* batch runbook

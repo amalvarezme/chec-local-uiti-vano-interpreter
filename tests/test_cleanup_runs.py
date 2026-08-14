@@ -23,8 +23,8 @@ def _build_fake_project(tmp_path):
     plus untouchable siblings (analysis-documents, geo)."""
     root = tmp_path
 
-    # 1. reports/interpretability/runs/ -- fully gitignored, no .gitkeep
-    runs = root / "reports" / "interpretability" / "runs"
+    # 1. reports/reportescircuitos/runs/ -- fully gitignored, no .gitkeep
+    runs = root / "reports" / "reportescircuitos" / "runs"
     run_dir = runs / "CHA23L14" / "20260717T000722423017"
     run_dir.mkdir(parents=True)
     (run_dir / "historical.out.json").write_text("{}")
@@ -33,20 +33,20 @@ def _build_fake_project(tmp_path):
     figs.mkdir()
     (figs / "chart.png").write_bytes(b"fake-png-bytes")
 
-    # 2. reports/interpretability/artifacts/ -- .gitkeep preserved
-    artifacts = root / "reports" / "interpretability" / "artifacts"
+    # 2. reports/reportescircuitos/artifacts/ -- .gitkeep preserved
+    artifacts = root / "reports" / "reportescircuitos" / "artifacts"
     (artifacts / "historical").mkdir(parents=True)
     (artifacts / "historical" / "foo.json").write_text("{}")
     (artifacts / ".gitkeep").write_text("")
 
-    # 3. reports/interpretability/published/ -- .gitkeep preserved
-    published = root / "reports" / "interpretability" / "published"
+    # 3. reports/reportescircuitos/published/ -- .gitkeep preserved
+    published = root / "reports" / "reportescircuitos" / "published"
     published.mkdir(parents=True)
     (published / "report.html").write_text("<html></html>")
     (published / ".gitkeep").write_text("")
 
-    # 4. reports/interpretability/html/ -- may or may not have .gitkeep
-    html_dir = root / "reports" / "interpretability" / "html"
+    # 4. reports/reportescircuitos/html/ -- may or may not have .gitkeep
+    html_dir = root / "reports" / "reportescircuitos" / "html"
     html_dir.mkdir(parents=True)
     (html_dir / "CHA23L14_report.html").write_text("<html></html>")
     (html_dir / ".gitkeep").write_text("")
@@ -59,17 +59,13 @@ def _build_fake_project(tmp_path):
     (graphify / "graphify-out" / "graph.json").write_text("{}")
     (graphify / ".gitkeep").write_text("")
 
-    # 6. reports/mgcecdl-results/ -- .gitkeep preserved
-    mgcecdl = root / "reports" / "mgcecdl-results"
-    mgcecdl.mkdir(parents=True)
-    (mgcecdl / "result.csv").write_text("a,b\n1,2\n")
-    (mgcecdl / ".gitkeep").write_text("")
-
-    # 7. reports/legacy-model-assets/ -- .gitkeep preserved
-    legacy = root / "reports" / "legacy-model-assets"
-    legacy.mkdir(parents=True)
-    (legacy / "model.zip").write_bytes(b"fake-zip-bytes")
-    (legacy / ".gitkeep").write_text("")
+    # 6. reports/informesgerenciales/ -- .gitkeep preserved. Raiz propia desde que
+    #    salio de `html/informe-gerencial`: antes se borraba con el HTML de los
+    #    circuitos, sin poder elegirlo aparte.
+    gerenciales = root / "reports" / "informesgerenciales"
+    gerenciales.mkdir(parents=True)
+    (gerenciales / "informe_alta.html").write_text("<html></html>")
+    (gerenciales / ".gitkeep").write_text("")
 
     # 8. outputs/graphify_workspace/ -- may be removed entirely
     outputs_ws = root / "outputs" / "graphify_workspace"
@@ -118,7 +114,7 @@ def test_discover_targets_finds_expected_files_and_counts(tmp_path):
     categories = discover_targets(root)
 
     by_name = {c.name for c in categories}
-    assert len(categories) == 10
+    assert len(categories) == len(CATEGORIES) == 9
     assert by_name == {c[0] for c in CATEGORIES}
 
     runs_cat = next(c for c in categories if c.name == "runs")
@@ -142,7 +138,7 @@ def test_discover_targets_reports_missing_roots_as_empty_not_error(tmp_path):
 
     categories = discover_targets(root)
 
-    assert len(categories) == 10
+    assert len(categories) == len(CATEGORIES) == 9
     for cat in categories:
         assert cat.item_count == 0
         assert cat.total_bytes == 0
@@ -216,14 +212,13 @@ def test_dry_run_deletes_nothing(tmp_path, capsys):
     assert "no se elimin" in out.lower() or "nothing" in out.lower() or "dry" in out.lower()
 
     # every fixture file must still exist
-    assert (root / "reports" / "interpretability" / "runs" / "CHA23L14" / "20260717T000722423017" / "historical.out.json").exists()
-    assert (root / "reports" / "interpretability" / "artifacts" / "historical" / "foo.json").exists()
-    assert (root / "reports" / "interpretability" / "published" / "report.html").exists()
-    assert (root / "reports" / "interpretability" / "html" / "CHA23L14_report.html").exists()
+    assert (root / "reports" / "reportescircuitos" / "runs" / "CHA23L14" / "20260717T000722423017" / "historical.out.json").exists()
+    assert (root / "reports" / "reportescircuitos" / "artifacts" / "historical" / "foo.json").exists()
+    assert (root / "reports" / "reportescircuitos" / "published" / "report.html").exists()
+    assert (root / "reports" / "reportescircuitos" / "html" / "CHA23L14_report.html").exists()
     assert (root / "reports" / "graphify" / "raw" / "input.json").exists()
     assert (root / "reports" / "graphify" / "graphify-out" / "graph.json").exists()
-    assert (root / "reports" / "mgcecdl-results" / "result.csv").exists()
-    assert (root / "reports" / "legacy-model-assets" / "model.zip").exists()
+    assert (root / "reports" / "informesgerenciales" / "informe_alta.html").exists()
     assert (root / "outputs" / "graphify_workspace" / "workspace.tmp").exists()
     assert (root / "notebooks" / "outputs" / "graphify_workspace" / "workspace.tmp").exists()
     assert (root / "reports" / "vault" / "CHA23L14.md").exists()
@@ -244,33 +239,30 @@ def test_confirmed_deletion_removes_selected_categories_but_preserves_gitkeep_an
     assert exit_code == 0
 
     # deleted content
-    assert not (root / "reports" / "interpretability" / "runs" / "CHA23L14").exists()
-    assert not (root / "reports" / "interpretability" / "artifacts" / "historical").exists()
-    assert not (root / "reports" / "interpretability" / "published" / "report.html").exists()
-    assert not (root / "reports" / "interpretability" / "html" / "CHA23L14_report.html").exists()
+    assert not (root / "reports" / "reportescircuitos" / "runs" / "CHA23L14").exists()
+    assert not (root / "reports" / "reportescircuitos" / "artifacts" / "historical").exists()
+    assert not (root / "reports" / "reportescircuitos" / "published" / "report.html").exists()
+    assert not (root / "reports" / "reportescircuitos" / "html" / "CHA23L14_report.html").exists()
     assert not (root / "reports" / "graphify" / "raw" / "input.json").exists()
     assert not (root / "reports" / "graphify" / "graphify-out" / "graph.json").exists()
-    assert not (root / "reports" / "mgcecdl-results" / "result.csv").exists()
-    assert not (root / "reports" / "legacy-model-assets" / "model.zip").exists()
+    assert not (root / "reports" / "informesgerenciales" / "informe_alta.html").exists()
     assert not (root / "reports" / "vault" / "CHA23L14.md").exists()
 
     # .gitkeep preserved
-    assert (root / "reports" / "interpretability" / "artifacts" / ".gitkeep").exists()
-    assert (root / "reports" / "interpretability" / "published" / ".gitkeep").exists()
-    assert (root / "reports" / "interpretability" / "html" / ".gitkeep").exists()
+    assert (root / "reports" / "reportescircuitos" / "artifacts" / ".gitkeep").exists()
+    assert (root / "reports" / "reportescircuitos" / "published" / ".gitkeep").exists()
+    assert (root / "reports" / "reportescircuitos" / "html" / ".gitkeep").exists()
     assert (root / "reports" / "graphify" / ".gitkeep").exists()
-    assert (root / "reports" / "mgcecdl-results" / ".gitkeep").exists()
-    assert (root / "reports" / "legacy-model-assets" / ".gitkeep").exists()
+    assert (root / "reports" / "informesgerenciales" / ".gitkeep").exists()
     assert (root / "reports" / "vault" / ".gitkeep").exists()
 
     # "root must survive" category roots still exist as (empty/.gitkeep-only) dirs
-    assert (root / "reports" / "interpretability" / "runs").is_dir()
-    assert (root / "reports" / "interpretability" / "artifacts").is_dir()
-    assert (root / "reports" / "interpretability" / "published").is_dir()
-    assert (root / "reports" / "interpretability" / "html").is_dir()
+    assert (root / "reports" / "reportescircuitos" / "runs").is_dir()
+    assert (root / "reports" / "reportescircuitos" / "artifacts").is_dir()
+    assert (root / "reports" / "reportescircuitos" / "published").is_dir()
+    assert (root / "reports" / "reportescircuitos" / "html").is_dir()
     assert (root / "reports" / "graphify").is_dir()
-    assert (root / "reports" / "mgcecdl-results").is_dir()
-    assert (root / "reports" / "legacy-model-assets").is_dir()
+    assert (root / "reports" / "informesgerenciales").is_dir()
     assert (root / "reports" / "vault").is_dir()
 
     # hard exclusions untouched
@@ -287,8 +279,8 @@ def test_confirmed_deletion_wrong_phrase_deletes_nothing_and_exits_nonzero(tmp_p
     exit_code = main(["--project-root", str(root), "--confirm", "not the phrase"])
 
     assert exit_code != 0
-    assert (root / "reports" / "interpretability" / "runs" / "CHA23L14" / "20260717T000722423017" / "historical.out.json").exists()
-    assert (root / "reports" / "interpretability" / "artifacts" / "historical" / "foo.json").exists()
+    assert (root / "reports" / "reportescircuitos" / "runs" / "CHA23L14" / "20260717T000722423017" / "historical.out.json").exists()
+    assert (root / "reports" / "reportescircuitos" / "artifacts" / "historical" / "foo.json").exists()
     assert _real_doc(root).exists()
     assert _geo_csv(root).exists()
 
@@ -315,11 +307,11 @@ def test_only_narrows_deletion_to_selected_category(tmp_path):
 
     assert exit_code == 0
     # runs category emptied
-    assert not (root / "reports" / "interpretability" / "runs" / "CHA23L14").exists()
+    assert not (root / "reports" / "reportescircuitos" / "runs" / "CHA23L14").exists()
     # everything else untouched
-    assert (root / "reports" / "interpretability" / "artifacts" / "historical" / "foo.json").exists()
-    assert (root / "reports" / "interpretability" / "published" / "report.html").exists()
-    assert (root / "reports" / "mgcecdl-results" / "result.csv").exists()
+    assert (root / "reports" / "reportescircuitos" / "artifacts" / "historical" / "foo.json").exists()
+    assert (root / "reports" / "reportescircuitos" / "published" / "report.html").exists()
+    assert (root / "reports" / "informesgerenciales" / "informe_alta.html").exists()
 
 
 def test_skip_excludes_category_from_deletion(tmp_path):
@@ -328,14 +320,14 @@ def test_skip_excludes_category_from_deletion(tmp_path):
     exit_code = main([
         "--project-root", str(root),
         "--skip",
-        "runs,artifacts,published,html,graphify,mgcecdl-results,legacy-model-assets,"
+        "runs,artifacts,published,html,informes-gerenciales,graphify,"
         "graphify-workspace-outputs,notebooks-graphify-workspace-outputs,vault",
         "--confirm", CONFIRM_PHRASE,
     ])
 
     assert exit_code == 0
     # everything skipped -- nothing deleted
-    assert (root / "reports" / "interpretability" / "runs" / "CHA23L14").exists()
+    assert (root / "reports" / "reportescircuitos" / "runs" / "CHA23L14").exists()
     assert (root / "notebooks" / "outputs" / "graphify_workspace" / "workspace.tmp").exists()
     assert (root / "reports" / "vault" / "CHA23L14.md").exists()
 

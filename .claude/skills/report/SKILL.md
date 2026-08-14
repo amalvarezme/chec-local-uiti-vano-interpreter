@@ -92,6 +92,24 @@ the CSV parser to hold the whole file before converting, which only matters when
 INFERS dtypes — and the dtype here is explicit. And stacking 400.000 rows of trials into
 one forward pass produced exactly the same plan as stacking 50.000, a little slower.
 
+## Where a run lands
+
+`reports/` is organised by what produced the file, not by pipeline stage:
+
+| Path | Written by |
+|---|---|
+| `reports/reportescircuitos/runs/<circuito>/<ts>/` | this Skill's `prepare` — the envelopes, the agents' `*.out.json`, the figures |
+| `reports/reportescircuitos/runs/_batch/` | `/reporte-lote`, which is this Skill repeated |
+| `reports/reportescircuitos/html/` | step 7's `render` — the circuit's HTML |
+| `reports/reportescircuitos/artifacts/` | the agents' rejected-output artifacts |
+| `reports/vault/<circuito>.md` | step 9's `vault-circuito`, plus its graph in `reports/graphify/` |
+
+`/informe-gerencial` writes to `reports/informesgerenciales/` instead — a root of its own,
+because it is another product with another reader, not a subfolder of these runs. Every one
+of these paths comes from a constant in the package; none is hard-coded in this file, so a
+future move needs no edit here.
+
+
 ## When to Use
 
 Load this Skill when the user asks for a full circuit report — `/report <circuito>` with optional

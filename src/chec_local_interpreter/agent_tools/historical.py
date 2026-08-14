@@ -22,7 +22,7 @@ Verbs:
                     that passes — the additive provenance validator
                     (`validar_provenance_base`), combining both error lists.
                     On failure, writes the raw output plus errors under
-                    `reports/interpretability/artifacts/historical/{circuito}/`.
+                    `reports/reportescircuitos/artifacts/historical/{circuito}/`.
 
 Both verbs read exactly one JSON document from stdin and write exactly one
 JSON document to stdout, via the shared `agent_tools.cli_support.dispatch`
@@ -60,7 +60,7 @@ TOOL_VERSION = "historical-agent-tools/0.1.0"
 # `agent_tools.expert_alignment.ARTIFACTS_ROOT`. Namespaced under its own
 # `historical` segment so this agent's failure artifacts can never collide
 # with the expert-alignment pilot's (spec: agent-namespaced-reports).
-ARTIFACTS_ROOT = Path("reports/interpretability/artifacts/historical")
+ARTIFACTS_ROOT = Path("reports/reportescircuitos/artifacts/historical")
 
 
 def _circuito_from_context(context: Any) -> str:
@@ -156,7 +156,7 @@ def validate(payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
 
     Returns `(result, exit_code)`. On failure, writes the raw response and
     combined errors under
-    `reports/interpretability/artifacts/historical/{circuito}/` and never
+    `reports/reportescircuitos/artifacts/historical/{circuito}/` and never
     returns `ok: true`.
     """
     response_text = payload["response_text"]

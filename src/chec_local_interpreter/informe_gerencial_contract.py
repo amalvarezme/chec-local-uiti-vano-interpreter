@@ -15,7 +15,7 @@ to their assigned cluster centroid), detects any of them missing a prior
 
 Content sourcing (Phase 3): vault-note-preferred, with the raw
 `expert-alignment.out.json` under
-`reports/interpretability/runs/{canonical_circuit}/` as the fallback -- both
+`reports/reportescircuitos/runs/{canonical_circuit}/` as the fallback -- both
 paths live in `load_circuit_content`.
 
 `find_latest_run` here deliberately does NOT delegate to the same-named
@@ -62,14 +62,14 @@ SCHEMA_VERSION = "informe-gerencial-contract/v1"
 
 TOP_N_REPRESENTATIVE = 12
 
-DEFAULT_RUNS_ROOT = PROJECT_ROOT / "reports" / "interpretability" / "runs"
+DEFAULT_RUNS_ROOT = PROJECT_ROOT / "reports" / "reportescircuitos" / "runs"
 DEFAULT_VAULT_ROOT = PROJECT_ROOT / "reports" / "vault"
-DEFAULT_REPORT_OUTPUT_ROOT = PROJECT_ROOT / "reports" / "interpretability" / "html" / "informe-gerencial"
+DEFAULT_REPORT_OUTPUT_ROOT = PROJECT_ROOT / "reports" / "informesgerenciales"
 # Mirrors `plotting.render_llm_analysis`'s own default `output_dir` -- the root
 # where every per-circuit `/report` HTML lands. This is the ONLY "file" this
 # module is allowed to cite to the user (never the internal JSON/markdown run
 # artifacts); see `_circuit_report_html_path`.
-DEFAULT_CIRCUIT_HTML_ROOT = PROJECT_ROOT / "reports" / "interpretability" / "html"
+DEFAULT_CIRCUIT_HTML_ROOT = PROJECT_ROOT / "reports" / "reportescircuitos" / "html"
 
 # Deterministic, non-LLM keyword buckets used to mine shared causal themes
 # from each circuit's own `cause_hypothesis_note` (historical agent output).

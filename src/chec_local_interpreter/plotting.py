@@ -1448,7 +1448,7 @@ def render_llm_analysis(
     selected_circuitos: list[str],
     start_date: str = None,
     end_date: str = None,
-    output_dir: str | Path = PROJECT_ROOT / "reports" / "interpretability" / "html",
+    output_dir: str | Path = PROJECT_ROOT / "reports" / "reportescircuitos" / "html",
     output_filename: str | None = None,
     llm_model: str = "Desconocido",
     llm_provider: str = "Desconocido",

@@ -158,7 +158,7 @@ Cautious causal/model-boundary phrasing (style guideline, not schema-enforced):
   aislada explica el resultado".
 
 If validation fails, the raw invalid output and validation errors are saved for review under
-`reports/interpretability/artifacts/inference/{circuito}/` (this Skill's own agent-namespaced
+`reports/reportescircuitos/artifacts/inference/{circuito}/` (this Skill's own agent-namespaced
 artifacts root — see `.claude/agents/rules/invariants.md`, Rule 3) — the invalid output is never
 presented as the final analysis.
 
