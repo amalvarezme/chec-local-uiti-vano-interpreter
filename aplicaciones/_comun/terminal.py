@@ -67,6 +67,7 @@ import os
 import shlex
 import subprocess
 import sys
+import tempfile
 import zlib
 from pathlib import Path
 
@@ -80,12 +81,21 @@ TITULO = "CriticidadCHEC"
 
 
 def _carpeta_temporal() -> Path:
-    """Una carpeta temporal SIN espacios, que es la condicion que impone
-    `CommandString`. En macOS `TMPDIR` es `/var/folders/...` y no los lleva, pero
-    comprobarlo cuesta una linea y el fallo que evita -- una ventana que no abre y no
-    dice por que -- cuesta una tarde."""
-    ruta = Path(os.environ.get("TMPDIR") or "/tmp")
-    return Path("/tmp") if " " in str(ruta) else ruta
+    """Donde se escriben el trampolin y el perfil.
+
+    `tempfile.gettempdir()` y no `TMPDIR` a pelo: esa variable es de POSIX y en Windows
+    no existe, asi que leerla directamente caia a `/tmp`, que alli no es ninguna carpeta.
+    `gettempdir` resuelve `%TEMP%` en Windows y `TMPDIR` en macOS.
+
+    La regla de los espacios es **solo de macOS**: alli el `CommandString` del perfil no
+    lo interpreta ningun shell, asi que una ruta con un espacio no arranca -- medido. En
+    Windows la ruta viaja entrecomillada dentro del `start` y un `%TEMP%` bajo
+    `C:\\Users\\Nombre Apellido\\...` pasa entero.
+    """
+    ruta = Path(tempfile.gettempdir())
+    if ES_MAC and " " in str(ruta):
+        return Path("/tmp")
+    return ruta
 
 
 def _huella(partes: str) -> str:
@@ -236,18 +246,117 @@ def _abrir_mac(comando: list[str], *, etiqueta: str,
     return False
 
 
+def _guion_windows(comando: list[str], entorno: dict[str, str] | None,
+                   directorio: Path | None) -> str:
+    """El trampolin de Windows: un `.bat` que fija el entorno y salta al comando.
+
+    Existe por los mismos dos motivos que el de POSIX y por uno mas, propio de `cmd`:
+    meter el comando entero dentro de `cmd /c start ... cmd /c "..."` obliga a anidar
+    comillas dentro de comillas, y ahi `cmd` las come de una forma que depende de cuantas
+    haya. Con el comando en un archivo, a `start` se le pasa UNA ruta y no hay nada que
+    anidar.
+
+    `setlocal` acota las variables a esta ventana. `pause` SOLO si algo fallo: la ventana
+    se cierra al terminar -- eso es lo que permite que "Cerrar todo" cierre tambien las
+    ventanas -- y sin la condicion se cerraria sobre su propio mensaje de error.
+    """
+    lineas = ["@echo off",
+              "REM Generado por _comun/terminal.py en cada arranque. No se edita: se",
+              "REM reescribe. Si esta viejo, es que sobrevivio a la ventana que lo uso.",
+              "setlocal"]
+    if directorio is not None:
+        # `/d` cambia tambien de unidad. Sin el, un repositorio en D: y un `cmd` que
+        # arranca en C: dejan el `cd` sin efecto y el comando corre desde otro sitio.
+        #
+        # Y se COMPRUEBA, igual que el `[ ! -x "$DESTINO" ]` del trampolin de POSIX y por
+        # el mismo caso: un acceso directo a una copia del repositorio que ya se borro.
+        # Sin la comprobacion el `.bat` sigue adelante en el directorio equivocado y el
+        # error que sale despues no se parece en nada a su causa.
+        lineas += [
+            f'cd /d "{directorio}"',
+            "if errorlevel 1 (",
+            "    echo.",
+            "    echo   No se encontro la carpeta de esta aplicacion:",
+            f"    echo     {directorio}",
+            "    echo.",
+            "    echo   Suele pasar al abrir un acceso directo a una copia del",
+            "    echo   repositorio que ya se borro.",
+            "    echo.",
+            "    pause",
+            "    exit /b 1",
+            ")",
+        ]
+    for clave, valor in (entorno or {}).items():
+        # Las comillas van alrededor de TODA la asignacion, que es la forma que no mete
+        # el espacio final dentro del valor: `set "X=uno"` y no `set X=uno `.
+        lineas.append(f'set "{clave}={valor}"')
+    lineas += [
+        "",
+        subprocess.list2cmdline(comando),
+        "if errorlevel 1 (",
+        "    echo.",
+        "    echo   Termino con error. Lee el mensaje de arriba.",
+        # `timeout` y no `pause`, y esto es una CONCESION medida a como apaga Windows.
+        #
+        # En POSIX "Cerrar todo" senala al GRUPO, asi que se lleva por delante tambien al
+        # trampolin y la ventana se cierra. En Windows el respaldo es `taskkill /T`, que
+        # baja por los descendientes y NUNCA por los ancestros: alcanza a la aplicacion y
+        # deja vivo al `cmd` que corre este archivo. Ese `cmd` ve un codigo distinto de
+        # cero -- porque a su hijo lo mataron -- y con un `pause` se quedaria esperando
+        # una tecla PARA SIEMPRE, con el puerto ya libre y la ventana muerta en pantalla.
+        # O sea, justo lo contrario de lo que "Cerrar todo" promete.
+        #
+        # Con `timeout` el error se puede leer, cualquier tecla lo salta, y una ventana
+        # que nadie esta mirando se cierra sola. Los 45 s son para leer un traceback sin
+        # prisa; el caso frecuente -- apagar desde el menu -- no los espera nadie.
+        "    echo   Esta ventana se cierra sola en 45 segundos.",
+        "    timeout /t 45",
+        ")",
+        "",
+    ]
+    return "\r\n".join(lineas)
+
+
 def _abrir_windows(comando: list[str], *, etiqueta: str,
                    entorno: dict[str, str] | None, directorio: Path | None) -> bool:
-    """`start` con TITULO explicito. Omitirlo hace que `start` tome la primera ruta
-    entrecomillada como titulo de la ventana y no ejecute nada -- el mismo fallo que
-    Ghostty, en otro sistema."""
-    partes = ["cmd", "/c", "start", f"{TITULO} -- {etiqueta}"]
-    if directorio is not None:
-        partes += ["/D", str(directorio)]
-    partes += ["cmd", "/k", subprocess.list2cmdline(comando)]
+    """Una consola NUEVA con `start`, y el comando en un `.bat` aparte.
+
+    `start` es una orden interna de `cmd`, asi que se invoca a traves de el. Y el primer
+    argumento entrecomillado es el **TITULO** de la ventana, no el comando: omitirlo hace
+    que `start` tome la primera ruta entrecomillada como titulo y no ejecute nada. Es el
+    equivalente exacto del fallo de Ghostty en el otro sistema -- el lanzador "funciona"
+    y no corre nada --, asi que el titulo va siempre y explicito.
+    """
+    temporal = _carpeta_temporal()
+    marca = _huella("\0".join([etiqueta, *comando, str(directorio)]))
+    trampolin = temporal / f"chec-{etiqueta}-{marca}-ventana.bat"
+    # `oem` y NO `utf-8`: `cmd` lee los archivos por lotes con la pagina de codigos OEM
+    # de la consola (cp850 / cp437 en un Windows en espaniol), no con UTF-8. Un
+    # `C:\Users\Jose Garcia\...` con tilde escrito en UTF-8 llega ahi como mojibake, el
+    # `cd /d` falla y la ventana arranca el comando desde la carpeta equivocada -- un
+    # fallo que no se parece en nada a su causa. `oem` es el alias que Python da a esa
+    # misma pagina, asi que el archivo se escribe en la codificacion en que se va a leer.
+    #
+    # El respaldo cubre el caso de que el codec no exista (no es Windows), que solo pasa
+    # en una prueba: aqui abajo ya se sabe que si lo es.
+    for codificacion in ("oem", "utf-8"):
+        try:
+            trampolin.write_text(_guion_windows(comando, entorno, directorio),
+                                 encoding=codificacion)
+            break
+        except (LookupError, UnicodeEncodeError):
+            continue
+        except OSError:
+            return False
+    else:
+        return False
+    # `/c` y no `/k`: `/k` deja la consola abierta PARA SIEMPRE despues de que el comando
+    # termine, y entonces "Cerrar todo" liberaria el puerto dejando la ventana muerta en
+    # pantalla -- justo lo contrario de lo que promete. La pausa en caso de error la pone
+    # el trampolin, que sabe si hubo error; `/k` no.
+    partes = ["cmd", "/c", "start", f"{TITULO} -- {etiqueta}", "/D",
+              str(directorio or temporal), "cmd", "/c", str(trampolin)]
     try:
-        ambiente = dict(os.environ, **(entorno or {}))
-        return subprocess.run(partes, env=ambiente,
-                              capture_output=True, timeout=20).returncode == 0
+        return subprocess.run(partes, capture_output=True, timeout=20).returncode == 0
     except (OSError, subprocess.SubprocessError):
         return False

@@ -23,10 +23,31 @@ abierta a mano en vez de duplicarla.
 | [`04_trayectorias_vanos/`](04_trayectorias_vanos/) | lo mismo un nivel más abajo: agrupamiento y evolución por vano | `04_uiti_vano_trayectorias_vano.ipynb` |
 | [`06_simulador/`](06_simulador/) | simulador de riesgo por vano: *qué pasaría si* sobre el modelo MIL | `06_uiti_vano_explicabilidad_simulador.ipynb` |
 
-## Cómo se usan
+## Cómo se usan — a qué le doy doble clic
 
-Cada carpeta trae los mismos cuatro lanzadores. En **macOS** doble clic sobre el
-`.command`; en **Windows**, sobre el `.bat`.
+Cada carpeta trae los mismos cuatro lanzadores. **Esta tabla es la respuesta corta**, y
+vale igual para el menú y para las cinco aplicaciones:
+
+| Sistema | Instalar (una sola vez) | Abrir (cada vez) |
+|---|---|---|
+| **macOS** | doble clic en **`instalar.command`** | doble clic en **`Iniciar.app`** |
+| **Windows** | doble clic en **`instalar.bat`** | doble clic en **`iniciar.bat`** |
+| Linux | `./instalar.command` desde una terminal | `./iniciar.command` desde una terminal |
+
+**En macOS lo que se abre es `Iniciar.app`, no `iniciar.command`.** Los dos hacen lo
+mismo cuando funcionan, y la diferencia es que uno funciona **siempre**: a un `.command`
+lo abre la aplicación que LaunchServices tenga atada a esa extensión, y eso lo fija cada
+máquina y se cambia sin querer desde el «Abrir con» del Finder. En una máquina con
+Ghostty puede tocarle Ghostty, que se declara *editor* de `.command` y entonces el doble
+clic **no ejecuta nada**. `Iniciar.app` no se puede desviar así: LaunchServices no lo
+abre con otra aplicación, lo **lanza**. Ver «La regla de Ghostty», más abajo.
+
+`iniciar.command` se conserva a propósito para lanzarlo **a mano** desde una terminal ya
+abierta, y es el camino de Linux.
+
+**En Windows el doble clic va sobre los `.bat` y no hay nada equivalente que resolver:**
+un `.bat` lo ejecuta el intérprete de órdenes del sistema, no una aplicación asociada que
+cada máquina pueda cambiar. No existe ningún `Iniciar.app` allí, y no hace falta.
 
 1. `instalar` — una sola vez. Crea el entorno de esa aplicación e instala sus
    dependencias.

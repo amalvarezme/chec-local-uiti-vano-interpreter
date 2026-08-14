@@ -473,8 +473,22 @@ def _pedir_por_su_puerta(app: Aplicacion) -> None:
     if pid is None:
         return
     try:
-        os.kill(pid, signal.SIGTERM)
-    except (ProcessLookupError, PermissionError, OSError):
+        if ES_WINDOWS:
+            # `os.kill(pid, SIGTERM)` NO es aqui lo que parece: CPython lo implementa
+            # como `TerminateProcess`, que mata a Voila en seco, sin darle ocasion de
+            # cerrar sus kernels. Cada uno es un `python.exe` de ~780 MB que queda
+            # huerfano, y el puerto SI queda libre -- asi que el menu informaba de un
+            # apagado limpio con hasta siete procesos vivos detras, que es justo lo que
+            # `PROBAR-EN-WINDOWS.md` comprueba en su paso 9.
+            #
+            # `taskkill /T` recorre el arbol, que es donde viven esos kernels. Es
+            # forzoso igual -- en Windows no hay un apagado suave que Voila atienda --,
+            # pero al menos no deja nada detras.
+            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                           capture_output=True, timeout=10)
+        else:
+            os.kill(pid, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError, OSError, subprocess.SubprocessError):
         pass
 
 
@@ -631,7 +645,15 @@ class _Manejador(http.server.BaseHTTPRequestHandler):
 
 
 class _Servidor(socketserver.ThreadingTCPServer):
-    allow_reuse_address = True
+    # La MISMA regla que `servidor.py`, y por el mismo motivo. En Windows
+    # `SO_REUSEADDR` no significa lo que en POSIX: permite atarse a un puerto que otro
+    # proceso ESTA escuchando ahora mismo, sin error, y el sistema reparte las
+    # conexiones entre los dos. Aqui eso seria un segundo menu robandole peticiones al
+    # primero -- y encima con el guardian de `revisar_puerto` apoyado en `pid_de`, que
+    # alli es el que menos garantias da.
+    #
+    # Estaba en `True` fijo, y el test que vigila esta regla solo miraba `servidor.py`.
+    allow_reuse_address = not ES_WINDOWS
     daemon_threads = True
 
 

@@ -220,13 +220,170 @@ def test_los_temporales_se_nombran_por_el_comando_entero():
         ["simulador", "/repo/aplicaciones/06_simulador/x"]))
 
 
-def test_la_carpeta_temporal_nunca_lleva_espacios(monkeypatch):
-    """`CommandString` no lo interpreta ningun shell: una ruta con un espacio no
-    arranca. Medido. Si `TMPDIR` los trae, se cae a `/tmp`."""
-    monkeypatch.setenv("TMPDIR", "/var/con espacio/T")
+def test_la_carpeta_temporal_en_mac_nunca_lleva_espacios(monkeypatch):
+    """`CommandString` no lo interpreta ningun shell: en macOS una ruta con un espacio
+    no arranca -- medido --, asi que ahi se cae a `/tmp`.
+
+    Se parchea `tempfile.gettempdir` y no la variable `TMPDIR`: `gettempdir` CACHEA su
+    resultado en `tempfile.tempdir`, asi que mover la variable despues de la primera
+    llamada no cambia nada y la prueba pasaria por casualidad.
+    """
+    monkeypatch.setattr(_terminal, "ES_MAC", True)
+    monkeypatch.setattr(_terminal.tempfile, "gettempdir", lambda: "/var/con espacio/T")
     assert _terminal._carpeta_temporal() == Path("/tmp")
-    monkeypatch.setenv("TMPDIR", "/var/folders/xy/T")
+    monkeypatch.setattr(_terminal.tempfile, "gettempdir", lambda: "/var/folders/xy/T")
     assert _terminal._carpeta_temporal() == Path("/var/folders/xy/T")
+
+
+def test_la_carpeta_temporal_en_windows_admite_espacios(monkeypatch):
+    """En Windows la ruta viaja entrecomillada dentro del `start`, asi que un `%TEMP%`
+    bajo `C:\\Users\\Nombre Apellido\\...` pasa entero. Caerse a `/tmp` alli seria
+    escribir el trampolin en una carpeta que no existe -- que es lo que hacia leer
+    `TMPDIR` a pelo, una variable que en Windows no esta definida."""
+    monkeypatch.setattr(_terminal, "ES_MAC", False)
+    monkeypatch.setattr(_terminal.tempfile, "gettempdir",
+                        lambda: r"C:\Users\Nombre Apellido\AppData\Local\Temp")
+    assert _terminal._carpeta_temporal() == Path(
+        r"C:\Users\Nombre Apellido\AppData\Local\Temp")
+
+
+# ------------------------------------------------- lo que se le dice al que lo abre
+#
+# Esto se fija como prueba porque ya se contradijo a si mismo una vez: los seis README de
+# aplicacion decian "en macOS haz doble clic en Iniciar.app, no en iniciar.command" y el
+# README de arriba, en la misma carpeta, decia "en macOS doble clic sobre el `.command`".
+# Alguien que siga la instruccion equivocada se encuentra con que no pasa nada, y no
+# tiene forma de saber que la culpa es de la documentacion.
+
+
+@pytest.mark.parametrize("carpeta", CARPETAS, ids=IDS)
+def test_cada_readme_dice_que_abrir_en_cada_sistema(carpeta):
+    """`Iniciar.app` en macOS y `iniciar.bat` en Windows, dicho en la misma frase."""
+    readme = carpeta / "README.md"
+    assert readme.exists(), f"{carpeta.name} se quedo sin README"
+    texto = readme.read_text(encoding="utf-8")
+    assert "A qué le doy doble clic" in texto, (
+        f"{carpeta.name}/README.md no dice a que hay que darle doble clic")
+    bloque = texto[texto.index("A qué le doy doble clic"):][:1200]
+    assert "`Iniciar.app`" in bloque and "macOS" in bloque
+    assert "`iniciar.bat`" in bloque and "Windows" in bloque
+
+
+def test_ningun_readme_manda_al_command_en_mac():
+    """La instruccion contraria, que es la que hubo que corregir.
+
+    Se busca la frase entera y no la palabra `.command`: los README hablan de el a
+    proposito -- se conserva para lanzarlo a mano y es el camino de Linux --, y prohibir
+    la palabra obligaria a no poder explicarlo.
+    """
+    for readme in [*(c / "README.md" for c in CARPETAS), APPS / "README.md"]:
+        texto = readme.read_text(encoding="utf-8")
+        for frase in ("En **macOS** doble clic sobre el `.command`",
+                      "en macOS doble clic sobre el `.command`",
+                      "En macOS haz doble clic en `iniciar.command`"):
+            assert frase not in texto, f"{readme} manda al `.command` en macOS"
+
+
+def test_el_readme_de_arriba_trae_la_tabla_de_los_tres_sistemas():
+    """Una tabla, tres filas, y el que la lee no tiene que deducir nada."""
+    texto = (APPS / "README.md").read_text(encoding="utf-8")
+    tabla = texto[texto.index("## Cómo se usan"):][:1400]
+    assert "| **macOS** |" in tabla and "`Iniciar.app`" in tabla
+    assert "| **Windows** |" in tabla and "`iniciar.bat`" in tabla
+    assert "| Linux |" in tabla and "./iniciar.command" in tabla
+
+
+# ------------------------------------------------------------- el camino de Windows
+#
+# Aqui no se puede ejecutar nada de esto: no hay Windows. Lo que si se puede fijar es la
+# FORMA del comando y del trampolin, que es donde estan los tres fallos que `cmd` regala
+# y que no avisan -- la ventana se abre igual y no corre nada, o se queda abierta para
+# siempre. Los tres se comprueban abajo sobre el texto que se genera.
+
+
+def test_windows_pasa_el_titulo_a_start_siempre():
+    """`start` toma su primer argumento entrecomillado como TITULO de la ventana.
+
+    Sin titulo, `start "C:\\ruta\\al\\trampolin.bat"` interpreta la ruta como titulo,
+    abre una consola vacia y no ejecuta nada. Es el equivalente exacto del fallo de
+    Ghostty en el otro sistema: el lanzador "funciona" y no corre nada.
+    """
+    fuente = _sin_prosa((COMUN / "terminal.py").read_text(encoding="utf-8"))
+    assert '"cmd", "/c", "start", f"{TITULO} -- {etiqueta}"' in fuente
+
+
+def test_windows_cierra_la_consola_al_terminar():
+    """`cmd /c` y NUNCA `cmd /k`.
+
+    `/k` deja la consola abierta para siempre despues de que el comando termine, asi que
+    "Cerrar todo" liberaria el puerto y dejaria la ventana muerta en pantalla -- lo
+    contrario de lo que promete, y lo contrario de lo que hace macOS con
+    `shellExitAction`.
+    """
+    fuente = _sin_prosa((COMUN / "terminal.py").read_text(encoding="utf-8"))
+    assert '"cmd", "/c", str(trampolin)' in fuente
+    assert "/k" not in fuente, "una consola con `cmd /k` no se cierra nunca"
+
+
+def test_el_trampolin_de_windows_lleva_entorno_directorio_y_pausa():
+    """Las tres cosas que el trampolin tiene que hacer, y una que no.
+
+    `cd /d` cambia tambien de UNIDAD: sin la `/d`, un repositorio en `D:` con un `cmd`
+    que arranca en `C:` deja el `cd` sin efecto y el comando no encuentra nada.
+    """
+    guion = _terminal._guion_windows(
+        [r"C:\Python\python.exe", "gestor.py"],
+        {"MENU_CRITICIDAD": "http://127.0.0.1:8800/"},
+        Path(r"C:\repo\aplicaciones\01_clima"))
+    assert guion.startswith("@echo off")
+    assert r'cd /d "C:\repo\aplicaciones\01_clima"' in guion
+    # Las comillas van alrededor de TODA la asignacion, que es la forma que no mete un
+    # espacio final dentro del valor.
+    assert 'set "MENU_CRITICIDAD=http://127.0.0.1:8800/"' in guion
+    # Y la parada SOLO si algo fallo: la ventana se cierra al terminar, asi que una
+    # parada incondicional la dejaria esperando en el caso normal.
+    assert guion.count("if errorlevel 1 (") == 2   # el `cd` y el comando
+
+
+def test_el_trampolin_de_windows_comprueba_el_cd():
+    """`cd /d` que falla y un `.bat` que sigue adelante es el mismo caso del worktree
+    borrado que ya costo una sesion, pero en Windows: el comando arranca desde otro
+    directorio y el error que sale despues no se parece en nada a su causa."""
+    guion = _terminal._guion_windows(["x.exe"], None, Path(r"D:\no\existe"))
+    cd = guion[guion.index("cd /d"):]
+    assert cd.startswith('cd /d "D:\\no\\existe"')
+    assert "if errorlevel 1 (" in cd[:200]
+    assert "exit /b 1" in cd
+
+
+def test_el_trampolin_de_windows_no_se_queda_esperando_una_tecla():
+    """`timeout` y NO `pause` tras un fallo del comando.
+
+    En POSIX "Cerrar todo" senala al GRUPO y se lleva tambien al trampolin, asi que la
+    ventana se cierra. En Windows el respaldo es `taskkill /T`, que baja por los
+    descendientes y nunca por los ancestros: deja vivo al `cmd` que corre el `.bat`, que
+    ve un codigo distinto de cero porque a su hijo lo mataron. Con un `pause` ahi, la
+    ventana se quedaria PARA SIEMPRE con el puerto ya libre -- lo contrario de lo que
+    "Cerrar todo" promete.
+    """
+    guion = _terminal._guion_windows(["x.exe"], None, None)
+    assert "timeout /t 45" in guion
+    # Sin directorio no hay bloque de `cd`, asi que no puede quedar ningun `pause`.
+    assert "pause" not in guion
+
+
+def test_el_trampolin_de_windows_usa_saltos_de_linea_de_windows():
+    """Un `.bat` con saltos `\\n` sueltos falla de formas que no se parecen a su causa:
+    `cmd` lee la linea con el retorno de carro pegado al ultimo argumento."""
+    guion = _terminal._guion_windows(["x.exe"], None, None)
+    assert "\r\n" in guion and "\n" not in guion.replace("\r\n", "")
+
+
+def test_windows_y_mac_nombran_su_trampolin_igual_de_distinto():
+    """La huella del comando entero, tambien alli: dos copias del repositorio no pueden
+    escribir el mismo `.bat`."""
+    fuente = _sin_prosa((COMUN / "terminal.py").read_text(encoding="utf-8"))
+    assert fuente.count('_huella("\\0".join([etiqueta, *comando, str(directorio)]))') == 2
 
 
 def test_sin_ventanas_no_se_intenta_abrir_ninguna():
