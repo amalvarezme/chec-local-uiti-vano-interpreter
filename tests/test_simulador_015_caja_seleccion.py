@@ -447,9 +447,10 @@ def test_the_diagnosis_button_is_called_just_diagnostico(fuente):
 
 
 def test_the_figure_has_six_rows_with_the_bars_and_the_graph_in_their_own(fuente):
-    """Fila 4 las barras de UITI partidas 3+1, fila 5 los costos a lo ancho y fila 6 el
-    grafo centrado en las columnas 2-3. El grafo va a MEDIA fila y no a lo ancho porque
-    es circular: a ancho completo queda un disco pequenio con dos franjas vacias.
+    """Filas 4 y 5 partidas 3+1 -- las barras de UITI y las de costo, cada una con su
+    acumulado en la ultima columna -- y fila 6 el grafo centrado en las columnas 2-3. El
+    grafo va a MEDIA fila y no a lo ancho porque es circular: a ancho completo queda un
+    disco pequenio con dos franjas vacias.
 
     El reparto de alturas se comprueba por su INVARIANTE y no por sus cifras: clavar los
     seis numeros hacia fallar el test cada vez que se reajusta el grafo, que es justo lo
@@ -463,10 +464,12 @@ def test_the_figure_has_six_rows_with_the_bars_and_the_graph_in_their_own(fuente
     """
     assert "rows=6, cols=4," in fuente
     assert "[None, {'type': 'xy', 'colspan': 2}, None, None]" in fuente
-    # Las barras de UITI: los vanos en las columnas 1-3 y el acumulado del circuito en
+    # Las barras de UITI y las de costo: los vanos en las columnas 1-3 y el acumulado en
     # la 4. Juntos, el total -- la suma de todos los vanos -- aplastaba contra la base a
-    # los grupos por vano, que es donde se decide la obra.
-    assert "[{'type': 'xy', 'colspan': 3}, None, None, {'type': 'xy'}]," in fuente
+    # los grupos por vano, que es donde se decide la obra. Son DOS filas con el mismo
+    # reparto, y ninguna fila ocupa ya las cuatro columnas de corrido.
+    assert fuente.count("[{'type': 'xy', 'colspan': 3}, None, None, {'type': 'xy'}],") == 2
+    assert "'colspan': 4" not in fuente
 
     alturas = re.search(r"row_heights=\[([\d.,\s]+)\]", fuente)
     assert alturas, "la figura tiene que repartir el alto explicitamente"

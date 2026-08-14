@@ -317,13 +317,36 @@ def test_the_quantity_dropdown_offers_zero_through_five(fuente):
     assert "options=[(str(n), n) for n in range(0, MAX_REPETICIONES + 1)]" in fuente
 
 
-def test_the_cost_row_is_a_single_trace_with_an_array_of_colours(fuente):
-    """Los vanos y el TOTAL viven en la MISMA escala de pesos y en la misma traza: el
-    total es su suma, y darle un eje propio dejaria de mostrar cuanto pesa cada vano
-    dentro de el. Se distinguen por color, que por eso viaja como arreglo."""
+def test_the_cost_row_splits_the_vanos_from_the_accumulated_total(fuente):
+    """Los vanos en las columnas 1-3 y el costo acumulado en la 4, cada panel con su
+    propio eje. Es la misma particion que ya rige a la fila del UITI y por la misma
+    razon: el total es la SUMA de los vanos, asi que compartiendo eje es siempre la
+    barra mas alta y aplasta contra la base a las de los vanos, que es donde se decide
+    la obra. Ahi se lee cuanto cuesta CADA vano; en el panel de al lado, cuanto cuesta
+    el plan entero.
+
+    La traza de los vanos conserva el color como ARREGLO aunque ya no lleve el total:
+    el repintado escribe un color por vano, y un escalar habria que volver a partirlo
+    el dia que un vano tenga que destacarse."""
     assert "IDX['costos'] = _agregar(go.Bar(" in fuente
+    assert "IDX['costo_total'] = _agregar(go.Bar(" in fuente
     assert "assert isinstance(_fig.data[IDX['costos']].marker.color, (list, tuple))" in fuente
-    assert re.search(r"\), 5, 1\)\n", fuente), "la barra de costos va en la fila 5"
+    assert re.search(r"\), 5, 1\)\n", fuente), "las barras por vano van en la fila 5, columna 1"
+    assert re.search(r"\), 5, 4\)\n", fuente), "el costo acumulado va en la fila 5, columna 4"
+
+
+def test_the_accumulated_cost_is_painted_into_its_own_trace(fuente):
+    """El repintado tiene que dejar de anexar el TOTAL a la lista de los vanos: si lo
+    sigue anexando, la particion de la figura queda a medias -- un panel con el total
+    mezclado y otro vacio -- y el fallo no se ve hasta que alguien simula."""
+    cuerpo = fuente[fuente.index("def _pintar_costos(costos)"):]
+    cuerpo = cuerpo[: cuerpo.index("_pintar_top_por_vano(TOP_VACIO)")]
+    assert "_x = [*_por_vano, ETIQUETA_TOTAL]" not in cuerpo
+    assert "IDX['costo_total']" in cuerpo
+    # El panel vacio: los DOS paneles se limpian, o el acumulado se queda describiendo
+    # la corrida anterior mientras el de los vanos ya se borro.
+    vacio = cuerpo[: cuerpo.index("_por_vano = costos['por_vano']")]
+    assert vacio.count("IDX['costos']") == 1 and "IDX['costo_total']" in vacio
 
 
 def test_the_activity_list_is_shared_and_the_rows_are_per_vano(fuente):
