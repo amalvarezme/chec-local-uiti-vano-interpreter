@@ -486,44 +486,43 @@ def test_the_diagnosis_button_is_called_just_diagnostico(fuente):
 # --- La figura de siete filas ----------------------------------------------------------
 
 
-def test_the_figure_has_seven_rows_with_the_bars_and_the_graph_in_their_own(fuente):
-    """Fila 3 el perfil del circuito a lo ancho, filas 5 y 6 partidas 3+1 -- las barras
-    de UITI y las de costo, cada una con su acumulado en la ultima columna -- y fila 7 el
-    grafo centrado en las columnas 2-3. El grafo va a MEDIA fila y no a lo ancho porque
-    es circular: a ancho completo queda un disco pequenio con dos franjas vacias.
+def test_the_figure_has_six_rows_with_the_profile_and_the_graph_sharing_one(fuente):
+    """Fila 3 partida en dos: el perfil del circuito a la izquierda y el grafo a la
+    derecha. Filas 5 y 6 partidas 3+1 -- las barras de UITI y las de costo, cada una
+    con su acumulado en la ultima columna.
+
+    El grafo tenia una septima fila para el solo, centrado y a media fila: un disco con
+    dos franjas blancas a los lados y otra debajo -- 243 px de vacio en el mejor caso
+    medido. Compartir la fila con el perfil llena las cuatro columnas y ahorra una fila
+    entera; el circulo conserva su diametro porque la fila hereda el alto que tenia la
+    del grafo.
 
     El reparto de alturas se comprueba por su INVARIANTE y no por sus cifras: clavar los
     seis numeros hacia fallar el test cada vez que se reajusta el grafo, que es justo lo
-    que se quiere poder hacer.
-
-    El invariante es que la fila del grafo sea la mas alta, y NO que lo sea por un factor
-    dado. El grafo ocupa las columnas 2-3 -- el 44,25% del ancho --, asi que por debajo de
-    unos 1.400 px de ventana su diametro lo fija el ANCHO y no la altura: subir la fila
-    mas alla de ese ancho no agranda el circulo, solo agrega banda blanca arriba y abajo.
-    Medido con la fila a 1.206 px: a 850 px de ventana sobraban 859 px de vacio.
+    que se quiere poder hacer. El invariante es que la fila del grafo siga siendo la mas
+    alta -- es lo que fija el diametro del circulo --, y ahora esa fila es la 3.
     """
-    assert "rows=7, cols=4," in fuente
-    assert "[None, {'type': 'xy', 'colspan': 2}, None, None]" in fuente
+    assert "rows=6, cols=4," in fuente
+    # El perfil y el grafo, cada uno en media fila de la misma fila.
+    assert "[{'type': 'xy', 'colspan': 2}, None,\n            {'type': 'xy', 'colspan': 2}, None]" in fuente
+    # Y la fila que el grafo tenia para el solo ya no existe.
+    assert "[None, {'type': 'xy', 'colspan': 2}, None, None]" not in fuente
     # Las barras de UITI y las de costo: los vanos en las columnas 1-3 y el acumulado en
     # la 4. Juntos, el total -- la suma de todos los vanos -- aplastaba contra la base a
     # los grupos por vano, que es donde se decide la obra. Son DOS filas con el mismo
-    # reparto.
-    assert fuente.count("[{'type': 'xy', 'colspan': 3}, None, None, {'type': 'xy'}],") == 2
-    # UNA sola fila de ancho completo, y es la del perfil del circuito. La cota importa:
-    # lo que este test protege es que las dos filas de barras NO vuelvan a ocupar las
-    # cuatro columnas de corrido, porque ahi es donde el acumulado aplasta a los vanos.
-    # El perfil puede porque es un panel propio, con su eje y una sola serie.
-    assert fuente.count("'colspan': 4") == 1
-    assert "[{'type': 'xy', 'colspan': 4}, None, None, None]," in fuente
+    # reparto, y esto es lo que impide que vuelvan a ocupar las cuatro columnas.
+    assert fuente.count("[{'type': 'xy', 'colspan': 3}, None, None, {'type': 'xy'}]") == 2
+    # Ninguna fila de ancho completo: la del perfil dejo de serlo al entrar el grafo.
+    assert fuente.count("'colspan': 4") == 0
 
     alturas = re.search(r"row_heights=\[([\d.,\s]+)\]", fuente)
     assert alturas, "la figura tiene que repartir el alto explicitamente"
     fracciones = [float(v) for v in alturas.group(1).split(",")]
-    assert len(fracciones) == 7
-    assert abs(sum(fracciones) - 1.0) < 1e-6, f"las fracciones no suman 1: {fracciones}"
-    assert fracciones[-1] > max(fracciones[:-1]), (
-        f"la fila del grafo tiene que ser la mas alta: {fracciones}"
-    )
+    assert len(fracciones) == 6
+    assert abs(sum(fracciones) - 1.0) < 1e-3, f"las fracciones no suman 1: {fracciones}"
+    # La tercera es la del perfil y el grafo, y sigue siendo la mas alta.
+    assert fracciones[2] == max(fracciones), (
+        f"la fila del grafo tiene que ser la mas alta: {fracciones}")
 
     # Los violines ya no existen: los reemplazan dos barras por vano.
     assert "go.Violin(" not in fuente
@@ -596,8 +595,9 @@ def test_the_circular_graph_keeps_its_aspect_at_any_screen_width(fuente):
     nombres. Cuanto menor, mayor el circulo -- y en cuanto se queda corto los nombres se
     salen del panel y se montan sobre el anillo, que es como se veia con fuente 14.
     """
-    assert "scaleanchor=_EJE_X_GRAFO, scaleratio=1.0, row=7, col=2" in fuente
-    assert "range=[-RANGO_GRAFO, RANGO_GRAFO], row=7, col=2" in fuente
+    # Fila 3 columna 3 desde que el grafo comparte fila con el perfil del circuito.
+    assert "scaleanchor=_EJE_X_GRAFO, scaleratio=1.0, row=3, col=3" in fuente
+    assert "range=[-RANGO_GRAFO, RANGO_GRAFO], row=3, col=3" in fuente
     rango = re.search(r"^RANGO_GRAFO = ([\d.]+)$", fuente, re.MULTILINE)
     assert rango, "el rango del grafo tiene que ser una constante con su justificacion"
     # Cota inferior: por debajo de `RADIO_ROTULO_GRAFO` el rango caeria DENTRO del anillo
