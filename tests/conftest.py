@@ -48,3 +48,15 @@ def _isolate_agent_tools_artifacts_root(tmp_path, monkeypatch):
     monkeypatch.setattr(inference, "ARTIFACTS_ROOT", artifacts_root / "inference")
     monkeypatch.setattr(expert_alignment, "ARTIFACTS_ROOT", artifacts_root)
     monkeypatch.setattr(pdf_discussion, "ARTIFACTS_ROOT", artifacts_root / "pdf-discussion-extraction")
+
+
+def pytest_configure(config):
+    """Marcadores propios del proyecto.
+
+    `sin_limpiar` exime a una prueba del reinicio automatico del simulador. Se
+    registra aqui y no en el modulo que lo usa porque pytest solo lee este gancho
+    de `conftest.py` y de los plugins: puesto en el modulo, el marcador funciona
+    igual pero cada prueba avisa de "marcador desconocido".
+    """
+    config.addinivalue_line(
+        "markers", "sin_limpiar: no reiniciar el tablero del simulador antes")
