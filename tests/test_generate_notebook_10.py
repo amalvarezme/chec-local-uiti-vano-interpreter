@@ -317,9 +317,9 @@ def test_generator_output_path_targets_notebook_10_only():
 
 def test_generator_never_edits_upstream_notebooks_or_variable_selection(tmp_path):
     watched_paths = [
-        "notebooks/old_version/02_uiti_vano_kmeans.ipynb",
-        "notebooks/old_version/03_uiti_vano_trayectorias_circuitos.ipynb",
-        "notebooks/old_version/04_uiti_vano_trayectorias_vano.ipynb",
+        "notebooks/base_apps/02_uiti_vano_kmeans.ipynb",
+        "notebooks/base_apps/03_uiti_vano_trayectorias_circuitos.ipynb",
+        "notebooks/base_apps/04_uiti_vano_trayectorias_vano.ipynb",
         "data/Variables_seleccion.xlsx",
     ]
     # Every watched path must exist: a rename upstream has to fail this test loudly

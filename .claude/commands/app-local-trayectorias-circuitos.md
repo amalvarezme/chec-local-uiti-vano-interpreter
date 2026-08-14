@@ -7,7 +7,7 @@ description: Abre en el navegador el tablero local de trayectoria y agrupamiento
 > what to report, and the restrictions already met in the field.
 
 Opens the local dashboard built from
-`notebooks/old_version/03_uiti_vano_trayectorias_circuitos.ipynb`: the circuit cloud
+`notebooks/base_apps/03_uiti_vano_trayectorias_circuitos.ipynb`: the circuit cloud
 grouped by K-Means, the dual-axis time series with the active window drawn at triple
 size, and the circuit map — all governed by one sliding window.
 

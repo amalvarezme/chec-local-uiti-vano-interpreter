@@ -36,7 +36,7 @@ import pytest
 
 RAIZ = Path(__file__).resolve().parents[1]
 APPS = RAIZ / "aplicaciones"
-CUADERNOS = RAIZ / "notebooks" / "old_version"
+CUADERNOS = RAIZ / "notebooks" / "base_apps"
 
 # Las piezas sin las cuales el lanzador no llega a ninguna parte, en CUALQUIER
 # aplicacion. `preparar.py` no esta: solo lo tiene el simulador, que congela un paquete

@@ -7,7 +7,7 @@ description: Abre en el navegador el tablero local de agrupamiento por UITI acum
 > what to report, and the restrictions already met in the field.
 
 Opens the local dashboard built from
-`notebooks/old_version/02_uiti_vano_kmeans.ipynb`: K-Means into 4 groups over
+`notebooks/base_apps/02_uiti_vano_kmeans.ipynb`: K-Means into 4 groups over
 accumulated UITI and event count, with date-range calendars, the marginal densities, the
 per-group violins and the label CSV download.
 

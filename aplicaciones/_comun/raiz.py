@@ -15,17 +15,18 @@ from pathlib import Path
 # quinientas lineas mas abajo.
 RAIZ_REPO = Path(__file__).resolve().parents[2]
 
-# Carpeta que contiene las tres aplicaciones.
+# Carpeta que contiene las aplicaciones: los cinco visores mas el menu CriticidadCHEC.
 RAIZ_APPS = Path(__file__).resolve().parents[1]
 
 # Carpeta de los cuadernos del repositorio.
 CUADERNOS = RAIZ_REPO / "notebooks"
 
-# De donde salen las tres aplicaciones. Los tres cuadernos que las alimentan -- 01, 02
-# y 06 -- se archivaron en `notebooks/old_version/` el 2026-08-13, y siguen siendo su
-# UNICA fuente: archivar no es dejar de construir desde ellos. Va aparte de `CUADERNOS`
-# para que mover uno solo se arregle aqui.
-CUADERNOS_APPS = CUADERNOS / "old_version"
+# De donde salen las cinco aplicaciones: los cuadernos 01, 02, 03, 04 y 06 son su UNICA
+# fuente. La carpeta se llamaba `old_version/` hasta el 2026-08-14, y ese nombre costo
+# caro -- invitaba a borrarla, cuando lo que hay dentro es justo lo que se construye. Se
+# renombro a `base_apps/` para que diga lo que es. Va aparte de `CUADERNOS` para que
+# mover la carpeta se arregle SOLO aqui.
+CUADERNOS_APPS = CUADERNOS / "base_apps"
 
 
 def verificar_repo() -> None:

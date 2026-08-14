@@ -245,7 +245,7 @@ Voronoi, los mapas MapLibre). Las Databricks Apps sí, y son el único camino de
 ## 7. Los cuadernos
 
 En `notebooks/` queda **uno**: `05_mil_vano_ventana` (el modelo). En
-`notebooks/old_version/` quedan **cinco**: los tableros `uiti_vano` (`01`-`04` y `06`) que son la
+`notebooks/base_apps/` quedan **cinco**: los tableros `uiti_vano` (`01`-`04` y `06`) que son la
 fuente de las aplicaciones.
 
 Eran quince hasta el 2026-08-14. Se borraron nueve: `07_relevancia_lote_por_vano` y los ocho del
@@ -254,7 +254,7 @@ nombraba prosa. Están en el historial de git, y los artefactos que produjeron (
 congelado de `data/models/`, el grafo experto de `data/graphs/`) siguen en su sitio y siguen
 usándose; lo que ya no está en el árbol es el código que los generó.
 
-El nombre de la carpeta engaña, y por eso conviene decirlo: **estar en `old_version/` no significa
+El nombre de la carpeta engaña, y por eso conviene decirlo: **estar en `base_apps/` no significa
 estar muerto.** Los cinco que quedan son justo lo que construyen las cinco aplicaciones de
 escritorio, vía `CUADERNOS_APPS` en `aplicaciones/_comun/raiz.py`. El `04` además es el dueño de
 la geometría KMeans que `scripts/extract_geometrias_014.py` extrae de su salida guardada.

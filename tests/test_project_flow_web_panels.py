@@ -31,7 +31,7 @@ from pathlib import Path
 
 import pytest
 
-NOTEBOOK_DIR = Path(__file__).resolve().parents[1] / "notebooks" / "old_version"
+NOTEBOOK_DIR = Path(__file__).resolve().parents[1] / "notebooks" / "base_apps"
 
 # `05` and `06` are deliberately excluded: they are ipywidgets/simulator
 # notebooks, not static HTML+JS boards, and do not share this contract.

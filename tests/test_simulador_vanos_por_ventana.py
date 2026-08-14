@@ -31,7 +31,7 @@ import pytest
 
 RAIZ = Path(__file__).resolve().parents[1]
 NOTEBOOK = (
-    RAIZ / "notebooks" / "old_version"
+    RAIZ / "notebooks" / "base_apps"
     / "06_uiti_vano_explicabilidad_simulador.ipynb"
 )
 

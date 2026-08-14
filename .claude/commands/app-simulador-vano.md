@@ -9,7 +9,7 @@ description: Publica el simulador de riesgo por vano del cuaderno 06 como una Da
 > - **D. Known restrictions** — D1–D9. If one shows up, do not re-diagnose it.
 
 Follow this exact sequence when `/app-simulador-vano` is invoked. It publishes
-`notebooks/old_version/06_uiti_vano_explicabilidad_simulador.ipynb` — the per-vano
+`notebooks/base_apps/06_uiti_vano_explicabilidad_simulador.ipynb` — the per-vano
 explainability and risk simulator — at a stable URL, and it is **self-healing**: it inspects
 the target workspace first and creates whatever is missing.
 
@@ -98,7 +98,7 @@ the memory numbers in this command no longer hold.**
 
 ## Scope
 
-MUST NOT modify `notebooks/old_version/06_uiti_vano_explicabilidad_simulador.ipynb` (the shim
+MUST NOT modify `notebooks/base_apps/06_uiti_vano_explicabilidad_simulador.ipynb` (the shim
 is applied to a scratch COPY), MUST NOT create or refresh any Delta table, view or Lakeview
 dashboard, and MUST NOT touch the artifacts the other `/app-*` commands publish under
 `dashboards/`.
@@ -209,9 +209,9 @@ import contextlib, hashlib, io, json, os, pathlib, sys, time
 RAIZ = pathlib.Path(__file__).resolve().parents[N]      # ajusta N: la raiz del repo
 SALIDA = pathlib.Path(sys.argv[1])
 SALIDA.mkdir(parents=True, exist_ok=True)
-os.chdir(RAIZ / 'notebooks' / 'old_version')
+os.chdir(RAIZ / 'notebooks' / 'base_apps')
 
-CUADERNO = RAIZ / 'notebooks/old_version/06_uiti_vano_explicabilidad_simulador.ipynb'
+CUADERNO = RAIZ / 'notebooks/base_apps/06_uiti_vano_explicabilidad_simulador.ipynb'
 nb = json.loads(CUADERNO.read_text('utf-8'))
 ns = {'__name__': '__main__'}
 t0 = time.perf_counter()
@@ -265,7 +265,7 @@ the project packages live) and assert the result: **7 files, ~94,5 MB**, dominat
 `X_inst.npy` at 88,1 MB. Fail if the total is under 50 MB — that means a cell silently produced
 an empty object.
 
-`git status --porcelain notebooks/old_version/06_uiti_vano_explicabilidad_simulador.ipynb` MUST
+`git status --porcelain notebooks/base_apps/06_uiti_vano_explicabilidad_simulador.ipynb` MUST
 be empty afterwards. The builder only reads the notebook; if it reports a change, stop.
 
 ## 4. Upload the bundle

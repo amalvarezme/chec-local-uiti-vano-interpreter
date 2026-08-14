@@ -76,7 +76,7 @@ ni los roles LLM. Solo viajan los datos que consumen los cuadernos `01`-`06` y e
 | `.claude/commands/` | Comandos de mantenimiento y despliegue a Databricks (fuera de la familia de skills de reporte) |
 | `reports/` | Artefactos locales de ejecución, reportes generados, insumos PDF, notas de `reports/vault/` |
 | `tests/` | Tests automatizados de contratos, pipelines y render |
-| `notebooks/` | `05`, más `old_version/` con los cinco tableros `01`-`04` y `06` que alimentan las aplicaciones |
+| `notebooks/` | `05`, más `base_apps/` con los cinco tableros `01`-`04` y `06` que alimentan las aplicaciones |
 | `aplicaciones/` | Las cinco aplicaciones locales de escritorio (macOS/Windows) construidas desde los cuadernos `01`, `02`, `03`, `04` y `06`, más `CriticidadCHEC`, el menú que las gobierna |
 
 ## Instalación
@@ -531,7 +531,7 @@ La carpeta se reorganizó el 2026-08-13: `project_flow/` desapareció y su conte
 |---|---|
 | `05_mil_vano_ventana.ipynb` | Aprendizaje de instancias múltiples sobre bolsas vano × ventana |
 
-**Archivados en `notebooks/old_version/`.** Los cinco que quedan ahí **son la fuente de las
+**Archivados en `notebooks/base_apps/`.** Los cinco que quedan ahí **son la fuente de las
 cinco aplicaciones de escritorio** — archivar no es dejar de construir desde ellos.
 `aplicaciones/_comun/raiz.py` los apunta con `CUADERNOS_APPS`:
 
@@ -548,7 +548,7 @@ La única dependencia dura es la geometría de `04`: `05` y `06` la reutilizan v
 modo que un cambio de centroides falla ruidosamente en vez de derivar en silencio.
 
 **El pipeline MGCECDL original se borró del árbol el 2026-08-14** (`07_relevancia_lote_por_vano`
-y los ocho `old_version/0{2,3,4,5,6,7,8,9}_*`). Ninguno se ejecutaba ni se importaba: solo los
+y los ocho `base_apps/0{2,3,4,5,6,7,8,9}_*`). Ninguno se ejecutaba ni se importaba: solo los
 nombraban este README, `docs/`, `site/` y algunos comandos. Su rastro vivo son los artefactos que
 dejaron, no su código: el modelo que `06` y el agente `inference` siguen cargando desde
 `data/models/` y el grafo experto bajo `data/graphs/`.

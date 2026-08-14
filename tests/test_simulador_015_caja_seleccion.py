@@ -36,7 +36,7 @@ import pytest
 NOTEBOOK = (
     Path(__file__).resolve().parents[1]
     / "notebooks"
-    / "old_version"
+    / "base_apps"
     / "06_uiti_vano_explicabilidad_simulador.ipynb"
 )
 

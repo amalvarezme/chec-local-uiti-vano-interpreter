@@ -7,7 +7,7 @@ description: Abre en el navegador el tablero local de agrupamiento y evolucion p
 > what to report, and the restrictions already met in the field.
 
 Opens the local dashboard built from
-`notebooks/old_version/04_uiti_vano_trayectorias_vano.ipynb`. It is the same dashboard as
+`notebooks/base_apps/04_uiti_vano_trayectorias_vano.ipynb`. It is the same dashboard as
 `/app-local-trayectorias-circuitos` one level down: where that one places circuits, this
 one places vanos inside the selected circuit, with its map, its K-Means cloud and the
 sliding window driving both views at once.
