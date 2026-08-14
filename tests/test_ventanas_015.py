@@ -1448,3 +1448,126 @@ def test_el_diagnostico_compara_los_fid_como_texto():
 
     assert [f for f, _u, _n in elegidos["vanos"]] == ["7002", "7001"]
     assert elegidos["marcados"] == ["7002"]
+
+
+# ---------------------------------------------------------------------------
+# El desajuste que ninguna huella podia detectar: CSV nuevo con bolsas viejas
+# ---------------------------------------------------------------------------
+#
+# `TABLA` (los eventos observados) sale del CSV; `X_inst`/`bag_index` (la criticidad
+# simulada) salen de `bolsas_mil_full.joblib`, que produce el cuaderno 05. Los dos
+# archivos se vigilan por separado y los dos disparan reconstruccion, pero la huella
+# contesta "cambio algun insumo?" y no "siguen hablando del mismo mes?". Actualizar el
+# CSV sin volver a correr el 05 reconstruye la aplicacion, muestra los eventos nuevos y
+# los puntua con las bolsas anteriores: **las dos mitades del tablero hablan de meses
+# distintos y nada falla**.
+#
+# Esto lo detecta comparando las CELDAS, sin metadatos nuevos -- o sea que vale tambien
+# para los artefactos que ya existen en disco.
+
+
+def _bolsas_de(filas):
+    """Un `BagIndex` minimo a partir de (circuito, fid, ventana, uiti, eventos)."""
+    from chec_impacto.data.bags import BagIndex
+
+    counts = np.array([f[4] for f in filas], dtype=np.int64)
+    n_inst = int(counts.sum())
+    return BagIndex(
+        keys=pd.DataFrame([(f[0], f[1], f[2]) for f in filas],
+                          columns=["CIRCUITO", "FID_VANO", "VENTANA"]),
+        instance_bag=np.repeat(np.arange(len(filas), dtype=np.int64), counts),
+        offsets=np.concatenate([[0], np.cumsum(counts)]).astype(np.int64),
+        counts=counts,
+        y=np.array([f[3] for f in filas], dtype=np.float64),
+        group=np.array([f"{f[0]}|{f[1]}" for f in filas], dtype=object),
+        instance_rows=np.arange(n_inst, dtype=np.int64),
+    )
+
+
+def _tabla_de(filas):
+    return pd.DataFrame(
+        [{"CIRCUITO": f[0], "FID_VANO": f[1], "ventana": f[2],
+          "uiti_acumulado": f[3], "num_eventos": f[4]} for f in filas])
+
+
+_COHERENTES = [
+    ("AGU23L12", 20130434, "V1", 15.515, 1),
+    ("AGU23L12", 20130434, "V2", 15.515, 1),
+    ("AGU23L12", 20130436, "V1", 16.436, 2),
+]
+
+
+def test_bolsas_al_dia_no_reportan_desajuste():
+    assert ventanas_015.desajuste_bolsas_vs_tabla(
+        _bolsas_de(_COHERENTES), _tabla_de(_COHERENTES)) is None
+
+
+def test_una_celda_que_el_csv_trae_y_las_bolsas_no_es_el_desajuste_peligroso():
+    """El caso real: llega un mes nuevo al CSV, nadie vuelve a correr el 05, y el
+    tablero muestra eventos que el modelo no puede puntuar."""
+    tabla = _tabla_de([*_COHERENTES, ("AGU23L12", 20130437, "V12", 9.0, 3)])
+
+    motivo = ventanas_015.desajuste_bolsas_vs_tabla(_bolsas_de(_COHERENTES), tabla)
+
+    assert motivo is not None
+    # Nombra cuantas y da un ejemplo: sin eso hay que ir a buscarlas a mano.
+    assert "1" in motivo and "V12" in motivo
+
+
+def test_una_celda_que_solo_esta_en_las_bolsas_no_es_desajuste():
+    """Al reves NO es sintoma, y confundirlo seria un falso positivo permanente.
+
+    `construir_tabla_vano_ventana` redondea `uiti_acumulado` a 3 decimales y despues
+    descarta las filas con valor <= 0, asi que una celda con UITI diminuto existe en las
+    bolsas y no en la tabla. Medido sobre los artefactos reales: pasa en exactamente 2
+    celdas de 111.233 -- VMA23L16/39520403 en V7 y V8, con y = 0,000333.
+    """
+    bolsas = _bolsas_de([*_COHERENTES, ("VMA23L16", 39520403, "V7", 0.000333, 1)])
+
+    assert ventanas_015.desajuste_bolsas_vs_tabla(bolsas, _tabla_de(_COHERENTES)) is None
+
+
+def test_un_conteo_de_eventos_distinto_delata_un_csv_corregido():
+    """El caso que la comparacion de celdas sola no ve: el CSV cambia DENTRO de los
+    meses que ya existian. `num_eventos` es un entero exacto -- no hay redondeo que lo
+    excuse -- asi que basta con que uno no cuadre."""
+    tabla = _tabla_de([
+        ("AGU23L12", 20130434, "V1", 15.515, 1),
+        ("AGU23L12", 20130434, "V2", 15.515, 1),
+        ("AGU23L12", 20130436, "V1", 16.436, 5),      # eran 2
+    ])
+
+    motivo = ventanas_015.desajuste_bolsas_vs_tabla(_bolsas_de(_COHERENTES), tabla)
+
+    assert motivo is not None and "20130436" in motivo
+
+
+def test_un_uiti_distinto_tambien_delata():
+    tabla = _tabla_de([
+        ("AGU23L12", 20130434, "V1", 99.999, 1),      # eran 15.515
+        ("AGU23L12", 20130434, "V2", 15.515, 1),
+        ("AGU23L12", 20130436, "V1", 16.436, 2),
+    ])
+
+    assert ventanas_015.desajuste_bolsas_vs_tabla(_bolsas_de(_COHERENTES), tabla) is not None
+
+
+def test_el_redondeo_a_tres_decimales_no_cuenta_como_desajuste():
+    """`construir_tabla_vano_ventana` redondea a 3 decimales y las bolsas no, asi que
+    hay siempre hasta 0,0005 de diferencia. Medido sobre los artefactos reales: el
+    maximo es exactamente 0,0005 en las 111.231 celdas compartidas. Marcarlo seria
+    declarar desajustado un par perfectamente al dia."""
+    bolsas = _bolsas_de([("AGU23L12", 20130434, "V1", 15.5154999, 1)])
+    tabla = _tabla_de([("AGU23L12", 20130434, "V1", 15.515, 1)])
+
+    assert ventanas_015.desajuste_bolsas_vs_tabla(bolsas, tabla) is None
+
+
+def test_el_fid_se_compara_como_texto_en_los_dos_lados():
+    """En las bolsas `FID_VANO` es str y en la tabla int64 -- verificado sobre los
+    artefactos reales. Sin coercion no casa NI UNA celda, y la comprobacion diria que
+    las 111.231 faltan: un falso positivo total, que es peor que no comprobar."""
+    bolsas = _bolsas_de([("AGU23L12", "20130434", "V1", 15.515, 1)])
+    tabla = _tabla_de([("AGU23L12", 20130434, "V1", 15.515, 1)])
+
+    assert ventanas_015.desajuste_bolsas_vs_tabla(bolsas, tabla) is None
