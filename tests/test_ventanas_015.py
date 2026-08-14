@@ -56,7 +56,9 @@ from chec_local_interpreter.ventanas_015 import (
     construir_ventanas,
     nube_fondo,
     nube_seleccion,
+    perfil_uiti_por_vano,
     clases_de_series,
+    ventanas_sin_traslape,
 )
 from scripts.extract_geometrias_014 import _extraer_bloque_json
 
@@ -314,6 +316,184 @@ def test_construir_tabla_vano_ventana_aggregates_events_per_vano_and_window():
 
     assert tabla[(tabla["FID_VANO"] == "VA") & (tabla["ventana_i"] == 1)].empty
     assert (tabla["uiti_acumulado"] > 0).all()
+
+
+# --- Perfil del circuito: UITI acumulado de TODA la serie, por vano --------
+#
+# `construir_ventanas` interleaves each calendar month with the 15th-to-15th
+# crossover into the next one, so the windows OVERLAP and
+# `construir_tabla_vano_ventana`'s own docstring warns they "cannot simply be
+# summed". The circuit profile needs a total over the whole series, so it has
+# to add up a set of windows that tiles the period exactly once -- which is
+# what `ventanas_sin_traslape` picks and `perfil_uiti_por_vano` consumes.
+#
+# Measured on the real 111.231-cell table: summing ALL windows inflates a
+# vano's total by a factor between 1,00 and 2,09 (median 2,0). Because the
+# factor is NOT constant it does not cancel out in a ranking -- 74 of the 208
+# circuits get a different top 15 depending on which sum is used.
+
+
+def test_ventanas_sin_traslape_toma_los_meses_y_embaldosa_el_periodo():
+    """Los meses calendario cubren el periodo entero sin huecos ni traslapes.
+
+    Es la propiedad de la que depende `perfil_uiti_por_vano`: si el conjunto
+    elegido dejara un hueco, el total de un vano perderia sus eventos; si se
+    traslapara, los contaria dos veces.
+    """
+    ventanas = construir_ventanas(pd.to_datetime(["2025-11-03", "2026-04-20"]))
+
+    indices = ventanas_sin_traslape(ventanas)
+
+    elegidas = [ventanas[i] for i in indices]
+    assert [v["etiqueta"] for v in elegidas] == ["V1", "V3", "V5", "V7", "V9", "V11"]
+    # Sin huecos ni traslapes: cada ventana empieza donde termina la anterior.
+    assert all(elegidas[k]["hasta_excl"] == elegidas[k + 1]["desde"]
+               for k in range(len(elegidas) - 1))
+    # Y entre todas cubren exactamente lo que cubren las once.
+    assert elegidas[0]["desde"] == min(v["desde"] for v in ventanas)
+    assert elegidas[-1]["hasta_excl"] == max(v["hasta_excl"] for v in ventanas)
+
+
+def test_perfil_uiti_por_vano_no_cuenta_dos_veces_el_evento_de_la_zona_traslapada():
+    """Un evento del 20 de noviembre cae en V1 (el mes) y en V2 (el corte del
+    15 al 15). El total del vano lo cuenta UNA vez.
+
+    Este es el test que separa la implementacion correcta de la obvia: un
+    `groupby(FID_VANO).uiti_acumulado.sum()` sobre la tabla entera devolveria
+    20,0 para VA en vez de 10,0.
+    """
+    # El rango llega hasta diciembre a proposito: `construir_ventanas` descarta
+    # el corte del 15 al 15 que se sale del periodo, asi que con un solo mes no
+    # habria traslape que probar.
+    df = pd.DataFrame({
+        "CIRCUITO": ["C1", "C1"],
+        "FID_VANO": ["VA", "VB"],
+        "UITI_VANO": [10.0, 3.0],
+        # Nov-20 cae en V1 (nov) y en V2 (15-nov a 15-dic): zona de traslape.
+        # Dic-05 cae SOLO en V3 (dic).
+        "FECHA": pd.to_datetime(["2025-11-20", "2025-12-05"]),
+    })
+    ventanas = construir_ventanas(df["FECHA"])
+    tabla = construir_tabla_vano_ventana(df, ventanas)
+    # La tabla SI trae el evento repetido en las dos ventanas: es el dato del
+    # que parte el perfil, no un error de la tabla.
+    assert len(tabla[tabla["FID_VANO"] == "VA"]) == 2
+
+    perfil = perfil_uiti_por_vano(tabla, "C1", ventanas=ventanas)
+
+    assert perfil.set_index("FID_VANO")["uiti_total"].to_dict() == {"VA": 10.0, "VB": 3.0}
+    assert perfil.set_index("FID_VANO")["num_eventos"].to_dict() == {"VA": 1, "VB": 1}
+
+
+def test_perfil_uiti_por_vano_ordena_de_mayor_a_menor_y_recorta_al_top():
+    """El panel muestra los mas criticos primero, y solo `top` de ellos."""
+    df = pd.DataFrame({
+        "CIRCUITO": ["C1"] * 4,
+        "FID_VANO": ["VA", "VB", "VC", "VD"],
+        "UITI_VANO": [1.0, 30.0, 20.0, 2.0],
+        "FECHA": pd.to_datetime(["2025-11-05"] * 4),
+    })
+    ventanas = construir_ventanas(df["FECHA"])
+    tabla = construir_tabla_vano_ventana(df, ventanas)
+
+    perfil = perfil_uiti_por_vano(tabla, "C1", ventanas=ventanas, top=2)
+
+    assert perfil["FID_VANO"].tolist() == ["VB", "VC"]
+    assert perfil["uiti_total"].tolist() == [30.0, 20.0]
+
+
+def test_perfil_uiti_por_vano_reparte_la_participacion_sobre_el_circuito_entero():
+    """`participacion` es la fraccion del UITI del CIRCUITO, no la del top.
+
+    Es lo que contesta la pregunta del panel -- cuanto del circuito se
+    concentra en unos pocos vanos --, y calcularla sobre los vanos mostrados
+    daria siempre 100% por construccion.
+    """
+    df = pd.DataFrame({
+        "CIRCUITO": ["C1"] * 4,
+        "FID_VANO": ["VA", "VB", "VC", "VD"],
+        "UITI_VANO": [50.0, 30.0, 15.0, 5.0],
+        "FECHA": pd.to_datetime(["2025-11-05"] * 4),
+    })
+    ventanas = construir_ventanas(df["FECHA"])
+    tabla = construir_tabla_vano_ventana(df, ventanas)
+
+    perfil = perfil_uiti_por_vano(tabla, "C1", ventanas=ventanas, top=2)
+
+    assert perfil["participacion"].tolist() == [0.5, 0.3]
+
+
+def test_perfil_uiti_por_vano_cuenta_en_cuantas_ventanas_del_periodo_aparece():
+    """`n_ventanas` distingue al vano que fallo una vez del que falla mes a
+    mes -- con el mismo UITI total, no son la misma obra."""
+    df = pd.DataFrame({
+        "CIRCUITO": ["C1", "C1", "C1"],
+        "FID_VANO": ["VA", "VA", "VB"],
+        "UITI_VANO": [5.0, 5.0, 10.0],
+        # VA en dos meses distintos; VB todo en uno.
+        "FECHA": pd.to_datetime(["2025-11-05", "2025-12-05", "2025-11-05"]),
+    })
+    ventanas = construir_ventanas(df["FECHA"])
+    tabla = construir_tabla_vano_ventana(df, ventanas)
+
+    perfil = perfil_uiti_por_vano(tabla, "C1", ventanas=ventanas)
+
+    por_vano = perfil.set_index("FID_VANO")
+    assert por_vano.loc["VA", "uiti_total"] == 10.0
+    assert por_vano.loc["VA", "n_ventanas"] == 2
+    assert por_vano.loc["VB", "n_ventanas"] == 1
+
+
+def test_perfil_uiti_por_vano_solo_mira_el_circuito_pedido():
+    df = pd.DataFrame({
+        "CIRCUITO": ["C1", "C2"],
+        "FID_VANO": ["VA", "VB"],
+        "UITI_VANO": [1.0, 99.0],
+        "FECHA": pd.to_datetime(["2025-11-05", "2025-11-05"]),
+    })
+    ventanas = construir_ventanas(df["FECHA"])
+    tabla = construir_tabla_vano_ventana(df, ventanas)
+
+    perfil = perfil_uiti_por_vano(tabla, "C1", ventanas=ventanas)
+
+    assert perfil["FID_VANO"].tolist() == ["VA"]
+
+
+def test_perfil_uiti_por_vano_devuelve_vacio_con_columnas_para_un_circuito_sin_celdas():
+    """El panel repinta con lo que reciba: un DataFrame vacio SIN columnas lo
+    haria fallar al leerlas, en vez de dibujar un panel vacio."""
+    df = pd.DataFrame({
+        "CIRCUITO": ["C1"],
+        "FID_VANO": ["VA"],
+        "UITI_VANO": [1.0],
+        "FECHA": pd.to_datetime(["2025-11-05"]),
+    })
+    ventanas = construir_ventanas(df["FECHA"])
+    tabla = construir_tabla_vano_ventana(df, ventanas)
+
+    perfil = perfil_uiti_por_vano(tabla, "NO_EXISTE", ventanas=ventanas)
+
+    assert perfil.empty
+    assert list(perfil.columns) == ["FID_VANO", "uiti_total", "num_eventos",
+                                    "n_ventanas", "participacion"]
+
+
+def test_perfil_uiti_por_vano_devuelve_el_fid_como_texto():
+    """El selector de vanos, el mapa y el hover trabajan con el fid en TEXTO
+    (`_vanos_marcables` devuelve `str`). Un fid entero aqui no cruzaria con
+    ellos y el panel quedaria desconectado del resto del tablero."""
+    df = pd.DataFrame({
+        "CIRCUITO": ["C1"],
+        "FID_VANO": [20130472],
+        "UITI_VANO": [1.0],
+        "FECHA": pd.to_datetime(["2025-11-05"]),
+    })
+    ventanas = construir_ventanas(df["FECHA"])
+    tabla = construir_tabla_vano_ventana(df, ventanas)
+
+    perfil = perfil_uiti_por_vano(tabla, "C1", ventanas=ventanas)
+
+    assert perfil["FID_VANO"].tolist() == ["20130472"]
 
 
 # --- 3.2: mask_cache (LRU 64) ----------------------------------------------

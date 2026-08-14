@@ -161,6 +161,106 @@ def construir_tabla_vano_ventana(
     return tabla.sort_values(["CIRCUITO", "FID_VANO", "ventana_i"]).reset_index(drop=True)
 
 
+_COLUMNAS_PERFIL = ["FID_VANO", "uiti_total", "num_eventos", "n_ventanas",
+                    "participacion"]
+
+
+def ventanas_sin_traslape(
+    ventanas: Iterable[Mapping[str, Any]]
+) -> list[int]:
+    """Los indices de las ventanas que embaldosan el periodo UNA sola vez.
+
+    `construir_ventanas` intercala, por cada mes, su mes completo y el corte
+    del 15 al 15 hacia el mes siguiente. O sea que las ventanas SE TRASLAPAN:
+    un evento del 20 de noviembre esta en la ventana de noviembre y tambien en
+    la del 15-nov al 15-dic, y `construir_tabla_vano_ventana` lo cuenta en las
+    dos -- lo dice su propia docstring: "they cannot simply be summed".
+
+    Cualquier total sobre la serie necesita entonces un subconjunto que cubra
+    el periodo sin huecos ni traslapes, y ese subconjunto son los MESES: por
+    construccion van de primero de mes a primero de mes y se encadenan.
+
+    No se filtran por `desde.day == 1` sino por encadenamiento, que es la
+    propiedad que de verdad hace falta: se recorren las ventanas en orden y se
+    toma la siguiente que empieza donde termino la ultima tomada. Asi el dia
+    del corte puede cambiar en `construir_ventanas` sin que esto empiece a
+    contar de mas en silencio.
+
+    Cuanto cuesta equivocarse, medido sobre las 111.231 celdas reales: sumar
+    las once ventanas infla el total de un vano entre 1,00 y 2,09 veces
+    (mediana 2,0). Como el factor NO es constante, tampoco se cancela al
+    ordenar: 74 de los 208 circuitos cambian su top 15.
+    """
+    ordenadas = sorted(enumerate(ventanas), key=lambda par: (par[1]["desde"],
+                                                             par[1]["hasta_excl"]))
+    elegidas: list[int] = []
+    frontera = None
+    for indice, v in ordenadas:
+        if frontera is None or v["desde"] == frontera:
+            elegidas.append(indice)
+            frontera = v["hasta_excl"]
+    return elegidas
+
+
+def perfil_uiti_por_vano(
+    tabla: pd.DataFrame,
+    circuito: str,
+    *,
+    ventanas: Iterable[Mapping[str, Any]],
+    top: int | None = None,
+) -> pd.DataFrame:
+    """El perfil de un circuito: cuanto UITI acumula CADA vano en toda la serie.
+
+    Contesta la pregunta con la que se aterriza en un circuito -- donde esta
+    concentrado el riesgo -- antes de elegir ventana o marcar un vano. Es
+    deliberadamente independiente de la ventana activa: la serie completa es
+    justo lo que el deslizador no deja ver.
+
+    Un renglon por vano, ordenado de mayor a menor UITI total, con:
+
+    - `uiti_total`: la suma del UITI de todos sus eventos del periodo, contando
+      cada evento UNA vez (ver `ventanas_sin_traslape`),
+    - `num_eventos`: cuantos eventos son,
+    - `n_ventanas`: en cuantas de esas ventanas aparece. Con el mismo
+      `uiti_total`, un vano que fallo una vez y otro que falla mes a mes no son
+      la misma obra, y el total solo no los distingue,
+    - `participacion`: la fraccion del UITI del CIRCUITO ENTERO que se lleva
+      ese vano. Sobre el circuito y no sobre el top, porque la pregunta es
+      cuanto del circuito cabe en unos pocos vanos; sobre el top sumaria 1 por
+      construccion y no diria nada.
+
+    `top` recorta la lista DESPUES de repartir la participacion, por lo mismo.
+
+    Devuelve un DataFrame vacio -- pero CON sus columnas -- si el circuito no
+    tiene ninguna celda: el repintado lee las columnas para dibujar un panel
+    vacio, y sin ellas fallaria en vez de quedarse en blanco.
+    """
+    indices = set(ventanas_sin_traslape(ventanas))
+    del_circuito = tabla[(tabla["CIRCUITO"].astype(str) == str(circuito))
+                         & (tabla["ventana_i"].isin(indices))]
+    if del_circuito.empty:
+        return pd.DataFrame({c: [] for c in _COLUMNAS_PERFIL})
+
+    perfil = (
+        del_circuito.groupby(del_circuito["FID_VANO"].astype(str))
+        .agg(uiti_total=("uiti_acumulado", "sum"),
+             num_eventos=("num_eventos", "sum"),
+             n_ventanas=("ventana_i", "nunique"))
+        .reset_index()
+        .rename(columns={"FID_VANO": "FID_VANO"})
+    )
+    total = float(perfil["uiti_total"].sum())
+    # El total no puede ser cero -- `construir_tabla_vano_ventana` ya descarto
+    # las celdas en cero --, pero dividir por el sin mirar convierte un cambio
+    # futuro de ese filtro en un panel lleno de NaN en vez de en un error.
+    perfil["participacion"] = perfil["uiti_total"] / total if total > 0 else 0.0
+    perfil = (perfil.sort_values(["uiti_total", "FID_VANO"], ascending=[False, True])
+              .reset_index(drop=True))
+    if top is not None:
+        perfil = perfil.head(top).reset_index(drop=True)
+    return perfil[_COLUMNAS_PERFIL]
+
+
 def desajuste_bolsas_vs_tabla(
     bag_index: Any, tabla: pd.DataFrame, *, tolerancia_uiti: float = 0.001
 ) -> str | None:
