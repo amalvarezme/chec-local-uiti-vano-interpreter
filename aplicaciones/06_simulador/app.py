@@ -94,6 +94,16 @@ def main() -> int:
     analizador.add_argument("--reconstruir", action="store_true")
     args = analizador.parse_args()
 
+    # Antes que nada, y antes de construir: si el simulador ya esta abierto en su puerto
+    # se abre ese y se sale bien. Construir primero seria pagar minutos para descubrir
+    # despues que no habia nada que levantar, y caer a otro puerto dejaria dos Voila --
+    # con sus kernels de ~780 MB cada uno -- sirviendo el mismo cuaderno.
+    puerto = args.puerto or PUERTO
+    codigo = servidor.revisar_puerto(AQUI, puerto, abrir=not args.no_abrir,
+                                     titulo="Simulador de riesgo por vano")
+    if codigo is not None:
+        return codigo
+
     motivo = "reconstruccion pedida" if args.reconstruir else _hace_falta_construir()
     if motivo:
         print(f"Construyendo el simulador: {motivo}.\n")
@@ -109,7 +119,8 @@ def main() -> int:
         )
     _asegurar_kernel()
 
-    puerto = args.puerto or servidor.puerto_libre(PUERTO)
+    # El puerto ya se resolvio arriba, y es el FIJO: no hay caida a uno que asigne el
+    # sistema. `revisar_puerto` acaba de confirmar que esta libre.
     # El boton de cerrar del tablero corre DENTRO del kernel, y para detener la
     # aplicacion tiene que senalar al proceso de Voila, no al suyo: matar el kernel
     # dejaria el servidor en pie sirviendo una pagina muerta.
@@ -119,7 +130,10 @@ def main() -> int:
     # mandar SIGTERM a un pid supuesto puede matar un proceso ajeno. Asi que se le
     # pasa por escrito: la RUTA del archivo se conoce antes de lanzar nada y viaja en
     # el entorno; el pid se escribe dentro en cuanto existe.
-    archivo_pid = AQUI / ".servidor.pid"
+    # El mismo nombre que leen CriticidadCHEC y `servidor.pid_de`, tomado de un solo
+    # sitio: si los dos extremos dejaran de coincidir, el menu no tendria por donde
+    # apagar un simulador que no lanzo el, y una segunda apertura no se reconoceria.
+    archivo_pid = AQUI / servidor.ARCHIVO_PID
     ambiente = dict(
         os.environ,
         PAQUETE_06=str(PAQUETE),

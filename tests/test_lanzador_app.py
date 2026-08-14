@@ -223,3 +223,62 @@ def test_el_guion_de_la_ventana_se_para_cuando_la_aplicacion_falla():
     guion = (APPS / "01_clima" / VENTANA).read_text(encoding="utf-8")
     assert "read -r" in guion, "no espera a que lean el error antes de cerrarse"
     assert "-ne 0" in guion, "no distingue el fallo de la salida normal"
+
+
+@pytest.fixture
+def open_que_falla(tmp_path):
+    """Un `open` que rechaza `-a Terminal` y apunta todo lo que le pidan.
+
+    Es el unico modo de fallo que el lanzador puede remontar por su cuenta: Terminal.app
+    renombrada o movida -- una politica de empresa, un macOS recortado -- deja el `-a`
+    sin resolver. Sin respaldo, el doble clic no hace absolutamente nada y no queda
+    donde leer por que: el bundle es `LSUIElement`, no tiene ventana ni terminal.
+    """
+    binarios = tmp_path / "bin"
+    binarios.mkdir()
+    registro = tmp_path / "llamadas.txt"
+    doble = binarios / "open"
+    doble.write_text(
+        "#!/bin/sh\n"
+        '{ echo "=== open"; for a in "$@"; do echo "arg: $a"; done; } >> '
+        f'"{registro}"\n'
+        'case "$1" in -a) exit 1 ;; esac\n'
+        "exit 0\n",
+        encoding="utf-8")
+    doble.chmod(0o755)
+
+    def correr(app: Path):
+        ambiente = dict(os.environ, PATH=f"{binarios}:{os.environ['PATH']}")
+        hecho = subprocess.run([str(app / EJECUTABLE)], env=ambiente,
+                               capture_output=True, text=True, timeout=30)
+        return hecho, (registro.read_text(encoding="utf-8") if registro.exists() else "")
+
+    return correr
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="el bundle es de macOS")
+def test_si_terminal_no_responde_por_nombre_se_pide_por_su_identificador(open_que_falla):
+    """`com.apple.Terminal` es lo que LaunchServices indexa de verdad; el nombre es solo
+    como se llama el archivo en disco."""
+    hecho, llamadas = open_que_falla(APPS / "01_clima")
+
+    assert "arg: -b\narg: com.apple.Terminal\n" in llamadas, (
+        f"no reintento por identificador de bundle: {llamadas}")
+    assert hecho.returncode == 0, "el respaldo funciono y aun asi salio con error"
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="el bundle es de macOS")
+def test_el_lanzador_no_se_da_por_bueno_sin_haber_abierto_nada(tmp_path):
+    """Con los dos intentos agotados hay que salir con error. Darse por bueno seria la
+    peor version del fallo original: nada en pantalla y nadie enterado."""
+    binarios = tmp_path / "bin"
+    binarios.mkdir()
+    doble = binarios / "open"
+    doble.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    doble.chmod(0o755)
+    ambiente = dict(os.environ, PATH=f"{binarios}:{os.environ['PATH']}")
+
+    hecho = subprocess.run([str(APPS / "01_clima" / EJECUTABLE)], env=ambiente,
+                           capture_output=True, text=True, timeout=30)
+
+    assert hecho.returncode != 0

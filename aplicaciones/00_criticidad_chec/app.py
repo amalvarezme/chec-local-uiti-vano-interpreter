@@ -22,8 +22,11 @@ def main() -> int:
     analizador.add_argument("--verboso", action="store_true", help="registra cada peticion")
     args = analizador.parse_args()
 
+    # `app=AQUI` es lo que deja que el menu reconozca una segunda apertura como propia:
+    # deja su pid aqui y, si el 8800 ya lo tiene este mismo menu, abre el que esta
+    # corriendo en vez de morir con un `OSError` en una ventana recien abierta.
     return menu.servir_menu(abrir=not args.no_abrir, puerto=args.puerto,
-                            verboso=args.verboso)
+                            verboso=args.verboso, app=AQUI)
 
 
 if __name__ == "__main__":
