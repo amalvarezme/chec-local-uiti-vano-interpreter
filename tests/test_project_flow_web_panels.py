@@ -712,6 +712,18 @@ def _constant(src: str, name: str) -> str | None:
     return found.group(1).strip() if found else None
 
 
+def _constant_list(src: str, name: str) -> list[float]:
+    """Los numeros de un `name=[...]` que va con sangria dentro de una llamada.
+
+    `_constant` no sirve para estos: no arrancan en columna cero y llevan coma al
+    final. Aqui interesa CUANTOS son -- una fila que sobra o que falta -- mas que
+    sus valores.
+    """
+    found = re.search(rf"{name}=\[([^\]]*)\]", src)
+    assert found, f"no se encontro {name}=[...]"
+    return [float(v) for v in found.group(1).split(",") if v.strip()]
+
+
 @pytest.mark.parametrize("notebook", sorted(MAP_STYLE_NOTEBOOKS))
 @pytest.mark.parametrize("constant", sorted(MAP_STYLE_CONSTANTS))
 def test_every_map_shares_board_01s_style(notebook, constant):
@@ -840,10 +852,86 @@ def test_board_04_draws_its_equipment_on_top_like_boards_01_and_03():
     # La ultima traza de vanos es la del marcado sin celda, que entro despues del
     # resaltado por grupo: comparar contra `mapaResaltado` dejaria de cubrir a esa.
     assert "assert min(IDX['mapaTrafos'], IDX['mapaSwitches']) > IDX['mapaResaltadoSinDato']" in src
-    assert "assert IDX['mapaSwitches'] == len(fig.data) - 1" in src, (
-        "nothing may be added after the equipment")
+    # Lo que la regla persigue son las trazas de MAPA: son las que MapLibre apila
+    # por orden de la figura. El perfil del circuito entro DESPUES de los equipos y
+    # no los tapa -- es una barra sobre un subplot xy --, asi que la asercion del
+    # cuaderno paso de "los equipos son los ultimos" a la que de verdad importa.
+    assert ("assert all(fig.data[i].type != 'scattermap'" in src), (
+        "the notebook must assert that no MAP trace comes after the equipment")
+    assert "for i in range(IDX['mapaSwitches'] + 1, len(fig.data))" in src
     # The loop used to bind `_n` and `_c`, the very names the IDX arithmetic below counts
     # with. It only worked because the loop ran before `_n = MAX_VANOS_RESALTADOS`; once
     # moved down it would have left `_n = 'Switches'`.
     assert "for _n, _c, _t in" not in src, (
         "the equipment loop must not bind the names the IDX arithmetic uses")
+
+
+def test_board_04_draws_the_circuit_profile_like_board_06():
+    """El 04 gana el panel "Perfil del circuito" que el 06 ya tenia.
+
+    Es la pregunta con la que se aterriza en un circuito -- donde esta concentrado
+    el riesgo -- y ningun otro panel de los dos tableros la contesta: la nube, el
+    mapa y la evolucion miran una ventana a la vez, y el deslizador obliga a
+    recorrer once para saber si el riesgo esta repartido o en un puniado de vanos.
+
+    Lo que tiene que compartir con el 06 no es el dibujo sino la ARITMETICA. Las
+    once ventanas se traslapan -- seis son meses y cinco son cortes del 15 al 15 --,
+    asi que sumar `uiti_acumulado` sobre todas cuenta casi todo evento dos veces:
+    infla el total entre 1,00 y 2,09 veces segun el vano y, como el factor no es
+    constante, tampoco se cancela al ordenar. 74 de los 208 circuitos cambian su
+    top 15 segun cual de las dos sumas se use. Un tablero con una suma y el otro con
+    la otra darian dos respuestas distintas a la misma pregunta.
+    """
+    src04 = _notebook_source(BOARDS["04"])
+
+    assert "'perfil'" in src04, "el 04 no tiene traza de perfil en su inventario"
+    # Sobre el subconjunto que embaldosa el periodo UNA vez, que el cuaderno ya
+    # calculaba para la marca automatica. Reusarlo es la garantia de que las barras
+    # y los vanos marcados hablan del mismo ranking.
+    assert "_SIN_TRASLAPE" in src04
+    assert "PERFIL_POR_CIRCUITO" in src04, (
+        "el perfil no viaja al navegador precalculado")
+    # `type='category'`: los fid son cadenas de digitos y sin esto plotly los lee como
+    # numeros y reparte las quince barras por su VALOR sobre un eje continuo -- quince
+    # postes separados por millones de unidades vacias.
+    assert re.search(r"type='category'", src04), (
+        "sin type='category' las barras del perfil se reparten por el valor del fid")
+
+
+def test_board_04_repaints_the_profile_only_when_the_circuit_changes():
+    """El perfil NO depende de la ventana ni de lo que este marcado.
+
+    Es deliberado, y es la misma decision del 06: el panel esta para leerse ANTES de
+    elegir ventana y de marcar vanos. Repintarlo con esas dos decisiones lo
+    convertiria en otro panel de seleccion, que ya hay cuatro. Y ademas lo pondria
+    en el camino del deslizador, que es justo el que se acaba de aligerar.
+    """
+    src04 = _notebook_source(BOARDS["04"])
+    i = src04.index("function pintarPerfil(")
+    # Hasta la siguiente funcion del panel, no una tajada de N caracteres: cortar por
+    # longitud metia el cuerpo de `dibujarReparto` -- que SI mira la ventana, y con
+    # razon -- dentro de lo que esta prueba juzga.
+    cuerpo = src04[i:src04.index("\n  function ", i + 1)]
+    assert "ventanaActual()" not in cuerpo, (
+        "el perfil mira la ventana activa, y no debe: no depende de ella")
+    assert "elegidos()" not in cuerpo, (
+        "el perfil mira los vanos marcados, y no debe: no depende de ellos")
+
+
+def test_board_06_puts_the_profile_and_the_graph_on_the_same_row():
+    """El grafo sube a la fila del perfil y la fila que ocupaba desaparece.
+
+    Ocupaba una fila entera para un disco centrado a media fila, con dos franjas
+    blancas a los lados y otra debajo -- 243 px de vacio en el mejor caso medido.
+    Compartir la fila con el perfil llena las cuatro columnas y ahorra una fila.
+    """
+    src06 = _notebook_source("06_uiti_vano_explicabilidad_simulador")
+
+    assert "rows=6, cols=4" in src06, "la figura del 06 sigue teniendo siete filas"
+    # El perfil a la izquierda y el grafo a la derecha, en la MISMA fila.
+    assert re.search(r"IDX\['perfil_circuito'\] = _agregar\([\s\S]{0,600}?\), 3, 1\)",
+                     src06), "el perfil ya no esta en la fila 3, columna 1"
+    assert "), 3, 3)" in src06, "el grafo no esta en la fila 3, columna 3"
+    assert "), 7, 2)" not in src06, "queda una traza en la fila 7, que ya no existe"
+    assert len(_constant_list(src06, "row_heights")) == 6, (
+        "row_heights sigue declarando siete filas")
