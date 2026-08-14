@@ -152,14 +152,31 @@ def main() -> int:
         # Sin esto, un fallo dentro de una celda deja la pagina en blanco y el motivo
         # solo aparece en la terminal, que el usuario no esta mirando.
         "--VoilaConfiguration.show_tracebacks=True",
-        # Un kernel ya ejecutado esperando ANTES de que llegue la primera peticion.
-        # Medido sobre esta aplicacion: con el, la pagina responde en 4 ms; sin el,
-        # en 6,0 s -- que es lo que cuesta arrancar el kernel, importar PyTorch y
-        # construir el tablero. Ese costo se paga mientras el navegador todavia abre.
-        "--preheat_kernel=True",
-        # Uno, no mas: cada kernel en espera ocupa memoria sin que nadie lo mire, y
-        # esta aplicacion es de un usuario en una portatil, no un servidor compartido.
-        "--pool_size=1",
+        # SIN `--preheat_kernel`, y es una decision medida, no un olvido.
+        #
+        # Precalentar deja un kernel ya ejecutado esperando a la primera peticion. La
+        # medicion A/B sobre esta aplicacion, pidiendo la pagina como la pide el menu --
+        # de inmediato, en cuanto el puerto contesta --:
+        #
+        #                        espera de la 1a pagina   RSS tras servirla
+        #   con precalentado           4,78 s              1.694 MB (3 procesos)
+        #   sin precalentado           4,45 s                931 MB (2 procesos)
+        #
+        # La espera no mejora, y no es raro: el puerto queda atado a los 0,77 s y el
+        # kernel precalentado tarda bastante mas en estar listo, asi que la primera
+        # peticion no lo alcanza y Voila levanta uno nuevo igual. El precalentado solo
+        # habria ganado algo si el usuario esperara unos segundos antes de abrir, y el
+        # menu hace justo lo contrario.
+        #
+        # Lo que si queda es el kernel de reserva que nadie llego a usar: 763 MB
+        # permanentes en la portatil de UNA persona a cambio de nada medible.
+        #
+        # En el despliegue de servidor (`.claude/commands/app-simulador-vano.md`) el
+        # trato es el contrario y por eso alli sigue encendido: un kernel caliente lo
+        # aprovechan muchas visitas, y la memoria es del cluster y no del portatil.
+        #
+        # `--pool_size` se va con el: sin reserva no hay nada que dimensionar.
+        #
         # Recicla el kernel de una pestania CERRADA a los tres minutos. `cull_connected`
         # se deja en False a proposito, al reves que en el despliegue de servidor: alli
         # interesa recuperar memoria de una pestania olvidada, pero aqui mataria la

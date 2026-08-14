@@ -790,3 +790,38 @@ def test_vigilar_el_codigo_no_cuesta_mas_que_servir_el_tablero():
 
     assert promedio < 0.05, f"la huella de src/ tarda {promedio*1000:.0f} ms"
 
+def test_el_simulador_local_no_deja_un_kernel_caliente_en_reposo():
+    """El simulador local NO precalienta kernel, y es una decision medida.
+
+    `--preheat_kernel=True` deja un kernel ya ejecutado esperando a la primera
+    peticion. Medido A/B en esta maquina, pidiendo la pagina como la pide el menu -- de
+    inmediato, en cuanto el puerto contesta --:
+
+        con precalentado : 4,78 s de espera, 1.694 MB tras servir (3 procesos)
+        sin precalentado : 4,45 s de espera,   931 MB tras servir (2 procesos)
+
+    La espera NO mejora. El puerto queda atado a los 0,77 s y el kernel precalentado
+    tarda bastante mas en estar listo, asi que la primera peticion no lo alcanza y Voila
+    levanta uno nuevo igual. Lo unico que quedaba era el kernel de reserva que nadie usa:
+    763 MB permanentes en la portatil de una persona a cambio de nada medible.
+
+    En el despliegue de servidor (`.claude/commands/app-simulador-vano.md`) el trato es
+    el contrario y por eso ahi sigue encendido: alli el kernel caliente lo aprovechan
+    muchas visitas, la memoria es del cluster, y nadie abre la pagina en el mismo
+    segundo en que arranca el servicio.
+
+    `--pool_size` no se queda huerfano: sin precalentado no hay reserva que dimensionar.
+
+    Se mira el ARGUMENTO y no el texto del archivo: el comentario que explica por que
+    ya no se precalienta nombra las dos banderas, y buscarlas a secas se dispara contra
+    la explicacion en vez de contra el fallo.
+    """
+    codigo = (APPS / "06_simulador" / "app.py").read_text(encoding="utf-8")
+    assert '"--preheat_kernel' not in codigo, (
+        "el simulador local volvio a precalentar: son 780 MB en reposo")
+    assert '"--pool_size' not in codigo, (
+        "sin precalentado, `--pool_size` dimensiona una reserva que no existe")
+    # Lo que SI tiene que seguir: reciclar el kernel de una pestania cerrada. Sin esto
+    # cada recarga deja atras otros 780 MB -- se llegaron a ver siete vivos a la vez.
+    assert "--MappingKernelManager.cull_idle_timeout=180" in codigo
+    assert "--MappingKernelManager.cull_connected=False" in codigo

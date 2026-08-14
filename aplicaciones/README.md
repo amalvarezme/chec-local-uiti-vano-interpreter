@@ -134,13 +134,17 @@ interfaz (59 trazas) y una simulación real idéntica hasta el décimo decimal.
 
 ## Los botones de cerrar
 
-Un tablero abierto **por su cuenta** trae arriba un botón *Cerrar tablero* que detiene
-su servidor — no los otros, que corren en su propio proceso y su propio puerto.
+Un tablero abierto **por su cuenta** trae arriba un botón *Cerrar* que detiene su
+servidor — no los otros, que corren en su propio proceso y su propio puerto.
 
-Un tablero abierto **desde CriticidadCHEC** trae en su lugar dos: *Volver al menú*, que
-lo apaga y cierra su pestaña dejando el menú a la vista, y *Cerrar todo*, que apaga las
-cinco aplicaciones y el menú. El botón suelto desaparece cuando hay menú, porque haría
-lo mismo que *Volver* pero dejando la pestaña sobre un tablero muerto.
+Un tablero abierto **desde CriticidadCHEC** trae en su lugar dos, y los dos apagan
+**solo ese tablero**, con su puerto y todo lo que cuelga de él: *Volver al menú*, que lo
+apaga y cierra su pestaña dejando el menú a la vista, y *Cerrar*, que lo apaga y cierra
+la pestaña sin volver al menú. El botón suelto desaparece cuando hay menú, porque haría
+lo mismo que *Cerrar* pero dejando la pestaña sobre un tablero muerto.
+
+**Ningún botón de un tablero apaga a los demás.** El único apagado general es el botón
+*Cerrar todo* de la página del menú, y desde ahí se ve qué se está apagando.
 
 Cerrar son tres cosas, y las tres están medidas contra el servidor real:
 

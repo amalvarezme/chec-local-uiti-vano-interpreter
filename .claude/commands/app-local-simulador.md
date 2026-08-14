@@ -97,9 +97,12 @@ lo construyo una version anterior, que no registraba sus insumos"* and rebuilds 
 
 ## What to tell the user when it opens
 
-- **The first load is instant, the second is not.** Restriction R4: one pre-executed
-  kernel waits, so the first page answers in 4 ms and the next takes ~6 s while a new
-  kernel starts. Expected, not a fault.
+- **The first load takes ~4,5 s; the rest are instant.** The port answers at 0,77 s but
+  the page needs a kernel, and starting it is where PyTorch gets imported. Expected, not
+  a fault — the menu already shows "Cargando..." meanwhile. The local app does **not**
+  pre-heat a kernel: measured A/B requesting the page the way the menu does, pre-heating
+  did not shorten the wait (4,78 s vs 4,45 s — the spare kernel is not ready yet at
+  0,77 s, so Voila starts a fresh one anyway) and left 1.694 MB resident instead of 931.
 - **Each open tab holds its own kernel**, around 700 MB. A closed tab is reclaimed after
   10 minutes. An **open** one is not — deliberately, so nobody reading the dashboard
   loses their session mid-way.
