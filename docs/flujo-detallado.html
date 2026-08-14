@@ -306,9 +306,10 @@
 
   <section>
     <h2><span class="num">§7</span> Los cuadernos</h2>
-    <p>En <code>notebooks/</code> quedan <strong>dos</strong>: <code>05_mil_vano_ventana</code> (el modelo) y <code>07_relevancia_lote_por_vano</code>. En <code>notebooks/old_version/</code> hay 13: los cinco tableros <code>uiti_vano</code> (<code>01</code>-<code>04</code> y <code>06</code>) que son la fuente de las aplicaciones, y los ocho del pipeline MGCECDL original.</p>
+    <p>En <code>notebooks/</code> queda <strong>uno</strong>: <code>05_mil_vano_ventana</code> (el modelo). En <code>notebooks/old_version/</code> quedan <strong>cinco</strong>: los tableros <code>uiti_vano</code> (<code>01</code>-<code>04</code> y <code>06</code>) que son la fuente de las aplicaciones.</p>
+    <p>Eran quince hasta el 2026-08-14. Se borraron nueve: <code>07_relevancia_lote_por_vano</code> y los ocho del pipeline MGCECDL original. Ninguno se ejecutaba ni se importaba desde ningún sitio — solo los nombraba prosa. Están en el historial de git, y los artefactos que produjeron (el clasificador congelado de <code>data/models/</code>, el grafo experto de <code>data/graphs/</code>) siguen en su sitio y siguen usándose; lo que ya no está en el árbol es el código que los generó.</p>
     <div class="callout">
-      Estar en <code>old_version/</code> <strong>no</strong> significa estar muerto: los cinco <code>uiti_vano</code> están vivos y son lo que las seis aplicaciones construyen. Los MGCECDL sí son historia — entrenaron el clasificador congelado que sigue en <code>data/models/</code>.
+      El nombre de la carpeta engaña, y por eso conviene decirlo: <strong>estar en <code>old_version/</code> no significa estar muerto.</strong> Los cinco que quedan son justo lo que construyen las cinco aplicaciones de escritorio, vía <code>CUADERNOS_APPS</code> en <code>aplicaciones/_comun/raiz.py</code>. El <code>04</code> además es el dueño de la geometría KMeans que <code>scripts/extract_geometrias_014.py</code> extrae de su salida guardada.
     </div>
     <div class="pipeline">01_uiti_vano_clima                     panel climático (violines + nube de rezagos)
 02_uiti_vano_kmeans                    agrupamiento de circuitos y de vanos

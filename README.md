@@ -76,7 +76,7 @@ ni los roles LLM. Solo viajan los datos que consumen los cuadernos `01`-`06` y e
 | `.claude/commands/` | Comandos de mantenimiento y despliegue a Databricks (fuera de la familia de skills de reporte) |
 | `reports/` | Artefactos locales de ejecución, reportes generados, insumos PDF, notas de `reports/vault/` |
 | `tests/` | Tests automatizados de contratos, pipelines y render |
-| `notebooks/` | `05` y `07`, más `old_version/` con los tableros `01`-`04`, `06` y el pipeline MGCECDL original |
+| `notebooks/` | `05`, más `old_version/` con los cinco tableros `01`-`04` y `06` que alimentan las aplicaciones |
 | `aplicaciones/` | Las cinco aplicaciones locales de escritorio (macOS/Windows) construidas desde los cuadernos `01`, `02`, `03`, `04` y `06`, más `CriticidadCHEC`, el menú que las gobierna |
 
 ## Instalación
@@ -294,16 +294,16 @@ flowchart TD
         CSV --> P1
     end
 
-    subgraph LANE2[Modelado ML, M-GCECDL]
-        P1 --> P2[Búsqueda de hiperparámetros con Optuna<br/>old_version/02_mgcecdl_optuna_classification_search.ipynb]
-        VARS[(variables.json /<br/>Variables_seleccion.xlsx)] --> P7[Construcción de grafo experto<br/>old_version/07_graph_preserved_connections_uiti_vano.ipynb]
+    subgraph LANE2["Modelado ML, M-GCECDL (histórico: cuadernos borrados el 2026-08-14, en el historial de git)"]
+        P1 --> P2[Búsqueda de hiperparámetros con Optuna]
+        VARS[(variables.json /<br/>Variables_seleccion.xlsx)] --> P7[Construcción de grafo experto]
         P7 --> ADJ[(matriz de adyacencia + edges)]
-        P2 --> P3[Entrenamiento en Colab GPU<br/>old_version/03_mgcecdl_training.ipynb]
+        P2 --> P3[Entrenamiento en Colab GPU]
         ADJ --> P3
         P3 --> MODEL[(mgcecdl_classifier_best.zip)]
-        MODEL --> P4[Evaluación de desempeño<br/>old_version/04_mgcecdl_performance.ipynb]
-        MODEL --> P5[Análisis SHAP por circuito<br/>old_version/05_mgcecdl_circuit_analysis.ipynb]
-        MODEL --> P6[Replicación documental<br/>old_version/06_mgcecdl_document_replication.ipynb]
+        MODEL --> P4[Evaluación de desempeño]
+        MODEL --> P5[Análisis SHAP por circuito]
+        MODEL --> P6[Replicación documental]
     end
 
     subgraph LANE3[Interpretación local, agentes]
@@ -530,11 +530,10 @@ La carpeta se reorganizó el 2026-08-13: `project_flow/` desapareció y su conte
 | Cuaderno | Qué hace |
 |---|---|
 | `05_mil_vano_ventana.ipynb` | Aprendizaje de instancias múltiples sobre bolsas vano × ventana |
-| `07_relevancia_lote_por_vano.ipynb` | Barrido de relevancia por vano sobre un lote de circuitos |
 
-**Archivados en `notebooks/old_version/`.** Dos generaciones conviven ahí, y la primera
-**sigue siendo la fuente de las cinco aplicaciones de escritorio** — archivar no es dejar de
-construir desde ellos. `aplicaciones/_comun/raiz.py` los apunta con `CUADERNOS_APPS`:
+**Archivados en `notebooks/old_version/`.** Los cinco que quedan ahí **son la fuente de las
+cinco aplicaciones de escritorio** — archivar no es dejar de construir desde ellos.
+`aplicaciones/_comun/raiz.py` los apunta con `CUADERNOS_APPS`:
 
 | Cuaderno | Qué hace | Lo consume |
 |---|---|---|
@@ -548,21 +547,19 @@ La única dependencia dura es la geometría de `04`: `05` y `06` la reutilizan v
 `chec_local_interpreter.ventanas_015`, que la extrae del archivo de `04` y verifica su sha1, de
 modo que un cambio de centroides falla ruidosamente en vez de derivar en silencio.
 
-Y el pipeline MGCECDL original, que entrenó el modelo que `06` y el agente `inference` siguen
-cargando desde `data/models/`:
+**El pipeline MGCECDL original se borró del árbol el 2026-08-14** (`07_relevancia_lote_por_vano`
+y los ocho `old_version/0{2,3,4,5,6,7,8,9}_*`). Ninguno se ejecutaba ni se importaba: solo los
+nombraban este README, `docs/`, `site/` y algunos comandos. Su rastro vivo son los artefactos que
+dejaron, no su código: el modelo que `06` y el agente `inference` siguen cargando desde
+`data/models/` y el grafo experto bajo `data/graphs/`.
 
-- `old_version/02_mgcecdl_optuna_classification_search.ipynb`
-- `old_version/03_mgcecdl_training.ipynb`
-- `old_version/04_mgcecdl_performance.ipynb`
-- `old_version/05_mgcecdl_circuit_analysis.ipynb`
-- `old_version/06_mgcecdl_document_replication.ipynb`
-- `old_version/07_graph_preserved_connections_uiti_vano.ipynb`
-- `old_version/08_geo_network_exploration.ipynb`
-- `old_version/09_simulador.ipynb`
+Eso tiene un precio que conviene decir: **esos artefactos ya no se pueden regenerar desde el
+árbol de trabajo.** El código que los produjo sigue en el historial de git — `git log --diff-filter=D
+--follow -- 'notebooks/old_version/*mgcecdl*'` lo encuentra — así que recuperarlo es un `git
+checkout` de ese commit, no un trabajo de arqueología.
 
-Cuidado con la colisión: `02`-`06` significan cosas distintas en cada generación, y ahora comparten
-carpeta. Un número suelto en este README se refiere siempre al grupo `uiti_vano`; los MGCECDL se
-nombran con su archivo completo.
+Con ellos desapareció también la colisión de numeración: `02`-`06` ya significan una sola cosa,
+el grupo `uiti_vano`.
 
 El enriquecimiento climático que hacía el viejo `01_climate.ipynb` ya no vive en un cuaderno: lo hace
 el comando `/clima`, y `01_uiti_vano_clima.ipynb` solo lo visualiza.
