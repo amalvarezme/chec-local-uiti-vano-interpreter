@@ -94,3 +94,50 @@ def test_an_empty_window_says_so_in_the_panel(fuente):
     activa no tiene un solo evento en el circuito."""
     assert "mensaje_vacio=" in fuente
     assert "Ventana sin eventos" in fuente
+
+
+# ------------------------------------------------ el encuadre sigue a la ventana
+
+
+def test_moving_the_window_reframes_the_base_map(fuente):
+    """Mover el deslizador tiene que MOVER el mapa, no solo repintarlo.
+
+    Medido en el navegador antes de este cambio: pasar de V11 a V1 en AGU23L12
+    redistribuia las capas de clase (`0,51,30,0,828` -> `42,213,0,0,654`) y
+    cambiaba la leyenda, pero dejaba `center` y `zoom` identicos. Como el 86% del
+    dibujo es la linea negra de "sin evento", lo unico que se movia era el color
+    de unos pocos tramos cortos, y el tablero se leia como que no habia pasado
+    nada.
+    """
+    assert "def _encuadrar_ventana(" in fuente
+    cuerpo = fuente[fuente.index("def _on_ventana_change("):]
+    cuerpo = cuerpo[: cuerpo.index("def _on_circuito_change(")]
+    assert "_encuadrar_ventana(" in cuerpo, (
+        "el deslizador repuebla y repinta pero no reencuadra")
+
+
+def test_the_window_frame_covers_the_vanos_with_events(fuente):
+    """El encuadre sale de los vanos CON eventos en esa ventana -- los mismos que
+    la lista ofrece --, no de la geometria entera del circuito: encuadrar sobre
+    todo el circuito es exactamente la vista que ya habia y que no se movia."""
+    cuerpo = fuente[fuente.index("def _encuadrar_ventana("):]
+    cuerpo = cuerpo[: cuerpo.index("def _al_hacer_clic(")]
+    assert "clases_para(circuito, ventana_i)" in cuerpo
+    assert "bounds_de_fids(" in cuerpo
+    # Y una ventana sin un solo evento no puede dejar el mapa sobre un punto
+    # inventado: se cae a la vista del circuito, que es la que ya existia.
+    assert "_vista_del_circuito(circuito)" in cuerpo
+
+
+def test_only_the_window_reframes_the_base_map(fuente):
+    """Marcar un vano NO puede mover el mapa.
+
+    `_redibujar_mapa_historico` corre en cada clic sobre el mapa y en cada
+    casilla. Reencuadrar ahi movería el dibujo bajo la mano del usuario justo
+    mientras esta marcando, que es peor que no moverse. El reencuadre pertenece
+    al deslizador y a nadie mas; para lo demas esta el boton "Centrar mapa base".
+    """
+    cuerpo = fuente[fuente.index("def _redibujar_mapa_historico("):]
+    cuerpo = cuerpo[: cuerpo.index("def _alto_del_mapa_px(")]
+    assert "_encuadrar_ventana(" not in cuerpo
+    assert "_aplicar_vista(" not in cuerpo
