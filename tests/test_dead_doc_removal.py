@@ -17,18 +17,11 @@ here. (`docs/arquitecturayflujo.md` itself was later removed as an orphaned,
 pre-pivot architecture draft, unrelated to this guard's own scope — see the
 docs cleanup that removed it alongside `docs/reference/architecture/`.)
 
-`docs/project-workflow-analysis.md` is a pre-existing, tracked scratch
-analysis document explicitly out of scope for this change (it predates and
-is unrelated to `sdd/retire-llm-directory`); it still contains one literal
-mention of the old `llm/prompts/arquitecturayflujo.md` path as a historical
-note about doc triplication. It is intentionally excluded from this guard's
-scan rather than edited.
-
-`docs/project-workflow-diagram.svg` is the pre-rendered companion image to
-the analysis doc above (same historical, out-of-scope commit); it contains
-baked-in `llm/skills*` label text from its Mermaid source but does not
-contain either of this guard's `OLD_PATHS` strings. It is excluded here
-defensively, for the same reason as its companion `.md` file.
+The two files this guard used to exclude -- `docs/project-workflow-analysis.md`
+and its pre-rendered companion `docs/project-workflow-diagram.svg` -- were the
+last carriers of a literal old-path mention. Both were deleted in the docs
+cleanup, so the exclusion list is down to this test file itself, which cites
+the old paths literally in `OLD_PATHS` and would otherwise flag itself.
 """
 
 from __future__ import annotations
@@ -43,13 +36,9 @@ OLD_PATHS = (
     "llm/prompts/arquitecturayflujo.md",
 )
 
-# Pre-existing, tracked, out-of-scope scratch doc and its pre-rendered
-# companion SVG (see module docstring), plus this test file itself, which
-# necessarily cites the old paths literally in OLD_PATHS/the docstring above
-# and would otherwise flag itself as an offender.
+# Solo este archivo: cita las rutas viejas literalmente en `OLD_PATHS` y sin la
+# exclusion se denunciaria a si mismo.
 EXCLUDED_FILES = {
-    "docs/project-workflow-analysis.md",
-    "docs/project-workflow-diagram.svg",
     "tests/test_dead_doc_removal.py",
 }
 

@@ -345,22 +345,9 @@ flowchart TD
     HTML1 -.-> PAGESRC
 ```
 
-Artefactos de referencia:
-
-- fuente Mermaid: `docs/project-workflow.mmd`
-- SVG renderizado: `docs/project-workflow.svg`
-- SVG alternativo: `docs/project-workflow-diagram.svg`
-
-### Diagrama tipo BPMN
-
-Vista de proceso de negocio del mismo flujo:
-
-![Workflow BPMN del proyecto](docs/project-workflow-bpmn.svg)
-
-Fuentes BPMN:
-
-- `docs/project-workflow.bpmn`
-- `docs/project-workflow-bpmn.svg`
+El diagrama vive acá, en el README, y no en un `.mmd` y un `.svg` aparte: las copias
+sueltas de `docs/` se quedaban atrás del flujo cada vez que este cambiaba, y un diagrama
+desactualizado engaña más que la ausencia de diagrama.
 
 ### Diagrama de la familia de comandos de reporte
 
@@ -457,11 +444,6 @@ flowchart TB
     LIMPIAR_DELETE -.limpia.-> LOTE_MANIFEST
     LIMPIAR_DELETE -.limpia.-> GER_SYNTH
 ```
-
-Artefactos de referencia:
-
-- fuente Mermaid: `docs/report-family-workflow.mmd`
-- SVG renderizado: `docs/report-family-workflow.svg`
 
 ## GitHub y modelo de publicación
 
@@ -585,8 +567,9 @@ nombran con su archivo completo.
 El enriquecimiento climático que hacía el viejo `01_climate.ipynb` ya no vive en un cuaderno: lo hace
 el comando `/clima`, y `01_uiti_vano_clima.ipynb` solo lo visualiza.
 
-Resumen detallado de propósito, entradas/salidas y orden real de dependencias de los archivados:
-**[`docs/notebooks-project-flow.md`](docs/notebooks-project-flow.md)**.
+El detalle celda por celda de los archivados ya no se documenta: cada cuaderno MGCECDL lleva
+sus propios comentarios y sus salidas guardadas, que es la única descripción que no se
+desactualiza sola.
 
 Sobre `02_uiti_vano_kmeans.ipynb`, que tampoco alimenta `/report`: agrupa vanos por UITI
 acumulado y número de eventos con KMeans en espacio log (4 grupos, preprocesamiento MinMax), con KDE

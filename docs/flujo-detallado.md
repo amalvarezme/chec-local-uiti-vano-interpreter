@@ -46,9 +46,9 @@ contenido subió a `notebooks/`. Hoy quedan **`05` y `07`** sueltos y una subcar
 **13**: los cinco tableros `uiti_vano` (`01`-`04` y `06`, que siguen siendo la fuente de las tres
 aplicaciones de `aplicaciones/`) y los 8 del pipeline MGCECDL original.
 
-Ninguno de los dos grupos es el punto de entrada del proyecto — ese es `/report`. Ver
-[`notebooks-project-flow.md`](./notebooks-project-flow.md) para el detalle celda por celda de los
-archivados (dependencias reales, gotchas, dónde caen los artefactos).
+Ninguno de los dos grupos es el punto de entrada del proyecto — ese es `/report`. El detalle celda
+por celda de los archivados vive en los cuadernos mismos: cada uno conserva sus comentarios y sus
+salidas guardadas.
 
 **Activos** (`notebooks/`):
 
@@ -158,8 +158,9 @@ que media familia reutilizaba: viven en las secciones **E1** y **E2** de
 
 ## 5. Más detalle
 
-- [`notebooks-project-flow.md`](./notebooks-project-flow.md) — detalle celda por celda de los 8 cuadernos archivados en `old_version/`.
 - [`agents-guide.md`](./agents-guide.md) — arquitectura de 4 capas del framework de agentes (Skills vs. roles vs. playbooks de prompt).
 - [`report-runtime-contract.md`](./report-runtime-contract.md) — contrato de invocación de `/report` entre runtimes.
 - [`flujo-detallado.html`](./flujo-detallado.html) — este mismo documento en HTML.
-- [`project-workflow.mmd`](./project-workflow.mmd) / [`report-family-workflow.mmd`](./report-family-workflow.mmd) — diagramas fuente de detalle (ingestión de datos → modelado ML → interpretación local → publicación; familia de comandos `/report`, respectivamente).
+- Los diagramas del flujo end-to-end y de la familia `/report` viven en el `README.md`, en Mermaid
+  y en línea. Los `.mmd`/`.svg` sueltos de esta carpeta se retiraron: se quedaban atrás del flujo
+  cada vez que este cambiaba.
