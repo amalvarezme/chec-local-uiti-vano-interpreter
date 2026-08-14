@@ -27,18 +27,39 @@ El simulador es la excepcion: no lo sirve `servidor.py` sino Voila, que no tiene
 de apagado. A ese se le manda `SIGTERM` al pid que dejo escrito en `.servidor.pid`, que
 es exactamente lo que hace su propio boton de cerrar.
 
+## Cada aplicacion abre su PROPIA ventana de terminal
+
+"Abrir" no lanza un proceso mudo: abre una ventana de Terminal nueva, con la salida de
+esa aplicacion a la vista, y esa ventana se cierra sola cuando el tablero se cierra. La
+ventana la abre `_comun/terminal.py`, que es el unico sitio del proyecto que sabe hacerlo
+sin que Ghostty se la quede -- ver ahi el detalle medido, que es el mismo motivo por el
+que el doble clic va por `Iniciar.app` y no por un `.command`.
+
+Consecuencia que hay que tener presente al tocar el apagado: **cuando una aplicacion vive
+en su ventana, el menu NO tiene su proceso en la mano.** Lo lanzo Terminal.app, que ya
+estaba corriendo. Lo que el menu ejecuto fue `open`, que vuelve en cuanto entrega el
+perfil. Por eso `Aplicacion.en_ventana` existe, por eso `_esperar` no recibe ese proceso
+-- verlo muerto le haria rendirse en el acto -- y por eso el respaldo del apagado va al
+pid que la aplicacion deja escrito en `.servidor.pid`.
+
+Se cae al arranque en segundo plano -- lo que habia antes -- si el sistema no sabe abrir
+ventanas (Linux) o si el lanzador falla. Nunca se deja de abrir el tablero por no haber
+podido abrir su ventana.
+
 ## Y por que la senal va al GRUPO, no al proceso
 
 Lo que el menu tiene en la mano no es la aplicacion: es el gestor. La cadena real son
 tres o cuatro procesos.
 
+    menu.py  --open-->  Terminal.app  -->  gestor.py  -->  app.py  --Popen-->  voila
     menu.py  --Popen-->  gestor.py  --subprocess.run-->  app.py  --Popen-->  voila
 
 `subprocess.run` no reenvia senales. Un `SIGTERM` al gestor lo mata a el y deja al de
 abajo -- el que tiene el puerto -- vivo y sin padre, con el menu informando de que lo
 cerro. Por eso cada hijo se lanza en su propia sesion (`start_new_session`) o grupo de
 procesos en Windows: eso convierte "alcanzar a los nietos" en una sola llamada, sin
-recorrer la tabla de procesos ni depender de `ps`.
+recorrer la tabla de procesos ni depender de `ps`. En la primera cadena el grupo es el
+trabajo en primer plano de la ventana, y se alcanza igual desde el pid escrito.
 
 Efecto lateral buscado: `Ctrl+C` en la ventana del menu ya no llega a los hijos por la
 terminal, sino que lo reparte `apagar_todo`. Es lo mismo que pasaba antes por accidente
@@ -80,6 +101,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import entorno  # noqa: E402
 import servidor as _servidor  # noqa: E402
+import terminal as _terminal  # noqa: E402
 from menu_pagina import pagina  # noqa: E402
 
 RAIZ_APPS = Path(__file__).resolve().parents[1]
@@ -118,7 +140,7 @@ class Aplicacion:
     """Una de las cinco aplicaciones gobernadas, y el proceso que la sirve."""
 
     __slots__ = ("clave", "carpeta", "titulo", "descripcion", "puerto", "voila",
-                 "proceso", "fase", "detalle")
+                 "proceso", "en_ventana", "fase", "detalle")
 
     def __init__(self, clave, carpeta, titulo, descripcion, puerto, *, voila=False):
         self.clave = clave
@@ -128,6 +150,11 @@ class Aplicacion:
         self.puerto = puerto
         self.voila = voila
         self.proceso: subprocess.Popen | None = None
+        # Si esta aplicacion vive en una ventana de terminal propia. Cuando es asi el
+        # menu NO tiene su proceso en la mano -- lo lanzo Terminal.app, que ya estaba
+        # corriendo --, y el apagado tiene que ir por el pid que la aplicacion deja
+        # escrito. Ver `_apagar_aplicacion`.
+        self.en_ventana = False
         # `fase` es lo unico que la pagina necesita saber para decidir que dibujar.
         self.fase = "detenida"      # detenida | preparando | corriendo | fallo
         self.detalle = ""
@@ -226,14 +253,17 @@ class Control:
                        "--no-abrir"]
             if not app.voila:
                 comando += ["--menu", f"http://127.0.0.1:{PUERTO_MENU}/"]
-            ambiente = dict(os.environ, PYTHONUNBUFFERED="1",
-                            MENU_CRITICIDAD=f"http://127.0.0.1:{PUERTO_MENU}/")
-            app.proceso = subprocess.Popen(comando, env=ambiente,
-                                           stdout=subprocess.DEVNULL,
-                                           stderr=subprocess.DEVNULL,
-                                           **_AISLAR_GRUPO)
+            propias = {"PYTHONUNBUFFERED": "1",
+                       "MENU_CRITICIDAD": f"http://127.0.0.1:{PUERTO_MENU}/"}
+            _lanzar(app, comando, propias)
             # Construir corre DENTRO de ese proceso, asi que el plazo tiene que cubrir
             # el peor caso medido -- 71 s de cuaderno mas el arranque -- con holgura.
+            #
+            # El proceso solo se pasa cuando el menu lo tiene en la mano. Con la
+            # aplicacion en su propia ventana, lo que el menu lanzo fue `open`, que
+            # vuelve en cuanto Terminal recibe el perfil: pasarlo haria que `_esperar`
+            # se rindiera en el acto -- ve un proceso muerto -- y toda apertura saldria
+            # como "el servidor no respondio" con el tablero levantandose detras.
             if _esperar(app.puerto, limite=600.0, proceso=app.proceso):
                 app.fase, app.detalle = "corriendo", ""
             else:
@@ -314,6 +344,33 @@ class Control:
 _ocupado = _servidor.puerto_tomado
 
 
+def _lanzar(app: Aplicacion, comando: list[str], propias: dict[str, str]) -> None:
+    """Levanta la aplicacion en su PROPIA ventana de terminal, o en segundo plano.
+
+    La ventana no es cosmetica y es lo que el usuario pidio: cada tablero tiene la suya,
+    con su salida a la vista, y se cierra sola cuando el tablero se cierra -- eso lo hace
+    el `shellExitAction` del perfil, no el menu. Antes las cinco aplicaciones corrian con
+    `stdout=DEVNULL` colgando del menu: no habia ninguna ventana que cerrar, y lo que
+    fuera mal solo dejaba rastro en el detalle de la tarjeta.
+
+    Se cae al arranque en segundo plano -- que es exactamente lo que habia -- cuando el
+    sistema no sabe abrir ventanas (Linux) o cuando el lanzador falla. Caerse es
+    deliberado: quedarse sin abrir el tablero porque no hubo ventana seria cambiar un
+    inconveniente por una aplicacion que no arranca.
+    """
+    if _terminal.abrir_ventana(comando, etiqueta=app.clave, entorno=propias,
+                               directorio=app.carpeta):
+        # La ventana es de Terminal.app, que ya estaba corriendo: el menu no tiene ningun
+        # proceso que vigilar ni al que senalar. El apagado va por el pid escrito.
+        app.proceso, app.en_ventana = None, True
+        return
+    app.en_ventana = False
+    app.proceso = subprocess.Popen(comando, env=dict(os.environ, **propias),
+                                   stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL,
+                                   **_AISLAR_GRUPO)
+
+
 def _esperar(puerto: int, *, limite: float, proceso: subprocess.Popen | None = None) -> bool:
     """Espera a que alguien tome el puerto. Se rinde antes si el proceso muere."""
     t0 = time.perf_counter()
@@ -341,20 +398,57 @@ def _apagar_aplicacion(app: Aplicacion) -> bool:
     Lo que NUNCA hace es matar por puerto. Un proceso ajeno que este en 8801 no es
     asunto del menu -- ese es el mismo criterio del contrato de `/app-local-*` --, asi
     que se informa de que sigue ahi en vez de dispararle.
+
+    Y la ventana de terminal no se cierra desde aqui, a proposito: se cierra sola en
+    cuanto su comando termina, que es lo que pide el `shellExitAction` del perfil. Es la
+    misma cadena de siempre -- el paso 1 hace salir a la aplicacion, con ella salen el
+    gestor y el trampolin, y Terminal cierra la ventana --, asi que cerrar puertos y
+    cerrar ventanas son el mismo acto y no dos. Ir a por la ventana aparte exigiria
+    AppleScript, que es justo lo que no se puede usar aqui: sin el permiso de
+    Automatizacion la llamada no falla, se queda colgada.
     """
-    if app.proceso is None and not _ocupado(app.puerto):
+    if app.proceso is None and not app.en_ventana and not _ocupado(app.puerto):
         return True
 
     _pedir_por_su_puerta(app)
     if _esperar_a_que_suelte(app):
         return True
 
-    if app.proceso is not None:
-        for senal, plazo in _ESCALADA:
+    # El respaldo, por el camino que haya. Con la aplicacion en su propia ventana el
+    # menu no tiene proceso que senalar -- lo lanzo Terminal.app --, asi que se va al pid
+    # que la aplicacion misma dejo escrito y se senala a SU grupo, que es el trabajo en
+    # primer plano de esa ventana: el gestor, la aplicacion, Voila y sus kernels. Nunca
+    # alcanza a Terminal.app, que vive en otro grupo.
+    for senal, plazo in _ESCALADA:
+        if app.proceso is not None:
             _senalar_al_grupo(app.proceso, senal)
-            if _esperar_a_que_suelte(app, plazo):
-                return True
+        elif not _senalar_al_pid_escrito(app, senal):
+            break
+        if _esperar_a_que_suelte(app, plazo):
+            return True
     return not _ocupado(app.puerto)
+
+
+def _senalar_al_pid_escrito(app: Aplicacion, senal) -> bool:
+    """Senala al grupo del pid que la aplicacion dejo en `.servidor.pid`.
+
+    Devuelve si habia a quien senalar. `pid_de` ya comprueba el archivo contra la tabla
+    de procesos, asi que un pid olvidado por un `SIGKILL` -- que el sistema acaba
+    reasignando a otro proceso -- no llega hasta aqui. Sin esa comprobacion esto seria
+    mandarle una senal a algo que no es la aplicacion por fiarse de un archivo.
+    """
+    pid = _servidor.pid_de(app.carpeta)
+    if pid is None:
+        return False
+    try:
+        if ES_WINDOWS:
+            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                           capture_output=True, timeout=10)
+        else:
+            os.killpg(os.getpgid(pid), senal)
+        return True
+    except (ProcessLookupError, PermissionError, OSError, subprocess.SubprocessError):
+        return False
 
 
 def _pedir_por_su_puerta(app: Aplicacion) -> None:
@@ -379,8 +473,22 @@ def _pedir_por_su_puerta(app: Aplicacion) -> None:
     if pid is None:
         return
     try:
-        os.kill(pid, signal.SIGTERM)
-    except (ProcessLookupError, PermissionError, OSError):
+        if ES_WINDOWS:
+            # `os.kill(pid, SIGTERM)` NO es aqui lo que parece: CPython lo implementa
+            # como `TerminateProcess`, que mata a Voila en seco, sin darle ocasion de
+            # cerrar sus kernels. Cada uno es un `python.exe` de ~780 MB que queda
+            # huerfano, y el puerto SI queda libre -- asi que el menu informaba de un
+            # apagado limpio con hasta siete procesos vivos detras, que es justo lo que
+            # `PROBAR-EN-WINDOWS.md` comprueba en su paso 9.
+            #
+            # `taskkill /T` recorre el arbol, que es donde viven esos kernels. Es
+            # forzoso igual -- en Windows no hay un apagado suave que Voila atienda --,
+            # pero al menos no deja nada detras.
+            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                           capture_output=True, timeout=10)
+        else:
+            os.kill(pid, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError, OSError, subprocess.SubprocessError):
         pass
 
 
@@ -452,6 +560,10 @@ def _anotar_apagado(app: Aplicacion, libre: bool) -> None:
     """Deja en la tarjeta lo que de verdad paso."""
     if libre:
         app.fase, app.detalle = "detenida", ""
+        # Con el puerto libre su ventana ya se cerro sola: el comando termino, y eso es
+        # lo que la cierra. Dejar la marca puesta haria que el siguiente apagado buscara
+        # un pid de una ventana que ya no existe.
+        app.en_ventana = False
         return
     app.fase = "fallo"
     app.detalle = (
@@ -533,7 +645,15 @@ class _Manejador(http.server.BaseHTTPRequestHandler):
 
 
 class _Servidor(socketserver.ThreadingTCPServer):
-    allow_reuse_address = True
+    # La MISMA regla que `servidor.py`, y por el mismo motivo. En Windows
+    # `SO_REUSEADDR` no significa lo que en POSIX: permite atarse a un puerto que otro
+    # proceso ESTA escuchando ahora mismo, sin error, y el sistema reparte las
+    # conexiones entre los dos. Aqui eso seria un segundo menu robandole peticiones al
+    # primero -- y encima con el guardian de `revisar_puerto` apoyado en `pid_de`, que
+    # alli es el que menos garantias da.
+    #
+    # Estaba en `True` fijo, y el test que vigila esta regla solo miraba `servidor.py`.
+    allow_reuse_address = not ES_WINDOWS
     daemon_threads = True
 
 

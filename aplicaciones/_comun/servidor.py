@@ -364,10 +364,31 @@ def pid_de(app: Path) -> int | None:
     if pid <= 0:
         return None
     if os.name == "nt":
-        # Sin `ps`, y `tasklist` no da la linea de ordenes completa sin privilegios. Se
-        # confia en el archivo, que alli el unico camino que lo escribe es el mismo que
-        # lo borra.
-        return pid
+        # `tasklist` no da la linea de ordenes, asi que alli no se puede comparar contra
+        # la RUTA de la aplicacion como abajo. Pero si da el NOMBRE DE IMAGEN, y eso ya
+        # descarta lo que de verdad pasa: que el archivo se quede rancio -- un `taskkill
+        # /F` no deja correr el `borrar_pid` del `finally` -- y que Windows, que recicla
+        # los pid en un espacio pequenio, se lo haya dado a otra cosa.
+        #
+        # Confiar en el archivo a secas era lo que dejaba dos agujeros: `menu.py` manda
+        # `taskkill /PID <pid> /T /F` sobre lo que esto devuelva, o sea que un pid
+        # reciclado se llevaba por delante a un proceso ajeno y a todo su arbol; y
+        # `revisar_puerto` concluia "ya se esta sirviendo" y abria el navegador sobre un
+        # servidor de otro. Ninguno de los dos avisaba.
+        #
+        # No es tan estricto como el `ps` de abajo -- otro Python cualquiera pasaria --,
+        # y aun asi es la diferencia entre matar un proceso al azar y matar como mucho
+        # otro interprete. La comprobacion fuerte necesitaria `wmic`, que Windows esta
+        # retirando, o PowerShell, que cuesta medio segundo por llamada.
+        try:
+            salida = subprocess.run(
+                ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+                capture_output=True, text=True, timeout=5)
+        except (OSError, subprocess.SubprocessError):
+            # Sin poder preguntar, se conserva lo que habia: negarlo aqui dejaria al
+            # simulador sin ninguna via de apagado.
+            return pid
+        return pid if "python" in salida.stdout.lower() else None
     try:
         salida = subprocess.run(["/bin/ps", "-p", str(pid), "-o", "command="],
                                 capture_output=True, text=True, timeout=3)

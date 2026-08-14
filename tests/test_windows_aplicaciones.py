@@ -90,10 +90,18 @@ def test_el_reuso_de_direccion_no_se_activa_en_windows():
     Ahi tambien esta el sondeo: con la opcion puesta, `puerto_libre` daria por libre en
     Windows un puerto que otra aplicacion esta sirviendo.
     """
+    # Los DOS modulos que atan un puerto, no solo `servidor.py`. `menu.py` tenia
+    # `allow_reuse_address = True` fijo y este test daba verde: solo leia el otro
+    # archivo. Un test que vigila una regla en un sitio y no en el de al lado no vigila
+    # la regla, vigila el sitio.
+    for nombre in ("servidor.py", "menu.py"):
+        ruta = COMUN / nombre
+        fuente = ruta.read_text(encoding="utf-8")
+        assert re.search(r"allow_reuse_address\s*=\s*(not\s+\w*WINDOWS|_REUSAR\w*)",
+                         fuente), (
+            f"{nombre}: allow_reuse_address tiene que depender de la plataforma, "
+            "no ser True fijo")
     ruta = COMUN / "servidor.py"
-    fuente = ruta.read_text(encoding="utf-8")
-    assert re.search(r"allow_reuse_address\s*=\s*(not\s+\w*WINDOWS|_REUSAR\w*)", fuente), (
-        "allow_reuse_address tiene que depender de la plataforma, no ser True fijo")
     # Y el sondeo tiene que hacerse la misma pregunta: si no, `puerto_libre` daria por
     # libre en Windows un puerto que otra aplicacion esta sirviendo ahora mismo.
     assert not _fuera_de_condicional(ruta, "setsockopt"), (
@@ -151,6 +159,39 @@ def test_los_lanzadores_llevan_el_final_de_linea_de_su_sistema():
                   "Iniciar.app/Contents/Resources/ventana"):
         assert re.search(rf"^{re.escape(pieza)}\s+text\s+eol=lf", reglas, re.M), (
             f"{pieza} puede acabar en CRLF y dejar de arrancar")
+
+
+def test_el_simulador_no_se_apaga_con_os_kill_en_windows():
+    """`os.kill(pid, SIGTERM)` en Windows es `TerminateProcess`, no una senal.
+
+    Mata a Voila en seco, sin darle ocasion de cerrar sus kernels -- cada uno un
+    `python.exe` de ~780 MB que queda huerfano --, y como el puerto SI queda libre el
+    menu informaba de un apagado limpio con hasta siete procesos vivos detras. Es
+    exactamente lo que el paso 9 de `PROBAR-EN-WINDOWS.md` comprueba, fallando en
+    silencio. `taskkill /T` recorre el arbol, que es donde viven esos kernels.
+    """
+    fuente = (COMUN / "menu.py").read_text(encoding="utf-8")
+    cuerpo = fuente[fuente.index("def _pedir_por_su_puerta("):]
+    cuerpo = cuerpo[: cuerpo.index("def _pid_escrito(")]
+    assert '"taskkill", "/PID", str(pid), "/T", "/F"' in cuerpo
+    # Y el `os.kill` que queda tiene que estar en la rama que Windows no ejecuta.
+    assert cuerpo.index("if ES_WINDOWS:") < cuerpo.index("os.kill(pid, signal.SIGTERM)")
+
+
+def test_el_pid_escrito_se_comprueba_tambien_en_windows():
+    """Devolver el pid del archivo sin mirar nada era un agujero doble.
+
+    El `.servidor.pid` se queda rancio con facilidad -- un `taskkill /F` no deja correr
+    el `borrar_pid` del `finally` -- y Windows recicla los pid en un espacio pequenio.
+    Sobre ese numero, `menu.py` manda `taskkill /PID <pid> /T /F`: un pid reciclado se
+    llevaba por delante a un proceso ajeno y a todo su arbol. Y `revisar_puerto`
+    concluia "ya se esta sirviendo" y abria el navegador sobre un servidor de otro.
+    """
+    fuente = (COMUN / "servidor.py").read_text(encoding="utf-8")
+    cuerpo = fuente[fuente.index("def pid_de("):]
+    cuerpo = cuerpo[: cuerpo.index('    try:\n        salida = subprocess.run(["/bin/ps"')]
+    assert "tasklist" in cuerpo, "en Windows el pid del archivo no se comprueba contra nada"
+    assert '"python" in salida.stdout.lower()' in cuerpo
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="en Windows el checkout es CRLF")

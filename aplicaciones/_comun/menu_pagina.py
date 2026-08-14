@@ -234,7 +234,9 @@ def pagina() -> str:
     <div>
       <h1>CriticidadCHEC</h1>
     </div>
-    <button id="cerrar-todo" class="peligro">Cerrar todo</button>
+    <button id="cerrar-todo" class="peligro"
+      title="Apaga los cinco tableros, libera sus puertos y cierra las ventanas de
+terminal que abrieron. Despues cierra este menu.">Cerrar todo</button>
   </header>
   <div id="lista"></div>
 </div>

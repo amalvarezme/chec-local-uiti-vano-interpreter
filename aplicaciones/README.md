@@ -23,10 +23,31 @@ abierta a mano en vez de duplicarla.
 | [`04_trayectorias_vanos/`](04_trayectorias_vanos/) | lo mismo un nivel más abajo: agrupamiento y evolución por vano | `04_uiti_vano_trayectorias_vano.ipynb` |
 | [`06_simulador/`](06_simulador/) | simulador de riesgo por vano: *qué pasaría si* sobre el modelo MIL | `06_uiti_vano_explicabilidad_simulador.ipynb` |
 
-## Cómo se usan
+## Cómo se usan — a qué le doy doble clic
 
-Cada carpeta trae los mismos cuatro lanzadores. En **macOS** doble clic sobre el
-`.command`; en **Windows**, sobre el `.bat`.
+Cada carpeta trae los mismos cuatro lanzadores. **Esta tabla es la respuesta corta**, y
+vale igual para el menú y para las cinco aplicaciones:
+
+| Sistema | Instalar (una sola vez) | Abrir (cada vez) |
+|---|---|---|
+| **macOS** | doble clic en **`instalar.command`** | doble clic en **`Iniciar.app`** |
+| **Windows** | doble clic en **`instalar.bat`** | doble clic en **`iniciar.bat`** |
+| Linux | `./instalar.command` desde una terminal | `./iniciar.command` desde una terminal |
+
+**En macOS lo que se abre es `Iniciar.app`, no `iniciar.command`.** Los dos hacen lo
+mismo cuando funcionan, y la diferencia es que uno funciona **siempre**: a un `.command`
+lo abre la aplicación que LaunchServices tenga atada a esa extensión, y eso lo fija cada
+máquina y se cambia sin querer desde el «Abrir con» del Finder. En una máquina con
+Ghostty puede tocarle Ghostty, que se declara *editor* de `.command` y entonces el doble
+clic **no ejecuta nada**. `Iniciar.app` no se puede desviar así: LaunchServices no lo
+abre con otra aplicación, lo **lanza**. Ver «La regla de Ghostty», más abajo.
+
+`iniciar.command` se conserva a propósito para lanzarlo **a mano** desde una terminal ya
+abierta, y es el camino de Linux.
+
+**En Windows el doble clic va sobre los `.bat` y no hay nada equivalente que resolver:**
+un `.bat` lo ejecuta el intérprete de órdenes del sistema, no una aplicación asociada que
+cada máquina pueda cambiar. No existe ningún `Iniciar.app` allí, y no hace falta.
 
 1. `instalar` — una sola vez. Crea el entorno de esa aplicación e instala sus
    dependencias.
@@ -132,6 +153,45 @@ en la caché del sistema operativo y no en la memoria del proceso.
 matriz de 288.632×80, los mismos 26 controles, los mismos 208 circuitos, la misma
 interfaz (59 trazas) y una simulación real idéntica hasta el décimo decimal.
 
+## La regla de Ghostty — léela antes de tocar cualquier lanzador
+
+Este fallo ha vuelto tres veces y siempre por el mismo sitio: **algo entrega un archivo
+a macOS y deja que LaunchServices decida quién lo abre.** Medido con `lsregister -dump`
+en la máquina donde pasa:
+
+| Aplicación | Reclama | Rol |
+|---|---|---|
+| Ghostty | `.command`, `.tool`, `.sh`, `.zsh`, `.csh`, `.pl` | **Editor** |
+| Terminal.app | `com.apple.terminal.shell-script` (los `.command`) | Shell |
+| Terminal.app | `com.apple.terminal.settings` (los `.terminal`) | Editor |
+
+Un `.command` que le toque a Ghostty **no se ejecuta**: solo se lleva el foco a la sesión
+que ya estuviera abierta. Y lo que hace este fallo tan caro es dónde deja el arreglo — si
+el script no llega a correr, nada de lo que se escriba **dentro** del script puede
+salvarlo. El síntoma es un parpadeo, o directamente nada, sin ningún sitio donde leerlo.
+
+> **La regla, en una línea:** todo camino que abra una ventana de terminal tiene que
+> **nombrar a Terminal.app** — `open -a Terminal <perfil.terminal>`, con
+> `open -b com.apple.Terminal` de respaldo. Nunca un `open <archivo>` a secas, y nunca un
+> `.command` como destino de doble clic.
+
+`-a` no es una preferencia: es una orden, y LaunchServices no consulta ninguna atadura.
+El formato `.terminal` además no lo reclama nadie más que Terminal.app, así que es el
+hueco por el que se pasa. Todo eso vive en **un solo sitio**, `_comun/terminal.py`, y los
+seis `Iniciar.app` hacen lo mismo en shell porque corren antes de que exista ningún
+Python.
+
+**Y nunca `osascript`.** Pedirle a Terminal por AppleScript que abra o cierre una ventana
+exige el permiso de Automatización. Sin él la llamada *no falla*: se queda **colgada**
+esperando un diálogo que puede salir detrás de otra ventana (medido: 19 s y subiendo).
+Por eso la ventana se cierra sola con `shellExitAction` del perfil y no mandándole nada a
+Terminal.
+
+`tests/test_terminal_nueva.py` fija las tres reglas leyendo los lanzadores como texto, y
+falla si alguien vuelve a dejar un `open` sin destinatario. El último salto — el doble
+clic de verdad — solo lo puede probar una persona delante de la pantalla: `open` sobre un
+bundle desde un entorno sin interfaz devuelve `-10669`.
+
 ## Los botones de cerrar
 
 Un tablero abierto **por su cuenta** trae arriba un botón *Cerrar* que detiene su
@@ -145,6 +205,34 @@ lo mismo que *Cerrar* pero dejando la pestaña sobre un tablero muerto.
 
 **Ningún botón de un tablero apaga a los demás.** El único apagado general es el botón
 *Cerrar todo* de la página del menú, y desde ahí se ve qué se está apagando.
+
+### Cada tablero abre su propia ventana de terminal
+
+*Abrir* en el menú no lanza un proceso mudo: abre una **ventana de Terminal nueva** con
+la salida de ese tablero a la vista. Antes las cinco corrían con `stdout=DEVNULL`
+colgando del menú, y lo que fuera mal solo dejaba rastro en el detalle de la tarjeta.
+
+*Cerrar todo* cierra los puertos **y** esas ventanas, y son el mismo acto y no dos: el
+menú hace **terminar el comando** que sostiene cada ventana, y Terminal la cierra sola
+por el `shellExitAction` del perfil. Ir a por la ventana aparte exigiría AppleScript, que
+es justo lo que no se puede usar aquí.
+
+Medido de punta a punta con el menú real: `POST /abrir` deja la ventana corriendo y el
+puerto sirviendo; `POST /apagar-todo` responde `{"cerrado": true, "vivas": []}`, los dos
+puertos quedan libres, la ventana desaparece y no sobrevive ningún kernel de Voila.
+
+Consecuencia que hay que tener presente **al tocar el apagado**: con el tablero en su
+ventana, el menú **no tiene su proceso en la mano** — lo lanzó Terminal.app. Lo que el
+menú ejecutó fue `open`, que vuelve en cuanto entrega el perfil. Por eso existe
+`Aplicacion.en_ventana`, por eso `_esperar` no recibe ese proceso — verlo muerto le haría
+rendirse en el acto y toda apertura saldría como *«el servidor no respondió»* con el
+tablero levantándose detrás — y por eso el respaldo del apagado va al pid que la
+aplicación deja escrito en `.servidor.pid`.
+
+En Linux no hay ventana: no existe un emulador que se pueda dar por instalado, y adivinar
+entre `gnome-terminal`, `konsole` y `xterm` es como se termina fallando en la máquina de
+alguien. Allí el menú lanza en segundo plano, que es lo que hacía antes. Nunca se deja de
+abrir el tablero por no haber podido abrir su ventana.
 
 Cerrar son tres cosas, y las tres están medidas contra el servidor real:
 
@@ -205,6 +293,7 @@ aplicaciones/
 │   ├── servidor.py            servidor estático con compresión y caché
 │   ├── menu.py                servidor de control: lanza y apaga las otras cinco
 │   ├── menu_pagina.py         la página del menú, sin dependencias
+│   ├── terminal.py            abre una ventana de terminal NUEVA sin que Ghostty se la quede
 │   ├── paleta.py              los ocho colores que comparten los tableros
 │   ├── huellas.py             huellas de los insumos, para saber cuándo reconstruir
 │   └── raiz.py                localización del repositorio
