@@ -44,6 +44,7 @@ from __future__ import annotations
 import os
 import plistlib
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -194,10 +195,12 @@ def test_el_perfil_de_ventana_acaba_llevando_al_guion_de_su_propio_bundle(dobles
     assert " " not in str(trampolin), (
         "el trampolin esta en una ruta con espacios, que es justo lo que no arranca")
     assert trampolin.is_file() and os.access(trampolin, os.X_OK)
-    # El trampolin no lleva la ruta dentro -- para no tener que citarla -- sino el
-    # nombre del archivo que la contiene.
-    destino = Path(re.search(r'cat "([^"]+)"', trampolin.read_text(encoding="utf-8")).group(1))
-    assert destino.read_text(encoding="utf-8") == str(app / VENTANA)
+    # El trampolin lleva la ruta DENTRO, entrecomillada. Antes viajaba en un segundo
+    # archivo para no tener que citarla, y ese archivo es justo el que se quedo viejo
+    # cuando se borro el worktree desde el que se habia hecho doble clic.
+    citada = re.search(r"^VENTANA='(.*)'$", trampolin.read_text(encoding="utf-8"),
+                       re.M).group(1)
+    assert citada.replace("'\\''", "'") == str(app / VENTANA)
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="el bundle es de macOS")
@@ -282,3 +285,144 @@ def test_el_lanzador_no_se_da_por_bueno_sin_haber_abierto_nada(tmp_path):
                            capture_output=True, text=True, timeout=30)
 
     assert hecho.returncode != 0
+
+
+# ------------------------------------ dos copias del repositorio no se pisan
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="el bundle es de macOS")
+def test_dos_copias_del_repositorio_no_comparten_los_archivos_temporales(dobles, tmp_path):
+    """El fallo que dejo el simulador sin abrir, reproducido.
+
+    Los archivos de `TMPDIR` se nombraban solo con la CARPETA de la aplicacion
+    (`chec-06_simulador-...`), y esa carpeta se llama igual en el clon principal y en
+    cualquier worktree de git. Las dos copias escribian EL MISMO archivo: la ultima que
+    corriera se lo quedaba.
+
+    Medido en la maquina del usuario: el trampolin del simulador apuntaba a
+    `...-worktrees/simulador-apagado/.../ventana`, un worktree ya borrado. Al hacer doble
+    clic, el trampolin salia con 126 y -- como el perfil lleva `shellExitAction` a 0 --
+    la ventana se cerraba en el acto. Un parpadeo y nada mas.
+
+    Basta con que el nombre lleve algo del CAMINO y no solo de la carpeta.
+    """
+    app = APPS / "06_simulador"
+    otra = tmp_path / "otra-copia" / "aplicaciones" / "06_simulador"
+    otra.parent.mkdir(parents=True)
+    shutil.copytree(app / BUNDLE, otra / BUNDLE, symlinks=True)
+
+    perfil_uno = _perfil_de(dobles(app, EJECUTABLE))
+    perfil_dos = _perfil_de(dobles(otra, EJECUTABLE))
+
+    assert perfil_uno != perfil_dos, (
+        "las dos copias escriben el mismo perfil: la ultima le pisa el trampolin a la "
+        "otra, y borrar una deja a la que queda apuntando al vacio")
+    uno = plistlib.loads(Path(perfil_uno).read_bytes())["CommandString"]
+    dos = plistlib.loads(Path(perfil_dos).read_bytes())["CommandString"]
+    assert uno != dos, "los dos trampolines son el mismo archivo"
+
+
+def _perfil_de(llamadas: str) -> str:
+    perfiles = [l[5:] for l in llamadas.splitlines()
+                if l.startswith("arg: ") and l.endswith(".terminal")]
+    assert perfiles, f"no se le paso ningun perfil a Terminal: {llamadas}"
+    return perfiles[-1]
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="el bundle es de macOS")
+def test_el_trampolin_lleva_dentro_la_ruta_y_no_depende_de_otro_archivo(dobles):
+    """El trampolin llevaba la ruta en un SEGUNDO archivo (`-destino`) para no tener que
+    citarla. Eso es un puntero mas que puede quedarse viejo, y se quedo: es justo lo que
+    apuntaba al worktree borrado.
+
+    Un trampolin es un guion de shell, asi que la ruta cabe dentro entrecomillada, con
+    las comillas simples escapadas. Un archivo menos y un desfase menos.
+    """
+    app = APPS / "06_simulador"
+    perfil = _perfil_de(dobles(app, EJECUTABLE))
+    trampolin = Path(plistlib.loads(Path(perfil).read_bytes())["CommandString"])
+    texto = trampolin.read_text(encoding="utf-8")
+
+    assert str(app / VENTANA) in texto, "el trampolin no lleva su destino dentro"
+    assert "cat " not in texto, "el trampolin sigue leyendo la ruta de otro archivo"
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="el bundle es de macOS")
+def test_un_destino_que_ya_no_existe_se_lee_en_la_ventana(dobles, tmp_path):
+    """Con `shellExitAction` a 0, un trampolin que falla cierra la ventana al instante: el
+    usuario ve un parpadeo y no tiene donde leer nada. Ese era el sintoma exacto de
+    "no se abre el simulador".
+
+    Asi que el trampolin comprueba su destino ANTES de saltar, y si no esta lo dice y se
+    para. Un mensaje que se puede leer separa "esto se rompio" de "estoy abriendo un
+    acceso directo a una copia que ya borre".
+    """
+    app = APPS / "06_simulador"
+    perfil = _perfil_de(dobles(app, EJECUTABLE))
+    trampolin = Path(plistlib.loads(Path(perfil).read_bytes())["CommandString"])
+
+    # Se le rompe el destino, que es exactamente lo que hizo borrar el worktree.
+    roto = trampolin.read_text(encoding="utf-8").replace(
+        str(app / VENTANA), str(tmp_path / "no-existe" / "ventana"))
+    trampolin.write_text(roto, encoding="utf-8")
+
+    hecho = subprocess.run(["/bin/sh", str(trampolin)], capture_output=True, text=True,
+                           input="\n", timeout=30)
+
+    assert hecho.returncode != 0, "un destino ausente no puede darse por bueno"
+    salida = hecho.stdout + hecho.stderr
+    assert "no-existe" in salida, f"no dijo QUE falta: {salida!r}"
+    assert "Intro" in salida, (
+        f"no se paro a que lo leyeran: la ventana se cierra sobre el mensaje: {salida!r}")
+
+
+# ----------------------------------- que "Cerrar todo" se lleve tambien la ventana
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="el bundle es de macOS")
+@pytest.mark.parametrize("app", TODAS, ids=IDS)
+def test_la_ventana_sale_sola_cuando_la_aplicacion_termina_bien(app: Path, tmp_path):
+    """La otra mitad de lo que promete el lanzador: que "Cerrar todo" cierre tambien la
+    ventana de Terminal.
+
+    La cadena es larga y ningun eslabon avisa si se rompe: el menu apaga la aplicacion ->
+    `gestor.py` devuelve -> este guion devuelve -> Terminal cierra la ventana, porque el
+    perfil lleva `shellExitAction` a 0. Medido de punta a punta con el simulador: el arbol
+    de la ventana eran 5 procesos y despues de "Cerrar todo" no quedo ninguno, con el
+    proceso de la ventana saliendo con 0.
+
+    Lo que esta prueba protege es el ultimo eslabon barato de romper: si este guion se
+    parara a que lean algo TAMBIEN en el camino bueno, la ventana se quedaria abierta
+    para siempre despues de cada cierre.
+    """
+    binarios = tmp_path / "bin"
+    binarios.mkdir()
+    (binarios / "python3").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    (binarios / "python3").chmod(0o755)
+    ambiente = dict(os.environ, PATH=f"{binarios}:{os.environ['PATH']}")
+
+    # Sin stdin: si el guion se parara a leer algo, esto falla en vez de colgarse.
+    hecho = subprocess.run([str(app / VENTANA)], env=ambiente, capture_output=True,
+                           text=True, timeout=30, stdin=subprocess.DEVNULL)
+
+    assert hecho.returncode == 0
+    assert "Intro" not in hecho.stdout, (
+        "la ventana se para a que lean algo en el camino BUENO: se quedaria abierta "
+        "despues de cada 'Cerrar todo'")
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="el bundle es de macOS")
+def test_la_ventana_se_para_a_que_lean_el_error(tmp_path):
+    """Al reves que la de arriba, y por eso van juntas: cuando la aplicacion falla, la
+    ventana NO puede cerrarse sobre su propio mensaje de error."""
+    binarios = tmp_path / "bin"
+    binarios.mkdir()
+    (binarios / "python3").write_text("#!/bin/sh\nexit 3\n", encoding="utf-8")
+    (binarios / "python3").chmod(0o755)
+    ambiente = dict(os.environ, PATH=f"{binarios}:{os.environ['PATH']}")
+
+    hecho = subprocess.run([str(APPS / "01_clima" / VENTANA)], env=ambiente,
+                           capture_output=True, text=True, timeout=30, input="\n")
+
+    assert "codigo 3" in hecho.stdout, hecho.stdout
+    assert "Intro" in hecho.stdout
