@@ -11,6 +11,10 @@ from chec_local_interpreter.expert_alignment import (
     validar_provenance_expert_alignment,
     validar_respuesta_expert_alignment,
 )
+from chec_local_interpreter.inference_validation import (
+    validar_provenance_inferencia,
+    validar_respuesta_inferencia_strict,
+)
 from chec_local_interpreter.llm_contracts import PROMPT_VERSION, load_output_schema, render_prompt
 from chec_local_interpreter.llm_validation import validar_provenance_base, validate_llm_response
 
@@ -178,6 +182,97 @@ def _valid_historical_output(context: dict) -> dict:
     }
 
 
+def _valid_inference_output(context: dict) -> dict:
+    """Synthetic, offline inference response: the 9 required keys of
+    `inference.output_schema.json` plus a resolving `provenance` on both sections
+    the validator inspects (`escenarios` and `discusion_grafos`), giving the MIL
+    interpretation role the same eval gate the other two already had — no API
+    call, everything checked through the two code-level validators the L2 CLI's
+    `validate` verb runs (strict schema+guardrails, then provenance).
+
+    Every citable token is READ from the context instead of hard-coded: the
+    scenario name, the window and the variable. A literal here would keep passing
+    after `construir_contexto_inferencia_mil` renames any of the three, which is
+    exactly the drift this eval exists to catch.
+
+    The wording avoids attributing the EVENT COUNT to the model on purpose. The
+    MIL predicts `uiti_acumulado`; the count is an axis of the KMeans space that
+    fixes the class, and `errores_de_metrica` rejects any sentence that hangs one
+    on the other — a plausible sentence no reader could tell apart from a correct
+    one.
+    """
+    escenario = context["escenarios"][0]
+    nombre = escenario["nombre"]
+    ventana = escenario["ventana"]
+    variable = context["features"][0]
+    return {
+        "contexto": {
+            "circuito": context["circuito_interes"],
+            "periodo": {"inicio": context["fecha_inicio"], "fin": context["fecha_fin"]},
+            "modelo": context["modelo"],
+        },
+        "entregables": {"grafos_html": []},
+        "escenarios": [
+            {
+                "nombre": nombre,
+                "interpretacion": (
+                    f"En la ventana {ventana}, {variable} es la palanca que mas baja el "
+                    f"{context['metrica']} estimado de las bolsas del circuito."
+                ),
+                "provenance": {
+                    "data_ref": [variable, ventana, nombre],
+                    "agent": "inference",
+                    "rule": "02_window_scenario_interpreter",
+                },
+            }
+        ],
+        "discusion_grafos": [
+            {
+                "seccion": ventana,
+                "lectura": (
+                    f"El grafo diferencia de la ventana {ventana} mueve las aristas que "
+                    f"salen de {variable} al simular la intervencion."
+                ),
+                "provenance": {
+                    "data_ref": [ventana],
+                    "agent": "inference",
+                    "rule": "04_graph_connectivity_guardrails",
+                },
+            }
+        ],
+        "coherencia_grafo_modelo": [
+            f"La relevancia de {variable} es coherente con las relaciones que el grafo "
+            f"del propio modelo conserva para esa variable."
+        ],
+        "hallazgos": [
+            f"{variable} concentra la mayor caida del {context['metrica']} estimado en "
+            f"los vanos criticos de la ventana {ventana}."
+        ],
+        "limitaciones": [
+            "La relevancia explica el comportamiento del modelo sobre la bolsa "
+            "(vano, ventana), no una relacion causal.",
+        ],
+        "inferencias_predictivas": [
+            {
+                "horizonte": "periodo analizado",
+                "riesgo": "moderado",
+                "justificacion_modelo": (
+                    f"El modelo asocia el {context['metrica']} de las bolsas criticas "
+                    f"con el nivel de {variable}."
+                ),
+            }
+        ],
+        "hipotesis_modelo_predictivo": {
+            "ventanas_estudiadas": [
+                f"La ventana {ventana} sostiene la lectura del periodo."
+            ],
+            "plan_de_intervencion": [
+                f"Verificar {variable} en los vanos que el diagnostico senala."
+            ],
+        },
+    }
+
+
 def _assert_prompt_contents(prompt: str, context: dict, schema: dict) -> list[str]:
     errors: list[str] = []
     required = [
@@ -252,6 +347,21 @@ def main() -> int:
         if not provenance_result["ok"]:
             errors.append(
                 f"{path.name}: valid synthetic historical output failed provenance validation: {provenance_result['errors']}"
+            )
+
+    for path in sorted(fixture_dir.glob("synthetic_inference_context_*.json")):
+        inference_context = _load_json(path)
+        inference_response = json.dumps(_valid_inference_output(inference_context), ensure_ascii=False)
+        schema_result = validar_respuesta_inferencia_strict(inference_response, inference_context)
+        if not schema_result["ok"]:
+            errors.append(
+                f"{path.name}: valid synthetic inference output failed schema/guardrail validation: {schema_result['errors']}"
+            )
+            continue
+        provenance_result = validar_provenance_inferencia(schema_result["data"], inference_context)
+        if not provenance_result["ok"]:
+            errors.append(
+                f"{path.name}: valid synthetic inference output failed provenance validation: {provenance_result['errors']}"
             )
 
     if errors:

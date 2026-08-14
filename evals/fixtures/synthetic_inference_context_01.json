@@ -1,0 +1,468 @@
+{
+  "circuito_interes": "SIN23L99",
+  "fecha_inicio": "2026-01-01",
+  "fecha_fin": "2026-01-31",
+  "fechas_interes": [
+    "2026-01-10"
+  ],
+  "modelo": "MIL por bolsas (cuaderno 05)",
+  "modelo_tipo": "mil_bolsas",
+  "unidad": "bolsa (vano, ventana)",
+  "metrica": "uiti_acumulado",
+  "n_bolsas": 6,
+  "n_instancias": 12,
+  "n_features": 3,
+  "features": [
+    "ALTURA",
+    "DDT",
+    "CNT_TRF"
+  ],
+  "n_controles": 2,
+  "ventanas": [
+    "V7",
+    "V11"
+  ],
+  "escenarios": [
+    {
+      "nombre": "SIN23L99 -- ventana V7",
+      "circuito": "SIN23L99",
+      "ventana": "V7",
+      "metrica": "uiti_acumulado",
+      "unidad": "bolsa (vano, ventana)",
+      "n_vanos": 3,
+      "relevancia": {
+        "metrica": "uiti_acumulado",
+        "unidad": "bolsa (vano, ventana)",
+        "circuito": "SIN23L99",
+        "ventana": "V7",
+        "n_controles": 2,
+        "sin_controles": false,
+        "vanos": {
+          "9001": {
+            "u_base": 0.4000000059604645,
+            "clase_base": 1,
+            "ya_en_clase_minima": false,
+            "n_obs_observado": 2,
+            "variables": [
+              {
+                "knob_id": "ALTURA",
+                "label": "ALTURA",
+                "grupo": "Intervencion",
+                "valor_optimo": 0.0,
+                "u_base": 0.4000000059604645,
+                "u_min": 0.0,
+                "caida": 11.602059997799454,
+                "avance": null,
+                "alcanza": false
+              },
+              {
+                "knob_id": "DDT",
+                "label": "DDT",
+                "grupo": "Escenario",
+                "valor_optimo": 0.0,
+                "u_base": 0.4000000059604645,
+                "u_min": 0.4000000059604645,
+                "caida": 0.0,
+                "avance": null,
+                "alcanza": false
+              }
+            ]
+          },
+          "9002": {
+            "u_base": 2.9000000953674316,
+            "clase_base": 2,
+            "ya_en_clase_minima": false,
+            "n_obs_observado": 2,
+            "variables": [
+              {
+                "knob_id": "ALTURA",
+                "label": "ALTURA",
+                "grupo": "Intervencion",
+                "valor_optimo": 0.0,
+                "u_base": 2.9000000953674316,
+                "u_min": 0.0,
+                "caida": 12.46239801218087,
+                "avance": null,
+                "alcanza": false
+              },
+              {
+                "knob_id": "DDT",
+                "label": "DDT",
+                "grupo": "Escenario",
+                "valor_optimo": 0.0,
+                "u_base": 2.9000000953674316,
+                "u_min": 2.9000000953674316,
+                "caida": 0.0,
+                "avance": null,
+                "alcanza": false
+              }
+            ]
+          },
+          "9003": {
+            "u_base": 3.0999999046325684,
+            "clase_base": 3,
+            "ya_en_clase_minima": false,
+            "n_obs_observado": 2,
+            "variables": [
+              {
+                "knob_id": "ALTURA",
+                "label": "ALTURA",
+                "grupo": "Intervencion",
+                "valor_optimo": 0.0,
+                "u_base": 3.0999999046325684,
+                "u_min": 0.0,
+                "caida": 12.491361680473773,
+                "avance": null,
+                "alcanza": false
+              },
+              {
+                "knob_id": "DDT",
+                "label": "DDT",
+                "grupo": "Escenario",
+                "valor_optimo": 0.0,
+                "u_base": 3.0999999046325684,
+                "u_min": 3.0999999046325684,
+                "caida": 0.0,
+                "avance": null,
+                "alcanza": false
+              }
+            ]
+          }
+        }
+      },
+      "variables_por_grupo": {
+        "Intervencion": [
+          {
+            "knob_id": "ALTURA",
+            "label": "ALTURA",
+            "grupo": "Intervencion",
+            "n_vanos": 3,
+            "n_vanos_alcanza": 0,
+            "avance_mediano": null,
+            "caida_mediana": 12.46239801218087,
+            "valor_tipico": 0.0
+          }
+        ],
+        "Escenario": [
+          {
+            "knob_id": "DDT",
+            "label": "DDT",
+            "grupo": "Escenario",
+            "n_vanos": 3,
+            "n_vanos_alcanza": 0,
+            "avance_mediano": null,
+            "caida_mediana": 0.0,
+            "valor_tipico": 0.0
+          }
+        ],
+        "Sin clasificar": []
+      },
+      "vanos_criticos": [
+        {
+          "fid": "9003",
+          "clase_base": 3,
+          "u_base": 3.0999999046325684,
+          "u_final": 0.0,
+          "clase_final": 1,
+          "alcanza": false,
+          "pasos": [
+            {
+              "knob_id": "ALTURA",
+              "label": "ALTURA",
+              "valor": 0.0,
+              "u_despues": 0.0
+            }
+          ]
+        },
+        {
+          "fid": "9002",
+          "clase_base": 2,
+          "u_base": 2.9000000953674316,
+          "u_final": 0.0,
+          "clase_final": 1,
+          "alcanza": false,
+          "pasos": [
+            {
+              "knob_id": "ALTURA",
+              "label": "ALTURA",
+              "valor": 0.0,
+              "u_despues": 0.0
+            }
+          ]
+        }
+      ],
+      "simulacion": {
+        "circuito": "SIN23L99",
+        "ventana": "V7",
+        "solo_intervencion": true,
+        "metrica": "uiti_acumulado",
+        "unidad": "bolsa (vano, ventana)",
+        "knobs_usados": [
+          "ALTURA"
+        ],
+        "vanos": [
+          {
+            "fid": "9002",
+            "u_base": 2.9000000953674316,
+            "u_simulado": 0.0,
+            "clase_base": 2,
+            "clase_simulada": 1,
+            "delta_grupo": -1,
+            "pasos": [
+              {
+                "knob_id": "ALTURA",
+                "label": "ALTURA",
+                "valor": 0.0,
+                "u_despues": 0.0
+              }
+            ]
+          },
+          {
+            "fid": "9003",
+            "u_base": 3.0999999046325684,
+            "u_simulado": 0.0,
+            "clase_base": 3,
+            "clase_simulada": 1,
+            "delta_grupo": -2,
+            "pasos": [
+              {
+                "knob_id": "ALTURA",
+                "label": "ALTURA",
+                "valor": 0.0,
+                "u_despues": 0.0
+              }
+            ]
+          }
+        ],
+        "grafo_diferencia": null
+      }
+    },
+    {
+      "nombre": "SIN23L99 -- ventana V11",
+      "circuito": "SIN23L99",
+      "ventana": "V11",
+      "metrica": "uiti_acumulado",
+      "unidad": "bolsa (vano, ventana)",
+      "n_vanos": 3,
+      "relevancia": {
+        "metrica": "uiti_acumulado",
+        "unidad": "bolsa (vano, ventana)",
+        "circuito": "SIN23L99",
+        "ventana": "V11",
+        "n_controles": 2,
+        "sin_controles": false,
+        "vanos": {
+          "9001": {
+            "u_base": 0.30000001192092896,
+            "clase_base": 1,
+            "ya_en_clase_minima": false,
+            "n_obs_observado": 2,
+            "variables": [
+              {
+                "knob_id": "ALTURA",
+                "label": "ALTURA",
+                "grupo": "Intervencion",
+                "valor_optimo": 0.0,
+                "u_base": 0.30000001192092896,
+                "u_min": 0.0,
+                "caida": 11.477121271976975,
+                "avance": null,
+                "alcanza": false
+              },
+              {
+                "knob_id": "DDT",
+                "label": "DDT",
+                "grupo": "Escenario",
+                "valor_optimo": 0.0,
+                "u_base": 0.30000001192092896,
+                "u_min": 0.30000001192092896,
+                "caida": 0.0,
+                "avance": null,
+                "alcanza": false
+              }
+            ]
+          },
+          "9002": {
+            "u_base": 1.2000000476837158,
+            "clase_base": 2,
+            "ya_en_clase_minima": false,
+            "n_obs_observado": 2,
+            "variables": [
+              {
+                "knob_id": "ALTURA",
+                "label": "ALTURA",
+                "grupo": "Intervencion",
+                "valor_optimo": 0.0,
+                "u_base": 1.2000000476837158,
+                "u_min": 0.0,
+                "caida": 12.079181263304937,
+                "avance": null,
+                "alcanza": false
+              },
+              {
+                "knob_id": "DDT",
+                "label": "DDT",
+                "grupo": "Escenario",
+                "valor_optimo": 0.0,
+                "u_base": 1.2000000476837158,
+                "u_min": 1.2000000476837158,
+                "caida": 0.0,
+                "avance": null,
+                "alcanza": false
+              }
+            ]
+          },
+          "9003": {
+            "u_base": 2.700000047683716,
+            "clase_base": 2,
+            "ya_en_clase_minima": false,
+            "n_obs_observado": 2,
+            "variables": [
+              {
+                "knob_id": "ALTURA",
+                "label": "ALTURA",
+                "grupo": "Intervencion",
+                "valor_optimo": 0.0,
+                "u_base": 2.700000047683716,
+                "u_min": 0.0,
+                "caida": 12.431363771828904,
+                "avance": null,
+                "alcanza": false
+              },
+              {
+                "knob_id": "DDT",
+                "label": "DDT",
+                "grupo": "Escenario",
+                "valor_optimo": 0.0,
+                "u_base": 2.700000047683716,
+                "u_min": 2.700000047683716,
+                "caida": 0.0,
+                "avance": null,
+                "alcanza": false
+              }
+            ]
+          }
+        }
+      },
+      "variables_por_grupo": {
+        "Intervencion": [
+          {
+            "knob_id": "ALTURA",
+            "label": "ALTURA",
+            "grupo": "Intervencion",
+            "n_vanos": 3,
+            "n_vanos_alcanza": 0,
+            "avance_mediano": null,
+            "caida_mediana": 12.079181263304937,
+            "valor_tipico": 0.0
+          }
+        ],
+        "Escenario": [
+          {
+            "knob_id": "DDT",
+            "label": "DDT",
+            "grupo": "Escenario",
+            "n_vanos": 3,
+            "n_vanos_alcanza": 0,
+            "avance_mediano": null,
+            "caida_mediana": 0.0,
+            "valor_tipico": 0.0
+          }
+        ],
+        "Sin clasificar": []
+      },
+      "vanos_criticos": [
+        {
+          "fid": "9003",
+          "clase_base": 2,
+          "u_base": 2.700000047683716,
+          "u_final": 0.0,
+          "clase_final": 1,
+          "alcanza": false,
+          "pasos": [
+            {
+              "knob_id": "ALTURA",
+              "label": "ALTURA",
+              "valor": 0.0,
+              "u_despues": 0.0
+            }
+          ]
+        },
+        {
+          "fid": "9002",
+          "clase_base": 2,
+          "u_base": 1.2000000476837158,
+          "u_final": 0.0,
+          "clase_final": 1,
+          "alcanza": false,
+          "pasos": [
+            {
+              "knob_id": "ALTURA",
+              "label": "ALTURA",
+              "valor": 0.0,
+              "u_despues": 0.0
+            }
+          ]
+        }
+      ],
+      "simulacion": {
+        "circuito": "SIN23L99",
+        "ventana": "V11",
+        "solo_intervencion": true,
+        "metrica": "uiti_acumulado",
+        "unidad": "bolsa (vano, ventana)",
+        "knobs_usados": [
+          "ALTURA"
+        ],
+        "vanos": [
+          {
+            "fid": "9002",
+            "u_base": 1.2000000476837158,
+            "u_simulado": 0.0,
+            "clase_base": 2,
+            "clase_simulada": 1,
+            "delta_grupo": -1,
+            "pasos": [
+              {
+                "knob_id": "ALTURA",
+                "label": "ALTURA",
+                "valor": 0.0,
+                "u_despues": 0.0
+              }
+            ]
+          },
+          {
+            "fid": "9003",
+            "u_base": 2.700000047683716,
+            "u_simulado": 0.0,
+            "clase_base": 2,
+            "clase_simulada": 1,
+            "delta_grupo": -1,
+            "pasos": [
+              {
+                "knob_id": "ALTURA",
+                "label": "ALTURA",
+                "valor": 0.0,
+                "u_despues": 0.0
+              }
+            ]
+          }
+        ],
+        "grafo_diferencia": null
+      }
+    }
+  ],
+  "metadata": {
+    "uiti_es_objetivo": true,
+    "eventos_no_son_objetivo": "El conteo de eventos es un EJE del espacio KMeans que fija la clase, no una salida del modelo: este contexto no lo explica.",
+    "grafo_del_modelo": "El grafo se reconstruye de las compuertas del propio MIL, no de una aproximacion RBF sobre otro modelo."
+  },
+  "ventanas_estudio": [
+    "V7",
+    "V11"
+  ],
+  "periodos_ventana": {
+    "V7": "2026-01-01 a 2026-01-15",
+    "V11": "2026-01-16 a 2026-01-31"
+  }
+}

@@ -318,10 +318,11 @@ governed by this framework (that frozen function itself is untouched and still c
 - L4 batch runner (`AgentSpec`-generalized): `src/chec_local_interpreter/agent_tools/batch.py`
 - Frozen-model guard (tests): `tests/test_frozen_model_guard.py`
 - Offline eval gate (no API call): `evals/run_llm_eval.py` — run it directly with
-  `python evals/run_llm_eval.py`; it validates synthetic expert-alignment AND historical
-  responses (including a resolving-provenance case for each) through both the schema validator and
-  their respective provenance validators, alongside the pre-existing base-agent eval case in the
-  same file.
+  `python evals/run_llm_eval.py`; it validates synthetic responses for the three roles the
+  report dispatches — `historical`, `inference` and `expert-alignment` — through both the schema
+  validator and their respective provenance validators, alongside the pre-existing base-agent eval
+  case in the same file. Each role carries a resolving-provenance case, so a `data_ref` that stops
+  resolving fails the gate instead of passing silently.
 
 ### Report orchestrator (multi-runtime adapters)
 
