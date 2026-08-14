@@ -98,11 +98,28 @@ INSUMOS_POR_MARCA = (
 )
 
 
+# El codigo que las celdas de arranque IMPORTAN, y que decide la forma de casi todo lo
+# que el paquete congela: las bolsas, la tabla vano x ventana, las trazas de mapa, el
+# catalogo de controles. Eran 67 archivos sin vigilar, medidos.
+#
+# Aqui el hueco era mas estrecho que en los visores y por eso costaba mas verlo: las
+# celdas del TABLERO (11 a 16) corren vivas en el kernel en cada apertura, asi que un
+# cambio en `ventanas_015.py` que solo toque el dibujo si llega. El que no llegaba es el
+# que toca lo CONGELADO -- `construir_ventanas`, `seleccionar_bolsas`, la geometria de
+# 01.4 --, y ese se sirve viejo sin dar ningun error.
+#
+# Como UNA huella del arbol: las huellas se indexan por nombre de archivo y los dos
+# paquetes tienen su `__init__.py`. Cuesta 1,4 ms contra los 0,3 s que tarda el paquete
+# en cargar.
+INSUMOS_ARBOL = (_raiz.RAIZ_REPO / "src",)
+
+
 def huellas_actuales() -> dict:
     """La huella de cada insumo AHORA. La comparacion contra la guardada la hace
     `huellas.motivo_de_reconstruccion`, y la usa el arranque de la aplicacion."""
     return _huellas.huellas_de_insumos(
-        por_contenido=INSUMOS_POR_CONTENIDO, por_marca=INSUMOS_POR_MARCA)
+        por_contenido=INSUMOS_POR_CONTENIDO, por_marca=INSUMOS_POR_MARCA,
+        arboles=INSUMOS_ARBOL)
 
 # Por debajo de esto, alguna celda produjo un objeto vacio en silencio. `X_inst.npy`
 # sola pesa 88 MB, asi que un paquete de 50 MB no es un paquete valido.

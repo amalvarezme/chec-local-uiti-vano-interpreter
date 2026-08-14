@@ -49,6 +49,17 @@ _CODIGO = (
     Path(__file__).resolve().parent / "cuaderno.py",
 )
 
+# Y el codigo que el CUADERNO importa, que es la mayor parte de lo que decide como se ve
+# el tablero: el agrupamiento, las capas del mapa, la construccion de ventanas. Eran 67
+# archivos sin vigilar, medidos, y es el mismo modo de fallo que las tres lineas de
+# arriba -- se toca `clases_para` y el visor sigue sirviendo el HTML anterior sin dar
+# ningun error -- solo que mucho mas ancho.
+#
+# Entra como UNA huella del arbol y no como 67 sueltas: las huellas se indexan por nombre
+# de archivo y los dos paquetes tienen su propio `__init__.py`, asi que sueltas se
+# pisarian. Cuesta 1,4 ms por arranque contra los 0,06 s que tarda un visor en servirse.
+_ARBOLES = (_raiz.RAIZ_REPO / "src",)
+
 # Los datos. Por marca porque el CSV pesa 540 MB y los shapefiles otros 180: su sha1
 # costaria segundos en cada apertura, contra los milisegundos que tarda el tablero ya
 # construido en servirse.
@@ -68,6 +79,7 @@ def huellas_actuales(nombre_cuaderno: str) -> dict:
     return _huellas.huellas_de_insumos(
         por_contenido=(_raiz.CUADERNOS_APPS / nombre_cuaderno, *_CODIGO),
         por_marca=_DATOS,
+        arboles=_ARBOLES,
     )
 
 

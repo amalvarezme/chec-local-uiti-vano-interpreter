@@ -736,3 +736,57 @@ def test_todo_insumo_que_el_simulador_exige_esta_ademas_vigilado():
                                                       ".json", ".shp"))} - vigilados
     assert not sin_vigilar, (
         f"exigidos para construir pero no vigilados: {sorted(sin_vigilar)}")
+
+
+# ------------------------------------- el codigo de las librerias es un insumo mas
+
+
+def test_las_cinco_vigilan_el_codigo_de_las_librerias():
+    """El punto ciego mas ancho que tenian, medido: 67 archivos bajo `src/` y CERO
+    vigilados.
+
+    Las cinco aplicaciones CONGELAN el resultado de un cuaderno -- los cuatro visores en
+    un HTML, el simulador en su paquete -- y ese cuaderno importa
+    `chec_local_interpreter` y `chec_impacto`. Cambiar `clases_para`, las capas del mapa
+    o la construccion de ventanas no movia ninguna huella, asi que la aplicacion seguia
+    sirviendo lo anterior sin dar ningun error. Es el mismo fallo que ya obligo a
+    vigilar `empaquetar.py` y `preparar.py`, un nivel mas abajo.
+
+    Cuesta 1,4 ms por arranque, medidos sobre los 67 archivos: nada frente a los 0,06 s
+    que tarda un visor en servirse.
+    """
+    construccion = _comun("construccion")
+    huellas_visor = construccion.huellas_actuales("01_uiti_vano_clima.ipynb")
+
+    sys.path.insert(0, str(APPS / "06_simulador"))
+    try:
+        preparar = __import__("preparar")
+    finally:
+        sys.path.pop(0)
+    huellas_simulador = preparar.huellas_actuales()
+
+    for nombre, huellas in (("los visores", huellas_visor),
+                            ("el simulador", huellas_simulador)):
+        arboles = {k: v for k, v in huellas.items() if k.endswith("/")}
+        assert arboles, f"{nombre} no vigila ningun arbol de codigo"
+        assert "src/" in arboles, f"{nombre} no vigila src/: {sorted(arboles)}"
+        # Y que de verdad haya mirado dentro, no que la carpeta exista.
+        assert arboles["src/"].get("archivos", 0) > 20, (
+            f"{nombre} vigila src/ pero solo vio {arboles['src/']} archivos")
+
+
+def test_vigilar_el_codigo_no_cuesta_mas_que_servir_el_tablero():
+    """La comprobacion corre en CADA apertura, antes de decidir si reconstruir. Un
+    visor ya construido se sirve en 0,06 s medidos; si comprobar costara mas que eso,
+    la defensa saldria mas cara que el fallo del que protege."""
+    import time
+
+    huellas = _comun("huellas")
+    raiz = RAIZ / "src"
+    t0 = time.perf_counter()
+    for _ in range(3):
+        huellas.huella_de_arbol(raiz)
+    promedio = (time.perf_counter() - t0) / 3
+
+    assert promedio < 0.05, f"la huella de src/ tarda {promedio*1000:.0f} ms"
+
