@@ -142,9 +142,16 @@ def _clase_selector():
 
         def __init__(self, opciones=(), *, titulo="", alto="132px",
                      ancho_casilla="96px", maximo=None, columnas=None,
-                     tooltips=None, info=None, **kwargs):
+                     tooltips=None, info=None, mensaje_vacio=None, **kwargs):
             super().__init__(**kwargs)
             self.casillas = {}
+            # Que decir cuando la lista se queda SIN opciones. Una caja vacia y muda
+            # se lee como que el tablero se rompio, no como que no hay nada que
+            # marcar. El cuaderno 06 lo usa desde que el selector solo ofrece los
+            # vanos con eventos en la ventana activa: ahi la lista vacia es una
+            # respuesta legitima -- "ventana sin eventos" -- y tiene que decirse.
+            # `None` = sin mensaje, que es lo que heredan 01.4 y sus hermanos.
+            self.mensaje_vacio = mensaje_vacio
             # `clave -> texto` que el navegador muestra al posar el mouse sobre la
             # casilla. Vive en el selector y no en las opciones porque `poblar` se
             # vuelve a llamar al cambiar de circuito: colgado de la lista de
@@ -255,10 +262,38 @@ def _clase_selector():
                 'border-radius:4px;padding:6px 10px;margin-top:4px;">'
                 f'{texto}</div>')
 
-        def poblar(self, opciones):
-            """Rebuilds the list for a new option set (a new circuit, in the
-            vano case). The previous selection is DROPPED on purpose: keeping
-            it would leave keys ticked that the new option set does not have."""
+        def _cuerpo_vacio(self):
+            """Lo que se dibuja dentro de la caja cuando no hay ni una opcion.
+
+            Un widget NUEVO en cada repoblado y no uno guardado: `poblar` cierra
+            todo lo que reemplaza, asi que reutilizar la misma instancia la dejaria
+            cerrada -- y muda -- a partir del segundo repoblado.
+            """
+            if not self.mensaje_vacio:
+                return ()
+            return (widgets.HTML(
+                '<span style="font-size:12px;color:#c62828;">'
+                f'{self.mensaje_vacio}</span>'),)
+
+        def poblar(self, opciones, *, conservar=False):
+            """Rebuilds the list for a new option set.
+
+            `conservar=False` (el caso del cambio de circuito) suelta la seleccion
+            anterior a proposito: conservarla dejaria marcadas claves que el
+            universo nuevo no tiene.
+
+            `conservar=True` mantiene marcado lo que SIGUE existiendo. Es lo que
+            pide el deslizador de ventana del cuaderno 06, que repuebla la lista en
+            cada paso: alli el universo no cambia de circuito, solo se recorta a los
+            vanos con eventos en la ventana activa, y perder la seleccion entera al
+            mover el deslizador un paso -- con el vano todavia en la lista -- se lee
+            como que el tablero se desmarco solo.
+
+            En los dos casos se emite UN cambio de `value` como mucho, y ninguno
+            cuando la seleccion sobrevive entera: cada uno cuesta un repintado del
+            mapa.
+            """
+            previas = tuple(self.value) if conservar else ()
             self._silencio = True
             try:
                 hijos_previos = tuple(self.caja.children)
@@ -278,13 +313,28 @@ def _clase_selector():
                 }
                 for caja in self.casillas.values():
                     caja.observe(self._al_cambiar_casilla, names="value")
-                self.caja.children = (
-                    tuple(self._con_boton(c, w) for c, w in self.casillas.items())
-                    if self.info is not None else tuple(self.casillas.values()))
+                if not self.casillas:
+                    self.caja.children = self._cuerpo_vacio()
+                else:
+                    self.caja.children = (
+                        tuple(self._con_boton(c, w) for c, w in self.casillas.items())
+                        if self.info is not None else tuple(self.casillas.values()))
                 self._soltar_lo_anterior(hijos_previos)
+                # Lo que sobrevive se marca ANTES de soltar el silencio, para que las
+                # casillas y `value` salgan de aqui ya de acuerdo. Al reves -- fijar
+                # `value` y dejar que el observer mueva las casillas -- funciona igual,
+                # pero deja una ventana en la que la lista se ve vacia y el trait dice
+                # otra cosa.
+                cupo = len(self.casillas) if self.maximo is None else self.maximo
+                sobreviven = tuple(dict.fromkeys(
+                    c for c in previas if c in self.casillas))[:cupo]
+                for clave in sobreviven:
+                    self.casillas[clave].value = True
             finally:
                 self._silencio = False
-            self.value = ()
+            # Traitlets solo notifica si cambia, asi que el repoblado que conserva la
+            # seleccion entera no dispara ningun repintado.
+            self.value = sobreviven
             # Sin esto un circuito nuevo arrancaria con las casillas que el
             # anterior dejo deshabilitadas por el tope, y bloqueado de entrada.
             self._aplicar_tope()

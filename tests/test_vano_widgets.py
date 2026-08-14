@@ -713,3 +713,111 @@ def test_the_shared_layout_survives_a_repopulate():
     selector.poblar([("B", "b"), ("C", "c"), ("D", "d")])
 
     assert len({id(c.layout) for c in selector.casillas.values()}) == 1
+
+
+# --- Repoblar conservando la seleccion, y la lista vacia ---------------------------
+# Mover el deslizador de ventana en el cuaderno 06 repuebla la lista de vanos: solo se
+# ofrecen los que registraron eventos en ESA ventana. Eso es un `poblar` por cada paso
+# del deslizador, y el `poblar` de siempre -- el del cambio de circuito -- suelta la
+# seleccion entera. Aplicado a la ventana eso borraria los vanos marcados al mover el
+# deslizador un paso, aunque el vano siga teniendo eventos en la ventana nueva.
+
+
+def test_repopulating_can_keep_the_keys_that_survive():
+    """`conservar=True` mantiene marcado lo que sigue existiendo y suelta lo demas."""
+    from chec_local_interpreter.vano_widgets import construir_selector_vanos
+
+    selector = construir_selector_vanos(["VA", "VB", "VC"])
+    selector.value = ("VA", "VC")
+
+    selector.poblar(["VA", "VD"], conservar=True)
+
+    assert selector.value == ("VA",)
+    assert selector.casillas["VA"].value is True
+    assert selector.casillas["VD"].value is False
+
+
+def test_repopulating_while_keeping_the_selection_emits_one_value_event_at_most():
+    """Un evento por repoblado, no uno para vaciar y otro para volver a marcar: cada
+    uno cuesta un repintado del mapa, y el deslizador de ventana los encadena."""
+    from chec_local_interpreter.vano_widgets import construir_selector_vanos
+
+    selector = construir_selector_vanos(["VA", "VB", "VC"])
+    selector.value = ("VA", "VC")
+    eventos = []
+    selector.observe(lambda cambio: eventos.append(cambio["new"]), names="value")
+
+    selector.poblar(["VA", "VD"], conservar=True)
+
+    assert eventos == [("VA",)]
+
+
+def test_repopulating_stays_silent_when_the_selection_survives_whole():
+    """Si nada cambia no hay nada que notificar: el repintado que dispara el propio
+    deslizador ya cubre la ventana nueva."""
+    from chec_local_interpreter.vano_widgets import construir_selector_vanos
+
+    selector = construir_selector_vanos(["VA", "VB"])
+    selector.value = ("VA",)
+    eventos = []
+    selector.observe(lambda cambio: eventos.append(cambio["new"]), names="value")
+
+    selector.poblar(["VA", "VB", "VC"], conservar=True)
+
+    assert eventos == []
+    assert selector.value == ("VA",)
+    assert selector.casillas["VA"].value is True
+
+
+def test_repopulating_without_conservar_keeps_dropping_the_selection():
+    """El cambio de circuito no cambia: el universo de vanos es otro."""
+    from chec_local_interpreter.vano_widgets import construir_selector_vanos
+
+    selector = construir_selector_vanos(["VA", "VB"])
+    selector.value = ("VA",)
+
+    selector.poblar(["VA", "VZ"])
+
+    assert selector.value == ()
+
+
+def test_an_empty_option_list_shows_the_configured_message():
+    """Una caja vacia y sin una palabra se lee como que el tablero se rompio. Con
+    `mensaje_vacio` dice por que no hay nada que marcar."""
+    import ipywidgets as widgets
+
+    from chec_local_interpreter.vano_widgets import construir_selector_vanos
+
+    selector = construir_selector_vanos(
+        ["VA"], mensaje_vacio="Ventana sin eventos")
+
+    selector.poblar([], conservar=True)
+
+    assert selector.casillas == {}
+    assert selector.value == ()
+    assert len(selector.caja.children) == 1
+    aviso = selector.caja.children[0]
+    assert isinstance(aviso, widgets.HTML)
+    assert "Ventana sin eventos" in aviso.value
+
+
+def test_the_message_disappears_as_soon_as_there_are_options_again():
+    from chec_local_interpreter.vano_widgets import construir_selector_vanos
+
+    selector = construir_selector_vanos([], mensaje_vacio="Ventana sin eventos")
+    assert len(selector.caja.children) == 1
+
+    selector.poblar(["VA", "VB"], conservar=True)
+
+    assert tuple(selector.caja.children) == tuple(selector.casillas.values())
+
+
+def test_without_a_message_an_empty_list_stays_empty():
+    """Los demas tableros (01.4 y hermanos) no configuran mensaje y no cambian."""
+    from chec_local_interpreter.vano_widgets import construir_selector_vanos
+
+    selector = construir_selector_vanos(["VA"])
+
+    selector.poblar([])
+
+    assert tuple(selector.caja.children) == ()
