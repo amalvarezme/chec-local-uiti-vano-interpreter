@@ -28,7 +28,7 @@ abandoned run must still leave evidence of how far it got.
 ```
 RUTA_BITACORA=$(python3 scripts/bitacora_despliegue.py init \
   --comando /app-vano-clima \
-  --cuaderno notebooks/old_version/01_uiti_vano_clima.ipynb)
+  --cuaderno notebooks/base_apps/01_uiti_vano_clima.ipynb)
 ```
 
 Then, **after every numbered step**, record it. Not at the end from memory — at

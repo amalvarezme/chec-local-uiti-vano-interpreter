@@ -8,7 +8,7 @@ description: Abre en el navegador el simulador local de riesgo por vano (cuadern
 > app's.
 
 Opens the local simulator built from
-`notebooks/old_version/06_uiti_vano_explicabilidad_simulador.ipynb`: the historical map
+`notebooks/base_apps/06_uiti_vano_explicabilidad_simulador.ipynb`: the historical map
 and the simulated-criticality one, selection of up to 15 vanos, the 26 simulable
 variables, the top variables per vano, the relevance graph and the cost of the plan.
 

@@ -7,7 +7,7 @@ description: Abre en el navegador el tablero local de nube por vano y clima (cua
 > what to report, and the restrictions already met in the field.
 
 Opens the local dashboard built from
-`notebooks/old_version/01_uiti_vano_clima.ipynb`: the per-vano cloud over the map with
+`notebooks/base_apps/01_uiti_vano_clima.ipynb`: the per-vano cloud over the map with
 the 6 selectable variables, the dual-axis time series and the 6 violins, with all 208
 circuits inside and the selector switching between them live.
 

@@ -376,7 +376,7 @@ El agente puede recibir:
 - Fechas de interes o subconjuntos de eventos.
 - Matriz de adyacencia y aristas preservadas del grafo usado por la corrida.
 - Rutas HTML de grafos estimados por escenario generados desde
-  `notebooks/old_version/05_mgcecdl_circuit_analysis.ipynb`.
+  `05_mgcecdl_circuit_analysis.ipynb`.
 
 El agente debe distinguir siempre la granularidad:
 
@@ -702,7 +702,7 @@ El agente debe distinguir tres niveles:
 2. **Grafo de entrenamiento:** matriz alineada exactamente con `features`; es el grafo que
    MGCECDL puede usar durante entrenamiento para reconstruccion/regularizacion.
 3. **Grafo estimado HTML del cuaderno 05:** entregable interpretativo generado por
-   `notebooks/old_version/05_mgcecdl_circuit_analysis.ipynb` para cada escenario de circuito.
+   `05_mgcecdl_circuit_analysis.ipynb` para cada escenario de circuito.
 
 El grafo estimado HTML:
 

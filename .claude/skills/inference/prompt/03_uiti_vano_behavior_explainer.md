@@ -32,7 +32,7 @@ El agente puede recibir:
 - Fechas de interes o subconjuntos de eventos.
 - Matriz de adyacencia y aristas preservadas del grafo usado por la corrida.
 - Rutas HTML de grafos estimados por escenario generados desde
-  `notebooks/old_version/05_mgcecdl_circuit_analysis.ipynb`.
+  `05_mgcecdl_circuit_analysis.ipynb`.
 
 El agente debe distinguir siempre la granularidad:
 

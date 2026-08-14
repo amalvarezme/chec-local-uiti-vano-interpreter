@@ -8,7 +8,7 @@ description: Publica el cuaderno 04 (agrupamiento y evolucion a nivel de vano po
 > - **C. Unity Catalog target** — `workspace.default.chec-simulador` below is a default, not a requirement. Resolve it at runtime and substitute the resolved value into every path here.
 > - **D. Known restrictions** — D1–D9. If one shows up, do not re-diagnose it.
 
-Follow this exact sequence when `/app-trayectorias-vanos` is invoked. It publishes `notebooks/old_version/04_uiti_vano_trayectorias_vano.ipynb` as a browsable dashboard at a stable URL, and it is **self-healing**: it inspects the target workspace first and creates whatever is missing, so it works against a workspace that has never been touched as well as against one that already has everything.
+Follow this exact sequence when `/app-trayectorias-vanos` is invoked. It publishes `notebooks/base_apps/04_uiti_vano_trayectorias_vano.ipynb` as a browsable dashboard at a stable URL, and it is **self-healing**: it inspects the target workspace first and creates whatever is missing, so it works against a workspace that has never been touched as well as against one that already has everything.
 
 This is the third member of the app family, after `/app-agrupamiento-vanos-circuitos` (`02`) and `/app-trayectorias-circuitos` (`03`). Everything it does that is not specific to `04` is deliberately identical to those two, so read them as the reference when something here is terse.
 
@@ -93,7 +93,7 @@ Warn first: `data/Indicadores_vano_v3.csv` is **566 MB** (Git-LFS tracked) and d
 
 ## 3. Stage and upload the shimmed copy of `04`
 
-**Hard invariant**: the modified notebook is a COPY in the scratch directory. `git status --porcelain notebooks/old_version/04_uiti_vano_trayectorias_vano.ipynb` MUST be empty when this step ends.
+**Hard invariant**: the modified notebook is a COPY in the scratch directory. `git status --porcelain notebooks/base_apps/04_uiti_vano_trayectorias_vano.ipynb` MUST be empty when this step ends.
 
 **Strip every code cell's `outputs` and `execution_count` first — in the STAGED COPY only.** The repo file is 12.3 MB on disk, almost all of it cell 7's embedded `text/html`; stripped it is **0.08 MB** (measured). `databricks workspace import --format JUPYTER` enforces a 10 MB limit, so an unstripped copy is over the ceiling outright — this is the difference between the upload working and failing, not hygiene.
 
@@ -199,12 +199,12 @@ The six names the template uses (`DIV`, `pd`, `df`, `CIRCUITOS`, `VENTANAS`, `TA
 Upload:
 ```
 databricks workspace mkdirs /Workspace/Users/<userName>/databricks-integration/project_flow -p <profile>
-databricks workspace import /Workspace/Users/<userName>/databricks-integration/old_version/04_uiti_vano_trayectorias_vano --file <staged_copy> --format JUPYTER --overwrite -p <profile>
+databricks workspace import /Workspace/Users/<userName>/databricks-integration/base_apps/04_uiti_vano_trayectorias_vano --file <staged_copy> --format JUPYTER --overwrite -p <profile>
 ```
 
 Then check the invariant. **Scope the hard assertion to `04` itself** and treat anything else in the folder as informational — a sibling notebook may well be open in Jupyter while this runs:
 ```
-test -z "$(git status --porcelain notebooks/old_version/04_uiti_vano_trayectorias_vano.ipynb)" && echo LIMPIO || echo MODIFICADO
+test -z "$(git status --porcelain notebooks/base_apps/04_uiti_vano_trayectorias_vano.ipynb)" && echo LIMPIO || echo MODIFICADO
 git status --porcelain notebooks/
 ```
 The first line MUST print `LIMPIO`. Do **not** write the check as `git status --porcelain <path> && echo ok`: `git status` exits 0 whether or not it printed anything.
@@ -220,7 +220,7 @@ with
   "run_name": "trayectorias-vanos-html",
   "tasks": [{
     "task_key": "build_html",
-    "notebook_task": {"notebook_path": "/Workspace/Users/<userName>/databricks-integration/old_version/04_uiti_vano_trayectorias_vano"}
+    "notebook_task": {"notebook_path": "/Workspace/Users/<userName>/databricks-integration/base_apps/04_uiti_vano_trayectorias_vano"}
   }]
 }
 ```
