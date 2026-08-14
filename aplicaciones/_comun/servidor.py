@@ -37,6 +37,14 @@ import paleta as _paleta
 # -- el boton que la llama y el servidor que la atiende -- tienen que coincidir.
 RUTA_APAGADO = "/apagar"
 
+# Donde cada aplicacion deja escrito el pid del proceso que tiene su puerto.
+#
+# Sirve para dos cosas distintas y las dos importan. Al ABRIR, es como se reconoce que
+# el puerto lo tiene esa misma aplicacion y no un programa ajeno, sin pedirle ninguna
+# pagina -- preguntarle una a Voila cuesta un kernel de ~700 MB, medido. Al CERRAR, es
+# el unico camino que tiene CriticidadCHEC hasta un simulador que no lanzo el.
+ARCHIVO_PID = ".servidor.pid"
+
 # Un ano. Solo se aplica a archivos cuyo nombre contiene el hash de su contenido:
 # si cambian, cambia la URL, asi que no hay forma de servir algo viejo.
 _CACHE_INMUTABLE = "public, max-age=31536000, immutable"
@@ -301,6 +309,120 @@ def abrir_navegador(url: str) -> bool:
         return False
 
 
+# --------------------------------------------------------- ya esta abierta?
+
+
+def puerto_tomado(puerto: int, espera: float = 0.6) -> bool:
+    """Si hay alguien ESCUCHANDO en ese puerto. Se abre una conexion y se cierra.
+
+    La pregunta no es "que sirve ahi" sino "esta el puerto tomado", y se contesta con
+    una conexion TCP a proposito. Un `GET /` haria que Voila RENDERIZARA el cuaderno:
+    medido, cada comprobacion de salud dejaba atras un kernel de ~700 MB con PyTorch
+    dentro, y preguntar tres veces llevaba la aplicacion de uno a seis kernels.
+
+    Es ademas la misma pregunta que contesta el `lsof ... -sTCP:LISTEN` del contrato de
+    `/app-local-*`, asi que la aplicacion y quien la vigila ven lo mismo.
+    """
+    try:
+        with socket.create_connection(("127.0.0.1", puerto), timeout=espera):
+            return True
+    except OSError:
+        return False
+
+
+def escribir_pid(app: Path) -> Path:
+    """Deja el pid de ESTE proceso en la carpeta de la aplicacion."""
+    archivo = app / ARCHIVO_PID
+    archivo.write_text(str(os.getpid()), encoding="utf-8")
+    return archivo
+
+
+def borrar_pid(app: Path) -> None:
+    (app / ARCHIVO_PID).unlink(missing_ok=True)
+
+
+def pid_de(app: Path) -> int | None:
+    """El pid que la aplicacion dejo escrito, si sigue siendo suyo.
+
+    El archivo se comprueba contra la tabla de procesos antes de devolverlo. Quien lo
+    escribe lo borra al salir, pero un `SIGKILL` no le da ocasion, y el sistema reasigna
+    los pid: un archivo olvidado apunta tarde o temprano a un proceso ajeno. Dar ese
+    numero por bueno es como se le manda una senal a algo que no es la aplicacion, o
+    como una apertura nueva concluye que el puerto es suyo cuando lo tiene otro.
+
+    Se compara contra la RUTA de la aplicacion y no contra el nombre de su carpeta: la
+    ruta aparece entera en la linea de ordenes de los tres procesos que pueden tener el
+    puerto -- `app.py`, el servidor de los tableros y el Voila del simulador, que abre
+    el cuaderno de dentro de esa misma carpeta -- y no la comparte ningun otro proceso
+    de la maquina.
+    """
+    try:
+        pid = int((app / ARCHIVO_PID).read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return None
+    if pid <= 0:
+        return None
+    if os.name == "nt":
+        # Sin `ps`, y `tasklist` no da la linea de ordenes completa sin privilegios. Se
+        # confia en el archivo, que alli el unico camino que lo escribe es el mismo que
+        # lo borra.
+        return pid
+    try:
+        salida = subprocess.run(["/bin/ps", "-p", str(pid), "-o", "command="],
+                                capture_output=True, text=True, timeout=3)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return pid if str(app.resolve()) in salida.stdout else None
+
+
+# Codigo de salida cuando el puerto lo tiene algo que no es esta aplicacion. Distinto de
+# cero a proposito: es lo que hace que la ventana de `Iniciar.app` NO se cierre sola y
+# el mensaje se quede en pantalla para que lo lean.
+SALIDA_PUERTO_AJENO = 2
+
+
+def revisar_puerto(app: Path, puerto: int, *, abrir: bool,
+                   titulo: str | None = None) -> int | None:
+    """Que hacer cuando alguien pide levantar `app` en `puerto`.
+
+    Devuelve `None` si el puerto esta libre y hay que seguir. Si no, devuelve el codigo
+    con el que hay que SALIR sin levantar nada:
+
+      * `0` -- el puerto lo tiene esta misma aplicacion. El doble clic es "abreme esto",
+        no "levanta otra copia": se abre el navegador sobre la que ya esta y se sale
+        bien, que ademas es lo que cierra sola la ventana recien abierta.
+      * `SALIDA_PUERTO_AJENO` -- lo tiene otra cosa. Ahi si hay algo que decidir.
+
+    Lo que ya no puede pasar es lo de antes: `puerto_libre` caia a un puerto que
+    asignara el sistema, y el segundo doble clic servia el MISMO tablero en una URL que
+    nadie conocia -- medido, 01_clima en 8801 y una segunda copia en 53745 --, invisible
+    para CriticidadCHEC, que busca las aplicaciones donde dice el contrato.
+    """
+    if not puerto_tomado(puerto):
+        return None
+
+    titulo = titulo or app.name
+    url = f"http://127.0.0.1:{puerto}/"
+    if pid_de(app) is not None:
+        # "ya se esta sirviendo" y no "ya esta abierta": el titulo lo pone quien
+        # llama y tanto puede ser un nombre de carpeta como una frase, asi que la
+        # concordancia de genero no se puede dar por buena.
+        print(f"\n  {titulo} ya se esta sirviendo en  {url}")
+        print("  No se levanta una segunda copia: se abre la que ya esta corriendo.\n")
+        if abrir and not abrir_navegador(url):
+            print(f"  No se pudo abrir el navegador solo: copia {url} y pegalo.")
+        return 0
+
+    quien = (f"netstat -ano | findstr :{puerto}" if os.name == "nt"
+             else f"lsof -ti tcp:{puerto} -sTCP:LISTEN")
+    print(f"\n  El puerto {puerto} ya lo tiene algo, y no es {titulo}.")
+    print(f"  Para ver quien:  {quien}")
+    print("  Cierra eso y vuelve a abrir la aplicacion. No se levanta en otro puerto "
+          "porque\n  su URL es fija: es la que espera CriticidadCHEC y la que queda en "
+          "el marcador.\n")
+    return SALIDA_PUERTO_AJENO
+
+
 def puerto_libre(preferido: int = 8765) -> int:
     """Devuelve `preferido` si esta libre; si no, uno que el sistema asigne.
 
@@ -328,9 +450,9 @@ def puerto_libre(preferido: int = 8765) -> int:
     raise SystemExit("No se pudo reservar ningun puerto local.")
 
 
-def servir(carpeta: Path, *, abrir: bool = True, puerto: int | None = None,
-           preferido: int = 8765, verboso: bool = False,
-           menu: str | None = None) -> None:
+def servir(carpeta: Path, *, app: Path | None = None, abrir: bool = True,
+           puerto: int | None = None, preferido: int = 8765, verboso: bool = False,
+           menu: str | None = None) -> int:
     """Sirve `carpeta` en 127.0.0.1 hasta que se interrumpa con Ctrl+C.
 
     `puerto` lo fija quien llama -- los comandos `/app-local-*` y CriticidadCHEC lo
@@ -342,7 +464,19 @@ def servir(carpeta: Path, *, abrir: bool = True, puerto: int | None = None,
     `menu` es la URL de CriticidadCHEC cuando fue el quien lanzo este tablero. Con
     ella, el armazon sale con la barra de "Volver al menu" / "Cerrar todo" en vez del
     boton de cerrar suelto.
+
+    `app` es la CARPETA de la aplicacion -- `carpeta` es solo su panel --, y con ella
+    este servidor deja su pid escrito y se rinde cuando su puerto ya lo tiene esa misma
+    aplicacion, en vez de servir una segunda copia en un puerto al azar. Sin `app` se
+    comporta como siempre, que es lo que necesitan las pruebas y cualquier uso suelto.
+
+    Devuelve el codigo con el que hay que salir.
     """
+    if app is not None:
+        codigo = revisar_puerto(app, puerto or preferido, abrir=abrir)
+        if codigo is not None:
+            return codigo
+
     piezas = _catalogo(carpeta)
     if menu:
         armazon = piezas["/index.html"]
@@ -358,6 +492,10 @@ def servir(carpeta: Path, *, abrir: bool = True, puerto: int | None = None,
     # Solo 127.0.0.1: la aplicacion es local y no tiene ninguna autenticacion, asi que
     # escuchar en 0.0.0.0 la publicaria a toda la red de la oficina sin decirlo.
     with _Servidor(("127.0.0.1", puerto), manejador) as servidor:
+        # El pid se escribe con el socket YA atado: antes, un arranque que fallara al
+        # atarse dejaria un archivo apuntando a un proceso que nunca sirvio nada.
+        if app is not None:
+            escribir_pid(app)
         url = f"http://127.0.0.1:{puerto}/"
         print(f"\n  Tablero servido en  {url}")
         if abrir:
@@ -378,3 +516,10 @@ def servir(carpeta: Path, *, abrir: bool = True, puerto: int | None = None,
             print("  Cerrado desde el tablero.")
         except KeyboardInterrupt:
             print("\n  Detenido.")
+        finally:
+            # Pase lo que pase: un pid olvidado apunta tarde o temprano a otro proceso,
+            # y la siguiente apertura lo leeria como "esta aplicacion ya esta abierta"
+            # sobre un puerto que tiene cualquier otra cosa.
+            if app is not None:
+                borrar_pid(app)
+    return 0

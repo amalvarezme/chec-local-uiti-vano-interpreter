@@ -469,3 +469,56 @@ def test_la_url_que_reciben_los_tableros_sale_del_puerto_del_menu():
     assert codigo.count('f"http://127.0.0.1:{PUERTO_MENU}/"') == 2, (
         "la URL del menu tiene que derivarse de PUERTO_MENU en los dos sitios que la "
         "reparten: el argumento --menu y la variable MENU_CRITICIDAD")
+
+
+# ------------------------------------------- lo que el menu dice de lo que no lanzo
+
+
+def _aplicacion_suelta(tmp_path, puerto: int) -> menu.Aplicacion:
+    carpeta = tmp_path / "01_clima"
+    carpeta.mkdir(exist_ok=True)
+    app = menu.Aplicacion("clima", carpeta.name, "Clima", "doble de prueba", puerto)
+    app.carpeta = carpeta
+    return app
+
+
+def test_una_aplicacion_abierta_por_fuera_no_se_dice_detenida(tmp_path, monkeypatch):
+    """El menu solo se enteraba de lo que habia lanzado el.
+
+    Abrir un tablero por doble clic y despues el menu dejaba su tarjeta diciendo
+    "detenida" mientras el tablero servia en su puerto, con el boton "Abrir" encima. Y
+    "Cerrar todo" lo apagaba igual -- porque llama a la puerta de cada puerto -- asi que
+    la pantalla contaba una cosa y la maquina hacia otra. La tarjeta tiene que salir de
+    lo que hay en el puerto, no solo de lo que este menu recuerda haber lanzado.
+    """
+    control = menu.Control()
+    app = _aplicacion_suelta(tmp_path, 8801)
+    control.apps["clima"] = app
+    monkeypatch.setattr(menu, "_ocupado", lambda *_a, **_k: True)
+
+    estado = control.estado_de(app)
+
+    assert estado["fase"] == "corriendo"
+    assert "8801" in estado["detalle"] and "menu" in estado["detalle"]
+
+
+def test_un_puerto_libre_sigue_diciendo_detenida(tmp_path, monkeypatch):
+    control = menu.Control()
+    app = _aplicacion_suelta(tmp_path, 8801)
+    control.apps["clima"] = app
+    monkeypatch.setattr(menu, "_ocupado", lambda *_a, **_k: False)
+
+    assert control.estado_de(app)["fase"] == "detenida"
+
+
+def test_mirar_el_estado_no_le_pide_ni_una_pagina_a_nadie(tmp_path, monkeypatch):
+    """La comprobacion nueva corre para las cinco aplicaciones cada 2,5 s. Como TCP no
+    cuesta nada; como `GET /` costaria un kernel de 700 MB por vuelta en el simulador."""
+    pedidas = []
+    monkeypatch.setattr(menu.urllib.request, "urlopen",
+                        lambda *a, **k: pedidas.append(a) or (_ for _ in ()).throw(
+                            AssertionError("el estado pidio una pagina")))
+    control = menu.Control()
+    control.estado()
+
+    assert pedidas == []

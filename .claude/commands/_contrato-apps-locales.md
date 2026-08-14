@@ -26,11 +26,19 @@ double-click one. Why is restriction **R5**.
 | `/app-local-trayectorias-vanos` | `04_trayectorias_vanos` | **8804** |
 | `/app-local-simulador` | `06_simulador` | **8866** |
 
-The apps themselves pick a free port when launched by double-click, which is right for
-that path — but here a fixed port is what makes the URL stable across sessions and what
-turns "is it already running?" into a single check. Always pass `--puerto <port>`.
+Every app uses the port in this table, on every path — the double-click launcher
+included. It used to fall back to a port the system assigned when its own was taken, and
+that turned the second double-click into a second copy of the same dashboard on a URL
+nobody knew: measured, `01_clima` on 8801 and another one on 53745, invisible to
+CriticidadCHEC, which looks for the apps where this table says. Pass `--puerto <port>`
+anyway: it is what keeps the URL stable when the command and the launcher disagree.
 
 ## B. If it is already running, do not start a second one
+
+The app now refuses this on its own — it leaves its pid in `<app folder>/.servidor.pid`,
+and an arrival on a port that pid already owns opens the browser on the running instance
+and exits 0 instead of serving a second copy. Check it here anyway: the check below tells
+the USER what happened, and it is the only one that runs before the app is even started.
 
 Before anything else:
 

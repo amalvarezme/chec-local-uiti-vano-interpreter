@@ -52,6 +52,13 @@ momento: rompe la siguiente apertura. El menu ve el puerto contestando, lo adopt
 si acabara de arrancarlo, y sirve el tablero VIEJO sin que nada en la pantalla lo diga.
 Asi que `_apagar_aplicacion` devuelve si el puerto quedo libre, y quien no lo suelta
 sale como fallo con el numero de puerto en el detalle.
+
+La regla vale en las dos direcciones, y la otra mitad se agrego despues: una aplicacion
+abierta POR FUERA -- doble clic sobre su `Iniciar.app`, o un `/app-local-*` -- tampoco
+puede salir como "detenida". El menu solo se enteraba de lo que habia lanzado el, asi que
+su tarjeta ofrecia "Abrir" sobre un tablero que ya estaba sirviendo, y "Cerrar todo" lo
+apagaba igual -- porque llama a la puerta de cada puerto --: la pantalla contaba una cosa
+y la maquina hacia otra. La fase sale del PUERTO, no de la memoria del menu.
 """
 from __future__ import annotations
 
@@ -59,7 +66,6 @@ import http.server
 import json
 import os
 import signal
-import socket
 import socketserver
 import subprocess
 import sys
@@ -81,10 +87,11 @@ GESTOR = Path(__file__).resolve().parent / "gestor.py"
 
 ES_WINDOWS = os.name == "nt"
 
-# Donde `06_simulador/app.py` deja escrito el pid de Voila. El nombre esta ahi y aqui, y
-# no en un sitio comun, porque los dos modulos tienen que poder correr sin importarse: el
-# menu es biblioteca estandar pura y la aplicacion vive en su propio entorno.
-ARCHIVO_PID = ".servidor.pid"
+# Donde cada aplicacion deja escrito el pid del proceso que tiene su puerto. Sale de
+# `servidor.py`, que es el que lo escribe: tenerlo declarado dos veces era una manera de
+# que los dos extremos se separaran sin que nada avisara, y el sintoma habria sido un
+# simulador que el menu no puede apagar.
+ARCHIVO_PID = _servidor.ARCHIVO_PID
 
 # Cada hijo, en su propia sesion (POSIX) o grupo (Windows). Es lo que despues permite
 # alcanzar de una sola llamada al nieto que tiene el puerto. Ver el encabezado.
@@ -275,6 +282,18 @@ class Control:
         if app.fase == "corriendo" and not app.viva() and not _ocupado(app.puerto):
             # Se cerro por su cuenta: con su propio boton, o con Ctrl+C en su ventana.
             app.fase, app.detalle = "detenida", ""
+        elif app.fase == "detenida" and _ocupado(app.puerto):
+            # Y al reves: alguien la abrio por fuera -- doble clic sobre su `Iniciar.app`,
+            # o un `/app-local-*` --. Antes la tarjeta seguia diciendo "detenida" con el
+            # boton "Abrir" encima mientras el tablero servia, y "Cerrar todo" lo apagaba
+            # igual, porque llama a la puerta de cada puerto: la pantalla contaba una cosa
+            # y la maquina hacia otra.
+            #
+            # Se pregunta solo por el PUERTO y no por el pid: esto corre para las cinco
+            # aplicaciones en cada `/estado`, o sea cada 2,5 s, y `pid_de` arranca un `ps`.
+            # Una conexion TCP no cuesta nada; dos subprocesos por segundo, si.
+            app.fase = "corriendo"
+            app.detalle = f"abierta fuera de este menu, en el puerto {app.puerto}"
         return {
             "clave": app.clave, "titulo": app.titulo, "descripcion": app.descripcion,
             "puerto": app.puerto, "url": app.url, "fase": app.fase,
@@ -289,26 +308,10 @@ class Control:
 # ----------------------------------------------------------------------- ayudas
 
 
-def _ocupado(puerto: int, espera: float = 0.6) -> bool:
-    """Si hay alguien escuchando en ese puerto. Se abre una conexion y se cierra.
-
-    Antes esto era un `GET /`, y con el simulador era una calamidad silenciosa: Voila
-    RENDERIZA el cuaderno en cada peticion, asi que cada comprobacion de salud dejaba
-    atras un kernel de ~700 MB con PyTorch dentro. Medido: preguntarle tres veces si
-    estaba vivo lo llevo de uno a seis kernels. Y al cargarse la maquina con lo que el
-    propio sondeo iba creando, Voila dejaba de contestar dentro del plazo, el menu lo
-    daba por muerto y ni siquiera le mandaba la senal de apagado.
-
-    La pregunta que hace falta no es "que sirve" sino "esta el puerto tomado", que es
-    tambien la que responde el `lsof ... -sTCP:LISTEN` del contrato de `/app-local-*`.
-    Y esa se contesta con una conexion TCP, que no renderiza nada, no arranca ningun
-    kernel y no depende de lo cargada que este la maquina.
-    """
-    try:
-        with socket.create_connection(("127.0.0.1", puerto), timeout=espera):
-            return True
-    except OSError:
-        return False
+# La pregunta "esta el puerto tomado" -- una conexion TCP, nunca un `GET /`, que con
+# Voila cuesta un kernel de ~700 MB por sondeo. Vive en `servidor.py` porque la hacen los
+# dos: el menu para vigilar, y cada aplicacion al arrancar para no duplicarse.
+_ocupado = _servidor.puerto_tomado
 
 
 def _esperar(puerto: int, *, limite: float, proceso: subprocess.Popen | None = None) -> bool:
@@ -388,29 +391,12 @@ def _pid_escrito(app: Aplicacion) -> int | None:
     doble clic --, porque de ese no tiene ningun proceso en la mano y Voila no tiene
     ruta de apagado.
 
-    El archivo se comprueba contra la tabla de procesos antes de usarlo. `app.py` lo
-    borra al salir pase lo que pase, pero un `SIGKILL` no le da ocasion, y el sistema
-    reasigna los pid: un archivo olvidado apunta tarde o temprano a un proceso ajeno.
-    Mandar `SIGTERM` a ese numero por fiarse de un archivo es exactamente el fallo que
-    el propio boton del simulador se cuido de no cometer.
+    La comprobacion contra la tabla de procesos la hace `servidor.pid_de`, que es donde
+    vive tambien la escritura del archivo. Un pid olvidado por un `SIGKILL` apunta tarde
+    o temprano a un proceso ajeno, y mandarle `SIGTERM` por fiarse de un archivo es
+    exactamente el fallo que el propio boton del simulador se cuido de no cometer.
     """
-    try:
-        pid = int((app.carpeta / ARCHIVO_PID).read_text(encoding="utf-8").strip())
-    except (OSError, ValueError):
-        return None
-    if pid <= 0:
-        return None
-    if ES_WINDOWS:
-        # Sin `ps`, y `tasklist` no da la linea de ordenes completa sin privilegios. Se
-        # confia en el archivo, que en Windows el unico camino que lo escribe es el
-        # mismo que lo borra.
-        return pid
-    try:
-        salida = subprocess.run(["/bin/ps", "-p", str(pid), "-o", "command="],
-                                capture_output=True, text=True, timeout=3)
-    except (OSError, subprocess.SubprocessError):
-        return None
-    return pid if app.carpeta.name in salida.stdout else None
+    return _servidor.pid_de(app.carpeta)
 
 
 def _senalar_al_grupo(proceso: subprocess.Popen, senal) -> None:
@@ -556,14 +542,27 @@ def _parametro(ruta: str, nombre: str) -> str:
 
 
 def servir_menu(*, abrir: bool = True, puerto: int | None = None,
-                verboso: bool = False) -> int:
-    """Levanta el menu y no vuelve hasta que se cierre todo."""
+                verboso: bool = False, app: Path | None = None) -> int:
+    """Levanta el menu y no vuelve hasta que se cierre todo.
+
+    `app` es la carpeta de CriticidadCHEC. Con ella, un segundo doble clic sobre el menu
+    ya abierto abre el que esta corriendo en vez de morir con un `OSError` -- el puerto
+    8800 no se puede reusar -- dejando la ventana nueva sobre una traza de Python.
+    """
     control = Control()
     manejador = type("Manejador", (_Manejador,), {
         "control": control, "silencioso": not verboso})
     puerto = puerto or PUERTO_MENU
 
+    if app is not None:
+        codigo = _servidor.revisar_puerto(app, puerto, abrir=abrir,
+                                          titulo="CriticidadCHEC")
+        if codigo is not None:
+            return codigo
+
     with _Servidor(("127.0.0.1", puerto), manejador) as servidor_menu:
+        if app is not None:
+            _servidor.escribir_pid(app)
         url = f"http://127.0.0.1:{puerto}/"
         print(f"\n  CriticidadCHEC en  {url}")
         print("  Deja esta ventana abierta mientras lo usas. Ctrl+C para cerrarlo todo.\n")
@@ -576,4 +575,9 @@ def servir_menu(*, abrir: bool = True, puerto: int | None = None,
             print("\n  Cerrando las aplicaciones abiertas...")
             control.apagar_todo()
             print("  Detenido.")
+        finally:
+            # Un pid olvidado apunta tarde o temprano a otro proceso, y la siguiente
+            # apertura lo leeria como "el menu ya esta abierto" sobre un puerto ajeno.
+            if app is not None:
+                _servidor.borrar_pid(app)
     return 0

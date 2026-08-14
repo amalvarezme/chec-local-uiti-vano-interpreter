@@ -57,10 +57,13 @@ def main() -> int:
               else "Reconstruyendo el tablero.")
         runpy.run_path(str(AQUI / "construir.py"), run_name="__main__")
 
-    servidor.servir(PANEL, abrir=not args.no_abrir, puerto=args.puerto,
-                    preferido=PUERTO,
-                    verboso=args.verboso, menu=args.menu)
-    return 0
+    # `app=AQUI` es lo que deja que el servidor reconozca una segunda apertura como
+    # PROPIA: deja su pid en esta carpeta y, si el puerto ya lo tiene esta misma
+    # aplicacion, abre la que esta corriendo en vez de servir otra copia en un puerto al
+    # azar -- que es donde iba a parar el segundo doble clic, invisible para el menu.
+    return servidor.servir(PANEL, app=AQUI, abrir=not args.no_abrir, puerto=args.puerto,
+                           preferido=PUERTO,
+                           verboso=args.verboso, menu=args.menu)
 
 
 if __name__ == "__main__":

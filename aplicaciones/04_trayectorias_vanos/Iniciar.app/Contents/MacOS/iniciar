@@ -84,5 +84,20 @@ cat > "$PERFIL" <<PLIST
 PLIST
 
 # `-a Terminal` y no el manejador por defecto: es justamente lo que hace que esto no se
-# lo pueda quedar otro terminal, que es todo el motivo de que este bundle exista.
-exec open -a Terminal "$PERFIL"
+# lo pueda quedar otro terminal, que es todo el motivo de que este bundle exista. Con
+# Ghostty corriendo y en primer plano, esto abre igual una ventana NUEVA de Terminal --
+# medido en esta maquina, dos veces seguidas.
+#
+# Y con respaldo, porque hay un modo de fallo que el lanzador si puede remontar: si
+# Terminal.app no esta donde `open` la busca POR NOMBRE -- renombrada, movida, o un macOS
+# recortado por una politica de empresa --, se la pide por su IDENTIFICADOR de bundle,
+# que es lo que LaunchServices indexa de verdad. Sin ese segundo intento el doble clic no
+# hace absolutamente nada, y no queda donde leerlo: el bundle es `LSUIElement` y no tiene
+# ni ventana ni terminal donde escribir.
+#
+# Si los dos fallan se sale con error en vez de darse por bueno. Nadie lee ese codigo en
+# un doble clic, pero un lanzador que afirma haber abierto algo que no abrio es la peor
+# version del fallo original.
+open -a Terminal "$PERFIL" && exit 0
+open -b com.apple.Terminal "$PERFIL" && exit 0
+exit 1
