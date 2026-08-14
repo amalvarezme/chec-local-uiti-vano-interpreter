@@ -51,24 +51,60 @@ def test_the_box_is_a_map_layer_below_the_traces_and_not_a_trace(fuente):
     """A filled `Scattermap` trace drawn on top would eat the click that
     toggles the selection, and would paint over the class colour of the very
     vano it is pointing at. `below='traces'` is what keeps both working."""
-    assert "CAPA_CAJA_SELECCION = dict(" in fuente
-    capa = fuente[fuente.index("CAPA_CAJA_SELECCION = dict(") :][:400]
+    assert "CAPAS_CAJA_SELECCION = [" in fuente
+    capa = fuente[fuente.index("CAPAS_CAJA_SELECCION = [") :][:500]
     assert "sourcetype='geojson'" in capa
     assert "type='fill'" in capa
     assert "below='traces'" in capa
-    assert "color=COLOR_CAJA_SELECCION" in capa
+    assert "color=COLOR_CAJA_POR_CLASE[_clase]" in capa
     assert "opacity=OPACIDAD_CAJA_SELECCION" in capa
     # Si alguien la convierte en traza, deja de estar en el layout y esto avisa.
-    assert "fig.layout.map.layers[0].source = cajas_seleccion(" in fuente
+    assert "fig.layout.map.layers[IDX_CAPA_CLASE[_clase]].source = _coleccion" in fuente
 
 
-def test_only_the_base_map_carries_the_selection_box(fuente):
-    """Row 2 is the model's OUTPUT, not a control: marking there would mix
-    "what I chose" with "what the model predicted" on the same surface. Row 2
-    has boxes of its own, but they answer a different question -- see below."""
-    assert fuente.count("layers=[CAPA_CAJA_SELECCION]") == 1
-    assert "assert len(_fig.layout.map.layers) == 1" in fuente
+def test_the_base_map_has_one_box_layer_per_kmeans_group(fuente):
+    """El relleno del recuadro lleva el color del GRUPO KMeans del vano, al 50%,
+    y no un rojo de acento propio.
+
+    "Cual estoy mirando" ya lo contestan el halo blanco y el trazo un 40% mas
+    ancho. Con el color del grupo, el recuadro contesta ademas en que nivel cayo
+    -- la misma lectura que su linea, pero en una mancha que se sigue viendo al
+    zoom en que la linea deja de distinguirse de sus vecinas.
+
+    Son CINCO capas porque una entrada de `layout.map.layers` pinta con UN color:
+    los cuatro grupos mas la del vano marcado sin celda en la ventana, que no
+    tiene grupo -- y eso no es el grupo mas bajo, es la ausencia del dato.
+    """
+    assert "CLASES_CAJA = (0, 1, 2, 3, None)" in fuente
+    assert fuente.count("layers=CAPAS_CAJA_SELECCION") == 1
+    assert "assert len(_fig.layout.map.layers) == len(CLASES_CAJA) == 5" in fuente
     assert "assert len(_fig.layout.map2.layers) == len(CAMBIOS)" in fuente
+    # El relleno y la linea del mismo grupo tienen que salir del MISMO color, o el
+    # vano queda encerrado en un color y trazado en otro.
+    assert "COLORES_CAJA_SELECCION = list(COLORES_GRUPOS)" in fuente
+    assert "COLOR_CAJA_SIN_CLASE = COLOR_SIN_GRUPO" in fuente
+    assert (
+        "assert [_fig.layout.map.layers[IDX_CAPA_CLASE[_c]].color for _c in range(4)] \\\n"
+        "    == [_fig.data[_i].line.color for _i in IDX['clases']] == COLORES_GRUPOS"
+    ) in fuente
+
+
+def test_deselecting_a_vano_only_removes_its_box(fuente):
+    """Desmarcar quita el recuadro y NO el color ni el grosor de la linea.
+
+    Es lo que separa las dos capas: el color y el ancho salen de
+    `clases_por_fid` -- el grupo KMeans de esa ventana --, y el recuadro sale de
+    `marcados`. Si el reparto por clase mirara la seleccion para decidir el
+    COLOR de la linea, desmarcar devolveria el vano al negro de "sin eventos" y
+    el tablero afirmaria que no hubo eventos donde si los hubo.
+    """
+    cuerpo = fuente[fuente.index("def _redibujar_mapa_historico("):]
+    cuerpo = cuerpo[: cuerpo.index("def _alto_del_mapa_px(")]
+    # Las capas de clase se alimentan de `capas['clases']`, que `capas_mapa_historico`
+    # construye para TODO vano con celda, este marcado o no.
+    assert "_volcar_capa(fig.data[IDX['clases'][_clase]], capas['clases'][_clase]," in cuerpo
+    assert "cajas_seleccion_por_clase(" in cuerpo
+    assert "marcados=_marcados" in cuerpo
 
 
 def test_the_simulated_map_has_one_box_layer_per_outcome(fuente):
@@ -130,9 +166,9 @@ def test_the_notebook_redraw_feeds_the_layer_from_the_geometry(fuente):
     the window's cells. A marked vano with no events in the active window has
     no class, but it still has coordinates, so its box stays put while the
     window slider moves."""
-    assert "cajas_seleccion," in fuente  # importada en la celda de arranque
+    assert "cajas_seleccion_por_clase," in fuente  # importada en la celda de arranque
     llamada = re.search(
-        r"fig\.layout\.map\.layers\[0\]\.source = cajas_seleccion\((.*?)\)\n",
+        r"_cajas = cajas_seleccion_por_clase\((.*?)\)\n",
         fuente,
         re.S,
     )
@@ -142,6 +178,10 @@ def test_the_notebook_redraw_feeds_the_layer_from_the_geometry(fuente):
     assert "marcados=_marcados" in argumentos
     assert "lado_minimo=LADO_MINIMO_CAJA" in argumentos
     assert "margen=MARGEN_CAJA" in argumentos
+    # La CLASE decide de que color se pinta, y sale de la ventana activa. La
+    # geometria del rectangulo no: por eso el recuadro sigue puesto -- en gris --
+    # sobre un vano marcado que en esta ventana no tiene ni un evento.
+    assert "clases_por_fid" in argumentos
 
 
 def test_the_minimum_side_is_wider_than_zero_so_a_north_south_vano_is_visible(fuente):

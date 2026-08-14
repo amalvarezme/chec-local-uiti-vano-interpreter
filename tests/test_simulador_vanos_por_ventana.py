@@ -1,25 +1,33 @@
-"""Contract tests: la lista de vanos del cuaderno 06 sigue a la VENTANA.
+"""Contract tests: la lista de vanos del cuaderno 06 es la del DATASET; la
+ventana mueve la SELECCION.
 
-Antes el selector ofrecia todo vano que el mapa dibujara, tuviera o no celdas en
-el modelo. Medido sobre 30 circuitos, solo el 21% de esas casillas tenia eventos
-en una ventana dada: el usuario marcaba cinco vanos, pulsaba "Simular" y no
-aparecia nada, y la unica pista era un renglon de aviso debajo de la lista.
+Historia de las tres versiones de este contrato, porque las tres se tomaron por
+buenas y las dos primeras fallaban en silencio:
 
-Ahora la lista se recorta a los vanos con eventos en la ventana activa y se
-repuebla en cada paso del deslizador. Eso mueve tres cosas que estos tests fijan
-contra la fuente del cuaderno (sin ejecutarlo, para que siga siendo rapido),
-porque las tres fallan en silencio:
+  1. La lista era la union de lo que el mapa dibuja y lo que la tabla de bolsas
+     trae. Medido sobre 30 circuitos, solo el 21% de esas casillas tenia eventos
+     en una ventana dada: marcar cinco vanos, pulsar "Simular" y no ver aparecer
+     nada era el caso NORMAL.
+  2. La lista se recorto a los vanos con eventos en la ventana activa y se
+     repoblaba en cada paso del deslizador. Eso arreglo lo anterior y trajo lo
+     suyo: las casillas cambiaban de sitio bajo la mano, un vano que se venia
+     siguiendo desaparecia al avanzar un mes, y el tope de quince deshabilitaba
+     las casillas sin marcar en cuanto la auto-marca llenaba el cupo -- con lo
+     que agregar un vano tocandolo en el mapa era imposible sin desmarcar otro.
+  3. La de ahora: la lista es el circuito COMPLETO -- sus vanos con eventos en
+     todo el periodo, la misma que ofrece el tablero de 04 -- y lo que el
+     deslizador mueve es quien esta marcado. La lista es el universo; la ventana
+     es el foco.
 
-  1. `_vanos_marcables` tiene que recibir la ventana. Sin ella la lista vuelve a
-     ser la del circuito entero y el recorte no ocurre en ninguna parte.
-  2. El deslizador tiene que REPOBLAR, no solo repintar el mapa. Un observer que
-     solo redibuja deja la lista de la ventana anterior sobre el mapa nuevo.
-  3. La lista vacia tiene que decir por que. Una caja vacia y muda se lee como
-     que el tablero se rompio.
+Lo que la version 2 protegia -- pulsar "Simular" sin nada que puntuar -- lo dice
+ahora `_actualizar_aviso_vanos`, y decirlo es mejor que impedirlo: un vano sin
+eventos en marzo sigue siendo el vano que interesa, y su serie de tiempo es
+justo donde se ve que en febrero si los tuvo.
 
-La mecanica del selector -- conservar la seleccion que sobrevive, emitir un solo
-cambio de `value`, dibujar el mensaje -- se prueba de verdad, con widgets vivos,
-en `tests/test_vano_widgets.py`. Aqui solo se comprueba que el cuaderno la usa.
+Se fija contra la FUENTE del cuaderno (sin ejecutarlo, para que siga siendo
+rapido). La mecanica del selector -- marcar por codigo, emitir un solo cambio de
+`value`, dibujar el mensaje de lista vacia -- se prueba de verdad, con widgets
+vivos, en `tests/test_vano_widgets.py`.
 """
 
 from __future__ import annotations
@@ -44,38 +52,97 @@ def fuente() -> str:
     )
 
 
-def test_the_markable_vanos_depend_on_the_active_window(fuente):
-    """Sin la ventana como argumento no hay recorte posible: la funcion no puede
-    saber a que periodo se refiere la pregunta."""
-    assert "def _vanos_marcables(circuito, ventana_i):" in fuente
+# ------------------------------------------------------- la lista es el circuito
 
 
-def test_the_markable_vanos_come_from_that_window_cells(fuente):
-    """`clases_para(circuito, ventana_i)` trae UNA entrada por vano con celda en
-    esa ventana, y ya esta cacheada porque el repintado del mapa la pide igual.
-    Derivar la lista de otra fuente -- la geometria, `VANOS_POR_CIRCUITO` -- es
-    como se vuelve a ofrecer un vano sin eventos."""
-    cuerpo = fuente[fuente.index("def _vanos_marcables(circuito, ventana_i):"):]
+def test_the_markable_vanos_do_not_depend_on_the_active_window(fuente):
+    """Sin la ventana como argumento la lista NO PUEDE recortarse a ella, que es
+    justo la propiedad que se busca: la caja de casillas se queda quieta mientras
+    el deslizador se mueve."""
+    assert "def _vanos_marcables(circuito):" in fuente
+    assert "def _vanos_marcables(circuito, ventana_i):" not in fuente
+
+
+def test_the_markable_vanos_are_the_circuit_vanos_with_events_in_the_dataset(fuente):
+    """Salen de `VANOS_POR_CIRCUITO`, que se deriva de `TABLA`.
+
+    No de `clases_para`, que es la ventana; ni de `GEO_POR_CIRCUITO`, que trae
+    tambien los tramos que nunca tuvieron un evento y no son marcables en ningun
+    periodo. Es la MISMA fuente que usa el tablero de 04, y ese es el punto: dos
+    tableros sobre el mismo circuito no pueden ofrecer dos listas distintas.
+    """
+    cuerpo = fuente[fuente.index("def _vanos_marcables(circuito):"):]
     cuerpo = cuerpo[: cuerpo.index("\nvano_widget = ")]
-    assert "clases_para(circuito, ventana_i)" in cuerpo
-    # La union con la geometria del mapa era justo lo contrario del recorte.
+    assert "VANOS_POR_CIRCUITO.get(circuito" in cuerpo
+    assert "clases_para(" not in cuerpo
     assert "GEO_POR_CIRCUITO" not in cuerpo
 
 
-def test_moving_the_window_repopulates_the_list(fuente):
-    """El deslizador tiene que repoblar ANTES de repintar. Registrar solo el
-    repintado deja la lista de la ventana anterior."""
+def test_the_vano_selector_has_no_cap(fuente):
+    """Sin `maximo`, y eso es lo que permite dos cosas que el usuario pidio: que
+    un clic en el mapa AGREGUE un vano aunque la auto-marca ya haya puesto
+    quince, y que las casillas sin marcar no se deshabiliten solas.
+
+    El tope protegia la rejilla de controles -- una columna por vano --, y eso lo
+    resuelve hoy la paginacion (`VANOS_POR_PAGINA`).
+    """
+    llamada = fuente[fuente.index("vano_widget = construir_selector_vanos("):]
+    llamada = llamada[: llamada.index("\n\n")]
+    assert "maximo=" not in llamada
+
+
+def test_an_empty_circuit_says_so_in_the_panel(fuente):
+    """Es el texto que el usuario ve dentro de la caja de vanos cuando el
+    circuito no registro un solo evento en todo el periodo. Una caja vacia y muda
+    se lee como que el tablero se rompio."""
+    assert "mensaje_vacio=" in fuente
+    assert "Circuito sin eventos" in fuente
+
+
+# --------------------------------------------------- la ventana mueve la seleccion
+
+
+def test_moving_the_window_reselects_the_top_of_that_window(fuente):
+    """El deslizador marca los vanos de mayor UITI EN ESA VENTANA y descarta la
+    marca anterior. Es un reemplazo: acumular ventanas dejaria marcado todo lo
+    que alguna vez tuvo un evento, y el deslizador no diria nada."""
     assert "def _on_ventana_change(" in fuente
     assert "ventana_widget.observe(_on_ventana_change, names='value')" in fuente
-    # El registro suelto del repintado sobre la ventana se sustituyo por el de
-    # arriba, que llama a los dos en orden.
-    assert "ventana_widget.observe(_redibujar_mapa_historico, names='value')" not in fuente
+    cuerpo = fuente[fuente.index("def _on_ventana_change("):]
+    cuerpo = cuerpo[: cuerpo.index("def _on_circuito_change(")]
+    assert "_auto_seleccion_ventana(circuito, ventana_i)" in cuerpo
+    # Y ya NO repuebla la lista: el universo no cambia con la ventana.
+    assert "poblar(" not in cuerpo
 
 
-def test_repopulating_by_window_keeps_what_survives(fuente):
-    """Mover el deslizador un paso no puede desmarcar un vano que sigue teniendo
-    eventos en la ventana nueva."""
-    assert "conservar=True" in fuente
+def test_the_window_autoselection_uses_the_shared_ranking(fuente):
+    """El criterio vive en `top_vanos_de_ventana` (probado con datos en
+    `tests/test_ventanas_015.py`) y no escrito aqui: el tablero de 04 auto-marca
+    con la misma regla, y dos reglas escritas por separado se separan."""
+    cuerpo = fuente[fuente.index("def _auto_seleccion_ventana("):]
+    cuerpo = cuerpo[: cuerpo.index("def _auto_seleccion_circuito(")]
+    assert "top_vanos_de_ventana(TABLA, circuito, ventana_i, top=TOP_VANOS_VENTANA)" in cuerpo
+
+
+def test_choosing_a_circuit_selects_the_top_of_the_whole_period(fuente):
+    """Al aterrizar en un circuito se marcan los vanos de mayor UITI del PERIODO
+    -- las mismas quince barras del perfil de la fila 3 --, no los de la ventana
+    inicial. Es lo que deja al perfil de arriba y a la serie de tiempo de abajo
+    hablando del mismo conjunto."""
+    cuerpo = fuente[fuente.index("def _auto_seleccion_circuito("):]
+    cuerpo = cuerpo[: cuerpo.index("def _fijar_seleccion(")]
+    assert "perfil_uiti_por_vano(TABLA, circuito, ventanas=VENTANAS," in cuerpo
+    assert "top=TOP_VANOS_PERFIL" in cuerpo
+
+    manejador = fuente[fuente.index("def _on_circuito_change("):]
+    manejador = manejador[: manejador.index("def _al_hacer_clic(")]
+    assert "vano_widget.value = tuple(_auto_seleccion_circuito(circuito))" in manejador
+
+
+def test_the_dashboard_opens_with_that_same_selection(fuente):
+    """Abrir el tablero y cambiar de circuito tienen que dejar el MISMO estado.
+    Sin esto, uno abre vacio y el otro con el top marcado."""
+    assert "_fijar_seleccion(_auto_seleccion_circuito(circuito_widget.value))" in fuente
 
 
 def test_changing_circuit_drops_the_selection_whole(fuente):
@@ -84,16 +151,38 @@ def test_changing_circuit_drops_the_selection_whole(fuente):
     cuerpo = fuente[fuente.index("def _on_circuito_change("):]
     cuerpo = cuerpo[: cuerpo.index("def _al_hacer_clic(")]
     assert "conservar=" not in cuerpo
-    # La ventana se resuelve ANTES de repoblar: repoblar con la ventana del
-    # circuito anterior ofreceria los vanos equivocados.
+    # La ventana se resuelve ANTES de repoblar: asignar `options` reajusta `value`
+    # a la primera opcion, y leerlo despues perdia la ventana en cada cambio.
     assert cuerpo.index("ventana_widget.value =") < cuerpo.index("vano_widget.poblar(")
 
 
-def test_an_empty_window_says_so_in_the_panel(fuente):
-    """Es el texto que el usuario ve dentro de la caja de vanos cuando la ventana
-    activa no tiene un solo evento en el circuito."""
-    assert "mensaje_vacio=" in fuente
-    assert "Ventana sin eventos" in fuente
+def test_a_map_click_adds_beyond_the_autoselection(fuente):
+    """El clic entra por `alternar`, que sin tope en el selector ya no rechaza
+    nada. Y entra a la serie de tiempo por el mismo camino que todo lo demas: la
+    serie sale de los marcados."""
+    cuerpo = fuente[fuente.index("def _al_hacer_clic("):]
+    cuerpo = cuerpo[: cuerpo.index("# SOLO el mapa base.")]
+    assert "vano_widget.alternar(fid)" in cuerpo
+
+
+def test_the_time_series_pool_is_bigger_than_the_autoselection(fuente):
+    """La auto-marca pone hasta quince y el usuario puede seguir agregando. Si el
+    pozo de series midiera lo mismo que la auto-marca, el primer vano agregado a
+    mano no tendria donde dibujarse."""
+    assert "MAX_VANOS_SERIE = 2 * MAX_VANOS_ANALISIS" in fuente
+    assert "for _cupo in range(MAX_VANOS_SERIE):" in fuente
+    assert "[:MAX_VANOS_SERIE]" in fuente
+    assert "2 * MAX_VANOS_SERIE" in fuente  # la asercion del inventario de trazas
+
+
+def test_the_overflow_is_announced_and_never_silent(fuente):
+    """Pasado `MAX_VANOS_SERIE` el mapa sigue resaltando y el simulador sigue
+    puntuando, pero la serie no tiene ranuras. Recortar en silencio es lo unico
+    que no se puede hacer."""
+    cuerpo = fuente[fuente.index("def _actualizar_aviso_vanos("):]
+    cuerpo = cuerpo[: cuerpo.index("# Cambiar de circuito o mover la ventana")]
+    assert "sobran = len(marcados) - MAX_VANOS_SERIE" in cuerpo
+    assert "su serie de tiempo no " in cuerpo
 
 
 # ------------------------------------------------ el encuadre sigue a la ventana
@@ -113,15 +202,16 @@ def test_moving_the_window_reframes_the_base_map(fuente):
     cuerpo = fuente[fuente.index("def _on_ventana_change("):]
     cuerpo = cuerpo[: cuerpo.index("def _on_circuito_change(")]
     assert "_encuadrar_ventana(" in cuerpo, (
-        "el deslizador repuebla y repinta pero no reencuadra")
+        "el deslizador reselecciona y repinta pero no reencuadra")
 
 
 def test_the_window_frame_covers_the_vanos_with_events(fuente):
     """El encuadre sale de los vanos CON eventos en esa ventana -- los mismos que
-    la lista ofrece --, no de la geometria entera del circuito: encuadrar sobre
-    todo el circuito es exactamente la vista que ya habia y que no se movia."""
+    la auto-marca elige entre -- y no de la geometria entera del circuito:
+    encuadrar sobre todo el circuito es exactamente la vista que ya habia y que
+    no se movia."""
     cuerpo = fuente[fuente.index("def _encuadrar_ventana("):]
-    cuerpo = cuerpo[: cuerpo.index("def _al_hacer_clic(")]
+    cuerpo = cuerpo[: cuerpo.index("# Cuantas ventanas hacen falta")]
     assert "clases_para(circuito, ventana_i)" in cuerpo
     assert "bounds_de_fids(" in cuerpo
     # Y una ventana sin un solo evento no puede dejar el mapa sobre un punto
