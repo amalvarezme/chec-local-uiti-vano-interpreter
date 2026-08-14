@@ -34,12 +34,15 @@ its own environment, and can stop them again.
   by hand and one launched from the menu would coexist without seeing each other, each
   building and serving separately. With the shared port the menu **recognises** an app
   that was already open instead of duplicating it.
-- **Closing the menu closes everything it opened.** `Ctrl+C` in its window, the *Cerrar
-  todo* button in the page, and the *Cerrar todo* button inside any dashboard all end
-  the same way. Measured over the five apps, each opened from the menu, closed from its
-  own button, reopened on the same port and stopped again from the menu, then three at
-  once with *Cerrar todo*: every port free, menu exits 0, no orphan process and no
-  orphan kernel. `tests/test_menu_apagado.py` holds that shape as tests.
+- **Closing the menu closes everything it opened, and only the menu can do that.**
+  `Ctrl+C` in its window and the *Cerrar todo* button in its page are the only two
+  paths to a general shutdown. The two buttons inside a dashboard — *Volver al menú* and
+  *Cerrar* — shut down **that** dashboard with its port and whatever hangs off it, and
+  leave the other four and the menu running; the menu notices on its own, because it
+  polls the five ports every 2,5 s. Measured over the five apps, each opened from the
+  menu, closed from its own button, reopened on the same port and stopped again from the
+  menu, then three at once with *Cerrar todo*: every port free, menu exits 0, no orphan
+  process and no orphan kernel. `tests/test_menu_apagado.py` holds that shape as tests.
 - **"Detenida" means the port is free, and nothing else.** The menu waits for the port
   to be released before saying so, and what it cannot free comes back as a failure
   naming the port. It never kills by port: something it did not launch is reported, not

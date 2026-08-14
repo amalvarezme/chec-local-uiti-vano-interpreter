@@ -520,9 +520,10 @@ class _Manejador(http.server.BaseHTTPRequestHandler):
         # El menu cambia en cada peticion: cachearlo mostraria aplicaciones ya cerradas
         # como si siguieran vivas.
         self.send_header("Cache-Control", "no-store")
-        # Los tableros viven en OTRO puerto, o sea otro origen. Esto es lo que deja que
-        # su boton "Cerrar todo" llegue hasta aqui.
-        self.send_header("Access-Control-Allow-Origin", "*")
+        # Sin `Access-Control-Allow-Origin`. Lo llevaba para que el "Cerrar todo" de los
+        # tableros -- que viven en otro puerto, o sea otro origen -- pudiera llegar hasta
+        # aqui. Ese boton ya no existe: desde un tablero solo se apaga ese tablero, y
+        # todo lo que pide esta pagina sale de su mismo origen.
         self.end_headers()
         self.wfile.write(cuerpo)
 

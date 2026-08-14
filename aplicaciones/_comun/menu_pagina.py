@@ -37,8 +37,7 @@ body { margin: 0; padding: 12px; font: 15px/1.55 $FUENTE;
 .envoltura { max-width: 880px; margin: 0 auto; padding: 20px 8px 60px; }
 header { display: flex; align-items: flex-start; justify-content: space-between;
          gap: 20px; margin-bottom: 22px; }
-h1 { font-size: 25px; margin: 0 0 4px; letter-spacing: -.01em; }
-header p { margin: 0; color: $TENUE; font-size: 13px; max-width: 52ch; }
+h1 { font-size: 25px; margin: 0; letter-spacing: -.01em; }
 
 /* El filo izquierdo rojo es el gesto que repiten los cinco tableros en sus paneles de
    control. Cada aplicacion del menu es una tarjeta con ese mismo filo, asi que la
@@ -69,7 +68,6 @@ button.principal:hover:not(:disabled) { background: $ACENTO_OSCURO;
 button.peligro { border-color: $ACENTO; background: $FONDO; color: $ACENTO; }
 button.peligro:hover:not(:disabled) { background: $PANEL; }
 
-.pie { margin-top: 22px; font-size: 12px; color: $TENUE; }
 .cerrado { padding: 60px 20px; text-align: center; }
 .cerrado h1 { margin-bottom: 10px; }
 """).substitute(_paleta.TOKENS, FUENTE=_paleta.FUENTE, FILO=_paleta.FILO)
@@ -131,19 +129,14 @@ function abrir(app) {
   // permiso para cerrarla desde "Volver al menu".
   var pestania = window.open('', 'app-' + app.clave);
   if (pestania) {
-    // Esta pagina la ve el usuario durante minutos la primera vez, asi que lleva la
-    // misma paleta: llegar al tablero no puede sentirse como cambiar de aplicacion.
+    // Una sola linea. Esta pagina puede estar minutos en pantalla la primera vez, pero
+    // lo que pasa mientras tanto -- crear el entorno, construir el tablero, y en que
+    // paso va -- se lee en la tarjeta del menu, que sigue viva en la otra pestania. Con
+    // la misma paleta: llegar al tablero no puede sentirse como cambiar de aplicacion.
     pestania.document.write(
-      '<!doctype html><meta charset=utf-8><title>' + app.titulo + '</title>' +
+      '<!doctype html><meta charset=utf-8><title>Cargando...</title>' +
       '<body style="font:16px/1.7 __FUENTE_JS__;padding:60px 40px;' +
-      'background:__FONDO__;color:__TEXTO__">' +
-      '<div style="border-left:__FILO__;background:__PANEL__;padding:16px 20px;' +
-      'border-radius:6px;max-width:52ch">' +
-      '<b style="font-size:20px">Preparando ' + app.titulo + '</b>' +
-      '<p id=p>Un momento...</p>' +
-      '<p style="color:__TENUE__;font-size:13px">La primera vez hay que crear su ' +
-      'entorno y construir su tablero. Puede tardar varios minutos. No cierres esta ' +
-      'pestana.</p></div>');
+      'background:__FONDO__;color:__TEXTO__">Cargando...');
   }
   mandar('abrir', app.clave, function () { seguir(app.clave, pestania); });
 }
@@ -154,10 +147,6 @@ function seguir(clave, pestania) {
       pintar(estado);
       var app = estado.filter(function (a) { return a.clave === clave; })[0];
       if (!app) { return; }
-      if (pestania && !pestania.closed && app.detalle) {
-        var p = pestania.document.getElementById('p');
-        if (p) { p.textContent = app.detalle; }
-      }
       if (app.fase === 'corriendo') {
         clearInterval(reloj);
         if (pestania && !pestania.closed) { pestania.location = app.url; }
@@ -244,15 +233,10 @@ def pagina() -> str:
   <header>
     <div>
       <h1>CriticidadCHEC</h1>
-      <p>Tableros de criticidad por vano. Cada uno corre en su propio proceso y su
-         propio puerto; este menu los abre, los vigila y los apaga.</p>
     </div>
     <button id="cerrar-todo" class="peligro">Cerrar todo</button>
   </header>
   <div id="lista"></div>
-  <p class="pie">Cada tablero abre en su propia pestana, con un boton
-     <b>Volver al menu</b> que lo apaga y cierra esa pestana. <b>Cerrar todo</b> apaga
-     las cinco aplicaciones y este menu.</p>
 </div>
 <script>{_GUION}</script>
 </body>

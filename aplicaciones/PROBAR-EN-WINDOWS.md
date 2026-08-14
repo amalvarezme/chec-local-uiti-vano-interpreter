@@ -66,7 +66,8 @@ Hay cuatro cosas que solo se pueden ver con una pantalla delante:
 1. el doble clic en `iniciar.bat` abre una consola nueva;
 2. el navegador abre solo (`os.startfile`);
 3. el botón de cerrar del tablero cierra puerto, proceso **y** consola;
-4. *Cerrar todo* del menú se lleva las cinco aplicaciones sin dejar huérfanos.
+4. *Cerrar todo* del menú se lleva las cinco aplicaciones sin dejar huérfanos, y el
+   *Cerrar* de un tablero se lleva **solo ese**, dejando los demás en pie.
 
 ### Si es en una VM sobre este Mac
 
@@ -94,7 +95,7 @@ Es la que de verdad importa, y no cuesta licencia ni disco. Diez pasos:
 2. Doble clic en `aplicaciones\01_clima\instalar.bat`. Termina sin error.
 3. Doble clic en `iniciar.bat`. **Se abre una consola nueva** y, tras la construcción, el
    navegador en `http://127.0.0.1:8801/`.
-4. Botón **Cerrar tablero**. Se cierra la pestaña, el puerto queda libre y **la consola se
+4. Botón **Cerrar**. Se cierra la pestaña, el puerto queda libre y **la consola se
    cierra sola**.
 5. Volver a dar doble clic. Abre en **el mismo 8801**, sin reconstruir, en menos de un
    segundo.
@@ -102,8 +103,9 @@ Es la que de verdad importa, y no cuesta licencia ni disco. Diez pasos:
    *«Reconstruyendo el tablero: cambio Indicadores_vano_v3.csv…»*.
 7. Doble clic en `aplicaciones\00_criticidad_chec\iniciar.bat`. El menú abre en 8800.
 8. Abrir dos tableros desde el menú. Cada uno en su puerto (8801, 8802) y en su pestaña.
-9. **Cerrar todo**. Los tres puertos quedan libres y no queda ningún `python.exe` vivo
-   (mirar el Administrador de tareas).
+   El botón **Cerrar** del primero libera **solo el 8801**: el 8802 y el menú siguen.
+9. **Cerrar todo**, en el menú. Los puertos que quedaran quedan libres y no queda ningún
+   `python.exe` vivo (mirar el Administrador de tareas).
 10. Repetir el paso 7. Todo vuelve a abrir: ningún puerto quedó bloqueado.
 
 Si algo falla, lo útil es el número de puerto y el texto exacto de la consola.

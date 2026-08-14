@@ -114,10 +114,16 @@ paquete de 95,2 MB y sirve una copia del cuaderno que lo lee.
 | memoria pico | 2.933 MB | **700 MB** |
 | solo la carga de datos | 4,3 s | **0,2 s** |
 
-Lo que queda de los 3,3 s son 2,0 s de importar PyTorch y compañía, que la aplicación
-paga **antes** de que llegue la primera petición: arranca un kernel ya ejecutado y
-esperando. Medido contra el servidor real, eso es la diferencia entre **4 ms** y
-**6,0 s** en abrir la página.
+Lo que queda de los 3,3 s son 2,0 s de importar PyTorch y compañía, que se pagan cuando
+llega la primera petición: **la página tarda ~4,5 s en aparecer la primera vez**, y las
+siguientes son inmediatas mientras el kernel siga vivo.
+
+> El simulador local **ya no precalienta kernel**. Medido A/B pidiendo la página como la
+> pide el menú —de inmediato, en cuanto el puerto contesta—, el precalentado no mejoraba
+> la espera (4,78 s contra 4,45 s): el puerto queda atado a los 0,77 s y el kernel de
+> reserva no llega a tiempo, así que Voilà levanta uno nuevo igual. Lo único que dejaba
+> era ese kernel sin usar: **1.694 MB contra 931 MB** tras servir la primera página. En
+> el despliegue de servidor sigue encendido, donde el trato es el contrario.
 
 La matriz de instancias (88 MB) se mapea en memoria en vez de cargarse, así que vive
 en la caché del sistema operativo y no en la memoria del proceso.

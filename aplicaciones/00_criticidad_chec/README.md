@@ -43,8 +43,15 @@ abierta en vez de duplicarla.
   primera vez; construir su tablero, ~71 s) y la abre **en una pestaña nueva**.
 - **Volver al menú** — aparece arriba en cada tablero abierto desde aquí. Apaga *esa*
   aplicación y cierra su pestaña, dejando a la vista el menú, que nunca se fue.
-- **Cerrar todo** — está en el menú y también en cada tablero. Apaga las cinco
-  aplicaciones y el menú.
+- **Cerrar** — el otro botón de esa misma barra. Apaga *esa* aplicación igual que
+  *Volver al menú* y cierra su pestaña, sin devolver al usuario al menú.
+
+Y en la página del menú, aparte de esos tres:
+
+- **Detener** — apaga una sola aplicación sin tocar su pestaña.
+- **Cerrar todo** — el **único** botón que apaga las cinco aplicaciones y el menú.
+  Ningún botón dentro de un tablero puede hacerlo: desde un tablero solo se apaga el
+  tablero que se está mirando.
 
 ## Por qué una pestaña por aplicación y no una sola
 

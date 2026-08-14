@@ -215,6 +215,19 @@ def test_el_boton_de_cerrar_llama_a_la_ruta_que_el_servidor_atiende():
     assert "window.close()" in html
 
 
+def _sin_comentarios(texto: str) -> str:
+    """Quita los comentarios `//` de JavaScript y los `<!-- -->` de HTML.
+
+    Lo que estas pruebas afirman es lo que el usuario LEE, y un comentario que explique
+    por que ya no existe "Cerrar todo" contiene esas dos palabras: sin este filtro, la
+    prueba se dispara contra la explicacion del arreglo en vez de contra el fallo.
+    """
+    import re
+
+    texto = re.sub(r"<!--.*?-->", "", texto, flags=re.S)
+    return "\n".join(l for l in texto.splitlines() if not l.lstrip().startswith("//"))
+
+
 def _comun(nombre: str):
     sys.path.insert(0, str(APPS / "_comun"))
     try:
@@ -249,8 +262,8 @@ def test_los_puertos_del_menu_son_los_que_fija_el_contrato():
 
 def test_la_barra_del_menu_quita_el_boton_de_cerrar_suelto():
     """Los dos juntos son una trampa: el suelto apaga el servidor y deja la pestana
-    abierta sobre un tablero muerto, que es peor que volver al menu y peor que cerrar
-    todo. Cuando hay menu, manda la barra."""
+    abierta sobre un tablero muerto, que es peor que volver al menu y peor que cerrar.
+    Cuando hay menu, manda la barra."""
     servidor = _comun("servidor")
     empaquetar = _comun("empaquetar")
     html = empaquetar._inyectar_boton_cerrar("<html><body>x</body></html>")
@@ -259,15 +272,37 @@ def test_la_barra_del_menu_quita_el_boton_de_cerrar_suelto():
     con_barra = servidor._con_barra_de_menu(html.encode("utf-8"),
                                             "http://127.0.0.1:8800/").decode("utf-8")
     assert 'id="bm-volver"' in con_barra
-    assert 'id="bm-todo"' in con_barra
+    assert 'id="bm-cerrar"' in con_barra
     # El boton suelto sigue en el documento, pero el guion de la barra lo retira al
     # cargar: quitarlo del HTML exigiria volver a parsear el armazon entero.
     assert "getElementById('cerrar-tablero')" in con_barra
     assert ".remove()" in con_barra
-    # La URL del menu tiene que viajar literal: es lo que usa `sendBeacon` para llegar
-    # al `/apagar-todo` del otro puerto.
+    # La URL del menu tiene que viajar literal: es a donde navega "Volver al menu"
+    # cuando la pestania no se deja cerrar.
     assert "var MENU = 'http://127.0.0.1:8800/';" in con_barra
-    assert "sendBeacon(MENU + 'apagar-todo'" in con_barra
+
+
+def test_los_dos_botones_de_la_barra_solo_apagan_su_propio_tablero():
+    """Ningun boton de un tablero puede apagar a los demas.
+
+    La barra ofrecia "Cerrar todo", que mandaba un `sendBeacon` al `/apagar-todo` del
+    menu: desde el tablero de clima se apagaban los otros cuatro y el menu. Ahora ese
+    boton es "Cerrar" y hace lo mismo que "Volver al menu" en cuanto a procesos --
+    `POST /apagar` a SU puerto, que se lleva su servidor y lo que cuelgue de el -- y
+    solo se diferencia en donde deja al usuario. El unico apagado general vive en la
+    pagina del menu.
+    """
+    servidor = _comun("servidor")
+    con_barra = _sin_comentarios(servidor._con_barra_de_menu(
+        b"<html><body>x</body></html>", "http://127.0.0.1:8800/").decode("utf-8"))
+    assert "apagar-todo" not in con_barra, "la barra sigue pudiendo apagarlo todo"
+    assert "sendBeacon" not in con_barra
+    assert ">Cerrar</button>" in con_barra
+    assert "Cerrar todo" not in con_barra
+    # Ni el rotulo ni el tooltip pueden prometer lo que ya no hace.
+    assert "TODAS" not in con_barra
+    # Los dos caminos pasan por la puerta del propio tablero y por ninguna otra.
+    assert con_barra.count(f"fetch('{servidor.RUTA_APAGADO}'") == 1
 
 
 def test_la_barra_falla_si_no_encuentra_donde_ponerse():
@@ -330,7 +365,7 @@ def _cargar_preparar():
 def test_el_simulador_sin_menu_trae_solo_su_boton_de_cerrar():
     espacio = _ejecutar_bloque_de_cierre("")
     botones = [b.kwargs.get("description") for b in espacio["_BOTONES_CIERRE"]]
-    assert botones == ["Cerrar simulador"]
+    assert botones == ["Cerrar"]
 
 
 def test_el_simulador_lanzado_desde_el_menu_cambia_su_boton_por_los_dos_del_menu():
@@ -339,14 +374,28 @@ def test_el_simulador_lanzado_desde_el_menu_cambia_su_boton_por_los_dos_del_menu
     la variable de entorno que le pasa el menu."""
     espacio = _ejecutar_bloque_de_cierre("http://127.0.0.1:8800/")
     botones = [b.kwargs.get("description") for b in espacio["_BOTONES_CIERRE"]]
-    assert botones == ["Volver al menu", "Cerrar todo"]
-    # "Cerrar simulador" no puede sobrevivir: haria lo mismo que "Volver al menu" pero
-    # dejando la pestania sobre un tablero muerto.
-    assert "_BOTON_CERRAR_APP" not in espacio
+    assert botones == ["Volver al menu", "Cerrar"]
+    # Dos y no tres: con menu, el boton de cerrar suelto no se suma a la barra, se
+    # convierte en el segundo boton de la barra.
     # La URL del menu tiene que quedar HORNEADA en el JavaScript: se resuelve al
     # ejecutar el bloque, no cuando alguien pulsa.
     assert "http://127.0.0.1:8800/" in espacio["_JS_VOLVER"]
-    assert 'sendBeacon("http://127.0.0.1:8800/" + "apagar-todo"' in espacio["_JS_CERRAR_TODO"]
+
+
+def test_el_simulador_no_puede_apagar_a_las_demas_aplicaciones():
+    """Su segundo boton mandaba un `sendBeacon` al `/apagar-todo` del menu, asi que
+    cerrar el simulador se llevaba por delante los otros cuatro tableros y el menu. El
+    apagado general es del menu y de nadie mas; aqui solo se manda `SIGTERM` al pid que
+    dejo escrito ESTA aplicacion."""
+    codigo = (APPS / "06_simulador" / "preparar.py").read_text(encoding="utf-8")
+    assert "apagar-todo" not in codigo, "el simulador sigue pudiendo apagarlo todo"
+    assert "sendBeacon" not in codigo
+    assert "_JS_CERRAR_TODO" not in codigo
+
+    for menu in ("", "http://127.0.0.1:8800/"):
+        espacio = _ejecutar_bloque_de_cierre(menu)
+        descripciones = [b.kwargs.get("description") for b in espacio["_BOTONES_CIERRE"]]
+        assert "Cerrar todo" not in descripciones
 
 
 def test_la_barra_del_simulador_lleva_siempre_el_aviso_y_la_salida():
@@ -448,6 +497,34 @@ def test_el_menu_no_sigue_el_tema_del_sistema():
     assert "prefers-color-scheme" not in pagina
     assert "color-scheme" not in pagina
     assert f"background: {_comun('paleta').FONDO}" in pagina
+
+
+def test_el_menu_no_explica_como_funciona_por_encima_de_la_lista():
+    """La portada del menu llevaba dos parrafos describiendo el mecanismo -- un proceso
+    y un puerto por tablero, que hace cada boton --. Es documentacion, y su sitio son
+    los README: en la pantalla solo empuja hacia abajo lo unico que se viene a hacer,
+    que es la lista de aplicaciones."""
+    pagina = _comun("menu_pagina").pagina()
+    for frase in ("su propio proceso", "los abre, los vigila", "en su propia pestana",
+                  "apaga\n     las cinco aplicaciones", "Cada tablero abre"):
+        assert frase not in pagina, f"la pagina del menu todavia explica: {frase!r}"
+    # Lo que si tiene que quedar: el titulo y el unico boton que apaga todo.
+    assert "<h1>CriticidadCHEC</h1>" in pagina
+    assert 'id="cerrar-todo"' in pagina
+
+
+def test_la_pestania_que_espera_a_un_tablero_solo_dice_cargando():
+    """Mientras la aplicacion se prepara, la pestania recien abierta contaba la historia
+    entera -- "Preparando X", el detalle vivo del avance, y un parrafo sobre entornos y
+    minutos --. Ahora dice "Cargando..." y nada mas; el avance con su detalle sigue
+    estando en la tarjeta del menu, que es donde se puede leer sin perder de vista el
+    resto."""
+    guion = _sin_comentarios(_guiones_emitidos()["pagina del menu"])
+    assert "Cargando..." in guion
+    for frase in ("Preparando ", "Un momento", "No cierres esta", "entorno"):
+        assert frase not in guion, f"la pestania de espera todavia dice: {frase!r}"
+    # Y el detalle del avance ya no se escribe dentro de esa pestania.
+    assert "getElementById('p')" not in guion
 
 
 def _guiones_emitidos() -> dict[str, str]:
