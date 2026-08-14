@@ -212,7 +212,7 @@ with
   }]
 }
 ```
-No cluster spec — the task runs on serverless. That is fine here: `02` uses no `ipywidgets` (that constraint belongs to `09_simulador`). Poll `databricks jobs get-run <run_id> -p <profile>` until terminal. On failure, surface the notebook's own error rather than retrying blindly.
+No cluster spec — the task runs on serverless. That is fine here: `02` uses no `ipywidgets` (that constraint belongs to `06_uiti_vano_explicabilidad_simulador`). Poll `databricks jobs get-run <run_id> -p <profile>` until terminal. On failure, surface the notebook's own error rather than retrying blindly.
 
 **Verify the artifact by content, not by exit code.** Expect **~6.1 MB**, which gzips to ~1.8 MB — the vano board measured 6.06 MB on the current base, of which **4.64 MB is the embedded plotly.js** and 1.41 MB the vano `CTX`. Two things brought it there: publishing one board instead of two (8.5 → 6.6 MB) and compacting the context (6.6 → 6.06 MB). The remaining 4.64 MB is not reducible from here — plotly 6.8.0 ships only the full `plotly.min.js`, and the board needs `scattergl` (27.390 points), `contour`, `violin` and `bar`, which no single official partial bundle covers; vendoring one would add an external dependency and a version to keep in sync for something gzip already halves. **Do not hardcode the number**: it scales with the base. Fail only under 1 MB, which means the board came out empty. Download it and assert:
 ```
