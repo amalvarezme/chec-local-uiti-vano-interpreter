@@ -261,6 +261,44 @@ def perfil_uiti_por_vano(
     return perfil[_COLUMNAS_PERFIL]
 
 
+def top_vanos_de_ventana(
+    tabla: pd.DataFrame,
+    circuito: str,
+    ventana_i: int,
+    *,
+    top: int | None = None,
+) -> list[str]:
+    """Los vanos de ESE circuito con eventos en ESA ventana, de mayor a menor
+    UITI acumulado en ella. Es a quien se le marca la casilla sola al mover el
+    deslizador.
+
+    Hermana de `perfil_uiti_por_vano` y deliberadamente distinta. Aquella suma
+    sobre TODO el periodo y por eso tiene que elegir un subconjunto de ventanas
+    que no se traslape; esta mira UNA ventana, donde cada `(vano, ventana)` es
+    ya una sola fila agregada y no hay nada que sumar ni que descontar. Mezclar
+    las dos -- ordenar la ventana por el total del periodo -- devolveria el
+    mismo top en las once ventanas y el deslizador dejaria de decir nada.
+
+    Los empates se rompen por fid ascendente, y eso no es cosmetica: sin
+    desempate el orden lo decidiria el de las filas, y la aplicacion congela la
+    tabla en un parquet cuyo orden no tiene por que ser el del cuaderno. El
+    mismo circuito en el mismo periodo auto-marcaria vanos distintos en cada
+    tablero.
+
+    El fid sale en TEXTO, como `perfil_uiti_por_vano` y por lo mismo: es la
+    clave con la que trabajan las casillas, el `customdata` del mapa y el
+    `alternar` del clic.
+    """
+    del_ventana = tabla[(tabla["CIRCUITO"].astype(str) == str(circuito))
+                        & (tabla["ventana_i"] == int(ventana_i))]
+    if del_ventana.empty:
+        return []
+    ordenados = del_ventana.assign(_fid=del_ventana["FID_VANO"].astype(str)).sort_values(
+        ["uiti_acumulado", "_fid"], ascending=[False, True])
+    fids = list(dict.fromkeys(ordenados["_fid"].tolist()))
+    return fids if top is None else fids[:top]
+
+
 def desajuste_bolsas_vs_tabla(
     bag_index: Any, tabla: pd.DataFrame, *, tolerancia_uiti: float = 0.001
 ) -> str | None:
@@ -592,6 +630,60 @@ def cajas_seleccion(
             },
         })
     return {"type": "FeatureCollection", "features": features}
+
+
+def cajas_seleccion_por_clase(
+    geo_circuito: Mapping[str, Any],
+    clases_por_fid: Mapping[str, int],
+    *,
+    marcados: Iterable[str] = (),
+    lado_minimo: float = 0.0,
+    margen: float = 0.0,
+) -> dict[int | None, dict[str, Any]]:
+    """La misma caja de `cajas_seleccion`, repartida en CINCO colecciones segun
+    el grupo KMeans del vano en la ventana activa: `0`, `1`, `2`, `3` y `None`.
+
+    El recuadro pasa de tener un color propio a llevar el color del grupo del
+    propio vano. Deja de contestar solo *cual estoy mirando* -- eso ya lo dice
+    el halo blanco y el trazo mas ancho de la linea -- y contesta ademas *en que
+    grupo cayo*, que es la lectura que la linea de color ya lleva pero que a
+    zoom bajo se pierde entre las lineas vecinas. Un relleno de 50 px de lado no
+    se pierde.
+
+    Cinco colecciones y no una porque una entrada de `layout.map.layers` pinta
+    con UN color, exactamente el mismo motivo por el que
+    `cajas_por_cambio_de_grupo` devuelve tres. Las cinco claves estan SIEMPRE,
+    vacias incluidas, para que el repintado sea una escritura de `source` por
+    capa y nunca un quitar y poner capas: MapLibre reordena lo que hay debajo
+    cuando las capas entran y salen.
+
+    `None` es el vano marcado que en esta ventana no tiene celda. No tiene
+    grupo, y eso NO es el grupo mas bajo: es la ausencia del dato, el mismo
+    criterio que `capas_mapa_historico` aplica a `marcados_sin_dato`. Va a su
+    propia capa para que el tablero la pinte con su gris de "sin grupo" y no
+    afirme un `Bajo` que nadie midio.
+
+    La caja sigue saliendo de la GEOMETRIA -- por eso reusa `cajas_seleccion` en
+    vez de repetirla: el rectangulo tiene que ser el MISMO sobre el mismo vano en
+    los tres mapas del proyecto, y dos tamanios distintos se leerian como dos
+    vanos. Lo unico que este reparto decide es de que color se pinta.
+
+    Un vano con clase que NO esta marcado no produce ninguna caja. Es la mitad
+    del contrato: desmarcar quita el recuadro y deja intactos el color y el
+    ancho de la linea, que dependen de la clase y no de la seleccion.
+    """
+    marcados = set(marcados)
+    por_clase: dict[int | None, list[str]] = {c: [] for c in (0, 1, 2, 3, None)}
+    for fid in geo_circuito["fids"]:
+        if fid not in marcados:
+            continue
+        clase = clases_por_fid.get(fid)
+        por_clase.setdefault(clase, []).append(fid)
+    return {
+        clase: cajas_seleccion(geo_circuito, fids, lado_minimo=lado_minimo,
+                               margen=margen)
+        for clase, fids in por_clase.items()
+    }
 
 
 # --- Row 2's box: the same rectangle, coloured by what the simulation did ---------------

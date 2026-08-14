@@ -48,6 +48,7 @@ from chec_local_interpreter.ventanas_015 import (
     bounds_de_fids,
     cajas_por_cambio_de_grupo,
     cajas_seleccion,
+    cajas_seleccion_por_clase,
     cargar_clases_desde_014,
     capas_mapa_historico,
     construir_hist_class_cache,
@@ -58,6 +59,7 @@ from chec_local_interpreter.ventanas_015 import (
     nube_seleccion,
     perfil_uiti_por_vano,
     clases_de_series,
+    top_vanos_de_ventana,
     ventanas_sin_traslape,
 )
 from scripts.extract_geometrias_014 import _extraer_bloque_json
@@ -496,6 +498,92 @@ def test_perfil_uiti_por_vano_devuelve_el_fid_como_texto():
     assert perfil["FID_VANO"].tolist() == ["20130472"]
 
 
+# --- Top de la VENTANA: a quien se le marca la casilla al mover el deslizador -
+#
+# `perfil_uiti_por_vano` contesta "donde esta el riesgo del circuito en TODO el
+# periodo" y es lo que se auto-marca al aterrizar en un circuito. Al mover el
+# deslizador la pregunta cambia de sujeto: cual es el riesgo de ESTA ventana. Y
+# ahi no hay traslape que corregir -- una ventana es una ventana --, asi que es
+# un orden directo sobre sus celdas y no una suma sobre un subconjunto.
+#
+# Los dos tableros (04 y 06) tienen que auto-marcar EXACTAMENTE los mismos
+# vanos, o el mismo circuito en el mismo periodo se lee como dos circuitos. Por
+# eso el criterio vive aqui y no escrito dos veces, una en Python y otra en el
+# JavaScript del panel de 04.
+
+
+def _tabla_de_ventana():
+    """Dos circuitos, dos ventanas y UITI deliberadamente desordenado respecto
+    del fid, para que un orden por fid no pueda pasar por un orden por UITI."""
+    return pd.DataFrame({
+        "CIRCUITO": ["C1", "C1", "C1", "C1", "C2"],
+        "FID_VANO": ["VA", "VB", "VC", "VB", "VZ"],
+        "ventana_i": [0, 0, 0, 1, 0],
+        "uiti_acumulado": [5.0, 9.0, 1.0, 40.0, 99.0],
+        "num_eventos": [2, 3, 1, 4, 7],
+    })
+
+
+def test_top_vanos_de_ventana_ordena_por_uiti_de_esa_ventana():
+    """De mayor a menor UITI EN ESA VENTANA. Es lo que decide a quien se le
+    marca la casilla sola, y por tanto quien entra a la serie de tiempo."""
+    assert top_vanos_de_ventana(_tabla_de_ventana(), "C1", 0) == ["VB", "VA", "VC"]
+
+
+def test_top_vanos_de_ventana_solo_mira_esa_ventana_y_ese_circuito():
+    """VB acumula 40 en la ventana 1 y 9 en la 0. Preguntar por la 0 no puede
+    traer el 40, ni el 99 de VZ, que es de otro circuito."""
+    tabla = _tabla_de_ventana()
+
+    assert top_vanos_de_ventana(tabla, "C1", 1) == ["VB"]
+    assert top_vanos_de_ventana(tabla, "C2", 0) == ["VZ"]
+
+
+def test_top_vanos_de_ventana_recorta_al_tope_pedido():
+    """Mas de quince vanos con eventos en la ventana se recortan a los quince de
+    mayor UITI: es el tope de la auto-marca que pide el panel."""
+    assert top_vanos_de_ventana(_tabla_de_ventana(), "C1", 0, top=2) == ["VB", "VA"]
+
+
+def test_top_vanos_de_ventana_desempata_por_fid_para_ser_reproducible():
+    """Dos vanos con el mismo UITI tienen que salir SIEMPRE en el mismo orden.
+
+    Sin desempate, el orden lo decidiria el de las filas de la tabla y el mismo
+    circuito auto-marcaria vanos distintos en el cuaderno y en la aplicacion, que
+    congela la tabla en un parquet reordenado.
+    """
+    tabla = pd.DataFrame({
+        "CIRCUITO": ["C1", "C1", "C1"],
+        "FID_VANO": ["VC", "VA", "VB"],
+        "ventana_i": [0, 0, 0],
+        "uiti_acumulado": [7.0, 7.0, 7.0],
+        "num_eventos": [1, 1, 1],
+    })
+
+    assert top_vanos_de_ventana(tabla, "C1", 0) == ["VA", "VB", "VC"]
+
+
+def test_top_vanos_de_ventana_devuelve_lista_vacia_sin_celdas():
+    """Una ventana sin un solo evento no auto-marca nada. Devolver `None` o
+    fallar obligaria a cada llamador a envolverlo."""
+    assert top_vanos_de_ventana(_tabla_de_ventana(), "C1", 9) == []
+    assert top_vanos_de_ventana(_tabla_de_ventana(), "NO_EXISTE", 0) == []
+
+
+def test_top_vanos_de_ventana_devuelve_el_fid_como_texto():
+    """El selector de vanos y el mapa trabajan con el fid en TEXTO. Un entero
+    aqui no cruzaria con las casillas y la auto-marca no marcaria ninguna."""
+    tabla = pd.DataFrame({
+        "CIRCUITO": ["C1"],
+        "FID_VANO": [20130472],
+        "ventana_i": [0],
+        "uiti_acumulado": [1.0],
+        "num_eventos": [1],
+    })
+
+    assert top_vanos_de_ventana(tabla, "C1", 0) == ["20130472"]
+
+
 # --- 3.2: mask_cache (LRU 64) ----------------------------------------------
 
 
@@ -790,6 +878,81 @@ def test_cajas_seleccion_on_a_circuit_without_geometry_is_empty():
     cajas = cajas_seleccion({"fids": [], "lat": [], "lon": []}, marcados=["VA"])
 
     assert cajas["features"] == []
+
+
+# --- La caja, repartida por GRUPO de criticidad -----------------------------
+#
+# La caja de seleccion pasa de tener un color propio ("esto es lo que estoy
+# mirando") a llevar el color del GRUPO KMeans del vano al 50% de opacidad. El
+# recuadro deja de decir solo cual elegi y dice ademas en que grupo cayo, que es
+# lo mismo que ya dice su linea: dos canales sobre el mismo dato, y el relleno se
+# lee a un zoom en el que la linea ya no se distingue de sus vecinas.
+#
+# Una capa de `layout.map.layers` pinta con UN color, asi que hacen falta CINCO
+# colecciones -- una por grupo mas la del vano marcado que en esa ventana no
+# tiene celda -- por el mismo motivo por el que el mapa simulado lleva tres.
+# Siempre las cinco, vacias incluidas: el repintado es una escritura de `source`
+# por capa y nunca un quitar y poner capas, que en MapLibre reordena lo que hay
+# debajo.
+
+
+def test_cajas_seleccion_por_clase_reparte_cada_marcado_en_la_capa_de_su_grupo():
+    cajas = cajas_seleccion_por_clase(
+        _geo_cajas(), {"VA": 3, "VB": 0}, marcados=["VA", "VB"], lado_minimo=0.02)
+
+    assert [f["properties"]["fid"] for f in cajas[3]["features"]] == ["VA"]
+    assert [f["properties"]["fid"] for f in cajas[0]["features"]] == ["VB"]
+    assert cajas[1]["features"] == [] and cajas[2]["features"] == []
+
+
+def test_cajas_seleccion_por_clase_siempre_devuelve_las_cinco_capas():
+    """Las cuatro clases mas `None`, presentes aunque no haya ni un marcado. El
+    repintado escribe `source` sobre capas que ya existen; una clave ausente lo
+    obligaria a decidir si crea la capa, y crear capas reordena MapLibre."""
+    cajas = cajas_seleccion_por_clase(_geo_cajas(), {}, marcados=[])
+
+    assert set(cajas) == {0, 1, 2, 3, None}
+    assert all(c == {"type": "FeatureCollection", "features": []}
+               for c in cajas.values())
+
+
+def test_cajas_seleccion_por_clase_pone_bajo_none_al_marcado_sin_celda():
+    """Un vano marcado SIN eventos en la ventana activa no tiene grupo, y eso no
+    es el grupo mas bajo: es la ausencia del dato. Va a su propia capa, que el
+    tablero pinta gris, y NO a la del grupo `Bajo`."""
+    cajas = cajas_seleccion_por_clase(
+        _geo_cajas(), {"VA": 2}, marcados=["VA", "VB"], lado_minimo=0.02)
+
+    assert [f["properties"]["fid"] for f in cajas[None]["features"]] == ["VB"]
+    assert cajas[0]["features"] == []
+
+
+def test_cajas_seleccion_por_clase_dibuja_el_mismo_rectangulo_que_cajas_seleccion():
+    """El reparto por color no puede cambiar la FORMA del recuadro.
+
+    Los dos mapas del simulador y el mapa de 04 encierran el mismo vano, y dos
+    rectangulos de distinto tamanio sobre el mismo tramo se leen como dos vanos.
+    Por eso esto reusa `cajas_seleccion` en vez de repetir la geometria, y el
+    test lo comprueba vertice a vertice.
+    """
+    geo = _geo_cajas()
+    esperado = cajas_seleccion(geo, marcados=["VC"], lado_minimo=0.02, margen=0.001)
+
+    cajas = cajas_seleccion_por_clase(
+        geo, {"VC": 1}, marcados=["VC"], lado_minimo=0.02, margen=0.001)
+
+    assert cajas[1] == esperado
+
+
+def test_cajas_seleccion_por_clase_no_dibuja_los_vanos_con_eventos_sin_marcar():
+    """Un vano con eventos que el usuario DESMARCO conserva el color y el ancho
+    de su grupo en la linea, pero pierde el recuadro. Es la mitad del contrato
+    que este reparto no puede romper: la clase esta en `clases_por_fid` y aun asi
+    no produce caja si el fid no esta marcado."""
+    cajas = cajas_seleccion_por_clase(
+        _geo_cajas(), {"VA": 3, "VB": 3, "VC": 3}, marcados=["VB"], lado_minimo=0.02)
+
+    assert [f["properties"]["fid"] for f in cajas[3]["features"]] == ["VB"]
 
 
 # --- Nube KMeans (fila 1 col 3 en 01.4): celdas vano x ventana ---------------

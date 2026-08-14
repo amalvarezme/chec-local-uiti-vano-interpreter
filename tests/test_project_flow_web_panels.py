@@ -492,32 +492,72 @@ def test_board_opens_on_the_first_circuit(sources, board):
     assert "SIN_SELECCION" in src, "the `(ninguno)` option itself must survive"
 
 
-def test_board_04_auto_marks_the_vanos_with_events_of_the_moving_window(sources):
-    """Moving the window re-marks the vanos that registered events IN it.
+def test_board_04_auto_marks_the_top_of_the_moving_window(sources):
+    """Moving the window re-marks the vanos with the most UITI IN it.
 
     Without this the slider changes the window but not the subject: the map, the series
     and the split keep describing vanos that in the new window have no cell at all, and
     re-picking them by hand at every step is the work the board exists to save.
 
-    It is a REPLACEMENT and not an addition -- `checked` is assigned from the lookup for
-    every box, so a vano that stops having events also stops being marked -- and it runs
-    BEFORE the map is drawn, or the first frame of every window would show the previous
-    window's selection.
+    The TOP and not every vano with an event. Marking every one was the previous
+    contract, and on an active circuit that is dozens: the legend grew to six rows, the
+    arrows crossed each other, and the board stopped pointing at anything in particular.
+    Fifteen is how many quotas carry their own colour, series and arrows, so marking more
+    was marking vanos the board could not count.
+
+    It is a REPLACEMENT and not an addition -- `marcarSolo` assigns `checked` over every
+    box from the chosen set -- and it runs BEFORE the map is drawn, or the first frame of
+    every window would show the previous window's selection.
     """
     src = sources["04"]
     assert "function autoseleccionar()" in src
-    assert "cajas[i].checked = uiti[cajas[i].value] !== undefined;" in src, (
+    assert "function topDeLaVentana(circuito, w)" in src
+    assert "return con.slice(0, CTX.topVentana);" in src
+    assert "cajas[i].checked = elegidos[cajas[i].value] === true;" in src, (
         "the mark must be an assignment over every box, not an OR that only ever adds")
+    # El desempate por fid ascendente es lo que hace que los dos tableros elijan los
+    # MISMOS quince: sin el, el orden lo decide el de las celdas.
+    assert "return a < b ? -1 : (a > b ? 1 : 0);" in src
     # Both entry points: the slider, and repopulating the list on a circuit change.
     assert re.search(r"autoseleccionar\(\);\s*\n\s*dibujarMapa\(gd,", src), (
         "the slider must mark before drawing the map")
-    assert re.search(r"poblarLista\(circuito\);\s*\n\s*autoseleccionar\(\);", src), (
+    # Al ELEGIR CIRCUITO se marca el top del PERIODO -- las mismas quince barras que el
+    # perfil del cuaderno 06 --, no el de la ventana: es la pregunta con la que se llega.
+    assert re.search(r"poblarLista\(circuito\);\s*\n\s*marcarSolo\(CTX\.topPeriodo", src), (
         "a circuit change repopulates the list, which leaves every box unchecked")
     # The window now brings a different SELECTION, so the debounced tail has to redo the
     # quotas, the legend, the evolution series and the arrows -- not just the split and the
     # opacities, which was enough while the selection survived a window change.
     assert "refrescarReparto(gd, geoActual(), circ, cuposDe(elegidos()));" not in src, (
         "the partial refresh is not enough once the window changes the selection")
+
+
+def test_board_04_keeps_the_group_colour_of_an_unmarked_vano(sources):
+    """Desmarcar un vano le quita el recuadro y le DEJA el color y el grosor de su grupo.
+
+    Era el defecto de fondo de este tablero. El trazo grueso de color era solo para los
+    vanos MARCADOS (`if (sel[fid] && dato)`), y todo lo demas caia en la traza negra de
+    estructura. O sea que desmarcar no quitaba el resaltado: borraba el grupo, y un vano
+    que tuvo eventos pasaba a dibujarse igual que uno que no tuvo ninguno. El cuaderno 06
+    nunca lo tuvo, porque `capas_mapa_historico` reparte por clase y por marcado en dos
+    capas distintas.
+
+    La clase manda el color y el ancho; la marca agrega el halo, el trazo mas grueso y el
+    recuadro. Que sean dos canales es lo que permite quitar uno sin perder el otro.
+    """
+    src = sources["04"]
+    # El vano va a la traza de SU grupo o a la de estructura, y eso lo decide `dst` --
+    # la clase de la ventana -- y nunca `sel`.
+    assert "var dLat = dst >= 0 ? glat[dst] : elat, dLon = dst >= 0 ? glon[dst] : elon;" in src
+    # Las trazas por grupo del mapa ya no nacen ni se quedan vacias.
+    assert "vacio.concat(" not in src, (
+        "las trazas de grupo del mapa dejaron de ir vacias: ahora llevan los vanos con "
+        "eventos, marcados o no")
+    assert "lat: glat.concat([elat], rlat, [slat, hlat, tr.lat, sw.lat])," in src
+    # Y el marcado se resalta tenga o no clase: sin la traza negra ancha, el halo de 25 px
+    # se comia al vano marcado sin celda, que quedaba en una linea de 1,5.
+    assert "'mapaResaltadoSinDato'" in src
+    assert "if (sel[fid]) {" in src
 
 
 def test_board_04_boxes_the_marked_vano_exactly_like_board_06():
@@ -532,40 +572,111 @@ def test_board_04_boxes_the_marked_vano_exactly_like_board_06():
     here: what matters is not the value, it is that the two boards cannot drift apart.
     Two highlights of different SIZE over the same vano read as two different things.
 
-    COLOUR is deliberately NOT compared. `06` paints its selection box in the board's
-    own red, the same one as the panel border and the window bar, because there red
-    means "this is what I am looking at". `04` has no second map to disambiguate
-    against, so it keeps its yellow. Geometry is the invariant; the palette is a
-    per-board decision.
+    COLOUR is now compared too, and it did not use to be. `06` painted its box in the
+    board's own red and `04` in yellow, on the argument that geometry was the invariant
+    and the palette a per-board decision. The fill of both is now the KMeans group colour
+    of the vano itself at 50% opacity: the box stopped answering only *which one am I
+    looking at* -- the white halo and the 40% wider stroke already answer that -- and
+    answers *which group did it fall into* as well, which is a reading that survives the
+    zoom at which the line stops being distinguishable from its neighbours. That reading
+    has to mean the same thing on both boards, so the palette is no longer free.
     """
     src04 = _notebook_source(BOARDS["04"])
     src06 = _notebook_source("06_uiti_vano_explicabilidad_simulador")
 
-    for constante in ("OPACIDAD_CAJA_SELECCION", "LADO_MINIMO_CAJA", "MARGEN_CAJA"):
+    for constante in ("OPACIDAD_CAJA_SELECCION", "LADO_MINIMO_CAJA", "MARGEN_CAJA",
+                      "COLORES_CAJA_SELECCION"):
         patron = rf"^{constante} = (.+?)(?:\s+#.*)?$"
         en04 = re.search(patron, src04, re.MULTILINE)
         en06 = re.search(patron, src06, re.MULTILINE)
         assert en04 and en06, f"{constante} must be declared in both notebooks"
         assert en04.group(1).strip() == en06.group(1).strip(), (
             f"{constante} drifted: 04 says {en04.group(1)!r}, 06 says {en06.group(1)!r}")
+    # El relleno sale de la MISMA paleta con que las dos figuras trazan los grupos.
+    assert _constant(src04, "COLORES_CAJA_SELECCION") == "list(COLORES_GRUPOS)"
+    assert _constant(src06, "COLORES_CAJA_SELECCION") == "list(COLORES_GRUPOS)"
 
     # The layer, not a trace: a filled trace on top would eat the very click that toggles
     # the selection, and would tint the class colour of the vano it is pointing at.
+    # CINCO capas en los dos: una entrada de `layout.map.layers` pinta con UN color, y el
+    # relleno pasa a depender del grupo. La quinta es el marcado sin celda en la ventana,
+    # que no tiene grupo -- y eso no es el grupo mas bajo, es la ausencia del dato.
     assert "sourcetype='geojson', type='fill', below='traces'," in src04
-    assert "layers=[CAPA_CAJA_SELECCION]" in src04
-    assert "assert fig.layout.map.layers[0].below == 'traces'" in src04
+    assert "layers=CAPAS_CAJA_SELECCION" in src04
+    assert "layers=CAPAS_CAJA_SELECCION" in src06
+    assert "assert len(fig.layout.map.layers) == len(CLASES_CAJA) == 5" in src04
+    assert "assert len(_fig.layout.map.layers) == len(CLASES_CAJA) == 5" in src06
+    assert "assert all(_capa.below == 'traces' for _capa in fig.layout.map.layers)" in src04
 
-    # The JS port of `cajas_seleccion`: the rectangle turns with the vano (`u` along it,
-    # `v` across it), opens about its centre, and closes its ring.
-    assert "function cajasSeleccion(circuito, sel)" in src04
+    # The JS port of `cajas_seleccion` / `cajas_seleccion_por_clase`: the rectangle turns
+    # with the vano (`u` along it, `v` across it), opens about its centre, closes its ring,
+    # and lands in the collection of its own group.
+    assert "function cajasSeleccion(circuito, sel, clasePorFid)" in src04
     assert "var v = [-u[1], u[0]];" in src04, "the cross axis must be `u` turned 90 degrees"
     assert "anillo.push(anillo[0]);" in src04, (
         "MapLibre silently drops an open ring and draws no box at all")
-    assert "'map.layers[0].source': cajasSeleccion(circuito, sel)" in src04, (
-        "the box must be repainted by writing the source of the layer that already exists")
+    assert "cambios['map.layers[' + c + '].source'] = colecciones[c];" in src04, (
+        "the box must be repainted by writing the source of the layers that already exist")
     # Drawn from the geometry and repainted with the map, so it survives a window change
     # and disappears the moment the vano is unmarked -- by its box or by clicking it again.
-    assert re.search(r"pintarCajas\(gd, circuito, sel\);", src04)
+    assert re.search(r"pintarCajas\(gd, circuito, sel, clasePorFid\);", src04)
+    # La ventana entra en la firma del repintado: el mismo vano marcado cambia de grupo
+    # entre ventanas, y sin eso el recuadro se quedaria con el color anterior.
+    assert "var firma = circuito + '|' + ventanaActual() + '|'" in src04
+
+
+def test_boards_04_and_06_auto_mark_the_same_number_of_vanos():
+    """Los dos tableros auto-marcan quince y quince, y no cada uno los suyos.
+
+    El usuario los mira uno al lado del otro sobre el mismo circuito y el mismo
+    periodo. Si uno marcara diez y el otro quince, la misma pregunta -- cuales son
+    los vanos criticos de este circuito -- tendria dos respuestas segun por que
+    ventana del navegador se mire.
+
+    Que hoy coincidan no es razon para que uno arrastre al otro: son cuatro
+    constantes declaradas en sus propios cuadernos, y esto es lo que avisa si una
+    se mueve sola.
+    """
+    src04 = _notebook_source(BOARDS["04"])
+    src06 = _notebook_source("06_uiti_vano_explicabilidad_simulador")
+
+    # El top de la VENTANA se llama igual en los dos.
+    assert _constant(src04, "TOP_VANOS_VENTANA") == _constant(src06, "TOP_VANOS_VENTANA")
+    # El del PERIODO no: en 04 es la marca automatica al elegir circuito y en 06 es,
+    # ademas, cuantas barras dibuja el panel "Perfil del circuito". Nombres distintos
+    # porque son cosas distintas; el numero tiene que ser el mismo.
+    assert _constant(src04, "TOP_VANOS_PERIODO") == _constant(src06, "TOP_VANOS_PERFIL")
+    assert _constant(src04, "TOP_VANOS_VENTANA") == "15"
+
+    # Y el tablero tiene que poder DIBUJAR lo que marca. 04 tiene un cupo por vano
+    # resaltado -- color propio, leyenda, flechas y serie de evolucion --, asi que un
+    # cupo menor que la marca automatica dejaria vanos marcados que el panel no cuenta.
+    cupos04 = int(_constant(src04, "MAX_VANOS_RESALTADOS"))
+    assert cupos04 >= int(_constant(src04, "TOP_VANOS_VENTANA"))
+    assert cupos04 >= int(_constant(src04, "TOP_VANOS_PERIODO"))
+
+
+def test_boards_04_and_06_identify_a_vano_with_the_same_colour():
+    """La paleta que dice DE QUE VANO es cada serie es la misma en los dos.
+
+    En las dos figuras el color del punto lleva el grupo de criticidad y el de la
+    linea lleva la identidad del vano. La primera ya estaba compartida
+    (`COLORES_GRUPOS`); la segunda no, y un vano que era azul en un tablero salia
+    verde en el otro -- que es justo lo que hace imposible seguir el mismo vano al
+    pasar de una ventana del navegador a la otra.
+    """
+    src04 = _notebook_source(BOARDS["04"])
+    src06 = _notebook_source("06_uiti_vano_explicabilidad_simulador")
+
+    # `_constant` lee UN renglon, y las dos listas ocupan varios. Se recorta desde el
+    # `[` hasta su `]`, que es lo unico que hace falta para leerlas con `ast`.
+    def _lista(src, nombre):
+        desde = src.index(f"{nombre} = [")
+        return ast.literal_eval(src[src.index("[", desde):src.index("]", desde) + 1])
+
+    # Se comparan los valores y no el texto: las dos listas caben en distinto numero
+    # de renglones y donde parta cada una no es parte del contrato.
+    assert _lista(src04, "COLORES_VANOS") == _lista(src06, "COLORES_VANOS")
 
 
 # --- One map style across every board ---------------------------------------------------
@@ -726,7 +837,9 @@ def test_board_04_draws_its_equipment_on_top_like_boards_01_and_03():
     assert src.index("('Transformadores', COLOR_TRAFO, TAM_TRAFO)") > fin_resaltado, (
         "the equipment traces must be added after the highlight, or the halo covers them")
     # And the notebook has to assert it where the indices are built, not just here.
-    assert "assert min(IDX['mapaTrafos'], IDX['mapaSwitches']) > max(IDX['mapaResaltado'])" in src
+    # La ultima traza de vanos es la del marcado sin celda, que entro despues del
+    # resaltado por grupo: comparar contra `mapaResaltado` dejaria de cubrir a esa.
+    assert "assert min(IDX['mapaTrafos'], IDX['mapaSwitches']) > IDX['mapaResaltadoSinDato']" in src
     assert "assert IDX['mapaSwitches'] == len(fig.data) - 1" in src, (
         "nothing may be added after the equipment")
     # The loop used to bind `_n` and `_c`, the very names the IDX arithmetic below counts
