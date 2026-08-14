@@ -306,7 +306,7 @@ _BOTON_CERRAR = """
     style="font:13px/1 __FUENTE__;font-weight:600;padding:6px 12px;
            border:1px solid __ACENTO__;border-radius:4px;background:__FONDO__;
            color:__ACENTO__;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.12);"
-    >Cerrar tablero</button>
+    >Cerrar</button>
 </div>
 <script>
 (function () {

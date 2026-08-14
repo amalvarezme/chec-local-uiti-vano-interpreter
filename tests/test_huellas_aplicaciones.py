@@ -154,3 +154,104 @@ def test_un_insumo_que_dejo_de_estar_tambien_es_un_motivo(huellas):
         {"a.csv": {"bytes": 1, "sha1": "aa"}}, {"a.csv": {"falta": True}})
 
     assert motivo is not None and "a.csv" in motivo
+
+
+# --- La huella de un ARBOL de codigo ---------------------------------------------------
+#
+# El punto ciego que cierran: las cinco aplicaciones CONGELAN el resultado de un cuaderno,
+# y ese cuaderno importa `chec_local_interpreter` y `chec_impacto` -- 67 archivos bajo
+# `src/`, medidos, de los que no se vigilaba NI UNO. Cambiar `clases_para`, las capas del
+# mapa o la construccion de ventanas no movia ninguna huella, asi que la aplicacion seguia
+# sirviendo el panel anterior sin dar ningun error. Es exactamente el fallo que ya obligo
+# a vigilar `empaquetar.py` y `preparar.py`, un nivel mas abajo y 67 archivos mas ancho.
+#
+# Va como UNA huella del arbol y no como 67 sueltas por una razon concreta: las huellas se
+# indexan por NOMBRE de archivo, y los dos paquetes tienen su propio `__init__.py`. Sueltas,
+# el segundo pisaria al primero en silencio y la mitad del arbol dejaria de vigilarse.
+
+
+def _arbol(tmp_path: Path) -> Path:
+    raiz = tmp_path / "src"
+    (raiz / "paquete_a").mkdir(parents=True)
+    (raiz / "paquete_b").mkdir(parents=True)
+    (raiz / "paquete_a" / "__init__.py").write_text("a = 1\n")
+    (raiz / "paquete_a" / "ventanas.py").write_text("def clases(): return {}\n")
+    (raiz / "paquete_b" / "__init__.py").write_text("b = 2\n")
+    return raiz
+
+
+def test_la_huella_del_arbol_cambia_si_cambia_un_archivo(huellas, tmp_path):
+    """El caso que motiva todo: se edita una funcion de la libreria y la aplicacion
+    tiene que enterarse."""
+    raiz = _arbol(tmp_path)
+    antes = huellas.huella_de_arbol(raiz)
+
+    (raiz / "paquete_a" / "ventanas.py").write_text("def clases(): return {'x': 1}\n")
+
+    assert huellas.huella_de_arbol(raiz) != antes
+
+
+def test_dos_paquetes_con_el_mismo_nombre_de_archivo_no_se_pisan(huellas, tmp_path):
+    """`chec_local_interpreter/__init__.py` y `chec_impacto/__init__.py` se llaman
+    igual. Con una huella por nombre de archivo, el segundo tapaba al primero y la
+    mitad del arbol dejaba de vigilarse sin que nada avisara."""
+    raiz = _arbol(tmp_path)
+    antes = huellas.huella_de_arbol(raiz)
+
+    # Se toca SOLO el que perderia la colision de nombres.
+    (raiz / "paquete_b" / "__init__.py").write_text("b = 99\n")
+
+    assert huellas.huella_de_arbol(raiz) != antes
+
+
+def test_la_huella_del_arbol_cambia_si_aparece_o_desaparece_un_modulo(huellas, tmp_path):
+    """Un modulo borrado tambien cambia lo que el cuaderno importa."""
+    raiz = _arbol(tmp_path)
+    antes = huellas.huella_de_arbol(raiz)
+
+    nuevo = raiz / "paquete_a" / "extra.py"
+    nuevo.write_text("y = 1\n")
+    con_extra = huellas.huella_de_arbol(raiz)
+    assert con_extra != antes
+
+    nuevo.unlink()
+    assert huellas.huella_de_arbol(raiz) == antes
+
+
+def test_la_huella_del_arbol_no_mira_la_fecha(huellas, tmp_path):
+    """Mismo criterio que `huella_de_archivo` por contenido: un `git checkout` mueve la
+    fecha de los 67 archivos sin cambiar ninguno, y con marcas eso reconstruiria las
+    cinco aplicaciones sin motivo."""
+    import os
+
+    raiz = _arbol(tmp_path)
+    antes = huellas.huella_de_arbol(raiz)
+    for ruta in raiz.rglob("*.py"):
+        os.utime(ruta, (1_000_000_000, 1_000_000_000))
+
+    assert huellas.huella_de_arbol(raiz) == antes
+
+
+def test_la_huella_del_arbol_es_estable_entre_pasadas(huellas, tmp_path):
+    """Sin orden fijo, el recorrido del disco cambiaria el sha1 entre maquinas y cada
+    arranque reconstruiria."""
+    raiz = _arbol(tmp_path)
+    assert huellas.huella_de_arbol(raiz) == huellas.huella_de_arbol(raiz)
+
+
+def test_un_arbol_que_no_esta_se_declara_ausente(huellas, tmp_path):
+    """Mismo contrato que un archivo que falta: no lanza, se reconstruye."""
+    assert huellas.huella_de_arbol(tmp_path / "no_existe") == {"falta": True}
+
+
+def test_el_arbol_ignora_lo_que_no_es_codigo(huellas, tmp_path):
+    """`__pycache__` se regenera solo y cambia sin que cambie el codigo. Vigilarlo
+    reconstruiria las cinco aplicaciones cada vez que alguien importa algo."""
+    raiz = _arbol(tmp_path)
+    antes = huellas.huella_de_arbol(raiz)
+
+    cache = raiz / "paquete_a" / "__pycache__"
+    cache.mkdir()
+    (cache / "ventanas.cpython-311.pyc").write_bytes(b"\x00basura")
+
+    assert huellas.huella_de_arbol(raiz) == antes

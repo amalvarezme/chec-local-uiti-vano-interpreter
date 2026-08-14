@@ -98,11 +98,28 @@ INSUMOS_POR_MARCA = (
 )
 
 
+# El codigo que las celdas de arranque IMPORTAN, y que decide la forma de casi todo lo
+# que el paquete congela: las bolsas, la tabla vano x ventana, las trazas de mapa, el
+# catalogo de controles. Eran 67 archivos sin vigilar, medidos.
+#
+# Aqui el hueco era mas estrecho que en los visores y por eso costaba mas verlo: las
+# celdas del TABLERO (11 a 16) corren vivas en el kernel en cada apertura, asi que un
+# cambio en `ventanas_015.py` que solo toque el dibujo si llega. El que no llegaba es el
+# que toca lo CONGELADO -- `construir_ventanas`, `seleccionar_bolsas`, la geometria de
+# 01.4 --, y ese se sirve viejo sin dar ningun error.
+#
+# Como UNA huella del arbol: las huellas se indexan por nombre de archivo y los dos
+# paquetes tienen su `__init__.py`. Cuesta 1,4 ms contra los 0,3 s que tarda el paquete
+# en cargar.
+INSUMOS_ARBOL = (_raiz.RAIZ_REPO / "src",)
+
+
 def huellas_actuales() -> dict:
     """La huella de cada insumo AHORA. La comparacion contra la guardada la hace
     `huellas.motivo_de_reconstruccion`, y la usa el arranque de la aplicacion."""
     return _huellas.huellas_de_insumos(
-        por_contenido=INSUMOS_POR_CONTENIDO, por_marca=INSUMOS_POR_MARCA)
+        por_contenido=INSUMOS_POR_CONTENIDO, por_marca=INSUMOS_POR_MARCA,
+        arboles=INSUMOS_ARBOL)
 
 # Por debajo de esto, alguna celda produjo un objeto vacio en silencio. `X_inst.npy`
 # sola pesa 88 MB, asi que un paquete de 50 MB no es un paquete valido.
@@ -361,12 +378,6 @@ setTimeout(function () {
 }, 400);
 """.replace('__MENU__', _MENU_CRITICIDAD)
 
-# Cerrar todo: el aviso al menu sale por `sendBeacon` y no por `fetch` porque el menu
-# vive en otro puerto -- otro origen -- y ademas esta pestania se esta cerrando; un
-# `fetch` a medio camino se cancelaria con ella y el menu se quedaria en pie.
-_JS_CERRAR_TODO = """
-navigator.sendBeacon("__MENU__" + "apagar-todo", "");
-""".replace('__MENU__', _MENU_CRITICIDAD) + _JS_CERRAR
 
 
 def _cerrar_aplicacion(_boton, _js=None):
@@ -405,24 +416,26 @@ _BOTONES_CIERRE = []
 
 if _MENU_CRITICIDAD:
     # Lanzado desde el menu: las dos acciones que ofrece la barra de los otros cuatro
-    # tableros. El "Cerrar simulador" suelto no aparece porque haria lo mismo que
-    # "Volver al menu" pero dejando la pestania sobre un tablero muerto.
+    # tableros. Las dos apagan SOLO este simulador -- el mismo SIGTERM al pid que dejo
+    # escrito `app.py`, que se lleva Voila y sus kernels -- y se diferencian en donde
+    # dejan al usuario. Apagar las cinco aplicaciones es cosa del "Cerrar todo" del menu
+    # y de nadie mas: desde aqui se cerraba tambien lo que el usuario no estaba mirando.
     _BOTON_VOLVER = widgets.Button(
         description='Volver al menu',
         tooltip='Apaga el simulador y vuelve a CriticidadCHEC',
         layout=widgets.Layout(width='170px'))
     _BOTON_VOLVER.on_click(lambda b: _cerrar_aplicacion(b, _JS_VOLVER))
-    _BOTON_TODO = widgets.Button(
-        description='Cerrar todo', button_style='danger',
-        tooltip='Apaga TODAS las aplicaciones y el menu',
+    _BOTON_CERRAR_APP = widgets.Button(
+        description='Cerrar', button_style='danger',
+        tooltip='Apaga el simulador y cierra esta pestania',
         layout=widgets.Layout(width='130px'))
-    _BOTON_TODO.on_click(lambda b: _cerrar_aplicacion(b, _JS_CERRAR_TODO))
-    _BOTONES_CIERRE = [_BOTON_VOLVER, _BOTON_TODO]
+    _BOTON_CERRAR_APP.on_click(_cerrar_aplicacion)
+    _BOTONES_CIERRE = [_BOTON_VOLVER, _BOTON_CERRAR_APP]
 else:
     _BOTON_CERRAR_APP = widgets.Button(
-        description='Cerrar simulador', button_style='danger',
+        description='Cerrar', button_style='danger',
         tooltip='Cierra esta pestania y apaga el servidor de la aplicacion',
-        layout=widgets.Layout(width='190px'))
+        layout=widgets.Layout(width='130px'))
     _BOTON_CERRAR_APP.on_click(_cerrar_aplicacion)
     _BOTONES_CIERRE = [_BOTON_CERRAR_APP]
 

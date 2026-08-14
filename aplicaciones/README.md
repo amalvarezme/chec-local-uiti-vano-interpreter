@@ -114,10 +114,16 @@ paquete de 95,2 MB y sirve una copia del cuaderno que lo lee.
 | memoria pico | 2.933 MB | **700 MB** |
 | solo la carga de datos | 4,3 s | **0,2 s** |
 
-Lo que queda de los 3,3 s son 2,0 s de importar PyTorch y compañía, que la aplicación
-paga **antes** de que llegue la primera petición: arranca un kernel ya ejecutado y
-esperando. Medido contra el servidor real, eso es la diferencia entre **4 ms** y
-**6,0 s** en abrir la página.
+Lo que queda de los 3,3 s son 2,0 s de importar PyTorch y compañía, que se pagan cuando
+llega la primera petición: **la página tarda ~4,5 s en aparecer la primera vez**, y las
+siguientes son inmediatas mientras el kernel siga vivo.
+
+> El simulador local **ya no precalienta kernel**. Medido A/B pidiendo la página como la
+> pide el menú —de inmediato, en cuanto el puerto contesta—, el precalentado no mejoraba
+> la espera (4,78 s contra 4,45 s): el puerto queda atado a los 0,77 s y el kernel de
+> reserva no llega a tiempo, así que Voilà levanta uno nuevo igual. Lo único que dejaba
+> era ese kernel sin usar: **1.694 MB contra 931 MB** tras servir la primera página. En
+> el despliegue de servidor sigue encendido, donde el trato es el contrario.
 
 La matriz de instancias (88 MB) se mapea en memoria en vez de cargarse, así que vive
 en la caché del sistema operativo y no en la memoria del proceso.
@@ -128,13 +134,17 @@ interfaz (59 trazas) y una simulación real idéntica hasta el décimo decimal.
 
 ## Los botones de cerrar
 
-Un tablero abierto **por su cuenta** trae arriba un botón *Cerrar tablero* que detiene
-su servidor — no los otros, que corren en su propio proceso y su propio puerto.
+Un tablero abierto **por su cuenta** trae arriba un botón *Cerrar* que detiene su
+servidor — no los otros, que corren en su propio proceso y su propio puerto.
 
-Un tablero abierto **desde CriticidadCHEC** trae en su lugar dos: *Volver al menú*, que
-lo apaga y cierra su pestaña dejando el menú a la vista, y *Cerrar todo*, que apaga las
-cinco aplicaciones y el menú. El botón suelto desaparece cuando hay menú, porque haría
-lo mismo que *Volver* pero dejando la pestaña sobre un tablero muerto.
+Un tablero abierto **desde CriticidadCHEC** trae en su lugar dos, y los dos apagan
+**solo ese tablero**, con su puerto y todo lo que cuelga de él: *Volver al menú*, que lo
+apaga y cierra su pestaña dejando el menú a la vista, y *Cerrar*, que lo apaga y cierra
+la pestaña sin volver al menú. El botón suelto desaparece cuando hay menú, porque haría
+lo mismo que *Cerrar* pero dejando la pestaña sobre un tablero muerto.
+
+**Ningún botón de un tablero apaga a los demás.** El único apagado general es el botón
+*Cerrar todo* de la página del menú, y desde ahí se ve qué se está apagando.
 
 Cerrar son tres cosas, y las tres están medidas contra el servidor real:
 

@@ -442,18 +442,22 @@ def test_el_gestor_sigue_sin_reenviar_senales_a_la_aplicacion():
         "el gestor toco senales: los dobles de esta prueba se quedaron viejos")
 
 
-def test_los_tres_botones_de_cerrar_todo_llaman_a_la_misma_ruta():
-    """Hay tres origenes distintos -- la pagina del menu, la barra inyectada en los
-    cuatro tableros estaticos, y los widgets del simulador -- y un solo sitio que
-    atiende. Los tres tienen la ruta escrita a mano en su propio JavaScript, asi que
-    nada salvo esta prueba impide que uno se quede atras."""
+def test_solo_la_pagina_del_menu_puede_apagarlo_todo():
+    """`/apagar-todo` apaga las cinco aplicaciones y el menu, asi que solo puede tener
+    UN origen: el boton "Cerrar todo" de la pagina del menu.
+
+    Antes lo llamaban tres -- esa pagina, la barra inyectada en los cuatro tableros
+    estaticos y los widgets del simulador --, asi que cerrar el tablero de clima se
+    llevaba por delante los otros cuatro y el menu. Desde los tableros solo se apaga el
+    tablero que se esta mirando.
+    """
     pagina = _comun("menu_pagina").pagina()
     barra = _comun("servidor")._BARRA_MENU
     preparar = (APPS / "06_simulador" / "preparar.py").read_text(encoding="utf-8")
 
     assert "fetch('/apagar-todo', { method: 'POST' })" in pagina
-    assert "sendBeacon(MENU + 'apagar-todo'" in barra
-    assert 'sendBeacon("__MENU__" + "apagar-todo"' in preparar
+    assert "apagar-todo" not in barra, "la barra de los tableros apaga todo"
+    assert "apagar-todo" not in preparar, "el simulador apaga todo"
 
     # Y el extremo que atiende, en el unico sitio donde esta escrito.
     assert '"/apagar-todo"' in (COMUN / "menu.py").read_text(encoding="utf-8")
@@ -462,9 +466,8 @@ def test_los_tres_botones_de_cerrar_todo_llaman_a_la_misma_ruta():
 def test_la_url_que_reciben_los_tableros_sale_del_puerto_del_menu():
     """Los cuatro tableros estaticos reciben la URL del menu por `--menu` y el simulador
     por la variable `MENU_CRITICIDAD`. Las dos tienen que salir de `PUERTO_MENU` y no de
-    un 8800 escrito a mano: con el numero suelto, arrancar el menu en otro puerto deja a
-    los tableros mandando su "Cerrar todo" a un puerto donde ya no hay nadie -- y el
-    `sendBeacon` no informa de errores, asi que el usuario ve como no pasa nada."""
+    un 8800 escrito a mano: con el numero suelto, arrancar el menu en otro puerto deja
+    el "Volver al menu" de los tableros navegando a un puerto donde ya no hay nadie."""
     codigo = (COMUN / "menu.py").read_text(encoding="utf-8")
     assert codigo.count('f"http://127.0.0.1:{PUERTO_MENU}/"') == 2, (
         "la URL del menu tiene que derivarse de PUERTO_MENU en los dos sitios que la "

@@ -118,17 +118,16 @@ _BARRA_MENU = """
            border-radius:4px;background:__FONDO__;color:__TEXTO__;cursor:pointer;
            box-shadow:0 1px 3px rgba(0,0,0,.12);"
     >&larr; Volver al menu</button>
-  <button type="button" id="bm-todo" title="Apaga TODAS las aplicaciones y el menu"
+  <button type="button" id="bm-cerrar" title="Apaga este tablero y cierra esta pestana"
     style="font:inherit;padding:6px 12px;border:1px solid __ACENTO__;
            border-radius:4px;background:__FONDO__;color:__ACENTO__;cursor:pointer;
            box-shadow:0 1px 3px rgba(0,0,0,.12);"
-    >Cerrar todo</button>
+    >Cerrar</button>
 </div>
 <script>
 (function () {
-  // El boton suelto de cerrar sobra cuando hay menu: haria lo mismo que "Volver" pero
-  // dejando la pestania abierta sobre un tablero muerto, que es peor que cualquiera de
-  // las dos cosas que ofrece la barra.
+  // El boton suelto de cerrar sobra cuando hay menu: apaga lo mismo que el "Cerrar" de
+  // la barra, pero dejando la pestania abierta sobre un tablero muerto.
   var suelto = document.getElementById('cerrar-tablero');
   if (suelto) { suelto.remove(); }
 
@@ -161,18 +160,20 @@ _BARRA_MENU = """
     });
   });
 
-  document.getElementById('bm-todo').addEventListener('click', function () {
-    if (!window.confirm('Se apagan TODAS las aplicaciones y el menu.')) { return; }
+  // "Cerrar" apaga ESTE tablero y nada mas: el mismo `POST /apagar` de "Volver", que se
+  // lleva su servidor, su puerto y lo que cuelgue de el. Las otras aplicaciones no son
+  // asunto suyo -- el unico apagado general es el "Cerrar todo" de la pagina del menu --
+  // y el menu se entera solo, porque revisa los cinco puertos cada 2,5 s.
+  //
+  // Los dos botones de la barra hacen lo mismo con los procesos y se diferencian en
+  // donde dejan al usuario: "Volver" lo devuelve al menu, "Cerrar" lo deja fuera.
+  document.getElementById('bm-cerrar').addEventListener('click', function () {
     document.getElementById('barra-menu').remove();
-    // `sendBeacon` y no `fetch`: el menu vive en otro puerto, o sea otro origen, y una
-    // respuesta cruzada exigiria CORS. Aqui no hace falta leer nada -- solo que el
-    // POST salga --, y `sendBeacon` sale incluso mientras la pestania se cierra.
-    navigator.sendBeacon(MENU + 'apagar-todo', '');
     apagarme().then(function () {
       window.close();
       setTimeout(function () {
         if (window.closed) { return; }
-        despedirse('Todo cerrado');
+        despedirse('Tablero cerrado');
       }, 400);
     });
   });
@@ -462,8 +463,8 @@ def servir(carpeta: Path, *, app: Path | None = None, abrir: bool = True,
     de los dos lo reconocia CriticidadCHEC, que los busca donde dice el contrato.
 
     `menu` es la URL de CriticidadCHEC cuando fue el quien lanzo este tablero. Con
-    ella, el armazon sale con la barra de "Volver al menu" / "Cerrar todo" en vez del
-    boton de cerrar suelto.
+    ella, el armazon sale con la barra de "Volver al menu" / "Cerrar" en vez del boton
+    de cerrar suelto. Los dos apagan SOLO este tablero: apagarlo todo es cosa del menu.
 
     `app` es la CARPETA de la aplicacion -- `carpeta` es solo su panel --, y con ella
     este servidor deja su pid escrito y se rinde cuando su puerto ya lo tiene esa misma

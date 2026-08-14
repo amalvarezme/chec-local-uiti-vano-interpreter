@@ -215,6 +215,19 @@ def test_el_boton_de_cerrar_llama_a_la_ruta_que_el_servidor_atiende():
     assert "window.close()" in html
 
 
+def _sin_comentarios(texto: str) -> str:
+    """Quita los comentarios `//` de JavaScript y los `<!-- -->` de HTML.
+
+    Lo que estas pruebas afirman es lo que el usuario LEE, y un comentario que explique
+    por que ya no existe "Cerrar todo" contiene esas dos palabras: sin este filtro, la
+    prueba se dispara contra la explicacion del arreglo en vez de contra el fallo.
+    """
+    import re
+
+    texto = re.sub(r"<!--.*?-->", "", texto, flags=re.S)
+    return "\n".join(l for l in texto.splitlines() if not l.lstrip().startswith("//"))
+
+
 def _comun(nombre: str):
     sys.path.insert(0, str(APPS / "_comun"))
     try:
@@ -249,8 +262,8 @@ def test_los_puertos_del_menu_son_los_que_fija_el_contrato():
 
 def test_la_barra_del_menu_quita_el_boton_de_cerrar_suelto():
     """Los dos juntos son una trampa: el suelto apaga el servidor y deja la pestana
-    abierta sobre un tablero muerto, que es peor que volver al menu y peor que cerrar
-    todo. Cuando hay menu, manda la barra."""
+    abierta sobre un tablero muerto, que es peor que volver al menu y peor que cerrar.
+    Cuando hay menu, manda la barra."""
     servidor = _comun("servidor")
     empaquetar = _comun("empaquetar")
     html = empaquetar._inyectar_boton_cerrar("<html><body>x</body></html>")
@@ -259,15 +272,37 @@ def test_la_barra_del_menu_quita_el_boton_de_cerrar_suelto():
     con_barra = servidor._con_barra_de_menu(html.encode("utf-8"),
                                             "http://127.0.0.1:8800/").decode("utf-8")
     assert 'id="bm-volver"' in con_barra
-    assert 'id="bm-todo"' in con_barra
+    assert 'id="bm-cerrar"' in con_barra
     # El boton suelto sigue en el documento, pero el guion de la barra lo retira al
     # cargar: quitarlo del HTML exigiria volver a parsear el armazon entero.
     assert "getElementById('cerrar-tablero')" in con_barra
     assert ".remove()" in con_barra
-    # La URL del menu tiene que viajar literal: es lo que usa `sendBeacon` para llegar
-    # al `/apagar-todo` del otro puerto.
+    # La URL del menu tiene que viajar literal: es a donde navega "Volver al menu"
+    # cuando la pestania no se deja cerrar.
     assert "var MENU = 'http://127.0.0.1:8800/';" in con_barra
-    assert "sendBeacon(MENU + 'apagar-todo'" in con_barra
+
+
+def test_los_dos_botones_de_la_barra_solo_apagan_su_propio_tablero():
+    """Ningun boton de un tablero puede apagar a los demas.
+
+    La barra ofrecia "Cerrar todo", que mandaba un `sendBeacon` al `/apagar-todo` del
+    menu: desde el tablero de clima se apagaban los otros cuatro y el menu. Ahora ese
+    boton es "Cerrar" y hace lo mismo que "Volver al menu" en cuanto a procesos --
+    `POST /apagar` a SU puerto, que se lleva su servidor y lo que cuelgue de el -- y
+    solo se diferencia en donde deja al usuario. El unico apagado general vive en la
+    pagina del menu.
+    """
+    servidor = _comun("servidor")
+    con_barra = _sin_comentarios(servidor._con_barra_de_menu(
+        b"<html><body>x</body></html>", "http://127.0.0.1:8800/").decode("utf-8"))
+    assert "apagar-todo" not in con_barra, "la barra sigue pudiendo apagarlo todo"
+    assert "sendBeacon" not in con_barra
+    assert ">Cerrar</button>" in con_barra
+    assert "Cerrar todo" not in con_barra
+    # Ni el rotulo ni el tooltip pueden prometer lo que ya no hace.
+    assert "TODAS" not in con_barra
+    # Los dos caminos pasan por la puerta del propio tablero y por ninguna otra.
+    assert con_barra.count(f"fetch('{servidor.RUTA_APAGADO}'") == 1
 
 
 def test_la_barra_falla_si_no_encuentra_donde_ponerse():
@@ -330,7 +365,7 @@ def _cargar_preparar():
 def test_el_simulador_sin_menu_trae_solo_su_boton_de_cerrar():
     espacio = _ejecutar_bloque_de_cierre("")
     botones = [b.kwargs.get("description") for b in espacio["_BOTONES_CIERRE"]]
-    assert botones == ["Cerrar simulador"]
+    assert botones == ["Cerrar"]
 
 
 def test_el_simulador_lanzado_desde_el_menu_cambia_su_boton_por_los_dos_del_menu():
@@ -339,14 +374,28 @@ def test_el_simulador_lanzado_desde_el_menu_cambia_su_boton_por_los_dos_del_menu
     la variable de entorno que le pasa el menu."""
     espacio = _ejecutar_bloque_de_cierre("http://127.0.0.1:8800/")
     botones = [b.kwargs.get("description") for b in espacio["_BOTONES_CIERRE"]]
-    assert botones == ["Volver al menu", "Cerrar todo"]
-    # "Cerrar simulador" no puede sobrevivir: haria lo mismo que "Volver al menu" pero
-    # dejando la pestania sobre un tablero muerto.
-    assert "_BOTON_CERRAR_APP" not in espacio
+    assert botones == ["Volver al menu", "Cerrar"]
+    # Dos y no tres: con menu, el boton de cerrar suelto no se suma a la barra, se
+    # convierte en el segundo boton de la barra.
     # La URL del menu tiene que quedar HORNEADA en el JavaScript: se resuelve al
     # ejecutar el bloque, no cuando alguien pulsa.
     assert "http://127.0.0.1:8800/" in espacio["_JS_VOLVER"]
-    assert 'sendBeacon("http://127.0.0.1:8800/" + "apagar-todo"' in espacio["_JS_CERRAR_TODO"]
+
+
+def test_el_simulador_no_puede_apagar_a_las_demas_aplicaciones():
+    """Su segundo boton mandaba un `sendBeacon` al `/apagar-todo` del menu, asi que
+    cerrar el simulador se llevaba por delante los otros cuatro tableros y el menu. El
+    apagado general es del menu y de nadie mas; aqui solo se manda `SIGTERM` al pid que
+    dejo escrito ESTA aplicacion."""
+    codigo = (APPS / "06_simulador" / "preparar.py").read_text(encoding="utf-8")
+    assert "apagar-todo" not in codigo, "el simulador sigue pudiendo apagarlo todo"
+    assert "sendBeacon" not in codigo
+    assert "_JS_CERRAR_TODO" not in codigo
+
+    for menu in ("", "http://127.0.0.1:8800/"):
+        espacio = _ejecutar_bloque_de_cierre(menu)
+        descripciones = [b.kwargs.get("description") for b in espacio["_BOTONES_CIERRE"]]
+        assert "Cerrar todo" not in descripciones
 
 
 def test_la_barra_del_simulador_lleva_siempre_el_aviso_y_la_salida():
@@ -448,6 +497,34 @@ def test_el_menu_no_sigue_el_tema_del_sistema():
     assert "prefers-color-scheme" not in pagina
     assert "color-scheme" not in pagina
     assert f"background: {_comun('paleta').FONDO}" in pagina
+
+
+def test_el_menu_no_explica_como_funciona_por_encima_de_la_lista():
+    """La portada del menu llevaba dos parrafos describiendo el mecanismo -- un proceso
+    y un puerto por tablero, que hace cada boton --. Es documentacion, y su sitio son
+    los README: en la pantalla solo empuja hacia abajo lo unico que se viene a hacer,
+    que es la lista de aplicaciones."""
+    pagina = _comun("menu_pagina").pagina()
+    for frase in ("su propio proceso", "los abre, los vigila", "en su propia pestana",
+                  "apaga\n     las cinco aplicaciones", "Cada tablero abre"):
+        assert frase not in pagina, f"la pagina del menu todavia explica: {frase!r}"
+    # Lo que si tiene que quedar: el titulo y el unico boton que apaga todo.
+    assert "<h1>CriticidadCHEC</h1>" in pagina
+    assert 'id="cerrar-todo"' in pagina
+
+
+def test_la_pestania_que_espera_a_un_tablero_solo_dice_cargando():
+    """Mientras la aplicacion se prepara, la pestania recien abierta contaba la historia
+    entera -- "Preparando X", el detalle vivo del avance, y un parrafo sobre entornos y
+    minutos --. Ahora dice "Cargando..." y nada mas; el avance con su detalle sigue
+    estando en la tarjeta del menu, que es donde se puede leer sin perder de vista el
+    resto."""
+    guion = _sin_comentarios(_guiones_emitidos()["pagina del menu"])
+    assert "Cargando..." in guion
+    for frase in ("Preparando ", "Un momento", "No cierres esta", "entorno"):
+        assert frase not in guion, f"la pestania de espera todavia dice: {frase!r}"
+    # Y el detalle del avance ya no se escribe dentro de esa pestania.
+    assert "getElementById('p')" not in guion
 
 
 def _guiones_emitidos() -> dict[str, str]:
@@ -659,3 +736,92 @@ def test_todo_insumo_que_el_simulador_exige_esta_ademas_vigilado():
                                                       ".json", ".shp"))} - vigilados
     assert not sin_vigilar, (
         f"exigidos para construir pero no vigilados: {sorted(sin_vigilar)}")
+
+
+# ------------------------------------- el codigo de las librerias es un insumo mas
+
+
+def test_las_cinco_vigilan_el_codigo_de_las_librerias():
+    """El punto ciego mas ancho que tenian, medido: 67 archivos bajo `src/` y CERO
+    vigilados.
+
+    Las cinco aplicaciones CONGELAN el resultado de un cuaderno -- los cuatro visores en
+    un HTML, el simulador en su paquete -- y ese cuaderno importa
+    `chec_local_interpreter` y `chec_impacto`. Cambiar `clases_para`, las capas del mapa
+    o la construccion de ventanas no movia ninguna huella, asi que la aplicacion seguia
+    sirviendo lo anterior sin dar ningun error. Es el mismo fallo que ya obligo a
+    vigilar `empaquetar.py` y `preparar.py`, un nivel mas abajo.
+
+    Cuesta 1,4 ms por arranque, medidos sobre los 67 archivos: nada frente a los 0,06 s
+    que tarda un visor en servirse.
+    """
+    construccion = _comun("construccion")
+    huellas_visor = construccion.huellas_actuales("01_uiti_vano_clima.ipynb")
+
+    sys.path.insert(0, str(APPS / "06_simulador"))
+    try:
+        preparar = __import__("preparar")
+    finally:
+        sys.path.pop(0)
+    huellas_simulador = preparar.huellas_actuales()
+
+    for nombre, huellas in (("los visores", huellas_visor),
+                            ("el simulador", huellas_simulador)):
+        arboles = {k: v for k, v in huellas.items() if k.endswith("/")}
+        assert arboles, f"{nombre} no vigila ningun arbol de codigo"
+        assert "src/" in arboles, f"{nombre} no vigila src/: {sorted(arboles)}"
+        # Y que de verdad haya mirado dentro, no que la carpeta exista.
+        assert arboles["src/"].get("archivos", 0) > 20, (
+            f"{nombre} vigila src/ pero solo vio {arboles['src/']} archivos")
+
+
+def test_vigilar_el_codigo_no_cuesta_mas_que_servir_el_tablero():
+    """La comprobacion corre en CADA apertura, antes de decidir si reconstruir. Un
+    visor ya construido se sirve en 0,06 s medidos; si comprobar costara mas que eso,
+    la defensa saldria mas cara que el fallo del que protege."""
+    import time
+
+    huellas = _comun("huellas")
+    raiz = RAIZ / "src"
+    t0 = time.perf_counter()
+    for _ in range(3):
+        huellas.huella_de_arbol(raiz)
+    promedio = (time.perf_counter() - t0) / 3
+
+    assert promedio < 0.05, f"la huella de src/ tarda {promedio*1000:.0f} ms"
+
+def test_el_simulador_local_no_deja_un_kernel_caliente_en_reposo():
+    """El simulador local NO precalienta kernel, y es una decision medida.
+
+    `--preheat_kernel=True` deja un kernel ya ejecutado esperando a la primera
+    peticion. Medido A/B en esta maquina, pidiendo la pagina como la pide el menu -- de
+    inmediato, en cuanto el puerto contesta --:
+
+        con precalentado : 4,78 s de espera, 1.694 MB tras servir (3 procesos)
+        sin precalentado : 4,45 s de espera,   931 MB tras servir (2 procesos)
+
+    La espera NO mejora. El puerto queda atado a los 0,77 s y el kernel precalentado
+    tarda bastante mas en estar listo, asi que la primera peticion no lo alcanza y Voila
+    levanta uno nuevo igual. Lo unico que quedaba era el kernel de reserva que nadie usa:
+    763 MB permanentes en la portatil de una persona a cambio de nada medible.
+
+    En el despliegue de servidor (`.claude/commands/app-simulador-vano.md`) el trato es
+    el contrario y por eso ahi sigue encendido: alli el kernel caliente lo aprovechan
+    muchas visitas, la memoria es del cluster, y nadie abre la pagina en el mismo
+    segundo en que arranca el servicio.
+
+    `--pool_size` no se queda huerfano: sin precalentado no hay reserva que dimensionar.
+
+    Se mira el ARGUMENTO y no el texto del archivo: el comentario que explica por que
+    ya no se precalienta nombra las dos banderas, y buscarlas a secas se dispara contra
+    la explicacion en vez de contra el fallo.
+    """
+    codigo = (APPS / "06_simulador" / "app.py").read_text(encoding="utf-8")
+    assert '"--preheat_kernel' not in codigo, (
+        "el simulador local volvio a precalentar: son 780 MB en reposo")
+    assert '"--pool_size' not in codigo, (
+        "sin precalentado, `--pool_size` dimensiona una reserva que no existe")
+    # Lo que SI tiene que seguir: reciclar el kernel de una pestania cerrada. Sin esto
+    # cada recarga deja atras otros 780 MB -- se llegaron a ver siete vivos a la vez.
+    assert "--MappingKernelManager.cull_idle_timeout=180" in codigo
+    assert "--MappingKernelManager.cull_connected=False" in codigo

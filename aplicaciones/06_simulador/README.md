@@ -42,8 +42,10 @@ Medido en esta máquina:
 |---|---|
 | construcción del paquete (una vez) | **7,3 s**, con un pico de 3,01 GB |
 | paquete resultante | **95,2 MB** en 8 archivos |
-| primera carga de la página | **4 ms** (kernel precalentado) |
-| carga siguiente, con el kernel ya consumido | **6,0 s** |
+| primera carga de la página | **~4,5 s** (arranca el kernel) |
+| cargas siguientes, con el kernel vivo | inmediatas |
+| memoria en reposo, antes de abrir la página | **96 MB** |
+| memoria tras servir la página | **931 MB** |
 | entorno virtual | 1,6 GB (PyTorch es casi todo) |
 
 ## Qué variables se pueden simular
@@ -90,9 +92,15 @@ resultado; la aplicación sirve una copia del cuaderno que lo lee.
 | memoria pico | 2.933 MB | **700 MB** |
 | solo la carga de datos | 4,3 s | **0,2 s** |
 
-De los 3,3 s que quedan, 2,0 s son importar PyTorch y compañía. La aplicación los
-paga **antes** de que llegue nadie: arranca un kernel ya ejecutado y esperando, y por
-eso la primera carga responde en 4 ms en vez de 6 s.
+De los 3,3 s que quedan, 2,0 s son importar PyTorch y compañía, y se pagan cuando llega
+la primera petición: la página aparece a los ~4,5 s y a partir de ahí es inmediata.
+
+**Ya no se precalienta kernel**, y es una decisión medida. `--preheat_kernel` deja uno
+ya ejecutado esperando, pero pidiendo la página como la pide el menú —de inmediato, en
+cuanto el puerto contesta— no ganaba nada: 4,78 s contra 4,45 s de espera. El puerto
+queda atado a los 0,77 s y el kernel de reserva no llega a tiempo, así que Voilà levanta
+uno nuevo igual. Lo único que quedaba era ese kernel sin usar, y se nota: **1.694 MB
+contra 931 MB** tras servir la primera página.
 
 ### 2. La matriz de instancias se mapea, no se carga
 

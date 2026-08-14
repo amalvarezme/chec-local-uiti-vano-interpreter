@@ -20,7 +20,7 @@ gobernado por una ventana deslizante que reordena las opacidades en vivo.
 > Terminal y la cierra sola cuando cierras el tablero. `iniciar.command` sigue ahí para
 > lanzarlo desde una terminal a propósito, y es el camino de Linux.
 
-`Ctrl+C` en la ventana lo detiene, y el botón **Cerrar tablero** de arriba a la derecha
+`Ctrl+C` en la ventana lo detiene, y el botón **Cerrar** de arriba a la derecha
 hace lo mismo desde el navegador.
 
 Opciones de `iniciar`: `--no-abrir` (no abre el navegador), `--puerto N`,

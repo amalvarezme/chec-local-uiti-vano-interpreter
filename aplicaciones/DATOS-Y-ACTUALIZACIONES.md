@@ -50,10 +50,25 @@ Reconstruyendo el tablero: cambio Indicadores_vano_v3.csv desde la ultima constr
 | `bolsas_mil_full.joblib` | — | — | — | — | ✅ |
 | `geometrias_014.json` | — | — | — | — | ✅ |
 | su cuaderno y el código que lo empaqueta | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `src/` completo (67 archivos) ⁽²⁾ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ⁽¹⁾ El cuaderno 02 no abre ningún shapefile, pero se vigilan igual. Vigilar de más cuesta
 una reconstrucción de 3 s el día que alguien cambie un shapefile; vigilar de menos cuesta
 un tablero que dibuja datos viejos sin dar ningún error. La asimetría es deliberada.
+
+⁽²⁾ El código de `chec_local_interpreter` y `chec_impacto`, que es lo que los cuadernos
+importan y lo que de verdad decide cómo se ve el tablero: el agrupamiento, las capas del
+mapa, la construcción de ventanas. **Estuvo sin vigilar y era el hueco más ancho que
+tenían las cinco**: se tocaba `clases_para` y el tablero seguía sirviendo el panel
+anterior sin dar ningún error — el mismo fallo que ya obligó a vigilar `empaquetar.py`,
+un nivel más abajo y 67 archivos más ancho.
+
+Entra como **una sola huella del árbol** y no como 67 sueltas, por dos razones: las
+huellas se indexan por nombre de archivo y los dos paquetes tienen su propio
+`__init__.py` (sueltas, el segundo pisaría al primero en silencio), y un manifiesto con
+67 entradas más es ilegible justo cuando hace falta leerlo. Cuesta **1,4 ms** por
+arranque, medidos sobre los 1,3 MB de código, contra los 0,06 s que tarda un visor ya
+construido en servirse. Cambiar cualquier archivo de `src/` reconstruye las cinco.
 
 **Un guion `—` no es un descuido: esa aplicación no lee ese archivo.** Solo el simulador
 usa el modelo MIL; los otros cuatro calculan todo en su cuaderno.
