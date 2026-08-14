@@ -443,14 +443,14 @@ def test_the_diagnosis_button_is_called_just_diagnostico(fuente):
     assert "Diagnostico del circuito" not in fuente
 
 
-# --- La figura de seis filas -----------------------------------------------------------
+# --- La figura de siete filas ----------------------------------------------------------
 
 
-def test_the_figure_has_six_rows_with_the_bars_and_the_graph_in_their_own(fuente):
-    """Filas 4 y 5 partidas 3+1 -- las barras de UITI y las de costo, cada una con su
-    acumulado en la ultima columna -- y fila 6 el grafo centrado en las columnas 2-3. El
-    grafo va a MEDIA fila y no a lo ancho porque es circular: a ancho completo queda un
-    disco pequenio con dos franjas vacias.
+def test_the_figure_has_seven_rows_with_the_bars_and_the_graph_in_their_own(fuente):
+    """Fila 3 el perfil del circuito a lo ancho, filas 5 y 6 partidas 3+1 -- las barras
+    de UITI y las de costo, cada una con su acumulado en la ultima columna -- y fila 7 el
+    grafo centrado en las columnas 2-3. El grafo va a MEDIA fila y no a lo ancho porque
+    es circular: a ancho completo queda un disco pequenio con dos franjas vacias.
 
     El reparto de alturas se comprueba por su INVARIANTE y no por sus cifras: clavar los
     seis numeros hacia fallar el test cada vez que se reajusta el grafo, que es justo lo
@@ -462,19 +462,24 @@ def test_the_figure_has_six_rows_with_the_bars_and_the_graph_in_their_own(fuente
     mas alla de ese ancho no agranda el circulo, solo agrega banda blanca arriba y abajo.
     Medido con la fila a 1.206 px: a 850 px de ventana sobraban 859 px de vacio.
     """
-    assert "rows=6, cols=4," in fuente
+    assert "rows=7, cols=4," in fuente
     assert "[None, {'type': 'xy', 'colspan': 2}, None, None]" in fuente
     # Las barras de UITI y las de costo: los vanos en las columnas 1-3 y el acumulado en
     # la 4. Juntos, el total -- la suma de todos los vanos -- aplastaba contra la base a
     # los grupos por vano, que es donde se decide la obra. Son DOS filas con el mismo
-    # reparto, y ninguna fila ocupa ya las cuatro columnas de corrido.
+    # reparto.
     assert fuente.count("[{'type': 'xy', 'colspan': 3}, None, None, {'type': 'xy'}],") == 2
-    assert "'colspan': 4" not in fuente
+    # UNA sola fila de ancho completo, y es la del perfil del circuito. La cota importa:
+    # lo que este test protege es que las dos filas de barras NO vuelvan a ocupar las
+    # cuatro columnas de corrido, porque ahi es donde el acumulado aplasta a los vanos.
+    # El perfil puede porque es un panel propio, con su eje y una sola serie.
+    assert fuente.count("'colspan': 4") == 1
+    assert "[{'type': 'xy', 'colspan': 4}, None, None, None]," in fuente
 
     alturas = re.search(r"row_heights=\[([\d.,\s]+)\]", fuente)
     assert alturas, "la figura tiene que repartir el alto explicitamente"
     fracciones = [float(v) for v in alturas.group(1).split(",")]
-    assert len(fracciones) == 6
+    assert len(fracciones) == 7
     assert abs(sum(fracciones) - 1.0) < 1e-6, f"las fracciones no suman 1: {fracciones}"
     assert fracciones[-1] > max(fracciones[:-1]), (
         f"la fila del grafo tiene que ser la mas alta: {fracciones}"
@@ -486,6 +491,47 @@ def test_the_figure_has_six_rows_with_the_bars_and_the_graph_in_their_own(fuente
     assert "IDX['barra_simulada']" in fuente
     assert "IDX['barra_total_observada']" in fuente
     assert "IDX['barra_total_simulada']" in fuente
+
+
+def test_el_perfil_del_circuito_no_suma_ventanas_que_se_traslapan(fuente):
+    """El total de cada vano sale de `perfil_uiti_por_vano` y NUNCA de sumar
+    `uiti_acumulado` sobre la tabla entera.
+
+    Es la simplificacion que este panel invita a hacer y que estaria mal: las once
+    ventanas se traslapan -- seis son meses y cinco son cortes del 15 al 15 --, asi que
+    casi todo evento cae en dos y esa suma lo cuenta dos veces.
+    `construir_tabla_vano_ventana` ya lo advierte en su docstring ("they cannot simply be
+    summed"), y `perfil_uiti_por_vano` suma solo sobre las ventanas que embaldosan el
+    periodo una vez.
+
+    Medido sobre las 111.231 celdas reales: la suma ingenua infla el total de un vano
+    entre 1,00 y 2,09 veces. Como el factor NO es constante tampoco se cancela al
+    ordenar, que es el error silencioso: 74 de los 208 circuitos cambian su top 15. El
+    panel seguiria dibujando quince barras plausibles, solo que de los vanos equivocados.
+    """
+    assert "IDX['perfil_circuito']" in fuente
+    assert "perfil_uiti_por_vano(TABLA, circuito, ventanas=VENTANAS" in fuente
+    codigo = [l for l in fuente.splitlines() if not l.strip().startswith("#")]
+    prohibido = [l for l in codigo
+                 if "uiti_acumulado" in l and ("groupby" in l or ".sum()" in l)]
+    assert not prohibido, (
+        f"el total del perfil no puede salir de una suma sobre TABLA: {prohibido}")
+
+
+def test_el_perfil_del_circuito_solo_se_repinta_al_cambiar_de_circuito(fuente):
+    """El perfil mira la serie COMPLETA, asi que ni la ventana ni los vanos marcados lo
+    cambian. Se repinta desde `_pintar_circuito` -- lo que depende del circuito y nada
+    mas -- y no desde `_redibujar_mapa_historico`, que corre en cada casilla y en cada
+    clic sobre el mapa.
+
+    No es solo higiene: un restyle de plotly cuesta lo suyo aunque lleve poco dato, y
+    colgarlo del repintado del mapa lo pagaria en cada uno de los quince vanos que se
+    pueden marcar, para volver a dibujar exactamente las mismas quince barras.
+    """
+    cuerpo = fuente.split("def _pintar_circuito(")[1].split("\ndef ")[0]
+    assert "_pintar_perfil_del_circuito(circuito)" in cuerpo
+    mapa = fuente.split("def _redibujar_mapa_historico(")[1].split("\ndef ")[0]
+    assert "_pintar_perfil_del_circuito" not in mapa
 
 
 def test_no_axis_of_the_dashboard_is_logarithmic(fuente):
@@ -510,8 +556,8 @@ def test_the_circular_graph_keeps_its_aspect_at_any_screen_width(fuente):
     nombres. Cuanto menor, mayor el circulo -- y en cuanto se queda corto los nombres se
     salen del panel y se montan sobre el anillo, que es como se veia con fuente 14.
     """
-    assert "scaleanchor=_EJE_X_GRAFO, scaleratio=1.0, row=6, col=2" in fuente
-    assert "range=[-RANGO_GRAFO, RANGO_GRAFO], row=6, col=2" in fuente
+    assert "scaleanchor=_EJE_X_GRAFO, scaleratio=1.0, row=7, col=2" in fuente
+    assert "range=[-RANGO_GRAFO, RANGO_GRAFO], row=7, col=2" in fuente
     rango = re.search(r"^RANGO_GRAFO = ([\d.]+)$", fuente, re.MULTILINE)
     assert rango, "el rango del grafo tiene que ser una constante con su justificacion"
     # Cota inferior: por debajo de `RADIO_ROTULO_GRAFO` el rango caeria DENTRO del anillo
