@@ -60,7 +60,7 @@ Databricks Apps. Todos comparten
 [`_contrato-despliegue-databricks.md`](.claude/commands/_contrato-despliegue-databricks.md).
 Es un árbol de comandos aislado, sin equivalente en Pi, que nunca modifica `report_pipeline.py`
 ni los roles LLM. Solo viajan los datos que consumen los cuadernos `01`-`06` y el comando
-`/report`: **no se crea ninguna tabla Delta, vista ni dashboard**. Detalle completo en [`docs/flujo-detallado.md`](docs/flujo-detallado.md#3-flujo-b--despliegue-a-databricks).
+`/report`: **no se crea ninguna tabla Delta, vista ni dashboard**. Detalle completo en [`docs/flujo-detallado.md`](docs/flujo-detallado.md#6-la-subida-a-databricks).
 
 ## Estructura del repositorio
 
@@ -150,7 +150,7 @@ Cada corrida deja una bitácora en `reports/despliegues/` con los pasos, los err
 restricciones encontradas; una restricción de permisos no aborta la corrida, se registra y
 el comando sigue para que el reporte quede completo.
 
-Ver [`docs/flujo-detallado.md`](docs/flujo-detallado.md#3-flujo-b--despliegue-a-databricks) para el flujo completo, objetos de datos y limitaciones conocidas.
+Ver [`docs/flujo-detallado.md`](docs/flujo-detallado.md#6-la-subida-a-databricks) para el flujo completo, objetos de datos y limitaciones conocidas.
 
 ### Modelo de compatibilidad en Pi
 
@@ -270,9 +270,9 @@ Antes de los diagramas fuente de abajo, dos documentos narrativos actualizados 2
 ambos cubren el pipeline local de reportes **y** el despliegue a Databricks:
 
 - **[`docs/flujo-detallado.md`](docs/flujo-detallado.md)** (o su versión HTML,
-  [`docs/flujo-detallado.html`](docs/flujo-detallado.html)) — flujo técnico completo: comandos,
-  agentes, los 6 cuadernos activos, los comandos de Databricks, objetos de datos, restricciones y
-  limitaciones conocidas de la plataforma.
+  [`docs/flujo-detallado.html`](docs/flujo-detallado.html)) — flujo técnico completo: el modelo MIL,
+  los agentes, la familia `/report`, las seis aplicaciones locales, la subida a Databricks con sus
+  restricciones conocidas y los cuadernos.
 - **[`docs/flujo-resumen.md`](docs/flujo-resumen.md)** (o su versión visual,
   [`docs/flujo-resumen.html`](docs/flujo-resumen.html)) — misma historia sin jerga técnica, para
   perfiles no técnicos.

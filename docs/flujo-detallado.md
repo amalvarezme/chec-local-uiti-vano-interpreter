@@ -1,166 +1,308 @@
 # Flujo detallado del proyecto — CHEC UITI_VANO Interpreter
 
-> Versión HTML: [`flujo-detallado.html`](./flujo-detallado.html) (mismo contenido). Actualizado 2026-07-25, rama `main` (única rama del proyecto desde la consolidación de ramas de esa fecha).
+> Versión HTML: [`flujo-detallado.html`](./flujo-detallado.html) (mismo contenido). Actualizado 2026-08-13.
 >
 > Audiencia: ingeniería / mantenimiento del repo. Para una versión sin jerga técnica, ver [`flujo-resumen.md`](./flujo-resumen.md) / [`flujo-resumen.html`](./flujo-resumen.html).
+>
+> Este documento describe el flujo esencial del proyecto. La publicación de la página web de
+> presentación queda fuera a propósito: es un canal interno de divulgación, no una pieza del flujo.
 
 ## 1. Panorama
 
-El proyecto sostiene **dos flujos** que comparten la misma fuente de verdad — el CSV `Indicadores_vano_v3.csv` y la función real `compute_circuit_criticality_groups` — pero terminan en destinos distintos y **no comparten runtime ni credenciales**:
+Todo parte de una sola fuente de verdad — el CSV `data/Indicadores_vano_v3.csv`, un histórico de
+eventos por vano — y se ramifica en **cuatro planos** que no comparten runtime:
 
-- **Flujo A — pipeline local de reportes.** Genera HTML por circuito (o por lote) usando agentes LLM de Claude Code, publicado opcionalmente a un vault Obsidian indexado con `graphify`.
-- **Flujo B — despliegue a Databricks.** Sube al Volume los datos que consumen los cuadernos `01`-`06` y el comando `/report`, importa el cuaderno `05` al Workspace y publica los demás como Databricks Apps. **No crea tablas Delta, vistas ni dashboards**: el stack Lakeview (`/deploy-databricks-dashboard`, `notebooks/databricks/`) se retiró.
+| Plano | Qué es | Dónde corre |
+|---|---|---|
+| **El modelo MIL** | El motor predictivo: aprende sobre bolsas *vano × ventana* y estima el UITI acumulado | Cuaderno `05`, local o Kaggle |
+| **Los agentes** | Cuatro roles LLM que leen contexto ya seleccionado y redactan JSON validado | Claude Code, local |
+| **Los reportes** | La familia `/report`: convierte modelo + datos + PDFs expertos en un HTML por circuito | Local |
+| **Las aplicaciones** | Seis tableros interactivos, en el escritorio o publicados como Databricks Apps | macOS/Windows, o Databricks |
 
-Un cambio en `plotting.py` no se refleja en Databricks hasta que se re-ejecuta `uiti_vano_tables.py` — son copias de datos independientes, no una vista en vivo del mismo backend.
+Los planos se tocan en un punto y solo uno: **el archivo del modelo**,
+`data/models/mil_vano_ventana_v1.pt`. El cuaderno `05` lo escribe; el pipeline de reportes y el
+simulador lo cargan en **solo lectura**, nunca lo reentrenan. Esa asimetría es un invariante
+vigilado por pruebas (`tests/test_frozen_model_guard.py`), no una convención.
 
-## 2. Flujo A — pipeline local de reportes
+## 2. El modelo MIL (cuaderno `05_mil_vano_ventana`)
 
-### 2.1 Comandos
+### 2.1 Qué aprende
+
+Multiple Instance Learning sobre **bolsas**: una bolsa es un vano dentro de una ventana de tiempo,
+y sus instancias son los eventos que cayeron ahí. El modelo estima el **UITI acumulado** de la
+bolsa y, en paralelo, su clase de criticidad. El número de eventos NO es una salida del modelo:
+es contexto observado.
+
+| | |
+|---|---|
+| Artefacto | `data/models/mil_vano_ventana_v1.pt` |
+| Configuración | `fusion="film"`, `LAMBDA_CLASE=1.0`, `TEMPERATURA_CLASE=0.01`, 30 épocas |
+| macro-F1 (CV agrupada, 62.114 bolsas) | 0,870982 |
+| Referencia RandomForest estructural | 0,881231 |
+| **Veredicto de la barra pre-registrada A1** | **NEGATIVO** (−1,02 puntos) |
+
+El veredicto negativo está publicado a propósito: el modelo **ordena** bien (correlaciona 0,950
+con el UITI observado sobre 599 bolsas) pero su **nivel** corre +34%, con error relativo mediano
+del 39,4%. Por eso todo lo que lo consume publica su incertidumbre en vez de presentar la
+predicción como una medición. El detalle completo está en
+[`mil-vano-ventana-estado-y-mejoras.md`](./mil-vano-ventana-estado-y-mejoras.md).
+
+### 2.2 Cómo se corre
+
+El cuaderno arranca por defecto como **visor** (`EJECUCION="visualizacion"`): carga el modelo ya
+entrenado y dibuja, en segundos. Reentrenar es explícito — `EJECUCION="entrenamiento"`, unos 40
+minutos. Nadie reentrena por accidente al abrir el cuaderno.
+
+El grafo experto de variables **no se lee de disco**: `construir_matriz_adyacencia_mgcecdl` lo
+construye en código y el `.pt` lo guarda dentro, junto con las aristas preservadas. El modelo y su
+grafo viajan juntos, que es lo que impide reconstruir uno con el otro desfasado.
+
+Para experimentos con GPU sin tocar la máquina local está `/experimento-kaggle`: propone diagrama
+de bloques y cuaderno, **exige aprobación explícita** y recién ahí ejecuta remoto vía la CLI de
+Kaggle.
+
+## 3. Los agentes
+
+Cuatro roles, cada uno con su skill, su esquema JSON y su contrato de citación. Ninguno inventa
+datos: reciben contexto **ya seleccionado** por código determinista y solo pueden citar lo que
+viene en su sobre.
+
+| Agente | Qué produce | Entrada |
+|---|---|---|
+| `historical` | El diagnóstico descriptivo del comportamiento del UITI_VANO en la ventana | `run_dir/historical.bc.json` |
+| `inference` | La interpretación del modelo MIL: relevancia por vano hacia el UITI mínimo, diagnóstico del vano crítico con su plan, coherencia con el grafo | `run_dir/inference.bc.json` |
+| `expert-alignment` | La comparación contra la discusión experta extraída de los PDFs | `run_dir/expert_alignment.bc.json` |
+| `pdf-discussion-extraction` | Decide qué secciones de un PDF técnico se vuelven filas de la tabla de discusión | Un PDF por corrida |
+
+Reglas duras, en `.claude/agents/rules/invariants.md`:
+
+- **Cada agente valida su propio JSON contra un esquema antes de aceptarlo.** Un JSON inválido se
+  reintenta o se guarda como fallo explícito; nunca se publica sin validar.
+- **Ningún agente entrena ni reentrena nada.** Una prueba escanea los `.md` de roles y skills
+  buscando vocabulario de entrenamiento, en español y en inglés, y falla si aparece.
+- **`historical` e `inference` son independientes** y se despachan en paralelo obligatoriamente.
+  Correrlos en serie no compra seguridad: no comparten estado.
+
+La arquitectura de cuatro capas (Skills vs. roles vs. playbooks de prompt) está en
+[`agents-guide.md`](./agents-guide.md).
+
+## 4. El flujo de reportes
+
+### 4.1 Los comandos
 
 | Comando | Uso | Qué produce |
 |---|---|---|
-| `/report` | `/report CIRCUITO [fecha_inicio fecha_fin]` | HTML de un circuito, 9 pasos completos |
-| `/reporte-lote` | `/reporte-lote grupo=alta` | Un reporte por circuito del grupo + scatter de clustering |
-| `/informe-gerencial` | `/informe-gerencial grupo=media` | Un HTML gerencial cross-circuito (12 representativos) |
-| `/agrupamiento-circuitos` | `/agrupamiento-circuitos` | Solo el scatter de clustering, sin reporte |
-| `/limpiar-corridas` | `/limpiar-corridas` (dry-run primero, confirmación explícita) | Borra artefactos desechables de corridas previas |
+| `/report` | `/report CIRCUITO [fecha_inicio fecha_fin]` | El HTML de un circuito, 9 pasos |
+| `/reporte-lote` | `/reporte-lote grupo=alta` | Un reporte por circuito del grupo + el scatter de agrupamiento |
+| `/informe-gerencial` | `/informe-gerencial grupo=media` | Un HTML gerencial cross-circuito sobre los representativos del grupo |
+| `/agrupamiento-circuitos` | `/agrupamiento-circuitos` | Solo el scatter de agrupamiento, sin reporte |
+| `/clima` | `/clima` | Enriquece los datos con clima de Open-Meteo (3 compuertas interactivas) |
+| `/limpiar-corridas` | `/limpiar-corridas` | Borra artefactos desechables de corridas previas (dry-run primero, confirmación explícita) |
 
-Los tres agentes que hacen el razonamiento LLM (`historical`, `inference`, `expert-alignment`) son los mismos en los tres comandos de reporte — `reporte-lote` e `informe-gerencial` nunca los reimplementan, solo re-invocan `.claude/skills/report/SKILL.md` por referencia.
+`reporte-lote` e `informe-gerencial` **nunca reimplementan** el razonamiento: reinvocan
+`.claude/skills/report/SKILL.md` por referencia. Esa cita cruzada es lo que mantiene a la familia
+sincronizada en vez de a la deriva.
 
-### 2.2 Orquestación de `/report` (motor: `report_pipeline.py`)
+### 4.2 Las nueve etapas de `/report`
 
-1. `prepare()` — detección de puntos críticos + contexto estructurado + simulador MGCECDL-SHAP + escaneo automático min/max.
-2. Despacho paralelo obligatorio: `historical` (diagnóstico descriptivo) e `inference` (SHAP/MGCECDL) corren en paralelo, no dependen entre sí. `auto-simulator` corre junto pero degrada solo (opcional) si falta `bc.json`.
-3. Join — cuando `historical` + `inference` terminan: `prepare_expert_alignment()` → agente `expert-alignment` (compara contra la discusión experta en PDF).
-4. `render()` → HTML del circuito.
-5. Paso 9 (alert-and-continue): skill `vault-circuito` proyecta 3 JSON validados a `reports/vault/*.md`, luego `graphify --update` indexa — **siempre aislado**, nunca `--update` sobre el manifiesto amplio (ver lección aprendida abajo).
+El orquestador es `src/chec_local_interpreter/report_pipeline.py`.
 
-Cada agente valida su propio JSON contra un esquema antes de aceptarlo; un JSON inválido se reintenta o se guarda como fallo explícito, nunca se publica sin validar.
+1. **Validar y confirmar.** Se rechaza una fecha suelta, se comprueba que el circuito exista y que
+   la ventana tenga eventos — todo antes de crear el `run_dir`. Un circuito inexistente o una
+   ventana vacía es una alerta y una parada, nunca una repregunta. Aquí va el **único** punto de
+   confirmación del usuario en toda la corrida.
+2. **`prepare`.** Escribe los tres sobres (`historical.bc.json`, `inference.bc.json`,
+   `l1_state.json`) y arma la capa de inferencia MIL en solo lectura: carga el `.pt` y la caché de
+   bolsas, y resuelve el catálogo de controles. Construirlo desde cero cuesta 3,40 s y 2.257 MB
+   de pico —medido— para 18 perillas; la caché lo recarga en 0,80 s y 182 MB. Una caché corrupta o
+   sin permiso de escritura **degrada** a "esta corrida lo paga completo", nunca a una corrida
+   que falla.
+   El reporte se ancla a la **ventana**: hasta tres por circuito, y cada una produce su propio
+   escenario con la relevancia por vano, el diagnóstico del vano crítico (≤15) y la simulación de
+   intervención. Un circuito sin bolsas en una ventana simplemente no produce escenario — un
+   circuito tranquilo es un resultado real, no un fallo.
+3. **`historical`** y 4. **`inference`**, en paralelo. Cada uno lee su sobre y escribe su
+   `*.out.json`.
+5. **`prepare_expert_alignment`** — cuando los dos anteriores terminan.
+6. **`expert-alignment`** — compara contra la discusión experta en PDF.
+7. **`render`** — el HTML del circuito.
+8. **Reportar la ruta al usuario.** `/report` es local: no publica nada por su cuenta.
+9. **Nota de vault + graphify** (alerta-y-continúa). La skill `vault-circuito` proyecta los tres
+   JSON validados a `reports/vault/*.md` y encadena `graphify --update`. Si esto falla, el HTML del
+   paso 7 ya existe y no se revierte.
 
-> **Lección aprendida — aislamiento de graphify.** El paso 2.5 de `informe-gerencial` reconstruye el grafo del vault de forma completamente aislada después de un incidente de producción donde una actualización con alcance mal delimitado podó ~271 archivos no relacionados. `vault-circuito` sigue el mismo principio: su `/graphify --update` queda acotado únicamente a `reports/vault/graphify-out/graph.json`.
+> **Lección aprendida — aislamiento de graphify.** El `--update` queda acotado **siempre** al grafo
+> propio de `reports/vault`, nunca al del proyecto. Viene de un incidente real: una actualización
+> con alcance mal delimitado podó ~271 archivos no relacionados.
 
-### 2.3 Los cuadernos de `notebooks/`
+### 4.3 Qué distingue una predicción de una medición
 
-La carpeta se renumeró el 2026-08-04 y se reorganizó el 2026-08-13: `project_flow/` desapareció y su
-contenido subió a `notebooks/`. Hoy quedan **`05` y `07`** sueltos y una subcarpeta `old_version/` con
-**13**: los cinco tableros `uiti_vano` (`01`-`04` y `06`, que siguen siendo la fuente de las tres
-aplicaciones de `aplicaciones/`) y los 8 del pipeline MGCECDL original.
+En el reporte y en el simulador conviven dos clases de número y nunca se mezclan en silencio: lo
+que dice la base de datos (medido) y lo que dice el modelo (simulado). Donde se comparan —las
+barras del cuaderno `06`, el `±` del título— la diferencia se publica con el desfase del modelo en
+la base de ese mismo vano, que es la única cantidad local y medible que hay.
 
-Ninguno de los dos grupos es el punto de entrada del proyecto — ese es `/report`. El detalle celda
-por celda de los archivados vive en los cuadernos mismos: cada uno conserva sus comentarios y sus
-salidas guardadas.
+## 5. Las aplicaciones locales
 
-**Activos** (`notebooks/`):
+Seis carpetas en `aplicaciones/`, para macOS y Windows, **sin servidor y sin conexión**. Cinco
+tableros y un menú que los gobierna.
+
+| Carpeta | Puerto | Qué abre | Cuaderno |
+|---|---|---|---|
+| `00_criticidad_chec/` | 8800 | **CriticidadCHEC**: el menú. Abre, vigila y cierra las otras cinco | — |
+| `01_clima/` | 8801 | Nube por vano sobre el mapa, 6 variables, serie de doble eje y 6 violines | `01_uiti_vano_clima` |
+| `02_agrupamiento_vanos/` | 8802 | Agrupamiento de vanos por UITI acumulado y número de eventos | `02_uiti_vano_kmeans` |
+| `03_trayectorias_circuitos/` | 8803 | Trayectoria y agrupamiento de circuitos con ventana deslizante | `03_uiti_vano_trayectorias_circuitos` |
+| `04_trayectorias_vanos/` | 8804 | Lo mismo un nivel más abajo: agrupamiento y evolución por vano | `04_uiti_vano_trayectorias_vano` |
+| `06_simulador/` | 8866 | Simulador de riesgo por vano: *qué pasaría si*, sobre el modelo MIL | `06_uiti_vano_explicabilidad_simulador` |
+
+Cada carpeta trae los mismos cuatro lanzadores: `instalar` (una vez, crea el entorno) e `iniciar`
+(cada vez). En macOS hay además un `Iniciar.app` para el doble clic — un bundle de verdad y no un
+`.command`, porque si el usuario tiene otra terminal instalada, LaunchServices se queda el
+`.command` y no lo ejecuta.
+
+Sus comandos: `/app-local-criticidadCHEC`, `/app-local-clima`,
+`/app-local-agrupamiento-circuitos`, `/app-local-trayectorias-circuitos`,
+`/app-local-trayectorias-vanos`, `/app-local-simulador`. El contrato compartido —puerto fijo,
+comprobación de "ya está corriendo", preflight, arranque en segundo plano— vive en
+[`_contrato-apps-locales.md`](../.claude/commands/_contrato-apps-locales.md).
+
+### 5.1 Por qué `01`-`04` son livianas y `06` no
+
+No es estilo: es lo que cada tablero necesita.
+
+- **`01`-`04` no necesitan Python en ejecución.** Sus cuadernos precomputan todo y entregan un
+  HTML donde la interacción entera vive en JavaScript. La aplicación es un **constructor** (se
+  corre una vez) y un **servidor estático** de biblioteca estándar. Los K-Means de `03` y `04` no
+  son excepción: se ajustan al construir, y lo que viaja al navegador son coordenadas y etiquetas
+  ya resueltas.
+- **`06` necesita un kernel vivo.** Todo su panel es `ipywidgets` y cada "Simular" vuelve a llamar
+  al modelo, así que se sirve con **Voila** sobre un kernel real. Para no pagar el CSV de 540 MB
+  en cada arranque, congela un **paquete** con lo que las celdas de arranque derivan; el arranque
+  baja de 2.867 MB a 579 MB.
+
+### 5.2 Reaccionan a los datos, no a la fecha
+
+Las seis vigilan sus insumos por **huella** (sha1 de lo pequeño, tamaño+fecha de lo pesado) y se
+reconstruyen solas cuando algo cambia: el CSV, los shapefiles, el modelo, `Variables_simular.xlsx`
+o el propio cuaderno. Un `git checkout` mueve la fecha de todo sin cambiar nada, y por eso lo
+pequeño se mira por contenido. El detalle está en
+[`../aplicaciones/DATOS-Y-ACTUALIZACIONES.md`](../aplicaciones/DATOS-Y-ACTUALIZACIONES.md).
+
+## 6. La subida a Databricks
+
+Tres comandos de sincronización y cinco de publicación, todos en `.claude/commands/`, todos
+reutilizando por referencia cruzada el mismo contrato compartido
+([`_contrato-despliegue-databricks.md`](../.claude/commands/_contrato-despliegue-databricks.md)):
+bitácora obligatoria, regla de no-abortar y resolución del catálogo en runtime.
+
+| Comando | Qué migra |
+|---|---|
+| `/subir-datos-databricks` | `data/` completo (más `site/data/variables.json`, única excepción) al Volume |
+| `/subir-notebooks-databricks` | Los tres paquetes fuente (`chec_local_interpreter`, `chec_impacto`, `scripts`) y los 6 cuadernos que corren allá, como copias adaptadas |
+| `/subir-a-databricks` | Orquesta a los dos anteriores, importa el cuaderno `05` y despliega las apps que quepan |
+| `/app-vano-clima` | Publica el cuaderno `01` como Databricks App |
+| `/app-agrupamiento-vanos-circuitos` | Publica el `02` |
+| `/app-trayectorias-circuitos` | Publica el `03` |
+| `/app-trayectorias-vanos` | Publica el `04` |
+| `/app-simulador-vano` | Publica el `06` (Voila, kernel vivo) |
+
+Los cinco comandos de app **se autorreparan**: si faltan datos en el Volume encadenan
+`/subir-datos-databricks`, y configuran el permiso de lectura de la app sin intervención manual.
+Preguntan solo el nombre de la app y la URL del workspace — el destino se pregunta **cada
+corrida**, nunca se deduce del perfil con sesión vigente.
+
+### 6.1 Dos reglas del contrato
+
+- **Bitácora obligatoria.** Se abre *antes* de preguntarle nada al usuario, se anota cada paso
+  numerado al terminarlo y siempre se cierra. Su ruta y su estado final son parte del reporte.
+- **Nunca abortar.** Una restricción se registra y se rodea; el comando corre hasta el final. Es
+  lo que hace que una corrida contra un workspace ajeno produzca la lista completa de permisos
+  que faltan en vez de morir en el primero.
+
+### 6.2 Restricciones ya conocidas (D1–D10)
+
+Si aparece una de estas, no se rediagnostica: está en el contrato con su rodeo.
+
+- **D1** el catálogo `workspace` no existe y no se puede crear; **D2** el FUSE de `/Volumes`
+  responde 403 mientras la Files API sí funciona; **D3/D4** `uc_securable` necesita `USE CATALOG` y
+  el `GRANT` está denegado al asistente — solo el dueño del catálogo puede darlo.
+- **D5 — cupo de apps: el workspace topa en 3**, y una app en `DELETING` sigue contando.
+- **D6** límites de subida: `--format JUPYTER` topa en 10 MB y para este conjunto no es un caso
+  borde sino la norma (`01` pesa 81,43 MB con salidas), así que hay que limpiar `outputs` y
+  `execution_count` de cada copia. `workspace import` tampoco crea carpetas padre.
+- **D8** un cuaderno con `ipywidgets` no corre en Serverless: el `06` necesita cluster clásico.
+- **D9 — el estado del workspace no es durable entre sesiones.** Un workspace verificado como
+  completo un día apareció vacío al siguiente. Siempre verificar en vivo antes de asumir.
+- **D10** `git push` puede fallar por la API de locks de LFS.
+
+### 6.3 El stack Lakeview se retiró
+
+El dashboard AI/BI y el job de tablas Delta que lo respaldaba ya no existen. Lakeview no ejecuta
+Python ni JS arbitrario, así que nunca pudo mostrar el análisis real de los cuadernos (K-Means,
+Voronoi, los mapas MapLibre). Las Databricks Apps sí, y son el único camino de publicación.
+
+## 7. Los cuadernos
+
+En `notebooks/` quedan **dos**: `05_mil_vano_ventana` (el modelo) y
+`07_relevancia_lote_por_vano`. En `notebooks/old_version/` hay 13: los cinco tableros `uiti_vano`
+(`01`-`04` y `06`) que son la fuente de las aplicaciones, y los ocho del pipeline MGCECDL
+original.
+
+Estar en `old_version/` **no** significa estar muerto: los cinco `uiti_vano` están vivos y son lo
+que las seis aplicaciones construyen. Los MGCECDL sí son historia — entrenaron el clasificador
+congelado que sigue en `data/models/`.
 
 ```
-01_uiti_vano_clima                     panel climático (violines + nube de rezagos), 208 circuitos
-02_uiti_vano_kmeans                    agrupamiento de circuitos y de vanos por UITI acumulado
-03_uiti_vano_trayectorias_circuitos    trayectorias de circuito por ventanas deslizantes + mapa
+01_uiti_vano_clima                     panel climático (violines + nube de rezagos)
+02_uiti_vano_kmeans                    agrupamiento de circuitos y de vanos
+03_uiti_vano_trayectorias_circuitos    trayectorias de circuito por ventanas + mapa
 04_uiti_vano_trayectorias_vano         idem a nivel de vano; DUEÑO de la geometría KMeans
    │                                   que 05 y 06 replican (verificada por sha1)
-   ├→ 05_mil_vano_ventana              MIL sobre bolsas vano × ventana (generado por
-   │                                   scripts/generate_notebook_10.py)
-   └→ 06_uiti_vano_explicabilidad_simulador   explicabilidad + simulador de riesgo,
-                                       requiere kernel vivo (ipywidgets)
+   ├→ 05_mil_vano_ventana              el modelo MIL sobre bolsas vano × ventana
+   └→ 06_uiti_vano_explicabilidad_simulador   explicabilidad + simulador, kernel vivo
 ```
 
-Los tres primeros son independientes entre sí. La única dependencia dura es la geometría de `04`:
-`05` y `06` la reutilizan a través de `chec_local_interpreter.ventanas_015`, que la extrae del
-archivo de `04` y verifica su sha1 — si alguien mueve los centroides de `04`, los dos fallan
-ruidosamente en vez de derivar en silencio.
+La única dependencia dura es la geometría de `04`: `05` y `06` la reutilizan a través de
+`chec_local_interpreter.ventanas_015`, que la extrae del archivo de `04` y **verifica su sha1**. Si
+alguien mueve los centroides, los dos fallan ruidosamente en vez de derivar en silencio.
 
-**Archivados** (`notebooks/old_version/`), el pipeline MGCECDL que entrenó el modelo
-que `06` y `report_pipeline.py` siguen cargando desde `data/models/`:
+Ojo con la colisión de numeración: `02`-`06` significan cosas distintas en cada generación y ahora
+comparten carpeta. Un número suelto se refiere siempre al grupo `uiti_vano`; los MGCECDL se nombran
+con su archivo completo.
 
-```
-02_optuna (búsqueda HP) → 03_training (modelo final)
-                                 ├→ 04_performance (métricas + SHAP)
-                                 ├→ 05_circuit_analysis (SHAP por circuito, ancestro de report_pipeline.py)
-                                 ├→ 06_document_replication (export CSV masivo)
-                                 └→ 09_simulador (interactivo, ipywidgets)
-07_graph_preserved_connections (grafo experto, cache opcional para 03, no bloqueante)
-08_geo_network_exploration (standalone, solo shapefiles + CSV)
-```
+## 8. Referencia rápida — todos los comandos
 
-Ojo con la colisión de numeración: `02`/`03`/`04`/`05`/`06` significan cosas distintas según el
-grupo. En este documento y en los comandos, un número suelto se refiere siempre al grupo **activo**;
-los archivados se nombran con su archivo completo.
-
-El enriquecimiento climático que hacía el viejo `01_climate.ipynb` ya no vive en un cuaderno: lo
-hace el comando `/clima`, y `01_uiti_vano_clima` solo lo visualiza.
-
-## 3. Flujo B — despliegue a Databricks
-
-Cuatro comandos cooperan, todos en `.claude/commands/`, todos reutilizando por referencia cruzada la misma resolución de perfil CLI / SQL warehouse (nunca duplicada):
-
-| Comando | Qué migra | Toca tablas/dashboard |
+| Comando | Plano | Uso |
 |---|---|---|
-| `/subir-datos-databricks` | `data/` completo + `site/data/variables.json` (única excepción fuera de `data/`) al Volume | No |
-| `/subir-notebooks-databricks` | Los tres paquetes fuente (`chec_local_interpreter`, `chec_impacto`, `scripts`) + los 6 cuadernos activos (copias adaptadas); `old_version/` NO se sube | No |
-| `/subir-a-databricks` | Orquesta los tres anteriores + tablas + reportes de interpretabilidad + dashboard en una sola corrida | Sí |
+| `/report` | Reportes | `/report CIRCUITO [fecha_inicio fecha_fin]` |
+| `/reporte-lote` | Reportes | `/reporte-lote grupo=alta` |
+| `/informe-gerencial` | Reportes | `/informe-gerencial grupo=media` |
+| `/agrupamiento-circuitos` | Reportes | `/agrupamiento-circuitos` |
+| `/clima` | Datos | enriquecimiento Open-Meteo |
+| `/limpiar-corridas` | Mantenimiento | dry-run y confirmación explícita |
+| `/experimento-kaggle` | Modelo | experimento remoto con compuerta de aprobación |
+| `/app-local-criticidadCHEC` | Aplicaciones | el menú, puerto 8800 |
+| `/app-local-clima` | Aplicaciones | tablero `01`, puerto 8801 |
+| `/app-local-agrupamiento-circuitos` | Aplicaciones | tablero `02`, puerto 8802 |
+| `/app-local-trayectorias-circuitos` | Aplicaciones | tablero `03`, puerto 8803 |
+| `/app-local-trayectorias-vanos` | Aplicaciones | tablero `04`, puerto 8804 |
+| `/app-local-simulador` | Aplicaciones | simulador `06` con Voila, puerto 8866 |
+| `/subir-datos-databricks` | Databricks | pide la URL del workspace |
+| `/subir-notebooks-databricks` | Databricks | pide la URL del workspace |
+| `/subir-a-databricks` | Databricks | orquesta datos → cuaderno `05` → apps → bitácora |
+| `/app-vano-clima` | Databricks | publica el `01` |
+| `/app-agrupamiento-vanos-circuitos` | Databricks | publica el `02` |
+| `/app-trayectorias-circuitos` | Databricks | publica el `03` |
+| `/app-trayectorias-vanos` | Databricks | publica el `04` |
+| `/app-simulador-vano` | Databricks | publica el `06` |
 
-### 3.1 Objetos de datos (5, todos reproducibles desde este repo)
+## 9. Más detalle
 
-| Objeto | Tipo | Origen |
-|---|---|---|
-| `indicadores_vano` | Tabla Delta | CSV tipado con TODAS las columnas (incluida geometría X1/Y1/X2/Y2/FID_VANO/FID_TRAFO/FID_SW), vía `uiti_vano_tables.py` |
-| `circuit_clustering` | Tabla Delta | Llama *verbatim* a `plotting.compute_circuit_criticality_groups` — mismos números que `/agrupamiento-circuitos` local |
-| `circuit_geo` | Tabla Delta | Shapefile `MVLINSEC.shp` vía geopandas (construida pero no usada por los widgets actuales del dashboard) |
-| `circuit_map_lines_equipment` | Vista | UNION de vanos/transformadores/switches sobre `indicadores_vano` |
-| `circuit_daily_evolution` | Vista | Serie diaria con ceros, sobre `indicadores_vano` |
-
-> **Corrección 2026-07-24**: una versión anterior de estos documentos listaba una sexta tabla, `indicadores_vano_v_3`, como "prerrequisito externo sin ETL en este repo". Era falso — la vista solo apuntaba al nombre de tabla equivocado; `indicadores_vano` ya trae esas columnas.
-
-### 3.2 Restricción dura: nada de `site/` en Databricks
-
-Ninguno de los cuatro comandos puede crear una ruta con nombre `site/` dentro del Volume de Databricks. La página web del proyecto (`site/`, publicada vía GitHub Actions/Pages) **solo se regenera con una corrida local** contra las rutas reales del repo. De los 6 cuadernos activos, solo `04` y `07` originalmente escriben ahí (figuras PNG y grafos HTML respectivamente); sus copias subidas a Databricks redirigen esa salida a carpetas del Volume sin la palabra "site" (`SITE_RESULTS_DIR = RESULTS_DIR` en `04`; `outputs/graphs/` en `07`).
-
-### 3.3 Notebooks en Databricks — shims y gotchas reales (encontrados en corridas en vivo)
-
-`/subir-notebooks-databricks` sube cada uno de los 6 cuadernos activos como una **copia modificada** (nunca el original del repo) con solo su celda de resolución de rutas reescrita (alias a variables del Volume, no reemplazo total de la celda). Hallazgos empíricos, no teóricos:
-
-- **Cada copia necesita su propia celda `%pip install -q -r requirements.txt`** como primera celda. El entorno local pre-configurado no existe en Databricks; sin esto, cualquier notebook que importe `chec_impacto`/`chec_local_interpreter` puede fallar con `ModuleNotFoundError` para cualquier paquete de esa cadena de imports (confirmado con `optuna` en el archivado `09_simulador`; `05` y `06` importan el mismo paquete y heredan el riesgo). El `requirements.txt` subido excluye `jupyter`/`ipykernel`/`pytest`/`python-dotenv`/`pydantic` (0 referencias en `src/` o en los notebooks, verificado por auditoría AST de imports).
-- **`workspace import`/`import-dir` no crean carpetas padre** — hace falta `databricks workspace mkdirs` explícito antes de subir archivos sueltos o notebooks.
-- **`--format JUPYTER` tiene un límite de 10MB**, y para este conjunto no es un caso borde sino la norma: medido, `01` pesa **81,43 MB** con salidas (0,05 MB sin), `03` 11,58 MB y `04` 12,31 MB — tres de seis pasan el techo. Hay que limpiar `outputs`/`execution_count` de las 6 copias antes de subir.
-- **Los SQL Warehouse no pueden ejecutar notebooks** — solo celdas SQL. Un notebook debe adjuntarse a un cluster o a Serverless (compute Python), nunca a un Warehouse.
-- **`06_uiti_vano_explicabilidad_simulador.ipynb` necesita un cluster clásico ("all-purpose"), no Serverless** — todo su panel es `ipywidgets`, y la documentación de Databricks es explícita: *"A notebook using ipywidgets must be attached to a running cluster"*, excluyendo Serverless. Los otros 5 activos sí funcionan en Serverless. La regla se descubrió con el archivado `09_simulador`, que la hereda.
-- **El Volume `chec-simulador` no persiste entre sesiones garantizado** — un workspace verificado como completamente poblado un día apareció vacío (0 tablas, sin Volume) al día siguiente. Siempre verificar en vivo (`SHOW TABLES`, `databricks fs ls`) antes de asumir estado previo.
-
-### 3.4 El stack Lakeview se retiró
-
-El dashboard AI/BI "Explorador de circuito UITI_VANO" y el job de tablas Delta que lo respaldaba
-ya no existen: se borraron `/deploy-databricks-dashboard` y `notebooks/databricks/`. Lakeview no
-ejecuta Python ni JS arbitrario, así que nunca pudo mostrar el análisis real de los cuadernos
-(K-Means, contornos de Voronoi, los mapas MapLibre); las Databricks Apps sí, y son ahora el
-único camino de publicación.
-
-Lo único que sobrevivió de ese comando es la resolución del perfil de CLI y del SQL warehouse,
-que media familia reutilizaba: viven en las secciones **E1** y **E2** de
-[`_contrato-despliegue-databricks.md`](../.claude/commands/_contrato-despliegue-databricks.md).
-
-## 4. Referencia rápida — todos los comandos
-
-| Comando | Flujo | Uso |
-|---|---|---|
-| `/report` | A | `/report CIRCUITO [fecha_inicio fecha_fin]` |
-| `/reporte-lote` | A | `/reporte-lote grupo=alta` |
-| `/informe-gerencial` | A | `/informe-gerencial grupo=media` |
-| `/agrupamiento-circuitos` | A | `/agrupamiento-circuitos` |
-| `/limpiar-corridas` | A | `/limpiar-corridas` |
-| `/subir-datos-databricks` | B | pide URL del workspace |
-| `/subir-notebooks-databricks` | B | pide URL del workspace |
-| `/subir-a-databricks` | B | pide URL del workspace; orquesta datos → cuaderno `05` → apps → commit |
-| `/app-vano-clima` | B | publica el cuaderno `01` como app |
-| `/app-agrupamiento-vanos-circuitos` | B | publica el cuaderno `02` como app |
-| `/app-trayectorias-circuitos` | B | publica el cuaderno `03` como app |
-| `/app-trayectorias-vanos` | B | publica el cuaderno `04` como app |
-| `/app-simulador-vano` | B | publica el cuaderno `06` como app (Voila, kernel vivo) |
-
-## 5. Más detalle
-
-- [`agents-guide.md`](./agents-guide.md) — arquitectura de 4 capas del framework de agentes (Skills vs. roles vs. playbooks de prompt).
+- [`agents-guide.md`](./agents-guide.md) — arquitectura de 4 capas del framework de agentes.
 - [`report-runtime-contract.md`](./report-runtime-contract.md) — contrato de invocación de `/report` entre runtimes.
+- [`mil-vano-ventana-estado-y-mejoras.md`](./mil-vano-ventana-estado-y-mejoras.md) — estado del modelo MIL y mejoras pendientes.
+- [`../aplicaciones/README.md`](../aplicaciones/README.md) — las seis aplicaciones, con sus requisitos.
 - [`flujo-detallado.html`](./flujo-detallado.html) — este mismo documento en HTML.
 - Los diagramas del flujo end-to-end y de la familia `/report` viven en el `README.md`, en Mermaid
-  y en línea. Los `.mmd`/`.svg` sueltos de esta carpeta se retiraron: se quedaban atrás del flujo
-  cada vez que este cambiaba.
+  y en línea.

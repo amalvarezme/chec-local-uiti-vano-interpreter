@@ -1,54 +1,110 @@
 # ¿Cómo funciona el proyecto? — Guía sencilla
 
-> Versión sin jerga técnica. Si buscas el detalle con nombres de archivos, comandos y diagramas completos, ve a [`flujo-detallado.md`](./flujo-detallado.md).
+> Versión sin jerga técnica. Si buscas el detalle con nombres de archivos, comandos y diagramas
+> completos, ve a [`flujo-detallado.md`](./flujo-detallado.md).
 
 ## ¿Para qué sirve esto?
 
-CHEC opera líneas eléctricas de distribución divididas en **circuitos**. Cada circuito tiene muchos tramos pequeños llamados **vanos**. Cuando algo falla (una caída de energía, un daño en un poste, etc.), el sistema registra ese evento y lo asocia a un indicador llamado **UITI_VANO**, que mide qué tan grave fue el impacto de esa falla para los usuarios conectados a ese tramo.
+CHEC opera líneas eléctricas de distribución divididas en **circuitos**. Cada circuito tiene muchos
+tramos pequeños llamados **vanos**. Cuando algo falla —una caída de energía, un daño en un poste—
+el sistema registra ese evento y lo asocia a un indicador llamado **UITI_VANO**, que mide qué tan
+grave fue el impacto para los usuarios conectados a ese tramo.
 
-Este proyecto toma todo ese historial de eventos y responde dos preguntas:
+El proyecto toma todo ese historial y responde tres preguntas:
 
 1. **¿Qué tan crítico es cada circuito** comparado con los demás, y por qué?
-2. **¿Qué variables influyen más** en que una falla sea grave (el clima, el tipo de conductor, la cantidad de usuarios, la antigüedad del equipo, etc.)?
+2. **¿Qué variables influyen más** en que una falla sea grave: el clima, el tipo de conductor, la
+   cantidad de usuarios, la antigüedad del equipo.
+3. **¿Qué pasaría si** se interviniera un vano concreto — y cuánto costaría esa intervención.
 
-Para responder esto se usan dos caminos que llegan a destinos distintos pero parten de la misma información.
+Todo sale del mismo archivo de historial. De ahí para adelante hay cuatro piezas.
 
-## Camino 1 — El reporte de un circuito
+## Pieza 1 — El modelo que predice
 
-Cuando alguien pide el análisis de un circuito, esto es lo que pasa, en orden:
+Un modelo estadístico aprende a estimar el impacto de un vano durante una ventana de tiempo, a
+partir de los eventos que ocurrieron ahí. Se entrena una vez, se guarda en un archivo, y de ahí en
+adelante **todo lo demás solo lo lee**: ni el reporte ni el simulador pueden reentrenarlo. Eso está
+verificado automáticamente, no es una promesa.
 
-1. **Se seleccionan los datos** del circuito y el periodo de tiempo pedido.
-2. **Un sistema automático** (no una persona) revisa esos datos y detecta los puntos donde el impacto fue más alto.
-3. **Tres "asistentes" de inteligencia artificial trabajan en paralelo**, cada uno mirando el mismo caso desde un ángulo distinto:
-   - Uno explica **qué pasó** (diagnóstico histórico, en lenguaje natural).
-   - Otro explica **qué variables pesaron más** en la predicción de un modelo estadístico entrenado previamente.
-   - Un tercero hace una prueba de "**qué pasaría si**" cambiara una variable (por ejemplo, si el clima hubiera sido distinto).
-4. Cuando los dos primeros terminan, **un cuarto asistente compara** ese análisis contra lo que dicen documentos técnicos de expertos humanos (informes en PDF), para señalar coincidencias o diferencias.
-5. Con todo eso, se arma **un reporte en una página web** (HTML) que cualquier persona puede abrir en el navegador — sin necesidad de instalar nada.
-6. Opcionalmente, ese reporte también se guarda en un archivo indexado, para poder buscarlo o relacionarlo con otros circuitos más adelante.
+Una cosa que el proyecto dice en voz alta en vez de esconder: el modelo **ordena bien** —acierta
+cuáles vanos son peores que cuáles— pero **su nivel corre alto**, cerca de un 34%. Por eso, cada
+vez que se muestra una predicción al lado de una medición real, se muestra también ese margen de
+error. Un número del modelo nunca se presenta como si fuera una medición.
 
-Este mismo proceso se puede pedir para **un circuito**, para **un grupo de circuitos** (por ejemplo, "todos los de riesgo alto"), o como **un informe gerencial** que resume varios circuitos representativos a la vez.
+## Pieza 2 — Los asistentes que redactan
 
-## Camino 2 — El panel visual en Databricks
+Cuatro asistentes de inteligencia artificial escriben las explicaciones en lenguaje natural. Cada
+uno mira el mismo caso desde un ángulo distinto:
 
-Además del reporte por circuito, existe un **panel de control visual** (un "dashboard") hospedado en Databricks, una plataforma en la nube. Ahí se puede ver, con gráficos interactivos:
+- Uno explica **qué pasó** en ese circuito durante ese periodo.
+- Otro explica **qué dice el modelo**: qué variables mueven el impacto de cada vano, cuál es el
+  vano crítico y qué plan tendría sentido sobre él.
+- Un tercero **compara** todo eso contra lo que dicen los informes técnicos de expertos humanos, en
+  PDF, para señalar coincidencias y diferencias.
+- Un cuarto se encarga de **leer esos PDF** y decidir qué párrafos son discusión técnica aprovechable.
 
-- Un mapa comparando qué tan críticos son todos los circuitos entre sí.
-- Un mapa geográfico con los vanos, transformadores e interruptores de un circuito.
-- La evolución diaria de eventos e impacto a lo largo del tiempo.
+Ninguno inventa: cada asistente recibe un paquete de datos ya seleccionado por el programa y solo
+puede citar lo que viene ahí. Además, cada uno revisa su propia respuesta contra una plantilla
+antes de entregarla. Si no pasa la revisión, se reintenta o se guarda como falla explícita — nunca
+se publica algo sin validar.
 
-Para que ese panel exista, alguien ejecuta un proceso que:
+## Pieza 3 — Los reportes
 
-1. **Copia los datos crudos** (el mismo historial de eventos) a un almacenamiento en la nube.
-2. **Copia el código real del análisis** — no una versión aparte reescrita a mano, sino exactamente el mismo código que corre localmente, para que los números coincidan siempre con los del reporte por circuito.
-3. **Reconstruye las mismas tablas de datos** dentro de la nube.
-4. **Publica el panel visual** con esas tablas conectadas.
+Cuando alguien pide el análisis de un circuito, esto es lo que pasa:
 
-**Importante:** este panel en la nube es una **copia independiente**. Si alguien cambia algo en el análisis local, esa copia en Databricks no se actualiza sola — hay que volver a correr el proceso de copiado para que refleje el cambio.
+1. Se confirman el circuito y las fechas. Si el circuito no existe o no hubo eventos en ese
+   periodo, se avisa y se para ahí mismo.
+2. El programa selecciona los datos y arma el contexto, incluido lo que el modelo predice para
+   **hasta tres ventanas de tiempo** del circuito.
+3. Los dos primeros asistentes trabajan **en paralelo**; cuando terminan, entra el que compara
+   contra los informes de expertos.
+4. Se arma **un reporte en una página HTML** que cualquiera abre en el navegador, sin instalar nada.
+5. El reporte también se guarda en un archivo indexado, para poder buscarlo y relacionarlo con
+   otros circuitos más adelante.
 
-## Lo que nunca se mezcla
+Lo mismo se puede pedir para **un circuito**, para **un grupo entero** (por ejemplo, todos los de
+riesgo alto) o como **un informe gerencial** que sintetiza varios circuitos representativos a la vez.
 
-La página web pública del proyecto (la que muestra los resultados de forma bonita para consulta general) **solo se genera y actualiza desde un computador local**, nunca desde la nube. Esto es intencional: evita que se acumulen archivos innecesarios o desactualizados en Databricks, y mantiene un único lugar responsable de esa publicación.
+## Pieza 4 — Las aplicaciones
+
+Seis aplicaciones de escritorio, para Mac y para Windows, **sin conexión a internet y sin
+servidor**. Se abren con doble clic:
+
+| Aplicación | Qué muestra |
+|---|---|
+| **CriticidadCHEC** | El menú: abre, vigila y cierra las otras cinco desde una sola ventana |
+| **Clima** | Cada vano sobre el mapa, con las variables de clima y su serie de tiempo |
+| **Agrupamiento de vanos** | Qué vanos se parecen entre sí por impacto acumulado y número de eventos |
+| **Trayectorias de circuitos** | Cómo se mueve cada circuito en el tiempo, con una ventana deslizante |
+| **Trayectorias de vanos** | Lo mismo, un nivel más abajo |
+| **Simulador** | *Qué pasaría si* se cambia una variable de un vano — y cuánto cuesta esa intervención |
+
+Las cinco primeras se preparan una vez y después abren en menos de un segundo, porque todo el
+cálculo ya está hecho y la interacción vive en el navegador. El **simulador** es distinto: cada vez
+que se presiona "Simular" vuelve a preguntarle al modelo, así que necesita el programa corriendo
+por detrás.
+
+Todas vigilan sus datos: si cambia el historial de eventos, el modelo o la lista de variables, se
+reconstruyen solas la próxima vez que se abren. No hay que acordarse de nada.
+
+## La misma cosa, pero en la nube
+
+Las mismas aplicaciones se pueden publicar en **Databricks**, la plataforma en la nube de CHEC,
+para que se abran desde una dirección web sin instalar nada en el computador. Un comando copia los
+datos, sube el código y publica cada tablero.
+
+Tres cosas que conviene saber:
+
+- **Es una copia independiente.** Si alguien cambia el análisis local, la nube no se entera sola:
+  hay que volver a subir.
+- **Caben tres aplicaciones a la vez.** El espacio de trabajo tiene ese tope, así que se publican
+  por prioridad.
+- **El estado de la nube no es durable.** Un espacio verificado como completo un día apareció vacío
+  al siguiente, así que el proceso siempre comprueba antes de dar algo por hecho.
+
+Y una regla de fondo: cuando el proceso choca con un permiso que no tiene, **no se detiene** —
+lo anota y sigue. Así, al final, entrega la lista completa de lo que hace falta pedirle al
+administrador, en vez de morir en el primer obstáculo.
 
 ## Glosario rápido
 
@@ -56,8 +112,9 @@ La página web pública del proyecto (la que muestra los resultados de forma bon
 |---|---|
 | **Circuito** | Una línea eléctrica de distribución completa, con muchos tramos. |
 | **Vano** | Un tramo pequeño dentro de un circuito, entre dos postes. |
-| **UITI_VANO** | Un número que mide qué tan grave fue el impacto de una falla en un vano específico. |
-| **Criticidad** | Qué tan grave es, en general, un circuito comparado con los demás (de "muy alto riesgo" a "riesgo bajo"). |
-| **Agente de IA** | Un asistente automático que lee datos y redacta una explicación en lenguaje natural, siguiendo reglas estrictas de validación. |
-| **Dashboard** | Un panel visual interactivo en la nube, con gráficos y mapas que se pueden filtrar. |
-| **Databricks** | La plataforma en la nube donde vive ese panel visual. |
+| **UITI_VANO** | Un número que mide qué tan grave fue el impacto de una falla en un vano. |
+| **Ventana** | Un periodo de tiempo recortado del historial, para mirar el circuito por tramos. |
+| **Criticidad** | Qué tan grave es un circuito comparado con los demás, de riesgo bajo a muy alto. |
+| **Modelo** | Un programa que aprendió del historial a estimar el impacto de un vano. |
+| **Agente de IA** | Un asistente que lee datos ya seleccionados y redacta una explicación, con reglas estrictas de validación. |
+| **Databricks** | La plataforma en la nube donde se publican las aplicaciones. |
