@@ -49,7 +49,7 @@ Document the hybrid nature of this upload to the user:
 
 | File / pattern | Treatment |
 |---|---|
-| `Indicadores_vano_v3.csv` | Uploaded as-is; also the sole Delta-conversion candidate materialized elsewhere (by `uiti_vano_tables.py`, not by this command) into `indicadores_vano` / `circuit_clustering` / `circuit_geo` |
+| `Indicadores_vano_v3.csv` | Uploaded as-is. Nothing converts it to Delta any more: `uiti_vano_tables.py` went with the retired Lakeview stack, so `indicadores_vano` / `circuit_clustering` / `circuit_geo` no longer exist and nothing here creates them |
 | `GEO/*` (all shapefile sidecars) | Uploaded as-is, binary, no conversion |
 | `graphs/*.npy`, `graphs/*.json` | Uploaded as-is |
 | `models/*.zip`, `models/manifest.sha256.json` | Uploaded as-is |
