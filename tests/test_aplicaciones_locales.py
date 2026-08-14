@@ -825,3 +825,30 @@ def test_el_simulador_local_no_deja_un_kernel_caliente_en_reposo():
     # cada recarga deja atras otros 780 MB -- se llegaron a ver siete vivos a la vez.
     assert "--MappingKernelManager.cull_idle_timeout=180" in codigo
     assert "--MappingKernelManager.cull_connected=False" in codigo
+
+
+def test_el_paquete_del_simulador_comprueba_que_las_bolsas_siguen_al_csv():
+    """El unico desajuste de datos que las huellas NO pueden ver.
+
+    `TABLA` sale del CSV y `BAG_INDEX` del cache de bolsas del cuaderno 05. Los dos se
+    vigilan y los dos disparan reconstruccion, pero una huella contesta "cambio algun
+    insumo?" y no "siguen hablando del mismo mes?". Actualizar el CSV sin volver a correr
+    el 05 reconstruye la aplicacion, muestra los eventos nuevos y los puntua con las
+    bolsas anteriores -- y nada falla.
+
+    `construir_paquete` es el sitio donde comprobarlo, y el unico: es el momento en que
+    las dos mitades estan en la mano a la vez, y corre exactamente cuando el CSV cambia.
+    Comprobarlo en cada arranque en cambio costaria cargar las bolsas de 199 MB para
+    contestar una pregunta que solo cambia al reconstruir.
+    """
+    codigo = (APPS / "06_simulador" / "preparar.py").read_text(encoding="utf-8")
+    assert "desajuste_bolsas_vs_tabla" in codigo, (
+        "el paquete se congela sin comprobar que las bolsas siguen al CSV")
+    cuerpo = codigo[codigo.index("def construir_paquete("):]
+    cuerpo = cuerpo[: cuerpo.index("\ndef ")]
+    assert "desajuste_bolsas_vs_tabla" in cuerpo, (
+        "la comprobacion tiene que correr DENTRO de construir_paquete, que es donde "
+        "TABLA y BAG_INDEX estan los dos en la mano")
+    # Y tiene que ABORTAR, no avisar: un paquete congelado con las dos mitades hablando
+    # de meses distintos es exactamente lo que esto viene a impedir.
+    assert "SystemExit" in cuerpo

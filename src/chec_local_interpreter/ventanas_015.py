@@ -161,6 +161,92 @@ def construir_tabla_vano_ventana(
     return tabla.sort_values(["CIRCUITO", "FID_VANO", "ventana_i"]).reset_index(drop=True)
 
 
+def desajuste_bolsas_vs_tabla(
+    bag_index: Any, tabla: pd.DataFrame, *, tolerancia_uiti: float = 0.001
+) -> str | None:
+    """Por que el cache de bolsas y la tabla de eventos no hablan del mismo CSV.
+
+    Es el unico desajuste de datos que las huellas NO pueden ver. `tabla` sale de
+    `Indicadores_vano_v3.csv` y `bag_index` de `bolsas_mil_full.joblib`, que produce el
+    cuaderno 05. Los dos archivos se vigilan por separado y los dos disparan
+    reconstruccion, pero una huella contesta *"cambio algun insumo?"* y no *"siguen
+    hablando del mismo mes?"*. Actualizar el CSV sin volver a correr el 05 reconstruye
+    la aplicacion, muestra los eventos nuevos y los puntua con las bolsas anteriores:
+    las dos mitades del tablero hablan de periodos distintos **y nada falla**.
+
+    Se compara la CELDA `(CIRCUITO, FID_VANO, VENTANA)` y lo que cada lado dice de ella,
+    sin metadatos nuevos: asi vale tambien para los artefactos que ya estan en disco, sin
+    volver a generarlos.
+
+    Tres reglas, y la asimetria entre las dos primeras es deliberada:
+
+    1. **Una celda que la tabla trae y las bolsas no** es el sintoma peligroso: hay
+       eventos que el modelo no puede puntuar.
+    2. **Una celda que solo esta en las bolsas NO lo es.**
+       `construir_tabla_vano_ventana` redondea `uiti_acumulado` a 3 decimales y despues
+       descarta lo que quede en cero, asi que una celda con UITI diminuto existe en las
+       bolsas y no en la tabla. Medido sobre los artefactos reales: pasa en 2 celdas de
+       111.233 -- VMA23L16/39520403 en V7 y V8, con y = 0,000333. Marcarlo seria un
+       falso positivo permanente.
+    3. **En las celdas compartidas, `num_eventos` tiene que cuadrar exacto** y el UITI
+       dentro de `tolerancia_uiti`. Es lo que atrapa un CSV corregido DENTRO de los meses
+       que ya existian, donde el conjunto de celdas no se mueve. El conteo es un entero
+       sin redondeo que lo excuse; el UITI arrastra hasta 0,0005 del redondeo a 3
+       decimales -- medido, ese es exactamente el maximo en las 111.231 celdas
+       compartidas --, y por eso la tolerancia es 0,001 y no cero.
+
+    `FID_VANO` se compara como TEXTO en los dos lados: en las bolsas es `str` y en la
+    tabla `int64` -- verificado sobre los artefactos reales --, y sin coercion no casa ni
+    una celda y esto diria que faltan las 111.231. Es la misma coercion que ya hace
+    `construir_hist_class_cache` por el mismo motivo.
+
+    Devuelve `None` cuando estan al dia, o una frase que NOMBRA el desajuste con un
+    ejemplo concreto: sin el ejemplo hay que ir a buscarlo a mano entre cien mil celdas.
+    """
+    claves = ["CIRCUITO", "FID_VANO", "VENTANA"]
+    bolsas = bag_index.keys[claves].copy()
+    bolsas["FID_VANO"] = bolsas["FID_VANO"].astype(str)
+    bolsas["_y"] = np.asarray(bag_index.y, dtype=float)
+    bolsas["_n"] = np.asarray(bag_index.counts, dtype=np.int64)
+
+    eventos = tabla[["CIRCUITO", "FID_VANO", "ventana", "uiti_acumulado",
+                     "num_eventos"]].copy()
+    eventos.columns = [*claves, "_y_tabla", "_n_tabla"]
+    eventos["FID_VANO"] = eventos["FID_VANO"].astype(str)
+
+    unidos = eventos.merge(bolsas, on=claves, how="left", indicator=True)
+
+    faltan = unidos[unidos["_merge"] == "left_only"]
+    if len(faltan):
+        f = faltan.iloc[0]
+        return (
+            f"el cache de bolsas no cubre {len(faltan):,} de las {len(eventos):,} celdas "
+            f"(vano, ventana) que trae el CSV -- por ejemplo {f['CIRCUITO']}/"
+            f"{f['FID_VANO']} en {f['VENTANA']}. El CSV va por delante del cuaderno 05."
+        )
+
+    compartidas = unidos[unidos["_merge"] == "both"]
+    conteo = compartidas[compartidas["_n"] != compartidas["_n_tabla"]]
+    if len(conteo):
+        f = conteo.iloc[0]
+        return (
+            f"{len(conteo):,} celdas tienen distinto numero de eventos en el CSV y en el "
+            f"cache de bolsas -- por ejemplo {f['CIRCUITO']}/{f['FID_VANO']} en "
+            f"{f['VENTANA']}: {int(f['_n_tabla'])} en el CSV contra {int(f['_n'])} en las "
+            "bolsas. El CSV cambio dentro de los periodos que ya existian."
+        )
+
+    uiti = compartidas[(compartidas["_y"] - compartidas["_y_tabla"]).abs() > tolerancia_uiti]
+    if len(uiti):
+        f = uiti.iloc[0]
+        return (
+            f"{len(uiti):,} celdas tienen distinto UITI acumulado en el CSV y en el cache "
+            f"de bolsas -- por ejemplo {f['CIRCUITO']}/{f['FID_VANO']} en {f['VENTANA']}: "
+            f"{f['_y_tabla']:.3f} en el CSV contra {f['_y']:.3f} en las bolsas."
+        )
+    return None
+
+
 def construir_mask_cache(
     tabla: pd.DataFrame, *, maxsize: int = 64
 ) -> Callable[[str, int], np.ndarray]:

@@ -148,6 +148,32 @@ def construir_paquete() -> dict:
     espacio = _cuaderno.ejecutar(CUADERNO, celdas=CELDAS_DE_ARRANQUE)
     print(f"      arranque completo en {time.perf_counter() - t0:.1f} s")
 
+    # La unica comprobacion de COHERENCIA, y va antes de congelar nada.
+    #
+    # Las huellas contestan "cambio algun insumo?". No contestan "siguen hablando del
+    # mismo mes?". `TABLA` sale del CSV y `BAG_INDEX` del cache de bolsas del cuaderno
+    # 05: actualizar el CSV sin volver a correr el 05 mueve la huella del CSV, reconstruye
+    # la aplicacion, muestra los eventos nuevos y los puntua con las bolsas anteriores.
+    # Las dos mitades del tablero hablan de periodos distintos y NADA falla.
+    #
+    # Aqui es el unico sitio donde se puede ver: es el momento en que las dos estan en la
+    # mano a la vez, y corre exactamente cuando el CSV cambia. Comprobarlo en cada
+    # arranque costaria cargar 199 MB de bolsas para contestar una pregunta que solo
+    # cambia al reconstruir.
+    #
+    # Aborta y no avisa, como las otras dos guardas de este paquete (modelo != bolsas,
+    # geometrias != modelo): un paquete congelado a medias es justo lo que esto impide.
+    from chec_local_interpreter.ventanas_015 import desajuste_bolsas_vs_tabla
+
+    desajuste = desajuste_bolsas_vs_tabla(espacio["BAG_INDEX"], espacio["TABLA"])
+    if desajuste:
+        raise SystemExit(
+            f"\n  El cache de bolsas no corresponde al CSV: {desajuste}\n\n"
+            "  Vuelve a correr notebooks/05_mil_vano_ventana.ipynb, que es quien produce\n"
+            "  data/derived/bolsas_mil_full.joblib a partir del CSV, y despues repite\n"
+            "  esta construccion. El orden es CSV -> 05 -> 04 -> abrir las aplicaciones.\n"
+        )
+
     print("[2/3] congelando el resultado")
     espacio["TABLA"].to_parquet(PAQUETE / "tabla.parquet", compression="zstd")
 

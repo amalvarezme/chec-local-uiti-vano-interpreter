@@ -117,10 +117,10 @@ Eso es bueno: es un error ruidoso y a tiempo, no un mapa equivocado.
 
 ---
 
-## 4. Lo único que la huella NO puede detectar
+## 4. Lo que la huella no puede detectar, y cómo se cubre
 
 La huella responde *«¿cambió algún insumo?»*. No responde *«¿siguen siendo coherentes
-entre sí?»*. Y hay un desajuste que **no da ningún error**:
+entre sí?»*. El desajuste de esa segunda clase que importa es:
 
 > **Un CSV nuevo con bolsas viejas.**
 >
@@ -128,16 +128,44 @@ entre sí?»*. Y hay un desajuste que **no da ningún error**:
 > salen del CSV, y la criticidad **simulada**, que sale del modelo puntuando las bolsas.
 > Si actualizas el CSV sin volver a correr el cuaderno 05, el simulador se reconstruye
 > — la huella del CSV cambió —, muestra los eventos nuevos, y los puntúa con las bolsas
-> anteriores. Las dos mitades del tablero hablan de meses distintos y **nada lo dice**.
+> anteriores. Las dos mitades del tablero hablarían de meses distintos.
 
-Por eso el orden de la sección 3.A no es una formalidad. Dos desajustes vecinos sí se
-detectan y avisan a gritos, y conviene saber cuáles son para no confundirlos con éste:
+**Desde ahora eso también falla a gritos.** `construir_paquete` compara las celdas
+`(CIRCUITO, FID_VANO, VENTANA)` de las bolsas contra las de la tabla de eventos antes de
+congelar nada, y aborta nombrando el desajuste con un ejemplo:
+
+```
+El cache de bolsas no corresponde al CSV: el cache de bolsas no cubre 1 de las
+111.232 celdas (vano, ventana) que trae el CSV -- por ejemplo AGU23L12/20130434
+en V12. El CSV va por delante del cuaderno 05.
+```
+
+Se compara **la celda y lo que cada lado dice de ella**, sin metadatos nuevos, así que
+vale también para los artefactos que ya están en disco. Tres reglas, y la asimetría
+entre las dos primeras es deliberada:
+
+1. una celda que el CSV trae y las bolsas no → **desajuste**: hay eventos que el modelo
+   no puede puntuar;
+2. una celda que solo está en las bolsas → **no lo es**. La tabla redondea el UITI a 3
+   decimales y descarta lo que quede en cero, así que una celda con UITI diminuto existe
+   en las bolsas y no en la tabla. Medido: pasa en 2 celdas de 111.233 —VMA23L16/39520403
+   en V7 y V8, con UITI 0,000333—. Marcarlo sería un falso positivo permanente;
+3. en las celdas compartidas, el número de eventos tiene que cuadrar **exacto** y el UITI
+   dentro de 0,001. Es lo que atrapa un CSV corregido *dentro* de los meses que ya
+   existían, donde el conjunto de celdas no se mueve.
+
+Cuesta **23 ms** sobre las 111.231 celdas, y solo al reconstruir. Comprobarlo en cada
+arranque obligaría a cargar los 199 MB de bolsas para contestar una pregunta que solo
+cambia al reconstruir.
+
+Aun así, **el orden de la sección 3.A sigue sin ser una formalidad**: la comprobación te
+frena, pero quien tiene que arreglarlo eres tú, corriendo el cuaderno 05.
 
 | Desajuste | Qué pasa |
 |---|---|
 | modelo ≠ bolsas | falla al arrancar, nombrando cuántas features tiene cada uno |
 | `geometrias_014.json` ≠ modelo | falla al arrancar: *«La geometría del modelo MIL difiere de la de 01.4…»* |
-| **CSV ≠ bolsas** | **no falla. Nadie avisa.** |
+| CSV ≠ bolsas | **falla al construir**, nombrando la celda que no cuadra |
 
 ---
 
