@@ -135,7 +135,51 @@ flowchart TD
 _MD_PERDIDA = '''\
 ## Funcion de costo
 
-### Termino general
+Se lee en cuatro pasos, y el orden importa: primero **como se produce
+$\\hat{p}_b$**, porque sin eso ninguna formula se sostiene; despues el **termino
+general**; despues **donde entra el grafo fijo**, que es la pregunta que mas se
+malinterpreta; y al final **cada termino** con su motivo.
+
+### 1. De la bolsa a la prediccion
+
+Se arma en dos pasadas sobre la MISMA base, con atencion por segmento (una
+distribucion por bolsa, no por lote):
+
+$$
+e_i = w^{\\top} \\tanh(V z_i), \\qquad
+a_i = \\frac{\\exp(e_i)}{\\sum_{j \\in b(i)} \\exp(e_j)}, \\qquad
+z_b = \\sum_{i \\in b} a_i\\, z_i
+$$
+
+La compuerta por bolsa $g_b = 2\\,\\sigma(W z_b) \\in (0,2)^E$ modula el grafo fijo
+y propaga sobre las instancias, escribiendo SOLO en las columnas destino de las
+$E$ aristas:
+
+$$
+x'_i = x_i + \\alpha \\sum_{(r \\to c) \\in \\mathcal{E}} g_{b(i),\\,rc}\\; A_{rc}\\; x_{i,r}\\; \\mathbf{e}_c
+$$
+
+La segunda pasada re-codifica $x'$, re-agrupa con la MISMA atencion (pesos
+compartidos) y produce $z_b^{(2)}$. Bajo `fusion="film"` -- la del artefacto
+guardado -- la modalidad climatica RE-ESCALA a la estructural en vez de
+concatenarse con ella:
+
+$$
+z^{\\mathrm{film}}_b = z^{\\mathrm{est}}_b \\odot (1 + \\gamma(z^{\\mathrm{clim}}_b)) + \\beta(z^{\\mathrm{clim}}_b),
+\\qquad \\hat{p}_b = \\mathrm{head}(z^{\\mathrm{film}}_b)
+$$
+
+Por que FiLM y no concatenar: una cabeza lineal sobre el latente concatenado es
+EXACTAMENTE aditiva entre modalidades, asi que no puede representar un producto
+entre una feature estructural y una climatica. Medido, el unico camino cruzado del
+modelo eran las pocas aristas cruzadas del grafo, escaladas por $\\alpha$ y por la
+compuerta. FiLM hace que el contexto climatico reescale lo estructural, que es
+ademas la afirmacion de dominio: una rafaga pesa mas sobre un apoyo alto, viejo y
+degradado. Las dos capas de FiLM se inicializan en cero, de modo que en el paso 0
+la fusion es la IDENTIDAD y el entrenamiento arranca desde el camino puramente
+estructural -- que es justo lo que usa la linea base que hay que superar.
+
+### 2. Termino general
 
 Sobre un lote de $B$ bolsas, con $\\hat{p}_b$ la prediccion de la bolsa $b$ y
 $t_b = \\log(1 + u_b)$ su objetivo:
@@ -155,7 +199,7 @@ $\\lambda_{\\mathrm{sup}} = 1$, $\\lambda_{\\mathrm{rec}} = \\lambda_{\\mathrm{M
 $\\lambda_{g} = 0$, $\\lambda_{\\mathrm{mod}} = 0$ (inerte fuera de
 `fusion="reliability"`) y $\\lambda_{\\mathrm{cl}} = 1$.
 
-### Donde entra el grafo fijo predefinido
+### 3. Donde entra el grafo fijo predefinido
 
 El grafo experto $A$ es **fijo**: se registra como buffer, no como parametro, asi
 que ninguna arista se aprende. `alpha` tambien es un escalar fijo. Lo unico
@@ -177,35 +221,7 @@ La confusion facil es la ultima fila: en este cuaderno conviven dos objetos
 congelados -- el **grafo** experto de variables y la **geometria** de centroides
 de 04 -- y solo el primero es "el grafo".
 
-### De la bolsa a la prediccion
-
-Antes de los terminos hace falta $\\hat{p}_b$. Se arma en dos pasadas sobre la
-MISMA base, con atencion por segmento (una distribucion por bolsa, no por lote):
-
-$$
-e_i = w^{\\top} \\tanh(V z_i), \\qquad
-a_i = \\frac{\\exp(e_i)}{\\sum_{j \\in b(i)} \\exp(e_j)}, \\qquad
-z_b = \\sum_{i \\in b} a_i\\, z_i
-$$
-
-La compuerta por bolsa $g_b = 2\\,\\sigma(W z_b) \\in (0,2)^E$ modula el grafo fijo
-y propaga sobre las instancias, escribiendo SOLO en las columnas destino de las
-$E$ aristas:
-
-$$
-x'_i = x_i + \\alpha \\sum_{(r \\to c) \\in \\mathcal{E}} g_{b(i),\\,rc}\\; A_{rc}\\; x_{i,r}\\; \\mathbf{e}_c
-$$
-
-La segunda pasada re-codifica $x'$, re-agrupa con la misma atencion y produce
-$z_b^{(2)}$. Bajo `fusion="film"` (la del artefacto) la modalidad climatica
-RE-ESCALA a la estructural en vez de concatenarse con ella:
-
-$$
-z^{\\mathrm{film}}_b = z^{\\mathrm{est}}_b \\odot (1 + \\gamma(z^{\\mathrm{clim}}_b)) + \\beta(z^{\\mathrm{clim}}_b),
-\\qquad \\hat{p}_b = \\mathrm{head}(z^{\\mathrm{film}}_b)
-$$
-
-### Cada termino
+### 4. Cada termino
 
 **1. Supervisado** — MSE ponderado por densidad inversa del objetivo:
 
@@ -236,15 +252,13 @@ $$
 \\tilde{\\mathcal{L}}_{\\mathrm{rec}} = \\frac{\\mathcal{L}^{\\mathrm{raw}}_{\\mathrm{rec}}}{1 + \\mathcal{L}^{\\mathrm{raw}}_{\\mathrm{rec}}} \\in [0, 1)
 $$
 
-*Grafo fijo: **no lo usa**, y es deliberado.* El objetivo es el $x$ ORIGINAL, no
-$x'$: si fuera $x'$, la compuerta -- lo unico aprendible del camino del grafo --
-controlaria su propio objetivo. Es el unico termino que se define EXPLICITAMENTE
-por fuera del grafo.
-
-El objetivo es el $x$ ORIGINAL, nunca $x'$: con $x'$ la compuerta controlaria su
-propio objetivo y podria bajar la perdida simplificandolo. La forma
-$\\mathrm{raw}/(1+\\mathrm{raw})$ acota sin matar el gradiente, a diferencia de un
-recorte duro, que arriba de 1 tiene derivada exactamente cero.
+*Grafo fijo: **no lo usa**, y es deliberado.* El objetivo es el $x$ ORIGINAL,
+nunca $x'$: con $x'$ la compuerta -- lo unico aprendible del camino del grafo --
+controlaria su propio objetivo y podria bajar la perdida simplificandolo en vez
+de mejorar la representacion. Es el unico termino que se define EXPLICITAMENTE
+por fuera del grafo. La forma $\\mathrm{raw}/(1+\\mathrm{raw})$ acota en $[0,1)$
+sin matar el gradiente, a diferencia de un recorte duro, que arriba de 1 tiene
+derivada exactamente cero.
 
 **3. Informacion mutua** — entropia cuadratica de Renyi entre dos kernels sobre
 variables (no sobre muestras):
@@ -259,18 +273,15 @@ $$
 \\mathcal{L}_{\\mathrm{MI}} = 1 - \\mathrm{clip}\\!\\left(\\frac{I_2(K_r, K_g)}{\\log p},\\, 0,\\, 1\\right)
 $$
 
-*Grafo fijo: **si, y aca es la REFERENCIA del termino**.* $K_g$ se calcula una
-sola vez al construir la perdida, desde los perfiles $[A \\;\\lvert\\; A^{\\top}]$
-(cada variable descrita por sus aristas de salida y de entrada) con ancho igual a
-la mediana de las distancias entre perfiles, y queda como buffer constante. El
-gradiente NO llega a $A$: el termino empuja la representacion aprendida hacia la
-estructura experta, jamas al reves.
-
-$K_r$ es un RBF sobre los perfiles de variable reconstruidos (las COLUMNAS de
-$\\hat{X}$, con la distancia dividida por la dimension del perfil) y $K_g$ un RBF
-sobre los perfiles del grafo $[A \\;|\\; A^{\\top}]$ con ancho igual a la mediana de
-las distancias. Es el unico termino que ata la representacion a la estructura
-experta.
+*Grafo fijo: **si, y aca es la REFERENCIA del termino**.* $K_r$ es un RBF sobre
+los perfiles de variable RECONSTRUIDOS (las COLUMNAS de $\\hat{X}$, con la
+distancia dividida por la dimension del perfil). $K_g$ es un RBF sobre los
+perfiles del grafo $[A \\;\\lvert\\; A^{\\top}]$ -- cada variable descrita por sus
+aristas de salida y de entrada -- con ancho igual a la mediana de las distancias
+entre perfiles; se calcula UNA sola vez al construir la perdida y queda como
+buffer constante. El gradiente NO llega a $A$: el termino empuja la
+representacion aprendida hacia la estructura experta, jamas al reves. Es el unico
+termino que ata las dos cosas.
 
 **$K_g$ no se estima de los datos: son las relaciones conceptuales
 predefinidas.** Vale la pena decirlo sin rodeos porque "kernel" suena a algo
@@ -352,7 +363,7 @@ y no un `clamp`: en la inicializacion $\\hat{p}_b \\approx 0$, y un recorte duro
 ahi tiene gradiente exactamente cero -- el termino estaria muerto justo cuando
 mas importa.
 
-### Resumen operativo
+### 5. Resumen operativo
 
 ```
 total = 1.00 * supervisado
@@ -1126,7 +1137,7 @@ resultado = procesar_dataset_completo(
 df_identidad = resultado["df_original_copy"].reset_index(drop=True)
 
 df_causa, encoding = codificar_cod_causa(df_identidad, min_frecuencia_relativa=0.01)
-print(f"Codigos propios (frecuencia >= 1.0%%): {len(encoding.codigos_propios)} "
+print(f"Codigos propios (frecuencia >= 1.0%): {len(encoding.codigos_propios)} "
       f"-> {encoding.codigos_propios}")
 print(f"Indicadores COD_CAUSA_*: {encoding.nombres_indicadores}")
 
@@ -1523,9 +1534,9 @@ _MD_POR_CLASE = '''\
 ## 9.1 Desglose por clase (matriz de confusion, precision/recall/F1, accuracy)
 
 macro-F1 no distingue "mediocre parejo" de "abandono una clase", y aqui esa
-es la pregunta: `Alto` es el 10,21%% del subconjunto de variacion intra-vano
+es la pregunta: `Alto` es el 10,21% del subconjunto de variacion intra-vano
 (6.342 de 62.114 bolsas) y es la clase que le importa a CHEC. Un brazo que
-acierte perfecto las otras tres y NUNCA prediga `Alto` saca 89,8%% de
+acierte perfecto las otras tres y NUNCA prediga `Alto` saca 89,8% de
 accuracy y 0,75 de macro-F1 -- y el modelo observado saca 0,7704, lo bastante
 cerca de 3/4 como para que la pregunta no se pueda esquivar.
 
@@ -1757,9 +1768,9 @@ _MD_LIMITACION = '''\
 ## 16. Techo interpretativo honesto
 
 El techo teorico de este problema es la varianza intra-vano medida por 01.4:
-39.1%% de la varianza de clase vive DENTRO del vano, el 60.9%% restante lo
+39.1% de la varianza de clase vive DENTRO del vano, el 60.9% restante lo
 explica la identidad del vano por si sola (obs #524) -- cualquier metrica
-global hereda gratis ese 60.9%%, que es exactamente lo que la linea base de
+global hereda gratis ese 60.9%, que es exactamente lo que la linea base de
 persistencia captura con ventaja informacional. Este cuaderno NO reclama
 haber superado esa varianza intra-vano mas alla de lo que la barra A1
 efectivamente mida.
@@ -1808,6 +1819,936 @@ for key, value in resumen_final.items():
 
 
 
+_MD_AUTOCONTENIDO = '''\
+## Que tan autocontenido es este cuaderno, y que alternativas hay
+
+"Autocontenido" no es una sola cosa. Son tres grados distintos, y este cuaderno
+esta en el segundo a proposito.
+
+| grado | que significa | estado |
+|---|---|---|
+| 1. de datos | no necesita ningun archivo derivado por otro cuaderno | **si** en visualizacion; **no** al reentrenar |
+| 2. de ejecucion | corre de punta a punta en un checkout limpio, sin correr nada antes | **si** en visualizacion |
+| 3. de codigo | no importa nada del repositorio: todo vive en sus celdas | **no**, y no conviene |
+
+**Lo medido, no lo supuesto.** Con `EJECUCION = "visualizacion"` este cuaderno
+corre completo sobre un checkout recien clonado -- sin `data/derived/`, sin
+haber ejecutado 01.4, sin entrenar -- en unos pocos segundos. La celda que sigue
+lo verifica archivo por archivo en vez de afirmarlo.
+
+Funciona por una decision concreta: **todo lo que el visor necesita viaja dentro
+de `data/models/mil_vano_ventana_v1.pt`**, que si esta versionado. El artefacto
+no guarda solo los pesos. Lleva los nombres de las features, la particion en
+modalidades, la matriz del grafo experto, la lista de aristas con su camino, la
+geometria KMeans de 01.4 y el desglose de desempeno por clase. Las predicciones
+fuera de pliegue (`.npz`) quedaron como extra OPCIONAL justamente para que el
+visor no dependa de `data/derived/`, que `.gitignore` excluye.
+
+### Que rompe la autocontencion, y por que
+
+- **Reentrenar.** `EJECUCION = "entrenamiento"` necesita el CSV de eventos (que
+  viaja por git-lfs), la seleccion experta y la geometria KMeans de 01.4. Ese
+  camino depende de 01.4 POR DISENO: la clase de criticidad no se reajusta aqui,
+  se hereda. Ademas SOBREESCRIBE el artefacto que consume el simulador.
+- **La descripcion de la base.** Mostrar como se ven los datos crudos exige
+  abrir el CSV. No hay forma de describir una base sin mirarla; lo que si se
+  puede es mirarla barata (ver la celda de vista preliminar).
+- **El codigo.** Los modulos de `src/chec_impacto/` y `scripts/` se importan por
+  ruta. Es la unica dependencia que NO conviene eliminar: son miles de lineas con
+  pruebas propias.
+
+### Las alternativas, con lo que cuesta cada una
+
+| alternativa | que resolveria | que cuesta | veredicto |
+|---|---|---|---|
+| Copiar la libreria dentro de celdas | grado 3 completo | duplica miles de lineas ya probadas; las pruebas dejan de cubrir lo que corre; el cuaderno se desincroniza del paquete a la primera correccion | **descartada** |
+| Empaquetar `src/` como wheel e instalarlo con `%pip install` | quita el `sys.path` manual | agrega un paso de construccion y un pin de version; el cuaderno deja de leer el arbol de trabajo, asi que editar `src/` ya no llega | **solo para Databricks**, donde `/subir-notebooks-databricks` ya hace el equivalente |
+| Versionar `data/derived/` | grado 1 en los dos modos | cientos de MB de `joblib` en git para archivos que cualquier corrida reproduce | **descartada** (`.gitignore` ya lo decidio) |
+| Leer la geometria KMeans del `.pt` en vez de `data/derived/geometrias_014.json` | grado 1 para el visor | ninguno: la geometria ya viaja dentro del artefacto | **adoptada** -- las celdas de visualizacion la leen del `.pt`; `extract_geometrias_014.py` queda solo en el camino de entrenamiento, que es donde la guarda de sha1 tiene sentido |
+| Congelar tambien una vista de la base dentro del `.pt` | quitaria el CSV de las celdas descriptivas | el artefacto dejaria de ser un modelo y pasaria a ser un cache de datos; habria que regenerarlo con cada base | **descartada**: la vista preliminar cuesta menos que el problema que crea |
+
+**Regla que queda escrita.** Ninguna celda del camino de visualizacion escribe
+en disco ni depende de `data/derived/`. Si una celda nueva necesita un derivado,
+va al camino de entrenamiento o se lee del artefacto.
+'''
+
+_CODE_INSUMOS = '''\
+# De donde lee este cuaderno cada cosa. Se resuelve contra el checkout ACTUAL y no
+# contra una lista escrita a mano: un archivo que se movio aparece aqui como ausente,
+# en vez de reventar tres celdas mas abajo con un FileNotFoundError sin contexto.
+import hashlib as _hashlib
+import re
+
+
+def _huella(ruta, tope=4 * 1024 * 1024):
+    """sha1 de los primeros `tope` bytes. Sobre el CSV de eventos el hash completo
+    cuesta segundos en CADA apertura y no responde nada que el tamano no responda ya;
+    sobre los artefactos pequenos cubre el archivo entero."""
+    if not ruta.exists() or ruta.is_dir():
+        return ""
+    h = _hashlib.sha1()
+    with open(ruta, "rb") as fh:
+        h.update(fh.read(tope))
+    return h.hexdigest()[:12]
+
+
+def _mb(ruta):
+    if not ruta.exists():
+        return None
+    if ruta.is_dir():
+        return sum(f.stat().st_size for f in ruta.rglob("*") if f.is_file()) / 1e6
+    return ruta.stat().st_size / 1e6
+
+
+RUTA_CSV_EVENTOS = DATA_DIR / "Indicadores_vano_v3.csv"
+RUTA_SELECCION = DATA_DIR / "Variables_seleccion.xlsx"
+RUTA_ARTEFACTO = DATA_DIR / "models" / "mil_vano_ventana_v1.pt"
+RUTA_GEOMETRIAS = DERIVED_DIR / "geometrias_014.json"
+RUTA_VARIABLES_JSON = PROJECT_ROOT / "site" / "data" / "variables.json"
+RUTA_NB_014 = PROJECT_ROOT / "notebooks" / "base_apps" / "04_uiti_vano_trayectorias_vano.ipynb"
+RUTA_SIMULAR = DATA_DIR / "Variables_simular.xlsx"
+# El mismo nombre que declara la celda del visor. Se repite aqui en vez de importarse
+# de mas abajo para que el inventario corra ANTES de intentar cargar nada.
+RUTA_OOF_DECLARADA = DERIVED_DIR / "oof_mil_full_film_clase1.0.npz"
+
+_INSUMOS = [
+    (RUTA_ARTEFACTO, "git", "visualizacion",
+     "pesos, features, modalidades, grafo experto, aristas, geometria KMeans y desglose"),
+    (RUTA_VARIABLES_JSON, "git", "opcional",
+     "modos tematicos A-F que colorean el grafo de variables"),
+    (RUTA_SELECCION, "git", "entrenamiento",
+     "seleccion experta (SELECCION=1) y la definicion de cada columna"),
+    (RUTA_CSV_EVENTOS, "git-lfs", "entrenamiento",
+     "una fila por evento de falla: es la base de la que salen las instancias"),
+    (RUTA_NB_014, "git", "entrenamiento",
+     "fuente de la geometria KMeans; su celda 7 lleva el payload embebido"),
+    (RUTA_GEOMETRIAS, "derivado, NO versionado", "entrenamiento",
+     "centroides de 01.4 extraidos del cuaderno; se regenera solo si falta"),
+    (RUTA_OOF_DECLARADA, "derivado, NO versionado", "opcional",
+     "predicciones fuera de pliegue de la corrida base"),
+    (RUTA_SIMULAR, "git", "no lo usa este cuaderno",
+     "catalogo de controles del simulador; se lista porque describe las MISMAS features"),
+    (PROJECT_ROOT / "src" / "chec_impacto", "git", "los dos modos",
+     "bolsas, grafo, modelo MIL, perdida, asignacion de clase y persistencia"),
+]
+
+tabla_insumos = pd.DataFrame([
+    {
+        "insumo": str(r.relative_to(PROJECT_ROOT)) if PROJECT_ROOT in r.parents else str(r),
+        "existe": r.exists(),
+        "MB": None if _mb(r) is None else round(_mb(r), 2),
+        "sha1_12": _huella(r),
+        "procedencia": proc,
+        "hace_falta_en": cuando,
+        "que_aporta": aporta,
+    }
+    for r, proc, cuando, aporta in _INSUMOS
+])
+
+_modo_actual = "entrenamiento" if ENTRENAR else "visualizacion"
+_requeridos = tabla_insumos[tabla_insumos["hace_falta_en"].isin((_modo_actual, "los dos modos"))]
+_faltan = _requeridos.loc[~_requeridos["existe"], "insumo"].tolist()
+
+print(f"Modo actual: {_modo_actual!r}")
+print(f"Insumos requeridos presentes: {int(_requeridos['existe'].sum())} de {len(_requeridos)}")
+if _faltan:
+    print("FALTAN (este modo no correra completo):")
+    for _f in _faltan:
+        print("  -", _f)
+else:
+    print("No falta ninguno: el cuaderno corre de punta a punta en este checkout.")
+# Las celdas DESCRIPTIVAS -- la vista preliminar de la base y los modos tematicos --
+# leen archivos que este modo no exige. Se degradan a un aviso en vez de fallar, asi
+# que su ausencia no aparece arriba: se dice aqui para que no se lea como que sobran.
+_desc_faltan = [n for n, e in zip(tabla_insumos["insumo"], tabla_insumos["existe"])
+                if not e and n not in _faltan]
+if _desc_faltan:
+    print("Ausentes pero NO requeridos en este modo (las celdas que los usan avisan y siguen):")
+    for _f in _desc_faltan:
+        print("  -", _f)
+print()
+display(tabla_insumos)
+'''
+
+_MD_BASE_CRUDA = '''\
+## La base cruda: una vista preliminar de `Indicadores_vano_v3.csv`
+
+Antes de hablar de features conviene ver de que se parte. La base tiene **una
+fila por evento de falla** -- no por vano y no por dia --, y arrastra en esa
+misma fila todo lo que se sabe del vano, del apoyo, del transformador, del
+equipo que lo protege y del clima de las 12 horas previas.
+
+La celda que sigue **no carga la base**. Abre el primer bloque con
+`pyarrow.csv.open_csv` y se detiene ahi: para una vista preliminar hacen falta el
+encabezado, los tipos y unas filas, no los cientos de MB. Leerla entera con
+`pandas.read_csv` cuesta decenas de segundos y un pico de memoria de varios
+cientos de MB, y no responderia nada mas de lo que responde el primer bloque.
+
+Los tipos que se reportan son los que **infiere pyarrow del texto del CSV**, no
+los que tendra la matriz del modelo: todo lo que entra al modelo termina en
+`float32`, y como llega ahi es justamente lo que explica la seccion siguiente.
+'''
+
+_CODE_VISTA_PREVIA = '''\
+# Vista preliminar SIN cargar la base. `pyarrow.csv.open_csv` devuelve el primer
+# bloque y se detiene; `pandas.read_csv` leeria el archivo entero para responder lo
+# mismo. El bloque se pide pequeno a proposito: la vista previa no mejora con mas
+# filas, y el costo si crece.
+FILAS_VISTA_PREVIA = 8
+
+try:
+    import pyarrow.csv as _pacsv
+except ImportError:
+    _pacsv = None
+
+if _pacsv is None or not RUTA_CSV_EVENTOS.exists():
+    print("Vista preliminar OMITIDA: falta el CSV de eventos o pyarrow no esta instalado.")
+    print(f"  CSV: {RUTA_CSV_EVENTOS} (existe: {RUTA_CSV_EVENTOS.exists()})")
+    tipos_csv = {}
+else:
+    _lector = _pacsv.open_csv(
+        RUTA_CSV_EVENTOS, read_options=_pacsv.ReadOptions(block_size=1 << 20)
+    )
+    _bloque = _lector.read_next_batch()
+    tipos_csv = {c: str(t) for c, t in zip(_bloque.schema.names, _bloque.schema.types)}
+    _muestra = _bloque.slice(0, FILAS_VISTA_PREVIA).to_pandas()
+
+    print(f"{_bloque.num_columns:,} columnas | primer bloque leido: "
+          f"{_bloque.num_rows:,} filas | la base completa NO se carga")
+    print()
+
+    # Que hace cada columna del CSV en este cuaderno. Las tres respuestas posibles son
+    # distintas y conviene no mezclarlas: entrar al modelo, definir la bolsa (clave o
+    # etiqueta) o quedarse fuera.
+    _features_art = list(globals().get("_features_artefacto", []))
+    if not _features_art and RUTA_ARTEFACTO.exists():
+        _features_art = list(
+            torch.load(RUTA_ARTEFACTO, map_location="cpu", weights_only=False)["features"]
+        )
+        _features_artefacto = _features_art
+    _familias_usadas = {re.sub(r"_\\d+$", "", f) for f in _features_art}
+    _CLAVES_BOLSA = {"CIRCUITO": "clave de bolsa", "FID_VANO": "clave de bolsa",
+                     "FECHA": "define la ventana", "UITI_VANO": "objetivo de la bolsa"}
+
+    def _papel_columna(col):
+        if col in _CLAVES_BOLSA:
+            return _CLAVES_BOLSA[col]
+        if col == "COD_CAUSA":
+            return "entra derivada (frecuencia + indicadores)"
+        if col in _features_art or col in _familias_usadas:
+            return "entra como feature de instancia"
+        return "no entra"
+
+    tabla_columnas = pd.DataFrame({
+        "columna": list(tipos_csv),
+        "tipo_en_el_csv": [tipos_csv[c] for c in tipos_csv],
+        "papel_en_este_cuaderno": [_papel_columna(c) for c in tipos_csv],
+    })
+    print("Tipos que infiere pyarrow del texto del CSV:")
+    print(tabla_columnas["tipo_en_el_csv"].value_counts().to_string())
+    print()
+    print("Papel de cada columna:")
+    print(tabla_columnas["papel_en_este_cuaderno"].value_counts().to_string())
+    print()
+    print(f"Primeras {FILAS_VISTA_PREVIA} filas (columnas que definen la bolsa y su objetivo):")
+    _cols_clave = [c for c in ("CIRCUITO", "FID_VANO", "FECHA", "COD_CAUSA",
+                               "DURACION", "TOT_USUS", "UITI", "UITI_VANO")
+                   if c in _muestra.columns]
+    display(_muestra[_cols_clave])
+    print("Catalogo completo de columnas:")
+    display(tabla_columnas)
+'''
+
+_MD_PREPROCESOS = '''\
+## Los preprocesos, variable por variable, y que significa cada uno
+
+Entre el CSV y la matriz que ve el modelo hay una cadena fija. Ninguno de sus
+pasos ajusta nada contra el objetivo: la unica estadistica que se calcula sobre
+los datos es la frecuencia de `COD_CAUSA`, y depende solo de esa columna.
+
+**1. Seleccion experta.** Se conservan las columnas con `SELECCION = 1` en
+`Variables_seleccion.xlsx`. El objetivo (`UITI_VANO`) se salta explicitamente: es
+lo que se predice, no una entrada.
+
+**2. Expansion climatica.** Una familia climatica no es una columna sino doce.
+`prep` se convierte en `prep_0 .. prep_11`, donde `_0` es la hora del evento y
+`_11` doce horas antes. Por eso una sola fila de `Variables_seleccion.xlsx`
+puede aportar doce features, y por eso el simulador trata la familia entera como
+UN control y no como doce.
+
+**3. Fechas a numero.** Una columna con tipo de fecha pasa a segundos desde 1970 y
+luego a `float32`. Con la base actual **ninguna feature toma ese camino**: la
+unica columna de fecha del CSV es `FECHA`, que no es una feature -- define la
+ventana de la bolsa. Las dos columnas que suenan a fecha y si son features,
+`FECHA_OPERACION_VANO` y `FECHA_OPERACION_TRF`, vienen como el ANO en entero, asi
+que siguen la ruta numerica. El paso queda descrito igual porque una base futura
+puede traer una fecha real y el resultado cambiaria sin aviso. La celda siguiente
+resuelve la ruta de cada variable contra el tipo REAL del CSV, no contra su
+nombre.
+
+**4. Imputacion numerica: un centinela, no una media.** Un faltante en una
+columna numerica se reemplaza por `-10 * max(columna)`. No es un valor plausible
+y no pretende serlo: cae MUY fuera del rango observado, siempre del mismo lado, y
+a una distancia proporcional a la escala propia de la variable. La consecuencia
+practica es doble. A favor: "no se sabe" queda distinguible y el modelo puede
+aprenderlo como una condicion mas. En contra: **cualquier promedio de esa columna
+deja de ser interpretable**, porque los faltantes lo arrastran. Es la razon por la
+que el simulador guarda `max_values_imputed` -- sin ese diccionario no hay como
+volver del centinela al valor legible.
+
+**5. Categoricas a entero.** Cada columna de texto pasa por un `LabelEncoder`,
+con los faltantes convertidos antes en la categoria `"no aplica"`. El codigo
+resultante es ORDINAL sin que el orden signifique nada: `CONDUCTOR = 7` no esta
+"entre" 6 y 8 en ningun sentido fisico. Es una simplificacion deliberada y tiene
+consecuencia directa en el simulador: mover un control categorico exige su
+`label_encoders`, y sin el la variable se salta EN SILENCIO.
+
+**6. `COD_CAUSA`, por dos caminos a la vez.** No esta seleccionada en el Excel;
+entra por su propio codificador. El codigo crudo se reemplaza por su frecuencia
+relativa en la base completa -- calculada solo desde esa columna, nunca desde el
+objetivo -- y ademas se abre en un indicador binario por cada codigo con
+frecuencia mayor o igual al 1%, mas un `COD_CAUSA_OTRAS` que absorbe la cola. La
+frecuencia sola perderia la identidad del codigo; los indicadores solos perderian
+el orden de magnitud. La columna de frecuencia conserva EXACTAMENTE el nombre
+`COD_CAUSA` porque es el nodo del grafo experto: renombrarla borra sus aristas.
+
+**7. Lo que NO se hace, y conviene saberlo.** No hay estandarizacion global de la
+entrada. El encoder ve `x` tal cual y se apoya en `LayerNorm` por instancia; la
+media y la desviacion por columna (`feature_mean`, `feature_std`) se calculan
+sobre el pliegue de ENTRENAMIENTO y se usan SOLO dentro del termino de
+reconstruccion de la perdida. Tampoco hay imputacion por vecinos, ni recorte de
+atipicos, ni balanceo de clases: el desbalance se trata en la perdida, con pesos
+de densidad inversa, no tocando los datos.
+
+**8. Exclusiones verificadas, no convenidas.** Dos familias no pueden ser feature
+de instancia y la construccion de la matriz lo comprueba en vez de confiar en la
+convencion: **fuga algebraica** (`DURACION`, `TOT_USUS`, `UITI`,
+`PORC_APORTE_VANO`, `UITI_VANO` -- el objetivo se reconstruye a partir de ellas) y
+**senal de cardinalidad** (`num_eventos`, `counts` -- cuentan cuantas instancias
+tiene la bolsa, que es justo lo que la bolsa no debe poder mirar).
+'''
+
+_CODE_PREPROCESOS = '''\
+# La cadena de preproceso, resuelta variable por variable sobre las features REALES
+# del artefacto. Se deriva de los nombres y del tipo original en el CSV, no de una
+# lista escrita a mano: una feature nueva aparece aqui sola.
+_art_pre = torch.load(RUTA_ARTEFACTO, map_location="cpu", weights_only=False)
+_features_artefacto = list(_art_pre["features"])
+_climaticas = {_features_artefacto[i] for i in _art_pre["modalidades"]["climaticos"]}
+
+_tipos_csv = globals().get("tipos_csv", {})
+_defs = {}
+if RUTA_SELECCION.exists():
+    # La columna de descripcion lleva tilde en el archivo. Se toma por POSICION y no
+    # por nombre: dos codificaciones distintas del mismo Excel dan dos cadenas
+    # distintas, y el fallo seria una columna de definiciones vacia sin ningun error.
+    _sel_df = pd.read_excel(RUTA_SELECCION)
+    _defs = dict(zip(_sel_df[_sel_df.columns[0]], _sel_df[_sel_df.columns[1]]))
+
+
+def _familia(nombre):
+    return re.sub(r"_\\d+$", "", nombre)
+
+
+def _cadena_de_preproceso(nombre):
+    """Los pasos que atraviesa ESTA variable, en orden, como una sola cadena."""
+    if nombre == "COD_CAUSA":
+        return ["frecuencia relativa (solo desde su propia columna)"]
+    if nombre.startswith("COD_CAUSA_"):
+        return ["indicador binario (umbral 1% + cola en OTRAS)"]
+
+    pasos = ["seleccion experta (SELECCION=1)"]
+    fam = _familia(nombre)
+    if fam != nombre:
+        pasos.append(f"expansion climatica de '{fam}' a 12 rezagos horarios")
+    tipo = _tipos_csv.get(nombre, _tipos_csv.get(fam, ""))
+    if "timestamp" in tipo or "date" in tipo:
+        pasos.append("fecha -> segundos epoch -> float32")
+    elif tipo.startswith("string") or tipo.startswith("large_string"):
+        pasos.append("faltantes -> 'no aplica'; LabelEncoder (entero SIN orden real)")
+    else:
+        pasos.append("faltantes -> centinela -10*max(columna)")
+    return pasos
+
+
+def _significado(nombre):
+    if nombre == "COD_CAUSA":
+        return "Que tan comun es la causa de la falla, en la base completa"
+    if nombre == "COD_CAUSA_OTRAS":
+        return "La causa cae en la cola de codigos poco frecuentes"
+    if nombre.startswith("COD_CAUSA_"):
+        return f"La causa de la falla es el codigo {nombre.rsplit('_', 1)[1]}"
+    fam = _familia(nombre)
+    if fam != nombre:
+        base = _defs.get(fam, f"Variable climatica {fam}")
+        return f"{base} -- {nombre.rsplit('_', 1)[1]} h antes del evento"
+    return _defs.get(nombre, "")
+
+
+tabla_preprocesos = pd.DataFrame([
+    {
+        "variable": v,
+        "modalidad": "climaticos" if v in _climaticas else "estructurales",
+        "tipo_en_el_csv": _tipos_csv.get(v, _tipos_csv.get(_familia(v), "(sin CSV a la vista)")),
+        "pasos": " -> ".join(_cadena_de_preproceso(v)),
+        "significado": _significado(v),
+    }
+    for v in _features_artefacto
+])
+
+print(f"{len(tabla_preprocesos)} features de instancia, todas en float32 al final de la cadena.")
+print()
+print("Cuantas variables sigue cada cadena de preproceso:")
+print(tabla_preprocesos["pasos"].value_counts().to_string())
+print()
+print("AVISO sobre el centinela de imputacion: en las columnas que lo usan, un promedio")
+print("de la variable NO es interpretable -- los faltantes lo arrastran hacia abajo.")
+print()
+display(tabla_preprocesos)
+'''
+
+_MD_COSTO_COMPUTO = '''\
+## Costo del modelo: parametros, buffers y pasadas
+
+La seccion anterior describe QUE calcula la perdida. Esta describe CUANTO cuesta
+calcularla, que es la otra mitad de la pregunta y la que decide si el
+reentrenamiento cabe en la maquina que se tenga.
+
+**Tres cantidades que no se deben mezclar:**
+
+- **Parametros aprendibles.** Lo que el optimizador mueve. Casi todo vive en los
+  codificadores y decodificadores por modalidad; el resto -- atencion, decodificador
+  de compuertas, las dos capas de FiLM y la cabeza -- es una fraccion pequena.
+- **Buffers fijos.** La matriz de adyacencia y los indices de arista se registran
+  como buffers, no como parametros: **ocupan memoria y no reciben gradiente**. Es
+  la forma tecnica de la afirmacion "el grafo es fijo".
+- **Pasadas por lote.** El regresor hace **dos** pasadas de codificacion sobre el
+  MISMO modulo base, no una: la primera produce la compuerta, la segunda produce la
+  prediccion. Un lote cuesta aproximadamente el doble que un codificador simple, y
+  esa duplicacion es estructural, no un desperdicio que se pueda optimizar.
+
+**Donde crece el costo.** Con la disposicion CSR el trabajo es proporcional al
+numero de INSTANCIAS, no al de bolsas ni al maximo de instancias por bolsa. Era
+exactamente el argumento contra el tensor rellenado: mas de la mitad de las bolsas
+tienen un solo evento y el maximo esta en decenas, asi que rellenar habria
+multiplicado el computo por mas de cuarenta sobre la mayor parte de los datos.
+
+**La propagacion sobre el grafo es barata y no escala con `p`.** Cuesta una
+operacion por arista y por instancia, no `p x p`: `index_add` escribe unicamente
+en las columnas destino. Un grafo de decenas de aristas sobre decenas de features
+es despreciable frente a los codificadores.
+
+**El presupuesto del reentrenamiento es una compuerta, no una estimacion.** La
+celda de pronostico del camino de entrenamiento cronometra UN pliegue real y
+proyecta la validacion cruzada completa contra `COST_CEILING_SECONDS`. Si la
+proyeccion no cabe, el entrenamiento completo NO se lanza. Ninguna corrida MIL se
+cronometro nunca al escribir este cuaderno, y por eso el numero se mide en vez de
+declararse.
+'''
+
+_CODE_COSTO_COMPUTO = '''\
+if not ENTRENAR:
+    _art_costo = torch.load(RUTA_MODELO, map_location="cpu", weights_only=False)
+    _sd = _art_costo["state_dict"]
+    _BUFFERS_FIJOS = ("adjacency", "edge_rows", "edge_cols", "edge_values")
+
+    _por_bloque, _n_param, _n_buffer = {}, 0, 0
+    for _clave, _tensor in _sd.items():
+        if not hasattr(_tensor, "numel"):
+            continue
+        _n = int(_tensor.numel())
+        if _clave in _BUFFERS_FIJOS:
+            _por_bloque[f"[buffer fijo] {_clave}"] = _por_bloque.get(
+                f"[buffer fijo] {_clave}", 0) + _n
+            _n_buffer += _n
+            continue
+        _partes = _clave.split(".")
+        _bloque = ".".join(_partes[:2]) if _partes[0] == "base" else _partes[0]
+        _por_bloque[_bloque] = _por_bloque.get(_bloque, 0) + _n
+        _n_param += _n
+
+    tabla_costo = (
+        pd.DataFrame([{"bloque": b, "valores": n} for b, n in _por_bloque.items()])
+        .sort_values("valores", ascending=False)
+        .reset_index(drop=True)
+    )
+    tabla_costo["% del total aprendible"] = [
+        "" if b.startswith("[buffer") else f"{100.0 * n / _n_param:.1f}%"
+        for b, n in zip(tabla_costo["bloque"], tabla_costo["valores"])
+    ]
+
+    _hp = _art_costo["hiperparametros"]
+    _n_edges = int(len(_art_costo["edges"]))
+    _p = len(_art_costo["features"])
+    print(f"Parametros aprendibles: {_n_param:,}")
+    print(f"Buffers fijos (el grafo, sin gradiente): {_n_buffer:,} valores")
+    print(f"Hiperparametros de forma: {_hp}")
+    print(f"Latente concatenado por instancia: n_modalidades x embed_dim = "
+          f"2 x {_hp['embed_dim']} = {2 * _hp['embed_dim']}")
+    print(f"Compuerta por bolsa: un valor por arista del grafo fijo -> {_n_edges}")
+    print(f"Propagacion: {_n_edges} operaciones por instancia, NO {_p} x {_p}")
+    print("Pasadas de codificacion por lote: 2 (fuente de la compuerta, y prediccion)")
+    print()
+    display(tabla_costo)
+'''
+
+_MD_GRAFO_COMPOSICION = '''\
+## Composicion del grafo: que variables entran a la propagacion y cuales no
+
+La figura de arriba muestra el grafo; esta seccion responde la pregunta que la
+figura no contesta sola: **de las variables de entrada, cuales usa el grafo y
+cuales no**. Hay que separar tres afirmaciones que suenan parecidas.
+
+1. **Todas las features son entrada del MODELO.** Los codificadores por modalidad
+   ven las `p` columnas. Ninguna variable esta "fuera del modelo".
+2. **Solo algunas son entrada de la PROPAGACION.** La propagacion lee las columnas
+   que son ORIGEN de alguna arista y escribe unicamente en las que son DESTINO.
+3. **Una variable con grado de entrada 0 pasa intacta.** El `index_add` solo toca
+   las columnas destino, asi que los indicadores `COD_CAUSA_*`, por ejemplo,
+   atraviesan el grafo sin modificarse. Eso no las excluye del modelo: las excluye
+   del grafo.
+
+**De donde salen las aristas.** No se estiman. Son una lista escrita a mano en
+`chec_impacto/data/graph.py`, con pesos que son juicio experto -- valores como
+`("ALTURA", "NR_T", 0.75)` --, no correlaciones medidas. Los datos deciden UNA
+sola cosa: **cuales nodos existen**. Si un codigo de causa no alcanza el umbral de
+frecuencia, su columna no esta y las aristas que lo tocaban no se proyectan.
+
+**Aristas directas y aristas virtuales.** El grafo experto describe la red
+completa, incluidas variables que la seleccion no conserva. Cuando una arista pasa
+por un nodo eliminado, la conectividad se PRESERVA: se crea una arista virtual
+entre los extremos que si sobreviven, con el peso minimo del camino, y el camino
+original queda registrado. Sin eso, quitar una variable intermedia cortaria en
+silencio una relacion que el experto si declaro.
+
+**El unico camino cruzado entre modalidades.** La fusion `film` y las aristas que
+unen la rama estructural con la climatica son los dos unicos lugares donde las dos
+modalidades se encuentran. Cuantas aristas cruzadas hay, y cuales, lo imprime la
+celda siguiente -- es un numero pequeno, y por eso la fusion `film` existe.
+
+**`COD_CAUSA` es el sumidero.** Recibe aristas y no emite ninguna. Es el nodo
+donde converge el flujo del grafo, y es tambien la razon de que su nombre no se
+pueda cambiar.
+'''
+
+_CODE_GRAFO_COMPOSICION = '''\
+if not ENTRENAR:
+    _art_comp = torch.load(RUTA_MODELO, map_location="cpu", weights_only=False)
+    _A_comp = np.asarray(_art_comp["adjacency"])
+    _feats_comp = list(_art_comp["features"])
+    _clim_comp = {_feats_comp[i] for i in _art_comp["modalidades"]["climaticos"]}
+    _aristas = list(_art_comp["edges"])
+
+    _ent = (_A_comp != 0).sum(axis=0)
+    _sal = (_A_comp != 0).sum(axis=1)
+
+    def _papel_en_la_propagacion(i):
+        emite, recibe = _sal[i] > 0, _ent[i] > 0
+        if emite and recibe:
+            return "emite y recibe"
+        if emite:
+            return "solo emite (la propagacion la lee, no la cambia)"
+        if recibe:
+            return "solo recibe (la propagacion la cambia)"
+        return "ni emite ni recibe (fuera del grafo)"
+
+    tabla_papeles = pd.DataFrame([
+        {
+            "variable": f,
+            "modalidad": "climaticos" if f in _clim_comp else "estructurales",
+            "grado_salida": int(_sal[i]),
+            "grado_entrada": int(_ent[i]),
+            "papel_en_la_propagacion": _papel_en_la_propagacion(i),
+        }
+        for i, f in enumerate(_feats_comp)
+    ])
+
+    tabla_aristas = pd.DataFrame([
+        {
+            "origen": a["source"],
+            "destino": a["target"],
+            "peso": float(a["weight"]),
+            "tipo": "virtual (a traves de nodos descartados)" if a["is_virtual"] else "directa",
+            "cruza_modalidad": (a["source"] in _clim_comp) != (a["target"] in _clim_comp),
+            "camino": " -> ".join(a["path"]),
+        }
+        for a in _aristas
+    ]).sort_values(["cruza_modalidad", "peso"], ascending=[False, False]).reset_index(drop=True)
+
+    print(f"{len(_feats_comp)} variables de entrada al modelo | "
+          f"{len(_aristas)} aristas en el grafo experto fijo")
+    print()
+    print("Papel de cada variable DENTRO de la propagacion:")
+    print(tabla_papeles["papel_en_la_propagacion"].value_counts().to_string())
+    # Las dos tablas de este cuaderno cuentan cosas distintas y deben cuadrar. La de
+    # variables lista las de GRADO DE ENTRADA 0 -- las que la propagacion no cambia --
+    # y esa cifra es la suma de dos filas de aqui. Sin esta linea las dos parecen
+    # contradecirse, y quien lee no tiene como saber cual mirar.
+    _sin_entrada = int((tabla_papeles["grado_entrada"] == 0).sum())
+    _fuera = int((tabla_papeles["papel_en_la_propagacion"]
+                  == "ni emite ni recibe (fuera del grafo)").sum())
+    print(f"  cuadre con la tabla de variables: grado de entrada 0 = {_sin_entrada} "
+          f"= 'solo emite' ({_sin_entrada - _fuera}) + 'fuera del grafo' ({_fuera})")
+    print()
+    print("Aristas por tipo:")
+    print(tabla_aristas["tipo"].value_counts().to_string())
+    print(f"Aristas que cruzan de una modalidad a la otra: "
+          f"{int(tabla_aristas['cruza_modalidad'].sum())} de {len(tabla_aristas)}")
+    print()
+    print("Las aristas que cruzan modalidad (el unico camino cruzado del grafo):")
+    display(tabla_aristas[tabla_aristas["cruza_modalidad"]].drop(columns="cruza_modalidad"))
+    print("Todas las aristas:")
+    display(tabla_aristas)
+    print("Todas las variables y su papel en la propagacion:")
+    display(tabla_papeles)
+'''
+
+_MD_ETIQUETAS = '''\
+## De donde salen las etiquetas: el agrupamiento de vanos y el ranking
+
+Este cuaderno **no decide las clases de criticidad**. Las hereda. Vale la pena
+seguir la cadena completa porque es la fuente de confusion mas comun al leer los
+resultados.
+
+### El mismo procedimiento que el tablero 02, sobre tres unidades
+
+El tablero de agrupamiento (`02_uiti_vano_kmeans`) hace exactamente lo mismo dos
+veces, sobre unidades distintas:
+
+- **A nivel de circuito.** Un punto es un circuito. El eje x es cuantos eventos
+  registro en el periodo y el eje y su UITI acumulado.
+- **A nivel de vano.** Un punto es un vano, con las mismas dos coordenadas.
+
+Y `04_uiti_vano_trayectorias_vano` repite el procedimiento una tercera vez, sobre
+la celda `(circuito, vano, ventana)`. Esa tercera es la que importa aqui.
+
+En los tres casos: K-Means a **4 grupos** sobre un espacio FIJO -- eje x lineal,
+eje y en `log10`, escalador `minmax` -- ajustado **una sola vez sobre la ventana
+temporal completa**. Cambiar el rango de fechas reevalua a que grupo cae cada
+punto, pero **no mueve las fronteras**. Sin eso, `Alto` significaria una cosa
+distinta en cada rango y dos tableros no se podrian comparar.
+
+### La regla que convierte un id arbitrario en una etiqueta
+
+K-Means devuelve ids sin orden. El nombre del grupo se asigna por el **ranking de
+la MEDIANA del UITI acumulado**, de menor a mayor: `Bajo`, `Medio`, `Medio-Alto`,
+`Alto`. Ese es todo el contenido del ranking, y es lo que hace que el indice del
+centroide SEA el id final de la clase, sin remapeos posteriores.
+
+Un aviso que el tablero 02 documenta y que aplica igual aqui: con centroides
+fijos, el orden por mediana esta garantizado sobre la ventana completa, no sobre
+cualquier subrango. En un rango corto un grupo puede quedar con pocos puntos y
+cruzarse con su vecino.
+
+### Que hereda este cuaderno, exactamente
+
+Cuidado con un detalle que decide si la herencia es legitima o no: **02 y 04
+aplican el mismo procedimiento sobre agregaciones distintas, y sus centroides NO
+son intercambiables**. El tablero 02 acumula por vano sobre todo el rango elegido;
+01.4 ajusta sobre la celda `(circuito, vano, ventana)`.
+
+Lo que este cuaderno hereda es la geometria de **01.4**, y su unidad es
+exactamente la celda `(circuito, vano, ventana)` -- que es, letra por letra, la
+definicion de una bolsa. Por eso la herencia funciona: la regla de clase se aplica
+sobre la misma unidad sobre la que se ajusto. Tomar en su lugar los centroides del
+nivel de vano de 02 asignaria clases con fronteras ajustadas a otra poblacion, y
+nada en el resultado lo delataria.
+
+Del artefacto viajan los `logs`, el `offset`, la `scale` y los cuatro centroides.
+Con eso se aplica la regla de **centroide mas cercano** sobre el par `(n_obs
+OBSERVADO, u ESTIMADO)`.
+
+De las dos coordenadas que deciden la clase, **el modelo solo aporta una**. El
+numero de eventos es observado siempre, en la verdad y en la prediccion; lo unico
+que el modelo predice es el UITI acumulado. Es la razon por la que el contexto del
+informe declara explicitamente que el conteo de eventos NO es una salida del
+modelo: un lector razonable supondria lo contrario.
+
+**Los grupos de circuito y los de vano NO son comparables aunque compartan
+nombre.** Son particiones sobre unidades distintas. Un vano `Alto` casi siempre
+vive en un circuito `Alto`, pero un circuito `Alto` contiene vanos de los cuatro
+grupos. El mismo aviso vale entre el nivel de vano y el de celda vano-ventana: un
+vano puede ser `Alto` en el acumulado del periodo y `Bajo` en una ventana
+tranquila.
+
+La celda siguiente dibuja esa particion con la geometria REAL del artefacto, y
+verifica el ranking en vez de repetirlo.
+'''
+
+_CODE_ETIQUETAS = '''\
+if not ENTRENAR:
+    import plotly.graph_objects as _go_km
+
+    # La geometria se lee del ARTEFACTO, no de data/derived/geometrias_014.json: ya
+    # viaja dentro del .pt y asi esta celda no depende de un derivado que no se
+    # versiona ni escribe nada en disco.
+    _art_km = torch.load(RUTA_MODELO, map_location="cpu", weights_only=False)
+    _geo_km = _art_km["geometria"]
+    _logs = [bool(b) for b in _geo_km["logs"]]
+    _off = np.asarray(_geo_km["offset"], dtype=float)
+    _esc = np.asarray(_geo_km["scale"], dtype=float)
+    _cent = np.asarray(_geo_km["centroides"], dtype=float)
+
+    def _a_unidades_originales(z, eje):
+        crudo = z * _esc[eje] + _off[eje]
+        return 10.0 ** crudo if _logs[eje] else crudo
+
+    tabla_centroides = pd.DataFrame({
+        "grupo": list(GRUPOS),
+        "indice": range(len(GRUPOS)),
+        "n_eventos_del_centroide": [_a_unidades_originales(c[0], 0) for c in _cent],
+        "uiti_del_centroide": [_a_unidades_originales(c[1], 1) for c in _cent],
+    })
+
+    _u_cent = tabla_centroides["uiti_del_centroide"].to_numpy()
+    _ranking_ok = bool(np.all(np.diff(_u_cent) > 0))
+    print(f"Espacio KMeans heredado de 01.4: log en x = {_logs[0]}, log en y = {_logs[1]}")
+    print(f"Ranking por UITI del centroide estrictamente creciente: {_ranking_ok}")
+    print("  (es la regla que convierte el id arbitrario de KMeans en Bajo..Alto)")
+    print()
+    display(tabla_centroides.round(4))
+
+    # Particion de Voronoi sobre el plano, en las MISMAS unidades en que se leen los
+    # datos. Se evalua la regla de centroide mas cercano sobre una grilla: es la misma
+    # `asignar_clase` que usa el modelo, no una aproximacion para dibujar.
+    _n_grilla = 260
+    _n_eje = np.linspace(_a_unidades_originales(_cent[:, 0].min(), 0) * 0.2,
+                         _a_unidades_originales(_cent[:, 0].max(), 0) * 1.6, _n_grilla)
+    _u_eje = np.logspace(np.log10(_u_cent.min() * 0.05), np.log10(_u_cent.max() * 8.0), _n_grilla)
+    _NN, _UU = np.meshgrid(_n_eje, _u_eje)
+    _clase_grilla, _ = asignar_clase(_NN.ravel(), _UU.ravel(), predictor_guardado.geometria)
+    _clase_grilla = _clase_grilla.reshape(_NN.shape)
+
+    COLOR_GRUPO = ["#7fa8c9", "#e8c468", "#e08a4b", "#c1443b"]
+    fig_km = _go_km.Figure()
+    fig_km.add_trace(_go_km.Heatmap(
+        x=_n_eje, y=_u_eje, z=_clase_grilla, showscale=False, opacity=0.32,
+        colorscale=[[i / 3.0, c] for i, c in enumerate(COLOR_GRUPO)],
+        hoverinfo="skip", zmin=0, zmax=3,
+    ))
+    # Si las predicciones fuera de pliegue estan a mano, se dibuja una muestra de las
+    # bolsas reales encima. Es OPCIONAL a proposito: el .npz no se versiona y la
+    # particion se entiende igual sin el.
+    if oof is not None and "n_obs" in oof and "y_uiti" in oof:
+        _rng_km = np.random.default_rng(RANDOM_STATE)
+        _n_obs_oof = np.asarray(oof["n_obs"], dtype=float)
+        _idx = _rng_km.choice(len(_n_obs_oof), size=min(4000, len(_n_obs_oof)), replace=False)
+        fig_km.add_trace(_go_km.Scatter(
+            x=_n_obs_oof[_idx], y=np.asarray(oof["y_uiti"], dtype=float)[_idx],
+            mode="markers", name="bolsas observadas (muestra)",
+            marker=dict(size=3, color="#3f3f3f", opacity=0.35),
+            hovertemplate="n_obs %{x}<br>uiti %{y:.2f}<extra></extra>",
+        ))
+    for _k, _grupo in enumerate(GRUPOS):
+        fig_km.add_trace(_go_km.Scatter(
+            x=[tabla_centroides["n_eventos_del_centroide"][_k]],
+            y=[tabla_centroides["uiti_del_centroide"][_k]],
+            mode="markers+text", name=_grupo, text=[_grupo], textposition="top center",
+            marker=dict(size=15, color=COLOR_GRUPO[_k], symbol="x-thin",
+                        line=dict(width=3, color=COLOR_GRUPO[_k])),
+            hovertemplate=f"{_grupo}<br>n_obs %{{x:.2f}}<br>uiti %{{y:.2f}}<extra></extra>",
+        ))
+    fig_km.update_layout(
+        title=("Particion heredada de 01.4 -- centroide mas cercano sobre "
+               "(eventos observados, UITI estimado)"),
+        template="plotly_white", height=560, width=980,
+        xaxis=dict(title="numero de eventos de la bolsa (OBSERVADO)"),
+        yaxis=dict(title="UITI acumulado (el modelo estima ESTE eje)", type="log"),
+        legend=dict(orientation="h", y=1.02, x=0),
+        margin=dict(l=70, r=20, t=90, b=60),
+    )
+    fig_km.show()
+
+    print("Como leer la figura: el color de fondo es la clase que asigna la regla de")
+    print("centroide mas cercano en cada punto del plano. El modelo mueve un punto solo")
+    print("en VERTICAL -- el eje de eventos es observado y no lo predice nadie.")
+'''
+
+_MD_ENTRENAMIENTO_GUIA = '''\
+## Como se genera el entrenamiento, y que produce
+
+Antes de las celdas conviene el mapa, porque el orden no es arbitrario: cada
+etapa existe para que la siguiente sea legitima.
+
+**1. De la base a las instancias.** Se lee el CSV, se aplica la seleccion experta
+y la expansion climatica, se codifica `COD_CAUSA` y se arma la matriz de
+instancias. `p` se deriva en tiempo de ejecucion; escribirlo a mano seria la forma
+mas facil de que una feature nueva pase inadvertida.
+
+**2. El grafo experto.** Se construye sobre las features que quedaron, con la
+preservacion de conectividad a traves de los nodos descartados. Se verifica que
+`COD_CAUSA` sea un sumidero puro y que el numero de aristas sea el que el diseno
+deriva.
+
+**3. La geometria de 01.4.** Se reutiliza, nunca se reajusta, y se verifica por
+sha1. Si los centroides se movieron, la corrida se detiene: las clases se correrian
+en silencio y ningun resultado lo diria.
+
+**4. Las bolsas.** Se reconstruyen las 11 ventanas con el mismo corte de 01.4 y se
+agrupan los eventos por celda `(circuito, vano, ventana)`. Los tamanos quedan
+fijados con asserts contra los valores poblacionales medidos.
+
+**5. La compuerta de costo.** Se cronometra UN pliegue real y se proyecta la
+validacion cruzada completa. Si la proyeccion excede el techo declarado, el
+entrenamiento completo NO se lanza. Es una compuerta, no un aviso.
+
+**6. La validacion cruzada agrupada.** `StratifiedGroupKFold` con
+`groups = CIRCUITO|FID_VANO`: un mismo vano nunca queda partido entre entrenamiento
+y prueba. Sin eso, la persistencia del vano se colaria como si fuera capacidad
+predictiva -- y la linea base de persistencia existe justamente para medir cuanta
+de esa "capacidad" es solo memoria.
+
+**7. Las barras y las guardas.** El modelo se compara contra las tres lineas base y
+debe superar a la MEJOR, no solo a la mas debil. Ademas corren la guarda de proxy
+univariante (A3), la deteccion de colapso de compuertas (A4) y el diagnostico de
+particion temporal (A6), que se reporta al lado y nunca reselecciona la metrica
+principal.
+
+**8. El modelo final y sus artefactos.** Un ajuste sobre TODAS las bolsas produce
+el modelo que se guarda -- distinto de los cinco modelos por pliegue, que solo
+existen para medir. De ahi salen las relevancias por Kernel SHAP agregadas en un
+ranking Borda, y la verificacion del contrato que el simulador espera.
+
+**Lo que este cuaderno NO hace.** No busca hiperparametros: los valores son fijos
+y razonables, y no hay un objetivo de Optuna definido para este modelo. Tampoco
+construye ni corre el simulador; solo verifica el contrato que el simulador exige.
+'''
+
+_MD_SIMULADOR = '''\
+## Que hace el simulador con lo que sale de aqui
+
+El simulador (`06_uiti_vano_explicabilidad_simulador`, servido como aplicacion)
+carga el artefacto de este cuaderno y responde tres preguntas distintas. Ninguna
+de las tres se calcula aqui, pero las tres dependen de decisiones que si se toman
+aqui.
+
+### 1. Prediccion de grupo
+
+Es la misma cadena que el visor: dos pasadas del modelo sobre las bolsas de la
+seleccion -- una con los valores observados y otra con los valores intervenidos --
+y sobre cada una la regla de centroide mas cercano con `(n_obs OBSERVADO, u
+estimado)`. Cuesta exactamente **dos** pasadas para toda la seleccion, nunca una
+por vano: los valores por vano se escriben en UNA matriz y se puntuan juntos.
+
+El indicador que compara escenarios es la **clase esperada**, es decir la
+distribucion suave de clases por su indice, promediada. La clase REPORTADA sigue
+siendo el argmin duro; la version suave existe solo para que la diferencia entre
+dos escenarios sea un numero continuo en vez de un escalon. Su `argmax` coincide
+siempre con la clase dura, porque la softmax es monotona en la distancia negativa.
+
+### 2. El grafo de inferencia
+
+No es el grafo experto tal cual, y tampoco es un grafo aprendido. Es **el grafo
+experto tal como ESTA seleccion de vanos lo usa**: para cada arista, el peso fijo
+multiplicado por la compuerta media que el modelo decodifico para esas bolsas. Las
+compuertas salen de la misma pasada que ya se hizo para predecir, asi que no
+cuesta nada extra.
+
+Dos decisiones importan al leerlo:
+
+- **Se anula si las compuertas colapsan.** Una compuerta que no varia entre vanos
+  no lleva estructura propia de la seleccion, y dibujarla presentaria el grafo
+  experto fijo como si la seleccion lo hubiera producido. Con muy pocos vanos se
+  anula por construccion.
+- **El panel muestra la DIFERENCIA, no el grafo.** Como el grafo es casi todo peso
+  experto fijo, el antes y el despues se ven iguales lado a lado y el efecto de la
+  intervencion -- que es el punto del panel -- queda invisible. Se muestra
+  `|base - simulado|` en valor absoluto: la pregunta es cuanto se movio cada
+  relacion, no en que direccion. Una matriz toda en cero es un RESULTADO, no un
+  panel vacio: dice que la intervencion no movio ninguna relacion.
+
+### 3. Analisis de sensibilidad de variables relevantes
+
+Un barrido de minimo y maximo por control. Para cada control numerico se fija toda
+su familia en su valor minimo, luego en su maximo, y se mide cuanto se movio la
+clase esperada respecto de la base. La relevancia de un control es la magnitud
+mayor de las dos, y se reporta ademas hacia donde empuja cada extremo.
+
+- **Cuesta `1 + 2 x controles_numericos` pasadas**, no una tanda por vano: cada
+  pasada ya devuelve un valor por bolsa, asi que basta con no promediarlo para
+  obtener el ranking de CADA vano en el mismo barrido.
+- **Una familia climatica es UN control, no doce.** Sus doce rezagos se mueven
+  juntos. Es la razon de ser del catalogo de controles.
+- **Los controles sin limites numericos se saltan.** Inventarles un rango
+  puntuaria un escenario que nadie pidio.
+
+### Lo que decide este cuaderno y el simulador solo obedece
+
+Que features existen y en que orden, que aristas tiene el grafo y cuanto pesan,
+cual es la geometria de clases, y el contrato de salida. Un cambio en cualquiera de
+esos cuatro obliga a reentrenar: el cargador RECHAZA un desajuste de nombres de
+features, y con razon -- puntuar columnas equivocadas no lanza error por si solo,
+solo devuelve un mapa creible y falso.
+'''
+
+_MD_ARTEFACTOS = '''\
+## Que archivos salen de aqui, y quien los consume
+
+Este cuaderno escribe solo al reentrenar. En modo visualizacion no toca el disco.
+
+| archivo | cuando se escribe | versionado | quien lo consume |
+|---|---|---|---|
+| `data/models/mil_vano_ventana_v1.pt` | al reentrenar con `mode="full"` | **si** | el visor de este cuaderno, el simulador, el informe y las aplicaciones locales y de Databricks |
+| `data/derived/oof_mil_{mode}_{fusion}_clase{lambda}.npz` | tras la validacion cruzada | no | analisis posteriores; **opcional** para el visor, que lee el desglose desde el `.pt` |
+| `data/derived/bolsas_mil_{mode}.joblib` | al construir las bolsas | no | el simulador, para no rehacer la construccion en cada arranque |
+| `data/derived/geometrias_014.json` | si falta, se extrae de 01.4 | no | la asignacion de clase en todos los caminos |
+
+Hay ademas dos derivados que este cuaderno NO escribe pero que dependen del mismo
+artefacto: el catalogo de controles del simulador y el cache de relevancias por
+circuito y ventana, ambos bajo `data/derived/`. Se invalidan por las huellas de sus
+archivos fuente, de modo que un artefacto nuevo no queda descrito por un cache
+viejo.
+
+**Por que el desglose de desempeno viaja DENTRO del `.pt`.** `data/models/` esta
+versionado y `data/derived/` no. Si el visor dependiera del `.npz`, fallaria en
+cualquier checkout limpio -- que es exactamente el escenario en el que alguien abre
+el cuaderno por primera vez.
+
+**La advertencia que importa.** Reentrenar SOBREESCRIBE el artefacto que el
+simulador y el informe ya estan usando. La copia que sirve cada aplicacion se
+reconstruye por huella de sus insumos, asi que un artefacto nuevo dispara la
+reconstruccion de los paquetes -- pero los reportes ya emitidos siguen citando
+numeros del modelo anterior.
+'''
+
+_CODE_ARTEFACTOS = '''\
+# El mapa de archivos, resuelto contra el checkout actual. Las rutas de salida se
+# construyen con los MISMOS nombres que usan las celdas de guardado, para que este
+# resumen no pueda describir un archivo que el cuaderno nunca escribiria.
+_SALIDAS = [
+    (DATA_DIR / "models" / "mil_vano_ventana_v1.pt",
+     'al reentrenar con mode="full"', "si",
+     "visor, simulador, informe y aplicaciones"),
+    (DERIVED_DIR / f"oof_mil_{mode}_{FUSION}_clase{LAMBDA_CLASE}.npz",
+     "tras la validacion cruzada", "no",
+     "analisis posteriores (opcional para el visor)"),
+    (DERIVED_DIR / f"bolsas_mil_{mode}.joblib",
+     "al construir las bolsas", "no",
+     "el simulador, para no rehacer la construccion"),
+    (DERIVED_DIR / "geometrias_014.json",
+     "si falta, se extrae de 01.4", "no",
+     "la asignacion de clase en todos los caminos"),
+]
+
+tabla_salidas = pd.DataFrame([
+    {
+        "archivo": str(r.relative_to(PROJECT_ROOT)) if PROJECT_ROOT in r.parents else str(r),
+        "existe_ahora": r.exists(),
+        "MB": round(r.stat().st_size / 1e6, 2) if r.exists() else None,
+        "cuando_se_escribe": cuando,
+        "versionado": versionado,
+        "quien_lo_consume": consumidor,
+    }
+    for r, cuando, versionado, consumidor in _SALIDAS
+])
+
+print("En modo visualizacion este cuaderno NO escribe ninguno de estos archivos.")
+print(f"Modo actual: {'entrenamiento' if ENTRENAR else 'visualizacion'}")
+print()
+display(tabla_salidas)
+'''
+
+
 def _solo_entrenamiento(codigo: str) -> str:
     """Indenta el cuerpo de una celda bajo `if ENTRENAR:`.
 
@@ -1840,6 +2781,13 @@ def build_notebook() -> nbformat.NotebookNode:
         _cell("code", _CODE_IMPORTS),
         _cell("markdown", _MD_CONFIG),
         _cell("code", _CODE_CONFIG),
+        # ---- de donde sale todo: insumos, base cruda y preprocesos ----
+        _cell("markdown", _MD_AUTOCONTENIDO),
+        _cell("code", _CODE_INSUMOS),
+        _cell("markdown", _MD_BASE_CRUDA),
+        _cell("code", _CODE_VISTA_PREVIA),
+        _cell("markdown", _MD_PREPROCESOS),
+        _cell("code", _CODE_PREPROCESOS),
         # ---- documentacion: siempre visible, no depende de EJECUCION ----
         _cell("markdown", _MD_ARQUITECTURA),
         _cell("markdown", _MD_BOLSAS_DOC),
@@ -1847,14 +2795,21 @@ def build_notebook() -> nbformat.NotebookNode:
         # ---- visor: lee el modelo guardado ----
         _cell("markdown", _MD_VISOR),
         _cell("code", _CODE_VISOR),
+        _cell("markdown", _MD_COSTO_COMPUTO),
+        _cell("code", _CODE_COSTO_COMPUTO),
         _cell("markdown", _MD_VARIABLES),
         _cell("code", _CODE_VARIABLES),
         _cell("markdown", _MD_GRAFO_INTERACTIVO),
         _cell("code", _CODE_GRAFO_INTERACTIVO),
+        _cell("markdown", _MD_GRAFO_COMPOSICION),
+        _cell("code", _CODE_GRAFO_COMPOSICION),
+        _cell("markdown", _MD_ETIQUETAS),
+        _cell("code", _CODE_ETIQUETAS),
         _cell("markdown", _MD_DESEMPENO),
         _cell("code", _CODE_DESEMPENO),
         # ---- entrenamiento: solo con EJECUCION="entrenamiento" ----
         _cell("markdown", _MD_ENTRENAMIENTO),
+        _cell("markdown", _MD_ENTRENAMIENTO_GUIA),
         _cell("markdown", _MD_DIAGRAM),
         _cell("markdown", _MD_DATA_LOAD),
         _cell("code", _solo_entrenamiento(_CODE_DATA_LOAD)),
@@ -1891,6 +2846,10 @@ def build_notebook() -> nbformat.NotebookNode:
         _cell("markdown", _MD_SIMULATOR),
         _cell("code", _solo_entrenamiento(_CODE_SIMULATOR)),
         _cell("markdown", _MD_LIMITACION),
+        # ---- que sale de aqui y quien lo usa ----
+        _cell("markdown", _MD_SIMULADOR),
+        _cell("markdown", _MD_ARTEFACTOS),
+        _cell("code", _CODE_ARTEFACTOS),
         _cell("markdown", _MD_SUMMARY),
         _cell("code", _CODE_SUMMARY),
     ]
