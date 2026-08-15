@@ -84,13 +84,13 @@ def test_el_mapa_ocupa_una_sola_fila_y_dos_columnas():
 def test_el_alto_de_la_figura_se_elige_contra_el_del_panel_de_control():
     """Las dos columnas del tablero tienen que acabar mas o menos a la misma altura.
 
-    El panel de control mide 941 px a 1.280 de ventana, 821 a 1.512 y 738 a 1.900 --
+    El panel de control mide 967 px a 1.280 de ventana, 847 a 1.512 y 764 a 1.900 --
     medido en el navegador; cambia de alto porque su texto se reparte en mas o menos
     renglones. No existe un numero que iguale a los tres, asi que se elige el que deja la
     diferencia mas chica donde mas se usa.
 
     Y se cuadra contra la COLUMNA de figuras, no contra la figura sola: encima de ella va
-    la barra del boton de encuadre, que son 44 px medidos. 777 + 44 = 821, o sea 0 px de
+    la barra del boton de encuadre, que son 44 px medidos. 803 + 44 = 847, o sea 0 px de
     diferencia a 1.512. Con los 2.100 de la version original le sobraban 660.
     """
     fuente = _sin_comentarios("\n".join(_celdas()))
