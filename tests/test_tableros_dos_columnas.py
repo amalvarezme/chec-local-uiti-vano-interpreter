@@ -107,11 +107,35 @@ def test_el_css_no_nombra_la_clase_de_ningun_panel():
 
 
 @pytest.mark.parametrize("nombre", CUADERNOS)
-@pytest.mark.parametrize("selector,ancho", [(".col-controles", "30%"), (".col-figuras", "70%")])
-def test_cada_columna_declara_su_ancho(nombre: str, selector: str, ancho: str):
-    """30% y 70%, en porcentaje: estos tableros se ven de 1.280 a 1.900 px de ancho."""
-    cuerpo = _regla(_css(nombre), selector)
-    assert ancho in cuerpo, f"{selector} no declara {ancho} en {nombre}: {cuerpo.strip()!r}"
+def test_los_controles_declaran_su_ancho_con_un_30_por_ciento_por_defecto(nombre: str):
+    """En porcentaje -- estos tableros se ven de 1.280 a 1.900 px -- y por variable.
+
+    El bloque va copiado en los cuatro cuadernos y esta misma suite exige que las copias
+    sean identicas, asi que el reparto NO puede escribirse aqui: un tablero que quiera
+    otro lo declara en su marcado (`style="--ancho-controles: 25%"`). El 30% es el valor
+    de respaldo para el que no diga nada.
+    """
+    cuerpo = _regla(_css(nombre), ".cuerpo-2col > .col-controles")
+    assert "var(--ancho-controles, 30%)" in cuerpo, (
+        f"{nombre} no toma el ancho de los controles de `--ancho-controles`: "
+        f"{cuerpo.strip()!r}")
+
+
+@pytest.mark.parametrize("nombre", CUADERNOS)
+def test_las_figuras_se_quedan_con_lo_que_sobre(nombre: str):
+    """`flex: 1 1 0` y no un 70% escrito.
+
+    Un porcentaje fijo en la columna de figuras y otro en la de controles son dos numeros
+    que tienen que sumar 100 para siempre; el dia que uno cambie, el otro no se entera y
+    queda una franja muerta o un desborde. Que una sea fija y la otra tome el resto lo
+    hace imposible por construccion.
+    """
+    cuerpo = _regla(_css(nombre), ".cuerpo-2col > .col-figuras")
+    assert re.search(r"flex:\s*1\s+1\s+0", cuerpo), (
+        f"{nombre}: la columna de figuras no toma el resto del ancho: {cuerpo.strip()!r}")
+    assert "%" not in cuerpo, (
+        f"{nombre}: la columna de figuras declara un ancho propio ({cuerpo.strip()!r}); "
+        "eso obliga a mantener dos numeros que suman 100")
 
 
 @pytest.mark.parametrize("nombre", CUADERNOS)
@@ -143,15 +167,15 @@ def test_el_panel_va_en_la_columna_izquierda_y_la_figura_en_la_derecha(
         nombre: str, panel: str, figura: str):
     """Y en ese orden: en un flex el orden del marcado es el orden en pantalla."""
     fuente = _fuente(nombre)
-    assert '<div class="cuerpo-2col">' in fuente, (
-        f'{nombre} no envuelve su tablero en `<div class="cuerpo-2col">`')
+    # El `style` es opcional: lo lleva el tablero que declara un reparto propio.
+    apertura = re.search(r'<div class="cuerpo-2col"(?: style="[^"]*")?>', fuente)
+    assert apertura, f'{nombre} no envuelve su tablero en `<div class="cuerpo-2col">`'
     izquierda = f'<div class="col-controles">{{{panel}}}'
     derecha = f'<div class="col-figuras">{{{figura}}}'
     assert izquierda in fuente, f"{nombre}: la columna izquierda no lleva {panel}"
     assert derecha in fuente, f"{nombre}: la columna derecha no lleva {figura}"
     # En un flex el orden del marcado ES el orden en pantalla, asi que esto no es estilo.
-    assert (fuente.index('<div class="cuerpo-2col">')
-            < fuente.index(izquierda) < fuente.index(derecha)), (
+    assert apertura.start() < fuente.index(izquierda) < fuente.index(derecha), (
         f"{nombre}: las figuras van antes que los controles")
 
 
