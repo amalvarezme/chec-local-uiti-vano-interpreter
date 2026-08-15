@@ -19,8 +19,11 @@ References:
   - spec: sdd/notebook-10-mil-vano-ventana/spec
   - design: sdd/notebook-10-mil-vano-ventana/design (revision 2)
   - PR1: src/chec_impacto/data/bags.py
-  - PR2: src/chec_impacto/models/criticality_assignment.py,
-         scripts/extract_geometrias_014.py
+  - PR2: src/chec_impacto/models/criticality_assignment.py
+  - geometry re-sourcing: sdd/retire-base-apps-notebooks/design (D3, D3b) --
+    the KMeans geometry is a tracked artifact
+    (data/geometria_kmeans_014_v1.json, produced by
+    scripts/exportar_geometria.py), no longer extracted from a notebook
   - PR3: src/chec_impacto/models/mgcecdl_mil.py
   - PR4: src/chec_impacto/interpretability/mil_vano_ventana.py
 """
@@ -904,7 +907,7 @@ flowchart TD
     B --> C["construir_matriz_instancias -> X_inst, p features"]
     C --> D["construir_matriz_adyacencia_mgcecdl -> A, E aristas"]
     A --> E["construir_indice_bolsas (11 ventanas de 01.4) -> BagIndex"]
-    F["extract_geometrias_014.py -> geometrias_014.json"] --> G["cargar_geometria_014 + verificar_sha1_geometrias"]
+    F["data/geometria_kmeans_014_v1.json (versionado)"] --> G["cargar_geometria_014 + verificar_sha1_geometrias"]
     C --> H["X_inst_bolsas = X_inst[bag_index.instance_rows]"]
     E --> H
     H --> I["StratifiedGroupKFold(groups=CIRCUITO|FID_VANO)"]
@@ -1029,7 +1032,6 @@ try:
         construir_modalidades_mgcecdl,
         resolve_training_device,
     )
-    from scripts.extract_geometrias_014 import DEFAULT_OUTPUT_PATH, extraer_geometrias_014
 except ImportError as exc:
     raise SystemExit(
         "Los modulos de PR1-4 (data/bags.py, models/criticality_assignment.py, "
@@ -1187,29 +1189,24 @@ print("Modalidad climatica:  ", len(modality_indices["climaticos"]), "features")
 _MD_GEOMETRIA = '''\
 ### Geometria de 01.4
 
-Se reutiliza la geometria KMeans que 01.4 ya exporto, verificada por sha1. La
-clase de criticidad NO se reajusta aqui.
+Se reutiliza la geometria KMeans, congelada como artefacto versionado
+(`data/geometria_kmeans_014_v1.json`) y verificada por sha1. La clase de
+criticidad NO se reajusta aqui.
 '''
 
 _CODE_GEOMETRIA = '''\
-geometrias_path = DEFAULT_OUTPUT_PATH
-if not geometrias_path.exists():
-    geometrias_path = extraer_geometrias_014()
-    print("Geometrias extraidas en:", geometrias_path)
-else:
-    print("Cache de geometrias existente, reutilizada:", geometrias_path)
+geometria = cargar_geometria_014(RUTA_GEOMETRIA_KMEANS)
 
-geometria = cargar_geometria_014(geometrias_path)
-
-geometrias_sha1_real, geometrias_sha1_coincide = verificar_sha1_geometrias(geometrias_path)
+geometrias_sha1_real, geometrias_sha1_coincide = verificar_sha1_geometrias(RUTA_GEOMETRIA_KMEANS)
 print(f"sha1 esperado de 'geometrias': {GEOMETRIAS_SHA1_ESPERADO}")
 print(f"sha1 real de 'geometrias':     {geometrias_sha1_real}")
 assert geometrias_sha1_coincide, (
-    "La geometria KMeans extraida de 01.4 cambio de VALORES respecto al 2026-08-02 "
+    "La geometria KMeans versionada cambio de VALORES respecto al pin original "
     f"(esperado={GEOMETRIAS_SHA1_ESPERADO}, real={geometrias_sha1_real}). Esto "
-    "significa que 01.4 movio los centroides -- las clases de criticidad se "
-    "correrian en silencio si se continua sin revisar. Deten la corrida y reconcilia "
-    "contra sdd/notebook-10-mil-vano-ventana/estado-ramas antes de seguir."
+    "significa que data/geometria_kmeans_014_v1.json fue editado -- las clases de "
+    "criticidad se correrian en silencio si se continua sin revisar. Deten la "
+    "corrida y reconcilia contra sdd/retire-base-apps-notebooks/design antes de "
+    "seguir."
 )
 '''
 
@@ -1864,7 +1861,7 @@ visor no dependa de `data/derived/`, que `.gitignore` excluye.
 | Copiar la libreria dentro de celdas | grado 3 completo | duplica miles de lineas ya probadas; las pruebas dejan de cubrir lo que corre; el cuaderno se desincroniza del paquete a la primera correccion | **descartada** |
 | Empaquetar `src/` como wheel e instalarlo con `%pip install` | quita el `sys.path` manual | agrega un paso de construccion y un pin de version; el cuaderno deja de leer el arbol de trabajo, asi que editar `src/` ya no llega | **solo para Databricks**, donde `/subir-notebooks-databricks` ya hace el equivalente |
 | Versionar `data/derived/` | grado 1 en los dos modos | cientos de MB de `joblib` en git para archivos que cualquier corrida reproduce | **descartada** (`.gitignore` ya lo decidio) |
-| Leer la geometria KMeans del `.pt` en vez de `data/derived/geometrias_014.json` | grado 1 para el visor | ninguno: la geometria ya viaja dentro del artefacto | **adoptada** -- las celdas de visualizacion la leen del `.pt`; `extract_geometrias_014.py` queda solo en el camino de entrenamiento, que es donde la guarda de sha1 tiene sentido |
+| Leer la geometria KMeans del `.pt` en vez de un artefacto versionado | grado 1 para el visor | ninguno: la geometria ya viaja dentro del artefacto | **adoptada para visualizacion** -- las celdas de visualizacion la leen del `.pt`; el camino de entrenamiento lee `data/geometria_kmeans_014_v1.json` (versionado, productor `scripts/exportar_geometria.py`), sin extraer de ninguna notebook (`sdd/retire-base-apps-notebooks/design`, D3b) |
 | Congelar tambien una vista de la base dentro del `.pt` | quitaria el CSV de las celdas descriptivas | el artefacto dejaria de ser un modelo y pasaria a ser un cache de datos; habria que regenerarlo con cada base | **descartada**: la vista preliminar cuesta menos que el problema que crea |
 
 **Regla que queda escrita.** Ninguna celda del camino de visualizacion escribe
@@ -1903,9 +1900,8 @@ def _mb(ruta):
 RUTA_CSV_EVENTOS = DATA_DIR / "Indicadores_vano_v3.csv"
 RUTA_SELECCION = DATA_DIR / "Variables_seleccion.xlsx"
 RUTA_ARTEFACTO = DATA_DIR / "models" / "mil_vano_ventana_v1.pt"
-RUTA_GEOMETRIAS = DERIVED_DIR / "geometrias_014.json"
+RUTA_GEOMETRIA_KMEANS = DATA_DIR / "geometria_kmeans_014_v1.json"
 RUTA_VARIABLES_JSON = PROJECT_ROOT / "site" / "data" / "variables.json"
-RUTA_NB_014 = PROJECT_ROOT / "notebooks" / "base_apps" / "04_uiti_vano_trayectorias_vano.ipynb"
 RUTA_SIMULAR = DATA_DIR / "Variables_simular.xlsx"
 # El mismo nombre que declara la celda del visor. Se repite aqui en vez de importarse
 # de mas abajo para que el inventario corra ANTES de intentar cargar nada.
@@ -1920,10 +1916,8 @@ _INSUMOS = [
      "seleccion experta (SELECCION=1) y la definicion de cada columna"),
     (RUTA_CSV_EVENTOS, "git-lfs", "entrenamiento",
      "una fila por evento de falla: es la base de la que salen las instancias"),
-    (RUTA_NB_014, "git", "entrenamiento",
-     "fuente de la geometria KMeans; su celda 7 lleva el payload embebido"),
-    (RUTA_GEOMETRIAS, "derivado, NO versionado", "entrenamiento",
-     "centroides de 01.4 extraidos del cuaderno; se regenera solo si falta"),
+    (RUTA_GEOMETRIA_KMEANS, "git", "entrenamiento",
+     "geometria KMeans congelada y versionada (productor: scripts/exportar_geometria.py)"),
     (RUTA_OOF_DECLARADA, "derivado, NO versionado", "opcional",
      "predicciones fuera de pliegue de la corrida base"),
     (RUTA_SIMULAR, "git", "no lo usa este cuaderno",

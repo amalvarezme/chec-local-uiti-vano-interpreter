@@ -160,6 +160,44 @@ def test_generator_asserts_geometrias_sha1_pin(notebook):
 
 
 # ---------------------------------------------------------------------------
+# Geometry re-sourcing (sdd/retire-base-apps-notebooks, D3b): the bootstrap
+# cell must no longer depend on scripts/extract_geometrias_014.py, which is
+# deleted. This must hold on a clean checkout with no data/derived/ present.
+# ---------------------------------------------------------------------------
+
+
+def test_generator_bootstrap_does_not_import_extract_geometrias_014(notebook):
+    source = _all_code_source(notebook)
+    assert "from scripts.extract_geometrias_014 import" not in source
+    assert "extraer_geometrias_014" not in source
+
+
+def test_generator_bootstrap_cell_runs_with_no_data_derived_dir(tmp_path, monkeypatch):
+    """The unconditional bootstrap `try:` (design D3b) must not raise
+    ImportError/SystemExit on a clean checkout with no `data/derived/` --
+    that used to be exactly where `extract_geometrias_014.py` broke it."""
+    bootstrap_source = next(
+        cell.source for cell in notebook_para_bootstrap() if "Guarda OK" in cell.source
+    )
+    # The bootstrap cell resolves its own project root and imports real PR1-4
+    # modules; running it for real (not just grepping for the import line)
+    # proves the ImportError/SystemExit branch is never reached.
+    resultado = subprocess.run(
+        [sys.executable, "-c", bootstrap_source],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert resultado.returncode == 0, resultado.stderr
+    assert "Guarda OK" in resultado.stdout
+
+
+def notebook_para_bootstrap():
+    nb = build_notebook()
+    return [cell for cell in nb.cells if cell.cell_type == "code"]
+
+
+# ---------------------------------------------------------------------------
 # Three baselines + A1 bar + negative-result path + per-circuit breakdown
 # ---------------------------------------------------------------------------
 

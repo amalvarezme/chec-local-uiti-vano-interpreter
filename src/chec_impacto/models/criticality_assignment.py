@@ -11,10 +11,10 @@ Canonical space is HARDCODED as `(log_x=False, log_y=True, prep='minmax')`
 -> `GEOMETRIAS["2"]`. 01.4's minified JS is never traced to "discover" the
 default; the key is fixed by this module's own contract.
 
-01.4 pre-sorts its 4 groups ascending by each raw group's median
-`uiti_acumulado` before export (see `scripts/extract_geometrias_014.py`'s
-docstring), so exported centroid index k IS the final class id: 0=Bajo,
-1=Medio, 2=Medio-Alto, 3=Alto. No remapping happens here.
+01.4's own fit sorts its 4 groups ascending by each raw group's median
+`uiti_acumulado` before export (see `scripts/exportar_geometria.py`'s
+docstring, the geometry PRODUCER), so exported centroid index k IS the final
+class id: 0=Bajo, 1=Medio, 2=Medio-Alto, 3=Alto. No remapping happens here.
 
 `EPS_UITI` clamps `log10(u)` against `u <= 0`. It is applied uniformly by
 axis (only the axis flagged `logs=True` is ever clamped), which is why it
@@ -47,15 +47,17 @@ CLAVE_ESPACIO_CANONICO = "0"
 EPS_UITI = 1e-6
 GRUPOS = ("Bajo", "Medio", "Medio-Alto", "Alto")
 
-# Pins the KMeans geometry VALUES 01.4 committed, not merely that the
-# notebook stayed unwritten (`extract_geometrias_014.py`'s sha256 check
-# already guarantees that, but not this). Measured 2026-08-02 by running the
-# real `extraer_geometrias_014()` against 01.4's real, committed notebook and
-# hashing the resulting `geometrias` block with `_sha1_de_geometrias`'s
-# canonicalization (sorted keys, no whitespace) -- reproduced independently
-# against `tests/fixtures/notebook_01_4_fixture.ipynb` (which embeds that
-# same real payload) in `tests/test_geometrias_sha1.py`. If a future edit to
-# 01.4 moves the KMeans centroids, this constant will no longer match and
+# Pins the KMeans geometry VALUES 01.4 committed, not merely that a source
+# notebook stayed unwritten. Measured 2026-08-02 by running the (retired)
+# extraction against 01.4's real, committed notebook and hashing the
+# resulting `geometrias` block (sorted keys, no whitespace) -- reproduced
+# independently in `tests/test_criticality_assignment.py`. Retired
+# (`sdd/retire-base-apps-notebooks`, D3): the geometry is now a tracked
+# artifact (`data/geometria_kmeans_014_v1.json`, byte-identical to that
+# extraction), cross-checked against `data/models/mil_vano_ventana_v1.pt` in
+# `tests/test_geometria_kmeans_promovida.py`. This digest survives that
+# promotion UNCHANGED by construction. If a future edit to the artifact
+# moves the KMeans centroids, this constant will no longer match and
 # `verificar_sha1_geometrias` reports the mismatch instead of silently
 # shifting every downstream criticality class. See the residual risk this
 # closes: `sdd/notebook-10-mil-vano-ventana/estado-ramas`.
@@ -85,8 +87,10 @@ class Geometria:
 def cargar_geometria_014(
     path: str | Path, clave: str = CLAVE_ESPACIO_CANONICO
 ) -> Geometria:
-    """Load a `Geometria` from `scripts/extract_geometrias_014.py`'s output
-    JSON. `clave` defaults to the hardcoded canonical space `"2"`."""
+    """Load a `Geometria` from the tracked geometry artifact's JSON
+    (`data/geometria_kmeans_014_v1.json`, produced by
+    `scripts/exportar_geometria.py`). `clave` defaults to the hardcoded
+    canonical space `"2"`."""
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f"No existe el cache de geometrías: {path}")
@@ -111,19 +115,20 @@ def cargar_geometria_014(
 def verificar_sha1_geometrias(
     path: str | Path, *, esperado: str = GEOMETRIAS_SHA1_ESPERADO
 ) -> tuple[str, bool]:
-    """Read the `geometrias_sha1` field `scripts/extract_geometrias_014.py`
-    wrote into `path` and compare it against `esperado` (defaults to the
-    pinned `GEOMETRIAS_SHA1_ESPERADO`). Returns `(sha1_real, coincide)` --
-    never raises on a MISMATCH by itself, so the caller (typically the
-    notebook) decides how loudly to report it; only raises `KeyError` when
-    `path` predates this field (a legacy extraction that must be re-run).
+    """Read the `geometrias_sha1` field written into `path` (by
+    `scripts/exportar_geometria.py`, or committed directly in the tracked
+    artifact) and compare it against `esperado` (defaults to the pinned
+    `GEOMETRIAS_SHA1_ESPERADO`). Returns `(sha1_real, coincide)` -- never
+    raises on a MISMATCH by itself, so the caller (typically the notebook)
+    decides how loudly to report it; only raises `KeyError` when `path`
+    predates this field (a legacy payload that must be regenerated).
     """
     path = Path(path)
     payload = json.loads(path.read_text(encoding="utf-8"))
     if "geometrias_sha1" not in payload:
         raise KeyError(
             f"{path} no tiene el campo 'geometrias_sha1' -- fue escrito por una version "
-            "anterior de extract_geometrias_014.py. Vuelve a correr la extraccion."
+            "anterior. Vuelve a generarlo con scripts/exportar_geometria.py."
         )
     sha1_real = str(payload["geometrias_sha1"])
     return sha1_real, sha1_real == esperado

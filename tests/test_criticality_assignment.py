@@ -1,28 +1,31 @@
 """RED/GREEN tests for D6 (criticality assignment from 01.4's KMeans geometry).
 
-Covers:
-  - `scripts.extract_geometrias_014.extraer_geometrias_014` -- read-only
-    extraction of 01.4's cell-7 `display_data` payload.
-  - `chec_impacto.models.criticality_assignment` -- `Geometria`,
-    `cargar_geometria_014`, `asignar_clase`, `distribucion_suave`.
+Covers `chec_impacto.models.criticality_assignment`: `Geometria`,
+`cargar_geometria_014`, `verificar_sha1_geometrias`, `asignar_clase`,
+`distribucion_suave`.
 
 See:
   - spec: `sdd/notebook-10-mil-vano-ventana/spec` (domain
     `criticality-assignment-from-014`)
   - design: `sdd/notebook-10-mil-vano-ventana/design` (D6)
+  - geometry re-sourcing: `sdd/retire-base-apps-notebooks/spec` (domain
+    `criticidad-geometria`), `sdd/retire-base-apps-notebooks/design` (D3)
 
-`tests/fixtures/notebook_01_4_fixture.ipynb` is a small, committed notebook
-shaped like 01.4: its cell 7 embeds the REAL `espacios`/`grupos`/`geometrias`
-JSON read from the committed 01.4 notebook on 2026-08-02, wrapped in
-synthetic surrounding markup so the marker-based parser is exercised against
-realistic noise, not an isolated JSON blob. The expected numbers below for
-space `"2"` are copied from that same real extraction (log_x=False,
-log_y=True, prep='minmax' -- the hardcoded canonical space).
+Retired (`sdd/retire-base-apps-notebooks`): this file used to build its test
+fixtures by running `scripts.extract_geometrias_014.extraer_geometrias_014`
+against a committed notebook fixture. That script is deleted -- the geometry
+is now a tracked artifact (`data/geometria_kmeans_014_v1.json`), so these
+tests build small JSON fixtures directly instead. The numeric values below
+are the SAME real values the retired extraction used to produce (verified
+independently: `tests/test_geometria_kmeans_promovida.py` cross-checks the
+committed artifact against `data/models/mil_vano_ventana_v1.pt`), not
+fabricated.
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 
 import numpy as np
@@ -31,19 +34,19 @@ import pytest
 from chec_impacto.models.criticality_assignment import (
     CLAVE_ESPACIO_CANONICO,
     EPS_UITI,
+    GEOMETRIAS_SHA1_ESPERADO,
     Geometria,
     asignar_clase,
     cargar_geometria_014,
     distribucion_suave,
+    verificar_sha1_geometrias,
 )
-from scripts.extract_geometrias_014 import extraer_geometrias_014
 
-FIXTURE_NOTEBOOK = Path(__file__).parent / "fixtures" / "notebook_01_4_fixture.ipynb"
-
-# Real values for the canonical space (log_x=False, log_y=True, prep="minmax"), copied
-# from 01.4's committed cell-7 output, 2026-08-02 -- NOT fabricated. They are UNCHANGED
-# since: on 2026-08-09 the space stopped being a control and its key moved from "2" to
-# "0", but the fit -- same data, same seed, same space -- produced the same numbers.
+# Real values for the canonical space (log_x=False, log_y=True, prep="minmax"), taken
+# from the tracked artifact `data/geometria_kmeans_014_v1.json` -- NOT fabricated. They
+# are UNCHANGED since: on 2026-08-09 the space stopped being a control and its key moved
+# from "2" to "0", but the fit -- same data, same seed, same space -- produced the same
+# numbers.
 GEOMETRIA_CANONICA_ESPERADA = {
     "logs": (False, True),
     "offset": [1.0, -3.0],
@@ -67,8 +70,11 @@ _PUNTOS_EN_CENTROIDE = [
 ]
 
 
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+def _sha1_de_geometrias(geometrias: dict) -> str:
+    """Same canonicalization the retired `extract_geometrias_014.py` used:
+    sorted-key, no-whitespace JSON over the `geometrias` block only."""
+    canonical = json.dumps(geometrias, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha1(canonical.encode("utf-8")).hexdigest()
 
 
 def _geometria_prueba() -> Geometria:
@@ -80,13 +86,23 @@ def _geometria_prueba() -> Geometria:
     )
 
 
-# --- 2.1/2.2/2.3: extraction + loader -------------------------------------
+def _escribir_geometrias_json(destino: Path, geometrias: dict) -> Path:
+    payload = {
+        "grupos": ["Bajo", "Medio", "Medio-Alto", "Alto"],
+        "geometrias": geometrias,
+        "geometrias_sha1": _sha1_de_geometrias(geometrias),
+    }
+    destino.write_text(json.dumps(payload), encoding="utf-8")
+    return destino
 
 
-def test_cargar_geometria_014_desde_extraccion(tmp_path):
-    salida = tmp_path / "geometrias_014.json"
-    ruta_escrita = extraer_geometrias_014(FIXTURE_NOTEBOOK, salida)
-    assert ruta_escrita == salida
+# --- 2.1/2.2/2.3: loader ----------------------------------------------------
+
+
+def test_cargar_geometria_014_desde_json(tmp_path):
+    salida = _escribir_geometrias_json(
+        tmp_path / "geometrias_014.json", {CLAVE_ESPACIO_CANONICO: GEOMETRIA_CANONICA_ESPERADA}
+    )
 
     geometria = cargar_geometria_014(salida, clave=CLAVE_ESPACIO_CANONICO)
 
@@ -97,34 +113,48 @@ def test_cargar_geometria_014_desde_extraccion(tmp_path):
     assert geometria.centroides.shape == (4, 2)
 
 
-def test_extraccion_es_de_solo_lectura_sobre_el_notebook_fuente(tmp_path):
-    sha_antes = _sha256(FIXTURE_NOTEBOOK)
-    extraer_geometrias_014(FIXTURE_NOTEBOOK, tmp_path / "salida.json")
-    assert _sha256(FIXTURE_NOTEBOOK) == sha_antes
-
-
-def test_extraccion_conserva_la_geometria_canonica_y_los_grupos(tmp_path):
-    """01.4 used to export eight spaces because its panel let you pick one.
-
-    That control is gone: the space is fixed to (linear x, log10 y, minmax) and exactly one
-    geometry is exported. Pinning "the only key is the canonical one" is what keeps a future
-    re-enumeration from silently filing the canonical geometry somewhere else -- which is the
-    failure this whole sha1 apparatus exists to catch.
-    """
-    salida = tmp_path / "geometrias_014.json"
-    extraer_geometrias_014(FIXTURE_NOTEBOOK, salida)
-    import json
-
-    payload = json.loads(salida.read_text(encoding="utf-8"))
-    assert payload["grupos"] == ["Bajo", "Medio", "Medio-Alto", "Alto"]
-    assert set(payload["geometrias"].keys()) == {CLAVE_ESPACIO_CANONICO}
-
-
 def test_cargar_geometria_014_clave_ausente_lanza(tmp_path):
-    salida = tmp_path / "geometrias_014.json"
-    extraer_geometrias_014(FIXTURE_NOTEBOOK, salida)
+    salida = _escribir_geometrias_json(
+        tmp_path / "geometrias_014.json", {CLAVE_ESPACIO_CANONICO: GEOMETRIA_CANONICA_ESPERADA}
+    )
     with pytest.raises(KeyError):
         cargar_geometria_014(salida, clave="99")
+
+
+# --- verificar_sha1_geometrias: pin match / mismatch / legacy payload ------
+# (folded in from the retired `tests/test_geometrias_sha1.py`, which tested
+# this same function via extraction; the fixtures below reproduce the SAME
+# canonical geometry directly instead.)
+
+
+def test_verificar_sha1_geometrias_matches_pinned_constant_on_real_geometry(tmp_path):
+    """The fixture embeds the REAL canonical geometry, so verifying it
+    against the pinned expected constant must report a match."""
+    salida = _escribir_geometrias_json(
+        tmp_path / "geometrias_014.json", {CLAVE_ESPACIO_CANONICO: GEOMETRIA_CANONICA_ESPERADA}
+    )
+
+    sha1_real, coincide = verificar_sha1_geometrias(salida)
+    assert coincide is True
+    assert sha1_real == GEOMETRIAS_SHA1_ESPERADO
+
+
+def test_verificar_sha1_geometrias_reports_mismatch_against_wrong_expected(tmp_path):
+    salida = _escribir_geometrias_json(
+        tmp_path / "geometrias_014.json", {CLAVE_ESPACIO_CANONICO: GEOMETRIA_CANONICA_ESPERADA}
+    )
+
+    sha1_real, coincide = verificar_sha1_geometrias(salida, esperado="0" * 40)
+    assert coincide is False
+    assert sha1_real == GEOMETRIAS_SHA1_ESPERADO
+
+
+def test_verificar_sha1_geometrias_raises_on_legacy_payload_without_field(tmp_path):
+    salida = tmp_path / "geometrias_014_legacy.json"
+    salida.write_text(json.dumps({"grupos": [], "geometrias": {}}), encoding="utf-8")
+
+    with pytest.raises(KeyError):
+        verificar_sha1_geometrias(salida)
 
 
 # --- 2.4/2.5: asignar_clase -------------------------------------------------
