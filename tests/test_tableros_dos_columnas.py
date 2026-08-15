@@ -171,9 +171,14 @@ def test_el_panel_va_en_la_columna_izquierda_y_la_figura_en_la_derecha(
     apertura = re.search(r'<div class="cuerpo-2col"(?: style="[^"]*")?>', fuente)
     assert apertura, f'{nombre} no envuelve su tablero en `<div class="cuerpo-2col">`'
     izquierda = f'<div class="col-controles">{{{panel}}}'
-    derecha = f'<div class="col-figuras">{{{figura}}}'
+    # La columna de figuras puede llevar algo ANTES de la figura -- el clima le pone su
+    # barra con el boton de encuadre --, asi que se busca la apertura y la figura, no una
+    # cadena pegada.
+    derecha = re.search(
+        rf'<div class="col-figuras">(\{{\w+\}})*\{{{figura}\}}', fuente)
     assert izquierda in fuente, f"{nombre}: la columna izquierda no lleva {panel}"
-    assert derecha in fuente, f"{nombre}: la columna derecha no lleva {figura}"
+    assert derecha, f"{nombre}: la columna derecha no lleva {figura}"
+    derecha = derecha.group(0)
     # En un flex el orden del marcado ES el orden en pantalla, asi que esto no es estilo.
     assert apertura.start() < fuente.index(izquierda) < fuente.index(derecha), (
         f"{nombre}: las figuras van antes que los controles")

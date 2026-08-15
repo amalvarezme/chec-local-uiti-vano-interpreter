@@ -84,18 +84,86 @@ def test_el_mapa_ocupa_una_sola_fila_y_dos_columnas():
 def test_el_alto_de_la_figura_se_elige_contra_el_del_panel_de_control():
     """Las dos columnas del tablero tienen que acabar mas o menos a la misma altura.
 
-    El panel de control mide 1.248 px a 1.280 de ventana, 1.034 a 1.512 y 915 a 1.900 --
+    El panel de control mide 941 px a 1.280 de ventana, 821 a 1.512 y 738 a 1.900 --
     medido en el navegador; cambia de alto porque su texto se reparte en mas o menos
     renglones. No existe un numero que iguale a los tres, asi que se elige el que deja la
-    diferencia mas chica donde mas se usa: con 1.050 son 16 px a 1.512 y menos de 200 en
-    el peor caso. Con los 2.100 de antes le sobraban 660 px de banda muerta.
+    diferencia mas chica donde mas se usa.
+
+    Y se cuadra contra la COLUMNA de figuras, no contra la figura sola: encima de ella va
+    la barra del boton de encuadre, que son 44 px medidos. 777 + 44 = 821, o sea 0 px de
+    diferencia a 1.512. Con los 2.100 de la version original le sobraban 660.
     """
     fuente = _sin_comentarios("\n".join(_celdas()))
     alto = re.search(r"ALTO_FIGURA\s*=\s*(\d+)", fuente)
     assert alto, "el cuaderno ya no declara `ALTO_FIGURA`"
-    assert 900 <= int(alto.group(1)) <= 1200, (
+    assert 700 <= int(alto.group(1)) <= 900, (
         f"ALTO_FIGURA = {alto.group(1)}: la figura deja de estar a la altura del panel "
-        "de control, que mide entre 915 y 1.248 px segun el ancho de la ventana")
+        "de control, que mide entre 738 y 941 px segun el ancho de la ventana")
+
+
+# ------------------------------------------------- el boton de encuadre, sobre el mapa
+
+
+def test_el_boton_de_encuadre_va_encima_de_la_figura_y_no_en_el_panel():
+    """Como en el simulador: alli cada mapa lleva su boton justo arriba, donde empieza.
+
+    Estaba dentro del panel de control, a media pantalla del mapa al que afecta.
+    """
+    celda = next(f for f in _celdas() if "BARRA_ENCUADRE" in f)
+    assert 'id="cl-centrar"' in celda, "la barra no lleva el boton de encuadre"
+    ensamblaje = re.search(
+        r'<div class="col-figuras">\{BARRA_ENCUADRE\}\{FIGURA_HTML\}', celda)
+    assert ensamblaje, (
+        "la barra no va dentro de la columna de figuras y ANTES de la figura, que es lo "
+        "que la deja encima del mapa")
+    panel = re.search(r'<div class="panel-clima">.*?</div>\s*\'\'\'', celda, re.S)
+    if panel:
+        assert 'id="cl-centrar"' not in panel.group(0), (
+            "el boton sigue tambien dentro del panel de control")
+
+
+def test_el_boton_conserva_el_id_del_que_cuelga_su_manejador():
+    """`cl-centrar`. Cambiarlo deja el boton dibujado y sin efecto, sin dar ningun error:
+    `getElementById` devuelve null y el `if` que lo protege se salta el `on_click`."""
+    fuente = "\n".join(_celdas())
+    assert fuente.count('id="cl-centrar"') == 1, "el boton de encuadre ya no es unico"
+    assert "getElementById('cl-centrar')" in fuente, (
+        "nadie cuelga ya un manejador de `cl-centrar`")
+
+
+def test_la_barra_se_alinea_con_el_borde_izquierdo_del_mapa():
+    """Su relleno izquierdo es el margen de la figura, y por el MISMO nombre.
+
+    El margen izquierdo de plotly es donde empieza el mapa dentro del recuadro. Con el
+    numero escrito dos veces, mover uno dejaba el boton flotando fuera del mapa.
+    """
+    celda = next(f for f in _celdas() if ".barra-encuadre" in f)
+    # `[^}]*` no sirve: el relleno lleva `{MARGEN_IZQ_FIGURA}` y su llave corta la clase.
+    regla = re.search(r"\.barra-encuadre \{\{(.*?)\}\}", celda, re.S)
+    assert regla, "no se pudo leer la regla de la barra"
+    assert "{MARGEN_IZQ_FIGURA}px" in regla.group(1), (
+        f"la barra no toma su alineacion del margen de la figura: {regla.group(1)!r}")
+    figura = next(f for f in _celdas() if "make_subplots(" in f)
+    assert "l=MARGEN_IZQ_FIGURA" in figura, (
+        "la figura no usa el mismo nombre para su margen izquierdo")
+
+
+def test_el_boton_lleva_el_estilo_medido_del_simulador():
+    """El simulador usa un `widgets.Button` sin `button_style`, o sea el gris de Jupyter.
+
+    Este tablero es HTML estatico y no trae la hoja de estilos de los widgets, asi que
+    hay que escribirlo. Los valores estan MEDIDOS en el navegador sobre el simulador
+    servido, no imitados a ojo.
+    """
+    celda = next(f for f in _celdas() if ".barra-encuadre button" in f)
+    regla = re.search(r"\.barra-encuadre button \{\{(.*?)\}\}", celda, re.S)
+    assert regla, "no se pudo leer el estilo del boton"
+    estilo = regla.group(1)
+    for propiedad in ("background: rgb(238, 238, 238)", "color: rgba(0, 0, 0, 0.87)",
+                      "font-size: 13px", "width: 260px", "height: 28px",
+                      "border-radius: 2px"):
+        assert propiedad in estilo, (
+            f"el boton se separa del del simulador en `{propiedad}`: {estilo.strip()!r}")
 
 
 def test_la_fila_del_mapa_no_se_come_la_figura():
