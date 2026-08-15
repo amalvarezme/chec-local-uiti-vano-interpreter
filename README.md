@@ -79,6 +79,12 @@ ni los roles LLM. Solo viajan los datos que consumen los cuadernos `01`-`06` y e
 | `notebooks/` | `05`, más `base_apps/` con los cinco tableros `01`-`04` y `06` que alimentan las aplicaciones |
 | `aplicaciones/` | Las cinco aplicaciones locales de escritorio (macOS/Windows) construidas desde los cuadernos `01`, `02`, `03`, `04` y `06`, más `CriticidadCHEC`, el menú que las gobierna |
 
+> **Para abrir las aplicaciones de escritorio:** entra en
+> `aplicaciones/00_criticidad_chec/` y haz doble clic en **`Iniciar.app`** (macOS) o en
+> **`iniciar.bat`** (Windows; la primera vez, `instalar.bat`). Eso levanta el menú
+> CriticidadCHEC, desde donde se abren y se cierran los cinco tableros. El detalle está
+> en [`aplicaciones/README.md`](aplicaciones/README.md).
+
 ## Instalación
 
 ```bash
