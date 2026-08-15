@@ -114,11 +114,6 @@ def _catalogo(carpeta: Path) -> dict[str, _Pieza]:
 _BARRA_MENU = """
 <div id="barra-menu" style="position:fixed;top:10px;right:12px;z-index:10000;
      display:flex;gap:8px;font:13px/1 __FUENTE__;font-weight:600;">
-  <button type="button" id="bm-volver" title="Apaga este tablero y vuelve al menu"
-    style="font:inherit;padding:6px 12px;border:1px solid __BORDE_FUERTE__;
-           border-radius:4px;background:__FONDO__;color:__TEXTO__;cursor:pointer;
-           box-shadow:0 1px 3px rgba(0,0,0,.12);"
-    >&larr; Volver al menu</button>
   <button type="button" id="bm-cerrar" title="Apaga este tablero y cierra esta pestana"
     style="font:inherit;padding:6px 12px;border:1px solid __ACENTO__;
            border-radius:4px;background:__FONDO__;color:__ACENTO__;cursor:pointer;
@@ -132,7 +127,12 @@ _BARRA_MENU = """
   var suelto = document.getElementById('cerrar-tablero');
   if (suelto) { suelto.remove(); }
 
+  // La URL del menu ya no la navega nadie -- el boton de volver se quito --, pero
+  // sigue horneada: es lo que distingue a un tablero lanzado por CriticidadCHEC de
+  // uno abierto por su cuenta, y de eso depende que salga esta barra y no el boton
+  // suelto. Quitarla obligaria a inventar otra senial para lo mismo.
   var MENU = '__MENU__';
+  void MENU;
 
   function despedirse(texto) {
     document.body.innerHTML =
@@ -147,19 +147,6 @@ _BARRA_MENU = """
     // El servidor puede morir antes de contestar; eso es exito, no fallo.
     return fetch('__RUTA__', { method: 'POST' }).catch(function () {});
   }
-
-  document.getElementById('bm-volver').addEventListener('click', function () {
-    document.getElementById('barra-menu').remove();
-    apagarme().then(function () {
-      window.close();
-      setTimeout(function () {
-        if (window.closed) { return; }
-        // No se pudo cerrar la pestania: se vuelve al menu por navegacion, que deja al
-        // usuario donde pidio ir en vez de en una pagina de despedida.
-        window.location = MENU;
-      }, 400);
-    });
-  });
 
   // "Cerrar" apaga ESTE tablero y nada mas: el mismo `POST /apagar` de "Volver", que se
   // lleva su servidor, su puerto y lo que cuelgue de el. Las otras aplicaciones no son
@@ -494,8 +481,8 @@ def servir(carpeta: Path, *, app: Path | None = None, abrir: bool = True,
     de los dos lo reconocia CriticidadCHEC, que los busca donde dice el contrato.
 
     `menu` es la URL de CriticidadCHEC cuando fue el quien lanzo este tablero. Con
-    ella, el armazon sale con la barra de "Volver al menu" / "Cerrar" en vez del boton
-    de cerrar suelto. Los dos apagan SOLO este tablero: apagarlo todo es cosa del menu.
+    ella, el armazon sale con la barra de "Cerrar" del menu en vez del boton de cerrar
+    suelto. Apaga SOLO este tablero: apagarlo todo es cosa del menu.
 
     `app` es la CARPETA de la aplicacion -- `carpeta` es solo su panel --, y con ella
     este servidor deja su pid escrito y se rinde cuando su puerto ya lo tiene esa misma
