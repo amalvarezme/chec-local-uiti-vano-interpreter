@@ -71,7 +71,7 @@ INSUMOS_POR_CONTENIDO = (
     # aplicacion seguiria sirviendo la copia vieja y el cambio no llegaria nunca.
     # Mismo error que se corrigio con `Variables_simular.xlsx`, un nivel mas arriba.
     Path(__file__).resolve(),
-    _raiz.datos("derived", "geometrias_014.json"),
+    _raiz.datos("geometria_kmeans_014_v1.json"),
     _raiz.datos("models", "mil_vano_ventana_v1.pt"),
     _raiz.datos("Actividades_mantenimiento_costos_2026.xlsx"),
     _raiz.datos("Variables_simular.xlsx"),
@@ -201,8 +201,7 @@ def construir_paquete() -> dict:
         compress=3,
     )
 
-    for origen in (_raiz.datos("derived", "geometrias_014.json"),
-                   _raiz.datos("models", "mil_vano_ventana_v1.pt"),
+    for origen in (_raiz.datos("models", "mil_vano_ventana_v1.pt"),
                    _raiz.datos("Actividades_mantenimiento_costos_2026.xlsx"),
                    # Que variables se pueden simular, con que rango y con que valores
                    # posibles. La aplicacion lo lee en cada arranque -- no queda
@@ -210,6 +209,11 @@ def construir_paquete() -> dict:
                    # como archivo y `app.py` lo apunta por entorno.
                    _raiz.datos("Variables_simular.xlsx")):
         shutil.copy2(origen, PAQUETE / origen.name)
+    # El nombre DENTRO del paquete se conserva (`geometrias_014.json`): la copia
+    # parcheada del cuaderno (celda 3, mas abajo) todavia busca ese nombre -- migrarla
+    # es del simulador (fase 2 de `sdd/retire-base-apps-notebooks`), y hasta que eso
+    # pase el ORIGEN puede repuntarse sin tocar el DESTINO.
+    shutil.copy2(_raiz.datos("geometria_kmeans_014_v1.json"), PAQUETE / "geometrias_014.json")
 
     manifiesto = {
         "construido_en": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -250,14 +254,15 @@ def _verificar_insumos() -> None:
         _raiz.datos("GEO", "MVLINSEC.shp"): "la geometria de los vanos",
         _raiz.datos("models", "mil_vano_ventana_v1.pt"): "el modelo MIL (cuaderno 05)",
         _raiz.datos("derived", "bolsas_mil_full.joblib"): "el cache de bolsas (cuaderno 05)",
-        _raiz.datos("derived", "geometrias_014.json"): "la geometria KMeans (cuaderno 04)",
+        _raiz.datos("geometria_kmeans_014_v1.json"): "la geometria KMeans, versionada",
     }
     faltan = [f"  {ruta}  --  {que}" for ruta, que in requeridos.items() if not ruta.exists()]
     if faltan:
         raise SystemExit(
             "Faltan insumos para construir el simulador:\n" + "\n".join(faltan) +
-            "\n\nLos dos de data/derived/ y el modelo los produce "
-            "05_mil_vano_ventana.ipynb; geometrias_014.json sale de 04. "
+            "\n\nLos de data/derived/ y el modelo los produce "
+            "05_mil_vano_ventana.ipynb; geometria_kmeans_014_v1.json esta versionado "
+            "(lo produce scripts/exportar_geometria.py). "
             "El CSV puede ser un puntero de Git LFS sin descargar: `git lfs pull`."
         )
     csv = _raiz.datos("Indicadores_vano_v3.csv")

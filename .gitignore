@@ -12,6 +12,7 @@ data/*
 !data/Actividades_mantenimiento_costos_2026.xlsx
 !data/Indicadores_vano_v3.csv
 !data/COSTOS ITEMS CONTRATOS.xlsx
+!data/geometria_kmeans_014_v1.json
 !data/GEO/
 !data/GEO/**
 !data/models

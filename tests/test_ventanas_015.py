@@ -1,9 +1,10 @@
 """RED/GREEN tests for notebook 01.5's `ventanas_015` module.
 
-PR1 covers `cargar_clases_desde_014`, which composes
-`extraer_geometrias_014` -> `verificar_sha1_geometrias` ->
-`cargar_geometria_014` -> `asignar_clase` (design section F). No KMeans
-fitting happens here -- 01.4's own nearest-centroid geometry is replayed.
+PR1 covers `cargar_clases_criticidad`, which composes
+`verificar_sha1_geometrias` -> `cargar_geometria_014` -> `asignar_clase`
+(design section F) over the tracked geometry artifact
+(`data/geometria_kmeans_014_v1.json`). No KMeans fitting happens here --
+01.4's own nearest-centroid geometry is replayed.
 
 PR3 covers the window builder and the row-1-col-1 (historical map) support
 functions: `construir_ventanas` (01.4's own month + shifted-15 cut list,
@@ -20,17 +21,21 @@ See:
     (domains `vano-explainability-panel`)
   - design: `sdd/notebook-15-trayectorias-vano-explicabilidad-simulador/design`
     (sections A, E, F)
+  - retirement of the notebook-04-extraction fallback:
+    `sdd/retire-base-apps-notebooks/design` (D3)
 
-Uses the same committed fixture as `tests/test_criticality_assignment.py`
-and `tests/test_geometrias_sha1.py`
-(`tests/fixtures/notebook_01_4_fixture.ipynb`), which embeds the REAL
-`espacios`/`grupos`/`geometrias` JSON read from 01.4's committed cell-7
-output. `_notebook_tamperado` produces a mutated copy so a sha1 mismatch can
-be exercised without ever touching the real 01.4 notebook.
+Retired (`sdd/retire-base-apps-notebooks`): `cargar_clases_desde_014` used to
+lazily extract the geometry from a notebook via
+`scripts/extract_geometrias_014.py` on a cold cache. That fallback and its
+notebook fixture round-trips are gone; `_geometria_tamperada` below tampers a
+COPY of the tracked artifact directly, computing its own sha1 the same way
+the retired extraction script used to (canonical, sorted-key JSON), so a
+sha1 mismatch can still be exercised without touching the committed file.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -49,7 +54,7 @@ from chec_local_interpreter.ventanas_015 import (
     cajas_por_cambio_de_grupo,
     cajas_seleccion,
     cajas_seleccion_por_clase,
-    cargar_clases_desde_014,
+    cargar_clases_criticidad,
     capas_mapa_historico,
     construir_hist_class_cache,
     construir_mask_cache,
@@ -62,14 +67,13 @@ from chec_local_interpreter.ventanas_015 import (
     top_vanos_de_ventana,
     ventanas_sin_traslape,
 )
-from scripts.extract_geometrias_014 import _extraer_bloque_json
 
-FIXTURE_NOTEBOOK = Path(__file__).parent / "fixtures" / "notebook_01_4_fixture.ipynb"
+RUTA_GEOMETRIA_REAL = Path(__file__).resolve().parents[1] / "data" / "geometria_kmeans_014_v1.json"
 
 # Raw (n_obs, u) pairs that invert EXACTLY onto each of the four centroids of
-# space "2" -- copied from `tests/test_criticality_assignment.py`'s own
-# `_PUNTOS_EN_CENTROIDE`, verified independently there against the same
-# fixture, so the expected class for each is unambiguous.
+# the canonical space -- copied from `tests/test_criticality_assignment.py`'s
+# own `_PUNTOS_EN_CENTROIDE`, verified independently there against the same
+# geometry values, so the expected class for each is unambiguous.
 _PUNTOS_EN_CENTROIDE = [
     (1.577035, 1.0497337983054202, 0),
     (2.1565, 17.862954277049855, 1),
@@ -78,49 +82,41 @@ _PUNTOS_EN_CENTROIDE = [
 ]
 
 
-def _notebook_tamperado(tmp_path: Path) -> Path:
-    """Return a copy of the fixture notebook with cell 7's `geometrias`
-    block mutated (one centroid nudged), simulating 01.4 being edited so its
-    KMeans geometry VALUES changed between two extractions."""
-    notebook = json.loads(FIXTURE_NOTEBOOK.read_text(encoding="utf-8"))
-    cell = notebook["cells"][7]
-    output = next(
-        o
-        for o in cell["outputs"]
-        if o.get("output_type") == "display_data" and "text/html" in o.get("data", {})
-    )
-    html = "".join(output["data"]["text/html"])
+def _sha1_de_geometrias(geometrias: dict) -> str:
+    """Same canonicalization the retired `extract_geometrias_014.py` used:
+    sorted-key, no-whitespace JSON over the `geometrias` block only."""
+    canonical = json.dumps(geometrias, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha1(canonical.encode("utf-8")).hexdigest()
 
-    bloque = _extraer_bloque_json(html, "geometrias")
-    geometrias = json.loads(bloque)
-    # The canonical space is the only one 01.4 exports since 2026-08-09, and its key is
-    # read from the constant so this helper follows a renumbering instead of dying on it.
-    geometrias[CLAVE_ESPACIO_CANONICO]["centroides"][0][0] += 1.0
-    bloque_tamperado = json.dumps(geometrias)
 
-    output["data"]["text/html"] = [html.replace(bloque, bloque_tamperado, 1)]
+def _geometria_tamperada(tmp_path: Path) -> Path:
+    """A copy of the tracked geometry artifact with one centroid nudged and
+    its stored `geometrias_sha1` recomputed from the mutated block --
+    simulates the artifact being hand-edited without re-pinning, which is
+    exactly what `verificar_sha1_geometrias` exists to catch."""
+    payload = json.loads(RUTA_GEOMETRIA_REAL.read_text(encoding="utf-8"))
+    payload["geometrias"][CLAVE_ESPACIO_CANONICO]["centroides"][0][0] += 1.0
+    payload["geometrias_sha1"] = _sha1_de_geometrias(payload["geometrias"])
 
-    destino = tmp_path / "notebook_01_4_tamperado.ipynb"
-    destino.write_text(json.dumps(notebook), encoding="utf-8")
+    destino = tmp_path / "geometria_tamperada.json"
+    destino.write_text(json.dumps(payload), encoding="utf-8")
     return destino
 
 
 # --- 1.1: sha1 mismatch hard-raises ----------------------------------------
 
 
-def test_cargar_clases_desde_014_raises_on_sha1_mismatch_against_tampered_014(tmp_path):
-    notebook_tamperado = _notebook_tamperado(tmp_path)
-    geometrias_path = tmp_path / "geometrias_014.json"
+def test_cargar_clases_criticidad_raises_on_sha1_mismatch_against_tampered_geometria(tmp_path):
+    geometrias_tamperadas = _geometria_tamperada(tmp_path)
 
     with pytest.raises(RuntimeError) as exc_info:
-        cargar_clases_desde_014(
+        cargar_clases_criticidad(
             n_obs=np.array([1.577035]),
             u=np.array([1.0497337983054202]),
-            notebook_path=notebook_tamperado,
-            geometrias_path=geometrias_path,
+            geometrias_path=geometrias_tamperadas,
         )
 
-    payload = json.loads(geometrias_path.read_text(encoding="utf-8"))
+    payload = json.loads(geometrias_tamperadas.read_text(encoding="utf-8"))
     sha1_real = payload["geometrias_sha1"]
     assert sha1_real != GEOMETRIAS_SHA1_ESPERADO
 
@@ -129,20 +125,17 @@ def test_cargar_clases_desde_014_raises_on_sha1_mismatch_against_tampered_014(tm
     assert sha1_real in mensaje
 
 
-def test_cargar_clases_desde_014_raises_when_esperado_override_mismatches_real_014(tmp_path):
-    """Triangulates the mismatch path with an untampered 01.4 fixture and a
-    deliberately wrong `esperado` override, so the RuntimeError is proven to
-    come from a real digest comparison, not from special-casing the tampered
-    fixture."""
-    geometrias_path = tmp_path / "geometrias_014.json"
+def test_cargar_clases_criticidad_raises_when_esperado_override_mismatches_real_geometria():
+    """Triangulates the mismatch path with the real, untampered geometry
+    artifact and a deliberately wrong `esperado` override, so the
+    RuntimeError is proven to come from a real digest comparison, not from
+    special-casing a tampered fixture."""
     esperado_incorrecto = "0" * 40
 
     with pytest.raises(RuntimeError) as exc_info:
-        cargar_clases_desde_014(
+        cargar_clases_criticidad(
             n_obs=np.array([1.577035]),
             u=np.array([1.0497337983054202]),
-            notebook_path=FIXTURE_NOTEBOOK,
-            geometrias_path=geometrias_path,
             esperado=esperado_incorrecto,
         )
 
@@ -151,112 +144,50 @@ def test_cargar_clases_desde_014_raises_when_esperado_override_mismatches_real_0
     assert GEOMETRIAS_SHA1_ESPERADO in mensaje
 
 
-# --- 1.2: legacy cache missing geometrias_sha1 retries once, then raises ---
+# --- 1.2: missing artifact raises, cold-cache regression scenario ----------
 
 
-def test_cargar_clases_desde_014_retries_legacy_cache_once_then_raises(tmp_path, monkeypatch):
-    geometrias_path = tmp_path / "geometrias_014.json"
-    geometrias_path.write_text(json.dumps({"grupos": [], "geometrias": {}}), encoding="utf-8")
-
-    llamadas: list[Path] = []
-
-    def _extraccion_legacy(notebook_path, output_path, **kwargs):
-        salida = Path(output_path)
-        llamadas.append(salida)
-        salida.write_text(json.dumps({"grupos": [], "geometrias": {}}), encoding="utf-8")
-        return salida
-
-    monkeypatch.setattr(ventanas_015, "extraer_geometrias_014", _extraccion_legacy)
-
-    with pytest.raises(KeyError):
-        cargar_clases_desde_014(
-            n_obs=np.array([1.0]),
-            u=np.array([1.0]),
-            notebook_path=FIXTURE_NOTEBOOK,
-            geometrias_path=geometrias_path,
-        )
-
-    # Re-extraction happens exactly once (retry, not an infinite loop) --
-    # the initial `geometrias_path.exists()` branch is skipped since the
-    # legacy file was already there, so the only call is the retry.
-    assert len(llamadas) == 1
-
-
-# --- 1.3: 01.4 file missing / extractor RuntimeError propagate uncaught ----
-
-
-def test_cargar_clases_desde_014_raises_file_not_found_when_014_missing(tmp_path):
-    geometrias_path = tmp_path / "geometrias_014.json"
-    notebook_inexistente = tmp_path / "no_existe_01_4.ipynb"
+def test_cargar_clases_criticidad_raises_file_not_found_when_geometrias_path_missing(tmp_path):
+    geometrias_inexistente = tmp_path / "no_existe.json"
 
     with pytest.raises(FileNotFoundError):
-        cargar_clases_desde_014(
+        cargar_clases_criticidad(
             n_obs=np.array([1.0]),
             u=np.array([1.0]),
-            notebook_path=notebook_inexistente,
-            geometrias_path=geometrias_path,
+            geometrias_path=geometrias_inexistente,
         )
 
 
-def test_cargar_clases_desde_014_propagates_extractor_runtime_error_uncaught(tmp_path, monkeypatch):
-    geometrias_path = tmp_path / "geometrias_014.json"  # does not exist yet
+def test_cargar_clases_criticidad_cold_cache_never_touches_notebook_04_or_extraction_script():
+    """Spec's cold-cache regression scenario: deleting
+    `data/derived/geometrias_014.json` (the old, gitignored cache) must not
+    make this function fall back to reading notebook 04 or
+    `scripts/extract_geometrias_014.py` -- neither exists as an attribute on
+    this module anymore, and the default `geometrias_path` never points at
+    `data/derived/` in the first place."""
+    assert not hasattr(ventanas_015, "extraer_geometrias_014")
+    assert "derived" not in str(ventanas_015.RUTA_GEOMETRIA)
 
-    def _extraccion_que_falla(notebook_path, output_path, **kwargs):
-        raise RuntimeError("01.4 cambio durante la extraccion")
-
-    monkeypatch.setattr(ventanas_015, "extraer_geometrias_014", _extraccion_que_falla)
-
-    with pytest.raises(RuntimeError, match="cambio durante"):
-        cargar_clases_desde_014(
-            n_obs=np.array([1.0]),
-            u=np.array([1.0]),
-            notebook_path=FIXTURE_NOTEBOOK,
-            geometrias_path=geometrias_path,
-        )
-
-
-# --- 1.4/1.5: GREEN -- matches 01.4's own class assignment -----------------
-
-
-@pytest.mark.parametrize("n_obs, u, clase_esperada", _PUNTOS_EN_CENTROIDE)
-def test_cargar_clases_desde_014_matches_014_geometry_for_known_points(
-    tmp_path, n_obs, u, clase_esperada
-):
-    geometrias_path = tmp_path / "geometrias_014.json"
-
-    clase, n_clamped = cargar_clases_desde_014(
-        n_obs=np.array([n_obs]),
-        u=np.array([u]),
-        notebook_path=FIXTURE_NOTEBOOK,
-        geometrias_path=geometrias_path,
+    clase, n_clamped = cargar_clases_criticidad(
+        n_obs=np.array([1.577035]), u=np.array([1.0497337983054202]),
     )
-
-    assert clase[0] == clase_esperada
+    assert clase[0] == 0
     assert n_clamped == 0
 
 
-def test_cargar_clases_desde_014_reuses_existing_cache_without_re_extracting(tmp_path, monkeypatch):
-    """Once a matching cache exists on disk, no extraction call is needed at
-    all -- proves the guard is genuinely cache-aware, not re-extracting on
-    every call."""
-    geometrias_path = tmp_path / "geometrias_014.json"
-    from scripts.extract_geometrias_014 import extraer_geometrias_014 as extraccion_real
+# --- 1.3/1.4: GREEN -- matches 01.4's own class assignment -----------------
 
-    extraccion_real(FIXTURE_NOTEBOOK, geometrias_path)
 
-    def _extraccion_que_no_deberia_llamarse(notebook_path, output_path, **kwargs):
-        raise AssertionError("extraer_geometrias_014 no debia llamarse: el cache ya existe")
-
-    monkeypatch.setattr(ventanas_015, "extraer_geometrias_014", _extraccion_que_no_deberia_llamarse)
-
-    clase, n_clamped = cargar_clases_desde_014(
-        n_obs=np.array([1.577035]),
-        u=np.array([1.0497337983054202]),
-        notebook_path=FIXTURE_NOTEBOOK,
-        geometrias_path=geometrias_path,
+@pytest.mark.parametrize("n_obs, u, clase_esperada", _PUNTOS_EN_CENTROIDE)
+def test_cargar_clases_criticidad_matches_committed_geometry_for_known_points(
+    n_obs, u, clase_esperada
+):
+    clase, n_clamped = cargar_clases_criticidad(
+        n_obs=np.array([n_obs]),
+        u=np.array([u]),
     )
 
-    assert clase[0] == 0
+    assert clase[0] == clase_esperada
     assert n_clamped == 0
 
 

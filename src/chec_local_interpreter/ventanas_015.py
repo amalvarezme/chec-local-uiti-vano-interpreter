@@ -2,11 +2,19 @@
 01.5.
 
 PR1: 01.5's row-1 (historical) classes are NEVER re-fit here. This module
-composes the same read-only chain notebook 10 already uses --
-`extraer_geometrias_014` -> `verificar_sha1_geometrias` ->
-`cargar_geometria_014` -> `asignar_clase` -- so 01.4's own nearest-centroid
-KMeans assignment is replayed exactly, and a future edit to 01.4 that moves
-the centroids fails loudly instead of silently drifting downstream classes.
+composes `verificar_sha1_geometrias` -> `cargar_geometria_014` ->
+`asignar_clase` over the tracked geometry artifact
+(`data/geometria_kmeans_014_v1.json`) -- so 01.4's own nearest-centroid
+KMeans assignment is replayed exactly, and an edited artifact fails loudly
+instead of silently drifting downstream classes.
+
+Retired (`sdd/retire-base-apps-notebooks`): this module used to lazily
+extract the geometry from notebook 04's committed cell-7 output via
+`scripts/extract_geometrias_014.py` whenever the cache was cold. The
+geometry is now a committed artifact with the SAME bytes that extraction
+used to produce (cross-checked against `data/models/mil_vano_ventana_v1.pt`
+independently -- see `tests/test_geometria_kmeans_promovida.py`), so there is
+no more cache to go cold and no more notebook to read.
 
 PR3: `construir_ventanas` and `construir_tabla_vano_ventana` reproduce
 01.4's own window cut list and per-(vano, ventana) event aggregation
@@ -41,60 +49,53 @@ from chec_impacto.models.criticality_assignment import (
     cargar_geometria_014,
     verificar_sha1_geometrias,
 )
-from scripts.extract_geometrias_014 import (
-    DEFAULT_NOTEBOOK_PATH,
-    DEFAULT_OUTPUT_PATH,
-    extraer_geometrias_014,
-)
+
+# `parents[2]`: ventanas_015.py -> chec_local_interpreter -> src -> raiz del
+# repositorio. Mismo patron que `web_export.py:_REPO_ROOT`.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+RUTA_GEOMETRIA = _REPO_ROOT / "data" / "geometria_kmeans_014_v1.json"
 
 
-def cargar_clases_desde_014(
+def cargar_clases_criticidad(
     n_obs: np.ndarray,
     u: np.ndarray,
     *,
-    notebook_path: str | Path = DEFAULT_NOTEBOOK_PATH,
-    geometrias_path: str | Path = DEFAULT_OUTPUT_PATH,
+    geometrias_path: str | Path = RUTA_GEOMETRIA,
     clave: str = CLAVE_ESPACIO_CANONICO,
     esperado: str = GEOMETRIAS_SHA1_ESPERADO,
 ) -> tuple[np.ndarray, int]:
     """Assign historical criticality classes for `(n_obs, u)` pairs, reusing
-    01.4's own KMeans geometry.
+    01.4's own KMeans geometry from the tracked artifact.
 
-    Composes `extraer_geometrias_014` -> `verificar_sha1_geometrias` ->
-    `cargar_geometria_014` -> `asignar_clase` (design section F):
+    Composes `verificar_sha1_geometrias` -> `cargar_geometria_014` ->
+    `asignar_clase` (design section F):
 
-      - If `geometrias_path` does not exist yet, it is produced by a
-        read-only `extraer_geometrias_014` pass over `notebook_path`. A
-        missing `notebook_path` raises `FileNotFoundError`; a notebook that
-        mutates mid-read raises `RuntimeError`. Both propagate uncaught.
-      - A legacy cache missing the `geometrias_sha1` field raises `KeyError`
-        from `verificar_sha1_geometrias`; that is caught exactly once, the
-        stale file is deleted, extraction re-runs, and verification is
-        retried. A second failure propagates uncaught.
+      - A missing `geometrias_path` raises `FileNotFoundError` -- there is no
+        extraction fallback: the geometry is a committed artifact, produced
+        by `scripts/exportar_geometria.py`, not derived lazily from a
+        notebook.
       - A sha1 mismatch against `esperado` raises `RuntimeError` carrying
-        both digests -- 01.4 was edited and its centroids moved, so
+        both digests -- the artifact was edited and its centroids moved, so
         continuing silently would shift every downstream criticality class.
 
     Returns the same `(clase, n_clamped)` pair as `asignar_clase`.
     """
-    notebook_path = Path(notebook_path)
     geometrias_path = Path(geometrias_path)
-
     if not geometrias_path.exists():
-        extraer_geometrias_014(notebook_path, geometrias_path)
+        raise FileNotFoundError(
+            f"No existe el artefacto de geometria KMeans: {geometrias_path}. "
+            "Se produce con scripts/exportar_geometria.py; no hay fallback de "
+            "extraccion desde ninguna notebook."
+        )
 
-    try:
-        sha1_real, coincide = verificar_sha1_geometrias(geometrias_path, esperado=esperado)
-    except KeyError:
-        geometrias_path.unlink()
-        extraer_geometrias_014(notebook_path, geometrias_path)
-        sha1_real, coincide = verificar_sha1_geometrias(geometrias_path, esperado=esperado)
+    sha1_real, coincide = verificar_sha1_geometrias(geometrias_path, esperado=esperado)
 
     if not coincide:
         raise RuntimeError(
-            "La geometria KMeans extraida de 01.4 no coincide con la esperada "
-            f"(esperado={esperado}, real={sha1_real}). 01.4 fue modificado; "
-            "01.5 y el cuaderno 10 dependen de esa geometria."
+            "La geometria KMeans no coincide con la esperada "
+            f"(esperado={esperado}, real={sha1_real}). El artefacto "
+            f"{geometrias_path} fue modificado; 01.5 y el cuaderno 10 dependen de "
+            "esa geometria."
         )
 
     geometria = cargar_geometria_014(geometrias_path, clave)
@@ -408,12 +409,12 @@ def construir_hist_class_cache(
     mask_para: Callable[[str, int], np.ndarray],
     *,
     maxsize: int = 64,
-    cargar_clases: Callable[..., tuple[np.ndarray, int]] = cargar_clases_desde_014,
+    cargar_clases: Callable[..., tuple[np.ndarray, int]] = cargar_clases_criticidad,
     **cargar_clases_kwargs: Any,
 ) -> Callable[[str, int], dict[str, int]]:
     """Design section A's `hist_class_cache`: a session-scoped, `lru_cache`d
     `(circuito, ventana_i) -> {FID_VANO: clase}` map, built by running
-    `cargar_clases` (defaults to `cargar_clases_desde_014`, injectable for
+    `cargar_clases` (defaults to `cargar_clases_criticidad`, injectable for
     tests) over exactly the rows `mask_para` selects. A window with zero
     rows for the circuit returns `{}` -- every fid absent from the result
     is "sin dato" for that window, never a fabricated class.
@@ -929,7 +930,7 @@ def series_temporal_vanos(
 def clases_de_series(
     series: Sequence[Mapping[str, Any]],
     *,
-    cargar_clases: Callable[..., tuple[np.ndarray, int]] = cargar_clases_desde_014,
+    cargar_clases: Callable[..., tuple[np.ndarray, int]] = cargar_clases_criticidad,
     **cargar_clases_kwargs: Any,
 ) -> list[list[int | None]]:
     """The criticality class of every point of every series, aligned with its

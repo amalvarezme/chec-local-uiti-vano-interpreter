@@ -1,0 +1,1 @@
+{"grupos": ["Bajo", "Medio", "Medio-Alto", "Alto"], "geometrias": {"0": {"logs": [false, true], "offset": [1.0, -3.0], "scale": [45.0, 7.424386], "centroides": [[0.012823, 0.406913], [0.0257, 0.572701], [0.024373, 0.733929], [0.237456, 0.7776]]}}, "geometrias_sha1": "2e351bbdc7a391054440f8155235ec91b20f2b7b"}
