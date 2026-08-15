@@ -190,10 +190,26 @@ def _clase_selector():
             # uno por familia sin cambiar un pixel, y es estado que el visor ya no
             # tiene que montar. Se crean aqui y no en `poblar` para que la rebaja
             # sobreviva a los cambios de circuito.
+            # `width` MAS `max_width`, que es lo que hace una caja fluida sin cambiar
+            # como se ve donde hay sitio: mide `ancho_casilla`, salvo que el recuadro que
+            # la contiene sea mas estrecho, y ahi se recorta a el.
+            #
+            # Hace falta desde que el panel del 06 vive en una columna al 30%: las
+            # casillas del catalogo de actividades miden 580 px y la columna, 445.
+            # Medido: ahi no se sale nada -- la pagina no scrollea a lo ancho --, pero el
+            # recuadro se quedaba con una barra horizontal propia y el rotulo cortado a
+            # 580 px de los 1.035 que mide su contenido.
+            #
+            # Y `width` y no `flex: 0 1 <ancho>`, que fue el primer intento y esta
+            # REFUTADO por medicion: sin `width` inline mandaba el ancho por defecto de
+            # ipywidgets y las casillas se quedaban en 300 px aun con 493 px de recuadro,
+            # o sea que en pantalla grande el rotulo perdia sitio en vez de ganarlo.
             self._estilo_casilla = widgets.Checkbox.style.klass()
             self._layout_casilla = widgets.Layout(width=ancho_casilla,
+                                                  max_width="100%",
                                                   margin="0 8px 0 0")
             self._layout_casilla_columna = widgets.Layout(width=ancho_casilla,
+                                                          max_width="100%",
                                                           margin="0 0 0 0")
             self._estilo_boton = widgets.ButtonStyle()
             self._layout_boton = widgets.Layout(width="26px", min_width="26px",

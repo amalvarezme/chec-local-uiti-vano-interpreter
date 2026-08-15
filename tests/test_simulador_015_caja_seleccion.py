@@ -282,10 +282,12 @@ def test_the_framing_buttons_compute_the_view_at_click_time(fuente):
     assert "_seleccion_actual()" in cuerpo
     assert "bounds_de_fids(geo, marcados)" in cuerpo
     assert "or _vista_del_circuito(circuito)" in cuerpo
-    # Uno por mapa, y los dos dentro del layout de la app.
+    # Uno por mapa, y los dos en la misma columna que la figura: cada boton se posa
+    # sobre SU mapa, asi que separarlos de ella lo dejaria apuntando a otro sitio. Desde
+    # que el tablero va en dos columnas, esa columna es `COLUMNA_FIGURAS`.
     assert "_boton_encuadre('map', 'Centrar mapa base')" in fuente
     assert "_boton_encuadre('map2', 'Centrar mapa simulado')" in fuente
-    assert "widgets.VBox([ESTILO, PANEL, ENCUADRES, fig]" in fuente
+    assert "COLUMNA_FIGURAS = widgets.VBox(\n    [ENCUADRES, fig]" in fuente
 
 
 def test_the_diagnostic_starts_from_what_the_user_marked(fuente):
