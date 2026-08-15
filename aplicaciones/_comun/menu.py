@@ -303,6 +303,16 @@ class Control:
             _anotar_apagado(app, libre)
             if not libre:
                 supervivientes.append(self.estado_de(app))
+        # Y AL FINAL, las ventanas que no se cerraron solas. Una ventana se cierra sola
+        # cuando su comando termina bien; la de una aplicacion que no llego a arrancar
+        # -- porque otra cosa tenia su puerto -- se para en un `read` a que lean el
+        # error y se queda ahi para siempre. No tiene puerto, asi que nada de lo de
+        # arriba la ve, y se acumula una por intento.
+        #
+        # Va despues y no antes: cerrar la ventana de una aplicacion que todavia esta
+        # soltando su puerto -- y en el simulador, sus kernels -- es como se queda un
+        # proceso de 700 MB huerfano.
+        _terminal.cerrar_ventanas()
         self.apagando.set()
         return supervivientes
 
@@ -342,6 +352,42 @@ class Control:
 # Voila cuesta un kernel de ~700 MB por sondeo. Vive en `servidor.py` porque la hacen los
 # dos: el menu para vigilar, y cada aplicacion al arrancar para no duplicarse.
 _ocupado = _servidor.puerto_tomado
+
+# Las claves que trae cada tarjeta de `/estado`. Se usan para reconocer a otro menu en el
+# puerto, y se sacan de una sola tarjeta de verdad para que anadir o quitar un campo no
+# deje esta comprobacion mirando algo que ya no existe.
+_CAMPOS_DE_ESTADO = frozenset(("clave", "titulo", "puerto", "fase", "instalada"))
+
+
+def es_un_menu(puerto: int) -> bool:
+    """Si lo que hay en `puerto` es un CriticidadCHEC, sea de la copia que sea.
+
+    Existe porque la otra manera de contestarlo -- comparar la carpeta de la aplicacion
+    contra la linea de ordenes del proceso, que es lo que hace `servidor.pid_de` -- dice
+    que no cuando el menu vivo salio de OTRO clon del repositorio, o de un worktree. Y
+    entonces el doble clic concluia "el puerto lo tiene algo, y no es CriticidadCHEC":
+    salia con error, dejaba la ventana abierta sobre el mensaje, y no abria nada. Una
+    ventana atascada mas por cada intento.
+
+    La pregunta correcta no es de quien es el proceso, sino que contesta el puerto.
+
+    Se pide `/estado` y NUNCA `/`: este sondeo cae sobre un puerto que puede tener
+    cualquier cosa detras, y pedirle `/` a la cosa equivocada -- Voila -- cuesta un
+    kernel de ~700 MB. `/estado` solo lo sirve el menu, y lo que devuelve es barato.
+    """
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{puerto}/estado",
+                                    timeout=2) as respuesta:
+            dato = json.loads(respuesta.read().decode("utf-8"))
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError,
+            json.JSONDecodeError, UnicodeDecodeError):
+        return False
+    # Una lista de tarjetas con la forma de las nuestras. Que conteste 200 no basta:
+    # cualquier servidor puede tener un `/estado`, y adoptar el suyo como si fuera el
+    # menu es abrirle al usuario la pagina de otro en la URL que tiene en el marcador.
+    return (isinstance(dato, list) and bool(dato)
+            and all(isinstance(t, dict) and _CAMPOS_DE_ESTADO <= t.keys()
+                    for t in dato))
 
 
 def _lanzar(app: Aplicacion, comando: list[str], propias: dict[str, str]) -> None:
@@ -677,7 +723,8 @@ def servir_menu(*, abrir: bool = True, puerto: int | None = None,
 
     if app is not None:
         codigo = _servidor.revisar_puerto(app, puerto, abrir=abrir,
-                                          titulo="CriticidadCHEC")
+                                          titulo="CriticidadCHEC",
+                                          identificar=es_un_menu)
         if codigo is not None:
             return codigo
 

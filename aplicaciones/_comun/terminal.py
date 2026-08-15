@@ -64,7 +64,9 @@ el equivalente exacto del fallo de Ghostty, en otro sistema.
 from __future__ import annotations
 
 import os
+import re
 import shlex
+import signal
 import subprocess
 import sys
 import tempfile
@@ -78,6 +80,18 @@ ES_MAC = sys.platform == "darwin"
 # usuario sepa de que es cada ventana con cinco abiertas, y que una prueba pueda
 # reconocerlas sin depender del comando que llevan dentro.
 TITULO = "CriticidadCHEC"
+
+# Como se llaman los trampolines, y por tanto la unica huella por la que una ventana
+# nuestra se puede reconocer despues. Se declara aqui arriba porque la escriben
+# `_abrir_mac`/`_abrir_windows` y la lee `cerrar_ventanas`: tenerla en dos sitios era la
+# manera de que el barrido dejara de encontrar lo que el lanzador acababa de crear.
+#
+# Casa RUTAS, no nombres sueltos, y quien la usa comprueba ademas que la ruta este en la
+# carpeta temporal. Las dos cosas juntas, porque el nombre a secas es demasiado facil de
+# llevar encima sin ser una ventana: cualquier `grep` de estos temporales -- una prueba,
+# una sonda, el propio `ps | grep` de quien esta mirando -- lleva el patron ENTERO en su
+# linea de ordenes, y con un criterio flojo el barrido le mandaria un `SIGTERM`.
+_PATRON_TRAMPOLIN = re.compile(r"\S*/chec-[^/\s]+-ventana\.(?:sh|bat)")
 
 
 def _carpeta_temporal() -> Path:
@@ -360,3 +374,122 @@ def _abrir_windows(comando: list[str], *, etiqueta: str,
         return subprocess.run(partes, capture_output=True, timeout=20).returncode == 0
     except (OSError, subprocess.SubprocessError):
         return False
+
+
+# ------------------------------------------------ cerrar lo que no se cerro solo
+
+
+def _tabla_de_procesos() -> list[tuple[int, int, str]]:
+    """`(pid, ppid, linea de ordenes)` de todo lo que corre ahora. Vacia si no se puede.
+
+    La linea de ordenes es lo unico que distingue una ventana nuestra de cualquier otra,
+    y en Windows no la da ni `tasklist` ni `taskkill`: hay que pedirsela a PowerShell.
+    Cuesta cerca de medio segundo, y por eso esto NO se llama al vigilar -- que corre
+    cada 2,5 s -- sino solo al apagar, que pasa una vez.
+    """
+    if ES_WINDOWS:
+        orden = ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+                 "Get-CimInstance Win32_Process | "
+                 "ForEach-Object { \"$($_.ProcessId) $($_.ParentProcessId) "
+                 "$($_.CommandLine)\" }"]
+    else:
+        orden = ["/bin/ps", "-eo", "pid=,ppid=,command="]
+    try:
+        salida = subprocess.run(orden, capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    tabla = []
+    for linea in salida.stdout.splitlines():
+        partes = linea.strip().split(None, 2)
+        if len(partes) < 3:
+            continue
+        try:
+            tabla.append((int(partes[0]), int(partes[1]), partes[2]))
+        except ValueError:
+            continue
+    return tabla
+
+
+def _es_una_ventana_nuestra(orden: str) -> bool:
+    """Si esa linea de ordenes es la de un trampolin que escribio este modulo.
+
+    Dos condiciones, y hacen falta las dos: que la ruta se llame como un trampolin y que
+    ESTE en la carpeta temporal donde este modulo los escribe. Solo con el nombre, todo
+    lo que nombre un trampolin sin serlo -- una prueba, una sonda, un `ps | grep` de
+    quien esta mirando -- pasaria por ventana y se llevaria un `SIGTERM`. La carpeta es
+    lo que separa "corre esto" de "habla de esto".
+    """
+    temporal = str(_carpeta_temporal()).rstrip("/\\")
+    return any(str(Path(ruta).parent).rstrip("/\\") == temporal
+               for ruta in _PATRON_TRAMPOLIN.findall(orden))
+
+
+def _procesos_en_ventana(tabla: list[tuple[int, int, str]] | None = None) -> list[int]:
+    """Los pid de lo que corre dentro de una ventana que abrio este modulo.
+
+    El criterio es el trampolin, que solo escribe este modulo. Cualquier otro -- el
+    nombre del interprete, la terminal en la que esta, un `read` colgado -- acaba
+    senialando procesos de alguien por parecerse a los nuestros.
+    """
+    if tabla is None:
+        tabla = _tabla_de_procesos()
+    return [pid for pid, _, orden in tabla if _es_una_ventana_nuestra(orden)]
+
+
+def _ascendencia(pid: int, padres: dict[int, int] | None = None) -> list[int]:
+    """Los pid de los que cuelga `pid`, de su padre hacia arriba."""
+    if padres is None:
+        padres = {p: pp for p, pp, _ in _tabla_de_procesos()}
+    cadena, visto = [], {pid}
+    actual = padres.get(pid, 0)
+    while actual > 1 and actual not in visto:
+        cadena.append(actual)
+        visto.add(actual)
+        actual = padres.get(actual, 0)
+    return cadena
+
+
+def cerrar_ventanas() -> list[int]:
+    """Cierra las ventanas de terminal que abrio este modulo. Devuelve a quien alcanzo.
+
+    Una ventana se cierra sola cuando su comando **termina bien**: lo pide el
+    `shellExitAction` del perfil. Cuando termina mal no, y es a proposito -- el trampolin
+    se para en un `read` para que el error se pueda leer --, asi que basta con que otra
+    cosa tenga el puerto de un tablero (`SALIDA_PUERTO_AJENO`) para que quede una ventana
+    parada para siempre. Esa ventana no tiene puerto, de modo que el apagado por puertos
+    ni la ve, y se acumula una por intento.
+
+    Esto es lo unico del proyecto que las alcanza, y por eso se llama al FINAL de
+    `apagar_todo`: primero cada aplicacion sale por su puerta -- soltando su puerto y,
+    en el simulador, sus kernels -- y su ventana se va sola; lo que quede aqui es lo que
+    no tenia puerta.
+
+    Nunca se barre la ventana desde la que se esta llamando. Es una ventana como las
+    otras: la del menu. Cerrarla aqui mataria al menu a mitad de apagar lo demas, y
+    ademas sobra, porque se cierra sola en cuanto su propio comando termina.
+    """
+    tabla = _tabla_de_procesos()
+    padres = {pid: ppid for pid, ppid, _ in tabla}
+    yo = os.getpid()
+    propias = {yo, *_ascendencia(yo, padres)}
+
+    alcanzadas = []
+    for pid in _procesos_en_ventana(tabla):
+        if pid in propias:
+            continue
+        try:
+            if ES_WINDOWS:
+                # `taskkill /T` baja por los descendientes, que es donde vive el comando
+                # de la ventana. Nunca sube: por eso hay que alcanzar cada pid de la
+                # cadena, y por eso se recorren todos los que casan y no solo el primero.
+                subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                               capture_output=True, timeout=10)
+            else:
+                os.kill(pid, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError, OSError,
+                subprocess.SubprocessError):
+            # Ya no esta -- lo normal cuando se alcanza primero a su padre -- o no es
+            # nuestro. Ninguna de las dos es un fallo del apagado.
+            continue
+        alcanzadas.append(pid)
+    return alcanzadas

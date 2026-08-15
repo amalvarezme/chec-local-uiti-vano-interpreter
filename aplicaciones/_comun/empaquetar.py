@@ -288,7 +288,7 @@ def _ajustar_titulo(html: str, titulo: str) -> str:
 # en su propio proceso y su propio puerto.
 #
 # Despues de apagar se llama a `window.close()`, y en el caso normal SI cierra la
-# pestana. Medido: abriendo por `/usr/bin/open`, que es el camino de `iniciar.command`,
+# pestana. Medido: abriendo por `/usr/bin/open`, que es el camino de `abrir-en-terminal.command`,
 # la pestana se cierra sola. La regla real del navegador no es "solo se cierra lo que
 # abrio un script" sino que Chrome lo acepta mientras la pestana no tenga historial
 # propio -- y una recien abierta por el lanzador no lo tiene.

@@ -98,10 +98,13 @@ def asegurar(app: Path) -> Path:
     """Devuelve el interprete del entorno, o explica como crearlo."""
     py = python_del_venv(app)
     if not py.exists():
-        script = "instalar.bat" if ES_WINDOWS else "instalar.command"
+        # En macOS el doble clic es `Iniciar.app`, que ya instala solo si hace falta; el
+        # `.command` de al lado es para una terminal ya abierta y no se nombra aqui como
+        # "doble clic", que es justo la confusion que costo una sesion.
+        script = "instalar.bat (doble clic)" if ES_WINDOWS else "Iniciar.app (doble clic)"
         raise SystemExit(
             f"La aplicacion {app.name} todavia no tiene entorno.\n"
-            f"Ejecuta primero {app / script} (doble clic)."
+            f"Abre primero {app / script}."
         )
     return py
 

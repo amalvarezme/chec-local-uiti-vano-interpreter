@@ -30,20 +30,24 @@ vale igual para el menú y para las cinco aplicaciones:
 
 | Sistema | Instalar (una sola vez) | Abrir (cada vez) |
 |---|---|---|
-| **macOS** | doble clic en **`instalar.command`** | doble clic en **`Iniciar.app`** |
+| **macOS** | nada: `Iniciar.app` instala solo si hace falta | doble clic en **`Iniciar.app`** |
 | **Windows** | doble clic en **`instalar.bat`** | doble clic en **`iniciar.bat`** |
-| Linux | `./instalar.command` desde una terminal | `./iniciar.command` desde una terminal |
+| Linux | `./instalar-en-terminal.command` desde una terminal | `./abrir-en-terminal.command` desde una terminal |
 
-**En macOS lo que se abre es `Iniciar.app`, no `iniciar.command`.** Los dos hacen lo
-mismo cuando funcionan, y la diferencia es que uno funciona **siempre**: a un `.command`
-lo abre la aplicación que LaunchServices tenga atada a esa extensión, y eso lo fija cada
-máquina y se cambia sin querer desde el «Abrir con» del Finder. En una máquina con
-Ghostty puede tocarle Ghostty, que se declara *editor* de `.command` y entonces el doble
-clic **no ejecuta nada**. `Iniciar.app` no se puede desviar así: LaunchServices no lo
-abre con otra aplicación, lo **lanza**. Ver «La regla de Ghostty», más abajo.
+**En macOS el único doble clic es `Iniciar.app`.** Junto a él hay un
+`abrir-en-terminal.command` que hace lo mismo, y aun así no es el destino del doble clic:
+a un `.command` lo abre la aplicación que LaunchServices tenga atada a esa extensión, y
+eso lo fija cada máquina y se cambia sin querer desde el «Abrir con» del Finder. En una
+máquina con Ghostty le toca Ghostty, que se declara *editor* de `.command` y entonces el
+doble clic **no ejecuta nada**: abre el archivo en un editor. `Iniciar.app` no se puede
+desviar así — LaunchServices no lo abre con otra aplicación, lo **lanza**. Ver «La regla
+de Ghostty», más abajo.
 
-`iniciar.command` se conserva a propósito para lanzarlo **a mano** desde una terminal ya
-abierta, y es el camino de Linux.
+Ese archivo se llamaba `iniciar.command`, y el nombre era el fallo: llamándose `iniciar`
+y estando al lado de `Iniciar.app`, el doble clic caía ahí una y otra vez. Se renombró a
+`abrir-en-terminal.command` (y `instalar.command` a `instalar-en-terminal.command`)
+justo por eso. Sigue sirviendo para lanzarlo **a mano** desde una terminal ya abierta, y
+es el camino de Linux.
 
 **En Windows el doble clic va sobre los `.bat` y no hay nada equivalente que resolver:**
 un `.bat` lo ejecuta el intérprete de órdenes del sistema, no una aplicación asociada que
@@ -243,7 +247,7 @@ Cerrar son tres cosas, y las tres están medidas contra el servidor real:
 2. **El puerto queda libre.** Al salir se cierra el socket: `lsof` no devuelve nada y
    el puerto se vuelve a reservar en el acto.
 3. **La pestaña se cierra sola**, en el caso normal. Medido abriendo por el mismo
-   camino que usa `iniciar.command`. La regla del navegador no es «solo se cierra lo
+   camino que usa `abrir-en-terminal.command`. La regla del navegador no es «solo se cierra lo
    que abrió un script» sino que Chrome lo permite mientras la pestaña no tenga
    historial propio — y una recién abierta por el lanzador no lo tiene.
 

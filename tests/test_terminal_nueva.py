@@ -131,10 +131,11 @@ def test_ningun_lanzador_entrega_un_command_a_open(nombre):
 def test_el_doble_clic_de_cada_app_es_el_bundle(carpeta):
     """Cada aplicacion trae su `Iniciar.app`, que es el destino del doble clic.
 
-    El `iniciar.command` de al lado se conserva a proposito -- sirve desde una terminal
-    ya abierta --, y por eso el README de cada aplicacion dice cual de los dos hay que
-    tocar. Lo que no puede faltar nunca es el bundle: sin el, el unico camino de doble
-    clic vuelve a ser el `.command`.
+    El `abrir-en-terminal.command` de al lado se conserva a proposito -- sirve desde una
+    terminal ya abierta, y es el camino de Linux --, pero ya no se llama como el bundle:
+    con el nombre viejo (`iniciar.command`) el doble clic caia ahi. Lo que no puede
+    faltar nunca es el bundle: sin el, el unico camino de doble clic vuelve a ser el
+    `.command`.
     """
     bundle = carpeta / "Iniciar.app" / "Contents" / "MacOS" / "iniciar"
     assert bundle.exists(), f"{carpeta.name} se quedo sin lanzador de doble clic"
@@ -290,7 +291,7 @@ def test_el_readme_de_arriba_trae_la_tabla_de_los_tres_sistemas():
     tabla = texto[texto.index("## Cómo se usan"):][:1400]
     assert "| **macOS** |" in tabla and "`Iniciar.app`" in tabla
     assert "| **Windows** |" in tabla and "`iniciar.bat`" in tabla
-    assert "| Linux |" in tabla and "./iniciar.command" in tabla
+    assert "| Linux |" in tabla and "./abrir-en-terminal.command" in tabla
 
 
 # ------------------------------------------------------------- el camino de Windows
