@@ -3,6 +3,23 @@
 Cinco aplicaciones de escritorio que corren en macOS y en Windows, sin servidor y sin
 conexión, sobre los cuadernos de `notebooks/` — más un menú que las gobierna.
 
+## A qué le doy doble clic
+
+Entra en **`00_criticidad_chec/`** y haz doble clic:
+
+| Sistema | Archivo |
+|---|---|
+| **macOS** | **`Iniciar.app`** |
+| **Windows** | **`instalar.bat`** la primera vez, y después **`iniciar.bat`** siempre |
+
+Eso abre **CriticidadCHEC**, el menú desde el que se abren y se cierran los cinco
+tableros. No hace falta entrar en las otras carpetas: traen los mismos lanzadores por si
+quieres abrir una suelta, pero el camino normal es el menú.
+
+> **No le des doble clic a `abrir-en-terminal.command`.** Es para escribirlo a mano en
+> una terminal ya abierta, y es el camino de Linux. En macOS un doble clic ahí puede no
+> ejecutar nada — el porqué está en «La regla de Ghostty», al final.
+
 ## Empieza por aquí
 
 | carpeta | qué es |
@@ -23,10 +40,12 @@ abierta a mano en vez de duplicarla.
 | [`04_trayectorias_vanos/`](04_trayectorias_vanos/) | lo mismo un nivel más abajo: agrupamiento y evolución por vano | `04_uiti_vano_trayectorias_vano.ipynb` |
 | [`06_simulador/`](06_simulador/) | simulador de riesgo por vano: *qué pasaría si* sobre el modelo MIL | `06_uiti_vano_explicabilidad_simulador.ipynb` |
 
-## Cómo se usan — a qué le doy doble clic
+## Cómo se usan — y por qué el doble clic es ese y no otro
 
-Cada carpeta trae los mismos cuatro lanzadores. **Esta tabla es la respuesta corta**, y
-vale igual para el menú y para las cinco aplicaciones:
+Cada carpeta trae los mismos cinco lanzadores: `Iniciar.app`, `iniciar.bat`,
+`instalar.bat`, `abrir-en-terminal.command` e `instalar-en-terminal.command`. La tabla
+de arriba dice a cuál darle; esta dice qué hace cada camino, y vale igual para el menú y
+para las cinco aplicaciones:
 
 | Sistema | Instalar (una sola vez) | Abrir (cada vez) |
 |---|---|---|
