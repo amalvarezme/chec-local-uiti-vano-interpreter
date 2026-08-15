@@ -81,6 +81,41 @@ def test_el_mapa_ocupa_una_sola_fila_y_dos_columnas():
         f"el mapa no ocupa dos columnas: {mapa.group(0)}")
 
 
+def test_el_alto_de_la_figura_se_elige_contra_el_del_panel_de_control():
+    """Las dos columnas del tablero tienen que acabar mas o menos a la misma altura.
+
+    El panel de control mide 1.248 px a 1.280 de ventana, 1.034 a 1.512 y 915 a 1.900 --
+    medido en el navegador; cambia de alto porque su texto se reparte en mas o menos
+    renglones. No existe un numero que iguale a los tres, asi que se elige el que deja la
+    diferencia mas chica donde mas se usa: con 1.050 son 16 px a 1.512 y menos de 200 en
+    el peor caso. Con los 2.100 de antes le sobraban 660 px de banda muerta.
+    """
+    fuente = _sin_comentarios("\n".join(_celdas()))
+    alto = re.search(r"ALTO_FIGURA\s*=\s*(\d+)", fuente)
+    assert alto, "el cuaderno ya no declara `ALTO_FIGURA`"
+    assert 900 <= int(alto.group(1)) <= 1200, (
+        f"ALTO_FIGURA = {alto.group(1)}: la figura deja de estar a la altura del panel "
+        "de control, que mide entre 915 y 1.248 px segun el ancho de la ventana")
+
+
+def test_la_fila_del_mapa_no_se_come_la_figura():
+    """El reparto entre las dos filas sale de la FORMA del mapa.
+
+    Con dos tercios el recuadro del mapa quedaba alto y angosto y empujaba la fila de
+    violines hacia abajo. Con 0,63 queda casi cuadrado -- medido: 459 x 455 px a 1.512 --
+    y lo que deja de gastar lo gana la fila de abajo.
+    """
+    celda = _sin_comentarios(_celda_de_la_figura())
+    alturas = re.search(r"row_heights=\[([^\]]+)\]", celda)
+    assert alturas, "la figura no declara `row_heights`"
+    valores = [eval(v.strip()) for v in alturas.group(1).split(",")]  # noqa: S307
+    assert len(valores) == 2, f"se esperaban dos filas, hay {len(valores)}"
+    assert abs(sum(valores) - 1.0) < 1e-9, f"las dos filas no suman 1: {valores}"
+    assert 0.55 <= valores[0] <= 0.70, (
+        f"la fila del mapa se lleva {valores[0]:.0%} de la figura; fuera de esa banda o "
+        "el mapa queda como una tira o los violines se quedan sin alto")
+
+
 # ------------------------------------------- los violines, de a dos por panel
 
 
