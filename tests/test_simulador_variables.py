@@ -455,6 +455,38 @@ def test_a_bar_too_short_even_for_the_initials_stays_empty():
     assert rotulo_en_barra("PROMEDIO_KWH_TRF", 4.0) == ""
 
 
+def test_a_bar_thinner_than_the_text_line_gets_no_label():
+    """El rotulo va girado -90, asi que la barra lo limita por sus DOS lados.
+
+    La cascada solo miraba el LARGO, que es lo que decide si el texto cabe escrito.
+    Pero el grosor de la barra es lo que decide si el texto cabe SIN montarse sobre la
+    de al lado: el renglon de un texto de 8 px mide unos 11 de alto, y en el panel del
+    top -- ocho vanos por diez posiciones -- cada barra mide 3,6 px medidos a 1.280 px
+    de ventana. El resultado eran ochenta rotulos verticales unos encima de otros.
+
+    Es la misma regla que el docstring de la funcion ya prometia -- vacio antes que
+    montado sobre la vecina -- aplicada al lado que faltaba.
+    """
+    assert rotulo_en_barra("PROMEDIO_KWH_TRF", 200.0, grosor_px=3.6) == ""
+    assert rotulo_en_barra("PROMEDIO_KWH_TRF", 200.0, grosor_px=14.0) == "kWh trafo"
+
+
+def test_without_a_declared_thickness_nothing_changes():
+    """El grosor es opcional: quien no lo sepa sigue decidiendo solo por el largo.
+
+    Importa porque el ancho del panel no se conoce en Python -- la figura es responsive
+    y lo fija el contenedor --, asi que solo el sitio que puede estimarlo lo pasa.
+    """
+    assert rotulo_en_barra("PROMEDIO_KWH_TRF", 200.0) == "kWh trafo"
+
+
+def test_the_cascade_is_monotone_in_the_available_thickness():
+    """Mas grosor nunca puede dar menos rotulo, igual que con el largo."""
+    grosores = [rotulo_en_barra("PROMEDIO_KWH_TRF", 200.0, grosor_px=g)
+                for g in range(0, 30)]
+    assert [len(t) for t in grosores] == sorted(len(t) for t in grosores)
+
+
 def test_the_cascade_is_monotone_in_the_available_length():
     """Mas barra nunca puede dar menos rotulo. Es la propiedad que hace que mover
     el eje no baraje los rotulos de forma caprichosa."""
