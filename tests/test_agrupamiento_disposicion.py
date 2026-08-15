@@ -1,0 +1,157 @@
+"""El tablero 02 vuelve a apilarse, y su figura se reordena en dos columnas.
+
+Los otros tres visores ganaron con el reparto 30/70 -- sus paneles de control son largos y
+la figura les queda al lado --, pero el del 02 son DOS fechas y un boton: 212 px medidos
+contra 1.700 de figura. Ese 30% dejaba ~1.500 px muertos en la columna izquierda.
+
+Aqui el panel vuelve ARRIBA, a lo ancho, y la figura ocupa el ancho entero debajo. Con eso
+las piezas pequenias -- barras por grupo, violines de UITI y top 10 de circuitos -- caben
+en una columna propia a la izquierda, justo debajo del panel, y el ranking de circuitos
+pasa a la fila de abajo, a lo ancho, que es lo que sus 184 barras necesitan.
+
+## La rejilla
+
+    fila 1:  barras "Vanos por grupo"  |  densidad en x (sobre la dispersion)
+    fila 2:  violines "UITI acumulado" |  dispersion vano x ventana   | densidad en y
+    fila 3:  "Top 10 circuitos"        |  (la dispersion sigue aqui)
+    fila 4:  ranking de circuitos, a lo ancho de las cuatro columnas
+
+La fila que sobraba -- la sexta, que solo existia para que el ranking tuviera alto -- se
+va: el ranking se lo queda de la fila 4.
+"""
+
+from __future__ import annotations
+
+import ast
+import json
+import re
+from pathlib import Path
+
+RAIZ = Path(__file__).resolve().parents[1]
+CUADERNO = RAIZ / "notebooks" / "base_apps" / "02_uiti_vano_kmeans.ipynb"
+
+# Donde tiene que quedar cada panel. La dispersion y sus dos densidades marginales van
+# juntas a la derecha; las tres piezas pequenias, en la columna de la izquierda.
+DESTINOS = {
+    "barras": (1, 1),
+    "kde_x": (1, 2),
+    "violines": (2, 1),
+    "dispersion": (2, 2),
+    "kde_y": (2, 4),
+    "top10": (3, 1),
+    "ranking": (4, 1),
+}
+
+
+def _celdas() -> list[str]:
+    documento = json.loads(CUADERNO.read_text(encoding="utf-8"))
+    return ["".join(c["source"]) for c in documento["cells"]
+            if c["cell_type"] == "code"]
+
+
+def _celda_de_la_figura() -> str:
+    """La celda que arma la figura de VANOS, que es la que se exporta."""
+    return next(f for f in _celdas() if "fig_vano = make_subplots(" in f
+                or ("make_subplots(" in f and "fig_vano" in f))
+
+
+def _sin_comentarios(fuente: str) -> str:
+    return "\n".join(l for l in fuente.splitlines() if not l.lstrip().startswith("#"))
+
+
+def _rejilla(celda: str) -> tuple[int, int]:
+    filas = int(re.search(r"rows=(\d+)", celda).group(1))
+    columnas = int(re.search(r"cols=(\d+)", celda).group(1))
+    return filas, columnas
+
+
+# --------------------------------------------------------- el panel, arriba y a lo ancho
+
+
+def test_el_tablero_de_vanos_no_va_en_dos_columnas():
+    """El panel del 02 son dos fechas y un boton: 212 px contra 1.700 de figura.
+
+    Reservarle el 30% del ancho dejaba ~1.500 px muertos debajo. Apilado, ese espacio se
+    lo queda la figura, que es la que tiene algo que dibujar.
+    """
+    fuente = "\n".join(_celdas())
+    assert "cuerpo-2col" not in fuente, (
+        "el 02 sigue partido en dos columnas; su panel no da para una columna propia")
+    assert "PANEL_VANOS_SOLO = PANEL_CSS + PANEL_VANO_HTML" in fuente, (
+        "el tablero exportado ya no apila panel y figura")
+
+
+# ------------------------------------------------------------------- la rejilla nueva
+
+
+def test_la_figura_pierde_las_dos_filas_que_sobraban():
+    """De seis filas a cuatro.
+
+    Las dos ultimas eran UNA casilla partida en dos solo para darle alto al ranking. En la
+    fila de abajo, a lo ancho, ese alto ya no hay que fabricarlo con un `rowspan`.
+    """
+    celda = _sin_comentarios(_celda_de_la_figura())
+    filas, columnas = _rejilla(celda)
+    assert (filas, columnas) == (4, 4), f"la figura declara {filas}x{columnas}"
+
+
+def test_cada_panel_esta_en_su_casilla():
+    """El mapa completo, para que reordenar no dependa de leer nueve `add_trace`."""
+    celda = _sin_comentarios(_celda_de_la_figura())
+    # (traza que lo identifica, destino). El orden de las trazas NO cambia -- los indices
+    # de `IDX_VANO` cuelgan de el --, solo cambia la casilla de cada una.
+    esperado = {
+        "go.Contour(": DESTINOS["dispersion"],
+        "go.Scattergl(": DESTINOS["dispersion"],
+    }
+    for aguja, destino in esperado.items():
+        i = celda.index(aguja)
+        cierre = re.search(r"\),\s*row=(\d+),\s*col=(\d+)\)", celda[i:])
+        assert cierre, f"no se pudo leer la casilla de {aguja}"
+        assert (int(cierre.group(1)), int(cierre.group(2))) == destino, (
+            f"{aguja} no esta en {destino}")
+
+
+def test_el_ranking_va_solo_en_la_ultima_fila_y_a_lo_ancho():
+    """184 barras con sus nombres rotados: cualquier cosa mas angosta los vuelve ilegibles."""
+    celda = _sin_comentarios(_celda_de_la_figura())
+    ultima = re.search(r"\[\{'colspan': 4\}, None, None, None\],\s*\n\s*\]", celda)
+    assert ultima, (
+        "la ultima fila de `specs` no es una sola casilla a lo ancho de las 4 columnas")
+    filas = re.findall(r"\), row=4, col=1\)", celda)
+    assert filas, "ninguna traza va a la fila 4, que es la del ranking"
+
+
+def test_las_tres_piezas_pequenias_comparten_la_columna_izquierda():
+    """Barras, violines y top 10, una debajo de otra, y las tres en la columna 1.
+
+    Es lo que las pone debajo del panel de control, que es donde se pidieron.
+    """
+    celda = _sin_comentarios(_celda_de_la_figura())
+    for fila in (1, 2, 3):
+        assert re.search(rf"row={fila}, col=1\)", celda) or \
+               re.search(rf"row=fila, col=1\)", celda), (
+            f"la fila {fila} no coloca nada en la columna izquierda")
+
+
+def test_los_titulos_siguen_el_orden_de_lectura_de_la_rejilla():
+    """Plotly los reparte por filas sobre las casillas CON subplot, no por nombre.
+
+    Reordenar la rejilla sin reordenar esta tupla le pone a cada panel el titulo del
+    vecino, y no da ningun error.
+    """
+    celda = _sin_comentarios(_celda_de_la_figura())
+    titulos = re.search(r"subplot_titles=(\([^)]*\))", celda, re.S)
+    assert titulos, "la figura no declara `subplot_titles`"
+    # Se lee como tupla y no partiendo por comas: 'Top 10 circuitos, clase Alto' lleva una
+    # coma dentro y partirla ahi inventa un titulo que no existe.
+    textos = list(ast.literal_eval(titulos.group(1)))
+    assert len(textos) == 7, f"son 7 casillas con subplot, hay {len(textos)} titulos"
+    assert textos[0] == "Vanos por grupo", (
+        f"el primer titulo es el de la casilla (1,1), que ahora son las barras: {textos}")
+    assert textos[2] == "UITI acumulado", (
+        f"el tercero es el de (2,1), los violines: {textos}")
+    assert textos[5].startswith("Top 10"), (
+        f"el sexto titulo es el de (3,1), el top 10: {textos}")
+    assert textos[6].startswith("Grupos Circuitos"), (
+        f"el septimo titulo es el del ranking, en (4,1): {textos}")
