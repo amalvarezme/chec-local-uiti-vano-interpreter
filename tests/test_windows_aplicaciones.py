@@ -199,7 +199,7 @@ def test_el_pid_escrito_se_comprueba_tambien_en_windows():
 def test_los_guiones_de_shell_no_llevan_retorno_de_carro(app: Path):
     """El fallo que esto evita es mudo de verdad: un `#!/bin/sh\\r` da
     "bad interpreter: no such file or directory", que hace pensar que falta `sh`."""
-    for pieza in ("iniciar.command", "instalar.command",
+    for pieza in ("abrir-en-terminal.command", "instalar-en-terminal.command",
                   "Iniciar.app/Contents/MacOS/iniciar",
                   "Iniciar.app/Contents/Resources/ventana"):
         ruta = app / pieza

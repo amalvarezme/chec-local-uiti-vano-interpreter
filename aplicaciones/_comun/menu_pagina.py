@@ -75,6 +75,34 @@ button.peligro:hover:not(:disabled) { background: $PANEL; }
 _GUION = """
 var APPS = [];
 
+// Las pestanias que ha abierto ESTA pagina, por clave de aplicacion. Es lo unico que da
+// permiso para cerrarlas: un navegador solo deja que un script cierre lo que ese mismo
+// script abrio. El objeto que devuelve `window.open` era una variable local del
+// manejador del clic, o sea que el permiso se tiraba en cuanto acababa el clic, y
+// "Cerrar todo" apagaba los cinco servidores dejando cinco pestanias en pantalla sobre
+// tableros muertos. Apagar el proceso y dejar su ventana es medio apagado.
+var PESTANIAS = {};
+
+function recordarPestania(clave, pestania) {
+  if (pestania) { PESTANIAS[clave] = pestania; }
+}
+
+function cerrarPestania(clave) {
+  var pestania = PESTANIAS[clave];
+  delete PESTANIAS[clave];
+  if (!pestania) { return; }
+  // Protegido a proposito. `close()` sobre una pestania que ya se fue a otro dominio, o
+  // que el usuario duplico a mano, puede levantar; sin el `try` ese fallo cortaria el
+  // apagado a mitad y dejaria sin cerrar las que vienen detras.
+  try {
+    if (!pestania.closed) { pestania.close(); }
+  } catch (e) { /* el usuario la cerrara a mano; no es motivo para parar */ }
+}
+
+function cerrarPestanias() {
+  Object.keys(PESTANIAS).forEach(cerrarPestania);
+}
+
 function pintar(estado) {
   APPS = estado;
   var lista = document.getElementById('lista');
@@ -101,9 +129,14 @@ function pintar(estado) {
 
     if (app.fase === 'corriendo') {
       t.appendChild(boton('Ver', 'principal', function () {
-        window.open(app.url, 'app-' + app.clave);
+        recordarPestania(app.clave, window.open(app.url, 'app-' + app.clave));
       }));
-      t.appendChild(boton('Detener', '', function () { mandar('detener', app.clave); }));
+      t.appendChild(boton('Detener', '', function () {
+        // Detener apaga ESA aplicacion, y su pestania es parte de ella. Las otras cuatro
+        // no son asunto suyo: el unico apagado general es "Cerrar todo".
+        cerrarPestania(app.clave);
+        mandar('detener', app.clave);
+      }));
     } else if (app.fase === 'preparando') {
       var esperando = boton('Preparando...', '', null);
       esperando.disabled = true;
@@ -138,6 +171,7 @@ function abrir(app) {
       '<body style="font:16px/1.7 __FUENTE_JS__;padding:60px 40px;' +
       'background:__FONDO__;color:__TEXTO__">Cargando...');
   }
+  recordarPestania(app.clave, pestania);
   mandar('abrir', app.clave, function () { seguir(app.clave, pestania); });
 }
 
@@ -152,7 +186,7 @@ function seguir(clave, pestania) {
         if (pestania && !pestania.closed) { pestania.location = app.url; }
       } else if (app.fase === 'fallo') {
         clearInterval(reloj);
-        if (pestania && !pestania.closed) { pestania.close(); }
+        cerrarPestania(clave);
         alert('No se pudo abrir ' + app.titulo + ':\\n\\n' + app.detalle);
       }
     });
@@ -172,6 +206,12 @@ function refrescar() {
 function cerrarTodo() {
   if (!window.confirm('Se apagan TODAS las aplicaciones abiertas y este menu.')) { return; }
   document.getElementById('cerrar-todo').disabled = true;
+  // Las pestanias primero, y no al final. Es lo unico de todo el apagado que el usuario
+  // ve en el acto -- los puertos y las ventanas de terminal tardan sus segundos --, y
+  // dejarlas hasta el final significaria seguir mirando cinco tableros vivos mientras
+  // por detras se apagan. Cerrarlas aqui no adelanta nada del apagado de verdad: el
+  // `POST` de abajo va igual, y es el que se lleva los procesos.
+  cerrarPestanias();
   // Apagar cinco aplicaciones puede llevar unos segundos, y la respuesta no llega hasta
   // que se sabe como acabaron. Sin este aviso la pagina se queda igual que estaba y el
   // clic parece perdido.

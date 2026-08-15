@@ -45,9 +45,9 @@ PIEZAS = (
     "app.py",
     "requirements.txt",
     "README.md",
-    "iniciar.command",
+    "abrir-en-terminal.command",
     "iniciar.bat",
-    "instalar.command",
+    "instalar-en-terminal.command",
     "instalar.bat",
 )
 
@@ -115,13 +115,15 @@ def test_los_lanzadores_llaman_al_gestor_de_la_carpeta_de_al_lado(app: Path):
     que hace que `gestor` encuentre la aplicacion: la deduce del cwd. En macOS
     `Terminal.app` abre un `.command` en la carpeta del usuario, no en la del
     archivo, asi que sin el `cd` el gestor buscaria la aplicacion en `~`."""
-    for nombre, orden in (("iniciar", "iniciar"), ("instalar", "instalar")):
-        sh = (app / f"{nombre}.command").read_text(encoding="utf-8")
-        bat = (app / f"{nombre}.bat").read_text(encoding="utf-8")
-        assert 'cd "$(dirname "$0")"' in sh, f"{app.name}/{nombre}.command no se situa"
-        assert 'cd /d "%~dp0"' in bat, f"{app.name}/{nombre}.bat no se situa"
-        assert f"_comun/gestor.py {orden}" in sh, f"{app.name}/{nombre}.command"
-        assert f"_comun\\gestor.py {orden}" in bat, f"{app.name}/{nombre}.bat"
+    for sh_nombre, bat_nombre, orden in (
+            ("abrir-en-terminal.command", "iniciar.bat", "iniciar"),
+            ("instalar-en-terminal.command", "instalar.bat", "instalar")):
+        sh = (app / sh_nombre).read_text(encoding="utf-8")
+        bat = (app / bat_nombre).read_text(encoding="utf-8")
+        assert 'cd "$(dirname "$0")"' in sh, f"{app.name}/{sh_nombre} no se situa"
+        assert 'cd /d "%~dp0"' in bat, f"{app.name}/{bat_nombre} no se situa"
+        assert f"_comun/gestor.py {orden}" in sh, f"{app.name}/{sh_nombre}"
+        assert f"_comun\\gestor.py {orden}" in bat, f"{app.name}/{bat_nombre}"
 
 
 @pytest.mark.parametrize("app", VISORES, ids=_ids(VISORES))

@@ -6,9 +6,9 @@ Un `.command` es un archivo a merced de quien LaunchServices tenga atado a esa
 extension, y esa atadura no viaja con el repositorio: la fija cada maquina. Medido en
 una con Ghostty instalado:
 
-  - `open iniciar.command` con el manejador por defecto (Terminal.app): abre una ventana
+  - `open abrir-en-terminal.command` con el manejador por defecto (Terminal.app): abre una ventana
     nueva y ejecuta el script.
-  - `open -a Ghostty iniciar.command`: **no ejecuta nada**. Ghostty se declara manejador
+  - `open -a Ghostty abrir-en-terminal.command`: **no ejecuta nada**. Ghostty se declara manejador
     de `.command` en su `Info.plist` con `CFBundleTypeRole = Editor` -- editor, no shell
     --, asi que se lleva el foco a la sesion que ya estaba abierta y ahi se acaba todo.
 

@@ -368,7 +368,7 @@ _CERRAR_AVISO = widgets.HTML('')
 _CERRAR_SALIDA = widgets.Output()
 
 # `window.close()` no siempre esta permitido: Chrome lo acepta cuando la pestania no
-# tiene historial propio -- que es el caso de la que abre `iniciar.command`, MEDIDO --,
+# tiene historial propio -- que es el caso de la que abre `abrir-en-terminal.command`, MEDIDO --,
 # pero lo rechaza si el usuario navego dentro de ella, y Firefox lo rechaza por defecto.
 # Por eso hay respaldo: si a los 400 ms la pestania sigue viva, se queda con el aviso de
 # cerrado a pantalla completa en vez de con el tablero muerto, que es lo que se veria si

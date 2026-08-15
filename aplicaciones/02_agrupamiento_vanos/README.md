@@ -14,19 +14,22 @@ por grupo y la descarga de etiquetas en CSV.
 
 | macOS | Windows | qué hace |
 |---|---|---|
-| `instalar.command` (doble clic) | `instalar.bat` (doble clic) | una sola vez: crea el entorno e instala las dependencias |
+| nada: `Iniciar.app` lo hace solo | `instalar.bat` (doble clic) | una sola vez: crea el entorno e instala las dependencias |
 | **`Iniciar.app`** (doble clic) | **`iniciar.bat`** (doble clic) | construye si hace falta, sirve el tablero y abre el navegador |
 
 > **A qué le doy doble clic:** en **macOS**, a `Iniciar.app`; en **Windows**, a
-> `iniciar.bat`. Los dos hacen lo mismo que `iniciar.command`, y la diferencia es que
+> `iniciar.bat`. Hacen lo mismo que el `abrir-en-terminal.command` de al lado, y la
+> diferencia es que
 > funcionan **siempre**: a un `.command` lo abre la aplicación que LaunchServices tenga
 > atada a esa extensión, y eso lo fija cada máquina — con Ghostty instalado puede tocarle
 > Ghostty, que se declara *editor* de `.command`, y entonces el doble clic **no ejecuta
 > nada**. `Iniciar.app` no se puede desviar así: LaunchServices no lo abre con otra
 > aplicación, lo **lanza**, y abre siempre una ventana nueva de Terminal que se cierra
 > sola al cerrar el tablero. En Windows no hace falta nada de esto: un `.bat` lo ejecuta
-> el intérprete de órdenes del sistema. `iniciar.command` se conserva para lanzarlo a
-> mano desde una terminal, y es el camino de Linux.
+> el intérprete de órdenes del sistema. `abrir-en-terminal.command` se conserva para
+> lanzarlo a mano desde una terminal, y es el camino de Linux; se llamaba
+> `abrir-en-terminal.command` y se renombró porque, con ese nombre y al lado de `Iniciar.app`, el
+> doble clic caía ahí — y ahí no ejecuta nada.
 
 `Ctrl+C` lo detiene. Opciones de `iniciar`: `--no-abrir`, `--puerto N`,
 `--reconstruir`, `--verboso`.

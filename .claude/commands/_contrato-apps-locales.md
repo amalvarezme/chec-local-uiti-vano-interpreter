@@ -12,7 +12,8 @@ Every `/app-local-*` command opens one of the local dashboards built in
 exist to do the same from the session, with the preflight and the diagnosis that a
 double-click cannot give.
 
-`iniciar.command` is still there, but it is the *terminal* path (and Linux's), not the
+`abrir-en-terminal.command` is still there, but it is the *terminal* path (and
+Linux's), not the
 double-click one. Why is restriction **R5**.
 
 ## A. Fixed port per app — never pick a free one
@@ -150,8 +151,8 @@ Do not re-diagnose these.
   one pre-executed kernel waiting: the first page load answers in 4 ms and the next one
   takes ~6 s while a new kernel starts. That is expected, not a fault.
 - **R5 — a `.command` file is opened by whatever LaunchServices has bound to it, and
-  that binding is per machine.** Measured with Ghostty installed: `open iniciar.command`
-  goes to Terminal.app and runs; `open -a Ghostty iniciar.command` runs **nothing** —
+  that binding is per machine.** Measured with Ghostty installed: `open abrir-en-terminal.command`
+  goes to Terminal.app and runs; `open -a Ghostty abrir-en-terminal.command` runs **nothing** —
   Ghostty claims `.command` with `CFBundleTypeRole = Editor`, so it just pulls focus to
   the session already open. Nothing written *inside* the script can fix that, because
   the script never runs. That is why the double-click entry is `Iniciar.app`: a bundle

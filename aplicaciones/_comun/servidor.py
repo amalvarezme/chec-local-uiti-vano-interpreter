@@ -29,6 +29,7 @@ import socketserver
 import subprocess
 import sys
 import threading
+from collections.abc import Callable
 from pathlib import Path
 
 import paleta as _paleta
@@ -404,7 +405,8 @@ SALIDA_PUERTO_AJENO = 2
 
 
 def revisar_puerto(app: Path, puerto: int, *, abrir: bool,
-                   titulo: str | None = None) -> int | None:
+                   titulo: str | None = None,
+                   identificar: Callable[[int], bool] | None = None) -> int | None:
     """Que hacer cuando alguien pide levantar `app` en `puerto`.
 
     Devuelve `None` si el puerto esta libre y hay que seguir. Si no, devuelve el codigo
@@ -419,13 +421,21 @@ def revisar_puerto(app: Path, puerto: int, *, abrir: bool,
     asignara el sistema, y el segundo doble clic servia el MISMO tablero en una URL que
     nadie conocia -- medido, 01_clima en 8801 y una segunda copia en 53745 --, invisible
     para CriticidadCHEC, que busca las aplicaciones donde dice el contrato.
+
+    `identificar` es la SEGUNDA manera de reconocer lo que hay en el puerto, y hace
+    falta porque la primera -- `pid_de`, que compara la carpeta contra la linea de
+    ordenes del proceso -- dice que no cuando lo que esta corriendo salio de otro clon
+    del repositorio o de un worktree. Dos rutas distintas, la misma aplicacion. Sin esto
+    el doble clic sobre un menu ya abierto salia con error, no abria nada, y dejaba su
+    ventana atascada sobre el mensaje. Quien la pasa decide como se reconoce a los
+    suyos; aqui solo se sabe que si dice que si, el puerto no es de un extranio.
     """
     if not puerto_tomado(puerto):
         return None
 
     titulo = titulo or app.name
     url = f"http://127.0.0.1:{puerto}/"
-    if pid_de(app) is not None:
+    if pid_de(app) is not None or (identificar is not None and identificar(puerto)):
         # "ya se esta sirviendo" y no "ya esta abierta": el titulo lo pone quien
         # llama y tanto puede ser un nombre de carpeta como una frase, asi que la
         # concordancia de genero no se puede dar por buena.
