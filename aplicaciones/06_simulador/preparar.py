@@ -589,10 +589,13 @@ def preparar_copia() -> Path:
     def celda16(f: str) -> str:
         return _reemplazar(
             f,
-            "APP = widgets.VBox([ESTILO, PANEL, ENCUADRES, fig], "
+            # El tablero se arma en dos columnas (`CUERPO`), asi que la barra de cerrar
+            # va ENCIMA de las dos y no dentro de ninguna: es del tablero entero, y
+            # metida en la columna de controles se iria al 30% del ancho.
+            "APP = widgets.VBox([ESTILO, CUERPO], "
             "layout=widgets.Layout(width='100%'))",
             _BOTON_CERRAR
-            + "APP = widgets.VBox([_BARRA_CERRAR, ESTILO, PANEL, ENCUADRES, fig], "
+            + "APP = widgets.VBox([_BARRA_CERRAR, ESTILO, CUERPO], "
               "layout=widgets.Layout(width='100%'))",
             etiqueta="16: boton de cerrar",
         )
