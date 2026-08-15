@@ -397,6 +397,13 @@ HOLGURA_PX = 6.0
 # Estas medidas valen para 8 px. Cambiar el tamanio de fuente del panel obliga a
 # volver a medir; el cuaderno lo fija en `TAM_FUENTE_BARRA`.
 TAM_FUENTE_MEDIDO = 8
+# El alto del RENGLON de ese texto. El rotulo va girado -90, asi que este numero se
+# compara contra el GROSOR de la barra y no contra su largo: es lo que decide si el
+# texto se queda dentro o se monta sobre la barra vecina. Un renglon mide mas que el
+# tamanio de la fuente -- ascendentes y descendentes -- y se redondea hacia arriba, del
+# mismo lado que el resto de las constantes de aqui: escribir de menos no rompe nada
+# porque el nombre completo esta en el hover.
+ALTO_RENGLON_PX = 11.0
 
 
 def ancho_px(texto: str) -> float:
@@ -427,6 +434,7 @@ def rotulo_en_barra(
     largo_px: float,
     *,
     holgura_px: float = HOLGURA_PX,
+    grosor_px: float | None = None,
 ) -> str:
     """Que escribir dentro de una barra de `largo_px` de largo: el resumen, sus
     iniciales, o nada.
@@ -441,7 +449,18 @@ def rotulo_en_barra(
 
     Vacio antes que cortado: un texto que se sale de su barra se monta sobre la
     vecina y termina rotulando a la variable equivocada.
+
+    Y la barra lo limita por sus DOS lados. `largo_px` decide si el texto cabe
+    escrito; `grosor_px` -- el ancho de la barra, contra el que se apoya el
+    RENGLON del texto girado -- decide si cabe sin invadir a la de al lado. Con
+    ocho vanos por diez posiciones cada barra mide 3,6 px medidos a 1.280 px de
+    ventana, y ahi no cabe ningun rotulo: eran ochenta textos verticales unos
+    encima de otros. Es opcional porque el ancho del panel no se conoce en
+    Python -- la figura es responsive y lo fija el contenedor --, asi que solo
+    lo pasa quien puede estimarlo.
     """
+    if grosor_px is not None and grosor_px < ALTO_RENGLON_PX:
+        return ""
     for texto in (abreviatura(label), iniciales(label)):
         if texto and largo_px >= ancho_px(texto) + holgura_px:
             return texto
