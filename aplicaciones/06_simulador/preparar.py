@@ -387,23 +387,6 @@ setTimeout(function () {
 """
 
 
-import os as _os_cierre
-
-# La pone CriticidadCHEC en el entorno cuando es el quien lanza el simulador. Vacia
-# cuando alguien arranca la aplicacion por su cuenta, y entonces la barra es la de
-# siempre: no hay menu al que volver.
-_MENU_CRITICIDAD = _os_cierre.environ.get('MENU_CRITICIDAD', '')
-
-# Volver al menu: se cierra la pestania igual que arriba, pero si no se puede se NAVEGA
-# al menu en vez de dejar un aviso de despedida. Deja al usuario donde pidio ir.
-_JS_VOLVER = """
-window.close();
-setTimeout(function () {
-  if (window.closed) { return; }
-  window.location = "__MENU__";
-}, 400);
-""".replace('__MENU__', _MENU_CRITICIDAD)
-
 
 
 def _cerrar_aplicacion(_boton, _js=None):
@@ -440,30 +423,19 @@ def _cerrar_aplicacion(_boton, _js=None):
 
 _BOTONES_CIERRE = []
 
-if _MENU_CRITICIDAD:
-    # Lanzado desde el menu: las dos acciones que ofrece la barra de los otros cuatro
-    # tableros. Las dos apagan SOLO este simulador -- el mismo SIGTERM al pid que dejo
-    # escrito `app.py`, que se lleva Voila y sus kernels -- y se diferencian en donde
-    # dejan al usuario. Apagar las cinco aplicaciones es cosa del "Cerrar todo" del menu
-    # y de nadie mas: desde aqui se cerraba tambien lo que el usuario no estaba mirando.
-    _BOTON_VOLVER = widgets.Button(
-        description='Volver al menu',
-        tooltip='Apaga el simulador y vuelve a CriticidadCHEC',
-        layout=widgets.Layout(width='170px'))
-    _BOTON_VOLVER.on_click(lambda b: _cerrar_aplicacion(b, _JS_VOLVER))
-    _BOTON_CERRAR_APP = widgets.Button(
-        description='Cerrar', button_style='danger',
-        tooltip='Apaga el simulador y cierra esta pestania',
-        layout=widgets.Layout(width='130px'))
-    _BOTON_CERRAR_APP.on_click(_cerrar_aplicacion)
-    _BOTONES_CIERRE = [_BOTON_VOLVER, _BOTON_CERRAR_APP]
-else:
-    _BOTON_CERRAR_APP = widgets.Button(
-        description='Cerrar', button_style='danger',
-        tooltip='Cierra esta pestania y apaga el servidor de la aplicacion',
-        layout=widgets.Layout(width='130px'))
-    _BOTON_CERRAR_APP.on_click(_cerrar_aplicacion)
-    _BOTONES_CIERRE = [_BOTON_CERRAR_APP]
+# UN solo boton, venga de donde venga. Habia dos cuando lo lanzaba el menu -- "Volver al
+# menu" y "Cerrar" --, y hacian lo MISMO con los procesos: el mismo SIGTERM al pid que
+# dejo escrito `app.py`, que se lleva Voila y sus kernels. Solo se diferenciaban en donde
+# dejaban al usuario, y eso no daba para un segundo boton.
+#
+# Apagar las cinco aplicaciones sigue siendo cosa del "Cerrar todo" del menu y de nadie
+# mas: desde aqui se cerraba tambien lo que el usuario no estaba mirando.
+_BOTON_CERRAR_APP = widgets.Button(
+    description='Cerrar', button_style='danger',
+    tooltip='Apaga el simulador y cierra esta pestania',
+    layout=widgets.Layout(width='130px'))
+_BOTON_CERRAR_APP.on_click(_cerrar_aplicacion)
+_BOTONES_CIERRE = [_BOTON_CERRAR_APP]
 
 _BARRA_CERRAR = widgets.HBox(
     [*_BOTONES_CIERRE, _CERRAR_AVISO, _CERRAR_SALIDA],

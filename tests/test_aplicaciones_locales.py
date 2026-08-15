@@ -273,26 +273,28 @@ def test_la_barra_del_menu_quita_el_boton_de_cerrar_suelto():
 
     con_barra = servidor._con_barra_de_menu(html.encode("utf-8"),
                                             "http://127.0.0.1:8800/").decode("utf-8")
-    assert 'id="bm-volver"' in con_barra
+    # UN solo boton: "Volver al menu" hacia lo mismo que "Cerrar" con los procesos --
+    # el mismo `POST /apagar` a SU puerto -- y solo se diferenciaba en donde dejaba al
+    # usuario. Eso no daba para un segundo boton.
+    assert 'id="bm-volver"' not in con_barra
     assert 'id="bm-cerrar"' in con_barra
     # El boton suelto sigue en el documento, pero el guion de la barra lo retira al
     # cargar: quitarlo del HTML exigiria volver a parsear el armazon entero.
     assert "getElementById('cerrar-tablero')" in con_barra
     assert ".remove()" in con_barra
-    # La URL del menu tiene que viajar literal: es a donde navega "Volver al menu"
-    # cuando la pestania no se deja cerrar.
+    # La URL del menu sigue viajando literal aunque ya no la navegue nadie: es lo que
+    # distingue a un tablero lanzado por CriticidadCHEC de uno abierto por su cuenta, y
+    # de eso depende que salga esta barra y no el boton suelto.
     assert "var MENU = 'http://127.0.0.1:8800/';" in con_barra
 
 
-def test_los_dos_botones_de_la_barra_solo_apagan_su_propio_tablero():
+def test_el_boton_de_la_barra_solo_apaga_su_propio_tablero():
     """Ningun boton de un tablero puede apagar a los demas.
 
     La barra ofrecia "Cerrar todo", que mandaba un `sendBeacon` al `/apagar-todo` del
     menu: desde el tablero de clima se apagaban los otros cuatro y el menu. Ahora ese
-    boton es "Cerrar" y hace lo mismo que "Volver al menu" en cuanto a procesos --
-    `POST /apagar` a SU puerto, que se lleva su servidor y lo que cuelgue de el -- y
-    solo se diferencia en donde deja al usuario. El unico apagado general vive en la
-    pagina del menu.
+    boton es "Cerrar" y manda un `POST /apagar` a SU puerto, que se lleva su servidor y
+    lo que cuelgue de el. El unico apagado general vive en la pagina del menu.
     """
     servidor = _comun("servidor")
     con_barra = _sin_comentarios(servidor._con_barra_de_menu(
@@ -370,18 +372,17 @@ def test_el_simulador_sin_menu_trae_solo_su_boton_de_cerrar():
     assert botones == ["Cerrar"]
 
 
-def test_el_simulador_lanzado_desde_el_menu_cambia_su_boton_por_los_dos_del_menu():
-    """El simulador no lo sirve `servidor.py` sino Voila, asi que no recibe la barra
-    inyectada: sus botones son widgets y la decision se toma dentro del kernel, leyendo
-    la variable de entorno que le pasa el menu."""
-    espacio = _ejecutar_bloque_de_cierre("http://127.0.0.1:8800/")
-    botones = [b.kwargs.get("description") for b in espacio["_BOTONES_CIERRE"]]
-    assert botones == ["Volver al menu", "Cerrar"]
-    # Dos y no tres: con menu, el boton de cerrar suelto no se suma a la barra, se
-    # convierte en el segundo boton de la barra.
-    # La URL del menu tiene que quedar HORNEADA en el JavaScript: se resuelve al
-    # ejecutar el bloque, no cuando alguien pulsa.
-    assert "http://127.0.0.1:8800/" in espacio["_JS_VOLVER"]
+def test_el_simulador_lleva_un_solo_boton_venga_de_donde_venga():
+    """Lanzado desde el menu tenia dos, y hacian lo MISMO con los procesos.
+
+    El simulador no lo sirve `servidor.py` sino Voila, asi que no recibe la barra
+    inyectada: sus botones son widgets. Antes la decision se tomaba dentro del kernel
+    leyendo la variable de entorno del menu; ahora no hay nada que decidir.
+    """
+    for menu in ("http://127.0.0.1:8800/", ""):
+        espacio = _ejecutar_bloque_de_cierre(menu)
+        botones = [b.kwargs.get("description") for b in espacio["_BOTONES_CIERRE"]]
+        assert botones == ["Cerrar"], f"con menu={menu!r} salen {botones}"
 
 
 def test_el_simulador_no_puede_apagar_a_las_demas_aplicaciones():
