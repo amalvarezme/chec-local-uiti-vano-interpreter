@@ -424,6 +424,31 @@ def _es_una_ventana_nuestra(orden: str) -> bool:
                for ruta in _PATRON_TRAMPOLIN.findall(orden))
 
 
+def ventana_viva(etiqueta: str) -> bool:
+    """Si sigue trabajando la ventana que se abrio con esa `etiqueta`.
+
+    El trampolin se llama `chec-<etiqueta>-<marca>-ventana.sh` y vive en la tabla de
+    procesos mientras la ventana tiene algo que hacer, asi que preguntar por el es
+    preguntar si esa apertura sigue en pie.
+
+    Existe porque quien abre una ventana NO se queda con un proceso al que vigilar --
+    lo lanzo Terminal.app -- y sin esto la unica forma de enterarse de que una apertura
+    murio es agotar el plazo de espera entero.
+
+    Se compara la CARPETA del trampolin, igual que en `cerrar_ventanas`: un `ps | grep
+    chec-simulador-ventana.sh` lleva ese texto en su propia linea de comando y sin
+    mirar la ruta se contaria a si mismo.
+    """
+    marca = f"chec-{etiqueta}-"
+    for _pid, _ppid, orden in _tabla_de_procesos():
+        if not _es_una_ventana_nuestra(orden):
+            continue
+        if any(Path(ruta).name.startswith(marca)
+               for ruta in _PATRON_TRAMPOLIN.findall(orden)):
+            return True
+    return False
+
+
 def _procesos_en_ventana(tabla: list[tuple[int, int, str]] | None = None) -> list[int]:
     """Los pid de lo que corre dentro de una ventana que abrio este modulo.
 

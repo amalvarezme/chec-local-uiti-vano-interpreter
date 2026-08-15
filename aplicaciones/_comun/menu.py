@@ -264,7 +264,14 @@ class Control:
             # vuelve en cuanto Terminal recibe el perfil: pasarlo haria que `_esperar`
             # se rindiera en el acto -- ve un proceso muerto -- y toda apertura saldria
             # como "el servidor no respondio" con el tablero levantandose detras.
-            if _esperar(app.puerto, limite=600.0, proceso=app.proceso):
+            # 180 s y no 600: lo que hay que cubrir es construir el tablero mas el
+            # arranque -- 71 s medidos en el peor caso --, no el entorno, que se instala
+            # arriba y en otra llamada. Y para la aplicacion en ventana va ademas el
+            # vigilante, que corta en segundos cuando la apertura muere.
+            vigilante = (lambda: _terminal.ventana_viva(app.clave)) if app.en_ventana \
+                else None
+            if _esperar(app.puerto, limite=180.0, proceso=app.proceso,
+                        sigue_viva=vigilante):
                 app.fase, app.detalle = "corriendo", ""
             else:
                 self._fallo(app, "el servidor no respondio", None)
@@ -417,16 +424,45 @@ def _lanzar(app: Aplicacion, comando: list[str], propias: dict[str, str]) -> Non
                                    **_AISLAR_GRUPO)
 
 
-def _esperar(puerto: int, *, limite: float, proceso: subprocess.Popen | None = None) -> bool:
-    """Espera a que alguien tome el puerto. Se rinde antes si el proceso muere."""
+# Cuanto se le da a una ventana para APARECER en la tabla de procesos. Abrirla es
+# `open -a Terminal`, que vuelve en cuanto Terminal recibe el perfil: el trampolin tarda
+# un momento mas en existir. Rendirse antes de este plazo convertiria cada apertura
+# normal en un fallo.
+_GRACIA_DE_LA_VENTANA = 20.0
+
+
+def _esperar(puerto: int, *, limite: float, proceso: subprocess.Popen | None = None,
+             sigue_viva=None) -> bool:
+    """Espera a que alguien tome el puerto. Se rinde antes si la apertura ya murio.
+
+    Hay dos formas de saberlo, y una aplicacion usa una u otra pero nunca las dos:
+
+      * `proceso`, cuando el menu la lanzo el mismo en segundo plano.
+      * `sigue_viva`, cuando la lanzo en su PROPIA ventana de Terminal. Ahi el menu no
+        se queda con ningun proceso -- lo lanzo Terminal.app --, y sin esto el unico
+        final posible era agotar el plazo entero. Con el plazo en 600 s eso dejaba la
+        tarjeta diez minutos en "preparando", y `abrir()` devuelve en el acto mientras
+        esta en esa fase: el boton no respondia y no habia forma de reintentar.
+
+    A la ventana se le da una gracia para aparecer: no haberla visto todavia no es
+    haberla perdido.
+    """
     t0 = time.perf_counter()
-    while time.perf_counter() - t0 < limite:
+    vista = False
+    while True:
+        transcurrido = time.perf_counter() - t0
+        if transcurrido >= limite:
+            return False
         if proceso is not None and proceso.poll() is not None:
             return False
         if _ocupado(puerto):
             return True
+        if sigue_viva is not None:
+            if sigue_viva():
+                vista = True
+            elif vista or transcurrido > _GRACIA_DE_LA_VENTANA:
+                return False
         time.sleep(0.4)
-    return False
 
 
 def _apagar_aplicacion(app: Aplicacion) -> bool:

@@ -44,9 +44,11 @@ BASE = RAIZ / "notebooks" / "base_apps"
 # El cuaderno, la celda que ensambla el tablero exportado, y el nombre de la variable que
 # lleva el panel y la que lleva la figura. El 02 se llama distinto porque exporta SOLO su
 # tablero de vanos: el de circuitos es un paso intermedio que solo se lee en el cuaderno.
+# El 02 NO esta: su panel de control son dos fechas y un boton -- 212 px medidos contra
+# 1.700 de figura --, asi que reservarle el 30% del ancho dejaba unos 1.500 px muertos.
+# Ese tablero vuelve a apilar panel y figura, y lo fija `test_agrupamiento_disposicion.py`.
 TABLEROS = [
     ("01_uiti_vano_clima.ipynb", "PANEL_HTML", "FIGURA_HTML"),
-    ("02_uiti_vano_kmeans.ipynb", "PANEL_VANO_HTML", "FIGURA_VANO_SOLA"),
     ("03_uiti_vano_trayectorias_circuitos.ipynb", "PANEL_HTML", "FIGURA_HTML"),
     ("04_uiti_vano_trayectorias_vano.ipynb", "PANEL_HTML", "FIGURA_HTML"),
 ]
@@ -80,6 +82,10 @@ def _regla(css: str, selector: str) -> str:
 
 def test_las_cuatro_copias_del_css_son_identicas():
     """Byte a byte. Es lo unico que sustituye al modulo compartido que no pueden importar.
+
+    Son TRES desde que el 02 volvio a apilarse: un cuaderno que no usa el bloque tampoco
+    lo lleva, y arrastrar una copia muerta seria justo la clase de codigo que este
+    guardian existe para que nadie tenga que leer dos veces.
 
     Si alguna vez hace falta que un tablero se separe, el sitio de decirlo es esta prueba
     -- con el motivo escrito --, no una edicion silenciosa en un solo cuaderno.
