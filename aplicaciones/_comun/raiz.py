@@ -21,6 +21,12 @@ RAIZ_APPS = Path(__file__).resolve().parents[1]
 # Carpeta de los cuadernos del repositorio.
 CUADERNOS = RAIZ_REPO / "notebooks"
 
+# El paquete instalable del repositorio. Ninguna aplicacion lo tenia en su `sys.path`
+# hasta que las notebooks 01-04 importaban cero modulos del proyecto -- `construccion.py`
+# es quien lo agrega, una sola vez, para que cualquier codigo que las aplicaciones
+# importen desde aqui en adelante (`chec_local_interpreter`, `chec_impacto`) resuelva.
+RAIZ_SRC = RAIZ_REPO / "src"
+
 # De donde salen las cinco aplicaciones: los cuadernos 01, 02, 03, 04 y 06 son su UNICA
 # fuente. La carpeta se llamaba `old_version/` hasta el 2026-08-14, y ese nombre costo
 # caro -- invitaba a borrarla, cuando lo que hay dentro es justo lo que se construye. Se

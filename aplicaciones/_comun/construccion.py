@@ -30,6 +30,7 @@ y marca de tiempo, resuelta hacia el mismo lado.
 from __future__ import annotations
 
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -37,6 +38,14 @@ import cuaderno as _cuaderno
 import empaquetar as _empaquetar
 import huellas as _huellas
 import raiz as _raiz
+
+# Unico punto de insercion para las cuatro aplicaciones: cada `app.py` ya inserta
+# `_comun` y su propia carpeta ANTES de `import construccion`, asi que agregarlo aqui
+# -- y no en cada `app.py` -- cubre a las cuatro con una sola linea. Sin esto ninguna
+# aplicacion podia importar `chec_local_interpreter` ni `chec_impacto`: las notebooks
+# 01-04 no importaban ningun modulo del proyecto, asi que el hueco nunca se notaba.
+if str(_raiz.RAIZ_SRC) not in sys.path:
+    sys.path.insert(0, str(_raiz.RAIZ_SRC))
 
 # Lo que le da forma al tablero sin ser un dato: el cuaderno y el codigo que lo ejecuta
 # y lo empaqueta. Va por contenido -- son unos cientos de KB -- y hace falta: un cambio
