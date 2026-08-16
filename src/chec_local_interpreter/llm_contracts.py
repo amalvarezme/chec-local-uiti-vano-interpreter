@@ -66,18 +66,3 @@ def render_prompt(
         skill_bundle=skill_bundle,
     )
     return f"{system.strip()}\n\n---\n\n{user.strip()}\n"
-
-
-
-def save_prompt_artifact(prompt: str, path: str | Path) -> Path:
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(prompt, encoding="utf-8")
-    return target
-
-
-def save_schema_artifact(schema: dict, path: str | Path) -> Path:
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(schema, ensure_ascii=False, indent=2), encoding="utf-8")
-    return target

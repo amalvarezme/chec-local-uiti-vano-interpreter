@@ -371,22 +371,3 @@ def _compute_circuit_characterization(
             })
             
     return results
-
-
-
-def critical_points_frame(critical_points: list[dict[str, Any]]) -> pd.DataFrame:
-    rows: list[dict[str, Any]] = []
-    for point in critical_points:
-        rows.append(
-            {
-                "critical_point_id": point.get("critical_point_id"),
-                "fecha_dia": point.get("fecha_dia"),
-                "rank": point.get("rank"),
-                "score": point.get("score"),
-                "types": ";".join(point.get("types") or []),
-                "selection_reason": point.get("selection_reason"),
-                "UITI_VANO": (point.get("metrics") or {}).get("UITI_VANO"),
-                "events": (point.get("daily_aggregates") or {}).get("events"),
-            }
-        )
-    return pd.DataFrame(rows)

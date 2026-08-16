@@ -128,22 +128,6 @@ def parse_fecha(frame: pd.DataFrame) -> pd.Series:
     return pd.to_datetime(frame[column], errors="coerce")
 
 
-def numeric_series(frame: pd.DataFrame, candidates: Iterable[str], default: float = 0.0) -> pd.Series:
-    for candidate in candidates:
-        column = resolve_column(frame, candidate)
-        if column is not None:
-            return pd.to_numeric(frame[column], errors="coerce").fillna(default)
-    return pd.Series([default] * len(frame), index=frame.index, dtype="float64")
-
-
-def text_series(frame: pd.DataFrame, candidates: Iterable[str], default: str = "") -> pd.Series:
-    for candidate in candidates:
-        column = resolve_column(frame, candidate)
-        if column is not None:
-            return frame[column].fillna(default).astype(str)
-    return pd.Series([default] * len(frame), index=frame.index, dtype="object")
-
-
 def filter_events(
     frame: pd.DataFrame,
     *,
@@ -190,13 +174,3 @@ def available_circuits(frame: pd.DataFrame) -> list[str]:
     if column is None:
         return []
     return sorted(frame[column].dropna().astype(str).unique().tolist())
-
-
-def dataset_summary(frame: pd.DataFrame) -> dict[str, object]:
-    fecha = parse_fecha(frame)
-    return {
-        "shape": [int(frame.shape[0]), int(frame.shape[1])],
-        "date_min": None if fecha.dropna().empty else fecha.min().date().isoformat(),
-        "date_max": None if fecha.dropna().empty else fecha.max().date().isoformat(),
-        "available_circuits_count": len(available_circuits(frame)),
-    }

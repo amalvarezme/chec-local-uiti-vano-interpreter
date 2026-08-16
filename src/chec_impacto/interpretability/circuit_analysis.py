@@ -239,57 +239,6 @@ def agrupar_por_vano(df, extra_group_cols=None, top_col="_TOP_VARS", top_k=20):
     return metricas.merge(rel, on=gcols, how="left")
 
 
-def construir_modos_chec(features, variables_seleccion_path):
-    """Build the six CHEC analysis modes used by the focused circuit notebook."""
-    sel_df = pd.read_excel(variables_seleccion_path)
-    vars_sel = set(
-        sel_df.loc[
-            pd.to_numeric(sel_df["SELECCIÓN"], errors="coerce").fillna(0).eq(1),
-            "COLUMNA",
-        ].astype(str).str.strip()
-    )
-    features = list(features)
-    features_set = set(features)
-    prefijos_clim = {"prep", "clouds", "wind_spd", "wind_gust_spd", "temp"}
-
-    def expandir(*vs):
-        out = []
-        for v in vs:
-            if v not in vars_sel or v == "UITI_VANO":
-                continue
-            if v in prefijos_clim:
-                out.extend(f for f in features if f.startswith(f"{v}_"))
-            elif v in features_set:
-                out.append(v)
-        return list(dict.fromkeys(out))
-
-    modos = {
-        "Evento, impacto\ne indicadores": expandir(
-            "FECHA", "DURACION", "TOT_USUS", "CNT_TRF", "COD_CAUSA", "UITI"
-        ),
-        "Infraestructura de\nprotección y maniobra": expandir(
-            "FID_SW", "COD_EQ_PROTEGE", "TIPO", "CNT_VN", "CNT_VN_SW", "T_USUS_EQ_PROT"
-        ),
-        "Topología y\nconfiguración espacial": expandir(
-            "CIRCUITO", "FID_VANO", "X1", "Y1", "X2", "Y2", "LVSW", "PORC_APORTE_VANO"
-        ),
-        "Características físicas\ny eléctricas del vano": expandir(
-            "FECHA_OPERACION_VANO", "LONGITUD", "CNT_FASES", "CONDUCTOR",
-            "CALIBRE_NEUTRO", "NG_RED", "PROMEDIO_KWH_VANO", "TIPO_TAX",
-        ),
-        "Activos: apoyo final\ny transformador": expandir(
-            "COD_APOYO_FIN", "FID_APOYO_FIN", "ALTURA", "CANTIDAD_TIERRA",
-            "PROPIETARIO", "CLASE", "ELEMENTO", "NORMA", "VAL_CRIT_APOYO",
-            "LONG_CRUCETA", "FID_TRAFO", "CODIGO", "CAPACIDAD_NOMINAL",
-            "CNT_USUS", "FECHA_OPERACION_TRF", "PROMEDIO_KWH_TRF",
-        ),
-        "Entorno, riesgo\ny clima": expandir(
-            "NR_T", "DDT", "prep", "clouds", "wind_spd", "wind_gust_spd", "temp"
-        ),
-    }
-    return {k: v for k, v in modos.items() if v}
-
-
 def normalizar_minmax(serie):
     vals = pd.to_numeric(serie, errors="coerce").astype(float)
     vals = vals.replace([np.inf, -np.inf], np.nan).fillna(0.0)
@@ -836,60 +785,6 @@ def graficar_barras_y_radar(
         "grafo_interactivo": graph_path,
         "fig_barras": fig_barras,
         "fig_radar": fig_radar,
-    }
-
-
-def _series_to_score_records(series, limit=None):
-    if series is None:
-        return []
-    ordered = series.sort_values(ascending=False)
-    if limit is not None:
-        ordered = ordered.head(int(limit))
-    return [
-        {"nombre": str(index), "score_normalizado": float(value)}
-        for index, value in ordered.items()
-    ]
-
-
-def construir_contexto_escenario_inferencia(
-    nombre,
-    criterio,
-    resultado,
-    tabla_top,
-    modos,
-    top_k=20,
-    fechas_interes=None,
-    ventana_climatica_horas=12,
-):
-    """Build a compact, JSON-safe context for one MGCECDL inference scenario."""
-    graph_path = resultado.get("grafo_interactivo") if isinstance(resultado, dict) else None
-    graph_path_text = str(graph_path) if graph_path is not None else None
-    variables = resultado.get("variables_normalizadas") if isinstance(resultado, dict) else None
-    mode_scores = resultado.get("modos_normalizados") if isinstance(resultado, dict) else None
-    eventos = resultado.get("eventos") if isinstance(resultado, dict) else None
-    tabla_records = (
-        tabla_top.head(20)
-        .where(pd.notna(tabla_top.head(20)), None)
-        .to_dict(orient="records")
-        if isinstance(tabla_top, pd.DataFrame)
-        else []
-    )
-    return {
-        "nombre": str(nombre),
-        "criterio": str(criterio),
-        "fechas_interes": list(fechas_interes or []),
-        "n_eventos": int(len(eventos)) if isinstance(eventos, pd.DataFrame) else 0,
-        "n_vanos_efectivo": int(len(tabla_top)) if isinstance(tabla_top, pd.DataFrame) else 0,
-        "top_k_vars": int(top_k),
-        "ventana_climatica_horas": int(ventana_climatica_horas),
-        "top_variables": _series_to_score_records(variables, limit=top_k),
-        "modos": _series_to_score_records(mode_scores),
-        "tabla_top_vanos": tabla_records,
-        "grafo": {
-            "path": graph_path_text,
-            "fuente": "reconstruccion_mgcecdl_rbf" if graph_path_text else None,
-            "pesos": "normalizados_0_1_por_maximo" if graph_path_text else None,
-        },
     }
 
 

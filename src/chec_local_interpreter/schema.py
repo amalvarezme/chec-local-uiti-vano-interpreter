@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from chec_local_interpreter.config import REQUIRED_COLUMNS
-
 EVENT_IMPACT_COLUMNS = (
     "DURACION",
     "UITI",
@@ -90,7 +88,3 @@ class ColumnResolution:
     required: dict[str, str]
     optional: dict[str, str]
     unavailable_optional: list[str]
-
-
-def expected_columns() -> tuple[str, ...]:
-    return REQUIRED_COLUMNS + OPTIONAL_COLUMNS

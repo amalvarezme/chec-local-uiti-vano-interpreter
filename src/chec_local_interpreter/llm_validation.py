@@ -4,7 +4,6 @@ import json
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -380,16 +379,6 @@ def validar_provenance_base(data: dict[str, Any], context: dict[str, Any]) -> di
     )
 
 
-def save_invalid_output(response_text: str, errors: list[str], output_dir: str | Path, timestamp: str) -> tuple[Path, Path]:
-    directory = Path(output_dir)
-    directory.mkdir(parents=True, exist_ok=True)
-    raw_path = directory / f"invalid_llm_output_{timestamp}.txt"
-    errors_path = directory / f"llm_validation_errors_{timestamp}.json"
-    raw_path.write_text(response_text, encoding="utf-8")
-    errors_path.write_text(json.dumps({"errors": errors}, ensure_ascii=False, indent=2), encoding="utf-8")
-    return raw_path, errors_path
-
-
 # --- Auto-simulator response validator ---------------------------------
 #
 # Ported verbatim from `_validate_auto_simulator_response`, defined inline in
@@ -398,8 +387,6 @@ def save_invalid_output(response_text: str, errors: list[str], output_dir: str |
 # (already defined above in this module) rather than reimplementing JSON
 # extraction — the notebook cell already imported and called the same
 # function.
-
-
 
 
 # --- PDF-discussion-extraction row validator ----------------------------

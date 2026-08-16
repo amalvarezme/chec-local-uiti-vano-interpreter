@@ -884,13 +884,6 @@ def construir_contexto_expert_alignment(
     return context
 
 
-def guardar_tabla_coincidencias_pdf(matches: list[dict[str, Any]], path: str | Path) -> Path:
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame(matches).to_excel(target, index=False)
-    return target
-
-
 def _flatten_strings(value: Any) -> list[str]:
     if isinstance(value, str):
         return [value]

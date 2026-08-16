@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-import warnings
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
@@ -12,22 +11,6 @@ import pandas as pd
 PRIORITIZED_VARIABLES_FILENAME = "variables_a_priorizar.xlsx"
 SIMULATOR_RESULTS_FILENAME = "simulador_clasificacion_resultados.xlsx"
 AUTO_MINMAX_SIMULATOR_RESULTS_FILENAME = "simulador_automatico_minmax_resultados.xlsx"
-
-
-def prioritized_variables_path(report_dir: str | Path) -> Path:
-    return Path(report_dir) / PRIORITIZED_VARIABLES_FILENAME
-
-
-def simulator_results_path(report_dir: str | Path) -> Path:
-    return Path(report_dir) / SIMULATOR_RESULTS_FILENAME
-
-
-def auto_minmax_simulator_results_path(report_dir: str | Path) -> Path:
-    return Path(report_dir) / AUTO_MINMAX_SIMULATOR_RESULTS_FILENAME
-
-
-def simulator_plots_dir(report_dir: str | Path) -> Path:
-    return Path(report_dir) / "simulador"
 
 
 def save_prioritized_variables_table(
@@ -58,25 +41,6 @@ def save_prioritized_variables_table(
     target.parent.mkdir(parents=True, exist_ok=True)
     df.to_excel(target, index=False)
     return target
-
-
-def read_prioritized_variables_table(path: str | Path) -> tuple[pd.DataFrame, list[str]]:
-    source = Path(path)
-    if not source.exists():
-        return pd.DataFrame(columns=["variable"]), [f"No existe la tabla de variables priorizadas: {source}"]
-    try:
-        if source.suffix.lower() in {".xlsx", ".xls"}:
-            df = pd.read_excel(source)
-        else:
-            df = pd.read_csv(source)
-    except Exception as exc:  # pragma: no cover - depends on local file engines
-        return pd.DataFrame(columns=["variable"]), [f"No se pudo leer la tabla de variables priorizadas: {exc}"]
-    if "variable" not in df.columns:
-        return pd.DataFrame(columns=["variable"]), ["La tabla de variables priorizadas no tiene columna 'variable'."]
-    df = df.copy()
-    df["variable"] = df["variable"].fillna("").astype(str).str.strip()
-    df = df[df["variable"] != ""].reset_index(drop=True)
-    return df, []
 
 
 def validate_prioritized_variables(
@@ -148,35 +112,6 @@ def transform_single_feature_value(
     )
     scaled = feature_scaler.transform(raw_row).astype(np.float32)
     return float(scaled[0, idx])
-
-
-def default_simulation_values(series: pd.Series, *, max_values: int = 12) -> list[Any]:
-    clean = series.dropna()
-    if clean.empty:
-        return []
-    if pd.api.types.is_numeric_dtype(clean):
-        values = pd.to_numeric(clean, errors="coerce").dropna()
-        if values.empty:
-            return []
-        if values.nunique() <= max_values:
-            return sorted(values.unique().tolist())
-        quantiles = np.linspace(0.05, 0.95, max_values)
-        return sorted(pd.Series(values.quantile(quantiles).unique()).dropna().tolist())
-    counts = clean.astype(str).value_counts()
-    return counts.head(max_values).index.tolist()
-
-
-def build_context_mask(
-    context_df: pd.DataFrame,
-    filters: dict[str, Any] | None,
-) -> np.ndarray:
-    mask = np.ones(len(context_df), dtype=bool)
-    filters = filters or {}
-    for column, value in filters.items():
-        if column not in context_df.columns or value in (None, "", "Todos"):
-            continue
-        mask &= context_df[column].astype(str).eq(str(value)).to_numpy()
-    return mask
 
 
 def predict_probabilities(
@@ -810,8 +745,3 @@ def simulate_explicit_overrides(
 def safe_plot_filename(variable: str) -> str:
     slug = re.sub(r"[^A-Za-z0-9_]+", "_", str(variable)).strip("_")
     return f"Sim_{slug or 'variable'}.pdf"
-
-
-def warn_messages(messages: list[str]) -> None:
-    for message in messages:
-        warnings.warn(message, RuntimeWarning, stacklevel=2)
