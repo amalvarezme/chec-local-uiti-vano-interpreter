@@ -60,16 +60,17 @@ ya en caché, y la primera apertura baja de 2,81 MB a 1,41 MB. Por eso `requirem
 fija `plotly==6.9.0` en vez de un mínimo, y por eso subirla hay que subirla en las
 cuatro a la vez.
 
-## No limpies la salida de este cuaderno
+## El tablero ya no vive en el cuaderno
 
-`04_uiti_vano_trayectorias_vano.ipynb` es el único de los cinco cuya **salida guardada
-en el `.ipynb` es un insumo**: `scripts/extract_geometrias_014.py` lee de ahí la
-geometría K-Means que comparten los cuadernos 05 y 06. Limpiar sus salidas «para que el
-diff no haga ruido» rompe la criticidad aguas abajo.
+Desde el 2026-08-15 el código de este tablero está en
+`src/chec_tableros/trayectorias_vanos.py`, y esta aplicación lo construye **importándolo**,
+no ejecutando celdas. El cuaderno queda como envoltorio delgado con su narrativa.
 
-Construir esta aplicación **no** la toca — `_comun/cuaderno.py` lee el documento y
-ejecuta las fuentes con `exec`, sin escribir nunca de vuelta —, y está comprobado:
-después de construir, `git status --porcelain notebooks/` sale vacío.
+Con eso se retiró la regla «no limpies la salida de este cuaderno», que era la más
+repetida del proyecto. Tenía dos motivos y los dos murieron: la geometría K-Means ya no
+se extrae de ese HTML —vive versionada en `data/geometria_kmeans_014_v1.json`— y el
+tablero ya no se publica desde su salida guardada. El `.ipynb` bajó de 7.707 a 239
+líneas y de 12,3 MB a unos pocos KB.
 
 ## Advertencia
 

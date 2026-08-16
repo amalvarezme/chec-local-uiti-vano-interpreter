@@ -2,6 +2,20 @@
 description: Publica el cuaderno 04 (agrupamiento y evolucion a nivel de vano por ventanas deslizantes, con mapa geografico y seleccion de vanos) como una Databricks App en una URL fija, detectando y reparando por su cuenta todo lo que falte — si no estan el CSV o los shapefiles en el Volume encadena /subir-datos-databricks, y configura el permiso de lectura de la app sin intervencion manual. Pregunta solo el nombre de la app y la URL del workspace destino.
 ---
 
+> **FUERA DE SERVICIO desde el 2026-08-15. NO lo ejecutes.**
+>
+> Este comando publica el cuaderno `04_uiti_vano_trayectorias_vano.ipynb` parcheando su
+> CODIGO por contenido. Ese codigo ya no esta en el cuaderno: vive en
+> `src/chec_tableros/trayectorias_vanos.py` (`sdd/retire-base-apps-notebooks`, fase 3),
+> y el cuaderno quedo como envoltorio delgado. Los parches no encuentran su marca: en el
+> mejor caso el despliegue aborta, en el peor publica un tablero vacio.
+>
+> Se marca en vez de arreglarse porque la arquitectura acordada retira estos cuatro
+> comandos: los cuatro tableros pasan a una sola aplicacion `criticidad-chec` con cuatro
+> rutas, y eso es la rebanada S13.
+>
+> Mientras tanto, para ver el tablero: la aplicacion de escritorio en `aplicaciones/`.
+
 > **Read `.claude/commands/_contrato-despliegue-databricks.md` before anything else.** It is mandatory and it overrides what follows:
 > - **A. Run log** — open the bitacora *before* asking the user anything, record every numbered step as you finish it, and always close it. Its path and final state are part of the report back to the user.
 > - **B. Never abort** — a restriction gets recorded and worked around; the command runs to the end regardless. Wherever this file says "stop and report", rule B applies instead.
@@ -97,7 +111,7 @@ Warn first: `data/Indicadores_vano_v3.csv` is **566 MB** (Git-LFS tracked) and d
 
 **Strip every code cell's `outputs` and `execution_count` first — in the STAGED COPY only.** The repo file is 12.3 MB on disk, almost all of it cell 7's embedded `text/html`; stripped it is **0.08 MB** (measured). `databricks workspace import --format JUPYTER` enforces a 10 MB limit, so an unstripped copy is over the ceiling outright — this is the difference between the upload working and failing, not hygiene.
 
-**Never strip the committed notebook.** Unlike `03`, `04`'s stored output is what gets published, so the source can be right while the panel still ships the `v4-logx`/`v4-logy`/`v4-prep` controls that were removed. Clearing it hides that mismatch instead of surfacing it. `tests/test_project_flow_web_panels.py` pins this.
+**La regla "nunca limpies el cuaderno commiteado" quedo RETIRADA el 2026-08-15.** El tablero se construye desde `src/chec_tableros/trayectorias_vanos.py`, asi que la salida guardada no es fuente de nada, y la geometria K-Means que un script sacaba de ese HTML vive versionada en `data/geometria_kmeans_014_v1.json`. El `.ipynb` bajo de 7.707 a 239 lineas.
 
 The stronger reason this rule used to have is **gone**: until 2026-08-15 `scripts/extract_geometrias_014.py` parsed the K-Means `geometrias` and `grupos` blocks out of cell 7's `text/html`. That script no longer exists — the geometry is tracked at `data/geometria_kmeans_014_v1.json` and refitted from the CSV by `scripts/exportar_geometria.py`. Nothing reads this notebook's HTML any more, so a `ValueError: No se encontró la clave 'geometrias'` is no longer the failure to expect.
 

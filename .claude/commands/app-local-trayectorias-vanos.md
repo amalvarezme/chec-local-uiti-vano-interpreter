@@ -25,15 +25,18 @@ sliding window driving both views at once.
 
 ## What is specific to this one
 
-- **Never clean this notebook's stored output.** The old reason is gone — the K-Means
-  geometry now lives in `data/geometria_kmeans_014_v1.json`, tracked in git and
-  refitted from the CSV by `scripts/exportar_geometria.py`, so nothing parses this
-  notebook's HTML any more. The rule survives on a different one: this is the only board
-  whose output is published as-is, so a stale one ships removed controls while the source
-  looks right. `tests/test_project_flow_web_panels.py` pins that. Building does not
-  touch it — `_comun/cuaderno.py` reads the document and `exec`s the sources, never
-  writing back — and that is verified: after a build, `git status --porcelain notebooks/`
-  comes back empty. Check it anyway if you ever rebuild.
+- **The "never clean this notebook's stored output" rule is RETIRED (2026-08-15).** It
+  was the most-repeated rule in the project — four runbooks and the deploy contract —
+  so it is worth saying why it is gone rather than letting it creep back. It had two
+  reasons and both died. First, a script used to parse the K-Means geometry out of that
+  HTML; the geometry is now tracked at `data/geometria_kmeans_014_v1.json` and refitted
+  from the CSV by `scripts/exportar_geometria.py`. Second, `04` was the one board
+  published *from* its stored output; its code now lives in
+  `src/chec_tableros/trayectorias_vanos.py` and the board is built by calling the module,
+  so the stored output is nobody's source. The notebook dropped from 7,707 to 239 lines.
+- **The board's code is no longer in the notebook.** This app builds by importing
+  `chec_tableros.trayectorias_vanos`, not by `exec`-ing cells. The notebook stays as a
+  thin wrapper with its `Como leerlo` narrative until the slice that deletes it.
 - **It needs the shapefiles**, not just the CSV: `data/GEO/MVLINSEC.shp` and its
   siblings. If they are missing the build fails inside the notebook — say which file and
   stop, since nothing in the repo regenerates them.

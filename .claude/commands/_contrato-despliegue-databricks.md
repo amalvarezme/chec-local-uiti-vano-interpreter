@@ -290,12 +290,12 @@ rest of the command (the HTML still gets generated and verified).
 
 - `databricks workspace import --format JUPYTER` enforces a **10 MB** payload
   limit. Always strip `outputs` and `execution_count` from the staged copy.
-  **Exception: notebook 04's stored output must not be stripped in the repo** — it
-  is the board published as-is, so a stale one ships controls the source already
-  removed. Strip the staged copy only. (Before 2026-08-15 the reason was that a
-  script parsed its HTML for the K-Means geometry; that geometry is now tracked at
-  `data/geometria_kmeans_014_v1.json` and the script is gone. The exception stands
-  on the publishing argument alone.)
+  **The old exception for notebook 04's stored output is RETIRED (2026-08-15).** It
+  had two reasons and both are gone: a script used to parse the K-Means geometry out
+  of that HTML (the geometry is now tracked at `data/geometria_kmeans_014_v1.json`),
+  and `04` used to be published *from* its stored output (its code now lives in
+  `src/chec_tableros/trayectorias_vanos.py`). The notebook dropped from 7,707 to 239
+  lines. There is now **no notebook whose committed output must be preserved**.
 - `databricks fs cp -r` and `workspace import-dir` have **no exclude flag**. They
   will upload `.DS_Store`, `.gitkeep`, `.openmeteo_cache.sqlite` and
   `__pycache__/*.pyc`. Clean up afterwards with `fs rm` / `workspace delete

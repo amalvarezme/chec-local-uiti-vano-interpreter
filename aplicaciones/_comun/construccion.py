@@ -95,6 +95,7 @@ _MIGRADOS = {
     "01_uiti_vano_clima.ipynb": "chec_tableros.clima",
     "02_uiti_vano_kmeans.ipynb": "chec_tableros.agrupamiento",
     "03_uiti_vano_trayectorias_circuitos.ipynb": "chec_tableros.trayectorias_circuitos",
+    "04_uiti_vano_trayectorias_vano.ipynb": "chec_tableros.trayectorias_vanos",
 }
 
 

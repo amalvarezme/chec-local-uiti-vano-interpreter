@@ -400,32 +400,40 @@ def test_a_migrated_board_leaves_no_deploy_command_promising_the_old_path(board)
     )
 
 
-def test_board_04_keeps_its_rendered_output_because_it_is_what_gets_published():
-    """`04`'s cell-7 `text/html` output is what ships, not a leftover.
+def test_board_04_no_longer_needs_to_carry_a_12_mb_rendered_output():
+    """La regla "nunca limpies la salida guardada de `04`" queda RETIRADA, con sus dos motivos.
 
-    This test's ORIGINAL reason died on 2026-08-15: `scripts/extract_geometrias_014.py`
-    used to pull the K-Means `geometrias` and `grupos` blocks straight out of that stored
-    output and cache them as `data/derived/geometrias_014.json`. That script no longer
-    exists -- the geometry is tracked at `data/geometria_kmeans_014_v1.json` and refitted
-    from the CSV by `scripts/exportar_geometria.py`, so nothing parses this HTML any more.
+    Vale la pena dejar escrito por que, porque era la regla mas repetida del proyecto
+    -- estaba en cuatro runbooks y en el contrato de despliegue -- y una regla que se
+    retira sin explicacion vuelve sola.
 
-    The assertions survive on a different argument, and it is worth stating plainly rather
-    than leaving a test whose name promises a dependency that is gone. `04` is the one
-    board published from its stored output, so clearing it -- an obvious-looking way to
-    shrink a 12 MB notebook, and the right call for `01`/`02`/`03` -- means the next
-    publish ships nothing, or ships whatever stale render happens to be there. That is the
-    failure `test_board_04_stored_output_carries_the_fixed_space_too` catches downstream,
-    and it needs the output to exist at all.
+    Motivo 1, muerto el 2026-08-15: `scripts/extract_geometrias_014.py` sacaba la
+    geometria K-Means del `text/html` de la celda 7. Ese script ya no existe; la
+    geometria vive versionada en `data/geometria_kmeans_014_v1.json`.
+
+    Motivo 2, muerto hoy: `04` era el unico tablero que se publicaba DESDE su salida
+    guardada, asi que limpiarla dejaba el despliegue sin nada que publicar. Su codigo
+    esta ahora en `src/chec_tableros/trayectorias_vanos.py` y el tablero se construye
+    llamando al modulo, asi que la salida guardada no es fuente de nada.
+
+    Lo que se gana no es cosmetico: el `.ipynb` baja de **7.707 a 239 lineas** y de
+    12,3 MB a unos pocos KB, y deja de ser el unico cuaderno que no se podia limpiar.
+
+    Se comprueba lo contrario de lo que se comprobaba: que NO vuelva a aparecer un
+    output pesado. Si alguien reintroduce uno, esta reintroduciendo el problema.
     """
     notebook = json.loads(
         (NOTEBOOK_DIR / f"{BOARDS['04']}.ipynb").read_text(encoding="utf-8"))
-    outputs = notebook["cells"][7]["outputs"]
-    html = [o for o in outputs
-            if o.get("output_type") == "display_data" and "text/html" in o.get("data", {})]
-    assert html, "cell 7 must keep a display_data output carrying text/html"
-    payload = "".join(html[0]["data"]["text/html"])
-    assert '"geometrias":' in payload, "the K-Means geometry block must survive in the output"
-    assert '"grupos":' in payload
+    pesados = [
+        (i, o.get("output_type"))
+        for i, celda in enumerate(notebook["cells"])
+        for o in celda.get("outputs", [])
+        if len("".join(o.get("data", {}).get("text/html", ""))) > 100_000
+    ]
+    assert not pesados, (
+        f"vuelve a haber salida HTML pesada guardada en {pesados}: el tablero se "
+        "construye desde src/chec_tableros/trayectorias_vanos.py y nadie la lee"
+    )
 
 
 # Boards whose clustering space stopped being a control. `01` never had one.
@@ -476,22 +484,29 @@ def test_space_keyed_lookups_use_the_literal_key_not_a_dead_variable(sources, bo
             f"CTX.{container} must be indexed by the literal '0', not a computed key")
 
 
-def test_board_04_stored_output_carries_the_fixed_space_too():
-    """`04`'s cell-7 output is preserved, so a stale one keeps the old controls alive.
+def test_board_04_no_longer_has_a_second_copy_that_can_disagree_with_its_source():
+    """El problema que esta prueba vigilaba desaparecio, y por una razon mejor que un arreglo.
 
-    Unlike the other three boards, `04`'s rendered output is published as-is and is never
-    cleared, which means the source can be right while the output the Databricks command
-    publishes still ships the removed checkboxes. The two must agree.
+    `04` guardaba su tablero RENDERIZADO dentro del `.ipynb`, y eso era lo que se
+    publicaba. Existian entonces dos copias que podian discrepar: la fuente podia estar
+    corregida -- sin los controles `v4-logx`/`v4-logy`/`v4-prep` -- mientras la salida
+    guardada seguia enviandolos. Esta prueba comparaba las dos.
+
+    Ahora hay UNA sola: el tablero se construye llamando a
+    `src/chec_tableros/trayectorias_vanos.py`, y no queda ninguna copia congelada que
+    pueda quedarse atras. Un problema que se elimina por construccion no necesita una
+    prueba que lo persiga; necesita una que impida reintroducirlo, y esa es
+    `test_board_04_no_longer_needs_to_carry_a_12_mb_rendered_output`.
+
+    Lo que si sigue valiendo la pena comprobar es que la FUENTE no tenga esos controles,
+    que es lo que `test_kmeans_space_is_fixed_and_no_longer_a_control` ya hace sobre los
+    cuatro tableros. Aqui se deja la comprobacion equivalente sobre el `04` migrado, para
+    que el traslado a `src/` no los haya devuelto de contrabando.
     """
-    notebook = json.loads(
-        (NOTEBOOK_DIR / f"{BOARDS['04']}.ipynb").read_text(encoding="utf-8"))
-    payload = "".join(
-        "".join(o["data"]["text/html"])
-        for o in notebook["cells"][7]["outputs"]
-        if o.get("output_type") == "display_data" and "text/html" in o.get("data", {}))
-    assert payload, "cell 7 must keep its rendered output"
+    src = fuente_de_tablero(BOARDS["04"], solo_codigo=True)
     for control in ("v4-logx", "v4-logy", "v4-prep"):
-        assert control not in payload, f"{control} survives in the stored output: re-run 04"
+        assert control not in src, (
+            f"{control} volvio en el modulo del tablero 04: el espacio K-Means es fijo")
 
 
 def test_board_02_exports_the_same_space_it_draws():

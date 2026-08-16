@@ -27,6 +27,7 @@ MIGRADOS = {
     "01_uiti_vano_clima": "clima",
     "02_uiti_vano_kmeans": "agrupamiento",
     "03_uiti_vano_trayectorias_circuitos": "trayectorias_circuitos",
+    "04_uiti_vano_trayectorias_vano": "trayectorias_vanos",
 }
 
 

@@ -22,10 +22,12 @@ un orden que importa. Todo lo de abajo está medido en este repositorio.
 | `data/Actividades_mantenimiento_costos_2026.xlsx` | costos del plan | se edita a mano |
 | `data/models/mil_vano_ventana_v1.pt` | el modelo MIL | **lo produce `notebooks/05_mil_vano_ventana.ipynb`** |
 | `data/derived/bolsas_mil_full.joblib` | las bolsas (vano × ventana) | **lo produce `notebooks/05_mil_vano_ventana.ipynb`** |
-| `data/derived/geometrias_014.json` | la geometría KMeans | **sale del cuaderno `04_uiti_vano_trayectorias_vano.ipynb`** |
+| `data/geometria_kmeans_014_v1.json` | la geometría KMeans | **versionada en git**; se reproduce con `python scripts/exportar_geometria.py` |
 
-Los tres últimos son **derivados**: salen del CSV pasando por un cuaderno. Esa es toda
-la dificultad de este documento.
+Los dos derivados de `data/derived/` salen del CSV pasando por el cuaderno 05. Esa es
+toda la dificultad de este documento. La geometría KMeans **dejó de ser uno de ellos** el
+2026-08-15: antes se extraía de la salida guardada del cuaderno 04, lo que ataba tres
+cuadernos entre sí y dejaba a un checkout limpio sin poder asignar clases.
 
 ---
 
@@ -84,7 +86,9 @@ Es el caso que más trabajo pide, porque **tres artefactos derivan de él**. En 
 1. Deja el CSV nuevo en `data/` (o `git lfs pull` si venía del repositorio).
 2. Corre `notebooks/05_mil_vano_ventana.ipynb` → regenera `bolsas_mil_full.joblib` y
    `mil_vano_ventana_v1.pt`.
-3. Corre `04_uiti_vano_trayectorias_vano.ipynb` → de ahí sale `geometrias_014.json`.
+3. Corre `python scripts/exportar_geometria.py` → reescribe
+   `data/geometria_kmeans_014_v1.json` reajustando el KMeans sobre el CSV nuevo. Antes
+   este paso era «corre el cuaderno 04», y por eso el orden importaba tanto.
 4. Abre las aplicaciones normalmente. **Se reconstruyen solas**, cada una nombrando lo
    que cambió.
 
