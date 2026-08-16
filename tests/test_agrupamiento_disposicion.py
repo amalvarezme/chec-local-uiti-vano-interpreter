@@ -179,6 +179,54 @@ def test_el_top_10_se_muda_a_la_esquina_superior_derecha():
         "ninguna traza va a (1,3), que es la del top 10")
 
 
+def test_las_filas_miden_la_mitad_y_las_columnas_no_se_tocan():
+    """El alto de las FILAS a la mitad; el ancho de las columnas, intacto.
+
+    Las filas no se achican bajando `row_heights` -- son fracciones y se
+    renormalizan, asi que dividirlas por dos no cambia un pixel. Lo que manda es
+    el `height`, y de el hay que descontar los margenes, que van en PIXELES y no
+    se reparten: t=175 + b=60 = 235 fijos.
+
+    Medido sobre la figura construida a 1700: area de dibujo 1465 px, fila 1 =
+    745 px y fila 2 = 610 px (los 110 restantes son la separacion entre filas).
+    Las filas a la mitad son 372,5 + 305 = 677,5, y de ahi salen los dos numeros:
+
+        area   = 677,5 + 110 = 788      # la separacion NO se encoge: es texto
+        height = 788 + 235   = 1023
+
+    850 -- partir 1700 por dos -- dejaba las filas en el 42%, no en la mitad.
+    968 -- el numero correcto si la separacion pudiera encogerse con el area --
+    pisaba el rotulo del eje x de la fila 1 contra el titulo de la fila 2.
+
+    Los dos numeros van juntos en la misma prueba porque no se pueden elegir por
+    separado: subir `vertical_spacing` sin subir `height` roba de las filas.
+    """
+    celda = _sin_comentarios(_celda_de_la_figura())
+    anchos = re.search(r"column_widths=\[([^\]]+)\]", celda)
+    assert anchos, "la figura no declara `column_widths`"
+    assert [float(x) for x in anchos.group(1).split(",")] == [0.24, 0.42, 0.34], (
+        f"el ancho de las columnas cambio: {anchos.group(1)}")
+    assert re.search(r"horizontal_spacing=0\.075", celda), (
+        "la separacion horizontal cambio; las columnas tenian que quedarse igual")
+
+    alto = re.search(r"height=(\d+)", celda)
+    assert alto, "la figura no declara `height`"
+    assert int(alto.group(1)) == 1023, (
+        f"el alto es {alto.group(1)}; las filas a la mitad piden 1023")
+
+    sep = re.search(r"vertical_spacing=([\d.]+)", celda)
+    assert sep and float(sep.group(1)) == 0.14, (
+        f"la separacion vertical es {sep.group(1) if sep else None}; con el area "
+        f"nueva hace falta 0.14 para conservar los ~110 px que pide el texto")
+
+    # Y que las cuentas cierren: filas = area - separacion, y cada una la mitad.
+    area = 1023 - 175 - 60
+    filas = area - 0.14 * area
+    assert abs(0.55 * filas - 745 / 2) < 4 and abs(0.45 * filas - 610 / 2) < 4, (
+        f"las filas no quedan a la mitad: {0.55 * filas:.0f} y {0.45 * filas:.0f} "
+        f"contra 372,5 y 305")
+
+
 def test_los_titulos_siguen_el_orden_de_lectura_de_la_rejilla():
     """Plotly los reparte por filas sobre las casillas CON subplot, no por nombre.
 

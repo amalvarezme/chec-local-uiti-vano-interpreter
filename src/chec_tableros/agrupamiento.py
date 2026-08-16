@@ -922,7 +922,13 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         # sobra se lo lleva la dispersion. El top 10 se queda con 0.34 porque sus nombres de
         # circuito van sobre el eje y, y ese margen lo pide `automargin`.
         column_widths=[0.24, 0.42, 0.34],
-        horizontal_spacing=0.075, vertical_spacing=0.075,
+        # El horizontal se queda en 0.075: las columnas no se tocan.
+        # El VERTICAL sube a 0.14 porque es una FRACCION del area de dibujo, y al
+        # bajar el area a la mitad se encogia de 110 px a 55. Lo que tiene que caber
+        # ahi -- el rotulo de eje x de la fila 1, el titulo de la fila 2 y su
+        # subtitulo -- es TEXTO, y el texto no se encoge: a 55 px se pisaban.
+        # 0.14 sobre los 788 px del area nueva son los mismos ~110 px de antes.
+        horizontal_spacing=0.075, vertical_spacing=0.14,
         specs=[
             [{}, {}, {}],
             [{}, {'colspan': 2}, None],
@@ -1047,7 +1053,21 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         # a la barra de conteo por grupo: esa es UNA sola traza, y apilar una traza sola no
         # cambia nada.
         barmode='stack',
-        height=1700, template='plotly_white', bargap=0.45, violingap=0.3,
+        # 1023 y no 1700: las filas van a la MITAD de alto y las columnas se quedan
+        # como estaban. Bajar `row_heights` no habria servido -- son fracciones, se
+        # renormalizan y dividirlas por dos no mueve un pixel; lo que manda es este
+        # `height`.
+        # Medido a 1700: area de dibujo 1465 px (1700 - 175 - 60 de margen), fila 1 =
+        # 745, fila 2 = 610, y los 110 restantes la separacion entre filas. Las filas
+        # a la mitad son 372,5 + 305 = 677,5.
+        # De ahi salen los DOS numeros que no se pueden elegir por separado:
+        #   area  = 677,5 (filas) + 110 (separacion, que NO se encoge: es texto) = 788
+        #   height = 788 + 235 (margenes, en PIXELES, no se reparten)            = 1023
+        # Partir 1700 por dos habria dado 850, y con el las filas caian al 42% -- no a
+        # la mitad -- porque una figura la mitad de alta le paga a los margenes una
+        # tajada doble. Y quedarse en 968 (el numero correcto si la separacion pudiera
+        # encogerse) pisaba el rotulo del eje x de la fila 1 contra el titulo de la 2.
+        height=1023, template='plotly_white', bargap=0.45, violingap=0.3,
     )
     fig_vano.update_xaxes(title_text='Numero de eventos por vano', row=1, col=2)
     fig_vano.update_yaxes(title_text='UITI acumulado por vano', row=1, col=2)
