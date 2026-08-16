@@ -5,7 +5,7 @@ description: Publica los cuatro tableros estaticos de criticidad como UNA sola D
 > **Read `.claude/commands/_contrato-despliegue-databricks.md` before anything else.** It is mandatory and it overrides what follows:
 > - **A. Run log** — open the bitacora *before* asking the user anything, record every numbered step as you finish it, and always close it. Its path and final state are part of the report back to the user.
 > - **B. Never abort** — a restriction gets recorded and worked around; the command runs to the end regardless. Wherever this file says "stop and report", rule B applies instead.
-> - **C. Unity Catalog target** — `workspace.default.chec-simulador` below is a default, not a requirement. Resolve it at runtime and substitute the resolved value into every path here.
+> - **C. Destination** — the **workspace URL is asked on every run**, never inferred from a profile that happens to have a live session; the profile is derived from it (E1). And `workspace.default.chec-simulador` below is a default, not a requirement: resolve it at runtime and substitute the resolved value into every path here.
 > - **D. Known restrictions** — D1–D10. If one shows up, do not re-diagnose it.
 
 Follow this exact sequence when `/app-criticidad-chec` is invoked. It publishes the four
@@ -48,9 +48,10 @@ Open the bitacora first (rule A), then ask, one at a time, and wait for each ans
 
 1. **The name for the Databricks App.** The API constrains this to 2–30 characters,
    lowercase alphanumerics and hyphens, unique in the workspace. Default: `criticidad-chec`.
-2. **The workspace URL.** Ask every run. Do **not** infer it from whichever profile
-   happens to have a live session — that is how a deploy lands in the wrong workspace,
-   and it is silent when both are reachable.
+2. **The Databricks workspace URL.** Ask it **every run** (contract C0). Never take it
+   from whichever profile happens to have a live session: that says which workspace you
+   can reach, not which one is meant, and a deploy to the wrong one is silent — it
+   authenticates, creates the Volume and publishes an app that answers.
 
 ```
 RUTA=$(python3 scripts/bitacora_despliegue.py init \

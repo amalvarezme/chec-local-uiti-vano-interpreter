@@ -6,7 +6,7 @@ description: Orquesta la subida completa a Databricks — tres artefactos y nada
 > - **A. Run log** — open the bitacora *before* asking the user anything, record every numbered step as you finish it, and always close it. Its path and final state are part of the report back to the user.
 > - **A1. One log per run** — this command delegates. It owns the log; every delegated command reuses `$RUTA_BITACORA` instead of calling `init`. One report, not four.
 > - **B. Never abort** — a restriction gets recorded and worked around; the command runs to the end regardless. Wherever this file says "stop and report", rule B applies instead.
-> - **C. Unity Catalog target** — `workspace.default.chec-simulador` below is a default, not a requirement. Resolve it at runtime and substitute the resolved value into every path here.
+> - **C. Destination** — the **workspace URL is asked on every run**, never inferred from a profile that happens to have a live session; the profile is derived from it (E1). And `workspace.default.chec-simulador` below is a default, not a requirement: resolve it at runtime and substitute the resolved value into every path here.
 > - **D. Known restrictions** — D1–D10. If one shows up, do not re-diagnose it.
 
 Follow this exact sequence when `/subir-a-databricks` is invoked. It is the **top-level orchestrator** of the family: it owns the order of operations and the single run log, and it delegates every individual piece of work to the command that already owns it. Read those command files when this one says so, rather than re-deriving their logic — that cross-reference is what keeps the family in sync instead of drifting.
@@ -60,7 +60,10 @@ Still forbidden: MUST NOT modify any file under `notebooks/` or `src/` (what get
 ## 0. Ask the user for the one required input
 
 Ask, and wait:
-1. The Databricks workspace URL (e.g. `https://adb-xxxxxxxxxxxx.0.azuredatabricks.net`).
+1. **The Databricks workspace URL** (e.g. `https://adb-xxxxxxxxxxxx.0.azuredatabricks.net`).
+   Ask it **every run** (contract C0). Never take it from whichever profile happens to
+   have a live session, and never from the bitacora of the last run: that is evidence of
+   where it went before, not a default for where it goes now.
 
 Do **not** ask for app names. This command uses the default name of each app command (see the table in step 5). Ask only if a default collides with an existing app that is not ours.
 

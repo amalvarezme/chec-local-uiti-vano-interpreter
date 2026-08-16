@@ -100,8 +100,41 @@ def test_cada_comando_nombra_el_rango_completo_de_restricciones(nombre: str):
 @pytest.mark.parametrize("nombre", FAMILIA)
 def test_cada_comando_enuncia_las_cuatro_reglas(nombre: str):
     texto = _leer(CMD_DIR / nombre)
-    for regla in ("A. Run log", "B. Never abort", "C. Unity Catalog target", "D. Known restrictions"):
+    for regla in ("A. Run log", "B. Never abort", "C. Destination", "D. Known restrictions"):
         assert regla in texto, f"{nombre} no enuncia la regla {regla!r}"
+
+
+@pytest.mark.parametrize("nombre", FAMILIA)
+def test_cada_comando_pregunta_el_workspace_en_cada_corrida(nombre: str):
+    """El destino se PREGUNTA; el perfil se DERIVA de el.
+
+    Equivocarse de workspace no se ve: el otro tambien autentica, tambien crea el
+    Volume y tambien publica una app que contesta. El usuario se entera cuando alguien
+    abre una URL que no tiene sus datos.
+
+    Y la tentacion es concreta: en esta maquina hay cinco perfiles configurados, y
+    `databricks auth profiles` dice cual se puede alcanzar -- no cual quiere el usuario.
+    """
+    texto = _leer(CMD_DIR / nombre)
+    assert "workspace URL is asked on every run" in texto, (
+        f"{nombre} no dice que el workspace se pregunta en cada corrida")
+    assert "never inferred from a profile" in texto, (
+        f"{nombre} no prohibe deducir el workspace de un perfil con sesion vigente")
+    # Y no solo en la cabecera heredada: el paso que lo pregunta tiene que decirlo,
+    # porque es el que alguien lee cuando esta ejecutando el comando.
+    assert "Ask it **every run** (contract C0)" in texto, (
+        f"{nombre} no lo repite donde de verdad se pregunta el workspace")
+
+
+def test_el_contrato_explica_por_que_el_workspace_se_pregunta_y_el_perfil_no():
+    """La regla sin su motivo es una regla que alguien optimiza el dia que estorba."""
+    texto = _leer(CONTRATO)
+    assert "### C0. The workspace URL is ASKED, every run" in texto
+    assert "### C1. The Unity Catalog target is DISCOVERED" in texto
+    # El motivo, que es lo que la hace defendible: la asimetria del error.
+    assert "look identical from here" in texto
+    # Y la otra mitad: el perfil se deriva, no se pregunta.
+    assert "derived** from the URL and never asked" in texto
 
 
 @pytest.mark.parametrize("nombre", FAMILIA)

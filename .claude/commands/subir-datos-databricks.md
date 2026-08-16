@@ -5,7 +5,7 @@ description: Sube/sincroniza solo la carpeta local data/ (más el archivo site/d
 > **Read `.claude/commands/_contrato-despliegue-databricks.md` before anything else.** It is mandatory and it overrides what follows:
 > - **A. Run log** — open the bitacora *before* asking the user anything, record every numbered step as you finish it, and always close it. Its path and final state are part of the report back to the user.
 > - **B. Never abort** — a restriction gets recorded and worked around; the command runs to the end regardless. Wherever this file says "stop and report", rule B applies instead.
-> - **C. Unity Catalog target** — `workspace.default.chec-simulador` below is a default, not a requirement. Resolve it at runtime and substitute the resolved value into every path here.
+> - **C. Destination** — the **workspace URL is asked on every run**, never inferred from a profile that happens to have a live session; the profile is derived from it (E1). And `workspace.default.chec-simulador` below is a default, not a requirement: resolve it at runtime and substitute the resolved value into every path here.
 > - **D. Known restrictions** — D1–D10. If one shows up, do not re-diagnose it.
 
 Follow this exact sequence when `/subir-datos-databricks` is invoked. It is the standalone, single-source-of-truth command for mirroring local `data/` into the Unity Catalog Volume `workspace.default.chec-simulador` — useful on its own when only the raw/data files changed and neither the source packages, the `project_flow` notebooks, the tables/dashboard, nor the reports need to be touched. `/subir-a-databricks` reuses this exact command by cross-reference instead of duplicating this logic.
@@ -15,7 +15,10 @@ Follow this exact sequence when `/subir-datos-databricks` is invoked. It is the 
 ## 0. Ask the user for the one required input
 
 Ask, and wait for the answer:
-1. The Databricks workspace URL (e.g. `https://dbc-xxxxxxxx-xxxx.cloud.databricks.com`).
+1. **The Databricks workspace URL** (e.g. `https://dbc-xxxxxxxx-xxxx.cloud.databricks.com`).
+   Ask it **every run** (contract C0). Never take it from whichever profile happens to
+   have a live session, and never from what the last run used: mirroring 566 MB into the
+   wrong workspace succeeds quietly.
 
 Do not ask about profile or catalog up front — resolve those automatically below.
 

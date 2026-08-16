@@ -5,7 +5,7 @@ description: Publica el simulador de riesgo por vano como una Databricks App en 
 > **Read `.claude/commands/_contrato-despliegue-databricks.md` before anything else.** It is mandatory and it overrides what follows:
 > - **A. Run log** — open the bitacora *before* asking the user anything, record every numbered step as you finish it, and always close it. Its path and final state are part of the report back to the user.
 > - **B. Never abort** — a restriction gets recorded and worked around; the command runs to the end regardless. Wherever this file says "stop and report", rule B applies instead.
-> - **C. Unity Catalog target** — `workspace.default.chec-simulador` below is a default, not a requirement. Resolve it at runtime and substitute the resolved value into every path here.
+> - **C. Destination** — the **workspace URL is asked on every run**, never inferred from a profile that happens to have a live session; the profile is derived from it (E1). And `workspace.default.chec-simulador` below is a default, not a requirement: resolve it at runtime and substitute the resolved value into every path here.
 > - **D. Known restrictions** — D1–D10. If one shows up, do not re-diagnose it.
 
 Follow this exact sequence when `/app-simulador-vano` is invoked. It publishes
@@ -116,7 +116,10 @@ Ask, one at a time, and wait for each answer:
    alphanumerics and hyphens only**, unique in the workspace (`Simulador Vano` →
    `simulador-vano`). If the answer has spaces, uppercase or accents, propose the normalized
    form and confirm.
-2. The Databricks workspace URL (e.g. `https://dbc-xxxxxxxx-xxxx.cloud.databricks.com`).
+2. **The Databricks workspace URL** (e.g. `https://dbc-xxxxxxxx-xxxx.cloud.databricks.com`).
+   Ask it **every run** (contract C0). Never take it from whichever profile happens to
+   have a live session: that says which workspace you can reach, not which one is meant,
+   and deploying to the wrong one looks exactly like deploying to the right one.
 
 Do **not** ask which compute size to use — decide it in step 6 from the measured footprint, and
 report the choice. Only ask if the user wants more than about six concurrent users.

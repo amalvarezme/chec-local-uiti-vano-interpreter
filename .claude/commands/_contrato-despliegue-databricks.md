@@ -138,7 +138,35 @@ The only three things that still stop a run outright:
 
 Everything else: record, work around, continue.
 
-## C. Resolving the Unity Catalog target — discover, never assume
+## C. Resolving the destination — ask the workspace, discover the catalog
+
+The destination has two halves, resolved in opposite ways. They share one reason:
+**getting the destination wrong is invisible**, because the wrong one is reachable too
+and answers exactly like the right one.
+
+### C0. The workspace URL is ASKED, every run
+
+Every command in this family asks for the workspace URL as its first input, on
+**every** run. Never infer it:
+
+- **Never from a live session.** `databricks auth profiles` may list several hosts,
+  and one of them may have a valid token right now. That says which workspace you
+  *can* reach, not which one the user *means*. There are five profiles configured on
+  this machine.
+- **Never from the last run.** The bitacora records which workspace the previous run
+  used; that is evidence, not a default.
+- **Never from a `DEFAULT` profile.** It is whatever was configured last.
+
+The reason is the asymmetry: deploying to the intended workspace and deploying to
+another one **look identical from here** — both authenticate, both create the Volume,
+both publish an app that answers. The user finds out when someone opens a URL that
+does not have their data. One question costs seconds; the wrong answer costs a
+deployment nobody knows is in the wrong place.
+
+The profile is the opposite: it is **derived** from the URL and never asked (E1).
+Asking for both invites the pair to disagree.
+
+### C1. The Unity Catalog target is DISCOVERED
 
 Every command in this family used to hardcode `workspace.default.chec-simulador`.
 **That catalog does not exist in every workspace** and cannot always be created
