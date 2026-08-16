@@ -553,7 +553,14 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         rows=2, cols=15,
         row_heights=[0.56, 0.44],
         column_widths=[1 / 15] * 15,
-        vertical_spacing=0.12, horizontal_spacing=0.012,
+        # El vertical sube de 0.12 a 0.19 porque es una FRACCION del area de dibujo, y al
+        # bajar la figura de 960 a 643 el hueco entre filas se encogia de 97 px a 59. Lo
+        # que tiene que caber ahi -- las marcas y el rotulo del eje x de la fila 1, y los
+        # titulos de los cuatro paneles de la fila 2 -- es TEXTO, y el texto no encoge:
+        # a 59 px "Numero de eventos en la ventana" se pisaba con "Evolucion (color =
+        # grupo)". 0.19 sobre el area nueva devuelve los ~94 px que habia.
+        # El horizontal no se toca: el ancho no ha cambiado.
+        vertical_spacing=0.19, horizontal_spacing=0.012,
         specs=[[{'colspan': 7}, None, None, None, None, None, None,
                 None,
                 {'type': 'map', 'colspan': 7}, None, None, None, None, None, None],
@@ -712,7 +719,20 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         # Sin `width`: la figura la fija el contenedor. Es la condicion para que
         # `default_width='100%'` y `config.responsive` de la celda siguiente surtan efecto y el
         # tablero use todo el ancho de la pantalla en el navegador.
-        height=960, template='plotly_white', bargap=0.45, violingap=0.3,
+        # 655 y no 960: es lo que deja que el tablero ENTERO quepa sin scroll en la
+        # pantalla de un portatil de 14 pulgadas. El presupuesto, con lo medido alrededor:
+        #
+        #     panel 119 + su margen 6 + barra del boton 32 + su margen 6
+        #                + relleno del body 24                     = 187 px fijos
+        #     830 (viewport) - 187                                 = 643
+        #
+        # Los dos margenes de 6 px se me habian pasado: con 655 el documento medido daba
+        # 842 contra los 830 de la pantalla, o sea 12 px de scroll por dos margenes.
+        #
+        # Apretar el panel a la mitad -- de 239 a 119 -- no bastaba ni de lejos: dejaba el
+        # documento en 1.147 px, y 960 de esos eran esta figura. Borrar el panel entero
+        # tampoco habria alcanzado. El unico numero elegible aqui es este.
+        height=643, template='plotly_white', bargap=0.45, violingap=0.3,
     )
     fig.update_xaxes(title_text='Numero de eventos en la ventana', row=1, col=1)
     fig.update_yaxes(title_text='UITI acumulado en la ventana', row=1, col=1)

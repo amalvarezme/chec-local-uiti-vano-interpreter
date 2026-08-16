@@ -106,3 +106,45 @@ def test_el_panel_pierde_una_fila_y_aprieta_las_separaciones():
     assert gap.group(1).strip() != "18px", (
         "el `gap` sigue siendo el mismo en fila y en columna; el de fila era lo que mas "
         "alto sumaba")
+
+
+def test_el_tablero_entero_cabe_en_una_pantalla_de_portatil():
+    """Panel, barra y figura sin scroll en un viewport de 830 px.
+
+    El panel a la mitad NO bastaba, y el numero lo dice: con el panel en 119 px el
+    documento seguia en 1.147, de los cuales 960 eran la figura. Borrar el panel entero
+    tampoco habria alcanzado.
+
+    El presupuesto, con lo que hay MEDIDO alrededor de la figura:
+
+        panel 119 + su margen 6 + barra del boton 32 + su margen 6
+                  + relleno del body 24                      = 187 px fijos
+        830 - 187 = 643
+
+    Los dos margenes de 6 px no son un detalle: con 655 el documento MEDIDO daba 842
+    contra los 830 de la pantalla, y esos 12 px de mas son exactamente ellos.
+
+    Se fija el `height` porque es el unico numero que se puede elegir: los otros tres
+    salen del contenido. Si alguien sube el panel otra vez, esta prueba no lo ve -- lo
+    que vigila es que la figura no vuelva a los 960 sin que nadie lo haya decidido.
+    """
+    fuente = _sin_comentarios(_fuente())
+    alto = re.search(r"height=(\d+), template='plotly_white'", fuente)
+    assert alto, "la figura del 03 no declara `height`"
+    assert int(alto.group(1)) == 643, (
+        f"el alto de la figura es {alto.group(1)}; el presupuesto de una pantalla de "
+        f"830 px deja 643")
+
+    # El alto y la separacion entre filas NO se pueden elegir por separado.
+    # `vertical_spacing` es una FRACCION del area de dibujo: al bajar la figura de 960 a
+    # 643 el hueco entre filas se encogia de 97 px a 59, y lo que tiene que caber ahi --
+    # el rotulo del eje x de la fila 1 y los titulos de los cuatro paneles de la fila 2 --
+    # es TEXTO, que no encoge. Visto en captura: "Numero de eventos en la ventana" se
+    # pisaba con "Evolucion (color = grupo)".
+    sep = re.search(r"vertical_spacing=([\d.]+)", fuente)
+    assert sep and float(sep.group(1)) == 0.19, (
+        f"la separacion vertical es {sep.group(1) if sep else None}; con el area nueva "
+        f"hace falta 0.19 para conservar los ~94 px que pide el texto")
+    area = 643 - 89 - 60
+    assert abs(0.19 * area - 94) < 5, (
+        f"la separacion ya no da los ~94 px: {0.19 * area:.0f}")
