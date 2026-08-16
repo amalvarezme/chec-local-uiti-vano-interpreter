@@ -258,6 +258,23 @@ SERIE_TAM_ACTIVO = SERIE_TAM * 3
 COLOR_SERIE_UITI = COLORES_MAPA[-1]  # el rojo de `Alto`, el extremo de la escala del mapa
 
 
+
+def _corta(ruta: Path, raiz: Path) -> str:
+    """La ruta relativa al repositorio, o la absoluta si cae fuera.
+
+    `construir()` acepta cualquier `ruta_html`, asi que el destino no tiene por que
+    estar dentro del arbol -- un directorio temporal, uno de despliegue. Con
+    `Path.relative_to` a secas eso era un `ValueError` lanzado DESPUES de construir el
+    tablero entero: el archivo quedaba escrito y la llamada fallaba igual.
+
+    La raiz entra por argumento porque `REPO_ROOT` es local de `construir()`: se
+    resuelve por llamada, ya que puede venir dada.
+    """
+    try:
+        return str(ruta.relative_to(raiz))
+    except ValueError:
+        return str(ruta)
+
 def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     """Construye el tablero y devuelve la ruta del HTML autocontenido.
 
@@ -1927,7 +1944,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         )
         destino.write_text(documento, encoding='utf-8')
         mb = destino.stat().st_size / 1024 ** 2
-        print(f'panel autocontenido escrito en {destino.relative_to(REPO_ROOT)} ({mb:,.1f} MB)')
+        print(f'panel autocontenido escrito en {_corta(destino, REPO_ROOT)} ({mb:,.1f} MB)')
         if abrir:
             webbrowser.open(destino.resolve().as_uri())
             print('abriendo en el navegador por defecto -- '

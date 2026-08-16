@@ -20,6 +20,14 @@ RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ / "aplicaciones" / "_comun"))
 sys.path.insert(0, str(RAIZ / "src"))
 
+# Construir un tablero abre el CSV de 566 MB y tres shapefiles. Sin ellos se salta, que
+# es informacion honesta; fingir que paso no lo es.
+requiere_datos = pytest.mark.skipif(
+    not (RAIZ / "data" / "Indicadores_vano_v3.csv").exists()
+    or not (RAIZ / "data" / "GEO" / "MVLINSEC.shp").exists(),
+    reason="requiere el CSV y los shapefiles para construir un tablero de verdad",
+)
+
 
 def _construccion():
     return importlib.import_module("construccion")
@@ -50,8 +58,54 @@ def test_cada_visor_declara_el_mismo_modulo_que_leen_las_pruebas():
 
 @pytest.mark.parametrize("cuaderno, modulo", sorted(ESTATICOS.items()))
 def test_el_modulo_del_tablero_existe_y_expone_construir(cuaderno, modulo):
+    """Barato y siempre: importar el modulo ya ejecuta sus ~250 lineas de nivel 0.
+
+    Es lo que atrapa un error de sintaxis o un import roto sin pagar una
+    construccion. El proyecto ya se llevo esa leccion una vez, cuando `pytest -q`
+    seguia en verde a traves de un cuaderno que no arrancaba.
+    """
+    from inspect import signature
+
     m = importlib.import_module(f"chec_tableros.{modulo}")
     assert callable(m.construir), f"{modulo} no expone construir()"
+    # La firma es el contrato con `construccion.py`, que llama con `raiz=` y `abrir=`.
+    parametros = signature(m.construir).parameters
+    for nombre in ("raiz", "abrir"):
+        assert nombre in parametros, f"{modulo}.construir() no acepta {nombre}="
+
+
+@requiere_datos
+@pytest.mark.parametrize("cuaderno, modulo", sorted(ESTATICOS.items()))
+def test_cada_tablero_se_construye_de_verdad(cuaderno, modulo, tmp_path):
+    """Que el tablero SE CONSTRUYA. Cuesta unos segundos y nada mas lo dice.
+
+    Aqui habia un golden: `tests/golden/tableros_pre_migracion/` fijaba el sha256 de
+    cada pieza de los cuatro paneles, congelado antes de la migracion. Se retiro al
+    terminarla, y con razon -- pinaba una apariencia que se sigue trabajando, y una
+    prueba que falla en cada cambio legitimo ensena a recapturarla sin mirar.
+
+    Pero era ademas **lo unico que construia un tablero**, y eso no era su proposito
+    sino un efecto lateral. Al borrarlo, la suite entera dejo de ejecutar una sola
+    linea de las ~1.900 de cada modulo: un fallo con datos reales -- una columna
+    renombrada, un `groupby` sobre algo que ya no esta -- pasaba en verde.
+
+    Lo que se afirma es lo permanente, no los bytes: que construye, que devuelve una
+    ruta, y que el documento es un HTML autocontenido con su figura dentro.
+    """
+    modulo_tablero = importlib.import_module(f"chec_tableros.{modulo}")
+    salida = tmp_path / f"{modulo}.html"
+
+    ruta = modulo_tablero.construir(raiz=RAIZ, ruta_html=salida, abrir=False)
+
+    assert Path(ruta) == salida, f"{modulo}.construir() no respeto `ruta_html`"
+    documento = salida.read_text(encoding="utf-8")
+    # Autocontenido: sin esto el panel depende de una CDN y muere sin red.
+    assert "<!DOCTYPE html>" in documento or "<!doctype html>" in documento
+    assert "Plotly.newPlot" in documento or "plotly" in documento.lower()
+    # Un umbral flojo a proposito: lo que se descarta es un documento vacio o un
+    # esqueleto sin datos, no un tamanio concreto que cambie con cada reestilizado.
+    assert len(documento) > 500_000, (
+        f"{modulo} produjo {len(documento):,} bytes: parece un documento sin datos")
 
 
 def test_el_simulador_expone_sus_dos_mitades():

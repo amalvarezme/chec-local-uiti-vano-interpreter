@@ -76,6 +76,23 @@ ESPACIOS = [(LOG_X, LOG_Y, PREPROCESO)]
 IDX_ESPACIO_DEFECTO = 0
 
 
+
+def _corta(ruta: Path, raiz: Path) -> str:
+    """La ruta relativa al repositorio, o la absoluta si cae fuera.
+
+    `construir()` acepta cualquier `ruta_html`, asi que el destino no tiene por que
+    estar dentro del arbol -- un directorio temporal, uno de despliegue. Con
+    `Path.relative_to` a secas eso era un `ValueError` lanzado DESPUES de construir el
+    tablero entero: el archivo quedaba escrito y la llamada fallaba igual.
+
+    La raiz entra por argumento porque `REPO_ROOT` es local de `construir()`: se
+    resuelve por llamada, ya que puede venir dada.
+    """
+    try:
+        return str(ruta.relative_to(raiz))
+    except ValueError:
+        return str(ruta)
+
 def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     """Construye el tablero de vanos y devuelve la ruta del HTML autocontenido."""
     ABRIR_EN_NAVEGADOR = bool(abrir)
@@ -749,7 +766,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     # Por defecto exporta la misma configuracion con que arranca la figura.
     etiquetas = tabla_etiquetas()
     ruta_csv = guardar_etiquetas()
-    print(f'{len(etiquetas)} circuitos -> {ruta_csv.relative_to(REPO_ROOT)}')
+    print(f'{len(etiquetas)} circuitos -> {_corta(ruta_csv, REPO_ROOT)}')
     print(etiquetas['etiqueta'].value_counts().reindex(NOMBRES_GRUPOS).to_string())
     etiquetas.head()
 
@@ -1857,7 +1874,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
                 f'{_espacio}.csv')
     _destino.parent.mkdir(parents=True, exist_ok=True)
     etiquetas_vano.to_csv(_destino, index=False)
-    print(f'{len(etiquetas_vano):,} vanos -> {_destino.relative_to(REPO_ROOT)}')
+    print(f'{len(etiquetas_vano):,} vanos -> {_corta(_destino, REPO_ROOT)}')
     print(etiquetas_vano['etiqueta'].value_counts().reindex(NOMBRES_GRUPOS).to_string())
     etiquetas_vano.head()
 
@@ -1915,7 +1932,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
 '''
         DESTINO_PANEL.write_text(documento, encoding='utf-8')
         mb = DESTINO_PANEL.stat().st_size / 1024 ** 2
-        print(f'panel de vanos escrito en {DESTINO_PANEL.relative_to(REPO_ROOT)} ({mb:,.1f} MB)')
+        print(f'panel de vanos escrito en {_corta(DESTINO_PANEL, REPO_ROOT)} ({mb:,.1f} MB)')
         if abrir:
             webbrowser.open(DESTINO_PANEL.resolve().as_uri())
             print('abriendo en el navegador por defecto')

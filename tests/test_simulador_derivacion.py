@@ -1,21 +1,30 @@
-"""El arranque caro del simulador, fuera del cuaderno y sin cambiar un byte.
+"""El arranque caro del simulador: que produce, y que no puede cambiar en silencio.
 
-## Que se esta moviendo, y por que importa el "sin cambiar un byte"
+## De donde viene el "sin cambiar un byte"
 
-Hasta ahora `aplicaciones/06_simulador/preparar.py` construia el paquete
-**ejecutando las siete primeras celdas del cuaderno 06** con `exec()`. Ese diseno
-tenia una virtud real -- no duplicaba la derivacion -- y un costo: el constructor
-dependia de los INDICES de celda de un `.ipynb`, y nadie podia importar esa
-derivacion desde ningun otro sitio ni probarla por separado.
+`aplicaciones/06_simulador/preparar.py` construia el paquete **ejecutando las siete
+primeras celdas del cuaderno 06** con `exec()`. Ese diseno tenia una virtud real -- no
+duplicaba la derivacion -- y un costo: el constructor dependia de los INDICES de celda
+de un `.ipynb`, y nadie podia importar esa derivacion desde ningun otro sitio ni
+probarla por separado.
 
-`chec_tableros.simulador.derivacion` se la lleva a un modulo. La pregunta que
-decide si el movimiento fue correcto no es si el paquete "se ve bien": es si sale
-**identico byte a byte** al que producia el camino viejo. Cualquier diferencia --
-un dtype, un orden de columnas, un redondeo de coordenada -- se propaga al
-simulador sin dar ningun error.
+`chec_tableros.simulador.derivacion` se la llevo a un modulo. La pregunta que decidia
+si el movimiento fue correcto no era si el paquete "se ve bien": era si salia
+**identico byte a byte**. Salio, y esa pregunta esta cerrada.
 
-Por eso estas pruebas comparan contra `tests/golden/tableros_pre_migracion/`,
-congelado ANTES de que existiera este modulo.
+## Por que la comparacion de bytes se queda
+
+Porque contesta otra que no caduca. Un dtype, un orden de columnas o un redondeo de
+coordenada se propagan al tablero **sin dar ningun error**: el simulador puntua otra
+cosa y todo se ve perfectamente bien. Lo demas de este fichero mira FORMA -- que el
+campo exista, que sea `float32`, que las features empiecen donde deben --, y un cambio
+de valores pasa por ahi sin tocar nada.
+
+Los cuatro sha256 viven ahora en `HUELLAS_DERIVADAS`, unas lineas mas abajo, con lo que
+significa cambiarlos. Estuvieron en `tests/golden/tableros_pre_migracion/huellas.json`,
+que se retiro al terminar la migracion: su otra mitad pinaba la APARIENCIA de los cuatro
+tableros HTML, que se sigue trabajando, y una prueba que falla en cada cambio legitimo
+ensena a recapturarla sin mirar.
 
 ## Por que se saltan sin datos
 
@@ -32,7 +41,6 @@ from pathlib import Path
 import pytest
 
 RAIZ = Path(__file__).resolve().parents[1]
-GOLDEN = RAIZ / "tests" / "golden" / "tableros_pre_migracion" / "huellas.json"
 CSV = RAIZ / "data" / "Indicadores_vano_v3.csv"
 BOLSAS = RAIZ / "data" / "derived" / "bolsas_mil_full.joblib"
 MODELO = RAIZ / "data" / "models" / "mil_vano_ventana_v1.pt"
@@ -42,14 +50,39 @@ requiere_datos = pytest.mark.skipif(
     reason="requiere el CSV, el cache de bolsas y el modelo entrenado",
 )
 
-# Los cuatro que `congelar` escribe. Los otros cuatro del paquete son copias
-# literales de archivos de `data/`, asi que no dicen nada sobre la derivacion.
-DERIVADOS = ("tabla.parquet", "X_inst.npy", "geo.json", "catalogo.joblib")
-
-
-def _huellas_golden() -> dict:
-    piezas = json.loads(GOLDEN.read_text(encoding="utf-8"))["06_simulador"]["piezas"]
-    return {n: piezas[n]["sha256"] for n in DERIVADOS}
+# Los cuatro archivos que `congelar` ESCRIBE, con el sha256 que produjeron. Los otros
+# cuatro del paquete son `shutil.copy2` de archivos versionados: sus huellas son las de
+# esos archivos y no dicen nada sobre este modulo.
+#
+# ## Por que estos numeros viven aqui y no en un golden aparte
+#
+# Estuvieron en `tests/golden/tableros_pre_migracion/huellas.json`, congelado antes de
+# que existiera `derivacion.py` para comprobar que sacarlo del cuaderno no movia un
+# byte. Ese golden se retiro con la migracion terminada -- su otra mitad, las huellas
+# de los cuatro tableros HTML, pinaba una apariencia que se sigue trabajando, y una
+# prueba que falla en cada cambio legitimo ensena a recapturarla sin mirar.
+#
+# Estas cuatro no se fueron con el, porque no eran una prueba de la migracion: son la
+# UNICA cosa que atrapa que la derivacion cambie en silencio lo que el simulador
+# puntua. Todo lo demas de este fichero mira forma -- que el campo exista, que el dtype
+# sea `float32`, que las features empiecen donde deben --, y un cambio de valores pasa
+# por ahi sin tocar nada.
+#
+# Escritas aqui y no en un JSON a proposito: cambiarlas es editar esta prueba, y eso
+# aparece en el diff con su motivo al lado. Un archivo de golden se vuelve a capturar
+# con un comando, que es justo lo que no debe ser barato.
+#
+# **Si una de estas cambia**, la pregunta no es "actualizo el numero" sino "que valor
+# se movio y por que": un dtype, un orden de columnas o un redondeo de coordenada se
+# propaga al tablero sin dar ningun error. Medidas el 2026-08-15 sobre
+# `Indicadores_vano_v3.csv` y `bolsas_mil_full.joblib` de esa fecha.
+HUELLAS_DERIVADAS = {
+    "tabla.parquet": "7788c466939479f43103277e04d3c0d21ea581a2553289f4ff84fe993f1915db",
+    "X_inst.npy": "48012f3508062dc228088e8042319449e68701c692c693d448441b0a7f1c4eb5",
+    "geo.json": "263eef51860baaa6e1de803c49f0a4d65703fb3b5c9a2b1d040f68be28d69049",
+    "catalogo.joblib": "64f09eb75157da856ed1401978210967da52ed07d44ca6acc5ece486b763bd6a",
+}
+DERIVADOS = tuple(HUELLAS_DERIVADAS)
 
 
 def test_el_modulo_expone_derivar_y_congelar():
@@ -62,26 +95,30 @@ def test_el_modulo_expone_derivar_y_congelar():
 
 
 @requiere_datos
-def test_derivar_congela_los_mismos_bytes_que_el_camino_viejo(tmp_path):
-    """El corazon de la rebanada: mismo paquete, sin ejecutar una sola celda.
+def test_la_derivacion_produce_exactamente_los_mismos_bytes(tmp_path):
+    """Lo unico que atrapa que el simulador empiece a puntuar otra cosa.
 
-    Se comparan solo los cuatro archivos que la derivacion PRODUCE. Los otros
-    cuatro del paquete son `shutil.copy2` de archivos versionados: incluirlos
-    inflaria la prueba sin anadir una sola garantia sobre este modulo.
+    Nacio comprobando que sacar la derivacion del cuaderno no movia un byte, y esa
+    pregunta ya esta contestada. Sigue aqui porque contesta otra que no caduca: que
+    nadie cambie en silencio los valores que el modelo lee.
+
+    Se comparan solo los cuatro archivos que la derivacion PRODUCE. Los otros cuatro
+    del paquete son `shutil.copy2` de archivos versionados: incluirlos inflaria la
+    prueba sin anadir una sola garantia sobre este modulo.
     """
     from chec_tableros.simulador import derivacion
 
     derivacion.congelar(derivacion.derivar(), tmp_path)
 
-    esperado = _huellas_golden()
     obtenido = {
         nombre: hashlib.sha256((tmp_path / nombre).read_bytes()).hexdigest()
         for nombre in DERIVADOS
     }
-    distintos = [n for n in DERIVADOS if obtenido[n] != esperado[n]]
+    distintos = [n for n in DERIVADOS if obtenido[n] != HUELLAS_DERIVADAS[n]]
     assert not distintos, (
-        f"{distintos} no reproducen el golden. El movimiento a src/ NO fue neutral: "
-        "algo cambio de dtype, de orden o de redondeo."
+        f"{distintos} ya no reproducen sus bytes. Algo cambio de dtype, de orden o de "
+        "redondeo, y eso se propaga al tablero sin dar ningun error. Antes de tocar "
+        "`HUELLAS_DERIVADAS`, averigua QUE valor se movio."
     )
 
 
