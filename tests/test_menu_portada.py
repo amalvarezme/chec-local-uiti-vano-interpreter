@@ -120,18 +120,35 @@ def test_el_diagrama_es_svg_en_linea():
         "el diagrama no declara `viewBox`; sin el no escala con su columna")
 
 
-def test_el_diagrama_nombra_las_cinco_aplicaciones_y_su_fuente():
-    """Un resumen que se salte una aplicacion es un resumen equivocado.
+def test_el_diagrama_explica_el_simulador_con_su_vocabulario_real():
+    """El diagrama dejo de listar los cinco tableros para explicar el simulador.
 
-    Los nombres salen de `tableros.py`, que es el catalogo, para que agregar un tablero
-    ponga esta prueba roja en vez de dejar el diagrama contando cuatro de cinco.
+    Y lo hace con las palabras que el tablero usa de verdad: `Diagnostico`, `Intervencion`,
+    `Escenario` y `Simular` son botones que existen, no invenciones de la portada. Un
+    diagrama que renombre lo que el usuario va a ver es peor que no tenerlo.
+
+    "Sensibilidad min-max" se comprueba aparte y con enfasis: el modulo que la calcula
+    documenta que su ranking NO es SHAP, y llamarlo asi en la portada seria prometer una
+    tecnica que no se corre.
     """
     pagina = _pagina()
-    tableros = _comun("tableros")
-    titulos = [t.titulo for t in tableros.TABLEROS]
-    assert len(titulos) == 5, f"el catalogo ya no tiene cinco tableros: {titulos}"
-    faltan = [t for t in titulos if t not in pagina]
-    assert not faltan, f"el diagrama no nombra: {faltan}"
+    svg = pagina[pagina.index("<svg"):pagina.index("</svg>")]
+    for pieza in ("Modelo MIL", "Sensibilidad min-max", "Diagnostico semi-automatico",
+                  "Intervencion", "Escenario", "Grafo de relaciones", "Que pasa si?"):
+        assert pieza in svg, f"el diagrama no nombra {pieza!r}"
+    assert "SHAP" in svg and "no es SHAP" in svg, (
+        "el diagrama no aclara que la sensibilidad NO es SHAP")
+
+
+def test_los_botones_que_el_diagrama_nombra_existen_de_verdad():
+    """Si el tablero renombra un boton, la portada tiene que enterarse."""
+    tablero = (RAIZ / "src" / "chec_tableros" / "simulador" / "tablero.py").read_text(
+        encoding="utf-8")
+    svg = _pagina()
+    for boton in ("Diagnostico", "Simular"):
+        assert f"description='{boton}'" in tablero, (
+            f"el simulador ya no tiene un boton {boton!r}; la portada lo sigue nombrando")
+        assert boton in svg, f"la portada dejo de nombrar el boton {boton!r}"
 
 
 def test_el_diagrama_usa_la_paleta_y_no_colores_de_su_cosecha():
