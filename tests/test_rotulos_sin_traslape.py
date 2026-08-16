@@ -99,7 +99,9 @@ def test_los_paneles_por_vano_del_simulador_declaran_su_eje_categorico():
     hay ningun vano que nombrar todavia.
     """
     fuente = _sin_comentarios(_fuente(SIMULADOR))
-    celdas = [(4, 3), (5, 1), (5, 4), (6, 1), (6, 4)]
+    # (4,1) y ya no (4,3): el top de variables paso a ocupar las cuatro columnas cuando la
+    # serie de UITI subio a la fila 3 a compartir con el perfil.
+    celdas = [(4, 1), (5, 1), (5, 4), (6, 1), (6, 4)]
     for fila, columna in celdas:
         llamada = re.search(
             rf"update_xaxes\((?:[^()]|\([^()]*\))*?row={fila},\s*col={columna}\)",

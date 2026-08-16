@@ -61,11 +61,17 @@ import ayudas_tableros
 RAIZ = Path(__file__).resolve().parents[1]
 TABLERO = "06_uiti_vano_explicabilidad_simulador"
 
-# Donde vive cada panel en la rejilla de `make_subplots`, y como se le reconoce en el
-# codigo. La fila del grafo y la del top son vecinas y las dos ocupan las columnas 3-4:
-# es precisamente esa vecindad la que hace que un desfase de uno no se note al leerlo.
-GRAFO = (3, 3)
-TOP_POR_VANO = (4, 3)
+# Donde vive cada panel en la rejilla de `make_subplots`.
+#
+# El GRAFO ya no esta en esta rejilla: se fue a su propia figura, debajo del panel de
+# control, porque ese era su sitio pedido y un subplot no puede salirse de su figura. Sus
+# ejes se configuran sobre `_fig_grafo` y sin `row`/`col`, asi que se le busca aparte --
+# ver `_llamadas_a_los_ejes_del_grafo`.
+#
+# El TOP paso a la columna 1 y de ancho completo cuando la serie de UITI subio a la fila 3
+# a compartir con el perfil. Antes el grafo y el top eran vecinos en las columnas 3-4, y
+# era esa vecindad la que hacia que un desfase de uno no se notara al leerlo.
+TOP_POR_VANO = (4, 1)
 
 # El ambito en el que se ARMA la figura. Todo lo demas que le escriba a un eje es un
 # repintado, y un repintado solo puede tocar su propio panel.
@@ -134,6 +140,19 @@ def _llamadas_al_panel(fila: int, columna: int) -> list[str]:
             if (f, c) == (fila, columna)]
 
 
+def _llamadas_a_los_ejes_del_grafo() -> list[str]:
+    """Las llamadas que configuran los ejes de la figura PROPIA del grafo.
+
+    No llevan `row`/`col` -- no hay rejilla que indexar --, asi que se reconocen por el
+    nombre de la figura. Es lo que sustituye a buscarlas por su casilla.
+    """
+    fuente = ayudas_tableros.fuente_de_tablero(TABLERO)
+    # Con los espacios COLAPSADOS: las llamadas ocupan varias lineas, y quien las lee
+    # busca con `.*?`, que no cruza saltos de linea.
+    return [" ".join(l.split()) for l in re.findall(
+        r"_fig_grafo\.update_[xy]axes\((?:[^()]|\([^()]*\))*\)", fuente)]
+
+
 def _funcion(nombre: str) -> str:
     return ayudas_tableros.cuerpo_de_funcion(
         ayudas_tableros.fuente_de_tablero(TABLERO), nombre)
@@ -143,10 +162,12 @@ def _funcion(nombre: str) -> str:
 
 
 def test_el_top_por_vano_le_escribe_a_su_propia_fila():
-    """El rango del top va a la fila 4, que es donde esta el top.
+    """El rango del top va a (4,1), que es donde esta el top.
 
-    Iba a la 3 -- el grafo -- desde que el perfil del circuito entro como fila nueva y
-    bajo al top una fila sin que esta llamada se enterara.
+    Iba a (4,3) hasta que la serie de UITI subio a la fila 3 y el top se quedo con el
+    ancho entero. Antes de eso iba a la 3 -- el grafo -- porque el perfil entro como fila
+    nueva y bajo al top una fila sin que esta llamada se enterara. Dos veces el mismo
+    fallo: por eso esta prueba.
     """
     cuerpo = _funcion("_pintar_top_por_vano")
     destinos = re.findall(r"update_yaxes\([^)]*row=(\d+),\s*col=(\d+)", cuerpo)
@@ -154,7 +175,7 @@ def test_el_top_por_vano_le_escribe_a_su_propia_fila():
     for fila, columna in destinos:
         assert (int(fila), int(columna)) == TOP_POR_VANO, (
             f"_pintar_top_por_vano escribe en la fila {fila}, columna {columna}. "
-            f"El top vive en {TOP_POR_VANO}; {GRAFO} es el grafo, y escribirle ahi le "
+            f"El top vive en {TOP_POR_VANO}; escribirle a otra casilla le cambia el "
             "descentra el circulo y lo saca de su recuadro.")
 
 
@@ -167,9 +188,12 @@ def test_nadie_mas_que_la_figura_le_toca_el_rango_al_grafo():
     porque `scaleanchor` estira lo que reciba hasta cuadrar los pixeles y conserva el
     CENTRO de lo que le den.
     """
+    # El grafo ya no vive en una casilla de la rejilla, asi que la regla cambia de forma
+    # sin cambiar de fondo: a sus ejes solo se les escribe al ARMAR su figura. Un repintado
+    # que le tocara el rango le descentraria el circulo igual que antes.
     culpables = [(ambito, llamada[:90])
                  for ambito, llamada, fila, col in _llamadas_a_ejes()
-                 if (fila, col) == GRAFO and ambito != ARMADO]
+                 if "_fig_grafo" in llamada and ambito != ARMADO]
     assert not culpables, (
         f"estas llamadas le reescriben los ejes al grafo desde fuera del armado de la "
         f"figura: {culpables}")
@@ -181,7 +205,7 @@ def test_el_rango_del_grafo_es_simetrico():
     Un rango asimetrico no se ve como un error: se ve como un grafo que se sale por un
     lado y deja una banda blanca por el otro.
     """
-    rangos = [m for llamada in _llamadas_al_panel(*GRAFO)
+    rangos = [m for llamada in _llamadas_a_los_ejes_del_grafo()
               for m in re.findall(r"update_([xy])axes\(.*?range=\[([^\]]+)\]", llamada)]
     assert len(rangos) == 2, f"el grafo deberia fijar sus dos ejes; se hallaron {rangos}"
     limites = []
@@ -210,7 +234,7 @@ def test_el_grafo_encoge_su_recuadro_y_no_su_rango():
     llena. Lo que sobra se queda dentro de la celda en vez de salirse a la de al lado.
     """
     for eje in ("x", "y"):
-        llamada = next((l for l in _llamadas_al_panel(*GRAFO)
+        llamada = next((l for l in _llamadas_a_los_ejes_del_grafo()
                         if f"update_{eje}axes(" in l), None)
         assert llamada, f"el grafo no configura su eje {eje}"
         assert "constrain='domain'" in llamada, (

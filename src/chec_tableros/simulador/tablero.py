@@ -643,10 +643,14 @@ def construir(
                # que tenia la del grafo -- lo que manda el diametro del circulo -- y el
                # perfil pasa de ancho completo a media fila: quince rotulos de ocho
                # digitos en la mitad del ancho, que es lo que hay que vigilar aqui.
+               # Fila 3: el perfil a la izquierda y la serie de UITI acumulado a su
+               # derecha. El grafo, que compartia esta fila, se fue a su propia figura
+               # debajo del panel de control.
                [{'type': 'xy', 'colspan': 2}, None,
-                {'type': 'xy', 'colspan': 2}, None],
-               [{'type': 'xy', 'colspan': 2, 'secondary_y': True}, None,
-                {'type': 'xy', 'colspan': 2}, None],
+                {'type': 'xy', 'colspan': 2, 'secondary_y': True}, None],
+               # Fila 4: el top de variables, ahora de ancho completo. Compartia fila con
+               # la serie, y con la serie arriba se queda con las cuatro columnas.
+               [{'type': 'xy', 'colspan': 4}, None, None, None],
                # Tres columnas para los vanos y UNA para el acumulado del circuito. Iban
                # juntos, y no son la misma pregunta ni la misma escala: el total del
                # circuito es la suma de sus 81 vanos y aplasta contra el eje a los diez
@@ -665,7 +669,6 @@ def construir(
             # Cuarto y no ultimo: los titulos van en el orden de la rejilla, y el grafo
             # ahora esta en la fila 3. El cuaderno los BUSCA por texto para reescribirlos,
             # asi que reordenarlos aqui no rompe ningun indice.
-            'Grafo - Relaciones relevantes de la simulación',
             'UITI acumulado y eventos por ventana',
             f'Top {TOP_VARIABLES_POR_VANO}: que baja el UITI de cada vano',
             'UITI acumulado: medido contra simulado',
@@ -709,7 +712,17 @@ def construir(
         # del grafo, que es lo que fija el diametro del circulo. Los paneles suman
         # 1.866,8 px, asi que el alto total baja de 3.003 a 2.489 px -- los 235,2 de la
         # fila que se va, mas su hueco.
-        row_heights=[0.126, 0.126, 0.3159, 0.153, 0.153, 0.126],
+        # La fila 3 baja a la MITAD de alto: su tamanio lo mandaba el diametro del grafo,
+        # que ya no esta ahi, y con el perfil y la serie basta con la mitad.
+        #
+        # Halvar una fila no es dividir su fraccion por dos: `row_heights` reparte lo que
+        # sobra DESPUES del espaciado, asi que cambiar una cambia a todas. Se recalculan las
+        # seis desde los pixeles MEDIDOS -- 189,4 | 189,4 | 474,8 | 230 | 230 | 189,4 sobre
+        # 1.503 px repartibles, con huecos de 162:
+        #
+        #     filas' = 189,4 + 189,4 + 237,4 (la mitad) + 230 + 230 + 189,4 = 1.265,6
+        #     cada fraccion = su alto / 1.265,6
+        row_heights=[0.1496, 0.1496, 0.1876, 0.1817, 0.1817, 0.1496],
         # 0,05 y no 0,035: en el hueco entre la serie de tiempo y el top 5 tienen que caber
         # CUATRO cosas -- las marcas del eje secundario de la serie, su rotulo "Eventos", el
         # rotulo "Relevancia variables" del top y las marcas de ese eje. Medido a 1.900 px,
@@ -733,7 +746,9 @@ def construir(
         # mide 17 de grosor, asi que seguian pisandose. En ese hueco tienen que caber
         # CUATRO capas -- marcas del eje derecho de la izquierda, su rotulo, el rotulo del
         # panel de la derecha y sus marcas --, que piden unos 90 px.
-        horizontal_spacing=0.095, vertical_spacing=0.07,
+        # El hueco entre filas se conserva en PIXELES -- 162 --, no en fraccion: lo que cabe
+        # ahi son rotulos y marcas, y el texto no encoge con la figura. 162 / 2.075,6 = 0.078.
+        horizontal_spacing=0.095, vertical_spacing=0.078,
     )
 
     # --- Mapa base (filas 1-2, columnas 1-2) ---------------------------------------------
@@ -869,7 +884,7 @@ def construir(
                         color=[COLOR_SIN_GRUPO] * len(VENTANAS),
                         line=dict(width=1.2, color=_estilo_de_cupo(_s)[0])),
             hovertext=[], hoverinfo='text', connectgaps=False,
-        ), 4, 1, secondary_y=False) for _s in range(MAX_VANOS_SERIE)
+        ), 3, 3, secondary_y=False) for _s in range(MAX_VANOS_SERIE)
     ]
     IDX['serie_eventos'] = [
         _agregar(go.Scatter(
@@ -879,22 +894,22 @@ def construir(
                         color=[COLOR_SIN_GRUPO] * len(VENTANAS),
                         line=dict(width=1.1, color=_estilo_de_cupo(_s)[0])),
             hovertext=[], hoverinfo='text', connectgaps=False,
-        ), 4, 1, secondary_y=True) for _s in range(MAX_VANOS_SERIE)
+        ), 3, 3, secondary_y=True) for _s in range(MAX_VANOS_SERIE)
     ]
     _fig.update_xaxes(title_text=('Inicio de la ventana'
                                   + (f' ({_ANIOS_VENTANA[0]})' if len(_ANIOS_VENTANA) == 1 else '')),
                       tickmode='array', tickvals=_X_VENTANAS, ticktext=_TICKS_VENTANA,
-                      tickangle=-45, tickfont=dict(size=8), row=4, col=1)
+                      tickangle=-45, tickfont=dict(size=8), row=3, col=3)
     # Eje LINEAL. Con `type='log'` las ventanas sin eventos -- que ahora valen cero, no un
     # hueco -- desaparecian del panel: `log(0)` no existe y Plotly descarta el punto en
     # silencio, asi que la secuencia completa de ventanas que el eje promete no se dibujaba.
     _fig.update_yaxes(title_text='UITI acumulado', rangemode='tozero',
-                      row=4, col=1, secondary_y=False)
+                      row=3, col=3, secondary_y=False)
     # Marcas mas pequenias en los dos ejes que comparten el hueco: cada digito que se
     # ahorran es espacio para separar sus rotulos, que estaban a 5 px uno del otro.
     _fig.update_yaxes(title_text='Eventos', rangemode='tozero', showgrid=False,
                       title_standoff=6, tickfont=dict(size=9),
-                      row=4, col=1, secondary_y=True)
+                      row=3, col=3, secondary_y=True)
 
     # --- Fila 4, columnas 3-4: el top de variables POR VANO -------------------------------
     # Un grupo de barras por vano. Cada traza es una POSICION del ranking (la 1a, la 2a...),
@@ -923,14 +938,30 @@ def construir(
             insidetextfont=dict(size=TAM_FUENTE_BARRA, color='white'),
             marker=dict(color=[], line=dict(width=0.4, color='rgba(60,10,10,0.6)')),
             hovertext=[], hoverinfo='text',
-        ), 4, 3) for _p in range(TOP_VARIABLES_POR_VANO)
+        ), 4, 1) for _p in range(TOP_VARIABLES_POR_VANO)
     ]
     _fig.update_yaxes(title_text='Caida de UITI (ordenes de magnitud)',
-                      title_standoff=6, tickfont=dict(size=9), row=4, col=3)
+                      title_standoff=6, tickfont=dict(size=9), row=4, col=1)
     _fig.update_xaxes(title_text='Vano', type='category', tickfont=dict(size=9),
-                      row=4, col=3)
+                      row=4, col=1)
 
-    # --- Fila 3, columnas 3-4: cuanto MOVIO la simulacion el grafo -------------------------
+    # --- El grafo: su propia figura, debajo del panel de control -----------------------
+    # Compartia la fila 3 con el perfil. Sale de la figura grande porque su sitio pedido es
+    # DEBAJO del panel de control y con su ancho, y el panel es la columna izquierda: un
+    # subplot no puede salirse de su figura.
+    #
+    # Lo que esto arrastra, y es la parte delicada: sus rotulos son ANOTACIONES guardadas
+    # POR POSICION (`IDX_ANOTACIONES_NODOS`), y las de los otros paneles tambien. Al llevarse
+    # las suyas a otra figura, los indices de las que quedan se recalculan solos -- cada uno
+    # se toma con `len(...) - 1` en el momento de crearla --, siempre que aqui no quede
+    # ninguna a medias.
+    _fig_grafo = go.Figure()
+
+    def _agregar_grafo(traza):
+        """Igual que `_agregar`, pero sobre la figura del grafo."""
+        _fig_grafo.add_trace(traza)
+        return len(_fig_grafo.data) - 1
+
     # Ya no es el grafo de la seleccion sino |grafo_base - grafo_simulado|. Los dos comparten
     # los pesos fijos del experto y solo difieren por las compuertas, asi que puestos uno al
     # lado del otro se ven iguales y el efecto de la intervencion -- que es lo que el panel
@@ -938,33 +969,33 @@ def construir(
     # El peso viaja en un marcador en el PUNTO MEDIO de cada arista y no en el ancho de la
     # linea: una sola traza de lineas no puede variar su ancho por segmento, y partirla en una
     # traza por arista serian decenas que hay que restilar una por una.
-    IDX['grafo_aristas'] = _agregar(go.Scattergl(
+    IDX['grafo_aristas'] = _agregar_grafo(go.Scattergl(
         x=[], y=[], mode='lines', showlegend=False,
         line=dict(width=1.0, color='rgba(120,110,110,0.45)'), hoverinfo='skip',
-    ), 3, 3)
-    IDX['grafo_pesos'] = _agregar(go.Scattergl(
+    ))
+    IDX['grafo_pesos'] = _agregar_grafo(go.Scattergl(
         x=[], y=[], mode='markers', showlegend=False,
         marker=dict(size=[], color=[], colorscale='Reds', cmin=0.0, showscale=False,
                     line=dict(width=0.4, color='#5b4a48')),
         hovertext=[], hoverinfo='text',
-    ), 3, 3)
+    ))
     # `mode='markers'` a secas: el NOMBRE del nodo ya no viaja en la traza. Un `Scatter` no
     # puede girar su texto -- comprobado contra plotly 6.8.0, solo `Bar` y las anotaciones
     # llevan `textangle` --, y con los rotulos horizontales los nombres de nodos vecinos se
     # montaban unos sobre otros alrededor del anillo. Van como anotaciones, mas abajo.
     IDX['grafo_nodos'] = [
-        _agregar(go.Scatter(
+        _agregar_grafo(go.Scatter(
             x=[], y=[], mode='markers', name=_modalidad, legendgroup='grafo',
             marker=dict(size=7, color=COLORES_MODALIDAD[_modalidad],
                         line=dict(width=0.5, color='#1f2937')),
             hovertext=[], hoverinfo='text',
-        ), 3, 3) for _modalidad in MODALIDADES_MIL
+        )) for _modalidad in MODALIDADES_MIL
     ]
     # Los ejes del grafo se PREGUNTAN a su traza en vez de escribirse a mano: el numero
     # depende de la posicion del subplot en la grilla y del eje secundario de la fila 3, y
     # adivinarlo deja el aviso flotando sobre otro panel.
-    _EJE_X_GRAFO = _fig.data[IDX['grafo_aristas']].xaxis or 'x'
-    _EJE_Y_GRAFO = _fig.data[IDX['grafo_aristas']].yaxis or 'y'
+    _EJE_X_GRAFO = _fig_grafo.data[IDX['grafo_aristas']].xaxis or 'x'
+    _EJE_Y_GRAFO = _fig_grafo.data[IDX['grafo_aristas']].yaxis or 'y'
     # Sin ejes: una disposicion circular no mide nada en x ni en y. El rango se fija a mano y
     # con holgura -- sin ella los rotulos de los nodos del borde salen cortados.
     # Con `scaleanchor` manda el eje con menos pixeles por unidad, asi que el circulo lo
@@ -1009,19 +1040,19 @@ def construir(
     # 614 x 559 con el circulo a 157 px de radio; con 'domain' queda de 559 x 559 con el
     # circulo a 193 px. Y lo que sobra se queda DENTRO de la celda, en vez de salirse hacia
     # la columna de al lado, que es lo que no puede pasar aqui.
-    _fig.update_xaxes(visible=False, showticklabels=False, constrain='domain',
-                      range=[-RANGO_GRAFO, RANGO_GRAFO], row=3, col=3)
+    _fig_grafo.update_xaxes(visible=False, showticklabels=False, constrain='domain',
+                      range=[-RANGO_GRAFO, RANGO_GRAFO])
     # `scaleanchor` iguala los pixeles por unidad de los dos ejes. Sin el, el panel es mucho
     # mas ancho que alto y la disposicion circular se dibujaba como una ELIPSE aplastada 2,93
     # veces -- medido --, que ademas hace que el giro radial de cada rotulo deje de coincidir
     # con la direccion que se ve.
-    _fig.update_yaxes(visible=False, showticklabels=False, constrain='domain',
+    _fig_grafo.update_yaxes(visible=False, showticklabels=False, constrain='domain',
                       range=[-RANGO_GRAFO, RANGO_GRAFO],
-                      scaleanchor=_EJE_X_GRAFO, scaleratio=1.0, row=3, col=3)
-    _fig.add_annotation(text='', xref=f'{_EJE_X_GRAFO} domain', yref=f'{_EJE_Y_GRAFO} domain',
+                      scaleanchor=_EJE_X_GRAFO, scaleratio=1.0)
+    _fig_grafo.add_annotation(text='', xref=f'{_EJE_X_GRAFO} domain', yref=f'{_EJE_Y_GRAFO} domain',
                         x=0.5, y=0.5, showarrow=False, align='center',
                         font=dict(size=11, color='#7a5c58'))
-    IDX_ANOTACION_GRAFO = len(_fig.layout.annotations) - 1
+    IDX_ANOTACION_GRAFO = len(_fig_grafo.layout.annotations) - 1
 
     # Un rotulo por nodo, como ANOTACION y no como texto de la traza, para poder girarlo.
     # La reserva se crea entera al armar la figura y despues solo se le cambia el contenido:
@@ -1031,10 +1062,19 @@ def construir(
     MAX_NODOS_GRAFO = len(FEATURES_MIL)
     IDX_ANOTACIONES_NODOS = []
     for _ in range(MAX_NODOS_GRAFO):
-        _fig.add_annotation(text='', xref=_EJE_X_GRAFO, yref=_EJE_Y_GRAFO, x=0, y=0,
+        _fig_grafo.add_annotation(text='', xref=_EJE_X_GRAFO, yref=_EJE_Y_GRAFO, x=0, y=0,
                             showarrow=False, font=dict(size=TAM_FUENTE_NODO, color='#334155'),
                             xanchor='left', yanchor='middle', textangle=0, visible=False)
-        IDX_ANOTACIONES_NODOS.append(len(_fig.layout.annotations) - 1)
+        IDX_ANOTACIONES_NODOS.append(len(_fig_grafo.layout.annotations) - 1)
+
+    _fig_grafo.update_layout(
+        title=dict(text='Grafo - Relaciones relevantes de la simulación', x=0.5,
+                   xanchor='center', font=dict(size=13)),
+        # Cuadrada: el anillo lo acota la dimension MENOR del panel, y en la columna de
+        # controles el ancho es fijo. Un alto mayor solo anadiria franjas blancas.
+        margin=dict(t=34, r=8, b=8, l=8),
+        height=430, template='plotly_white', showlegend=False,
+    )
 
     # --- Fila 5: UITI acumulado MEDIDO contra el simulado, vano por vano -------------------
     # Un grupo por vano y un ultimo grupo con el circuito entero. Reemplaza a los violines:
@@ -1161,7 +1201,10 @@ def construir(
     # 26 px y no una fraccion escrita a ojo: la banda es TEXTO -- fuente 16 mas su relleno --
     # y mide lo mismo pase lo que pase con el alto de la figura. Dividirla aqui es lo que
     # mantiene la cuenta correcta el dia que el alto cambie.
-    _ALTO_FIGURA = 2489
+    # 2.252: la fila 3 a la mitad y las otras cinco quietas.
+    #     area   = 1.265,6 (filas) + 5 x 162 (huecos) = 2.075,6
+    #     height = 2.075,6 + 106 + 44 (margenes)      = 2.225,6 -> 2.226
+    _ALTO_FIGURA = 2226
     _BANDA_TITULO_MAPAS = 26 / _ALTO_FIGURA
 
     _fig.update_layout(
@@ -1252,8 +1295,14 @@ def construir(
     # vanos a su propia columna; el `+ 2` final son la traza de costo por vano y la del
     # costo acumulado, que se partieron por la misma razon.
     # El `+ 1` del final es la barra del perfil del circuito, que es una sola traza.
+    # El `- (2 + len(MODALIDADES_MIL))` son las trazas del GRAFO -- aristas, pesos y una por
+    # modalidad --, que se fueron a `_fig_grafo`. Se resta en vez de reescribir la suma para
+    # que siga leyendose de donde viene cada sumando.
     assert len(_fig.data) == 4 + 1 + 1 + 4 + 1 + 4 + 1 + 4 + 2 * MAX_VANOS_SERIE \
-        + TOP_VARIABLES_POR_VANO + 2 + 2 + len(MODALIDADES_MIL) + 2 + 2 + 1, len(_fig.data)
+        + TOP_VARIABLES_POR_VANO + 2 + 2 + len(MODALIDADES_MIL) + 2 + 2 + 1 \
+        - (2 + len(MODALIDADES_MIL)), len(_fig.data)
+    # Y las del grafo, en la suya: las dos de aristas y pesos mas una por modalidad.
+    assert len(_fig_grafo.data) == 2 + len(MODALIDADES_MIL), len(_fig_grafo.data)
     assert _fig.layout.width is None and _fig.layout.height, (
         'la figura no puede llevar ancho fijo: con uno, Plotly ignora el contenedor. El alto '
         'si es propio. Cuidado: sin ancho fijo NO alcanza -- ver `responsive` abajo.')
@@ -1305,7 +1354,7 @@ def construir(
                for i in IDX['clases'] + IDX['pred_clases'])
     assert (_fig.data[IDX['sin_dato']].line.width
             == _fig.data[IDX['pred_sin_dato']].line.width == ANCHO_SIN_EVENTOS == 1.5)
-    assert [_fig.data[i].name for i in IDX['grafo_nodos']] == MODALIDADES_MIL
+    assert [_fig_grafo.data[i].name for i in IDX['grafo_nodos']] == MODALIDADES_MIL
     # El recuadro de seleccion es una CAPA del mapa y no una traza, y va DEBAJO de las trazas:
     # si alguien lo sube por encima vuelve a comerse el clic que alterna la seleccion. El mapa
     # base lleva CINCO -- una por grupo KMeans mas la del marcado sin celda -- y el simulado
@@ -1331,6 +1380,10 @@ def construir(
     # en la salida de la celda que muestra el widget, por encima del tablero, asi que se lee
     # como si una celda anterior se hubiera roto.
     fig = figura_de_mapas(_fig)
+    # El grafo va en un `FigureWidget` aparte porque vive en otra columna del tablero. No
+    # necesita `figura_de_mapas`: ese envoltorio existe para el fallo de `map._derived` al
+    # arrastrar un mapa, y aqui no hay ninguno.
+    fig_grafo = go.FigureWidget(_fig_grafo)
     # Un `FigureWidget` NO es fluido por si solo: `width=None` mas `autosize` mas el CSS de la
     # celda estiran el DIV, pero plotly sigue DIBUJANDO al ancho que midio al montar -- medido,
     # 858 px dentro de un contenedor de 1.935. Su bundle trae un `ResizeObserver` que arregla
@@ -1494,9 +1547,8 @@ def construir(
         elif cuantos:
             AVISO_VANOS.value = (
                 f'<span style="font-size:12px;color:#5b4a48;"><b>{cuantos}</b> de los '
-                f'{len(marcados)} vanos marcados tienen eventos en la ventana activa; el '
-                f'simulador solo puntua esos. Los demas siguen dibujados y su serie de '
-                f'tiempo muestra en que ventanas si los tuvieron.{exceso}</span>')
+                f'{len(marcados)} vanos marcados tienen eventos en la ventana '
+                f'activa.{exceso}</span>')
         else:
             AVISO_VANOS.value = (
                 '<span style="font-size:12px;color:#c62828;">Ninguno de los '
@@ -2202,9 +2254,7 @@ def construir(
     mapas para decir algo que se lee mejor como texto."""
         if diag is None:
             return ('<span style="font-size:12px;color:#5b4a48;">Presiona <b>Diagnostico</b> '
-                    'para estudiar los vanos que hayas marcado; si no marcaste ninguno -- o si '
-                    'no llegan a ' + str(TOP_VANOS_CIRCUITO) + ' -- la lista se completa con '
-                    'los de mayor UITI de la ventana activa.</span>')
+                    'para estudiar los vanos que hayas marcado.</span>')
         if not diag['vanos']:
             _marcados_sin = diag['seleccion']['sin_eventos']
             _por_lo_marcado = (
@@ -2328,7 +2378,7 @@ def construir(
             # de [0, 1] salia [-0,737, 1,737] -- medido en el navegador -- y el arco de
             # abajo del anillo, con sus rotulos, quedaba fuera del recuadro. Y el top se
             # quedaba sin rango, que es justo lo que este bloque existe para evitar.
-            fig.update_yaxes(range=[0, _rango], row=4, col=3)
+            fig.update_yaxes(range=[0, _rango], row=4, col=1)
             for _posicion in range(TOP_VARIABLES_POR_VANO):
                 _traza = fig.data[IDX['top_vano'][_posicion]]
                 _x, _y, _texto, _hover, _colores = [], [], [], [], []
@@ -3071,7 +3121,7 @@ def construir(
     costos y del mapa simulado, que se guardan por posicion.
     """
         for _k, _i_anotacion in enumerate(IDX_ANOTACIONES_NODOS):
-            _anotacion = fig.layout.annotations[_i_anotacion]
+            _anotacion = fig_grafo.layout.annotations[_i_anotacion]
             if _k >= len(nodos['texto']):
                 _anotacion.visible = False
                 continue
@@ -3118,32 +3168,32 @@ def construir(
             _matriz, _nombres = plegar_rezagos(grafo['matriz'], FEATURES_MIL)
             trazas, mensaje = trazas_grafo(_matriz, _nombres), ''
 
-        with fig.batch_update():
-            fig.data[IDX['grafo_aristas']].x = trazas['aristas']['x']
-            fig.data[IDX['grafo_aristas']].y = trazas['aristas']['y']
+        with fig_grafo.batch_update():
+            fig_grafo.data[IDX['grafo_aristas']].x = trazas['aristas']['x']
+            fig_grafo.data[IDX['grafo_aristas']].y = trazas['aristas']['y']
             _pesos = trazas['pesos']
-            fig.data[IDX['grafo_pesos']].x = _pesos['x']
-            fig.data[IDX['grafo_pesos']].y = _pesos['y']
-            fig.data[IDX['grafo_pesos']].hovertext = _pesos['hovertext']
+            fig_grafo.data[IDX['grafo_pesos']].x = _pesos['x']
+            fig_grafo.data[IDX['grafo_pesos']].y = _pesos['y']
+            fig_grafo.data[IDX['grafo_pesos']].hovertext = _pesos['hovertext']
             # El tamano codifica el peso relativo DE ESTA seleccion: los pesos absolutos
             # cambian dos ordenes de magnitud entre ventanas y un tamano fijo por valor
             # dejaria el panel vacio o saturado segun cual se mire.
             _maximo = max(_pesos['peso'], default=0.0) or 1.0
-            fig.data[IDX['grafo_pesos']].marker.size = [4 + 10 * (p / _maximo) for p in _pesos['peso']]
-            fig.data[IDX['grafo_pesos']].marker.color = list(_pesos['peso'])
+            fig_grafo.data[IDX['grafo_pesos']].marker.size = [4 + 10 * (p / _maximo) for p in _pesos['peso']]
+            fig_grafo.data[IDX['grafo_pesos']].marker.color = list(_pesos['peso'])
             # Un nodo por variable, con el color de su modo. El NOMBRE ya no va en la traza:
             # va como anotacion girada, mas abajo, porque un `Scatter` no puede girar texto.
             _nodos = trazas['nodos']
             for _i_traza, _modalidad in zip(IDX['grafo_nodos'], MODALIDADES_MIL):
                 _cuales = [k for k, col in enumerate(_nodos['indice'])
                            if col in COLUMNAS_MODALIDAD[_modalidad]]
-                _traza_nodo = fig.data[_i_traza]
+                _traza_nodo = fig_grafo.data[_i_traza]
                 _traza_nodo.x = [_nodos['x'][k] for k in _cuales]
                 _traza_nodo.y = [_nodos['y'][k] for k in _cuales]
                 _traza_nodo.hovertext = [f'<b>{_nodos["texto"][k]}</b><br>Modo: {_modalidad}'
                                          for k in _cuales]
             _pintar_rotulos_del_grafo(_nodos)
-            fig.layout.annotations[IDX_ANOTACION_GRAFO].text = mensaje
+            fig_grafo.layout.annotations[IDX_ANOTACION_GRAFO].text = mensaje
 
 
     def _simular(epoca_job):
@@ -3651,8 +3701,10 @@ def construir(
     #
     # En porcentaje y no en pixeles: esto se sirve en pantallas de 1.280 a 1.900 px y un
     # ancho fijo deja banda blanca en la grande o corta en la chica.
+    # El grafo va DEBAJO del panel y dentro de esta columna: es de ahi de donde saca el
+    # mismo ancho que el panel de control.
     COLUMNA_CONTROLES = widgets.VBox(
-        [PANEL], layout=widgets.Layout(width='30%', align_items='stretch'))
+        [PANEL, fig_grafo], layout=widgets.Layout(width='30%', align_items='stretch'))
     # Los dos botones de encuadre viajan con la FIGURA y no con los controles: cada uno se
     # posa sobre su mapa, y en la otra columna apuntarian a un sitio donde no hay mapa.
     COLUMNA_FIGURAS = widgets.VBox(
@@ -3671,8 +3723,11 @@ def construir(
     # cerrar -- la fila se queda solo con el titulo, y `space-between` sobre un unico hijo
     # lo deja donde tiene que estar: a la izquierda.
     ENCABEZADO_TITULO = widgets.HTML(
+        # `nowrap`: en la fila del encabezado el titulo comparte ancho con la barra de
+        # cerrar, y sin esto se parte en dos renglones cuando la ventana se estrecha.
         '<span style="font-family:system-ui,-apple-system,\'Segoe UI\',sans-serif;'
-        'font-size:19px;color:#2b2b2b;"><b>Simulador Criticidad</b></span>')
+        'font-size:19px;color:#2b2b2b;white-space:nowrap;">'
+        '<b>Simulador Criticidad</b></span>')
     ENCABEZADO = widgets.HBox(
         [ENCABEZADO_TITULO, *encabezado],
         layout=widgets.Layout(width='100%', justify_content='space-between',

@@ -953,20 +953,26 @@ def test_board_04_repaints_the_profile_only_when_the_circuit_changes():
         "el perfil mira los vanos marcados, y no debe: no depende de ellos")
 
 
-def test_board_06_puts_the_profile_and_the_graph_on_the_same_row():
-    """El grafo sube a la fila del perfil y la fila que ocupaba desaparece.
+def test_board_06_keeps_the_profile_sharing_its_row():
+    """El perfil NUNCA se queda solo en una fila entera.
 
-    Ocupaba una fila entera para un disco centrado a media fila, con dos franjas
-    blancas a los lados y otra debajo -- 243 px de vacio en el mejor caso medido.
-    Compartir la fila con el perfil llena las cuatro columnas y ahorra una fila.
+    Primero compartio fila con el GRAFO -- que antes ocupaba una fila para si, con un
+    disco centrado a media fila y 243 px de vacio medidos --. Despues el grafo se fue a su
+    PROPIA figura, debajo del panel de control, que es su sitio pedido y adonde un subplot
+    no puede llegar; su hueco lo tomo la serie de UITI acumulado y la fila bajo a la mitad
+    de alto, que era lo unico que el diametro del circulo justificaba.
+
+    Lo que se persigue no ha cambiado: el perfil solo en una fila es un panel de ancho
+    completo para quince barras y una franja blanca debajo.
     """
     src06 = _notebook_source("06_uiti_vano_explicabilidad_simulador")
 
-    assert "rows=6, cols=4" in src06, "la figura del 06 sigue teniendo siete filas"
-    # El perfil a la izquierda y el grafo a la derecha, en la MISMA fila.
+    assert "rows=6, cols=4" in src06, "la figura del 06 ya no tiene seis filas"
     assert re.search(r"IDX\['perfil_circuito'\] = _agregar\([\s\S]{0,600}?\), 3, 1\)",
                      src06), "el perfil ya no esta en la fila 3, columna 1"
-    assert "), 3, 3)" in src06, "el grafo no esta en la fila 3, columna 3"
+    assert "{'type': 'xy', 'colspan': 2, 'secondary_y': True}, None]," in src06, (
+        "la serie de UITI ya no comparte fila con el perfil")
+    assert "_fig_grafo" in src06, "el grafo ya no tiene su propia figura"
     assert "), 7, 2)" not in src06, "queda una traza en la fila 7, que ya no existe"
     assert len(_constant_list(src06, "row_heights")) == 6, (
-        "row_heights sigue declarando siete filas")
+        "row_heights sigue declarando otro numero de filas")

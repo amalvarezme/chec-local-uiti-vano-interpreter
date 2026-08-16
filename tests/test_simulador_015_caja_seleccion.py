@@ -524,8 +524,12 @@ def test_the_figure_has_six_rows_with_the_profile_and_the_graph_sharing_one(fuen
     """
     assert "rows=6, cols=4," in fuente
     # El perfil y el grafo, cada uno en media fila de la misma fila.
+    # El perfil a la izquierda y la SERIE de UITI a su derecha. Compartia esta fila el
+    # grafo, que se fue a su propia figura debajo del panel de control: alli su ancho es el
+    # del panel, que es donde se pidio. Con el grafo fuera la fila bajo a la mitad de alto,
+    # que era lo unico que el diametro del circulo justificaba.
     assert _tiene(fuente, "[{'type': 'xy', 'colspan': 2}, None,\n"
-                          "            {'type': 'xy', 'colspan': 2}, None]")
+                          "            {'type': 'xy', 'colspan': 2, 'secondary_y': True}, None]")
     # Y la fila que el grafo tenia para el solo ya no existe.
     assert "[None, {'type': 'xy', 'colspan': 2}, None, None]" not in fuente
     # Las barras de UITI y las de costo: los vanos en las columnas 1-3 y el acumulado en
@@ -533,8 +537,15 @@ def test_the_figure_has_six_rows_with_the_profile_and_the_graph_sharing_one(fuen
     # los grupos por vano, que es donde se decide la obra. Son DOS filas con el mismo
     # reparto, y esto es lo que impide que vuelvan a ocupar las cuatro columnas.
     assert fuente.count("[{'type': 'xy', 'colspan': 3}, None, None, {'type': 'xy'}]") == 2
-    # Ninguna fila de ancho completo: la del perfil dejo de serlo al entrar el grafo.
-    assert fuente.count("'colspan': 4") == 0
+    # UNA sola fila de ancho completo, y es la del top de variables: se quedo con las
+    # cuatro columnas cuando la serie de UITI subio a compartir fila con el perfil.
+    #
+    # La regla no es "ninguna fila entera" -- eso era cierto mientras no habia ninguna que
+    # la mereciera --, sino que las de UITI y costo NO lo sean, que es lo que fija la
+    # asercion de arriba: con las cuatro columnas, el total aplasta contra la base a los
+    # grupos por vano, que es donde se decide la obra.
+    assert fuente.count("'colspan': 4") == 1, (
+        "hay mas de una fila de ancho completo; solo el top de variables lo justifica")
 
     alturas = re.search(r"row_heights=\[([\d.,\s]+)\]", fuente)
     assert alturas, "la figura tiene que repartir el alto explicitamente"
@@ -614,9 +625,13 @@ def test_the_circular_graph_keeps_its_aspect_at_any_screen_width(fuente):
     nombres. Cuanto menor, mayor el circulo -- y en cuanto se queda corto los nombres se
     salen del panel y se montan sobre el anillo, que es como se veia con fuente 14.
     """
-    # Fila 3 columna 3 desde que el grafo comparte fila con el perfil del circuito.
-    assert "scaleanchor=_EJE_X_GRAFO, scaleratio=1.0, row=3, col=3" in fuente
-    assert "range=[-RANGO_GRAFO, RANGO_GRAFO], row=3, col=3" in fuente
+    # Sin `row`/`col`: el grafo dejo de ser un subplot de la figura grande y tiene la suya,
+    # debajo del panel de control. Lo que la prueba persigue es lo mismo -- que los dos ejes
+    # queden atados y con el mismo rango --, y ahora se comprueba sobre `_fig_grafo`.
+    assert "scaleanchor=_EJE_X_GRAFO, scaleratio=1.0)" in fuente
+    assert "_fig_grafo.update_xaxes(" in fuente and "_fig_grafo.update_yaxes(" in fuente
+    assert fuente.count("range=[-RANGO_GRAFO, RANGO_GRAFO]") == 2, (
+        "los dos ejes del grafo tienen que llevar el MISMO rango")
     rango = re.search(r"^\s*RANGO_GRAFO = ([\d.]+)$", fuente, re.MULTILINE)
     assert rango, "el rango del grafo tiene que ser una constante con su justificacion"
     # Cota inferior: por debajo de `RADIO_ROTULO_GRAFO` el rango caeria DENTRO del anillo
