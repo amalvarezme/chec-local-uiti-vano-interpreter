@@ -65,9 +65,14 @@ def test_el_panel_va_arriba_y_la_figura_debajo():
     fuente = _fuente()
     ensamblado = re.search(r"PANEL_COMPLETO = (.+)", fuente)
     assert ensamblado, "el 03 no ensambla `PANEL_COMPLETO`"
-    linea = ensamblado.group(1)
-    assert linea.strip() == "PANEL_HTML + FIGURA_HTML + PANEL_JS", (
-        f"el 03 no apila panel, figura y JS en ese orden: {linea.strip()!r}")
+    # La barra del boton de encuadre entra entre el panel y la figura: pertenece al mapa,
+    # no al panel. El orden lo fija `test_trayectorias_circuitos_encuadre.py`; aqui lo que
+    # importa es que el panel siga PRIMERO, la figura DESPUES y el JS al final.
+    linea = ensamblado.group(1).strip()
+    piezas = [p.strip() for p in linea.split("+")]
+    assert piezas[0] == "PANEL_HTML", f"el panel ya no va primero: {linea!r}"
+    assert piezas[-1] == "PANEL_JS", f"el JS ya no va al final: {linea!r}"
+    assert piezas.index("FIGURA_HTML") > 0, f"la figura no va debajo del panel: {linea!r}"
 
 
 def test_el_panel_conserva_su_barra_a_lo_ancho():

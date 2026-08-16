@@ -85,6 +85,13 @@ def find_repo_root():
 # tiene grupo propio y su color sale de cortes fijos de UITI. En el 04, donde la unidad si es
 # el vano, el color del mapa es la membresia de K-Means.
 CLASES_MAPA = NOMBRES_GRUPOS
+# Los margenes laterales de la figura. Con nombre y no escritos dentro del `margin`
+# porque la barra del boton de encuadre los necesita para su `calc()`: el borde izquierdo
+# del mapa es `margen_izq + x0 * (ancho - margen_izq - margen_der)`, y si el margen y la
+# barra se declararan por separado, mover uno desalinearia la otra sin fallar.
+MARGEN_IZQ = 90
+MARGEN_DER = 90
+
 COLORES_MAPA = COLORES_GRUPOS
 COLOR_SIN_EVENTO = 'rgb(0,0,0)'
 # Anchos del mapa, con los mismos nombres y valores que el 04, para que un vano sin eventos
@@ -701,7 +708,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         # leyenda, medidos en el navegador. Esta leyenda es FIJA -- los cuatro grupos y las
         # dos series del doble eje, siempre un renglon -- asi que el numero se puede clavar
         # aqui: con t=89 la leyenda arranca 12 px debajo del pie del titulo, sin traslape.
-        margin=dict(t=89, r=90, b=60, l=90),
+        margin=dict(t=89, r=MARGEN_DER, b=60, l=MARGEN_IZQ),
         # Sin `width`: la figura la fija el contenedor. Es la condicion para que
         # `default_width='100%'` y `config.responsive` de la celda siguiente surtan efecto y el
         # tablero use todo el ancho de la pantalla en el navegador.
@@ -887,12 +894,16 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
 <style>
   .panel-tray {{
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 13px;
-    display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-end;
+    /* `gap` en DOS valores: 8px entre filas y 18px entre columnas. Con los bloques que
+       quedan apilados, el hueco de fila era lo que mas alto sumaba, y apretarlo no
+       estrecha nada -- el de columna, que es el que separa controles vecinos, no se
+       toca. */
+    display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: flex-end;
     /* El panel sigue el ancho de la figura, que ya no es fijo: la figura se genera sin
        `width` y con `default_width='100%'`, de modo que ocupa el ancho disponible.
        `border-box` mantiene relleno y bordes DENTRO de ese ancho y no encima. */
     width: 100%; box-sizing: border-box;
-    margin: 0 0 6px 0; padding: 12px 14px;
+    margin: 0 0 6px 0; padding: 9px 14px;
     border: 1px solid #e4c4c0; border-left: 4px solid rgb(203,24,29);
     border-radius: 6px; background: #fdf7f6; color: #2b2b2b;
   }}
@@ -919,7 +930,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
        <select id="tr-circuito">
          <option value="{SIN_SELECCION}">{SIN_SELECCION}</option>{_opciones}
        </select></div>
-  <div style="flex-basis:100%; display:flex; align-items:center; gap:10px;">
+  <div style="flex:1 1 420px; display:flex; align-items:center; gap:10px;">
     <label for="tr-ventana" style="margin:0; white-space:nowrap;">Ventana</label>
     <input type="range" id="tr-ventana" min="0" max="{len(VENTANAS) - 1}" value="0" step="1"
            style="flex:1; accent-color: rgb(203,24,29);">
@@ -936,11 +947,6 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
       border-radius:50%;margin-right:5px;"></span>Transformador</span>
     <span><span style="display:inline-block;width:18px;height:18px;background:{COLOR_SWITCH};
       border-radius:50%;margin-right:5px;"></span>Interruptor</span>
-  </div>
-  <div style="flex-basis:100%; display:flex; align-items:center; gap:10px;
-              margin:2px 0 6px 0;">
-    <button type="button" id="tr-centrar"
-      title="Encuadra el mapa sobre los vanos que registraron eventos en el periodo elegido. El encuadre automatico usa el circuito completo, que en un circuito largo deja los vanos con eventos apretados en una esquina.">Centrar en vanos con eventos</button>
   </div>
   <p class="panel-aviso" id="tr-aviso"></p>
 </div>
@@ -1664,6 +1670,44 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
                               default_width='100%', config={'responsive': True})
 
 
+    # El boton de encuadre, ENCIMA del mapa y a su izquierda, con la misma forma que en el
+    # tablero de clima. Estaba en la ultima fila del panel de control, a media pantalla de
+    # lo unico que mueve.
+    #
+    # La diferencia con el 01 es la sangria. Alli el mapa arranca en el margen izquierdo de
+    # la figura y basta un `padding-left` en pixeles. Aqui el mapa es la casilla (1,9) de
+    # una rejilla de quince columnas: empieza pasada la mitad. Y como la figura es
+    # responsiva -- sin `width`, con `default_width='100%'` --, su borde izquierdo no es un
+    # numero de pixeles sino una mezcla: los margenes van en pixeles y el dominio en
+    # fraccion del area que queda entre ellos. De ahi el `calc()`.
+    #
+    # `MAPA_IZQ` se LEE de la figura y no se escribe a mano: sale del reparto de columnas y
+    # del `horizontal_spacing`, asi que un literal no fallaria el dia que alguien toque la
+    # rejilla -- se desalinearia en silencio. Es la misma fuente que lee el JS del tablero
+    # (`fl.map.domain`).
+    MAPA_IZQ = float(fig.layout.map.domain.x[0])
+    BARRA_ENCUADRE = f"""
+<style>
+  .barra-encuadre {{ padding: 0 0 0 calc({MARGEN_IZQ}px + (100% - {MARGEN_IZQ + MARGEN_DER}px) * {MAPA_IZQ:.5f});
+                     margin: 0 0 6px 0; }}
+  /* El estilo es el del boton del 01, que a su vez copia el del simulador: el gris por
+     defecto de un `widgets.Button` de Jupyter. Aqui hay que escribirlo porque este
+     tablero es HTML estatico y no trae la hoja de estilos de los widgets. */
+  .barra-encuadre button {{
+    font-family: Arial, sans-serif; font-size: 13px; font-weight: 400;
+    color: rgba(0, 0, 0, 0.87); background: rgb(238, 238, 238);
+    border: 0; border-radius: 2px; padding: 0 10px;
+    width: 260px; height: 28px; line-height: 28px; margin: 2px;
+    text-align: center; cursor: pointer;
+  }}
+  .barra-encuadre button:hover {{ background: rgb(224, 224, 224); }}
+</style>
+<div class="barra-encuadre">
+  <button type="button" id="tr-centrar"
+    title="Encuadra el mapa sobre los vanos que registraron eventos en el periodo elegido. El encuadre automatico usa el circuito completo, que en un circuito largo deja los vanos con eventos apretados en una esquina.">Centrar mapa</button>
+</div>
+"""
+
     # Panel arriba a lo ancho, figura debajo a lo ancho. El orden del ensamblado ES el
     # orden en la pagina.
     #
@@ -1676,7 +1720,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     #
     # El JS va ULTIMO: no pinta nada, solo cuelga manejadores, y necesita que sus elementos
     # ya existan en el documento cuando corre.
-    PANEL_COMPLETO = PANEL_HTML + FIGURA_HTML + PANEL_JS
+    PANEL_COMPLETO = PANEL_HTML + BARRA_ENCUADRE + FIGURA_HTML + PANEL_JS
 
 
     # El MISMO html, envuelto en un documento minimo, escrito a disco y abierto en el navegador:
