@@ -1,4 +1,4 @@
-"""Los cuatro visores en dos columnas: controles al 30% a la izquierda, figuras al 70%.
+"""Los visores en dos columnas: controles al 30% a la izquierda, figuras al 70%.
 
 Los cuatro tableros estaticos (01, 02, 03 y 04) nacieron con el panel de control como una
 BARRA HORIZONTAL encima de la figura. Con figuras de 960 a 1.700 px de alto, elegir un
@@ -12,11 +12,16 @@ ademas de alimentar las aplicaciones locales se despliegan como apps de Databric
 el arbol del repositorio no esta. Un `from chec_local_interpreter import ...` los romperia
 alli.
 
-Asi que el bloque de CSS viaja COPIADO en los cuatro, y lo que impide que se separen es
-esta prueba: exige que las cuatro copias sean identicas byte a byte. Por eso el CSS no
-puede nombrar la clase del panel de cada tablero -- `.panel-clima`, `.panel-agrup`,
+Asi que el bloque de CSS viaja COPIADO en cada uno, y lo que impide que se separen es
+esta prueba: exige que las copias sean identicas byte a byte. Por eso el CSS no puede
+nombrar la clase del panel de cada tablero -- `.panel-clima`, `.panel-agrup`,
 `.panel-tray`, `.panel-v` --, y usa `[class^="panel-"]`, que es lo que permite que el
-mismo texto sirva para los cuatro.
+mismo texto sirva para todos.
+
+Hoy quedan DOS: el 01 y el 04. El 02 y el 03 volvieron a apilar panel y figura, cada uno
+por su motivo, y cada uno con su prueba. El CSS conserva el selector por prefijo aunque
+sobren dos de los cuatro nombres: escribir `.panel-clima` ahora ataria el bloque a un
+tablero y habria que deshacerlo el dia que otro se sume.
 
 ## Las dos propiedades que no son obvias
 
@@ -24,7 +29,7 @@ mismo texto sirva para los cuatro.
     que no puede encogerse por debajo de su contenido. El div de plotly y las casillas del
     panel tienen ancho minimo propio, asi que sin esta linea las columnas se pasan del 30
     y del 70 y la pagina scrollea a lo ancho.
-  * **El panel deja de ser una fila.** Los cuatro paneles son `display:flex` con
+  * **El panel deja de ser una fila.** Estos paneles son `display:flex` con
     `flex-wrap:wrap` pensados para ocupar el ancho entero. Metidos en una columna estrecha
     sin cambiarles la direccion, cada control se queda en su ancho minimo y el conjunto
     hace una escalera de una columna con huecos.
@@ -44,14 +49,18 @@ RAIZ = Path(__file__).resolve().parents[1]
 BASE = RAIZ / "notebooks" / "base_apps"
 
 # El cuaderno, la celda que ensambla el tablero exportado, y el nombre de la variable que
-# lleva el panel y la que lleva la figura. El 02 se llama distinto porque exporta SOLO su
-# tablero de vanos: el de circuitos es un paso intermedio que solo se lee en el cuaderno.
-# El 02 NO esta: su panel de control son dos fechas y un boton -- 212 px medidos contra
-# 1.700 de figura --, asi que reservarle el 30% del ancho dejaba unos 1.500 px muertos.
-# Ese tablero vuelve a apilar panel y figura, y lo fija `test_agrupamiento_disposicion.py`.
+# lleva el panel y la que lleva la figura.
+#
+# Quedan DOS de los cuatro. Los otros dos se fueron por motivos distintos, y los dos estan
+# escritos donde se decidieron:
+#   * el 02, porque su panel son dos fechas y un boton -- 212 px medidos contra 1.700 de
+#     figura --, asi que el 30% dejaba unos 1.500 px muertos. Lo fija
+#     `test_agrupamiento_disposicion.py`.
+#   * el 03, porque su panel ya nace como barra a lo ancho y el bloque de dos columnas
+#     existia solo para darle la vuelta a eso. Lo fija
+#     `test_trayectorias_circuitos_apilado.py`.
 TABLEROS = [
     ("01_uiti_vano_clima.ipynb", "PANEL_HTML", "FIGURA_HTML"),
-    ("03_uiti_vano_trayectorias_circuitos.ipynb", "PANEL_HTML", "FIGURA_HTML"),
     ("04_uiti_vano_trayectorias_vano.ipynb", "PANEL_HTML", "FIGURA_HTML"),
 ]
 CUADERNOS = [t[0] for t in TABLEROS]
@@ -77,15 +86,19 @@ def _regla(css: str, selector: str) -> str:
     return regla.group(1)
 
 
-# ------------------------------------------------- una sola copia, en cuatro cuadernos
+# --------------------------------------------------- una sola copia, en dos cuadernos
 
 
-def test_las_cuatro_copias_del_css_son_identicas():
+def test_las_copias_del_css_son_identicas():
     """Byte a byte. Es lo unico que sustituye al modulo compartido que no pueden importar.
 
-    Son TRES desde que el 02 volvio a apilarse: un cuaderno que no usa el bloque tampoco
+    Son DOS desde que se apilaron el 02 y el 03: un cuaderno que no usa el bloque tampoco
     lo lleva, y arrastrar una copia muerta seria justo la clase de codigo que este
     guardian existe para que nadie tenga que leer dos veces.
+
+    OJO con lo que esta prueba NO puede ver: compara las copias ENTRE SI, no contra quien
+    las usa. Una copia olvidada en un cuaderno que ya no la aplica pasaria por aqui sin
+    problema; eso lo vigila la prueba del tablero que se apilo.
 
     Si alguna vez hace falta que un tablero se separe, el sitio de decirlo es esta prueba
     -- con el motivo escrito --, no una edicion silenciosa en un solo cuaderno.
@@ -100,9 +113,9 @@ def test_las_cuatro_copias_del_css_son_identicas():
 def test_el_css_no_nombra_la_clase_de_ningun_panel():
     """`[class^="panel-"]` y no `.panel-clima`.
 
-    Las cuatro clases son distintas, asi que nombrar una sola haria imposible que las
-    cuatro copias fueran iguales -- y el tablero que no se llamara asi se quedaria con su
-    panel en fila dentro de una columna del 30%.
+    Las clases son distintas, asi que nombrar una sola haria imposible que las copias
+    fueran iguales -- y el tablero que no se llamara asi se quedaria con su panel en fila
+    dentro de una columna del 30%.
     """
     css = _css(CUADERNOS[0])
     nombradas = re.findall(r"\.panel-[a-z]+", css)
@@ -116,7 +129,7 @@ def test_el_css_no_nombra_la_clase_de_ningun_panel():
 def test_los_controles_declaran_su_ancho_con_un_30_por_ciento_por_defecto(nombre: str):
     """En porcentaje -- estos tableros se ven de 1.280 a 1.900 px -- y por variable.
 
-    El bloque va copiado en los cuatro cuadernos y esta misma suite exige que las copias
+    El bloque va copiado en cada cuaderno que lo usa y esta misma suite exige que las copias
     sean identicas, asi que el reparto NO puede escribirse aqui: un tablero que quiera
     otro lo declara en su marcado (`style="--ancho-controles: 25%"`). El 30% es el valor
     de respaldo para el que no diga nada.

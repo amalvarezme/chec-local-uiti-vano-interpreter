@@ -1844,8 +1844,8 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
      ancho minimo del div de plotly manda sobre el 70% declarado y la pagina scrollea a
      lo ancho: el 30/70 se escribe pero no se cumple. */
   /* El ancho de los controles viaja en una variable CSS con 30% por defecto: este mismo
-     bloque va COPIADO en los cuatro cuadernos y una prueba exige que las copias sean
-     identicas, asi que un tablero que quiera otro reparto lo dice en SU marcado --
+     bloque va COPIADO en cada cuaderno que lo usa y una prueba exige que las copias
+     sean identicas, asi que un tablero que quiera otro reparto lo dice en SU marcado --
      `<div class="cuerpo-2col" style="--ancho-controles: 25%">` -- y no aqui. */
   .cuerpo-2col > .col-controles {
     flex: 0 0 var(--ancho-controles, 30%); max-width: var(--ancho-controles, 30%);
@@ -1859,7 +1859,8 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
      en una columna del 30% va en vertical, o cada control se queda en su ancho minimo y
      el conjunto hace una escalera con huecos. Se le llama por el PREFIJO de su clase y
      no por su nombre -- son cuatro distintos: panel-clima, panel-agrup, panel-tray,
-     panel-v -- para que este mismo bloque sirva para los cuatro cuadernos. */
+     panel-v -- para que este mismo bloque sirva para cualquiera de ellos. Hoy lo usan el
+     01 y el 04; el 02 y el 03 volvieron a apilar panel y figura. */
   .cuerpo-2col > .col-controles > [class^="panel-"] {
     flex-direction: column; flex-wrap: nowrap; align-items: stretch; max-width: 100%;
   }

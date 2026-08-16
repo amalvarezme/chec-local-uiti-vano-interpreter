@@ -1663,74 +1663,20 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     FIGURA_HTML = pio.to_html(fig, include_plotlyjs=True, full_html=False, div_id=DIV_FIGURA,
                               default_width='100%', config={'responsive': True})
 
-    CSS_DOS_COLUMNAS = '''
-<style>
-  /* Los controles a la izquierda y las figuras a la derecha, en vez de una barra
-     horizontal encima de una figura de 960 a 1.700 px de alto: asi elegir un circuito y
-     ver que le hace al mapa dejan de estar en extremos opuestos del scroll. */
-  .cuerpo-2col {
-    display: flex; align-items: flex-start; gap: 14px;
-    width: 100%; box-sizing: border-box;
-  }
-  /* `min-width: 0` apaga el `min-width: auto` que trae todo hijo de flex. Sin el, el
-     ancho minimo del div de plotly manda sobre el 70% declarado y la pagina scrollea a
-     lo ancho: el 30/70 se escribe pero no se cumple. */
-  /* El ancho de los controles viaja en una variable CSS con 30% por defecto: este mismo
-     bloque va COPIADO en los cuatro cuadernos y una prueba exige que las copias sean
-     identicas, asi que un tablero que quiera otro reparto lo dice en SU marcado --
-     `<div class="cuerpo-2col" style="--ancho-controles: 25%">` -- y no aqui. */
-  .cuerpo-2col > .col-controles {
-    flex: 0 0 var(--ancho-controles, 30%); max-width: var(--ancho-controles, 30%);
-    min-width: 0; box-sizing: border-box;
-  }
-  /* Y las figuras se quedan con lo que sobra, sea cual sea ese reparto. `flex: 1 1 0`
-     con `min-width: 0` es lo que hace que "lo que sobra" no dependa del ancho minimo del
-     contenido: el div de plotly tiene uno propio y sin esto manda el. */
-  .cuerpo-2col > .col-figuras { flex: 1 1 0; min-width: 0; box-sizing: border-box; }
-  /* El panel de cada tablero es una barra `display:flex` pensada para el ancho entero;
-     en una columna del 30% va en vertical, o cada control se queda en su ancho minimo y
-     el conjunto hace una escalera con huecos. Se le llama por el PREFIJO de su clase y
-     no por su nombre -- son cuatro distintos: panel-clima, panel-agrup, panel-tray,
-     panel-v -- para que este mismo bloque sirva para los cuatro cuadernos. */
-  .cuerpo-2col > .col-controles > [class^="panel-"] {
-    flex-direction: column; flex-wrap: nowrap; align-items: stretch; max-width: 100%;
-  }
-  /* Y sus controles dejan de exigir un ancho que la columna ya no tiene. */
-  .cuerpo-2col > .col-controles select,
-  .cuerpo-2col > .col-controles input,
-  .cuerpo-2col > .col-controles button { max-width: 100%; min-width: 0; }
-  /* Las filas del panel se parten cuando no caben, en vez de salirse por la derecha. */
-  .cuerpo-2col > .col-controles > [class^="panel-"] > div { flex-wrap: wrap; }
-  /* Medido en 01_clima: sus filas de barra deslizante traen `min-width` y
-     `white-space: nowrap` EN LINEA -- un rotulo de 520 px y un hueco de 300 px reservado
-     para que el numero no haga saltar la barra --, dimensionados para el ancho entero. En
-     una columna de 370 px eso sacaba un control hasta 180 px fuera. Un atributo `style`
-     solo lo vence `!important`, y este es el unico sitio del bloque donde se usa. */
-  .cuerpo-2col > .col-controles [style*="min-width"] { min-width: 0 !important; }
-  .cuerpo-2col > .col-controles label,
-  .cuerpo-2col > .col-controles span { white-space: normal !important; }
-  /* Pero la barra conserva un ancho con el que se pueda arrastrar. */
-  .cuerpo-2col > .col-controles input[type="range"] { min-width: 140px; }
-  /* Y las tiras de escala, que el JS arma con `display:inline-flex` EN LINEA y sin
-     `flex-wrap`: medido en 01_clima, se salian 46 px por la derecha a 1.280 y a 1.512 px
-     de ventana, y a 1.900 no -- justo el tipo de fallo que solo aparece en la pantalla
-     de otro. Un `inline-flex` que no puede partirse no encoge: se sale entero. */
-  .cuerpo-2col > .col-controles [style*="inline-flex"] {
-    flex-wrap: wrap !important; max-width: 100% !important;
-  }
-  .cuerpo-2col > .col-figuras > div { width: 100%; }
-</style>
-'''
 
-    # El panel y la figura dejan de apilarse: van en una fila de dos columnas. El JS queda
-    # FUERA de la fila -- no pinta nada, solo cuelga los manejadores -- y sigue encontrando
-    # sus elementos por id, que no cambian al envolverlos.
-    PANEL_COMPLETO = CSS_DOS_COLUMNAS + (
-        '<div class="cuerpo-2col">'
-        f'<div class="col-controles">{PANEL_HTML}</div>'
-        f'<div class="col-figuras">{FIGURA_HTML}</div>'
-        '</div>'
-    ) + PANEL_JS
+    # Panel arriba a lo ancho, figura debajo a lo ancho. El orden del ensamblado ES el
+    # orden en la pagina.
+    #
+    # Se fue con esto el bloque `CSS_DOS_COLUMNAS`, que existia solo para meter el panel en
+    # una columna del 30%: le cambiaba la direccion a `.panel-tray`, le partia las filas y
+    # vencia con `!important` los `min-width` que sus controles traen EN LINEA. Pero
+    # `.panel-tray` ya nace con `width: 100%`, `display: flex` y `flex-wrap: wrap` en su
+    # propio <style>: la barra a lo ancho es su forma original, y todo aquel bloque era el
+    # precio de taparla. Apilado no hace falta nada.
+    #
+    # El JS va ULTIMO: no pinta nada, solo cuelga manejadores, y necesita que sus elementos
+    # ya existan en el documento cuando corre.
+    PANEL_COMPLETO = PANEL_HTML + FIGURA_HTML + PANEL_JS
 
 
     # El MISMO html, envuelto en un documento minimo, escrito a disco y abierto en el navegador:
