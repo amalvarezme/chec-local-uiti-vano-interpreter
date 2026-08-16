@@ -137,14 +137,23 @@ function pintar(estado) {
 
     var texto = document.createElement('div');
     texto.className = 'texto';
+    // Bajo el nombre no va nada que el usuario no necesite. Se fue la DESCRIPCION -- prosa
+    // fija, la misma en cada apertura -- y con ella la linea de relleno del caso normal,
+    // que decia que la aplicacion estaba lista: lo que la tarjeta ya dice con su punto.
+    //
+    // Lo que se queda es lo que NO se puede deducir mirando: un fallo, en que paso va,
+    // en que puerto quedo, o que falta instalarla. `menu.py` lo dice en su encabezado --
+    // cuando algo falla "el usuario no esta mirando ninguna terminal: el menu es su unica
+    // ventana" --, y `_fallo()` escribe ahi la ultima linea de pip o del constructor.
+    // Vaciar la linea entera se habria llevado eso por delante.
     var linea = app.detalle ? app.detalle
               : app.fase === 'corriendo' ? 'abierta en el puerto ' + app.puerto
-              : app.construida ? 'lista, abre en menos de un segundo'
+              : app.construida ? ''
               : app.instalada ? 'hay que construirla la primera vez'
               : 'hay que instalarla la primera vez';
     texto.innerHTML = '<div class="titulo"></div><div class="desc"></div>';
     texto.querySelector('.titulo').textContent = app.titulo;
-    texto.querySelector('.desc').textContent = app.descripcion + ' \\u2014 ' + linea;
+    texto.querySelector('.desc').textContent = linea;
     if (BLOQUEADAS[app.clave]) {
       // En la tarjeta y no en un `alert()`: levantar la aplicacion tarda, y el aviso
       // llegaria minutos despues del clic encima de lo que el usuario estuviera haciendo.

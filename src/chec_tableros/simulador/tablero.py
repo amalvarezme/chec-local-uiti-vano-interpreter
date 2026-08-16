@@ -1155,17 +1155,43 @@ def construir(
     )
     IDX_ANOTACION_SIMULADO = len(_fig.layout.annotations) - 1
 
+    # El alto de la figura y, en unidades de papel, la banda que ocupan los titulos de los
+    # mapas. Se despeja para que la leyenda, que sube encima de ellos, no se les monte.
+    #
+    # 26 px y no una fraccion escrita a ojo: la banda es TEXTO -- fuente 16 mas su relleno --
+    # y mide lo mismo pase lo que pase con el alto de la figura. Dividirla aqui es lo que
+    # mantiene la cuenta correcta el dia que el alto cambie.
+    _ALTO_FIGURA = 2489
+    _BANDA_TITULO_MAPAS = 26 / _ALTO_FIGURA
+
     _fig.update_layout(
         map=dict(style='carto-positron', center=dict(lat=5.07, lon=-75.52), zoom=10,
                  layers=CAPAS_CAJA_SELECCION),
         map2=dict(style='carto-positron', center=dict(lat=5.07, lon=-75.52), zoom=10,
                   layers=CAPAS_CAJA_SIMULADA),
-        title=dict(text='Simulador Criticidad'),
+        # El titulo se ANCLA arriba del contenedor en vez de dejar que Plotly lo centre en
+        # el margen: ahi es donde ahora vive la leyenda, y un titulo auto-centrado se le
+        # monta encima. Medido con el margen en 108 y el titulo suelto: la leyenda ocupaba
+        # de 25 a 92 px y el titulo caia en 45-66, dentro de ella.
+        title=dict(text='Simulador Criticidad', y=1.0, yanchor='top', yref='container'),
         # Margenes explicitos. Los de Plotly por defecto (l=80, r=80, t=100, b=80) se llevaban
         # 160 px de ancho -- medido, el 8,5% de una pantalla de 1.920 -- y a la derecha no hay
         # nada que rotular. El izquierdo NO puede bajar a cero: es donde viven el titulo y las
         # marcas del eje y de los paneles de la primera columna.
-        margin=dict(l=52, r=14, t=78, b=44),
+        # El margen de arriba sube de 78 a 132 px, y no es un numero redondo: es la suma de
+        # lo que hay que apilar ahi, todo MEDIDO en el navegador.
+        #
+        #     titulo de la figura, anclado arriba          22 px
+        #     leyenda horizontal, que envuelve en 3 filas   67
+        #     banda de los titulos de los mapas             19
+        #     aire entre las tres                           24
+        #                                                  ---
+        #                                                  132
+        #
+        # La leyenda son 67 px y no 20 porque son siete nombres con `tracegroupgap=22`: no
+        # caben en una fila y Plotly las envuelve. Contar una sola fila era lo que dejaba el
+        # titulo dentro de la leyenda.
+        margin=dict(l=52, r=14, t=132, b=44),
         barmode='group', bargap=0.25, bargroupgap=0.05,
         # SIN `width`: con un ancho fijo Plotly ignora el contenedor. Pero dejarlo en None NO
         # basta por si solo -- `autosize` mide el contenedor UNA vez, al montar, y el widget
@@ -1174,12 +1200,22 @@ def construir(
         # 2.489 y no 3.003: el grafo comparte fila con el perfil y su septima fila
         # desaparece. Lo que se va son sus 235,2 px de la fila 3 vieja mas un hueco; el
         # grafo conserva sus 589,8 px porque la fila 3 los hereda. Ver `row_heights`.
-        height=2489, autosize=True, template='plotly_white',
-        # La leyenda va HORIZONTAL y justo debajo de los mapas. Vertical y a la derecha se
-        # llevaba 196 px medidos de ancho para decir siete nombres. `y` sale del dominio del
-        # mapa y no de un numero escrito a mano: cambiar `row_heights` mueve los mapas.
+        height=_ALTO_FIGURA, autosize=True, template='plotly_white',
+        # La leyenda va HORIZONTAL y ENCIMA de los mapas, centrada entre los dos. Horizontal
+        # porque vertical y a la derecha se llevaba 196 px medidos de ancho para decir siete
+        # nombres. Encima porque abajo quedaba lejos de lo que nombra: entre los mapas y ella
+        # se metia todo el alto de las dos filas del mapa.
+        #
+        # `y` sale del dominio del mapa y no de un numero escrito a mano: cambiar
+        # `row_heights` mueve los mapas. Lo que se le suma es la BANDA DE LOS TITULOS: en
+        # `domain.y[1]` -- el borde de arriba de los mapas -- ya estan "Criticidad Original"
+        # y "Criticidad Simulada", anclados por abajo a esa misma linea. Anclar ahi la
+        # leyenda la pondria encima de ellos.
+        #
+        # `x=0.5` es literalmente "entre los mapas": el primero acaba en 0.4225 y el segundo
+        # empieza en 0.5175.
         legend=dict(orientation='h', x=0.5, xanchor='center',
-                    y=_fig.layout.map.domain.y[0] - 0.004, yanchor='top',
+                    y=_fig.layout.map.domain.y[1] + _BANDA_TITULO_MAPAS, yanchor='bottom',
                     font=dict(size=10), tracegroupgap=22),
     )
 
@@ -2555,7 +2591,7 @@ def construir(
         '<span style="font-size:12px;color:#5b4a48;">No simulables: <b>'
         + ', '.join(k.label for k in KNOBS_BLOQUEADOS) + '</b>. '
         'Entran a la simulacion con el valor observado de cada vano, pero no se pueden '
-        'mover: la tabla de arriba dice por que. </span>')
+        'mover.</span>')
     # --- Las actividades del contrato, la otra mitad de la decision -----------------------
     # Mismo patron que la lista de variables, y por la misma razon: UNA lista compartida de
     # casillas arriba, y cada vano marcado recibe abajo su propia fila por actividad elegida.
@@ -2792,8 +2828,7 @@ def construir(
             _COLUMNAS_VANO.clear()
             controles_knob_box.children = [widgets.HTML(
                 '<span style="font-size:12px;color:#5b4a48;">Elige arriba las variables a '
-                'modificar y, si vas a costear, las actividades del contrato. Cada vano '
-                'marcado recibe su propia columna.</span>')]
+                'modificar y, si vas a costear, las actividades del contrato.</span>')]
             return
         if seleccion is None:
             _COLUMNAS_VANO.clear()
@@ -3544,20 +3579,6 @@ def construir(
             _grupo(_titulo('Ventana'), ventana_widget),
             _grupo(vano_widget,
                    widgets.HBox([boton_desmarcar, boton_top_ventana]),
-                   widgets.HTML(f'<span style="font-size:12px;color:#5b4a48;">La lista trae '
-                                'los vanos con eventos del circuito en <b>todo el periodo</b>, '
-                                'asi que no cambia al mover el deslizador: lo que cambia es '
-                                f'quien esta marcado. Al elegir circuito se marcan los '
-                                f'{TOP_VANOS_PERFIL} de mayor UITI del periodo -- las mismas '
-                                'barras del perfil de arriba -- y al mover la ventana, los '
-                                f'{TOP_VANOS_VENTANA} de mayor UITI en ella. Desde ahi puedes '
-                                'agregar o quitar los que quieras, con la casilla o haciendo '
-                                'clic sobre el vano en el mapa, sin tope. El vano marcado se '
-                                'encierra en un recuadro del color de su grupo de criticidad; '
-                                'al desmarcarlo pierde el recuadro y conserva el color y el '
-                                'grosor de su grupo. Sin ninguno marcado el simulador toma el '
-                                f'circuito completo, y se dibujan hasta {MAX_VANOS_SERIE} '
-                                'series de tiempo.</span>'),
                    AVISO_VANOS),
             _grupo(_titulo('Variables del simulador'), knob_selector_widget,
                    AVISO_BLOQUEADOS),
@@ -3568,9 +3589,7 @@ def construir(
                    item_selector_widget,
                    widgets.HTML('<span style="font-size:12px;color:#5b4a48;">Lo que marques '
                                 'aqui aparece como una fila bajo CADA vano marcado, con su '
-                                'costo unitario y cuantas veces se ejecuta. El costo no '
-                                'alimenta al modelo: el simulador estima el riesgo y esta '
-                                'lista lo que vale el plan; unirlos es tu decision.</span>'),
+                                'costo unitario.</span>'),
                    AVISO_SIN_COSTO),
             _grupo(controles_knob_box),
             _grupo(widgets.HTML(
