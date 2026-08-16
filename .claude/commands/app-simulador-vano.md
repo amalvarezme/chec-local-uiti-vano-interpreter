@@ -237,8 +237,11 @@ joblib.dump({'knobs': ns['KNOBS'], 'feature_names': ns['feature_names'],
              'bag_index': ns['BAG_INDEX'], 'features_mil': list(ns['FEATURES_MIL']),
              'ventanas': ns['VENTANAS']},
             SALIDA / 'catalogo.joblib', compress=3)
-for origen in (RAIZ / 'data/derived/geometrias_014.json',
-               RAIZ / 'data/models/mil_vano_ventana_v1.pt',
+# La geometria KMeans es un artefacto VERSIONADO (`data/geometria_kmeans_014_v1.json`),
+# no un derivado que se extraiga del cuaderno 04. Dentro del paquete conserva el nombre
+# `geometrias_014.json` porque el parche de la celda 3 apunta ahi.
+shutil.copy2(RAIZ / 'data/geometria_kmeans_014_v1.json', SALIDA / 'geometrias_014.json')
+for origen in (RAIZ / 'data/models/mil_vano_ventana_v1.pt',
                RAIZ / 'data/Actividades_mantenimiento_costos_2026.xlsx'):
     shutil.copy2(origen, SALIDA / origen.name)
 
@@ -321,11 +324,9 @@ to `/`, put `/` and `/src` on `sys.path`, and every project import would fail. V
 rather than trusting it: the notebook's own first-cell `_sonda` probe fails loudly if
 `chec_local_interpreter` did not import from where you think.
 
-**Edit 3 — cell 3, read the geometry from the bundle instead of re-extracting it.** Replace
+**Edit 3 — cell 3, read the geometry from the bundle instead of the repository.** Replace
 ```python
-GEOMETRIAS_PATH = DEFAULT_OUTPUT_PATH
-if not GEOMETRIAS_PATH.exists():
-    extraer_geometrias_014(DEFAULT_NOTEBOOK_PATH, GEOMETRIAS_PATH)
+GEOMETRIAS_PATH = ROOT / 'data' / 'geometria_kmeans_014_v1.json'
 ```
 with
 ```python
@@ -498,9 +499,11 @@ every asset 404. That documentation is also where the diagnostic for step 8 come
 widget round-trip runs over `/api/kernels/`, so if the page renders but nothing reacts, that is
 the path the proxy is dropping.
 
-**The two source packages.** The app needs `chec_impacto`, `chec_local_interpreter` and
-`scripts` (the last one is not optional — `ventanas_015.py` imports
-`scripts.extract_geometrias_014` **at module import time**). Mirror them into the app source
+**The two source packages.** The app needs `chec_impacto` and `chec_local_interpreter`.
+`scripts` used to be mandatory too, because `ventanas_015.py` imported
+`scripts.extract_geometrias_014` at module import time; that module no longer exists — the
+KMeans geometry is a versioned artifact now — and nothing under `src/` imports from
+`scripts` any more. Mirror `scripts` anyway only if a step below needs it. Mirror them into the app source
 folder with `databricks sync`, which — unlike `workspace import-dir`, used by the sibling
 commands — has an exclude mechanism, so `__pycache__` never reaches the workspace:
 ```

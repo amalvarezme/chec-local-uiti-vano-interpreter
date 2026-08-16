@@ -2685,7 +2685,14 @@ Este cuaderno escribe solo al reentrenar. En modo visualizacion no toca el disco
 | `data/models/mil_vano_ventana_v1.pt` | al reentrenar con `mode="full"` | **si** | el visor de este cuaderno, el simulador, el informe y las aplicaciones locales y de Databricks |
 | `data/derived/oof_mil_{mode}_{fusion}_clase{lambda}.npz` | tras la validacion cruzada | no | analisis posteriores; **opcional** para el visor, que lee el desglose desde el `.pt` |
 | `data/derived/bolsas_mil_{mode}.joblib` | al construir las bolsas | no | el simulador, para no rehacer la construccion en cada arranque |
-| `data/derived/geometrias_014.json` | si falta, se extrae de 01.4 | no | la asignacion de clase en todos los caminos |
+
+La geometria KMeans **ya no aparece en esa tabla**, y es un cambio que conviene
+notar: antes se derivaba en caliente -- si faltaba el cache, se extraia del HTML
+guardado del cuaderno 04 --, y hoy es un artefacto VERSIONADO
+(`data/geometria_kmeans_014_v1.json`) que este cuaderno solo LEE. Lo produce
+`scripts/exportar_geometria.py`, deliberadamente aparte: un dato del que dependen
+el modelo, el simulador y los informes no debia regenerarse como efecto
+secundario de abrir un cuaderno.
 
 Hay ademas dos derivados que este cuaderno NO escribe pero que dependen del mismo
 artefacto: el catalogo de controles del simulador y el cache de relevancias por
@@ -2719,8 +2726,15 @@ _SALIDAS = [
     (DERIVED_DIR / f"bolsas_mil_{mode}.joblib",
      "al construir las bolsas", "no",
      "el simulador, para no rehacer la construccion"),
-    (DERIVED_DIR / "geometrias_014.json",
-     "si falta, se extrae de 01.4", "no",
+]
+
+# La geometria KMeans NO va en esta tabla: este cuaderno la LEE, no la escribe. Estuvo
+# aqui mientras se derivaba en caliente del cuaderno 04, y quedo como una fila falsa al
+# promoverla a artefacto versionado -- una fila que ademas se IMPRIME, asi que mentia a
+# quien leyera la salida. Se lista aparte, como insumo, que es lo que es.
+_SOLO_LECTURA = [
+    (DATA_DIR / "geometria_kmeans_014_v1.json",
+     "no lo escribe este cuaderno; lo produce scripts/exportar_geometria.py", "si",
      "la asignacion de clase en todos los caminos"),
 ]
 
@@ -2736,10 +2750,25 @@ tabla_salidas = pd.DataFrame([
     for r, cuando, versionado, consumidor in _SALIDAS
 ])
 
+tabla_solo_lectura = pd.DataFrame([
+    {
+        "archivo": str(r.relative_to(PROJECT_ROOT)) if PROJECT_ROOT in r.parents else str(r),
+        "existe_ahora": r.exists(),
+        "MB": round(r.stat().st_size / 1e6, 2) if r.exists() else None,
+        "cuando_se_escribe": cuando,
+        "versionado": versionado,
+        "quien_lo_consume": consumidor,
+    }
+    for r, cuando, versionado, consumidor in _SOLO_LECTURA
+])
+
 print("En modo visualizacion este cuaderno NO escribe ninguno de estos archivos.")
 print(f"Modo actual: {'entrenamiento' if ENTRENAR else 'visualizacion'}")
 print()
 display(tabla_salidas)
+print("Y esto lo LEE pero no lo escribe -- se lista aparte para que la tabla de")
+print("salidas no lo reclame como propio:")
+display(tabla_solo_lectura)
 '''
 
 
