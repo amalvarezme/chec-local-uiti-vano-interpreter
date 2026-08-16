@@ -26,6 +26,7 @@ MODULOS = RAIZ / "src" / "chec_tableros"
 MIGRADOS = {
     "01_uiti_vano_clima": "clima",
     "02_uiti_vano_kmeans": "agrupamiento",
+    "03_uiti_vano_trayectorias_circuitos": "trayectorias_circuitos",
 }
 
 
@@ -51,6 +52,20 @@ def fuente_de_tablero(nombre: str, *, solo_codigo: bool = False) -> str:
         for celda in documento["cells"]
         if not solo_codigo or celda["cell_type"] == "code"
     )
+
+
+def fuente_del_cuaderno(nombre: str) -> str:
+    """El texto del `.ipynb`, SIEMPRE, este migrado o no.
+
+    No es lo mismo que `fuente_de_tablero`, y confundirlos cuesta caro. Esa
+    contesta *donde vive el codigo del tablero*; esta contesta *que hay dentro del
+    archivo de cuaderno*. Los comandos de despliegue parchean el `.ipynb` por
+    contenido -- la linea del `%pip install`, el bloque de `sys.path` -- y esas
+    marcas siguen viviendo ahi aunque el tablero ya no.
+    """
+    documento = json.loads(
+        (CUADERNOS / f"{_clave(nombre)}.ipynb").read_text(encoding="utf-8"))
+    return "\n".join("".join(celda["source"]) for celda in documento["cells"])
 
 
 def _clave(nombre: str) -> str:

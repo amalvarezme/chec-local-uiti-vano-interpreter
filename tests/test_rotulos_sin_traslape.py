@@ -35,9 +35,10 @@ SIMULADOR = "06_uiti_vano_explicabilidad_simulador.ipynb"
 
 
 def _fuente(nombre: str) -> str:
-    documento = json.loads((BASE / nombre).read_text(encoding="utf-8"))
-    return "\n".join("".join(c["source"]) for c in documento["cells"]
-                     if c["cell_type"] == "code")
+    """La fuente del tablero, ya viva en el cuaderno o en `src/chec_tableros/`."""
+    from ayudas_tableros import fuente_de_tablero
+
+    return fuente_de_tablero(nombre, solo_codigo=True)
 
 
 def _sin_comentarios(fuente: str) -> str:

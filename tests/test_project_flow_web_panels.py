@@ -31,7 +31,7 @@ from pathlib import Path
 
 import pytest
 
-from ayudas_tableros import fuente_de_tablero
+from ayudas_tableros import esta_migrado, fuente_de_tablero, fuente_del_cuaderno
 
 NOTEBOOK_DIR = Path(__file__).resolve().parents[1] / "notebooks" / "base_apps"
 
@@ -334,17 +334,70 @@ SHIM_ANCHORS = {
 
 
 @pytest.mark.parametrize("board", sorted(SHIM_ANCHORS))
-def test_databricks_command_shim_anchors_still_exist_in_the_notebook(sources, board):
+def test_databricks_command_shim_anchors_still_exist_in_the_notebook(board):
+    """The deploy command patches the notebook's CODE by content -- and that code moves.
+
+    These commands stage a Databricks copy by finding `REPO_ROOT = find_repo_root()`,
+    `ABRIR_EN_NAVEGADOR = True` and the export call inside the `.ipynb`, and rewriting
+    them. Once a board moves to `src/chec_tableros/`, none of those markers is in the
+    notebook any more: the command aborts at best, and publishes an empty board at worst.
+
+    So the assertion forks on where the board lives. While it is still a notebook, the
+    anchors must be there. Once it is migrated, the command must carry an explicit
+    out-of-service banner -- because the failure it would otherwise produce is silent,
+    and these four commands are retired wholesale in S13 rather than repaired.
+    """
     command_name, anchors = SHIM_ANCHORS[board]
     command = (COMMAND_DIR / command_name).read_text(encoding="utf-8")
+
+    if esta_migrado(BOARDS[board]):
+        assert "FUERA DE SERVICIO" in command, (
+            f"{command_name} sigue prometiendo desplegar un tablero cuyo codigo ya no "
+            "esta en el cuaderno; sin el aviso, publica un tablero vacio"
+        )
+        return
+
+    cuaderno = fuente_del_cuaderno(BOARDS[board])
     for anchor in anchors:
-        assert anchor in sources[board], (
+        assert anchor in cuaderno, (
             f"{BOARDS[board]} no longer contains {anchor!r}, which /{command_name[:-3]} "
             f"replaces when staging the Databricks copy"
         )
         assert anchor in command, (
             f"{command_name} no longer mentions {anchor!r}; the shim would miss it"
         )
+
+
+@pytest.mark.parametrize("board", sorted(BOARDS))
+def test_a_migrated_board_leaves_no_deploy_command_promising_the_old_path(board):
+    """Ningun comando puede seguir prometiendo un despliegue que ya no funciona.
+
+    Cubre los cuatro tableros y no solo los dos de `SHIM_ANCHORS`: esa tabla solo
+    listaba `03` y `04`, y por eso migrar `01` y `02` rompio sus comandos en silencio.
+    Aqui se busca el comando por el nombre del cuaderno, que es como se relacionan de
+    verdad.
+    """
+    if not esta_migrado(BOARDS[board]):
+        pytest.skip("todavia vive en el cuaderno")
+
+    # El predicado no es "nombra el cuaderno" sino "parchea su CODIGO". Las
+    # aplicaciones locales (`app-local-*.md`) tambien nombran el cuaderno y estan
+    # perfectamente: construyen llamando al modulo. Las que se rompen son las que
+    # buscan una linea del guion dentro del `.ipynb` para reescribirla.
+    sin_aviso = []
+    for ruta in sorted(COMMAND_DIR.glob("*.md")):
+        texto = ruta.read_text(encoding="utf-8")
+        if f"{BOARDS[board]}.ipynb" not in texto:
+            continue
+        if not any(marca in texto for marca in
+                   ("REPO_ROOT = find_repo_root()", "ABRIR_EN_NAVEGADOR = True")):
+            continue
+        if "FUERA DE SERVICIO" not in texto:
+            sin_aviso.append(ruta.name)
+
+    assert not sin_aviso, (
+        f"{sin_aviso} despliegan {BOARDS[board]} parcheando un codigo que ya no esta ahi"
+    )
 
 
 def test_board_04_keeps_its_rendered_output_because_it_is_what_gets_published():

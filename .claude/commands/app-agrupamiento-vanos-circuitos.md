@@ -2,6 +2,24 @@
 description: Publica el tablero de VANOS del cuaderno 02 (agrupamiento de vanos por UITI acumulado, con el top 10 de circuitos por vanos en clase Alto) como una Databricks App en una URL fija, detectando y reparando por su cuenta todo lo que falte — si no hay datos en el Volume encadena /subir-datos-databricks, y configura el permiso de lectura de la app sin intervención manual. Pregunta solo el nombre de la app y la URL del workspace destino.
 ---
 
+> **FUERA DE SERVICIO desde el 2026-08-15. NO lo ejecutes.**
+>
+> Este comando publica el cuaderno `02_uiti_vano_kmeans.ipynb` parcheando su CODIGO por contenido:
+> busca `REPO_ROOT = find_repo_root()`, `ABRIR_EN_NAVEGADOR = True` y la llamada que
+> exporta el panel, y los reemplaza para que corran en Databricks.
+>
+> Ese codigo **ya no esta en el cuaderno**: vive en `src/chec_tableros/agrupamiento.py`
+> (`sdd/retire-base-apps-notebooks`, fase 3). El cuaderno quedo como envoltorio
+> delgado que llama al modulo, asi que los parches no encuentran su marca. En el
+> mejor caso el despliegue aborta; en el peor publica un tablero vacio.
+>
+> Se marca en vez de arreglarse porque la arquitectura acordada retira estos cuatro
+> comandos: los cuatro tableros pasan a una sola aplicacion `criticidad-chec` con
+> cuatro rutas, y eso es la rebanada S13. Repararlos ahora seria trabajo que se borra.
+>
+> Mientras tanto, para ver el tablero: la aplicacion de escritorio en
+> `aplicaciones/`, que si construye desde el modulo y esta verificada contra su golden.
+
 > **Read `.claude/commands/_contrato-despliegue-databricks.md` before anything else.** It is mandatory and it overrides what follows:
 > - **A. Run log** — open the bitacora *before* asking the user anything, record every numbered step as you finish it, and always close it. Its path and final state are part of the report back to the user.
 > - **B. Never abort** — a restriction gets recorded and worked around; the command runs to the end regardless. Wherever this file says "stop and report", rule B applies instead.

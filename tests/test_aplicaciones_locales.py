@@ -447,12 +447,15 @@ CUADERNOS_CON_CSS = (
 
 
 def _css_de_los_cuadernos() -> str:
-    import json
-    partes = []
-    for nombre in CUADERNOS_CON_CSS:
-        nb = json.loads((CUADERNOS / f"{nombre}.ipynb").read_text(encoding="utf-8"))
-        partes += ["".join(c["source"]) for c in nb["cells"] if c["cell_type"] == "code"]
-    return "\n".join(partes)
+    """El CSS de los tableros, esten en un cuaderno o ya en `src/chec_tableros/`.
+
+    El nombre se conserva porque es de lo que habla la prueba -- la paleta sale de
+    los TABLEROS, no de `paleta.py` --, y esa relacion no cambia porque el tablero
+    haya cambiado de archivo.
+    """
+    from ayudas_tableros import fuente_de_tablero
+
+    return "\n".join(fuente_de_tablero(n, solo_codigo=True) for n in CUADERNOS_CON_CSS)
 
 
 @pytest.mark.parametrize("token", sorted(_comun("paleta").TOKENS))

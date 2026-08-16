@@ -36,14 +36,22 @@ CUADERNOS = RAIZ / "notebooks" / "base_apps"
 # El panel de los dos tableros vive en la misma celda: la que arma el HTML y el
 # JavaScript alrededor de la figura.
 PANELES = {
-    "03": (CUADERNOS / "03_uiti_vano_trayectorias_circuitos.ipynb", 7),
-    "04": (CUADERNOS / "04_uiti_vano_trayectorias_vano.ipynb", 7),
+    "03": "03_uiti_vano_trayectorias_circuitos",
+    "04": "04_uiti_vano_trayectorias_vano",
 }
 
 
 def _panel(clave: str) -> str:
-    ruta, celda = PANELES[clave]
-    return "".join(json.loads(ruta.read_text(encoding="utf-8"))["cells"][celda]["source"])
+    """La fuente del tablero, ya viva en el cuaderno o en `src/chec_tableros/`.
+
+    Antes se pedia la celda 7 por su indice. Un modulo no tiene celdas, y el indice
+    tampoco era el contrato: lo que estas pruebas buscan son cuerpos de funciones de
+    JavaScript por su nombre (`_cuerpo`), y esos se encuentran igual en todo el
+    texto. El indice solo estaba acotando de mas.
+    """
+    from ayudas_tableros import fuente_de_tablero
+
+    return fuente_de_tablero(PANELES[clave], solo_codigo=True)
 
 
 def _cuerpo(fuente: str, nombre: str) -> str:

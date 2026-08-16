@@ -37,8 +37,10 @@ SLIDER = {"03": "tr-ventana", "04": "v4-ventana"}
 
 
 def _fuente(nombre: str) -> str:
-    celdas = json.loads((NOTEBOOK_DIR / f"{nombre}.ipynb").read_text(encoding="utf-8"))
-    return "\n".join("".join(celda["source"]) for celda in celdas["cells"])
+    """La fuente del tablero, ya viva en el cuaderno o en `src/chec_tableros/`."""
+    from ayudas_tableros import fuente_de_tablero
+
+    return fuente_de_tablero(nombre)
 
 
 @pytest.fixture(scope="module")
