@@ -1,0 +1,54 @@
+"""De donde se lee la fuente de un tablero mientras dura la migracion.
+
+Los cinco tableros tenian su codigo dentro de un `.ipynb`, y decenas de pruebas lo
+leian de ahi. Se estan moviendo a `src/chec_tableros/` de a uno
+(`sdd/retire-base-apps-notebooks`, fase 3), asi que durante un tiempo unos viven en
+un cuaderno y otros en un modulo.
+
+Que cada prueba resuelva eso por su cuenta es como se termina con tres criterios
+distintos y con una que se olvida de actualizar. Aqui hay uno solo, y la tabla de
+migrados es la unica linea que hay que tocar cuando un tablero cambia de casa.
+
+Lo que estas pruebas comprueban -- que los cuatro mapas compartan paleta, que el CSS
+de dos columnas sea identico, que los violines lleven su unidad -- son invariantes
+del TABLERO, no del formato en que se guarda. Por eso se repuntan en vez de borrarse.
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+RAIZ = Path(__file__).resolve().parents[1]
+CUADERNOS = RAIZ / "notebooks" / "base_apps"
+MODULOS = RAIZ / "src" / "chec_tableros"
+
+# Nombre del cuaderno (sin `.ipynb`) -> modulo que ya se lo llevo.
+MIGRADOS = {"01_uiti_vano_clima": "clima"}
+
+
+def esta_migrado(nombre: str) -> bool:
+    return _clave(nombre) in MIGRADOS
+
+
+def fuente_de_tablero(nombre: str, *, solo_codigo: bool = False) -> str:
+    """El codigo de un tablero, venga de donde venga.
+
+    `nombre` acepta con o sin `.ipynb`, que es como lo nombran las pruebas hoy.
+    `solo_codigo` descarta las celdas de texto del cuaderno; en un modulo no hay
+    tal distincion, asi que devuelve lo mismo en los dos casos.
+    """
+    clave = _clave(nombre)
+    modulo = MIGRADOS.get(clave)
+    if modulo is not None:
+        return (MODULOS / f"{modulo}.py").read_text(encoding="utf-8")
+
+    documento = json.loads((CUADERNOS / f"{clave}.ipynb").read_text(encoding="utf-8"))
+    return "\n".join(
+        "".join(celda["source"])
+        for celda in documento["cells"]
+        if not solo_codigo or celda["cell_type"] == "code"
+    )
+
+
+def _clave(nombre: str) -> str:
+    return nombre[:-6] if nombre.endswith(".ipynb") else nombre

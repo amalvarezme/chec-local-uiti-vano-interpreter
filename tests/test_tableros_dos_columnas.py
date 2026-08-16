@@ -38,6 +38,8 @@ from pathlib import Path
 
 import pytest
 
+from ayudas_tableros import fuente_de_tablero
+
 RAIZ = Path(__file__).resolve().parents[1]
 BASE = RAIZ / "notebooks" / "base_apps"
 
@@ -56,10 +58,8 @@ CUADERNOS = [t[0] for t in TABLEROS]
 
 
 def _fuente(nombre: str) -> str:
-    """Todo el codigo del cuaderno, en un solo texto."""
-    documento = json.loads((BASE / nombre).read_text(encoding="utf-8"))
-    return "\n".join("".join(c["source"]) for c in documento["cells"]
-                     if c["cell_type"] == "code")
+    """Todo el codigo del tablero, venga de un cuaderno o de `src/chec_tableros/`."""
+    return fuente_de_tablero(nombre, solo_codigo=True)
 
 
 def _css(nombre: str) -> str:

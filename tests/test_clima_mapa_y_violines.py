@@ -27,8 +27,9 @@ import json
 import re
 from pathlib import Path
 
+from ayudas_tableros import fuente_de_tablero
+
 RAIZ = Path(__file__).resolve().parents[1]
-CUADERNO = RAIZ / "notebooks" / "base_apps" / "01_uiti_vano_clima.ipynb"
 
 # El orden en que se dibujan, que es el de `VARS_VIOLIN`, y su unidad.
 VIOLINES = [("prep", "mm"), ("temp", "°C"),
@@ -37,9 +38,13 @@ VIOLINES = [("prep", "mm"), ("temp", "°C"),
 
 
 def _celdas() -> list[str]:
-    documento = json.loads(CUADERNO.read_text(encoding="utf-8"))
-    return ["".join(c["source"]) for c in documento["cells"]
-            if c["cell_type"] == "code"]
+    """La fuente del tablero, venga del cuaderno o de `src/chec_tableros/clima.py`.
+
+    Se devuelve como lista de un solo trozo cuando ya es un modulo: lo que estas
+    pruebas miran son bloques de codigo delimitados por sus propias marcas, no
+    celdas, asi que la frontera de celda nunca fue parte del contrato.
+    """
+    return [fuente_de_tablero("01_uiti_vano_clima", solo_codigo=True)]
 
 
 def _celda_de_la_figura() -> str:
@@ -51,9 +56,18 @@ def _sin_comentarios(fuente: str) -> str:
 
 
 def _rejilla() -> tuple[int, int]:
+    """Filas y columnas declaradas en `make_subplots`.
+
+    El `(?<![A-Za-z_])` no es decoracion: al pasar el tablero de celdas a un modulo,
+    `rows=` sin frontera empezo a encontrar el `nrows=0` de la lectura de cabecera,
+    a 550 lineas de distancia, y la prueba afirmaba que la figura tenia 0 filas. La
+    frontera de celda estaba haciendo de delimitador sin que nadie lo hubiera
+    decidido.
+    """
     celda = _sin_comentarios(_celda_de_la_figura())
-    filas = int(re.search(r"rows=(\d+)", celda).group(1))
-    columnas = int(re.search(r"cols=(\w+)", celda).group(1).replace("VIOL_COLS", "3"))
+    filas = int(re.search(r"(?<![A-Za-z_])rows=(\d+)", celda).group(1))
+    columnas = int(re.search(r"(?<![A-Za-z_])cols=(\w+)", celda)
+                   .group(1).replace("VIOL_COLS", "3"))
     return filas, columnas
 
 

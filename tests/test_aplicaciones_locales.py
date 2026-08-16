@@ -670,14 +670,27 @@ def test_el_visor_construido_registra_de_que_insumos_salio(app: Path):
 
 
 @pytest.mark.parametrize("app", ESTATICOS, ids=_ids(ESTATICOS))
-def test_un_visor_al_dia_no_se_reconstruye(app: Path):
+def test_un_visor_al_dia_no_se_reconstruye(app: Path, tmp_path: Path):
     """El otro lado del trato: vigilar no puede volverse reconstruir siempre. Un visor
     tarda entre 4 y 8 s en construirse, y hacerlo en cada apertura anularia el motivo
-    de que exista el paquete."""
-    if not (app / "panel" / "index.html").exists():
-        pytest.skip("este visor no esta construido en esta maquina")
+    de que exista el paquete.
+
+    Se arma un manifiesto con las huellas de AHORA en vez de mirar el panel que haya
+    en disco. La version anterior hacia lo segundo y era un falso positivo esperando:
+    un panel construido ayer queda legitimamente obsoleto en cuanto alguien toca
+    `src/` -- que es a diario --, y la prueba lo denunciaba como si la maquinaria de
+    huellas estuviera rota. Medido: fallaba en la primera corrida tras cualquier
+    cambio en `src/` y pasaba en la segunda, porque otra prueba habia reconstruido
+    los paneles por el camino. Un fallo que se arregla solo al repetir es peor que
+    ninguno: ensena a repetir.
+    """
     construccion = _comun("construccion")
-    assert construccion.motivo_de_reconstruccion(app / "panel", _cuaderno_de(app)) is None
+    cuaderno = _cuaderno_de(app)
+    (tmp_path / "index.html").write_text("", encoding="utf-8")
+    (tmp_path / "manifiesto.json").write_text(
+        json.dumps({"insumos": construccion.huellas_actuales(cuaderno)}),
+        encoding="utf-8")
+    assert construccion.motivo_de_reconstruccion(tmp_path, cuaderno) is None
 
 
 @pytest.mark.parametrize("app", ESTATICOS, ids=_ids(ESTATICOS))

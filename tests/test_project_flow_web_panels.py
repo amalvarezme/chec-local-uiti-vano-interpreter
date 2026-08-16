@@ -31,6 +31,8 @@ from pathlib import Path
 
 import pytest
 
+from ayudas_tableros import fuente_de_tablero
+
 NOTEBOOK_DIR = Path(__file__).resolve().parents[1] / "notebooks" / "base_apps"
 
 # `05` and `06` are deliberately excluded: they are ipywidgets/simulator
@@ -48,21 +50,19 @@ NO_CSV_BOARDS = ["03", "04"]
 
 
 def _source(name: str) -> str:
-    notebook = json.loads((NOTEBOOK_DIR / f"{name}.ipynb").read_text(encoding="utf-8"))
-    return "\n".join("".join(cell["source"]) for cell in notebook["cells"])
+    """The board's source, whether it still lives in a notebook or already in `src/`."""
+    return fuente_de_tablero(name)
 
 
 def _arbol(name: str) -> ast.Module:
-    """El arbol sintactico del cuaderno, solo con sus celdas de CODIGO.
+    """El arbol sintactico del tablero, solo con su CODIGO.
 
     Sirve para acotar un bloque por su estructura en vez de partir el texto por una
-    marca. Las celdas de texto se dejan fuera a proposito: `_source` las incluye
-    -- las comprobaciones de redaccion las necesitan -- y ninguna es Python valido.
+    marca. Las celdas de texto del cuaderno se dejan fuera a proposito: `_source`
+    las incluye -- las comprobaciones de redaccion las necesitan -- y ninguna es
+    Python valido.
     """
-    notebook = json.loads((NOTEBOOK_DIR / f"{name}.ipynb").read_text(encoding="utf-8"))
-    codigo = "\n".join("".join(cell["source"]) for cell in notebook["cells"]
-                       if cell["cell_type"] == "code")
-    return ast.parse(codigo)
+    return ast.parse(fuente_de_tablero(name, solo_codigo=True))
 
 
 @pytest.fixture(scope="module")

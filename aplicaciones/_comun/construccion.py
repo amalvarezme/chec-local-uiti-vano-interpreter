@@ -83,6 +83,23 @@ _DATOS = (
 )
 
 
+# Los tableros cuya fuente ya vive en `src/chec_tableros/` y no en un `.ipynb`. Se
+# migran de a uno (`sdd/retire-base-apps-notebooks`, fase 3), asi que esta tabla crece
+# hasta que este vacia de cuadernos: mientras tanto los dos caminos conviven y el que
+# no esta aqui se sigue ejecutando como celdas.
+#
+# La huella del cuaderno se sigue vigilando aunque ya no se ejecute: el `.ipynb` sigue
+# en el arbol hasta la rebanada que lo borra, y hasta entonces mirarlo de mas no cuesta
+# nada mientras que dejar de mirarlo tapa un cambio.
+_MIGRADOS = {"01_uiti_vano_clima.ipynb": "chec_tableros.clima"}
+
+
+def _construir_con_modulo(modulo: str) -> Path:
+    from importlib import import_module
+
+    return import_module(modulo).construir(raiz=_raiz.RAIZ_REPO, abrir=False)
+
+
 def huellas_actuales(nombre_cuaderno: str) -> dict:
     """La huella de cada insumo de ese visor, ahora mismo."""
     return _huellas.huellas_de_insumos(
@@ -120,15 +137,20 @@ def construir_tablero(nombre_cuaderno: str, destino: Path, *, titulo: str) -> No
             "descargar, no los datos. Corre `git lfs pull` en la raiz del repositorio."
         )
 
-    print(f"[1/2] ejecutando {nombre_cuaderno}")
+    modulo = _MIGRADOS.get(nombre_cuaderno)
     t0 = time.perf_counter()
-    espacio = _cuaderno.ejecutar(
-        ruta_cuaderno,
-        sustituciones={"ABRIR_EN_NAVEGADOR = True": "ABRIR_EN_NAVEGADOR = False"},
-    )
+    if modulo is not None:
+        print(f"[1/2] construyendo {modulo} (modulo, ya no cuaderno)")
+        fuente = _construir_con_modulo(modulo)
+    else:
+        print(f"[1/2] ejecutando {nombre_cuaderno}")
+        espacio = _cuaderno.ejecutar(
+            ruta_cuaderno,
+            sustituciones={"ABRIR_EN_NAVEGADOR = True": "ABRIR_EN_NAVEGADOR = False"},
+        )
+        fuente = Path(espacio["RUTA_PANEL"])
     print(f"      cuaderno completo en {time.perf_counter() - t0:.1f} s")
 
-    fuente = Path(espacio["RUTA_PANEL"])
     if not fuente.exists():
         raise SystemExit(f"El cuaderno no dejo su tablero en {fuente}.")
 
