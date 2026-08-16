@@ -887,13 +887,13 @@ def test_board_04_draws_its_equipment_on_top_like_boards_01_and_03():
     # La ultima traza de vanos es la del marcado sin celda, que entro despues del
     # resaltado por grupo: comparar contra `mapaResaltado` dejaria de cubrir a esa.
     assert "assert min(IDX['mapaTrafos'], IDX['mapaSwitches']) > IDX['mapaResaltadoSinDato']" in src
-    # Lo que la regla persigue son las trazas de MAPA: son las que MapLibre apila
-    # por orden de la figura. El perfil del circuito entro DESPUES de los equipos y
-    # no los tapa -- es una barra sobre un subplot xy --, asi que la asercion del
-    # cuaderno paso de "los equipos son los ultimos" a la que de verdad importa.
-    assert ("assert all(fig.data[i].type != 'scattermap'" in src), (
-        "the notebook must assert that no MAP trace comes after the equipment")
-    assert "for i in range(IDX['mapaSwitches'] + 1, len(fig.data))" in src
+    # Los equipos vuelven a ser las ULTIMAS trazas de la figura, asi que la asercion
+    # vuelve a ser la fuerte. Hubo un tiempo en que no podia serlo: el perfil del
+    # circuito era la tercera fila de esta misma figura y entraba DESPUES de los
+    # equipos -- sin taparlos, porque es una barra sobre un subplot xy --, y entonces
+    # lo unico que se podia exigir era que ninguna traza de MAPA fuera detras. Con el
+    # perfil en su propia figura, debajo del panel, esa concesion sobra: "los equipos
+    # son los ultimos" cubre el caso de las de mapa y ademas cualquier otra.
     # The loop used to bind `_n` and `_c`, the very names the IDX arithmetic below counts
     # with. It only worked because the loop ran before `_n = MAX_VANOS_RESALTADOS`; once
     # moved down it would have left `_n = 'Switches'`.
