@@ -83,20 +83,12 @@ _DATOS = (
 )
 
 
-# Los tableros cuya fuente ya vive en `src/chec_tableros/` y no en un `.ipynb`. Se
-# migran de a uno (`sdd/retire-base-apps-notebooks`, fase 3), asi que esta tabla crece
-# hasta que este vacia de cuadernos: mientras tanto los dos caminos conviven y el que
-# no esta aqui se sigue ejecutando como celdas.
-#
-# La huella del cuaderno se sigue vigilando aunque ya no se ejecute: el `.ipynb` sigue
-# en el arbol hasta la rebanada que lo borra, y hasta entonces mirarlo de mas no cuesta
-# nada mientras que dejar de mirarlo tapa un cambio.
-_MIGRADOS = {
-    "01_uiti_vano_clima.ipynb": "chec_tableros.clima",
-    "02_uiti_vano_kmeans.ipynb": "chec_tableros.agrupamiento",
-    "03_uiti_vano_trayectorias_circuitos.ipynb": "chec_tableros.trayectorias_circuitos",
-    "04_uiti_vano_trayectorias_vano.ipynb": "chec_tableros.trayectorias_vanos",
-}
+# Un TABLERO se nombra por su modulo (`chec_tableros.clima`) o, mientras quede alguno
+# sin migrar, por su cuaderno (`0X_....ipynb`). Los cuatro visores estaticos ya no
+# nombran ningun cuaderno: su codigo se fue a `src/chec_tableros/` y sus `.ipynb` se
+# borraron el 2026-08-15.
+def _es_modulo(tablero: str) -> bool:
+    return tablero.startswith("chec_tableros.")
 
 
 def _construir_con_modulo(modulo: str) -> Path:
@@ -105,16 +97,22 @@ def _construir_con_modulo(modulo: str) -> Path:
     return import_module(modulo).construir(raiz=_raiz.RAIZ_REPO, abrir=False)
 
 
-def huellas_actuales(nombre_cuaderno: str) -> dict:
-    """La huella de cada insumo de ese visor, ahora mismo."""
+def huellas_actuales(tablero: str) -> dict:
+    """La huella de cada insumo de ese visor, ahora mismo.
+
+    Un tablero que ya es un modulo no tiene `.ipynb` que vigilar: su codigo esta bajo
+    `src/`, que entra entero por `_ARBOLES`. Pedir ademas la huella de un archivo que
+    no existe haria que la aplicacion se reconstruyera en cada apertura.
+    """
+    propios = () if _es_modulo(tablero) else (_raiz.CUADERNOS_APPS / tablero,)
     return _huellas.huellas_de_insumos(
-        por_contenido=(_raiz.CUADERNOS_APPS / nombre_cuaderno, *_CODIGO),
+        por_contenido=(*propios, *_CODIGO),
         por_marca=_DATOS,
         arboles=_ARBOLES,
     )
 
 
-def motivo_de_reconstruccion(destino: Path, nombre_cuaderno: str) -> str | None:
+def motivo_de_reconstruccion(destino: Path, tablero: str) -> str | None:
     """Por que hay que reconstruir el visor de `destino`, o None si esta al dia.
 
     Un tablero sin construir tambien es un motivo, y se dice con esas palabras: es lo
@@ -124,40 +122,39 @@ def motivo_de_reconstruccion(destino: Path, nombre_cuaderno: str) -> str | None:
     if not (Path(destino) / "index.html").exists() or not manifiesto.exists():
         return "todavia no esta construido"
     guardadas = json.loads(manifiesto.read_text(encoding="utf-8")).get("insumos")
-    return _huellas.motivo_de_reconstruccion(guardadas, huellas_actuales(nombre_cuaderno))
+    return _huellas.motivo_de_reconstruccion(guardadas, huellas_actuales(tablero))
 
 
-def construir_tablero(nombre_cuaderno: str, destino: Path, *, titulo: str) -> None:
+def construir_tablero(tablero: str, destino: Path, *, titulo: str) -> None:
     _raiz.verificar_repo()
-    ruta_cuaderno = _raiz.CUADERNOS_APPS / nombre_cuaderno
-    if not ruta_cuaderno.exists():
+    ruta_cuaderno = _raiz.CUADERNOS_APPS / tablero
+    if not _es_modulo(tablero) and not ruta_cuaderno.exists():
         raise SystemExit(f"No existe {ruta_cuaderno}")
 
     csv = _raiz.datos("Indicadores_vano_v3.csv")
     if not csv.exists():
-        raise SystemExit(f"Falta {csv}. Es el insumo del cuaderno; sin el no hay tablero.")
+        raise SystemExit(f"Falta {csv}. Es el insumo del tablero; sin el no hay nada.")
     if csv.stat().st_size < 1024 * 1024:
         raise SystemExit(
             f"{csv} pesa {csv.stat().st_size} bytes: es un puntero de Git LFS sin "
             "descargar, no los datos. Corre `git lfs pull` en la raiz del repositorio."
         )
 
-    modulo = _MIGRADOS.get(nombre_cuaderno)
     t0 = time.perf_counter()
-    if modulo is not None:
-        print(f"[1/2] construyendo {modulo} (modulo, ya no cuaderno)")
-        fuente = _construir_con_modulo(modulo)
+    if _es_modulo(tablero):
+        print(f"[1/2] construyendo {tablero}")
+        fuente = _construir_con_modulo(tablero)
     else:
-        print(f"[1/2] ejecutando {nombre_cuaderno}")
+        print(f"[1/2] ejecutando {tablero}")
         espacio = _cuaderno.ejecutar(
             ruta_cuaderno,
             sustituciones={"ABRIR_EN_NAVEGADOR = True": "ABRIR_EN_NAVEGADOR = False"},
         )
         fuente = Path(espacio["RUTA_PANEL"])
-    print(f"      cuaderno completo en {time.perf_counter() - t0:.1f} s")
+    print(f"      tablero completo en {time.perf_counter() - t0:.1f} s")
 
     if not fuente.exists():
-        raise SystemExit(f"El cuaderno no dejo su tablero en {fuente}.")
+        raise SystemExit(f"{tablero} no dejo su tablero en {fuente}.")
 
     print(f"[2/2] empaquetando {fuente.name} ({fuente.stat().st_size / 1024**2:,.1f} MB)")
     # Las huellas se toman DESPUES de ejecutar el cuaderno, no antes: si alguien toca un
@@ -165,7 +162,7 @@ def construir_tablero(nombre_cuaderno: str, destino: Path, *, titulo: str) -> No
     # entro en el tablero. Tomarlas antes registraria un estado que el tablero no vio, y
     # la siguiente apertura lo daria por al dia.
     paquete = _empaquetar.empaquetar(fuente.read_text("utf-8"), destino, titulo=titulo,
-                                     insumos=huellas_actuales(nombre_cuaderno))
+                                     insumos=huellas_actuales(tablero))
     print()
     print(paquete.resumen())
     print()

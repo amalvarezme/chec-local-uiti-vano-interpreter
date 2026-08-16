@@ -37,6 +37,7 @@ import pytest
 RAIZ = Path(__file__).resolve().parents[1]
 APPS = RAIZ / "aplicaciones"
 CUADERNOS = RAIZ / "notebooks" / "base_apps"
+MODULOS_TABLEROS = RAIZ / "src" / "chec_tableros"
 
 # Las piezas sin las cuales el lanzador no llega a ninguna parte, en CUALQUIER
 # aplicacion. `preparar.py` no esta: solo lo tiene el simulador, que congela un paquete
@@ -127,31 +128,33 @@ def test_los_lanzadores_llaman_al_gestor_de_la_carpeta_de_al_lado(app: Path):
 
 
 @pytest.mark.parametrize("app", VISORES, ids=_ids(VISORES))
-def test_cada_visor_nombra_un_cuaderno_que_existe(app: Path):
-    """El nombre del cuaderno se resuelve contra `CUADERNOS_APPS` en tiempo de
-    ejecucion, asi que uno renombrado o archivado no rompe nada hasta que alguien
-    intenta construir -- y para entonces ya creo el entorno virtual y espero. Aqui
-    cuesta un `is_file()`.
+def test_cada_visor_declara_una_fuente_que_existe(app: Path):
+    """Cada aplicacion tiene que resolver EXACTAMENTE una fuente, y tenerla ahi.
 
-    Se busca en TODOS los `.py` de la carpeta y no solo en `construir.py`: los
-    cuatro visores estaticos lo declaran ahi, pero el simulador lo declara en
-    `preparar.py`, que es quien congela su paquete. Fijar el archivo concreto
-    convertiria esa diferencia legitima en un fallo."""
-    nombres = {
-        m.group(1)
-        for py in sorted(app.glob("*.py"))
-        for m in re.finditer(r"['\"]([\w.]+\.ipynb)['\"]",
-                             py.read_text(encoding="utf-8"))
-    }
-    assert nombres, f"{app.name} no nombra ningun cuaderno en sus .py"
-    # Se cuentan los que RESUELVEN, no los que se nombran. El simulador nombra dos --
-    # el cuaderno fuente y la copia parcheada que el mismo escribe -- y esa segunda no
-    # vive en `notebooks/` ni tiene por que. Lo que se fija es que haya exactamente
-    # una fuente: cero significa que el cuaderno se renombro o se archivo a otro sitio.
-    fuentes = {n for n in nombres if (CUADERNOS / n).is_file()}
+    Antes esa fuente era siempre un `.ipynb` y se comprobaba con un `is_file()`
+    contra `CUADERNOS_APPS`, que costaba nada y evitaba descubrir un cuaderno
+    renombrado despues de crear el entorno virtual y esperar la construccion.
+
+    Los cuatro visores estaticos ya no nombran ningun cuaderno: nombran su modulo
+    de `src/chec_tableros/`, que es donde se movio su codigo. El simulador todavia
+    nombra dos `.ipynb` -- su fuente y la copia parcheada que el mismo escribe --,
+    asi que la comprobacion se bifurca por lo que la aplicacion declara, no por lo
+    que se supone que deberia declarar.
+    """
+    fuentes = set()
+    for py in sorted(app.glob("*.py")):
+        texto = py.read_text(encoding="utf-8")
+        fuentes |= {n for n in re.findall(r"['\"]([\w.]+\.ipynb)['\"]", texto)
+                    if (CUADERNOS / n).is_file()}
+        fuentes |= {f"chec_tableros.{m}" for m in
+                    re.findall(r"from chec_tableros import (\w+)", texto)
+                    if (MODULOS_TABLEROS / f"{m}.py").is_file()}
+        fuentes |= {m for m in re.findall(r"['\"](chec_tableros\.\w+)['\"]", texto)
+                    if (MODULOS_TABLEROS / f"{m.split('.')[-1]}.py").is_file()}
+
     assert len(fuentes) == 1, (
-        f"{app.name} nombra {sorted(nombres)} y de esos resuelven en {CUADERNOS}: "
-        f"{sorted(fuentes) or 'ninguno'}. Una aplicacion sirve exactamente un cuaderno.")
+        f"{app.name} resuelve {sorted(fuentes) or 'ninguna fuente'}. Una aplicacion "
+        "sirve exactamente un tablero, y su fuente tiene que existir.")
 
 
 @pytest.mark.parametrize("app", TODAS, ids=_ids(TODAS))
@@ -712,10 +715,17 @@ def test_mover_el_dataset_obliga_a_reconstruir_el_visor(app: Path):
 
 
 def _cuaderno_de(app: Path) -> str:
-    """El cuaderno que declara `construir.py`, leido sin importarlo: importarlo tira
-    del `_comun` de la aplicacion y del cuaderno entero."""
+    """El TABLERO que declara `construir.py`, leido sin importarlo.
+
+    Importarlo tiraria del `_comun` de la aplicacion y de la construccion entera.
+    Se acepta `TABLERO` -- el modulo de `src/chec_tableros/`, que es lo que declaran
+    los cuatro visores desde el 2026-08-15 -- y el viejo `CUADERNO`, que solo queda
+    donde todavia hay un `.ipynb`.
+    """
     texto = (app / "construir.py").read_text(encoding="utf-8")
-    return re.search(r'^CUADERNO\s*=\s*"([^"]+)"', texto, re.M).group(1)
+    m = re.search(r'^(?:TABLERO|CUADERNO)\s*=\s*"([^"]+)"', texto, re.M)
+    assert m, f"{app.name}/construir.py no declara ni TABLERO ni CUADERNO"
+    return m.group(1)
 
 
 def test_todo_insumo_que_el_simulador_exige_esta_ademas_vigilado():

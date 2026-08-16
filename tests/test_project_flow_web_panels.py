@@ -419,20 +419,22 @@ def test_board_04_no_longer_needs_to_carry_a_12_mb_rendered_output():
     Lo que se gana no es cosmetico: el `.ipynb` baja de **7.707 a 239 lineas** y de
     12,3 MB a unos pocos KB, y deja de ser el unico cuaderno que no se podia limpiar.
 
-    Se comprueba lo contrario de lo que se comprobaba: que NO vuelva a aparecer un
-    output pesado. Si alguien reintroduce uno, esta reintroduciendo el problema.
+    Se comprueba lo contrario de lo que se comprobaba, y sobre TODOS los cuadernos que
+    quedan: que ninguno cargue salida HTML pesada. Medido hoy, el mayor son 0 bytes en
+    los dos que sobreviven. Si alguien reintroduce uno esta reintroduciendo el
+    problema, y el `04` demostro que una vez dentro dura anios.
     """
-    notebook = json.loads(
-        (NOTEBOOK_DIR / f"{BOARDS['04']}.ipynb").read_text(encoding="utf-8"))
-    pesados = [
-        (i, o.get("output_type"))
-        for i, celda in enumerate(notebook["cells"])
-        for o in celda.get("outputs", [])
-        if len("".join(o.get("data", {}).get("text/html", ""))) > 100_000
-    ]
+    pesados = []
+    for ruta in sorted(NOTEBOOK_DIR.parent.rglob("*.ipynb")):
+        doc = json.loads(ruta.read_text(encoding="utf-8"))
+        for i, celda in enumerate(doc["cells"]):
+            for salida in celda.get("outputs", []):
+                n = len("".join(salida.get("data", {}).get("text/html", "")))
+                if n > 100_000:
+                    pesados.append(f"{ruta.name}:celda {i} ({n:,} bytes)")
     assert not pesados, (
-        f"vuelve a haber salida HTML pesada guardada en {pesados}: el tablero se "
-        "construye desde src/chec_tableros/trayectorias_vanos.py y nadie la lee"
+        f"vuelve a haber salida HTML pesada guardada en {pesados}: los tableros se "
+        "construyen desde src/chec_tableros/ y nadie lee esa salida"
     )
 
 

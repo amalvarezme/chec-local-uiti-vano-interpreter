@@ -354,10 +354,15 @@ def test_generator_output_path_targets_notebook_10_only():
 
 
 def test_generator_never_edits_upstream_notebooks_or_variable_selection(tmp_path):
+    # Los tres cuadernos de tablero que se vigilaban aqui se borraron el 2026-08-15
+    # (`sdd/retire-base-apps-notebooks`, fase 3): su codigo vive en
+    # `src/chec_tableros/`. Se vigilan los MODULOS en su lugar, que es lo que el
+    # generador podria pisar ahora, mas los dos cuadernos que quedan.
     watched_paths = [
-        "notebooks/base_apps/02_uiti_vano_kmeans.ipynb",
-        "notebooks/base_apps/03_uiti_vano_trayectorias_circuitos.ipynb",
-        "notebooks/base_apps/04_uiti_vano_trayectorias_vano.ipynb",
+        "src/chec_tableros/agrupamiento.py",
+        "src/chec_tableros/trayectorias_circuitos.py",
+        "src/chec_tableros/trayectorias_vanos.py",
+        "notebooks/base_apps/06_uiti_vano_explicabilidad_simulador.ipynb",
         "data/Variables_seleccion.xlsx",
     ]
     # Every watched path must exist: a rename upstream has to fail this test loudly

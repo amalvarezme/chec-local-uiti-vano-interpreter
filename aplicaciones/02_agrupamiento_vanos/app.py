@@ -51,7 +51,7 @@ def main() -> int:
     # ya no corresponden; que la aplicacion lo note sola es la unica defensa, porque
     # nada mas en el sistema va a avisar. Cuesta unos milisegundos.
     motivo = None if args.reconstruir else construccion.motivo_de_reconstruccion(
-        PANEL, construir.CUADERNO)
+        PANEL, construir.TABLERO)
     if args.reconstruir or motivo:
         print(f"Reconstruyendo el tablero: {motivo}." if motivo
               else "Reconstruyendo el tablero.")
