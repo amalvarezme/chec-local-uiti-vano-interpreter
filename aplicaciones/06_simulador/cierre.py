@@ -127,12 +127,32 @@ def barra(*, js: str | None = None) -> widgets.HBox:
     de nadie mas: desde aqui se cerraba tambien lo que el usuario no estaba
     mirando.
     """
+    # El verde de la marca, el mismo `ACENTO` de `aplicaciones/_comun/paleta.py`. Escrito
+    # y no importado porque `cierre.py` corre dentro del kernel de Voila, y el cuaderno que
+    # este sirve solo pone `APP_06` y `RAIZ_SRC_06` en el `sys.path`: `_comun` no esta ahi.
+    # Lo que impide que se separen es `test_simulador_grafo_abajo.py`, que compara estos
+    # valores contra los de la paleta.
+    #
+    # Va en un `widgets.HTML` y no en `button_style`: un `<style>` inyectado por innerHTML
+    # SI lo aplica el navegador -- lo que no ejecuta son los `<script>` --, y asi se puede
+    # fijar tambien el color del texto.
+    ESTILO = widgets.HTML(
+        "<style>"
+        ".chec-cerrar-simulador {"
+        " background: rgb(0,128,36) !important; color: #fff !important;"
+        " border: 1px solid rgb(0,128,36) !important; font-weight: 600; }"
+        ".chec-cerrar-simulador:hover {"
+        " background: rgb(0,102,29) !important; border-color: rgb(0,102,29) !important; }"
+        "</style>")
     aviso = widgets.HTML("")
     # `Output` y no un `HTML`: el JavaScript de un `HTML` no se ejecuta -- ipywidgets
     # lo mete por `innerHTML`, y el navegador no corre los `<script>` que llegan asi.
     salida = widgets.Output()
     boton = widgets.Button(
-        description="Cerrar", button_style="danger",
+        # Sin `button_style`: "danger" es el ROJO de Jupyter, que no es un color de este
+        # proyecto. El verde se pone abajo por CSS, que ademas permite fijar el color del
+        # texto -- `ButtonStyle` no siempre lo expone.
+        description="Cerrar",
         tooltip="Apaga el simulador y cierra esta pestania",
         layout=widgets.Layout(width="130px"))
 
@@ -181,6 +201,6 @@ def barra(*, js: str | None = None) -> widgets.HBox:
         }))
 
     return widgets.HBox(
-        [boton, aviso, salida],
+        [ESTILO, boton, aviso, salida],
         layout=widgets.Layout(width="100%", justify_content="flex-end",
                               padding="4px 12px"))

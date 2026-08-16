@@ -967,12 +967,17 @@ def test_board_06_keeps_the_profile_sharing_its_row():
     """
     src06 = _notebook_source("06_uiti_vano_explicabilidad_simulador")
 
-    assert "rows=6, cols=4" in src06, "la figura del 06 ya no tiene seis filas"
     assert re.search(r"IDX\['perfil_circuito'\] = _agregar\([\s\S]{0,600}?\), 3, 1\)",
                      src06), "el perfil ya no esta en la fila 3, columna 1"
     assert "{'type': 'xy', 'colspan': 2, 'secondary_y': True}, None]," in src06, (
         "la serie de UITI ya no comparte fila con el perfil")
-    assert "_fig_grafo" in src06, "el grafo ya no tiene su propia figura"
-    assert "), 7, 2)" not in src06, "queda una traza en la fila 7, que ya no existe"
-    assert len(_constant_list(src06, "row_heights")) == 6, (
+    # El grafo volvio a la figura grande, ahora en una SEPTIMA fila y bajo el costo. Lo
+    # que esta prueba persigue no es donde esta el grafo sino que el perfil no se quede
+    # solo en una fila entera; eso lo garantiza la linea de arriba.
+    assert "rows=7, cols=4" in src06, "la figura del 06 ya no tiene siete filas"
+    # La fila 7 volvio a existir: es la del grafo, bajo el costo. Lo que no puede haber
+    # es nada en una OCTAVA, que es donde acaba una traza cuando alguien agrega una fila
+    # sin declararla.
+    assert "), 8, " not in src06, "hay una traza en la fila 8, que no existe"
+    assert len(_constant_list(src06, "row_heights")) == 7, (
         "row_heights sigue declarando otro numero de filas")

@@ -506,7 +506,7 @@ def test_the_diagnosis_button_is_called_just_diagnostico(fuente):
 # --- La figura de siete filas ----------------------------------------------------------
 
 
-def test_the_figure_has_six_rows_with_the_profile_and_the_graph_sharing_one(fuente):
+def test_the_figure_has_seven_rows_with_the_graph_in_its_own(fuente):
     """Fila 3 partida en dos: el perfil del circuito a la izquierda y el grafo a la
     derecha. Filas 5 y 6 partidas 3+1 -- las barras de UITI y las de costo, cada una
     con su acumulado en la ultima columna.
@@ -522,7 +522,7 @@ def test_the_figure_has_six_rows_with_the_profile_and_the_graph_sharing_one(fuen
     que se quiere poder hacer. El invariante es que la fila del grafo siga siendo la mas
     alta -- es lo que fija el diametro del circulo --, y ahora esa fila es la 3.
     """
-    assert "rows=6, cols=4," in fuente
+    assert "rows=7, cols=4," in fuente
     # El perfil y el grafo, cada uno en media fila de la misma fila.
     # El perfil a la izquierda y la SERIE de UITI a su derecha. Compartia esta fila el
     # grafo, que se fue a su propia figura debajo del panel de control: alli su ancho es el
@@ -530,8 +530,10 @@ def test_the_figure_has_six_rows_with_the_profile_and_the_graph_sharing_one(fuen
     # que era lo unico que el diametro del circulo justificaba.
     assert _tiene(fuente, "[{'type': 'xy', 'colspan': 2}, None,\n"
                           "            {'type': 'xy', 'colspan': 2, 'secondary_y': True}, None]")
-    # Y la fila que el grafo tenia para el solo ya no existe.
-    assert "[None, {'type': 'xy', 'colspan': 2}, None, None]" not in fuente
+    # El grafo vuelve a tener fila para el solo -- la 7, bajo el costo --, y ocupa las
+    # columnas 2-3: a media anchura, porque el anillo lo acota la dimension MENOR del panel
+    # y de ancho completo solo apareceria franja blanca a los lados.
+    assert "[None, {'type': 'xy', 'colspan': 2}, None, None]" in fuente
     # Las barras de UITI y las de costo: los vanos en las columnas 1-3 y el acumulado en
     # la 4. Juntos, el total -- la suma de todos los vanos -- aplastaba contra la base a
     # los grupos por vano, que es donde se decide la obra. Son DOS filas con el mismo
@@ -550,10 +552,12 @@ def test_the_figure_has_six_rows_with_the_profile_and_the_graph_sharing_one(fuen
     alturas = re.search(r"row_heights=\[([\d.,\s]+)\]", fuente)
     assert alturas, "la figura tiene que repartir el alto explicitamente"
     fracciones = [float(v) for v in alturas.group(1).split(",")]
-    assert len(fracciones) == 6
+    assert len(fracciones) == 7
     assert abs(sum(fracciones) - 1.0) < 1e-3, f"las fracciones no suman 1: {fracciones}"
-    # La tercera es la del perfil y el grafo, y sigue siendo la mas alta.
-    assert fracciones[2] == max(fracciones), (
+    # El invariante no cambia: la fila del GRAFO es la mas alta, porque es su diametro lo
+    # que la fija. Lo que cambio es cual: era la 3 cuando compartia con el perfil, y ahora
+    # es la 7, la suya propia bajo el costo.
+    assert fracciones[6] == max(fracciones), (
         f"la fila del grafo tiene que ser la mas alta: {fracciones}")
 
     # Los violines ya no existen: los reemplazan dos barras por vano.
@@ -625,11 +629,10 @@ def test_the_circular_graph_keeps_its_aspect_at_any_screen_width(fuente):
     nombres. Cuanto menor, mayor el circulo -- y en cuanto se queda corto los nombres se
     salen del panel y se montan sobre el anillo, que es como se veia con fuente 14.
     """
-    # Sin `row`/`col`: el grafo dejo de ser un subplot de la figura grande y tiene la suya,
-    # debajo del panel de control. Lo que la prueba persigue es lo mismo -- que los dos ejes
-    # queden atados y con el mismo rango --, y ahora se comprueba sobre `_fig_grafo`.
-    assert "scaleanchor=_EJE_X_GRAFO, scaleratio=1.0)" in fuente
-    assert "_fig_grafo.update_xaxes(" in fuente and "_fig_grafo.update_yaxes(" in fuente
+    # (7,2): el grafo volvio a la figura grande, en una fila propia bajo el costo y a
+    # media anchura. Lo que la prueba persigue no ha cambiado -- los dos ejes atados y con
+    # el mismo rango --, solo la casilla en la que vive.
+    assert "scaleanchor=_EJE_X_GRAFO, scaleratio=1.0, row=7, col=2" in fuente
     assert fuente.count("range=[-RANGO_GRAFO, RANGO_GRAFO]") == 2, (
         "los dos ejes del grafo tienen que llevar el MISMO rango")
     rango = re.search(r"^\s*RANGO_GRAFO = ([\d.]+)$", fuente, re.MULTILINE)

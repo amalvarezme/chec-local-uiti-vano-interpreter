@@ -84,11 +84,15 @@ def test_el_estado_solo_se_escribe_cuando_dice_algo():
     usuario se entera de que una aplicacion no arranco.
     """
     guion = _comun("menu_pagina")._GUION
+    # De las cuatro lineas que llegaron a escribirse ahi, hoy queda UNA: el detalle de un
+    # FALLO. Las otras tres -- el puerto, "lista" y los avisos de instalar o construir --
+    # se retiraron despues: el punto de la izquierda ya dice el estado y el boton dice que
+    # se puede hacer, asi que eran la misma informacion escrita dos veces.
     assert "app.detalle" in guion, "el detalle del fallo ya no llega a la tarjeta"
-    assert "hay que instalarla la primera vez" in guion, (
-        "la tarjeta ya no avisa de que falta instalar")
+    assert "'fallo'" in guion, "el detalle ya no se limita al caso de fallo"
     assert "lista, abre en menos de un segundo" not in guion, (
         "sigue el texto de relleno del caso normal")
+    assert "abierta en el puerto" not in guion, "sigue el puerto bajo el nombre"
 
 
 def test_el_catalogo_conserva_las_descripciones():

@@ -221,14 +221,13 @@ def test_el_tablero_se_arma_entero_contra_el_paquete_congelado():
     linea = next(l for l in proceso.stdout.splitlines() if l.startswith("RESULTADO "))
     r = json.loads(linea[len("RESULTADO "):])
 
-    # DOS figuras y no una: la grande, con sus paneles, y la del GRAFO, que vive debajo
-    # del panel de control. El grafo salio de la figura grande porque su sitio pedido es esa
-    # columna y con su ancho, y un subplot no puede salirse de su figura.
+    # UNA figura otra vez: el grafo volvio a ella, en una septima fila bajo el costo.
+    # Estuvo un tiempo aparte, debajo del panel de control.
     #
     # El numero se fija -- y no se relaja a ">= 1" -- porque cada `FigureWidget` cuesta lo
     # suyo y partir la figura tiene que ser una decision, no algo que se cuele.
-    assert r["figuras"] == 2, (
-        "el tablero tiene DOS figuras: la grande y la del grafo, debajo del panel")
+    assert r["figuras"] == 1, (
+        "el tablero tiene UNA figura, con todos sus paneles dentro")
     assert r["trazas"] > 50, f"la figura salio con {r['trazas']} trazas"
     assert r["widgets"] > 300, (
         f"el tablero armo {r['widgets']} widgets; las casillas de vano, de variable y "

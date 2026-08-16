@@ -63,14 +63,13 @@ TABLERO = "06_uiti_vano_explicabilidad_simulador"
 
 # Donde vive cada panel en la rejilla de `make_subplots`.
 #
-# El GRAFO ya no esta en esta rejilla: se fue a su propia figura, debajo del panel de
-# control, porque ese era su sitio pedido y un subplot no puede salirse de su figura. Sus
-# ejes se configuran sobre `_fig_grafo` y sin `row`/`col`, asi que se le busca aparte --
-# ver `_llamadas_a_los_ejes_del_grafo`.
+# El GRAFO volvio a la rejilla: una fila para el solo, la 7, bajo el costo y en las
+# columnas 2-3. Estuvo un tiempo en figura propia debajo del panel de control.
 #
 # El TOP paso a la columna 1 y de ancho completo cuando la serie de UITI subio a la fila 3
 # a compartir con el perfil. Antes el grafo y el top eran vecinos en las columnas 3-4, y
 # era esa vecindad la que hacia que un desfase de uno no se notara al leerlo.
+GRAFO = (7, 2)
 TOP_POR_VANO = (4, 1)
 
 # El ambito en el que se ARMA la figura. Todo lo demas que le escriba a un eje es un
@@ -141,16 +140,12 @@ def _llamadas_al_panel(fila: int, columna: int) -> list[str]:
 
 
 def _llamadas_a_los_ejes_del_grafo() -> list[str]:
-    """Las llamadas que configuran los ejes de la figura PROPIA del grafo.
+    """Las llamadas que configuran los ejes del grafo, que vuelve a ser un subplot.
 
-    No llevan `row`/`col` -- no hay rejilla que indexar --, asi que se reconocen por el
-    nombre de la figura. Es lo que sustituye a buscarlas por su casilla.
+    Estuvo en figura propia y se le buscaba por el nombre de la figura; ahora vive en
+    (7,2) y se le busca por su casilla, como a todos los demas.
     """
-    fuente = ayudas_tableros.fuente_de_tablero(TABLERO)
-    # Con los espacios COLAPSADOS: las llamadas ocupan varias lineas, y quien las lee
-    # busca con `.*?`, que no cruza saltos de linea.
-    return [" ".join(l.split()) for l in re.findall(
-        r"_fig_grafo\.update_[xy]axes\((?:[^()]|\([^()]*\))*\)", fuente)]
+    return _llamadas_al_panel(*GRAFO)
 
 
 def _funcion(nombre: str) -> str:
@@ -193,7 +188,7 @@ def test_nadie_mas_que_la_figura_le_toca_el_rango_al_grafo():
     # que le tocara el rango le descentraria el circulo igual que antes.
     culpables = [(ambito, llamada[:90])
                  for ambito, llamada, fila, col in _llamadas_a_ejes()
-                 if "_fig_grafo" in llamada and ambito != ARMADO]
+                 if (fila, col) == GRAFO and ambito != ARMADO]
     assert not culpables, (
         f"estas llamadas le reescriben los ejes al grafo desde fuera del armado de la "
         f"figura: {culpables}")
