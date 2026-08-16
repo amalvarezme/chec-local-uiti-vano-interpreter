@@ -22,9 +22,37 @@ contesta que la aplicacion ya responde se le pone la URL encima.
 """
 from __future__ import annotations
 
+import base64
+from pathlib import Path
 from string import Template
 
 import paleta as _paleta
+import raiz as _raiz
+# Al NIVEL DEL MODULO y no dentro de `pagina()`: estos modulos se importan con
+# `aplicaciones/_comun` puesto en `sys.path` un momento y retirado despues, asi que un
+# import diferido corre cuando la ruta ya no esta y no encuentra nada.
+import tableros as _tableros
+
+# Donde viven los logos. Se LEEN de donde ya estan y no se copian a otra carpeta: dos
+# copias del mismo PNG se separan el dia que alguien actualice una.
+_LOGOS = _raiz.RAIZ_REPO / "site" / "assets" / "site" / "logos"
+
+
+def _logo(nombre: str) -> str:
+    """El logo como `data:` URI, o cadena vacia si no esta.
+
+    Embebido y no enlazado porque el menu sirve UNA pagina y nada mas: no tiene ruta para
+    archivos estaticos, asi que un `src="/logos/..."` daria 404. Y una ruta del disco
+    depende de desde donde se haya abierto la aplicacion.
+
+    Y devuelve vacio en vez de reventar: el menu es lo unico que el usuario tiene para
+    arrancar los tableros, y no abrirlo porque falta un PNG decorativo seria cambiar un
+    adorno por la aplicacion entera.
+    """
+    archivo = _LOGOS / nombre
+    if not archivo.is_file():
+        return ""
+    return "data:image/png;base64," + base64.b64encode(archivo.read_bytes()).decode("ascii")
 
 # Sin `color-scheme` ni bloque de modo oscuro, a proposito. Los cinco tableros fijan
 # `background:#fff` y no responden al tema del sistema; un menu que si lo hiciera se
@@ -34,7 +62,29 @@ _ESTILO = Template("""
 * { box-sizing: border-box; }
 body { margin: 0; padding: 12px; font: 15px/1.55 $FUENTE;
        background: $FONDO; color: $TEXTO; }
-.envoltura { max-width: 880px; margin: 0 auto; padding: 20px 8px 60px; }
+.envoltura { max-width: 1180px; margin: 0 auto; padding: 20px 8px 60px; }
+
+/* La portada: los botones a la izquierda y el diagrama a la derecha.
+   La columna de los botones lleva ancho FIJO y la del diagrama toma el resto. Con las dos
+   al 50% -- o con `1fr 1fr` -- la lista de cinco tarjetas se estira en una pantalla ancha
+   y el diagrama, que es lo que hay que leer de un vistazo, se queda con una franja.
+   `minmax(0, 1fr)` en la derecha y no `1fr` a secas: una celda de rejilla no baja de su
+   contenido minimo, y el SVG tiene uno propio. */
+.portada { display: grid; grid-template-columns: 420px minmax(0, 1fr); gap: 28px;
+           align-items: start; }
+/* Y en pantalla estrecha se apilan, con los botones primero: son lo unico accionable. */
+@media (max-width: 900px) { .portada { grid-template-columns: 1fr; } }
+
+/* Los logos, debajo de los botones. `filter: grayscale(0)` no hace falta: viajan tal cual
+   los aprobo la marca y aqui no se recolorean. */
+.logos { display: flex; align-items: center; gap: 22px; flex-wrap: wrap;
+         margin: 22px 4px 0; padding-top: 18px; border-top: 1px solid $BORDE; }
+.logos img { height: 44px; width: auto; }
+/* El del LabIA es cuadrado y el de CHEC apaisado: igualarlos por ALTO los deja del mismo
+   peso visual, que es lo que se quiere de dos marcas que acompanian a la vez. */
+.logos img:last-child { height: 52px; }
+
+.col-der svg { width: 100%; height: auto; }
 header { display: flex; align-items: flex-start; justify-content: space-between;
          gap: 20px; margin-bottom: 22px; }
 h1 { font-size: 25px; margin: 0; letter-spacing: -.01em; }
@@ -315,7 +365,74 @@ setInterval(refrescar, 2500);
 _GUION = _paleta.aplicar(_GUION)
 
 
+# El diagrama de bloques de la portada. SVG EN LINEA y no una imagen: es texto, se lee en
+# el diff, se corrige sin abrir un editor de imagenes y hereda la paleta desde el mismo
+# sitio que el resto de la pagina. Una captura habria que rehacerla cada vez que cambie un
+# nombre.
+#
+# Los nombres de los cinco tableros NO se escriben aqui: salen de `tableros.py`, que es el
+# catalogo. Escritos a mano, agregar un tablero dejaria el diagrama contando cuatro de
+# cinco sin que nada fallara.
+def _diagrama(titulos: list[str]) -> str:
+    """El resumen de CriticidadCHEC: de donde salen los datos, quien los sirve y que sale."""
+    filas, ALTO, PASO, Y0 = [], 34, 46, 150
+    for i, titulo in enumerate(titulos):
+        y = Y0 + i * PASO
+        filas.append(
+            f'<rect x="212" y="{y}" width="252" height="{ALTO}" rx="5" '
+            f'fill="$PANEL" stroke="$BORDE"/>'
+            f'<text x="338" y="{y + 22}" text-anchor="middle" class="db">{titulo}</text>'
+            f'<path d="M196 {y + ALTO // 2} H212" class="fl"/>')
+    pie = Y0 + len(titulos) * PASO + 8
+    # El BUS: baja del bloque y recorre la lista por la izquierda; de el salen las ramas.
+    # Antes bajaba en x=98 y las ramas arrancaban en x=196, asi que colgaban sin tocarlo.
+    bus = f'<path d="M98 156 V180 H196 V{pie + ALTO // 2}" class="fl"/>'
+    return """
+<svg viewBox="0 0 480 {vb}" role="img" aria-label="Resumen de CriticidadCHEC">
+  <defs>
+    <marker id="pf" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7"
+            orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="$BORDE_FUERTE"/></marker>
+  </defs>
+  <style>
+    .db {{ font: 11px $FUENTE; fill: $TEXTO; }}
+    .dt {{ font: 600 12px $FUENTE; fill: $TEXTO; }}
+    .dn {{ font: 10px $FUENTE; fill: $TENUE; }}
+    .fl {{ stroke: $BORDE_FUERTE; stroke-width: 1.4; fill: none; marker-end: url(#pf); }}
+  </style>
+
+  <rect x="18" y="26" width="160" height="52" rx="5" fill="$PANEL" stroke="$BORDE"/>
+  <text x="98" y="46" text-anchor="middle" class="dt">Datos del periodo</text>
+  <text x="98" y="62" text-anchor="middle" class="dn">eventos, geometria y clima</text>
+  <path d="M98 78 V104" class="fl"/>
+
+  <rect x="18" y="104" width="160" height="52" rx="5" fill="$ACENTO" stroke="$ACENTO"/>
+  <!-- El blanco va en `style` y no en `fill=`: una regla de la hoja gana siempre al
+       atributo de presentacion, asi que `class="dt"` pintaba el rotulo del color del
+       texto y sobre el verde no se leia. -->
+  <text x="98" y="124" text-anchor="middle" class="dt" style="fill:#fff">CriticidadCHEC</text>
+  <text x="98" y="140" text-anchor="middle" class="dn" style="fill:#fff">construye y sirve</text>
+  {bus}
+
+  {filas}
+
+  <rect x="212" y="{pie}" width="252" height="34" rx="5" fill="#fff" stroke="$BORDE_FUERTE"/>
+  <path d="M196 {pie_m} H212" class="fl"/>
+  <text x="338" y="{pie_t}" text-anchor="middle" class="db">Cada uno en su pestania</text>
+</svg>
+""".format(filas="\n  ".join(filas), bus=bus, pie=pie,
+           pie_m=pie + ALTO // 2, pie_t=pie + 22,
+           # El `viewBox` se calcula: escrito a mano, agregar un tablero corta el ultimo
+           # bloque por abajo sin que nada falle -- que es como se descubrio.
+           vb=pie + ALTO + 16)
+
+
 def pagina() -> str:
+    _chec, _labia = _logo("checlogo.png"), _logo("logo_labIA.png")
+    # Un logo que falta no deja hueco ni etiqueta rota: simplemente no se dibuja.
+    _marca_chec = (f'<img src="{_chec}" alt="CHEC Grupo EPM">' if _chec else "")
+    _marca_labia = (f'<img src="{_labia}" alt="LabIA">' if _labia else "")
+    _diagrama_html = Template(_diagrama([t.titulo for t in _tableros.TABLEROS])).substitute(
+        **_paleta.TOKENS, FUENTE=_paleta.FUENTE)
     return f"""<!doctype html>
 <html lang="es">
 <head>
@@ -334,7 +451,13 @@ def pagina() -> str:
       title="Apaga los cinco tableros, libera sus puertos y cierra las ventanas de
 terminal que abrieron. Despues cierra este menu.">Cerrar todo</button>
   </header>
-  <div id="lista"></div>
+  <div class="portada">
+    <div class="col-izq">
+      <div id="lista"></div>
+      <div class="logos">{_marca_chec}{_marca_labia}</div>
+    </div>
+    <div class="col-der">{_diagrama_html}</div>
+  </div>
 </div>
 <script>{_GUION}</script>
 </body>
