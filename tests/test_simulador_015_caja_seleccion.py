@@ -449,33 +449,53 @@ def test_a_markdown_title_introduces_the_dashboard():
         assert paso in texto
 
 
-def test_the_startup_does_not_keep_a_second_copy_of_the_dataset(fuente):
-    """Medido: `datos` sostenia la matriz cruda y los dos DataFrame mientras el cuaderno
-    guardaba ademas un `.copy()` de cada uno -- 506 MB duplicados. Se suelta en la MISMA
-    celda que lo creo, asi que la celda sigue siendo re-ejecutable."""
-    assert "Xdf = datos['Xdata'].reset_index(drop=True)" in fuente
-    assert "context_df = datos['df_original_copy'].reset_index(drop=True)" in fuente
-    assert ".copy().reset_index(drop=True)" not in fuente
-    assert "del datos" in fuente
+# El arranque dejo de vivir en las celdas del cuaderno y vive en
+# `chec_tableros.simulador.derivacion`. Las tres pruebas de abajo protegen invariantes
+# de MEMORIA, no de ubicacion, asi que siguen valiendo: solo cambia donde miran.
+FUENTE_DERIVACION = (
+    Path(__file__).resolve().parents[1]
+    / "src" / "chec_tableros" / "simulador" / "derivacion.py"
+).read_text(encoding="utf-8")
+
+
+def test_the_startup_does_not_keep_a_second_copy_of_the_dataset():
+    """Medido: `datos` sostenia la matriz cruda y los dos DataFrame mientras el arranque
+    guardaba ademas un `.copy()` de cada uno -- 506 MB duplicados. Se suelta en la misma
+    funcion que lo creo."""
+    assert 'xdf = datos["Xdata"].reset_index(drop=True)' in FUENTE_DERIVACION
+    assert 'context_df = datos["df_original_copy"].reset_index(drop=True)' in FUENTE_DERIVACION
+    assert ".copy().reset_index(drop=True)" not in FUENTE_DERIVACION
+    assert "del datos" in FUENTE_DERIVACION
     # `X_raw_model` eran 44,7 MB que solo alimentaban un `len()`: ya no se construye.
-    assert "X_raw_model = " not in fuente
-    assert "n_filas_x = len(datos['X'])" in fuente
+    assert "X_raw_model = " not in FUENTE_DERIVACION
+    assert 'n_filas_x = len(datos["X"])' in FUENTE_DERIVACION
 
 
-def test_the_instance_matrix_is_float32_like_the_model_weights(fuente):
+def test_the_instance_matrix_is_float32_like_the_model_weights():
     """Los pesos del MIL son float32, asi que la conversion ya ocurria en cada llamada.
     Medido sobre 523 bolsas de 3 circuitos con un override aplicado: clase simulada y
     UITI IDENTICOS BIT A BIT, y la matriz baja de 184,7 a 92,4 MB."""
-    assert "X_INST = np.asarray(BOLSAS['X'], dtype=np.float32)" in fuente
+    assert 'x_inst = np.asarray(bolsas["X"], dtype=np.float32)' in FUENTE_DERIVACION
     # Sin soltar el dict del artefacto, el ahorro seria un tercer juego de la matriz.
-    assert "del BOLSAS" in fuente
+    assert "del bolsas" in FUENTE_DERIVACION
 
 
-def test_the_raw_shapefile_is_released_after_the_geometry_is_built(fuente):
+def test_the_raw_shapefile_is_released_after_the_geometry_is_built():
     """76 MB entre las dos tablas del shapefile, muertas en cuanto `GEO_POR_CIRCUITO`
-    esta armado. Se sueltan en la misma celda que las leyo, que es lo que deja volver a
-    correr esa celda sin un NameError."""
-    assert "del _lineas, _utiles" in fuente
+    esta armado.
+
+    En el cuaderno esto exigia un `del _lineas, _utiles` explicito, porque una celda
+    comparte el espacio de nombres global y lo que se lee ahi no se muere nunca. Al
+    pasar a una funcion la liberacion es del lenguaje: `lineas` y `utiles` son locales
+    de `_geometria_de_vanos` y desaparecen al volver. Lo que se comprueba, entonces, es
+    que NO se hayan vuelto globales por el camino -- que es la unica forma de perder la
+    propiedad al moverla aqui.
+    """
+    assert "def _geometria_de_vanos(" in FUENTE_DERIVACION
+    for local in ("    lineas = gpd.read_file(ruta)", "    utiles = lineas["):
+        assert local in FUENTE_DERIVACION, local
+    assert "\nlineas = " not in FUENTE_DERIVACION
+    assert "\nutiles = " not in FUENTE_DERIVACION
 
 
 def test_the_diagnosis_button_is_called_just_diagnostico(fuente):

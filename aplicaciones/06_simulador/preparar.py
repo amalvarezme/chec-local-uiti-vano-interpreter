@@ -46,6 +46,15 @@ import cuaderno as _cuaderno  # noqa: E402
 import huellas as _huellas  # noqa: E402
 import raiz as _raiz  # noqa: E402
 
+# `src/` al path ANTES de importar la derivacion. Hasta ahora esto lo hacia la celda 1
+# del cuaderno, que este archivo ejecutaba; al dejar de ejecutarla, sin esta linea el
+# import de abajo falla con `ModuleNotFoundError` en un archivo que no menciona ninguna
+# celda.
+if str(_raiz.RAIZ_SRC) not in sys.path:
+    sys.path.insert(0, str(_raiz.RAIZ_SRC))
+
+from chec_tableros.simulador import derivacion as _derivacion  # noqa: E402
+
 CUADERNO = _raiz.CUADERNOS_APPS / "06_uiti_vano_explicabilidad_simulador.ipynb"
 PAQUETE = AQUI / "paquete"
 COPIA = AQUI / "cuaderno" / "06_simulador.ipynb"
@@ -137,16 +146,13 @@ NOMBRE_KERNEL_VISIBLE = "CHEC -- simulador de riesgo por vano"
 # Parte 1: el paquete
 # --------------------------------------------------------------------------------
 def construir_paquete() -> dict:
-    import joblib
-    import numpy as np
-
     _verificar_insumos()
     PAQUETE.mkdir(parents=True, exist_ok=True)
 
-    print(f"[1/3] ejecutando las celdas de arranque de {CUADERNO.name}")
+    print("[1/3] derivando (CSV, shapefiles y cache de bolsas)")
     t0 = time.perf_counter()
-    espacio = _cuaderno.ejecutar(CUADERNO, celdas=CELDAS_DE_ARRANQUE)
-    print(f"      arranque completo en {time.perf_counter() - t0:.1f} s")
+    derivado = _derivacion.derivar(raiz=_raiz.RAIZ_REPO)
+    print(f"      derivacion completa en {time.perf_counter() - t0:.1f} s")
 
     # La unica comprobacion de COHERENCIA, y va antes de congelar nada.
     #
@@ -165,7 +171,7 @@ def construir_paquete() -> dict:
     # geometrias != modelo): un paquete congelado a medias es justo lo que esto impide.
     from chec_local_interpreter.ventanas_015 import desajuste_bolsas_vs_tabla
 
-    desajuste = desajuste_bolsas_vs_tabla(espacio["BAG_INDEX"], espacio["TABLA"])
+    desajuste = desajuste_bolsas_vs_tabla(derivado.bag_index, derivado.tabla)
     if desajuste:
         raise SystemExit(
             f"\n  El cache de bolsas no corresponde al CSV: {desajuste}\n\n"
@@ -175,31 +181,7 @@ def construir_paquete() -> dict:
         )
 
     print("[2/3] congelando el resultado")
-    espacio["TABLA"].to_parquet(PAQUETE / "tabla.parquet", compression="zstd")
-
-    # `ascontiguousarray` + float32: es el dtype con el que el modelo opera de todos
-    # modos, y un .npy contiguo es lo que se puede mapear en memoria en el arranque.
-    np.save(PAQUETE / "X_inst.npy",
-            np.ascontiguousarray(espacio["X_INST"], dtype=np.float32))
-
-    (PAQUETE / "geo.json").write_text(
-        json.dumps({"geo": espacio["GEO_POR_CIRCUITO"],
-                    "trafos": espacio["TRAFOS"],
-                    "switches": espacio["SWITCHES"]}, separators=(",", ":")),
-        encoding="utf-8",
-    )
-
-    joblib.dump(
-        {"knobs": espacio["KNOBS"],
-         "feature_names": espacio["feature_names"],
-         "label_encoders": espacio["label_encoders"],
-         "max_values_imputed": espacio["max_values_imputed"],
-         "bag_index": espacio["BAG_INDEX"],
-         "features_mil": list(espacio["FEATURES_MIL"]),
-         "ventanas": espacio["VENTANAS"]},
-        PAQUETE / "catalogo.joblib",
-        compress=3,
-    )
+    _derivacion.congelar(derivado, PAQUETE)
 
     for origen in (_raiz.datos("models", "mil_vano_ventana_v1.pt"),
                    _raiz.datos("Actividades_mantenimiento_costos_2026.xlsx"),
@@ -221,9 +203,9 @@ def construir_paquete() -> dict:
         # produjeron lo que hay en `paquete/`, y con `huellas_actuales()` al arrancar
         # basta para saber si alguno se movio.
         "insumos": huellas_actuales(),
-        "n_bolsas": len(espacio["BAG_INDEX"].keys),
-        "n_instancias": int(espacio["X_INST"].shape[0]),
-        "n_features": len(espacio["FEATURES_MIL"]),
+        "n_bolsas": len(derivado.bag_index.keys),
+        "n_instancias": int(derivado.x_inst.shape[0]),
+        "n_features": len(derivado.features_mil),
         "archivos": {},
     }
     for archivo in sorted(PAQUETE.iterdir()):
@@ -302,29 +284,6 @@ def _reemplazar_rango(fuente: str, desde: str, hasta: str, nuevo: str, *, etique
     return fuente[:i] + nuevo + fuente[j:]
 
 
-_CARGA_CATALOGO = """_cat = joblib.load(PAQUETE / 'catalogo.joblib')
-feature_names = list(_cat['feature_names'])
-label_encoders = _cat['label_encoders']
-max_values_imputed = _cat['max_values_imputed']
-# `context_df`, `Xdf` y `n_filas_x` NO se definen, y eso es el objetivo del cambio:
-# eran los 1.919 MB que costaba `procesar_dataset_completo`, y ninguna celda de la 9
-# en adelante los vuelve a nombrar.
-print(f'{len(feature_names)} features (del paquete; la aplicacion no abre el CSV)')"""
-
-_CARGA_INSTANCIAS = """assert RUTA_MODELO_MIL.exists(), (
-    f'Falta {RUTA_MODELO_MIL.name} en el paquete. Vuelve a construir la aplicacion.')
-
-# `mmap_mode='r'` y no una carga normal: los 88 MB de la matriz de instancias se
-# quedan en el cache de paginas del sistema operativo, no en la memoria privada del
-# proceso. Leer unos miles de filas de ahi cuesta 0 MB adicionales, y si algun dia
-# corren dos sesiones a la vez comparten una sola copia en vez de llevar 88 MB cada
-# una. Depende de que `mil_simulador_015` indexe ANTES de promover a float64
-# (`np.asarray(X_inst[filas], ...)`, no `np.asarray(X_inst, ...)[filas]`): la forma
-# vieja leia los 88 MB enteros del disco en cada clic y convertia el mapeo en copia.
-X_INST = np.load(PAQUETE / 'X_inst.npy', mmap_mode='r')
-FEATURES_MIL = list(_cat['features_mil'])
-BAG_INDEX = _cat['bag_index']"""
-
 # --- Silenciar la salida de las celdas en la aplicacion ---------------------------
 # El camino obvio para esto es marcar las celdas y pasarle a Voila
 # `--TagRemovePreprocessor.remove_all_outputs_tags`. NO FUNCIONA, y se comprobo: ese
@@ -392,8 +351,6 @@ setTimeout(function () {
 """
 
 
-
-
 def _cerrar_aplicacion(_boton, _js=None):
     import os
     import signal
@@ -448,12 +405,6 @@ _BARRA_CERRAR = widgets.HBox(
 
 '''
 
-_CARGA_GEO = """# Trazas de mapa del paquete. En el cuaderno esto son tres `gpd.read_file` sobre
-# 180 MB de shapefiles que se reducen a estas listas de coordenadas redondeadas a
-# cinco decimales; la aplicacion no vuelve a hacer esa reduccion ni importa geopandas.
-_geo = json.loads((PAQUETE / 'geo.json').read_text('utf-8'))
-GEO_POR_CIRCUITO, TRAFOS, SWITCHES = _geo['geo'], _geo['trafos'], _geo['switches']"""
-
 
 def preparar_copia() -> Path:
     documento = json.loads(CUADERNO.read_text("utf-8"))
@@ -465,17 +416,10 @@ def preparar_copia() -> Path:
 
     # --- celda 1: imports y raiz del paquete -------------------------------------
     def celda1(f: str) -> str:
-        f = _reemplazar(f, "import asyncio\nimport gc\nimport os\n",
-                        "import asyncio\nimport gc\nimport joblib\nimport json\nimport os\n",
-                        etiqueta="1: json y joblib")
-        # geopandas sale porque la aplicacion no abre ningun shapefile; el import de
-        # `procesar_dataset_completo` sale porque dejar a mano la funcion que lee el
-        # CSV de 540 MB es como se reintroduce el costo que este paquete quita.
-        f = _reemplazar(f, "import geopandas as gpd\n", "", etiqueta="1: geopandas")
-        f = _reemplazar(f, "from chec_impacto.data import procesar_dataset_completo\n", "",
-                        etiqueta="1: pipeline")
-        f = _reemplazar(f, "from chec_impacto.data.bags import cargar_bolsas\n", "",
-                        etiqueta="1: bolsas")
+        # Los tres borrados de import que habia aqui -- geopandas, el pipeline del CSV y
+        # el cargador de bolsas -- ya no hacen falta: el cuaderno dejo de importarlos
+        # cuando su arranque paso a `chec_tableros.simulador.derivacion`. Un parche que
+        # quita algo que ya no esta no es inofensivo: aborta la construccion.
         return _reemplazar(
             f,
             "for _path_a_agregar in (ROOT, ROOT / 'src'):\n"
@@ -504,65 +448,27 @@ def preparar_copia() -> Path:
             etiqueta="3: geometria",
         )
 
-    # --- celda 4: catalogo en vez del pipeline ------------------------------------
+    # --- celda 4: el arranque se lee en vez de derivarse ---------------------------
+    # Aqui vivian SIETE parches repartidos por cuatro celdas: el pipeline del CSV, la
+    # matriz de bolsas, la tabla, los tres shapefiles y el catalogo de knobs, cada uno
+    # reemplazando un bloque del cuaderno por su equivalente leido del paquete. Eran
+    # siete sitios donde el cuaderno y esta aplicacion tenian que moverse a la vez.
+    #
+    # Ahora el cuaderno dispara su arranque con UNA llamada a
+    # `chec_tableros.simulador.derivacion`, y los dos caminos -- derivar y leer -- son
+    # dos funciones del mismo modulo que devuelven el mismo objeto. El parche se reduce
+    # a cambiar cual de las dos se llama.
     def celda4(f: str) -> str:
         f = _reemplazar(
             f, "COSTOS_ITEMS_PATH = ROOT / 'data' / 'Actividades_mantenimiento_costos_2026.xlsx'",
             "COSTOS_ITEMS_PATH = PAQUETE / 'Actividades_mantenimiento_costos_2026.xlsx'",
             etiqueta="4: costos")
-        f = _reemplazar(f, "MODEL_DIR = ROOT / 'data' / 'models'", "MODEL_DIR = PAQUETE",
-                        etiqueta="4: modelo")
-        # El rango empieza en el COMENTARIO y no en la llamada: ese parrafo explica
-        # por que el pipeline corre sin muestreo para dejar `context_df` alineado
-        # fila a fila, y en la copia ya no hay ni pipeline ni `context_df`. Dejarlo
-        # seria documentacion que describe un paso que no ocurre.
         return _reemplazar_rango(
             f,
-            "# Mismo preprocesamiento real usado en entrenamiento",
-            "print(f'{len(context_df):,} filas | {len(feature_names)} features')",
-            _CARGA_CATALOGO,
-            etiqueta="4: pipeline",
-        )
-
-    # --- celda 5: matriz de instancias mapeada en memoria -------------------------
-    def celda5(f: str) -> str:
-        return _reemplazar_rango(
-            f,
-            "RUTA_BOLSAS_MIL = ROOT / 'data' / 'derived' / 'bolsas_mil_full.joblib'",
-            "del BOLSAS\ngc.collect()",
-            _CARGA_INSTANCIAS,
-            etiqueta="5: bolsas",
-        )
-
-    # --- celda 6: tabla y trazas del paquete --------------------------------------
-    def celda6(f: str) -> str:
-        f = _reemplazar_rango(
-            f,
-            "VENTANAS = construir_ventanas(context_df['FECHA'])",
-            "TABLA = construir_tabla_vano_ventana(context_df, VENTANAS)",
-            "VENTANAS = _cat['ventanas']\nTABLA = pd.read_parquet(PAQUETE / 'tabla.parquet')",
-            etiqueta="6: tabla",
-        )
-        f = _reemplazar_rango(
-            f,
-            "def _norm_id(serie):",
-            "SWITCHES = _equipo('SWITCHES.shp')",
-            _CARGA_GEO,
-            etiqueta="6: shapefiles",
-        )
-        return _reemplazar(f, "del _lineas, _utiles\ngc.collect()", "gc.collect()",
-                           etiqueta="6: liberacion")
-
-    # --- celda 7: catalogo de controles -------------------------------------------
-    def celda7(f: str) -> str:
-        return _reemplazar_rango(
-            f,
-            "KNOBS = build_knobs(",
-            "max_values_imputed=max_values_imputed,\n)",
-            # `build_knobs` necesita `Xdf`, que es justo el DataFrame que el parche de
-            # la celda 4 dejo de construir.
-            "KNOBS = _cat['knobs']",
-            etiqueta="7: knobs",
+            "_D = derivacion.derivar(",
+            "clave_espacio=CLAVE_ESPACIO)",
+            "_D = derivacion.cargar(PAQUETE)",
+            etiqueta="4: arranque",
         )
 
     # --- celda 16: boton de cerrar dentro del tablero ------------------------------
@@ -585,9 +491,10 @@ def preparar_copia() -> Path:
         return _reemplazar(f, "display(APP)", "_display_real(APP)",
                            etiqueta="16: mostrar el tablero")
 
+    # De siete celdas parcheadas a cuatro. Las 5, 6 y 7 ya no se tocan: leen del objeto
+    # que devuelve la celda 4, asi que cambiar esa una vez cambia las tres.
     for indice, funcion in ((1, celda1), (3, celda3), (4, celda4),
-                            (5, celda5), (6, celda6), (7, celda7), (16, celda16),
-                            (16, celda16_mostrar)):
+                            (16, celda16), (16, celda16_mostrar)):
         parchear(indice, funcion)
 
     # --- La aplicacion muestra el TABLERO, nada mas --------------------------------
