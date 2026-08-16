@@ -1,19 +1,20 @@
-"""El tablero 02 vuelve a apilarse, y su figura se reordena en dos columnas.
+"""El tablero 02 vuelve a apilarse, y su figura se reordena en dos filas.
 
 Los otros tres visores ganaron con el reparto 30/70 -- sus paneles de control son largos y
 la figura les queda al lado --, pero el del 02 son DOS fechas y un boton: 212 px medidos
 contra 1.700 de figura. Ese 30% dejaba ~1.500 px muertos en la columna izquierda.
 
-Aqui el panel vuelve ARRIBA, a lo ancho, y la figura ocupa el ancho entero debajo. Con eso
-las piezas pequenias -- barras por grupo, violines de UITI y top 10 de circuitos -- caben
-en una columna propia a la izquierda, justo debajo del panel, y el ranking de circuitos
-pasa a la fila de abajo, a lo ancho, que es lo que sus 184 barras necesitan.
+Aqui el panel vuelve ARRIBA, a lo ancho, y la figura ocupa el ancho entero debajo.
 
 ## La rejilla
 
-    fila 1:  barras "Vanos por grupo"  |  dispersion vano x ventana (2 filas x 2 columnas)
-    fila 2:  violines "UITI acumulado" |  (la dispersion sigue aqui)
-    fila 3:  "Top 10 clase Alto"       |  ranking de circuitos, sobre esas dos columnas
+    fila 1:  barras "Vanos por grupo"  |  dispersion vano x ventana  |  "Top 10 clase Alto"
+    fila 2:  violines "UITI acumulado" |  ranking de circuitos, sobre esas dos columnas
+
+La fila de arriba es la lectura por VANO -- cuantos hay en cada grupo, donde caen en el
+plano eventos x UITI, y que circuitos concentran los peores --, y la de abajo la lectura
+por DISTRIBUCION y por CIRCUITO. El ranking sigue debajo de la dispersion y sobre sus
+mismas dos columnas, que es lo que deja leer las dos como una sola cosa.
 
 Y se fueron las dos densidades marginales con sus ocho trazas: repetian en forma lo que
 la dispersion ya dice con sus puntos, y cada una se llevaba una fila o una columna
@@ -31,14 +32,14 @@ from ayudas_tableros import fuente_de_tablero
 
 RAIZ = Path(__file__).resolve().parents[1]
 
-# Donde tiene que quedar cada panel. La dispersion y sus dos densidades marginales van
-# juntas a la derecha; las tres piezas pequenias, en la columna de la izquierda.
+# Donde tiene que quedar cada panel. Arriba, las tres lecturas por vano; abajo, los
+# violines y el ranking de circuitos.
 DESTINOS = {
     "barras": (1, 1),
     "dispersion": (1, 2),
+    "top10": (1, 3),
     "violines": (2, 1),
-    "top10": (3, 1),
-    "ranking": (3, 2),
+    "ranking": (2, 2),
 }
 
 
@@ -89,12 +90,15 @@ def test_el_tablero_de_vanos_no_va_en_dos_columnas():
 # ------------------------------------------------------------------- la rejilla nueva
 
 
-def test_la_rejilla_es_de_tres_por_tres():
-    """De 6x4 a 3x3. Cada fila y cada columna que se fue estaba ahi para algo que ya no
-    esta: las dos filas del ranking y las dos casillas de las densidades marginales."""
+def test_la_rejilla_es_de_dos_por_tres():
+    """Dos filas y tres columnas: cinco paneles y ni una casilla de relleno.
+
+    La fila que se fue era la del top 10, que ahora comparte la de arriba con las otras
+    dos lecturas por vano.
+    """
     celda = _sin_comentarios(_celda_de_la_figura())
     filas, columnas = _rejilla(celda)
-    assert (filas, columnas) == (3, 3), f"la figura declara {filas}x{columnas}"
+    assert (filas, columnas) == (2, 3), f"la figura declara {filas}x{columnas}"
 
 
 def test_las_densidades_marginales_ya_no_se_dibujan():
@@ -130,32 +134,49 @@ def test_cada_panel_esta_en_su_casilla():
             f"{aguja} no esta en {destino}")
 
 
+def test_la_dispersion_ya_no_se_lleva_dos_filas():
+    """Ocupaba dos filas y dos columnas; ahora es una casilla como las demas.
+
+    Es lo que libera la columna 3 de la fila 1 para el top 10 y deja la fila 2 entera
+    para los violines y el ranking.
+    """
+    celda = _sin_comentarios(_celda_de_la_figura())
+    assert "'rowspan'" not in celda, (
+        "algun panel sigue ocupando dos filas")
+
+
 def test_el_ranking_va_justo_debajo_del_scatter_y_sobre_sus_mismas_columnas():
-    """Las dos que ocupa la dispersion, ni una mas.
+    """Las dos de la derecha, ni una mas.
 
     184 barras con sus nombres rotados necesitan ancho, pero alinearlas con la dispersion
-    es lo que deja leer las dos como una sola lectura: los circuitos de la derecha del
-    ranking son los que pueblan la esquina superior de la nube.
+    y el top 10 es lo que deja leer las tres como una sola lectura: los circuitos de la
+    derecha del ranking son los que pueblan la esquina superior de la nube.
     """
     celda = _sin_comentarios(_celda_de_la_figura())
     assert re.search(r"\[\{\}, \{'colspan': 2\}, None\],", celda), (
-        "la ultima fila no pone el ranking sobre dos columnas junto al top 10")
-    assert re.search(r"\{'rowspan': 2, 'colspan': 2\}", celda), (
-        "la dispersion no ocupa dos filas y dos columnas")
-    assert re.findall(r"\), row=3, col=2\)", celda), (
-        "ninguna traza va a (3,2), que es la del ranking")
+        "la ultima fila no pone el ranking sobre las dos columnas de la derecha")
+    assert re.findall(r"\), row=2, col=2\)", celda), (
+        "ninguna traza va a (2,2), que es la del ranking")
 
 
-def test_las_tres_piezas_pequenias_comparten_la_columna_izquierda():
-    """Barras, violines y top 10, una debajo de otra, y las tres en la columna 1.
+def test_las_dos_lecturas_por_grupo_comparten_la_columna_izquierda():
+    """Barras arriba y violines abajo, las dos en la columna 1.
 
-    Es lo que las pone debajo del panel de control, que es donde se pidieron.
+    Es lo que las pone debajo del panel de control, que es donde se pidieron, y lo que
+    deja las dos columnas de la derecha para la dispersion, el top 10 y el ranking.
     """
     celda = _sin_comentarios(_celda_de_la_figura())
-    for fila in (1, 2, 3):
-        assert re.search(rf"row={fila}, col=1\)", celda) or \
-               re.search(rf"row=fila, col=1\)", celda), (
-            f"la fila {fila} no coloca nada en la columna izquierda")
+    assert re.search(r"row=1, col=1\)", celda), (
+        "la fila 1 no coloca las barras en la columna izquierda")
+    assert re.search(r"row=2, col=1\)", celda) or re.search(r"row=fila, col=1\)", celda), (
+        "la fila 2 no coloca los violines en la columna izquierda")
+
+
+def test_el_top_10_se_muda_a_la_esquina_superior_derecha():
+    """Sus barras horizontales son la tercera casilla de la fila de arriba."""
+    celda = _sin_comentarios(_celda_de_la_figura())
+    assert re.findall(r"\), row=1, col=3\)", celda), (
+        "ninguna traza va a (1,3), que es la del top 10")
 
 
 def test_los_titulos_siguen_el_orden_de_lectura_de_la_rejilla():
@@ -172,10 +193,12 @@ def test_los_titulos_siguen_el_orden_de_lectura_de_la_rejilla():
     textos = list(ast.literal_eval(titulos.group(1)))
     assert len(textos) == 5, f"son 5 casillas con subplot, hay {len(textos)} titulos"
     assert textos[0] == "Vanos por grupo", (
-        f"el primer titulo es el de la casilla (1,1), que ahora son las barras: {textos}")
-    assert textos[2] == "UITI acumulado", (
-        f"el tercero es el de (2,1), los violines: {textos}")
-    assert textos[3].startswith("Top 10"), (
-        f"el cuarto titulo es el de (3,1), el top 10: {textos}")
+        f"el primer titulo es el de la casilla (1,1), que son las barras: {textos}")
+    assert textos[1] == "", (
+        f"el segundo es el de (1,2), la dispersion, que no lleva titulo: {textos}")
+    assert textos[2].startswith("Top 10"), (
+        f"el tercero es el de (1,3), el top 10: {textos}")
+    assert textos[3] == "UITI acumulado", (
+        f"el cuarto es el de (2,1), los violines: {textos}")
     assert textos[4].startswith("Grupos Circuitos"), (
-        f"el quinto titulo es el del ranking, en (3,2): {textos}")
+        f"el quinto titulo es el del ranking, en (2,2): {textos}")

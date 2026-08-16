@@ -898,45 +898,42 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
           f'{np.max(np.abs(_propio - _scipy) / _scipy):.2e}')
 
     # Misma estructura de trazas que el tablero de circuitos: 1 contorno + 4 scatter +
-    # 4 KDE del eje x + 4 KDE del eje y + 1 barra + 8 violines.
-    # Grilla 4 FILAS x 4 COLUMNAS. Las celdas cubiertas por un colspan/rowspan van como None:
-    #   filas 1-2, cols 1-4 -> la dispersion con sus dos marginales. El KDE de arriba y el
-    #       scatter ocupan las cols 1-3; el marginal derecho se queda con la col 4, que es lo
-    #       que conserva la lectura de marginales (si el scatter tomara las 4, el KDE del eje
-    #       y no tendria donde ir).
-    #   fila 3, cols 1-2 -> barras de conteo por grupo
-    #   fila 4, cols 1-2 -> violines de UITI por grupo
-    #   filas 3-4, cols 3-4 -> barras HORIZONTALES del top 10 de circuitos (rowspan 2): son 10
-    #       categorias y en una sola fila quedan aplastadas.
-    # Los anchos mantienen 0.78 / 0.22 para el bloque de dispersion (identico a como estaba) y
-    # dejan 0.52 / 0.48 entre las dos mitades de las filas 3 y 4.
+    # 1 barra de conteo + 1 de porcentaje + 4 del top 10 + 4 violines + 2 del ranking.
     fig_vano = make_subplots(
-        # TRES filas y TRES columnas. A la izquierda, una debajo de otra, las tres piezas
-        # pequenias: barras por grupo, violines de UITI y top 10 de circuitos. A la derecha
-        # la dispersion, que se lleva dos filas y dos columnas, y justo debajo el ranking,
-        # sobre esas mismas dos columnas.
+        # DOS filas y TRES columnas, con las cinco casillas ocupadas.
+        #
+        #   fila 1:  barras por grupo | dispersion vano x ventana | top 10 clase Alto
+        #   fila 2:  violines de UITI | ranking de circuitos, sobre esas dos columnas
+        #
+        # Arriba queda la lectura por VANO -- cuantos hay en cada grupo, donde caen en el
+        # plano eventos x UITI, y que circuitos concentran los peores -- y abajo la lectura
+        # por distribucion y por circuito. El ranking sigue justo debajo de la dispersion y
+        # sobre sus mismas dos columnas: sus 184 barras necesitan ese ancho, y alinearlas
+        # con la nube es lo que deja leer las dos como una sola cosa.
         #
         # Se fueron las dos densidades marginales -- la curva sobre el eje x y la del eje y --
         # con sus ocho trazas. Repetian en forma lo que la dispersion ya dice con sus puntos,
         # y cada una se llevaba una fila o una columna enteras del tablero.
-        rows=3, cols=3,
-        row_heights=[0.33, 0.30, 0.37],
-        # La columna 1 es la de las piezas pequenias; las 2-3 se las reparten la dispersion
-        # y el ranking, que ocupan exactamente las mismas.
-        column_widths=[0.28, 0.36, 0.36],
+        rows=2, cols=3,
+        # La fila de arriba se lleva algo mas: la dispersion es la pieza grande, y el top 10
+        # apila cuatro clases sobre diez categorias.
+        row_heights=[0.55, 0.45],
+        # La columna 1 son cuatro categorias (los cuatro grupos) y no necesita ancho; el que
+        # sobra se lo lleva la dispersion. El top 10 se queda con 0.34 porque sus nombres de
+        # circuito van sobre el eje y, y ese margen lo pide `automargin`.
+        column_widths=[0.24, 0.42, 0.34],
         horizontal_spacing=0.075, vertical_spacing=0.075,
         specs=[
-            [{}, {'rowspan': 2, 'colspan': 2}, None],
-            [{}, None, None],
+            [{}, {}, {}],
             [{}, {'colspan': 2}, None],
         ],
         # En orden de lectura sobre las casillas que SI llevan subplot: (1,1) barras,
-        # (1,2) dispersion, (2,1) violines, (3,1) top 10, (3,2) ranking. Plotly los reparte
+        # (1,2) dispersion, (1,3) top 10, (2,1) violines, (2,2) ranking. Plotly los reparte
         # por FILAS y no por nombre: reordenar la rejilla sin reordenar esta tupla le pone a
         # cada panel el titulo del vecino, sin dar error.
         subplot_titles=('Vanos por grupo', '',
-                        'UITI acumulado',
                         'Top 10 clase Alto',
+                        'UITI acumulado',
                         'Grupos Circuitos: Vanos en clase Medio-Alto y Alto por circuito'),
     )
 
@@ -989,7 +986,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
             text=[], texttemplate='%{text}', textposition='inside', insidetextanchor='middle',
             insidetextfont=dict(size=10, color=COLOR_TEXTO_GRUPO[g]), cliponaxis=False,
             showlegend=False, hovertext=[], hovertemplate='%{hovertext}<extra></extra>',
-        ), row=3, col=1)
+        ), row=1, col=3)
 
     for fila, etiqueta in [(2, 'UITI acumulado')]:                   # 15-18: violines UITI
         for g in range(4):
@@ -1001,7 +998,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
                 hovertemplate=f'%{{x}} -- {etiqueta}: %{{y:,.1f}}<extra></extra>',
             ), row=fila, col=1)
 
-    # --- Fila 5: vanos en las DOS clases criticas por circuito ---------------------------
+    # --- Fila 2, columnas 2-3: vanos en las DOS clases criticas por circuito --------------
     # El conteo y el orden suman Medio-Alto Y Alto: un circuito con muchos vanos a un paso de
     # la clase peor es tan accionable como uno que ya los tiene ahi, y mirando solo Alto esa
     # poblacion quedaba invisible.
@@ -1021,14 +1018,14 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         x=[], y=[], marker=dict(color=[], line=dict(width=0.4, color='rgba(60,60,60,0.5)')),
         showlegend=False, cliponaxis=False,
         hovertext=[], hovertemplate='%{hovertext}<extra></extra>',
-    ), row=3, col=2)
+    ), row=2, col=2)
     # Las tres divisiones de cuartil van en UNA sola traza de lineas, separadas por null.
     # Se resuelven con coordenadas numericas sobre el eje de categorias (i + 0.5 cae entre la
     # categoria i y la i+1), que es como se marca una frontera sin inventar una categoria.
     fig_vano.add_trace(go.Scatter(                                   # 24: divisiones Q1/Q2/Q3
         x=[], y=[], mode='lines', line=dict(color='rgba(40,40,40,0.55)', width=1.2, dash='dot'),
         showlegend=False, hoverinfo='skip',
-    ), row=3, col=2)
+    ), row=2, col=2)
 
     fig_vano.update_layout(
         title=dict(
@@ -1057,13 +1054,13 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     # Eje de las barras horizontales: porcentaje 0-100 fijo, para que las 10 barras se lean
     # como proporciones comparables y no se reencuadren al cambiar de rango.
     fig_vano.update_xaxes(title_text='% de vanos del circuito', range=[0, 100],
-                          ticksuffix='%', row=3, col=1)
-    fig_vano.update_yaxes(title_text='', automargin=True, row=3, col=1)
+                          ticksuffix='%', row=1, col=3)
+    fig_vano.update_yaxes(title_text='', automargin=True, row=1, col=3)
     # `ticklabelstandoff` aparta las marcas del eje y 8 px del area de dibujo. Sin el, el
     # '0' del origen y la primera etiqueta de circuito -- vertical, pegada al eje -- se
     # tocaban por 6 px, y solo a 1.280 y 1.512: a 1.900 el panel es mas ancho y no pasaba.
     fig_vano.update_yaxes(title_text='Vanos Medio-Alto + Alto', rangemode='tozero',
-                          ticklabelstandoff=8, row=3, col=2)
+                          ticklabelstandoff=8, row=2, col=2)
     # Eje LINEAL, no de categorias, aunque lo que se rotula sean nombres de circuito. En un
     # eje de categorias Plotly interpreta un x numerico como una categoria NUEVA: las tres
     # divisiones de cuartil (11.5, 22.5, 33.5) se dibujaban como tres categorias extra
@@ -1072,12 +1069,9 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     # con tickvals/ticktext que el JS reescribe en cada repintado.
     fig_vano.update_xaxes(title_text='Circuitos ordenados por vanos en Medio-Alto + Alto',
                           tickangle=-90, tickfont_size=8, automargin=True,
-                          showgrid=False, row=3, col=2)
+                          showgrid=False, row=2, col=2)
     fig_vano.update_yaxes(title_text='Vanos', rangemode='tozero', row=1, col=1)
     fig_vano.update_yaxes(title_text='UITI acumulado', row=2, col=1)
-    for _celda in [(1, 4)]:
-        fig_vano.update_xaxes(visible=False, row=_celda[0], col=_celda[1])
-        fig_vano.update_yaxes(visible=False, row=_celda[0], col=_celda[1])
     # Titulos de subplot al DOBLE (eran 12): el tablero se mira a pantalla completa y a 12 px
     # los rotulos de cada casilla se perdian frente a la figura.
     FUENTE_SUBTITULO = 16
