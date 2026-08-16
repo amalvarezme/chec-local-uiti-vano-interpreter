@@ -184,3 +184,35 @@ def test_la_barra_del_04_se_alinea_con_su_mapa():
         "la barra no calcula su sangria")
     assert re.search(r"MAPA_IZQ\s*=\s*float\(fig\.layout\.map\.domain\.x\[0\]\)", fuente), (
         "`MAPA_IZQ` no se lee de la figura")
+
+
+def test_el_perfil_baja_50px_respecto_del_panel():
+    """Cincuenta pixeles de aire entre el panel y el perfil.
+
+    Medido antes: el hueco eran 6 px -- el `margin-bottom` del propio panel --, asi que el
+    perfil arrancaba pegado al borde de la caja de controles y los dos se leian como una
+    sola pieza.
+
+    El desplazamiento va en un envoltorio y NO en el `margin.t` de la figura. Subir el
+    margen de la figura mueve el area de dibujo DENTRO de un div que sigue donde estaba:
+    baja las barras y deja el titulo flotando, en vez de bajar el panel entero. El
+    envoltorio mueve las dos cosas juntas y no toca la figura.
+
+    Y es `padding-top`, no `margin-top`. Los margenes verticales de hermanos adyacentes
+    COLAPSAN al mayor: contra el `margin-bottom: 6px` del panel, un `margin-top: 50px`
+    deja el hueco en 50 -- medido -- y el perfil baja 44, no 50. El relleno no colapsa.
+
+    Tampoco va en `CSS_DOS_COLUMNAS`: ese bloque viaja COPIADO en el 01 y en el 04 y una
+    prueba exige que las copias sean identicas byte a byte, asi que una regla que solo
+    necesita este tablero lo separaria de su gemelo.
+    """
+    fuente = _sin_comentarios(_fuente())
+    assert re.search(r"\.caja-perfil \{\{[^}]*padding-top:\s*50px", fuente), (
+        "el perfil no baja 50 px respecto del panel")
+    assert not re.search(r"\.caja-perfil \{\{[^}]*margin-top", fuente), (
+        "usa `margin-top`, que colapsa contra el margen del panel y baja menos de 50 px")
+    assert re.search(r'<div class="caja-perfil">', fuente), (
+        "el perfil no va dentro de su envoltorio")
+    css_compartido = re.search(r"CSS_DOS_COLUMNAS = '''(.*?)'''", _fuente(), re.S)
+    assert css_compartido and "caja-perfil" not in css_compartido.group(1), (
+        "la regla se colo en el CSS que este tablero comparte byte a byte con el 01")

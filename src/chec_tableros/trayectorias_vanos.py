@@ -2339,9 +2339,33 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     # perfil va antes en el documento -- columna izquierda, debajo del panel -- y el guion
     # que plotly emite para cada div corre en cuanto se lee. Si la libreria viajara con la
     # figura grande, el guion del perfil se ejecutaria con `Plotly` sin definir.
-    PERFIL_HTML = pio.to_html(fig_perfil, include_plotlyjs=True, full_html=False,
-                              div_id=DIV_PERFIL, default_width='100%',
-                              config={'responsive': True})
+    # El perfil baja 50 px respecto del panel. Medido antes: el hueco eran 6 px -- el
+    # `margin-bottom` del propio panel --, asi que el perfil arrancaba pegado al borde de
+    # la caja de controles y los dos se leian como una sola pieza.
+    #
+    # Va en un ENVOLTORIO y no en el `margin.t` de la figura: subir el margen de la figura
+    # mueve el area de dibujo DENTRO de un div que sigue donde estaba -- baja las barras y
+    # deja el titulo flotando --, mientras que el envoltorio mueve las dos cosas juntas y
+    # no toca la figura.
+    #
+    # Y es `padding-top` y no `margin-top`, que es lo primero que se prueba y NO da 50 px
+    # de desplazamiento: los margenes verticales de hermanos adyacentes COLAPSAN al mayor,
+    # asi que contra el `margin-bottom: 6px` del panel un `margin-top: 50px` deja el hueco
+    # en 50 -- medido -- y el perfil baja 44, no 50. El relleno no colapsa: 6 + 50 = 56 de
+    # hueco, que son los 50 px de bajada pedidos.
+    #
+    # Y no va en `CSS_DOS_COLUMNAS`: ese bloque viaja COPIADO en el 01 y en el 04, y una
+    # prueba exige que las copias sean identicas byte a byte. Una regla que solo necesita
+    # este tablero lo separaria de su gemelo.
+    PERFIL_HTML = f'''
+<style>
+  .caja-perfil {{ padding-top: 50px; }}
+</style>
+<div class="caja-perfil">{pio.to_html(fig_perfil, include_plotlyjs=True,
+                                      full_html=False, div_id=DIV_PERFIL,
+                                      default_width='100%',
+                                      config={'responsive': True})}</div>
+'''
     FIGURA_HTML = pio.to_html(fig, include_plotlyjs=False, full_html=False, div_id=DIV,
                               default_width='100%', config={'responsive': True})
 
