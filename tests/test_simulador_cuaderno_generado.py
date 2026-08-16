@@ -85,11 +85,11 @@ def test_la_celda_generada_compila_y_nombra_lo_que_app_py_le_pasa():
     kernel con un `KeyError` que no menciona a `app.py`.
     """
     preparar = _preparar()
-    compile(preparar.CELDA, "<celda generada>", "exec")
+    compile(preparar.celda(), "<celda generada>", "exec")
 
     fuente_app = (APP / "app.py").read_text("utf-8")
     for variable in ("PAQUETE_06", "RAIZ_SRC_06", "APP_06"):
-        assert variable in preparar.CELDA, f"la celda no lee {variable}"
+        assert variable in preparar.celda(), f"la celda no lee {variable}"
         assert f"{variable}=" in fuente_app, f"app.py no pone {variable} en el entorno"
 
 
@@ -97,13 +97,27 @@ def test_la_celda_generada_llama_al_camino_barato_y_no_al_caro():
     """`derivar()` abre 909 MB; `cargar()` lee 94,5 MB congelados. La aplicacion es
     lo unico que NUNCA puede llamar al primero: son 7,1 s contra 0,3 s en cada
     apertura, que es la razon entera de que el paquete exista."""
-    celda = _preparar().CELDA
     llamadas = {
         f"{ast.unparse(n.func)}"
-        for n in ast.walk(ast.parse(celda)) if isinstance(n, ast.Call)
+        for n in ast.walk(ast.parse(_preparar().celda())) if isinstance(n, ast.Call)
     }
     assert "derivacion.cargar" in llamadas
     assert "derivacion.derivar" not in llamadas
+
+
+@pytest.mark.parametrize("con_cierre", [True, False])
+def test_el_boton_de_cerrar_solo_va_donde_hay_algo_que_cerrar(con_cierre: bool):
+    """En local cierra el Voila que arranco `app.py`; en Databricks no hay tal proceso.
+
+    Ese boton manda `SIGTERM` al pid que `app.py` deja escrito. En el contenedor de
+    una Databricks App no hay ni ese `app.py` ni ese pid, y el ciclo de vida lo
+    gobierna la plataforma: un boton "Cerrar" que no cierra nada -- o que senala a un
+    pid ajeno del contenedor -- no es un detalle cosmetico.
+    """
+    codigo = _preparar().celda(con_cierre=con_cierre)
+    compile(codigo, "<celda generada>", "exec")
+    assert ("import cierre" in codigo) is con_cierre
+    assert ("cierre.barra()" in codigo) is con_cierre
 
 
 # ------------------------------------------------ el tablero no toca el camino caro

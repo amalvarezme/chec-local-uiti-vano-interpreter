@@ -1,45 +1,28 @@
 ---
-description: Publica el simulador de riesgo por vano del cuaderno 06 como una Databricks App en una URL fija, servido con Voila sobre un kernel vivo. Precalcula fuera de la app todo lo que hoy se deriva del CSV de 540 MB, de modo que el arranque baje de 2.867 MB a 579 MB y de 909 MB leidos a 94,5 MB. Detecta y repara por su cuenta lo que falte. Pregunta solo el nombre de la app y la URL del workspace destino.
+description: Publica el simulador de riesgo por vano como una Databricks App en una URL fija, servido con Voila sobre un kernel vivo. Precalcula fuera de la app todo lo que hoy se deriva del CSV de 540 MB, de modo que el arranque baje de 2.867 MB a 579 MB y de 909 MB leidos a 94,5 MB. Detecta y repara por su cuenta lo que falte. Pregunta solo el nombre de la app y la URL del workspace destino.
 ---
 
-> **FUERA DE SERVICIO desde el 2026-08-16.** El codigo del simulador ya no vive en
-> `notebooks/base_apps/06_uiti_vano_explicabilidad_simulador.ipynb`: la derivacion esta en
-> `src/chec_tableros/simulador/derivacion.py` y el tablero en `.../tablero.py`. Este comando
-> sigue construyendo el paquete **ejecutando las celdas 1-9 del cuaderno por su indice** y
-> sirviendo una copia parcheada de ese mismo cuaderno, y las dos cosas dejaron de ser el
-> camino real. Concretamente falla en tres sitios:
->
-> 1. **Duplica `derivacion.congelar`** a mano (paso 3). Hoy son dos lineas --
->    `derivacion.derivar()` y `derivacion.congelar(d, salida)` -- y cualquier cambio en la
->    derivacion llega al despliegue solo si alguien se acuerda de copiarlo aqui.
-> 2. **Escribe `geometrias_014.json`** dentro del paquete. Ese nombre existia porque un
->    parche de texto lo buscaba en el cuaderno; el paquete real ya lleva
->    `geometria_kmeans_014_v1.json`, y la app arrancaria contra un manifiesto que no cuadra.
-> 3. **Sirve una copia "shimeada" del cuaderno** (paso 5). No hay shim: `preparar.py` genera
->    un cuaderno de UNA celda que importa el modulo.
->
-> No se repara aqui porque el destino de esta familia es la app consolidada
-> `criticidad-chec` (fase 5 de `sdd/retire-base-apps-notebooks`), que la reescribe entera
-> alrededor del contrato de tres artefactos. Se marca en vez de borrarse porque **lo que
-> este archivo sabe del despliegue sigue valiendo**: por que hace falta un cluster clasico y
-> no Serverless, las nueve restricciones conocidas y el dimensionado de los kernels.
->
 > **Read `.claude/commands/_contrato-despliegue-databricks.md` before anything else.** It is mandatory and it overrides what follows:
 > - **A. Run log** — open the bitacora *before* asking the user anything, record every numbered step as you finish it, and always close it. Its path and final state are part of the report back to the user.
 > - **B. Never abort** — a restriction gets recorded and worked around; the command runs to the end regardless. Wherever this file says "stop and report", rule B applies instead.
 > - **C. Unity Catalog target** — `workspace.default.chec-simulador` below is a default, not a requirement. Resolve it at runtime and substitute the resolved value into every path here.
-> - **D. Known restrictions** — D1–D9. If one shows up, do not re-diagnose it.
+> - **D. Known restrictions** — D1–D10. If one shows up, do not re-diagnose it.
 
 Follow this exact sequence when `/app-simulador-vano` is invoked. It publishes
-`notebooks/base_apps/06_uiti_vano_explicabilidad_simulador.ipynb` — the per-vano
-explainability and risk simulator — at a stable URL, and it is **self-healing**: it inspects
-the target workspace first and creates whatever is missing.
+`src/chec_tableros/simulador/` — the per-vano explainability and risk simulator — at a
+stable URL, and it is **self-healing**: it inspects the target workspace first and creates
+whatever is missing.
+
+It is now the **only** command in this family that needs a live kernel, and the only one
+whose app cannot be a set of static files. Its four siblings published one static dashboard
+each by patching a notebook; that code moved to `src/chec_tableros/` and the four were
+replaced by `/app-criticidad-chec`, a single app with four routes.
 
 ## Why this one cannot be a static HTML file
 
-Every other `/app-*` command in this family exports the notebook's own HTML and serves it from
-a Volume. That works because `01`–`04` compute everything up front and let the browser filter
-it. **`06` cannot**: its whole point is that clicking *Simular* runs a PyTorch MIL model on the
+`/app-criticidad-chec` serves four dashboards as static files from a Volume. That works
+because those four compute everything up front and let the browser filter it. **The simulator
+cannot**: its whole point is that clicking *Simular* runs a PyTorch MIL model on the
 bags the user selected, with the knob values the user typed. There is no precomputable answer —
 the input space is 26 simulable variables over up to 15 vanos. The panel is `ipywidgets` end to
 end (`go.FigureWidget`, `.observe`, `on_click`, an `asyncio` debounce), so it needs a **live
@@ -47,9 +30,10 @@ Python kernel**, not a static document.
 
 Two routes exist and only one is sane:
 
-- **Voila** serves the notebook itself. The notebook stays the single source of truth, and its
-  ~1.900 lines of panel logic (cells 11–16) are reused verbatim.
-- **A Dash/Streamlit rewrite** would mean re-implementing those 1.900 lines against a different
+- **Voila** serves a one-cell notebook that imports `chec_tableros.simulador.tablero`. The
+  module stays the single source of truth, and its ~3.200 lines of panel logic are reused
+  verbatim — the same code the desktop app runs.
+- **A Dash/Streamlit rewrite** would mean re-implementing those 3.200 lines against a different
   callback model, and maintaining two panels that must agree forever. Reject it unless the user
   explicitly asks for a rewrite.
 
@@ -120,10 +104,10 @@ the memory numbers in this command no longer hold.**
 
 ## Scope
 
-MUST NOT modify `notebooks/base_apps/06_uiti_vano_explicabilidad_simulador.ipynb` (the shim
-is applied to a scratch COPY), MUST NOT create or refresh any Delta table, view or Lakeview
-dashboard, and MUST NOT touch the artifacts the other `/app-*` commands publish under
-`dashboards/`.
+MUST NOT modify anything under `src/` or `aplicaciones/` beyond what `construir.py`
+regenerates on its own (the bundle and the served notebook, both untracked), MUST NOT create
+or refresh any Delta table, view or Lakeview dashboard, and MUST NOT touch the panels
+`/app-criticidad-chec` publishes under `paneles/`.
 
 ## 0. Ask the user for the two required inputs
 
@@ -216,82 +200,53 @@ If this fails on privileges, **do not stop** — this is contract rule B. Resolv
 
 ## 3. Build the bundle
 
-Write the builder into the scratch directory — **not** into the repo. It runs the notebook's
-**own** cells 1–9 and freezes the resulting namespace, so the bundle can never drift from what
-the notebook computes: if the loading cells change, the bundle follows on the next build.
-
-```python
-"""Congela lo que el cuaderno 06 deriva al arrancar, para que la app no lo rehaga.
-
-Corre las celdas 1..9 del propio cuaderno y guarda el resultado. No reimplementa nada:
-si esas celdas cambian, el paquete cambia con ellas.
-"""
-import contextlib, hashlib, io, json, os, pathlib, sys, time
-
-RAIZ = pathlib.Path(__file__).resolve().parents[N]      # ajusta N: la raiz del repo
-SALIDA = pathlib.Path(sys.argv[1])
-SALIDA.mkdir(parents=True, exist_ok=True)
-os.chdir(RAIZ / 'notebooks' / 'base_apps')
-
-CUADERNO = RAIZ / 'notebooks/base_apps/06_uiti_vano_explicabilidad_simulador.ipynb'
-nb = json.loads(CUADERNO.read_text('utf-8'))
-ns = {'__name__': '__main__'}
-t0 = time.perf_counter()
-for i in range(1, 10):
-    c = nb['cells'][i]
-    if c['cell_type'] == 'code':
-        with contextlib.redirect_stdout(io.StringIO()):
-            exec(compile(''.join(c['source']), f'celda{i}', 'exec'), ns)
-print(f'celdas 1-9 en {time.perf_counter() - t0:.1f} s')
-
-import joblib, numpy as np, shutil
-
-ns['TABLA'].to_parquet(SALIDA / 'tabla.parquet', compression='zstd')
-# float32 y contiguo: es el dtype que el modelo usa igual, y asi el .npy se puede
-# mapear en memoria y compartirse entre los kernels de Voila.
-np.save(SALIDA / 'X_inst.npy', np.ascontiguousarray(ns['X_INST'], dtype=np.float32))
-(SALIDA / 'geo.json').write_text(json.dumps(
-    {'geo': ns['GEO_POR_CIRCUITO'], 'trafos': ns['TRAFOS'], 'switches': ns['SWITCHES']},
-    separators=(',', ':')))
-joblib.dump({'knobs': ns['KNOBS'], 'feature_names': ns['feature_names'],
-             'label_encoders': ns['label_encoders'],
-             'max_values_imputed': ns['max_values_imputed'],
-             'bag_index': ns['BAG_INDEX'], 'features_mil': list(ns['FEATURES_MIL']),
-             'ventanas': ns['VENTANAS']},
-            SALIDA / 'catalogo.joblib', compress=3)
-# La geometria KMeans es un artefacto VERSIONADO (`data/geometria_kmeans_014_v1.json`),
-# no un derivado que se extraiga del cuaderno 04. Dentro del paquete conserva el nombre
-# `geometrias_014.json` porque el parche de la celda 3 apunta ahi.
-shutil.copy2(RAIZ / 'data/geometria_kmeans_014_v1.json', SALIDA / 'geometrias_014.json')
-for origen in (RAIZ / 'data/models/mil_vano_ventana_v1.pt',
-               RAIZ / 'data/Actividades_mantenimiento_costos_2026.xlsx'):
-    shutil.copy2(origen, SALIDA / origen.name)
-
-# El manifiesto es lo que permite comprobar en el arranque de la app que el paquete
-# esta completo y que el modelo es el mismo con el que se construyo.
-manifiesto = {'construido_en': time.strftime('%Y-%m-%d %H:%M:%S'),
-              'cuaderno_sha1': hashlib.sha1(CUADERNO.read_bytes()).hexdigest(),
-              'n_bolsas': len(ns['BAG_INDEX'].keys),
-              'n_instancias': int(ns['X_INST'].shape[0]),
-              'n_features': len(ns['FEATURES_MIL']),
-              'archivos': {}}
-for f in sorted(SALIDA.iterdir()):
-    if f.name != 'manifiesto.json':
-        manifiesto['archivos'][f.name] = {
-            'bytes': f.stat().st_size,
-            'sha256': hashlib.sha256(f.read_bytes()).hexdigest()}
-(SALIDA / 'manifiesto.json').write_text(json.dumps(manifiesto, indent=1))
-total = sum(v['bytes'] for v in manifiesto['archivos'].values())
-print(f'{len(manifiesto["archivos"])} archivos | {total / 1024 / 1024:.1f} MB')
+```
+.venv/bin/python aplicaciones/06_simulador/construir.py
 ```
 
-Run it with the project interpreter (`.venv/bin/python`, which is where `geopandas`, `torch` and
-the project packages live) and assert the result: **7 files, ~94,5 MB**, dominated by
-`X_inst.npy` at 88,1 MB. Fail if the total is under 50 MB — that means a cell silently produced
-an empty object.
+That is the whole step. It leaves the bundle in `aplicaciones/06_simulador/paquete/` and
+the served notebook in `aplicaciones/06_simulador/cuaderno/`.
 
-`git status --porcelain notebooks/base_apps/06_uiti_vano_explicabilidad_simulador.ipynb` MUST
-be empty afterwards. The builder only reads the notebook; if it reports a change, stop.
+**It is the same code the desktop app runs**, which is the property worth protecting: a
+second builder would be a second bundle that has to match the first forever. Concretely
+it does two things:
+
+1. `chec_tableros.simulador.derivacion.derivar()` reads the CSV, the three shapefiles and
+   the bag cache, and `congelar()` freezes the result — 909 MB in, 94,5 MB out.
+2. `preparar.escribir_cuaderno()` writes a **one-cell** notebook that imports
+   `chec_tableros.simulador.tablero` and displays it.
+
+Three guards run inside and abort the build rather than freezing something incoherent:
+the KMeans geometry must match the versioned one, the MIL model's geometry must match
+that, and the bag cache must correspond to the CSV. That last one is the subtle one —
+updating the CSV without re-running notebook 05 gives you a dashboard whose two halves
+describe different periods, and nothing fails.
+
+Assert the result rather than trusting the exit code: **8 files and ~95 MB**, dominated by
+`X_inst.npy` at 88 MB. Under 50 MB means something produced an empty object, and
+`construir.py` already stops there with that message.
+
+> This used to be ~80 lines of builder pasted from this file into a scratch directory,
+> which executed notebook 06's cells 1–9 by index and re-implemented `congelar()` by hand.
+> It also wrote the geometry into the bundle under a second name, because a text patch
+> looked for that name. All of that is gone: the notebook is gone, and the two halves are
+> two functions of one module.
+
+### 3a. The one deploy-specific difference
+
+The served notebook must be generated **without the close button**:
+
+```
+.venv/bin/python -c "import sys; sys.path.insert(0, 'aplicaciones/06_simulador'); \
+  import preparar; print(preparar.escribir_cuaderno(con_cierre=False))"
+```
+
+That button sends `SIGTERM` to the pid `app.py` writes when it launches Voila locally.
+There is no such `app.py` and no such pid inside the container, and the lifecycle is the
+platform's. A *Cerrar* button that closes nothing — or worse, that signals a pid that
+belongs to something else in the container — is not a cosmetic detail.
+
+Run this **after** `construir.py`, since it overwrites the notebook that step left.
 
 ## 4. Upload the bundle
 
@@ -305,118 +260,22 @@ check walks the manifest and an extra file is noise it will report.
 
 ## 5. Stage the app source
 
-Five items in the scratch directory, deliberately not added to the repo.
+Five items in the scratch directory.
 
-**`06_simulador.ipynb`** — the shimmed COPY of the notebook. Strip every code cell's `outputs`
-and `execution_count` first (the repo copy is 245 KB; a locally-executed one re-embeds
-megabytes). Keep the `jupyter.source_hidden` metadata and `hide-input` tags that are already
-there — Voila hides input anyway (`strip_sources` defaults to true), but they keep the file
-honest if someone opens it in Jupyter.
+**`06_simulador.ipynb`** — the notebook `preparar.escribir_cuaderno(con_cierre=False)`
+generated in step 3a. It has **one cell** and no stored output, so there is nothing to
+strip and nothing to patch: copy it as it is.
 
-Apply exactly these edits, asserting each match is **unique** and failing loudly if not. A
-silently-skipped edit produces a notebook that dies deep inside the app with no useful log.
-
-**Edit 1 — cell 1, drop the two imports the app does not need.**
-```python
-import geopandas as gpd                                    → (delete the line)
-from chec_impacto.data import procesar_dataset_completo     → (delete the line)
-```
-`geopandas` is never touched again once the map traces come from the bundle. Deleting the
-pipeline import saves nothing measurable on its own — `mil_persistencia` pulls the same
-transitive tree (`sklearn`, `shap`, `optuna`, `numba`, `matplotlib`) anyway, which is why they
-stay in `requirements.txt` below — but leaving an import of a module the app must never call is
-how someone reintroduces the 540 MB read later. **Leave the `sys.modules` purge loop and the
-`_sonda` / `assert hasattr(_sonda, 'caja')` probe completely untouched.**
-
-**Edit 2 — cell 1, add the bundle root right after the `sys.path` block.** Cell 1 imports
-`asyncio`, `gc`, `sys`, `time` and `pathlib` but **neither `os` nor `json`**, and edits 2 and 6
-need both — add them to the import block in the same edit:
-```python
-import json
-import os
-...
-PAQUETE = Path(os.environ.get('PAQUETE_06', '/tmp/paquete_06'))
-```
-
-**Do not touch the `ROOT` walk-up loop above it.** It climbs from the working directory looking
-for a `src/` folder, and step 5's layout is chosen so that it lands on the app root on the first
-try — which is why the packages go to `<base>/src/...` and `scripts` to `<base>/scripts`, exactly
-mirroring the repo. Flattening them next to `arranque.py` instead would send that loop climbing
-to `/`, put `/` and `/src` on `sys.path`, and every project import would fail. Verify the layout
-rather than trusting it: the notebook's own first-cell `_sonda` probe fails loudly if
-`chec_local_interpreter` did not import from where you think.
-
-**Edit 3 — cell 3, read the geometry from the bundle instead of the repository.** Replace
-```python
-GEOMETRIAS_PATH = ROOT / 'data' / 'geometria_kmeans_014_v1.json'
-```
-with
-```python
-GEOMETRIAS_PATH = PAQUETE / 'geometrias_014.json'
-```
-**Keep the sha1 verification and the assert that follow.** They are what guarantees the two maps
-share one KMeans geometry, they cost microseconds, and the bundle is exactly the thing that
-could go stale.
-
-**Edit 4 — cell 4, replace the whole `procesar_dataset_completo` block** (from `datos =` through
-`del datos` / `gc.collect()` / the `print`) with:
-```python
-_cat = joblib.load(PAQUETE / 'catalogo.joblib')
-feature_names = list(_cat['feature_names'])
-label_encoders = _cat['label_encoders']
-max_values_imputed = _cat['max_values_imputed']
-print(f'{len(feature_names)} features (del paquete; el CSV no se abre en la app)')
-```
-Keep `DATA_PATH`, `VARIABLES_SELECCION_PATH` and `MODEL_DIR` defined but repoint the two that
-are still read:
-```python
-COSTOS_ITEMS_PATH = PAQUETE / 'Actividades_mantenimiento_costos_2026.xlsx'
-MODEL_DIR = PAQUETE
-```
-`context_df`, `Xdf` and `n_filas_x` must **not** be defined. That is the point of the edit, and
-it is safe: they are referenced zero times below cell 9.
-
-**Edit 5 — cell 5, memory-map the instance matrix instead of loading the bolsas artifact.**
-Replace the `RUTA_BOLSAS_MIL` assert, `cargar_bolsas`, `X_INST = np.asarray(...)`, `del BOLSAS`
-block with:
-```python
-# `mmap_mode='r'` y no una carga normal: los 88 MB quedan en el cache de paginas del
-# sistema, asi que TODOS los kernels de Voila del contenedor comparten una sola copia
-# en vez de llevar 88 MB privados cada uno. Medido: leer 5.000 filas cuesta +0 MB.
-X_INST = np.load(PAQUETE / 'X_inst.npy', mmap_mode='r')
-FEATURES_MIL = list(_cat['features_mil'])
-BAG_INDEX = _cat['bag_index']
-```
-Keep `RUTA_MODELO_MIL = MODEL_DIR / 'mil_vano_ventana_v1.pt'`, `cargar_modelo_mil(...,
-device='cpu', ...)` and **all four asserts** that follow — the geometry comparison against
-`GEOMETRIA_014` and the `FEATURES_MIL[:len(feature_names)]` check are what stop a stale bundle
-from silently repainting the map with another model's classes.
-
-**Edit 6 — cell 6, load the table and the traces instead of deriving them.** Replace
-`VENTANAS = construir_ventanas(context_df['FECHA'])` and
-`TABLA = construir_tabla_vano_ventana(context_df, VENTANAS)` with:
-```python
-VENTANAS = _cat['ventanas']
-TABLA = pd.read_parquet(PAQUETE / 'tabla.parquet')
-```
-and replace the whole shapefile block — from `def _norm_id(...)` through `del _lineas, _utiles` —
-with:
-```python
-_geo = json.loads((PAQUETE / 'geo.json').read_text('utf-8'))
-GEO_POR_CIRCUITO, TRAFOS, SWITCHES = _geo['geo'], _geo['trafos'], _geo['switches']
-```
-**Keep everything else in the cell**: `mask_para`, `clases_para`, `CIRCUITOS`,
-`VANOS_POR_CIRCUITO`, `VENTANAS_POR_CIRCUITO` and the `DATOS_VENTANA` loop all derive from
-`TABLA` in well under a second and would only bloat the bundle. Add `import json` to cell 1 if
-it is not already there.
-
-**Edit 7 — cell 7, take the knob catalog from the bundle.** Replace the `build_knobs(...)` call
-with `KNOBS = _cat['knobs']`, keeping the `print`. `build_knobs` needs `Xdf` — the full feature
-frame — which is exactly the object edit 4 removed.
-
-After the edits, `compile()` every code cell. That catches syntax damage but **not** a name
-used before it is defined, so also assert that the strings `context_df`, `Xdf` and
-`procesar_dataset_completo` appear **nowhere** in the staged copy.
+> Here lived **seven text edits** against the old notebook, each one asserting its match
+> was unique — drop two imports, inject the bundle root, repoint the geometry, replace the
+> `procesar_dataset_completo` block, memory-map the instance matrix, load the table and
+> the traces, take the knob catalog from the bundle. Every one of them existed to turn the
+> expensive path into the cheap one inside a document that only knew the expensive one.
+>
+> The two paths are now two functions of `chec_tableros.simulador.derivacion` —
+> `derivar()` and `cargar()` — returning the same object, and the generated cell calls
+> `cargar()`. Nothing to patch, and nothing that can half-apply: a shim that silently
+> skipped one edit produced a notebook that died deep inside the app with no useful log.
 
 **`app.yaml`:**
 ```yaml
@@ -562,10 +421,10 @@ Pick the size from the measured footprint, and say why in the report:
 ```
 databricks apps create --compute-size MEDIUM --json '{
   "name": "<app-name>",
-  "description": "Simulador de riesgo por vano y explicabilidad (cuaderno 06)",
+  "description": "Simulador de riesgo por vano y explicabilidad",
   "resources": [{
     "name": "volumen-chec-simulador",
-    "description": "Volume con el paquete precalculado del cuaderno 06",
+    "description": "Volume con el paquete precalculado del simulador",
     "uc_securable": {
       "securable_type": "VOLUME",
       "securable_full_name": "workspace.default.chec-simulador",

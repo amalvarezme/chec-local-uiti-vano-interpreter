@@ -321,63 +321,22 @@ def test_board_prose_stays_neutral_spanish(sources, board, label, pattern):
 # These anchors must therefore stay verbatim in both places.
 
 COMMAND_DIR = Path(__file__).resolve().parents[1] / ".claude" / "commands"
-SHIM_ANCHORS = {
-    "03": (
-        "app-trayectorias-circuitos.md",
-        [
-            '# %pip install -q pandas numpy pyarrow "plotly>=6" geopandas scikit-learn',
-            "REPO_ROOT = find_repo_root()",
-            "ABRIR_EN_NAVEGADOR = True",
-            "display(HTML(PANEL_COMPLETO))",
-            "RUTA_PANEL = exportar_y_abrir(PANEL_COMPLETO, abrir=ABRIR_EN_NAVEGADOR)",
-        ],
-    ),
-    "04": (
-        "app-trayectorias-vanos.md",
-        [
-            '# %pip install -q pandas numpy pyarrow "plotly>=6" geopandas scikit-learn',
-            "REPO_ROOT = find_repo_root()",
-            "ABRIR_EN_NAVEGADOR = True",
-            "display(HTML(PANEL_COMPLETO))",
-            "RUTA_PANEL = exportar_y_abrir(PANEL_COMPLETO, abrir=ABRIR_EN_NAVEGADOR)",
-        ],
-    ),
-}
-
-
-@pytest.mark.parametrize("board", sorted(SHIM_ANCHORS))
-def test_databricks_command_shim_anchors_still_exist_in_the_notebook(board):
-    """The deploy command patches the notebook's CODE by content -- and that code moves.
-
-    These commands stage a Databricks copy by finding `REPO_ROOT = find_repo_root()`,
-    `ABRIR_EN_NAVEGADOR = True` and the export call inside the `.ipynb`, and rewriting
-    them. Once a board moves to `src/chec_tableros/`, none of those markers is in the
-    notebook any more: the command aborts at best, and publishes an empty board at worst.
-
-    So the assertion forks on where the board lives. While it is still a notebook, the
-    anchors must be there. Once it is migrated, the command must carry an explicit
-    out-of-service banner -- because the failure it would otherwise produce is silent,
-    and these four commands are retired wholesale in S13 rather than repaired.
-    """
-    command_name, anchors = SHIM_ANCHORS[board]
-    command = (COMMAND_DIR / command_name).read_text(encoding="utf-8")
-
-    if esta_migrado(BOARDS[board]):
-        assert "FUERA DE SERVICIO" in command, (
-            f"{command_name} sigue prometiendo desplegar un tablero cuyo codigo ya no "
-            "esta en el cuaderno; sin el aviso, publica un tablero vacio"
-        )
-        return
-
-    cuaderno = fuente_del_cuaderno(BOARDS[board])
-    for anchor in anchors:
-        assert anchor in cuaderno, (
-            f"{BOARDS[board]} no longer contains {anchor!r}, which /{command_name[:-3]} "
-            f"replaces when staging the Databricks copy"
-        )
-        assert anchor in command, (
-            f"{command_name} no longer mentions {anchor!r}; the shim would miss it"
-        )
+# Aqui vivian `SHIM_ANCHORS` y sus dos pruebas: las marcas de texto que
+# `/app-trayectorias-circuitos` y `/app-trayectorias-vanos` buscaban dentro del `.ipynb`
+# para reescribirlas al preparar la copia de Databricks -- la linea del `%pip install`,
+# `REPO_ROOT = find_repo_root()`, `ABRIR_EN_NAVEGADOR = True`, la llamada de exportacion --
+# y la regla `width: 100%` sobre el id real del div de la figura.
+#
+# Existian por una razon buena: un ancla que deja de aparecer no rompe el despliegue, lo
+# vacia. El comando corre entero y publica un tablero sin contenido.
+#
+# Los dos comandos se retiraron el 2026-08-16 y los cuadernos que parcheaban ya no
+# existen. `/app-criticidad-chec` no parchea nada: construye los cuatro paneles llamando a
+# `chec_tableros.<modulo>.construir()` y sube el resultado. No hay marca que se pueda
+# perder, que es la unica forma de que este modo de fallo desaparezca en vez de mudarse.
+#
+# Que los comandos retirados no vuelvan lo fija
+# `tests/test_despliegue_databricks_contract.py::test_los_comandos_retirados_no_volvieron`.
 
 
 @pytest.mark.parametrize("board", sorted(BOARDS))
@@ -412,30 +371,33 @@ def test_a_migrated_board_leaves_no_deploy_command_promising_the_old_path(board)
     )
 
 
-def test_el_despliegue_del_simulador_avisa_de_que_ya_no_construye_lo_que_promete():
-    """El comando del simulador se rompe de OTRA forma que los cuatro estaticos.
+def test_el_despliegue_del_simulador_construye_con_el_modulo_y_no_con_celdas():
+    """`/app-simulador-vano` se rompio de OTRA forma que los cuatro estaticos.
 
-    Aquellos parchean el `.ipynb` buscando una linea por su texto, y por eso
-    `test_a_migrated_board_leaves_no_deploy_command_promising_the_old_path` los
-    encuentra por esa marca. `/app-simulador-vano` no parchea: **ejecuta las celdas
-    1-9 del cuaderno por su INDICE** y despues reescribe a mano lo que hoy hace
-    `derivacion.congelar`. Ninguna de las dos marcas de aquel predicado aparece aqui,
-    asi que se le habria pasado entero.
+    Aquellos parcheaban el `.ipynb` buscando una linea por su texto. Este no parcheaba:
+    **ejecutaba las celdas 1-9 del cuaderno por su INDICE** y despues reescribia a mano
+    lo que hace `derivacion.congelar`. Ninguna de las marcas que delataban a los otros
+    aparecia aqui, asi que se le habria pasado entero -- y su fallo era peor por ser
+    parcial: las celdas todavia corrian, o sea que construia un paquete que PARECIA
+    bueno y lo publicaba con el nombre viejo de la geometria.
 
-    Y el fallo es peor por ser parcial: las celdas 1-9 del cuaderno todavia corren, o
-    sea que el comando construye un paquete que PARECE bueno y lo publica con el
-    nombre viejo de la geometria y con una copia del cuaderno que ya no se parece a la
-    que sirve la aplicacion.
+    Se reescribio el 2026-08-16 y ahora su paso 3 es una linea:
+    `aplicaciones/06_simulador/construir.py`, el mismo camino que la aplicacion de
+    escritorio. Esta prueba fija que no vuelva a ejecutar celdas por indice.
     """
     texto = (COMMAND_DIR / "app-simulador-vano.md").read_text(encoding="utf-8")
-    ejecuta_celdas = "nb['cells'][i]" in texto or "exec(compile(''.join(c['source'])" in texto
-    if not ejecuta_celdas:
-        pytest.skip("el comando dejo de ejecutar celdas del cuaderno; ya no aplica")
-    assert "FUERA DE SERVICIO" in texto, (
-        "/app-simulador-vano sigue prometiendo un despliegue que construye el paquete "
-        "ejecutando celdas del cuaderno 06 y sirviendo una copia parcheada de el; el "
-        "tablero vive en src/chec_tableros/simulador/ desde el 2026-08-16"
-    )
+
+    for marca in ("nb['cells'][i]", "exec(compile(''.join(c['source'])"):
+        assert marca not in texto, (
+            f"/app-simulador-vano volvio a ejecutar celdas por indice ({marca!r}); "
+            "el paquete se construye con `aplicaciones/06_simulador/construir.py`")
+
+    assert "aplicaciones/06_simulador/construir.py" in texto, (
+        "el comando dejo de nombrar el constructor que produce el paquete")
+    # La unica diferencia real entre el paquete local y el desplegado.
+    assert "con_cierre=False" in texto, (
+        "el cuaderno servido en Databricks tiene que generarse SIN el boton de cerrar: "
+        "ese boton manda SIGTERM a un pid que en el contenedor no existe")
 
 
 def test_board_04_no_longer_needs_to_carry_a_12_mb_rendered_output():
@@ -564,20 +526,6 @@ def test_board_02_exports_the_same_space_it_draws():
     assert "prep=PREPROCESO" in src
     assert "_xlin_ylin_minmax.csv" not in src, (
         "the hard-coded suffix must follow the fixed space, not a frozen guess")
-
-
-@pytest.mark.parametrize("board", sorted(SHIM_ANCHORS))
-def test_databricks_command_names_the_notebooks_own_div_variable(board):
-    """The generated document needs a `width: 100%` rule on the figure's real div id.
-
-    Hard-coding the id string instead would drift silently the day the notebook renames it,
-    leaving the board rendered into a collapsed container.
-    """
-    command_name, _ = SHIM_ANCHORS[board]
-    command = (COMMAND_DIR / command_name).read_text(encoding="utf-8")
-    variable = "DIV_FIGURA" if board == "03" else "DIV"
-    assert f"#{{{variable}}} {{{{ width: 100%; }}}}" in command
-    assert "{PANEL_COMPLETO}" in command, "the document must embed the notebook's own block"
 
 
 # --- `04`'s selection: what the board opens on, and what marks a vano -------------------

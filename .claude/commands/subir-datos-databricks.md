@@ -6,7 +6,7 @@ description: Sube/sincroniza solo la carpeta local data/ (más el archivo site/d
 > - **A. Run log** — open the bitacora *before* asking the user anything, record every numbered step as you finish it, and always close it. Its path and final state are part of the report back to the user.
 > - **B. Never abort** — a restriction gets recorded and worked around; the command runs to the end regardless. Wherever this file says "stop and report", rule B applies instead.
 > - **C. Unity Catalog target** — `workspace.default.chec-simulador` below is a default, not a requirement. Resolve it at runtime and substitute the resolved value into every path here.
-> - **D. Known restrictions** — D1–D9. If one shows up, do not re-diagnose it.
+> - **D. Known restrictions** — D1–D10. If one shows up, do not re-diagnose it.
 
 Follow this exact sequence when `/subir-datos-databricks` is invoked. It is the standalone, single-source-of-truth command for mirroring local `data/` into the Unity Catalog Volume `workspace.default.chec-simulador` — useful on its own when only the raw/data files changed and neither the source packages, the `project_flow` notebooks, the tables/dashboard, nor the reports need to be touched. `/subir-a-databricks` reuses this exact command by cross-reference instead of duplicating this logic.
 

@@ -293,9 +293,11 @@ rest of the command (the HTML still gets generated and verified).
   **The old exception for notebook 04's stored output is RETIRED (2026-08-15).** It
   had two reasons and both are gone: a script used to parse the K-Means geometry out
   of that HTML (the geometry is now tracked at `data/geometria_kmeans_014_v1.json`),
-  and `04` used to be published *from* its stored output (its code now lives in
-  `src/chec_tableros/trayectorias_vanos.py`). The notebook dropped from 7,707 to 239
-  lines. There is now **no notebook whose committed output must be preserved**.
+  and `04` used to be published *from* its stored output. There is now **no notebook
+  whose committed output must be preserved** — in fact there is only **one notebook
+  left**, `notebooks/05_mil_vano_ventana.ipynb`, and it is itself generated output of
+  `scripts/generate_notebook_10.py`. The five dashboard notebooks were deleted on
+  2026-08-15/16; their code lives in `src/chec_tableros/`.
 - `databricks fs cp -r` and `workspace import-dir` have **no exclude flag**. They
   will upload `.DS_Store`, `.gitkeep`, `.openmeteo_cache.sqlite` and
   `__pycache__/*.pyc`. Clean up afterwards with `fs rm` / `workspace delete

@@ -22,17 +22,39 @@ CMD_DIR = PROJECT_ROOT / ".claude" / "commands"
 CONTRATO = CMD_DIR / "_contrato-despliegue-databricks.md"
 BITACORA = PROJECT_ROOT / "scripts" / "bitacora_despliegue.py"
 
+# La familia entera. Eran ocho hasta agosto de 2026; cinco se retiraron a la vez
+# (`sdd/retire-base-apps-notebooks`, fase 5) y no por limpieza:
+#
+#   * `/app-vano-clima`, `/app-agrupamiento-vanos-circuitos`,
+#     `/app-trayectorias-circuitos` y `/app-trayectorias-vanos` publicaban un tablero
+#     cada uno parcheando su `.ipynb` por contenido. Ese codigo se fue a
+#     `src/chec_tableros/` y los cuadernos se borraron: los cuatro apuntaban a archivos
+#     que ya no existen. `/app-criticidad-chec` los reemplaza con UNA app de cuatro
+#     rutas, que ademas gasta un cupo en vez de cuatro contra un tope de tres.
+#   * `/subir-notebooks-databricks` subia seis cuadernos y quedo uno. Su procedimiento
+#     -- que sigue siendo correcto -- se absorbio en el paso 4 de `/subir-a-databricks`.
 FAMILIA = (
-    "app-agrupamiento-vanos-circuitos.md",
     "app-criticidad-chec.md",
     "app-simulador-vano.md",
+    "subir-a-databricks.md",
+    "subir-datos-databricks.md",
+)
+
+RETIRADOS = (
+    "app-agrupamiento-vanos-circuitos.md",
     "app-trayectorias-circuitos.md",
     "app-trayectorias-vanos.md",
     "app-vano-clima.md",
-    "subir-a-databricks.md",
-    "subir-datos-databricks.md",
     "subir-notebooks-databricks.md",
 )
+
+
+@pytest.mark.parametrize("nombre", RETIRADOS)
+def test_los_comandos_retirados_no_volvieron(nombre: str):
+    """Un comando que publica parcheando un cuaderno inexistente no falla: publica un
+    tablero vacio. Se borran en vez de dejarlos con un aviso, porque un aviso en la
+    cabecera no impide que alguien invoque el comando."""
+    assert not (CMD_DIR / nombre).exists()
 
 
 def _leer(p: Path) -> str:
@@ -58,6 +80,21 @@ def test_cada_comando_apunta_al_contrato(nombre: str):
     assert "_contrato-despliegue-databricks.md" in texto, (
         f"{nombre} debe leer el contrato compartido antes que nada"
     )
+
+
+@pytest.mark.parametrize("nombre", FAMILIA)
+def test_cada_comando_nombra_el_rango_completo_de_restricciones(nombre: str):
+    """Los cuatro decian "D1–D9" mucho despues de que el contrato llegara a D10.
+
+    No es cosmetico: la cabecera es lo unico que dice cuantas restricciones ya
+    diagnosticadas hay, y un comando que anuncia nueve invita a re-diagnosticar la
+    decima -- que es `git push` fallando por la API de locking de LFS, justo lo que
+    el paso final de `/subir-a-databricks` hace.
+    """
+    texto = _leer(CMD_DIR / nombre)
+    ultima = max(int(m) for m in re.findall(r"^### D(\d+) ", _leer(CONTRATO), re.M))
+    assert f"D1–D{ultima}" in texto, (
+        f"{nombre} anuncia un rango de restricciones que no llega a D{ultima}")
 
 
 @pytest.mark.parametrize("nombre", FAMILIA)
@@ -144,13 +181,14 @@ def test_el_contrato_exige_una_sola_bitacora_al_delegar():
 
 ORQUESTADOR = CMD_DIR / "subir-a-databricks.md"
 
-APPS_POR_PRIORIDAD = [
-    ("01", "/app-vano-clima", "vano-clima"),
-    ("02", "/app-agrupamiento-vanos-circuitos", "agrupamiento-circuitos"),
-    ("06", "/app-simulador-vano", "simulador-vano"),
-    ("03", "/app-trayectorias-circuitos", "trayectorias-circuitos"),
-    ("04", "/app-trayectorias-vanos", "trayectorias-vanos"),
+LAS_DOS_APPS = [
+    ("/app-criticidad-chec", "criticidad-chec"),
+    ("/app-simulador-vano", "simulador-vano"),
 ]
+
+# Los tres artefactos que suben, y nada mas. Es el contrato entero de este comando
+# desde agosto de 2026, y sustituye a "seis cuadernos y cinco apps".
+ARTEFACTOS = ("data/", "notebooks/05_mil_vano_ventana.ipynb", "dos aplicaciones")
 
 
 def test_el_orquestador_verifica_los_datos_antes_de_subirlos():
@@ -165,43 +203,70 @@ def test_el_orquestador_sube_el_05_como_cuaderno_y_no_como_app():
     assert "05_mil_vano_ventana" in texto
 
 
-def test_el_05_no_aparece_en_la_tabla_de_apps():
-    """El 05 es la unica excepcion deliberada: no se publica como app."""
+@pytest.mark.parametrize("artefacto", ARTEFACTOS)
+def test_el_contrato_de_tres_artefactos_esta_enunciado(artefacto: str):
+    """Lo que sube y lo que no es la primera pregunta de quien lee este comando."""
     texto = _leer(ORQUESTADOR)
-    inicio = texto.index("| Prioridad | Cuaderno |")
-    tabla = texto[inicio : texto.index("\n\n", inicio)]
-    assert "05" not in tabla, "el 05 no debe estar entre las apps"
+    assert "Tres artefactos" in texto
+    assert artefacto in texto
 
 
-@pytest.mark.parametrize("cuaderno,comando,defecto", APPS_POR_PRIORIDAD)
-def test_cada_app_esta_en_la_tabla_de_prioridad(cuaderno, comando, defecto):
+def test_el_orquestador_absorbio_la_subida_del_cuaderno():
+    """`/subir-notebooks-databricks` se retiro, y su procedimiento no podia irse con el.
+
+    Las tres cosas que aquel comando sabia y que un `workspace import` a secas pierde:
+    el limite de 10 MB de `--format JUPYTER`, que los directorios padre no se crean
+    solos, y que la copia que se sube es una COPIA.
+    """
     texto = _leer(ORQUESTADOR)
-    inicio = texto.index("| Prioridad | Cuaderno |")
+    paso4 = texto.split("## 4.")[1].split("## 5.")[0]
+
+    # Se busca la DELEGACION, no la mencion. El paso explica que antes delegaba y por
+    # que dejo de hacerlo, y esa explicacion es justo lo que hay que conservar: prohibir
+    # el nombre empujaria a borrarla. Es el mismo criterio que ya gobierna las pruebas
+    # sobre el codigo migrado.
+    assert "Delegate to `/subir-notebooks-databricks`" not in paso4, (
+        "el paso 4 sigue delegando en un comando retirado")
+    for saber in ("10 MB", "mkdirs", "COPY in the scratch directory"):
+        assert saber in texto, f"el paso 4 perdio lo que sabia sobre {saber!r}"
+
+
+@pytest.mark.parametrize("comando,defecto", LAS_DOS_APPS)
+def test_cada_app_esta_en_la_tabla(comando: str, defecto: str):
+    texto = _leer(ORQUESTADOR)
+    inicio = texto.index("| # | Comando |")
     tabla = texto[inicio : texto.index("\n\n", inicio)]
-    assert comando in tabla, f"falta {comando} en la tabla de prioridad"
+    assert comando in tabla, f"falta {comando} en la tabla de apps"
     assert defecto in tabla, f"falta el nombre por defecto {defecto}"
 
 
-def test_las_tres_primeras_apps_son_01_02_y_06():
-    """La regla del usuario: con cupo de solo 3, van 01, 02 y 06."""
+def test_ya_no_hay_tabla_de_prioridad_porque_las_dos_caben():
+    """Eran cinco apps contra un cupo de tres, y cual entraba era una decision que
+    este comando tomaba en cada corrida. Con dos, el cupo deja de decidir nada.
+
+    Se afirma la AUSENCIA porque una tabla de prioridad que sobrevive a su motivo es
+    peor que inutil: hace pensar que hay una eleccion que hacer.
+    """
     texto = _leer(ORQUESTADOR)
-    inicio = texto.index("| Prioridad | Cuaderno |")
-    tabla = texto[inicio : texto.index("\n\n", inicio)]
-    orden = [c for c, _, _ in APPS_POR_PRIORIDAD]
-    posiciones = [tabla.index(f"| {i} |") for i in range(1, 6)]
-    assert posiciones == sorted(posiciones), "la tabla debe ir en orden de prioridad"
-    corte = tabla.index("corte del cupo de 3")
-    for cuaderno in ("vano-clima", "agrupamiento-circuitos", "simulador-vano"):
-        assert tabla.index(cuaderno) < corte, f"{cuaderno} debe ir antes del corte de 3"
-    for cuaderno in ("trayectorias-circuitos", "trayectorias-vanos"):
-        assert tabla.index(cuaderno) > corte, f"{cuaderno} debe ir despues del corte de 3"
-    assert orden[:3] == ["01", "02", "06"]
+    assert "| Prioridad | Cuaderno |" not in texto
+    assert "corte del cupo de 3" not in texto
+    assert "no hace falta" in texto.lower()
 
 
 def test_el_cupo_se_descubre_no_se_asume():
+    """Sigue valiendo aunque hoy las dos quepan: el tope es del workspace, no nuestro,
+    y otro workspace puede tener uno mas bajo o apps ajenas ocupandolo."""
     texto = _leer(ORQUESTADOR)
-    assert "Do not look for a quota API" in texto
+    assert "there is no quota API" in texto
     assert "has reached the maximum limit of N apps" in texto
+
+
+def test_el_relevo_de_las_cuatro_apps_viejas_se_pregunta():
+    """Publicar la nueva no autoriza borrar las que reemplaza. Son cuatro apps que
+    alguien puede tener abiertas, y borrarlas es destructivo."""
+    texto = _leer(ORQUESTADOR)
+    assert "Las cuatro apps viejas" in texto
+    assert "Preguntar antes de borrar cada una" in texto
 
 
 def test_el_cupo_agotado_no_detiene_el_comando():

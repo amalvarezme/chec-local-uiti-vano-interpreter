@@ -310,7 +310,7 @@ def _verificar_insumos() -> None:
 # se mueva: el paquete no se reconstruye si las huellas no se movieron, y las huellas no
 # miran donde esta el repositorio. `app.py` las pone justo antes de lanzar Voila, que es
 # el unico que arranca esto.
-CELDA = """\
+_PLANTILLA_CELDA = """\
 # GENERADO por preparar.py -- no se edita a mano; se reescribe en cada construccion.
 import os
 import sys
@@ -321,19 +321,37 @@ for _ruta in (os.environ['RAIZ_SRC_06'], os.environ['APP_06']):
     if _ruta not in sys.path:
         sys.path.insert(0, _ruta)
 
-import cierre
-from chec_tableros.simulador import derivacion, tablero
+{importar_cierre}from chec_tableros.simulador import derivacion, tablero
 
 display(tablero.construir(
     derivacion.cargar(PAQUETE),
     costos=PAQUETE / 'Actividades_mantenimiento_costos_2026.xlsx',
-    encabezado=[cierre.barra()],
+    encabezado={encabezado},
 ))
 """
 
 
-def escribir_cuaderno() -> Path:
+def celda(*, con_cierre: bool = True) -> str:
+    """El codigo de la unica celda, ya resuelto. Es lo que se escribe y lo que se prueba."""
+    return _PLANTILLA_CELDA.format(
+        importar_cierre="import cierre\n" if con_cierre else "",
+        encabezado="[cierre.barra()]" if con_cierre else "[]",
+    )
+
+
+def escribir_cuaderno(*, con_cierre: bool = True) -> Path:
     """Escribe el cuaderno de una celda que Voila sirve, y comprueba que compila.
+
+    `con_cierre` decide si el tablero lleva su boton de cerrar, y las dos respuestas
+    son correctas en su sitio:
+
+      * **En local, si.** Cerrar apaga el servidor de Voila que arranco `app.py`, que
+        es un proceso de la maquina del usuario y no se apaga solo.
+      * **En Databricks, no.** Ese boton manda `SIGTERM` al pid que dejo escrito
+        `app.py`; alli no hay tal `app.py` ni tal pid, y el ciclo de vida del
+        contenedor lo gobierna la plataforma. Un boton "Cerrar" que no cierra nada --
+        o peor, que senala a un pid ajeno del contenedor -- no es un detalle
+        cosmetico.
 
     No lleva narrativa, y su ausencia es deliberada. El cuaderno 06 explicaba la
     pregunta que responde el ranking, la matematica de la busqueda del grupo Bajo y
@@ -341,7 +359,7 @@ def escribir_cuaderno() -> Path:
     en una aplicacion, donde el usuario viene a operar el tablero. Se conserva en el
     README de esta aplicacion, que es donde alguien lo va a buscar.
     """
-    codigo = CELDA.splitlines(keepends=True)
+    codigo = celda(con_cierre=con_cierre).splitlines(keepends=True)
     # Compila ANTES de escribir: un error de sintaxis aqui solo aparecia al arrancar,
     # dentro del kernel de Voila, como una pagina en blanco.
     compile("".join(codigo), str(COPIA), "exec")
