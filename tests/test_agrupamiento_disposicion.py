@@ -27,8 +27,9 @@ import json
 import re
 from pathlib import Path
 
+from ayudas_tableros import fuente_de_tablero
+
 RAIZ = Path(__file__).resolve().parents[1]
-CUADERNO = RAIZ / "notebooks" / "base_apps" / "02_uiti_vano_kmeans.ipynb"
 
 # Donde tiene que quedar cada panel. La dispersion y sus dos densidades marginales van
 # juntas a la derecha; las tres piezas pequenias, en la columna de la izquierda.
@@ -42,15 +43,21 @@ DESTINOS = {
 
 
 def _celdas() -> list[str]:
-    documento = json.loads(CUADERNO.read_text(encoding="utf-8"))
-    return ["".join(c["source"]) for c in documento["cells"]
-            if c["cell_type"] == "code"]
+    """La fuente del tablero, ya venga del cuaderno o de `src/chec_tableros/`."""
+    return [fuente_de_tablero("02_uiti_vano_kmeans", solo_codigo=True)]
 
 
 def _celda_de_la_figura() -> str:
-    """La celda que arma la figura de VANOS, que es la que se exporta."""
-    return next(f for f in _celdas() if "fig_vano = make_subplots(" in f
-                or ("make_subplots(" in f and "fig_vano" in f))
+    """El bloque que arma la figura de VANOS, que es la que se exporta.
+
+    El 02 arma DOS figuras y solo exporta la de vanos, asi que el bloque hay que
+    acotarlo: en el cuaderno lo acotaba la frontera de celda, y en el modulo no hay
+    ninguna. Se corta desde `fig_vano = make_subplots(` porque a partir de ahi todo
+    lo que sigue es de esa figura.
+    """
+    fuente = _celdas()[0]
+    i = fuente.index("fig_vano = make_subplots(")
+    return fuente[i:]
 
 
 def _sin_comentarios(fuente: str) -> str:

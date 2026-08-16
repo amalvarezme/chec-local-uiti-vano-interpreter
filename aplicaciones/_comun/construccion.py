@@ -91,7 +91,10 @@ _DATOS = (
 # La huella del cuaderno se sigue vigilando aunque ya no se ejecute: el `.ipynb` sigue
 # en el arbol hasta la rebanada que lo borra, y hasta entonces mirarlo de mas no cuesta
 # nada mientras que dejar de mirarlo tapa un cambio.
-_MIGRADOS = {"01_uiti_vano_clima.ipynb": "chec_tableros.clima"}
+_MIGRADOS = {
+    "01_uiti_vano_clima.ipynb": "chec_tableros.clima",
+    "02_uiti_vano_kmeans.ipynb": "chec_tableros.agrupamiento",
+}
 
 
 def _construir_con_modulo(modulo: str) -> Path:

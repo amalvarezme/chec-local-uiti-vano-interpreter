@@ -23,7 +23,10 @@ CUADERNOS = RAIZ / "notebooks" / "base_apps"
 MODULOS = RAIZ / "src" / "chec_tableros"
 
 # Nombre del cuaderno (sin `.ipynb`) -> modulo que ya se lo llevo.
-MIGRADOS = {"01_uiti_vano_clima": "clima"}
+MIGRADOS = {
+    "01_uiti_vano_clima": "clima",
+    "02_uiti_vano_kmeans": "agrupamiento",
+}
 
 
 def esta_migrado(nombre: str) -> bool:
