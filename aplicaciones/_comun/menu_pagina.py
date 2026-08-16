@@ -48,6 +48,9 @@ h1 { font-size: 25px; margin: 0; letter-spacing: -.01em; }
 .texto { flex: 1; min-width: 0; }
 .titulo { font-weight: 600; margin-bottom: 2px; }
 .desc { color: $TENUE; font-size: 12px; }
+/* El aviso de la emergente bloqueada. En el acento y no en el gris de `.desc`: es lo
+   unico que explica por que un tablero que dice "corriendo" no se ve en ninguna parte. */
+.aviso { color: $ACENTO_OSCURO; font-size: 12px; margin-top: 4px; }
 .punto { width: 9px; height: 9px; border-radius: 50%; flex: none;
          background: $BORDE_FUERTE; }
 .punto.corriendo { background: $ACENTO; }
@@ -83,8 +86,25 @@ var APPS = [];
 // tableros muertos. Apagar el proceso y dejar su ventana es medio apagado.
 var PESTANIAS = {};
 
+// Las aplicaciones a las que el navegador les BLOQUEO la pestania. `window.open()`
+// devuelve null cuando eso pasa, y ese null se perdia: la aplicacion arrancaba, tomaba
+// su puerto y llegaba a "corriendo", pero la unica linea que le pone la URL encima --
+// `pestania.location = app.url` -- no hacia nada, y nadie decia por que. Desde la silla
+// del usuario eso se lee como "no me deja abrir otro", que es justo el caso: la primera
+// emergente pasa por el gesto del clic y las siguientes las bloquea la politica del
+// navegador mientras siga viva una pestania que abrio un script.
+//
+// Forzar la emergente no se puede desde JavaScript. Lo que si se puede es dejar de
+// callarselo.
+var BLOQUEADAS = {};
+
 function recordarPestania(clave, pestania) {
-  if (pestania) { PESTANIAS[clave] = pestania; }
+  if (pestania) {
+    PESTANIAS[clave] = pestania;
+    delete BLOQUEADAS[clave];
+  } else {
+    BLOQUEADAS[clave] = true;
+  }
 }
 
 function cerrarPestania(clave) {
@@ -125,11 +145,25 @@ function pintar(estado) {
     texto.innerHTML = '<div class="titulo"></div><div class="desc"></div>';
     texto.querySelector('.titulo').textContent = app.titulo;
     texto.querySelector('.desc').textContent = app.descripcion + ' \\u2014 ' + linea;
+    if (BLOQUEADAS[app.clave]) {
+      // En la tarjeta y no en un `alert()`: levantar la aplicacion tarda, y el aviso
+      // llegaria minutos despues del clic encima de lo que el usuario estuviera haciendo.
+      var nota = document.createElement('div');
+      nota.className = 'aviso';
+      nota.textContent = 'El navegador bloqueo la ventana emergente: el tablero esta '
+        + 'servido, pero su pestania no se abrio. Pulsa Ver, o permite las ventanas '
+        + 'emergentes de este sitio.';
+      texto.appendChild(nota);
+    }
     t.appendChild(texto);
 
     if (app.fase === 'corriendo') {
       t.appendChild(boton('Ver', 'principal', function () {
+        // `recordarPestania` limpia la marca si la pestania abrio, y la pone si no.
+        // `Ver` cuelga de un clic directo, asi que normalmente pasa; cuando tampoco
+        // pasa, insistir con el mismo boton no lo va a arreglar y el aviso se queda.
         recordarPestania(app.clave, window.open(app.url, 'app-' + app.clave));
+        refrescar();
       }));
       t.appendChild(boton('Detener', '', function () {
         // Detener apaga ESA aplicacion, y su pestania es parte de ella. Las otras cuatro
@@ -161,6 +195,11 @@ function abrir(app) {
   // hacerlo despues de la respuesta la bloquearia el navegador y ademas perderia el
   // permiso para cerrarla desde "Volver al menu".
   var pestania = window.open('', 'app-' + app.clave);
+  if (!pestania) {
+    // La aplicacion se lanza IGUAL: esta corriendo y el boton `Ver` la alcanza. Lo que
+    // no puede pasar es que el usuario no se entere de que no habra pestania.
+    BLOQUEADAS[app.clave] = true;
+  }
   if (pestania) {
     // Una sola linea. Esta pagina puede estar minutos en pantalla la primera vez, pero
     // lo que pasa mientras tanto -- crear el entorno, construir el tablero, y en que
@@ -183,7 +222,15 @@ function seguir(clave, pestania) {
       if (!app) { return; }
       if (app.fase === 'corriendo') {
         clearInterval(reloj);
-        if (pestania && !pestania.closed) { pestania.location = app.url; }
+        if (pestania && !pestania.closed) {
+          pestania.location = app.url;
+        } else {
+          // Aqui es donde se perdia el aviso: la aplicacion llegaba a "corriendo" y no
+          // habia pestania a la que ponerle la URL. Se anota y se repinta, para que la
+          // tarjeta lo diga.
+          BLOQUEADAS[clave] = true;
+          pintar(APPS);
+        }
       } else if (app.fase === 'fallo') {
         clearInterval(reloj);
         cerrarPestania(clave);
