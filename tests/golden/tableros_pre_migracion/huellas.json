@@ -1,0 +1,204 @@
+{
+ "01_clima": {
+  "bloques_del_payload": {
+   "clases": "d78a090a79fd0602c435c7e3222d46af9c1f297af05fccbec2d61becfedd8e1a",
+   "colores": "fcf4f918c4900e9c197ca1f545fed758250f3675572aab93ff3348cdd92bc2b7",
+   "defaultCircuito": "d2088160214ba0921010418d9a6aaaf84fad1e626eaffde36935435a328c4a01",
+   "div": "acce98de15be3687b7750ffe06a6dc29a860922109c33fe1a0ee02196473e77d",
+   "ejes": "0a1addd61c7bc2915f9f5a3c18248f95b3d40173e0081d2d6632b8b7e65afff7",
+   "horasLabels": "2ae8d7e0bcd941cfbb7ad7af8e1fe2c80b0f205d3f43d346984e492ee1a6e60c",
+   "idx": "0062111b0913969f0b682c28248553f142fc20310f86295647f72f4a3177dbdb",
+   "nubeCfg": "40b62e57cb6abc90dd9ab6b152fb8605da62aaeea71efc07dcbb91481e7e26f7",
+   "nubePaleta": "0548a9b4ce91bf3b5b3a596ab7baa9042209dfec39d3de02a7317aed0742fbc9",
+   "porCircuito": "9382f294fc5ca939258d8d37590b9c2500b77e167fcee31b99bd3d8e004098f7",
+   "serieTam": "19581e27de7ced00ff1ce50b2047e7a567c76b1cbaebabe5ef03f7c3017bb5b7",
+   "serieTamActivo": "670671cd97404156226e507973f2ab8330d3022ca96e0c93bdbdb320c41adcaf",
+   "varDefaultIdx": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+   "variables": "7ed3e0c5104d4385fffddc71e5bffce756ef58fbaa38ab83bb16b84ffdbfa3fb"
+  },
+  "piezas": {
+   "datos.json": {
+    "bytes": 24238803,
+    "sha256": "3d8f03194c9aab989b2a59a0cb5217e491dabf6e9a8ddec027e76830e9e1e3dd"
+   },
+   "index.html": {
+    "bytes": 75036,
+    "sha256": "c73d5a1c90e8f3986bae3f1bd130fd9d84c9adfc320a426949792d45799c2f92"
+   },
+   "plotly.js": {
+    "bytes": 4844191,
+    "sha256": "41a395c2d558d13d3655a1ebafaa67a072c2c1ac8c269e0ee67e18c9a137ac99"
+   }
+  }
+ },
+ "02_agrupamiento_vanos": {
+  "bloques_del_payload": {
+   "circuitos": "dba21b59455971b72ce1f041088cd9bf980ad45f7425a7209ca090819b871c8a",
+   "circuitosNombres": "f3ec8c9eeee26ff3df869f7daedc2dff8e84385e49201a2b4dc93e3d13b7653f",
+   "coloresCuartil": "fcf4f918c4900e9c197ca1f545fed758250f3675572aab93ff3348cdd92bc2b7",
+   "div": "15738780397f32f59714adb8ae2e7dc3c691132c244f4d05c2a91ed83582286b",
+   "ejes": "570b38ed6ab4fc678555ba03a6fdc312ab08e2d99dd0aa44728b2657aad2895a",
+   "espacios": "1dada63455e64db8bd8964c15d0b54f6e89ac600be2d655b068a14d258ab4687",
+   "extension": "af256d5d9a96b060be4734a0a1ab9f93565e6a111d5b64a00186d17fb1b53fea",
+   "finMes": "3ab2e933ca4d04b5f9d813e41c5a2c2399cf40c439431f7f478ce1fa94a72df8",
+   "geometrias": "d704423d2a61cda6199066cdd688b519eeae58a2dcab2bbe0b6c1e8ae8cbae4c",
+   "grupos": "d78a090a79fd0602c435c7e3222d46af9c1f297af05fccbec2d61becfedd8e1a",
+   "idx": "2a3f0eac92c9be6495c416c35cfecbfd3741335e8896d9e99ac002bbfe70a6fc",
+   "meses": "e1f318e8f6bb463b2b2cea0d69f1eb49a038babf6753ef81871f2b24731712d9",
+   "nMes": "b432837ab279e12f5dcab2f9b8fc48f1249f9186f2cbf8c7aa5150e095f38fb1",
+   "rangos": "7265a94ef5035e346af5f84692be22a2f462b34e2de550fafc4dd14762cff902",
+   "resolucion": "48449a14a4ff7d79bb7a1b6f3d488eba397c36ef25634c111b49baf362511afc",
+   "titulos": "22f20c0d7db4582b2ff25d13f33f628e00513f2f30977e6af1315070114e0dd6",
+   "uMes": "e05ed754e0b71d735352e5d70af4c3ffc93977a5f9d482cc81f212e7b60f95f0",
+   "vanos": "b4061fe9bd5b793afba29b6c65e6766c5d41c02dbe0d7f9520fde72248458467"
+  },
+  "piezas": {
+   "datos.json": {
+    "bytes": 1474087,
+    "sha256": "7ce24e5ecaf91d2dc682692f4fc92e810a234070486054f290393d485de272c6"
+   },
+   "index.html": {
+    "bytes": 54095,
+    "sha256": "c6cc34b875f3d50686608bc98a4366bd77f7d10b4f4cbf4adc4bca3b8f20ab12"
+   },
+   "plotly.js": {
+    "bytes": 4844191,
+    "sha256": "41a395c2d558d13d3655a1ebafaa67a072c2c1ac8c269e0ee67e18c9a137ac99"
+   }
+  }
+ },
+ "03_trayectorias_circuitos": {
+  "bloques_del_payload": {
+   "circuitos": "f3ec8c9eeee26ff3df869f7daedc2dff8e84385e49201a2b4dc93e3d13b7653f",
+   "clases": "d78a090a79fd0602c435c7e3222d46af9c1f297af05fccbec2d61becfedd8e1a",
+   "colorSinGrupo": "e14a8c53020ed5145439abc07b27ab7e0a7a9981729e73085a6afc03941b6fdb",
+   "colores": "fcf4f918c4900e9c197ca1f545fed758250f3675572aab93ff3348cdd92bc2b7",
+   "div": "c075466001230602c4e383464162793d4a653d51b30226df6259071eca489bcc",
+   "ejes": "676fbc9db05f7e5e81f680a42e7eb5bfb12c3a3cbbd80bd5bbda3a35c606092f",
+   "espacios": "1dada63455e64db8bd8964c15d0b54f6e89ac600be2d655b068a14d258ab4687",
+   "extension": "7835ad5c33cb6671a14a7bc0cf97eb465bf1ba625598f4031203c27084b6eb04",
+   "factorPuntoActivo": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce",
+   "geo": "d18b5d6ada24de968e80be73f11cb2bc2f3462d0f8cf9c094ecd7728ac59b3a3",
+   "geometrias": "990b94508e0d854a9433fc5d47ef8724b38d13086576cb26cad60623403c0742",
+   "grupos": "d78a090a79fd0602c435c7e3222d46af9c1f297af05fccbec2d61becfedd8e1a",
+   "gruposPorEspacio": "80e0174eeb348fe6dd3acf14beb51b9e66a8f81f5c8b1e668f0d06df62bbdb79",
+   "idx": "c2dc3fce2c633f9116e00b9f69f87c758c7faa952eb40952c13a8f4a599bd399",
+   "opacidadFoco": "d0ff5974b6aa52cf562bea5921840c032a860a91a3512f7fe8f768f6bbe005f6",
+   "opacidadFondo": "221764976efe04132774d96b0253cc31434c5261737469324f222621baf34b20",
+   "porCircuito": "f5d220b9c19b6999af8837980c36b5ba732bc4d73789c9c6c8aa14e49d5fdfb0",
+   "resolucion": "69f59c273b6e669ac32a6dd5e1b2cb63333d8b004f9696447aee2d422ce63763",
+   "serieTamEventos": "19581e27de7ced00ff1ce50b2047e7a567c76b1cbaebabe5ef03f7c3017bb5b7",
+   "serieTamUiti": "4a44dc15364204a80fe80e9039455cc1608281820fe2b24f1e5233ade6af1dd5",
+   "sinSeleccion": "89e7a3c49816aa336a4e9ba7ae06f0dc4f72adc8e9a05ed065a8b00aac9d4ba9",
+   "switches": "5b4a345acf413fedec89b44851f88eff8483dcb757a5c47c5d6599521d4dd0f6",
+   "titulos": "7b86593ed6d6bdc6473b3d7dc313cf475e200fdb2e281ad680158f897b6095f4",
+   "trafos": "625b94eadd1a1fd9c8162e9982f3ed6e0da64796e7838f94b6e881773d0434b2",
+   "uitiVentana": "d67d7ff6691ed895f55f724dfada4def95eeafdf2a97389eecdaf857827e48fa",
+   "umbrales": "46839213316f541afd9ca755da1e63cf6a6fa2adc01b9b8f4f2beb94989b44f0",
+   "vanosPorGrupo": "729e5029ee0d22b0f6c03a23e25670b01b5e69c25a4a54e35e5f22c78fd3c847",
+   "ventanas": "61e679ece745961ad8268d72b695a3d86e44b6319bceb13e3349d8e33b2b3610"
+  },
+  "piezas": {
+   "datos.json": {
+    "bytes": 6051758,
+    "sha256": "1eb5b8203d937adf6b9eb9beb5aa2abf126696ec365c47d519abe7ffa2921717"
+   },
+   "index.html": {
+    "bytes": 75254,
+    "sha256": "78fbbbfb5537135a9e9e245be73a98f4803fd33c28903b8f19fc3fd4c23e0f83"
+   },
+   "plotly.js": {
+    "bytes": 4844191,
+    "sha256": "41a395c2d558d13d3655a1ebafaa67a072c2c1ac8c269e0ee67e18c9a137ac99"
+   }
+  }
+ },
+ "04_trayectorias_vanos": {
+  "bloques_del_payload": {
+   "celdas": "0242e207f42e0090390c2f990eb312dc11b0ab86062136f9b56fb658f11e9bfd",
+   "circuitos": "f3ec8c9eeee26ff3df869f7daedc2dff8e84385e49201a2b4dc93e3d13b7653f",
+   "colorSinGrupo": "e14a8c53020ed5145439abc07b27ab7e0a7a9981729e73085a6afc03941b6fdb",
+   "colores": "fcf4f918c4900e9c197ca1f545fed758250f3675572aab93ff3348cdd92bc2b7",
+   "coloresVanos": "a2d3ce69256724702c52aa8721d0e59debfffcd5aceb882e5606b75a73c7b302",
+   "div": "74da091a0c4dc22d7433a3ed20e8fdfb917a0838faad45dbcb63925b1ef4f0af",
+   "ejes": "6a5c58b625a41d20250585cff851a4932a390810a902672e32f8889ee896ee85",
+   "espacios": "1dada63455e64db8bd8964c15d0b54f6e89ac600be2d655b068a14d258ab4687",
+   "extension": "08dc9ca88b712553a2c988edb7c23312a54fd105710209f3363e0232bf2453cf",
+   "factorPuntoActivo": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce",
+   "geo": "c61de7a73a7f2be02026a4cd70cba0e6d814a0a207a21aba8f14dc40020cd034",
+   "geometrias": "c4b7f159fb23b7e882f511ecc71ae6a948d1dec64754f08375deabb76f2b6b49",
+   "grupos": "d78a090a79fd0602c435c7e3222d46af9c1f297af05fccbec2d61becfedd8e1a",
+   "idx": "5d54064dc5533ca4b955b74fa440149139616b85b087f1b5b82235028813fc75",
+   "ladoMinimoCaja": "87e8c454c985e8f3ceb65e1305c2a689d76bae0fbe9039c01a67a40267e4f784",
+   "margenCaja": "be42ff5199346425bec2d3b794fef0ec6283264342b1144d766371e2a0b668b1",
+   "maxResaltados": "624b60c58c9d8bfb6ff1886c2fd605d2adeb6ea4da576068201b6c6958ce93f4",
+   "opacidadFoco": "d0ff5974b6aa52cf562bea5921840c032a860a91a3512f7fe8f768f6bbe005f6",
+   "opacidadFondo": "221764976efe04132774d96b0253cc31434c5261737469324f222621baf34b20",
+   "perfil": "a095d9b896962876e9caf5fd1fc01cc868a7fb028c91975ed6bfdd012408936d",
+   "periodosCortos": "b984e51fd0c605111c408d903c5c6a5f39cdcdd2ff1870ca9feb1b522f16f7e1",
+   "resolucion": "48449a14a4ff7d79bb7a1b6f3d488eba397c36ef25634c111b49baf362511afc",
+   "serieTamEventos": "2c624232cdd221771294dfbb310aca000a0df6ac8b66b696d90ef06fdefb64a3",
+   "serieTamUiti": "19581e27de7ced00ff1ce50b2047e7a567c76b1cbaebabe5ef03f7c3017bb5b7",
+   "sinSeleccion": "89e7a3c49816aa336a4e9ba7ae06f0dc4f72adc8e9a05ed065a8b00aac9d4ba9",
+   "switches": "5b4a345acf413fedec89b44851f88eff8483dcb757a5c47c5d6599521d4dd0f6",
+   "titulos": "68c51d95efe222d61bfdaf960135632f92fc4e2475c508a262283232a4620b65",
+   "topPeriodo": "6d57bdac61863e421f03e2bf565fc10a2e214f49dbdba2ab4d9c3efd618e6c8b",
+   "topVentana": "e629fa6598d732768f7c726b4b621285f9c3b85303900aa912017db7617d8bdb",
+   "trafos": "625b94eadd1a1fd9c8162e9982f3ed6e0da64796e7838f94b6e881773d0434b2",
+   "vanosPorCircuito": "e837a6d8038c54fb953a73f5b8c232bb077c1ec6bb340b969a63bd8ff02dd33b",
+   "ventanas": "61e679ece745961ad8268d72b695a3d86e44b6319bceb13e3349d8e33b2b3610",
+   "ventanasDelPeriodo": "e7f6c011776e8db7cd330b54174fd76f7d0216b612387a5ffcfb81e6f0919683"
+  },
+  "piezas": {
+   "datos.json": {
+    "bytes": 6910412,
+    "sha256": "8359dfa526065176b592dc078419e2ee4d183650cba45571bcbed135e78048d2"
+   },
+   "index.html": {
+    "bytes": 153120,
+    "sha256": "54ff3ef6d3629f6b9477126821420d724eb192ed0df2613a49794a542be21585"
+   },
+   "plotly.js": {
+    "bytes": 4844191,
+    "sha256": "41a395c2d558d13d3655a1ebafaa67a072c2c1ac8c269e0ee67e18c9a137ac99"
+   }
+  }
+ },
+ "06_simulador": {
+  "bloques_del_payload": {},
+  "piezas": {
+   "Actividades_mantenimiento_costos_2026.xlsx": {
+    "bytes": 42509,
+    "sha256": "eb100728872679177e6bf249e3dbd920750dd6c9be94fa33913bbd2d22bf5e51"
+   },
+   "Variables_simular.xlsx": {
+    "bytes": 8538,
+    "sha256": "cf1bbb992606bcfb04134c286a9ef8adbf7af911363a14be0405f238cc350a77"
+   },
+   "X_inst.npy": {
+    "bytes": 92362368,
+    "sha256": "48012f3508062dc228088e8042319449e68701c692c693d448441b0a7f1c4eb5"
+   },
+   "catalogo.joblib": {
+    "bytes": 2307498,
+    "sha256": "64f09eb75157da856ed1401978210967da52ed07d44ca6acc5ece486b763bd6a"
+   },
+   "geo.json": {
+    "bytes": 3572718,
+    "sha256": "263eef51860baaa6e1de803c49f0a4d65703fb3b5c9a2b1d040f68be28d69049"
+   },
+   "geometrias_014.json": {
+    "bytes": 310,
+    "sha256": "022352cc3963c98e724cccb71bd05b09f58be6ae2dbda12dabf5b52bfd333bd6"
+   },
+   "mil_vano_ventana_v1.pt": {
+    "bytes": 691059,
+    "sha256": "309d76511fd107de228a522cce2a52299432f224472ce4760e8d1874edc50288"
+   },
+   "tabla.parquet": {
+    "bytes": 808267,
+    "sha256": "7788c466939479f43103277e04d3c0d21ea581a2553289f4ff84fe993f1915db"
+   }
+  }
+ }
+}
