@@ -147,14 +147,14 @@ la base de ese mismo vano, que es la única cantidad local y medible que hay.
 Seis carpetas en `aplicaciones/`, para macOS y Windows, **sin servidor y sin conexión**. Cinco
 tableros y un menú que los gobierna.
 
-| Carpeta | Puerto | Qué abre | Cuaderno |
+| Carpeta | Puerto | Qué abre | Módulo |
 |---|---|---|---|
 | `00_criticidad_chec/` | 8800 | **CriticidadCHEC**: el menú. Abre, vigila y cierra las otras cinco | — |
-| `01_clima/` | 8801 | Nube por vano sobre el mapa, 6 variables, serie de doble eje y 6 violines | `01_uiti_vano_clima` |
-| `02_agrupamiento_vanos/` | 8802 | Agrupamiento de vanos por UITI acumulado y número de eventos | `02_uiti_vano_kmeans` |
-| `03_trayectorias_circuitos/` | 8803 | Trayectoria y agrupamiento de circuitos con ventana deslizante | `03_uiti_vano_trayectorias_circuitos` |
-| `04_trayectorias_vanos/` | 8804 | Lo mismo un nivel más abajo: agrupamiento y evolución por vano | `04_uiti_vano_trayectorias_vano` |
-| `06_simulador/` | 8866 | Simulador de riesgo por vano: *qué pasaría si*, sobre el modelo MIL | `06_uiti_vano_explicabilidad_simulador` |
+| `01_clima/` | 8801 | Nube por vano sobre el mapa, 6 variables, serie de doble eje y 6 violines | `chec_tableros.clima` |
+| `02_agrupamiento_vanos/` | 8802 | Agrupamiento de vanos por UITI acumulado y número de eventos | `chec_tableros.agrupamiento` |
+| `03_trayectorias_circuitos/` | 8803 | Trayectoria y agrupamiento de circuitos con ventana deslizante | `chec_tableros.trayectorias_circuitos` |
+| `04_trayectorias_vanos/` | 8804 | Lo mismo un nivel más abajo: agrupamiento y evolución por vano | `chec_tableros.trayectorias_vanos` |
+| `06_simulador/` | 8866 | Simulador de riesgo por vano: *qué pasaría si*, sobre el modelo MIL | `chec_tableros.simulador` |
 
 Cada carpeta trae los mismos cuatro lanzadores: `instalar` (una vez, crea el entorno) e `iniciar`
 (cada vez). En macOS hay además un `Iniciar.app` para el doble clic — un bundle de verdad y no un
@@ -261,18 +261,22 @@ KMeans que `05` y `06` también usan; desde el 2026-08-15 esa geometría no se e
 guardada, sino que vive versionada en `data/geometria_kmeans_014_v1.json`.
 
 ```
-01_uiti_vano_clima                     panel climático (violines + nube de rezagos)
-02_uiti_vano_kmeans                    agrupamiento de circuitos y de vanos
-03_uiti_vano_trayectorias_circuitos    trayectorias de circuito por ventanas + mapa
-04_uiti_vano_trayectorias_vano         idem a nivel de vano; DUEÑO de la geometría KMeans
-   │                                   que 05 y 06 replican (verificada por sha1)
+chec_tableros.clima                    panel climático (violines + nube de rezagos)
+chec_tableros.agrupamiento             agrupamiento de circuitos y de vanos
+chec_tableros.trayectorias_circuitos   trayectorias de circuito por ventanas + mapa
+chec_tableros.trayectorias_vanos       idem a nivel de vano
+   │
+data/geometria_kmeans_014_v1.json      la geometría KMeans, versionada y verificada por sha1
    ├→ 05_mil_vano_ventana              el modelo MIL sobre bolsas vano × ventana
-   └→ 06_uiti_vano_explicabilidad_simulador   explicabilidad + simulador, kernel vivo
+   └→ chec_tableros.simulador          explicabilidad + simulador, kernel vivo
 ```
 
-La única dependencia dura es la geometría de `04`: `05` y `06` la reutilizan a través de
-`chec_local_interpreter.ventanas_015`, que la extrae del archivo de `04` y **verifica su sha1**. Si
-alguien mueve los centroides, los dos fallan ruidosamente en vez de derivar en silencio.
+La geometría KMeans **dejó de ser una dependencia entre cuadernos** el 2026-08-15. Era de `04`,
+y `05` y `06` la extraían de su salida guardada: tres artefactos atados, y un checkout limpio
+que no podía asignar clases. Ahora es `data/geometria_kmeans_014_v1.json`, versionada y
+reproducible con `scripts/exportar_geometria.py`.
+`chec_local_interpreter.ventanas_015.cargar_clases_criticidad` la lee de ahí y **verifica su
+sha1**, de modo que mover los centroides falla ruidosamente en vez de derivar en silencio.
 
 Ojo con la colisión de numeración: `02`-`06` significan cosas distintas en cada generación y ahora
 comparten carpeta. Un número suelto se refiere siempre al grupo `uiti_vano`; los MGCECDL se nombran

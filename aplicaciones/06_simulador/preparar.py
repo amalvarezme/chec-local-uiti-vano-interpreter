@@ -1,13 +1,13 @@
-"""Congela el arranque del cuaderno 06 y deja una copia que lee ese resultado.
+"""Congela el arranque del simulador y escribe el cuaderno delgado que lo sirve.
 
 ## El problema
 
-El cuaderno 06 dedica sus primeras siete celdas a DERIVAR cosas: abre el CSV de
-540 MB, lee tres shapefiles de 180 MB y carga un artefacto de bolsas de 190 MB, para
-terminar con una tabla de vano x ventana, un catalogo de controles y unas trazas de
-mapa que, juntas, son dos ordenes de magnitud mas pequenas. Medido sobre esta base:
+El arranque del simulador DERIVA: abre el CSV de 540 MB, lee tres shapefiles de
+180 MB y carga un artefacto de bolsas de 190 MB, para terminar con una tabla de vano
+x ventana, un catalogo de controles y unas trazas de mapa que, juntas, son dos
+ordenes de magnitud mas pequenas. Medido sobre esta base:
 
-| | cuaderno tal cual | con el paquete |
+| | derivando | con el paquete |
 |---|---|---|
 | bytes leidos al arrancar | 909 MB | 94,5 MB |
 | memoria residente | 2.867 MB | 579 MB |
@@ -17,19 +17,22 @@ En Databricks eso decide cuantas sesiones caben en un contenedor. En una portati
 decide otra cosa igual de concreta: si reiniciar el simulador cuesta siete segundos y
 casi tres gigas, o menos de uno y medio giga.
 
-## La forma de hacerlo sin duplicar el cuaderno
+## Una sola implementacion, sin parchear ningun cuaderno
 
-El constructor **ejecuta las celdas del propio cuaderno** y congela el resultado. No
-reimplementa la derivacion: si el cuaderno cambia como agrega o como clasifica, el
-paquete cambia con el en la siguiente construccion.
+Derivar es `chec_tableros.simulador.derivacion` y el tablero es
+`chec_tableros.simulador.tablero`. Este archivo solo hace dos cosas: llama a la
+derivacion y congela lo que devuelve, y escribe un cuaderno de una celda que lee ese
+paquete y arma el tablero.
 
-La copia que sirve la aplicacion se genera aplicando parches acotados sobre el
-cuaderno original -- nunca a mano --, y cada parche exige que su marca aparezca
-exactamente una vez. Un parche que no encuentra su sitio detiene la construccion en
-vez de producir un cuaderno que muere dentro del servidor sin dejar rastro util.
+Antes esto se conseguia PARCHEANDO el cuaderno 06 por texto: seis marcas que tenian
+que aparecer exactamente una vez, en celdas identificadas por su indice, para
+convertir el camino caro en el barato y silenciar la narrativa. Funcionaba, y el
+precio era que cambiar una linea del cuaderno rompiera la aplicacion en un archivo
+que no la mencionaba. Ahora los dos caminos son dos funciones del mismo modulo y lo
+unico que cambia entre ellos es cual se llama.
 
-`06_uiti_vano_explicabilidad_simulador.ipynb` NO se modifica. La copia vive en
-`cuaderno/` dentro de esta aplicacion.
+El cuaderno servido se genera entero desde aqui y vive en `cuaderno/` dentro de esta
+aplicacion. Es codigo generado: no se edita a mano y no se versiona.
 """
 from __future__ import annotations
 
@@ -42,7 +45,6 @@ from pathlib import Path
 AQUI = Path(__file__).resolve().parent
 sys.path.insert(0, str(AQUI.parent / "_comun"))
 
-import cuaderno as _cuaderno  # noqa: E402
 import huellas as _huellas  # noqa: E402
 import raiz as _raiz  # noqa: E402
 
@@ -55,13 +57,8 @@ if str(_raiz.RAIZ_SRC) not in sys.path:
 
 from chec_tableros.simulador import derivacion as _derivacion  # noqa: E402
 
-CUADERNO = _raiz.CUADERNOS_APPS / "06_uiti_vano_explicabilidad_simulador.ipynb"
 PAQUETE = AQUI / "paquete"
 COPIA = AQUI / "cuaderno" / "06_simulador.ipynb"
-
-# Las celdas que solo derivan. De la 8 en adelante empieza el tablero, que la copia
-# conserva intacto.
-CELDAS_DE_ARRANQUE = range(0, 8)
 
 # --- De que depende el paquete ---------------------------------------------------
 # Todo lo que el paquete congela sale de aqui, y el manifiesto guarda la huella de
@@ -69,26 +66,38 @@ CELDAS_DE_ARRANQUE = range(0, 8)
 # el cuaderno, y editar `Variables_simular.xlsx` dejaba a la aplicacion sirviendo el
 # catalogo anterior sin dar ningun error.
 #
-# Por CONTENIDO lo pequenio -- el cuaderno y los cuatro archivos que viajan dentro del
-# paquete, ~1 MB en total --, porque su sha1 cuesta microsegundos y un `git checkout`
-# mueve la fecha de todo sin cambiar nada.
+# El cuaderno 06 ya NO esta en esta lista, y su ausencia es deliberada: nada de aqui
+# lo lee. Vigilar un archivo que no es insumo cuesta una reconstruccion de 7 s cada
+# vez que alguien lo toca, y el dia que se borre -- fase 4 de este mismo cambio --
+# seria la huella de un archivo inexistente, o sea una reconstruccion en CADA
+# apertura, en silencio. El codigo que de verdad decide lo que hay dentro del paquete
+# entra por `INSUMOS_ARBOL`, que cubre `src/` entero.
+#
+# Por CONTENIDO lo pequenio -- los cuatro archivos que viajan dentro del paquete,
+# ~1 MB en total --, porque su sha1 cuesta microsegundos y un `git checkout` mueve la
+# fecha de todo sin cambiar nada.
 INSUMOS_POR_CONTENIDO = (
-    CUADERNO,
-    # Este mismo archivo. No aporta nada al paquete, pero es quien ESCRIBE la copia
-    # parcheada del cuaderno: cambiar un bloque inyectado aqui -- el silenciador, la
-    # barra de cierre -- no mueve ningun otro insumo, asi que sin esta linea la
-    # aplicacion seguiria sirviendo la copia vieja y el cambio no llegaria nunca.
-    # Mismo error que se corrigio con `Variables_simular.xlsx`, un nivel mas arriba.
+    # Este mismo archivo. No aporta nada al paquete, pero es quien ESCRIBE el cuaderno
+    # que la aplicacion sirve: cambiar la celda generada de abajo no mueve ningun otro
+    # insumo, asi que sin esta linea la aplicacion seguiria sirviendo el cuaderno viejo
+    # y el cambio no llegaria nunca. Mismo error que se corrigio con
+    # `Variables_simular.xlsx`, un nivel mas arriba.
     Path(__file__).resolve(),
     _raiz.datos("geometria_kmeans_014_v1.json"),
     _raiz.datos("models", "mil_vano_ventana_v1.pt"),
     _raiz.datos("Actividades_mantenimiento_costos_2026.xlsx"),
     _raiz.datos("Variables_simular.xlsx"),
-    # No viaja dentro del paquete, pero la celda 4 -- que si se congela -- lo lee para
-    # nombrar las variables. Se exigia para construir y no se vigilaba: editarlo dejaba
-    # a la aplicacion sirviendo los nombres anteriores, en silencio. El mismo error que
+    # No viaja dentro del paquete y se lee DOS veces, por dos caminos distintos:
+    # `derivacion.derivar()` lo pasa al pipeline -- y de ahi salen las features, que si
+    # se congelan --, y el tablero lo abre en cada apertura para nombrar las variables
+    # del panel. La primera lectura es la que obliga a vigilarlo: editarlo dejaba a la
+    # aplicacion sirviendo unas features anteriores, en silencio. El mismo error que
     # `Variables_simular.xlsx`, un archivo mas alla; ahora hay una prueba que compara
     # las dos listas para que no haya un tercero.
+    #
+    # La segunda lectura es la unica cosa que la aplicacion servida toma de `data/` y no
+    # de su paquete. Copiarlo dentro cambiaria lo que el paquete contiene -- y con ello
+    # su golden --, asi que se deja anotado y no se toca aqui.
     _raiz.datos("Variables_seleccion.xlsx"),
 )
 # Por MARCA lo pesado: 909 MB que hashear costaria segundos en CADA arranque, contra
@@ -107,15 +116,15 @@ INSUMOS_POR_MARCA = (
 )
 
 
-# El codigo que las celdas de arranque IMPORTAN, y que decide la forma de casi todo lo
-# que el paquete congela: las bolsas, la tabla vano x ventana, las trazas de mapa, el
-# catalogo de controles. Eran 67 archivos sin vigilar, medidos.
+# El codigo que la derivacion IMPORTA, y que decide la forma de casi todo lo que el
+# paquete congela: las bolsas, la tabla vano x ventana, las trazas de mapa, el catalogo
+# de controles. Eran 67 archivos sin vigilar, medidos.
 #
-# Aqui el hueco era mas estrecho que en los visores y por eso costaba mas verlo: las
-# celdas del TABLERO (11 a 16) corren vivas en el kernel en cada apertura, asi que un
-# cambio en `ventanas_015.py` que solo toque el dibujo si llega. El que no llegaba es el
-# que toca lo CONGELADO -- `construir_ventanas`, `seleccionar_bolsas`, la geometria de
-# 01.4 --, y ese se sirve viejo sin dar ningun error.
+# Aqui el hueco era mas estrecho que en los visores y por eso costaba mas verlo: el
+# TABLERO se arma vivo en el kernel en cada apertura, asi que un cambio en
+# `ventanas_015.py` que solo toque el dibujo si llega. El que no llegaba es el que toca
+# lo CONGELADO -- `construir_ventanas`, `seleccionar_bolsas`, la geometria de 01.4 --, y
+# ese se sirve viejo sin dar ningun error.
 #
 # Como UNA huella del arbol: las huellas se indexan por nombre de archivo y los dos
 # paquetes tienen su `__init__.py`. Cuesta 1,4 ms contra los 0,3 s que tarda el paquete
@@ -130,12 +139,12 @@ def huellas_actuales() -> dict:
         por_contenido=INSUMOS_POR_CONTENIDO, por_marca=INSUMOS_POR_MARCA,
         arboles=INSUMOS_ARBOL)
 
-# Por debajo de esto, alguna celda produjo un objeto vacio en silencio. `X_inst.npy`
+# Por debajo de esto, la derivacion produjo un objeto vacio en silencio. `X_inst.npy`
 # sola pesa 88 MB, asi que un paquete de 50 MB no es un paquete valido.
 MINIMO_PAQUETE_MB = 50
 
-# Nombre del kernel que la aplicacion registra en su propio entorno y que la copia del
-# cuaderno declara. Deliberadamente especifico: `python3` es el nombre que usa todo el
+# Nombre del kernel que la aplicacion registra en su propio entorno y que el cuaderno
+# generado declara. Deliberadamente especifico: `python3` es el nombre que usa todo el
 # mundo, y coincidir con el es como se termina arrancando el interprete de otro
 # proyecto.
 NOMBRE_KERNEL = "chec-simulador-vano"
@@ -191,11 +200,19 @@ def construir_paquete() -> dict:
                    # como archivo y `app.py` lo apunta por entorno.
                    _raiz.datos("Variables_simular.xlsx")):
         shutil.copy2(origen, PAQUETE / origen.name)
-    # El nombre DENTRO del paquete se conserva (`geometrias_014.json`): la copia
-    # parcheada del cuaderno (celda 3, mas abajo) todavia busca ese nombre -- migrarla
-    # es del simulador (fase 2 de `sdd/retire-base-apps-notebooks`), y hasta que eso
-    # pase el ORIGEN puede repuntarse sin tocar el DESTINO.
-    shutil.copy2(_raiz.datos("geometria_kmeans_014_v1.json"), PAQUETE / "geometrias_014.json")
+    # La geometria KMeans viaja con su NOMBRE de origen. Se llamaba `geometrias_014.json`
+    # dentro del paquete porque el parche de la celda 3 buscaba ese nombre en el
+    # cuaderno; sin parche no hay nada que lo obligue, y dos nombres para el mismo
+    # archivo eran una traduccion que alguien tenia que recordar.
+    #
+    # Hoy NADIE lo lee desde el paquete: la unica verificacion de esa geometria vive en
+    # `derivacion._geometria_verificada`, que la busca en `data/` y corre al construir.
+    # Viaja igual porque es lo que hace del paquete un artefacto completo -- se puede
+    # comprobar contra que geometria se congelo sin volver al repositorio.
+    shutil.copy2(_raiz.datos("geometria_kmeans_014_v1.json"),
+                 PAQUETE / "geometria_kmeans_014_v1.json")
+
+    _barrer_lo_que_sobra()
 
     manifiesto = {
         "construido_en": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -221,9 +238,37 @@ def construir_paquete() -> dict:
     if total_mb < MINIMO_PAQUETE_MB:
         raise SystemExit(
             f"El paquete pesa {total_mb:,.1f} MB y deberia superar {MINIMO_PAQUETE_MB} MB. "
-            "Alguna celda produjo un objeto vacio; revisa la salida de arriba."
+            "La derivacion produjo un objeto vacio; revisa la salida de arriba."
         )
     return manifiesto
+
+
+# Lo que una construccion completa deja dentro de `paquete/`, y nada mas. Cuatro los
+# escribe `derivacion.congelar` y cuatro se copian de `data/`.
+CONTENIDO_DEL_PAQUETE = frozenset({
+    "tabla.parquet", "X_inst.npy", "geo.json", "catalogo.joblib",
+    "mil_vano_ventana_v1.pt", "Actividades_mantenimiento_costos_2026.xlsx",
+    "Variables_simular.xlsx", "geometria_kmeans_014_v1.json",
+    "manifiesto.json",
+})
+
+
+def _barrer_lo_que_sobra() -> None:
+    """Borra del paquete lo que esta construccion no escribio.
+
+    `paquete/` no se vacia entre construcciones -- `X_inst.npy` son 88 MB y se
+    reescriben en su sitio --, asi que un archivo que deja de producirse se queda
+    ahi para siempre. Paso al renombrar `geometrias_014.json`: la version vieja
+    sobrevivio a la nueva construccion, entro en el manifiesto y quedo dentro del
+    paquete como si alguien todavia la leyera.
+
+    Es la misma clase de mentira que persiguen las huellas, del otro lado: alli el
+    riesgo es servir un dato viejo, aqui es CONSERVAR uno que ya no significa nada.
+    """
+    for archivo in PAQUETE.iterdir():
+        if archivo.is_file() and archivo.name not in CONTENIDO_DEL_PAQUETE:
+            print(f"      sobra de una construccion anterior, se borra: {archivo.name}")
+            archivo.unlink()
 
 
 def _verificar_insumos() -> None:
@@ -253,345 +298,74 @@ def _verificar_insumos() -> None:
 
 
 # --------------------------------------------------------------------------------
-# Parte 2: la copia del cuaderno que lee el paquete
+# Parte 2: el cuaderno de una celda que sirve la aplicacion
 # --------------------------------------------------------------------------------
-def _reemplazar(fuente: str, viejo: str, nuevo: str, *, etiqueta: str) -> str:
-    apariciones = fuente.count(viejo)
-    if apariciones != 1:
-        raise SystemExit(
-            f"[{etiqueta}] el texto a reemplazar aparece {apariciones} veces y deberia "
-            f"aparecer 1. El cuaderno 06 cambio en esa zona y esta aplicacion tiene que "
-            f"actualizarse.\n  buscaba: {viejo.strip().splitlines()[0][:90]!r}"
-        )
-    return fuente.replace(viejo, nuevo, 1)
-
-
-def _reemplazar_rango(fuente: str, desde: str, hasta: str, nuevo: str, *, etiqueta: str) -> str:
-    """Reemplaza desde la marca `desde` hasta el final de la marca `hasta`, inclusive.
-
-    Se trabaja con marcas y no con el bloque literal completo para que un comentario
-    reformateado en medio del bloque no rompa la construccion. Las dos marcas se
-    exigen unicas, que es lo que impide reemplazar el trozo equivocado.
-    """
-    for marca in (desde, hasta):
-        if fuente.count(marca) != 1:
-            raise SystemExit(
-                f"[{etiqueta}] la marca {marca.strip()[:70]!r} aparece "
-                f"{fuente.count(marca)} veces y deberia aparecer 1."
-            )
-    i = fuente.index(desde)
-    j = fuente.index(hasta, i) + len(hasta)
-    return fuente[:i] + nuevo + fuente[j:]
-
-
-# --- Silenciar la salida de las celdas en la aplicacion ---------------------------
-# El camino obvio para esto es marcar las celdas y pasarle a Voila
-# `--TagRemovePreprocessor.remove_all_outputs_tags`. NO FUNCIONA, y se comprobo: ese
-# preprocesador borra las salidas que el cuaderno YA TRAE GUARDADAS, y las de la
-# aplicacion se generan en vivo al ejecutarse. Con la marca puesta y el flag pasado, la
-# pagina seguia abriendo con "Geometria 01.4 verificada...", "70 features..." y
-# "MIL cargado...".
+# Todo lo que la aplicacion necesita saber cabe aqui: donde quedo el paquete, donde
+# vive el codigo del tablero y cual es la barra de cerrar. Antes eran seis parches de
+# texto sobre un cuaderno de 5.094 lineas, cada uno exigiendo que su marca apareciera
+# exactamente una vez.
 #
-# Asi que se silencia en el origen: `print` y `display` se sustituyen por funciones que
-# no hacen nada, y la unica llamada que SI tiene que mostrar algo -- la del tablero --
-# se reescribe para usar la referencia real, guardada antes de sustituirlas. Es
-# determinista y no depende de que ningun preprocesador se comporte de una manera.
-#
-# Es seguro porque el cuaderno no usa `widgets.Output`: se verifico que ningun `print`
-# alimenta un area de salida de la interfaz. Si algun dia se agrega uno, esto lo
-# silenciaria y habria que exceptuarlo.
-_SILENCIO = '''
-# --- Solo en la aplicacion: el tablero es lo unico que se muestra -------------------
-# Las celdas de abajo informan de lo que van cargando, y eso es util en el cuaderno y
-# ruido en la aplicacion. Se guarda la referencia real de `display` porque la celda del
-# tablero la necesita para mostrarse.
-_display_real = display
+# Las dos rutas entran por el ENTORNO y no escritas aqui dentro. Escritas serian rutas
+# absolutas de la maquina que construyo, y este cuaderno sobrevive a que el repositorio
+# se mueva: el paquete no se reconstruye si las huellas no se movieron, y las huellas no
+# miran donde esta el repositorio. `app.py` las pone justo antes de lanzar Voila, que es
+# el unico que arranca esto.
+CELDA = """\
+# GENERADO por preparar.py -- no se edita a mano; se reescribe en cada construccion.
+import os
+import sys
+from pathlib import Path
 
+PAQUETE = Path(os.environ['PAQUETE_06']).resolve()
+for _ruta in (os.environ['RAIZ_SRC_06'], os.environ['APP_06']):
+    if _ruta not in sys.path:
+        sys.path.insert(0, _ruta)
 
-def print(*_a, **_k):  # noqa: A001 -- sombrea el print del cuaderno a proposito
-    pass
+import cierre
+from chec_tableros.simulador import derivacion, tablero
 
-
-def display(*_a, **_k):  # noqa: A001
-    pass
-
-'''
-
-# --- Boton de cerrar, solo en la aplicacion --------------------------------------
-# Entra dentro del propio tablero y no como una celda aparte: asi Voila lo pinta
-# siempre junto a la figura, sin depender de en que orden queden las celdas.
-_BOTON_CERRAR = '''
-# --- Boton de cerrar (solo en la aplicacion, no en el cuaderno) ---------------------
-# Cerrar es TRES cosas y hay que hacerlas en este orden: cerrar la pestania, apagar el
-# servidor y, con el, los kernels que cuelgan de el. El orden importa porque el segundo
-# paso mata al proceso que le esta hablando al navegador: si se apaga primero, el
-# mensaje que cierra la pestania nunca sale del kernel.
-_CERRAR_AVISO = widgets.HTML('')
-# `Output` y no un `HTML`: el JavaScript de un `HTML` no se ejecuta -- ipywidgets lo
-# mete por `innerHTML`, y el navegador no corre los `<script>` que llegan asi.
-_CERRAR_SALIDA = widgets.Output()
-
-# `window.close()` no siempre esta permitido: Chrome lo acepta cuando la pestania no
-# tiene historial propio -- que es el caso de la que abre `abrir-en-terminal.command`, MEDIDO --,
-# pero lo rechaza si el usuario navego dentro de ella, y Firefox lo rechaza por defecto.
-# Por eso hay respaldo: si a los 400 ms la pestania sigue viva, se queda con el aviso de
-# cerrado a pantalla completa en vez de con el tablero muerto, que es lo que se veria si
-# esto se diera por hecho.
-_JS_CERRAR = """
-window.close();
-setTimeout(function () {
-  if (window.closed) { return; }
-  document.body.innerHTML =
-    "<div style='font:17px/1.7 system-ui;padding:80px 40px;color:#2b2b2b'>" +
-    "<b style='font-size:22px'>Simulador cerrado</b><br>" +
-    "El servidor se detuvo. Ya puedes cerrar esta pestana.<br>" +
-    "<span style='color:#666'>Para volver a abrirlo: Iniciar.app (macOS) o " +
-    "iniciar.bat (Windows).</span></div>";
-}, 400);
+display(tablero.construir(
+    derivacion.cargar(PAQUETE),
+    costos=PAQUETE / 'Actividades_mantenimiento_costos_2026.xlsx',
+    encabezado=[cierre.barra()],
+))
 """
 
 
-def _cerrar_aplicacion(_boton, _js=None):
-    import os
-    import signal
-    import threading
+def escribir_cuaderno() -> Path:
+    """Escribe el cuaderno de una celda que Voila sirve, y comprueba que compila.
 
-    from IPython.display import Javascript
+    No lleva narrativa, y su ausencia es deliberada. El cuaderno 06 explicaba la
+    pregunta que responde el ranking, la matematica de la busqueda del grupo Bajo y
+    como leer cada panel: eso es lo que lo hacia util COMO CUADERNO y lo que sobra
+    en una aplicacion, donde el usuario viene a operar el tablero. Se conserva en el
+    README de esta aplicacion, que es donde alguien lo va a buscar.
+    """
+    codigo = CELDA.splitlines(keepends=True)
+    # Compila ANTES de escribir: un error de sintaxis aqui solo aparecia al arrancar,
+    # dentro del kernel de Voila, como una pagina en blanco.
+    compile("".join(codigo), str(COPIA), "exec")
 
-    ruta = os.environ.get('ARCHIVO_PID_06')
-    # El pid se lee del archivo que escribio `app.py`, NUNCA de `os.getppid()`: el
-    # padre de un kernel es una suposicion sobre como jupyter_client lo lanzo, y
-    # mandar SIGTERM a un pid supuesto puede matar un proceso que no es la aplicacion.
-    if not ruta or not os.path.exists(ruta):
-        _CERRAR_AVISO.value = (
-            "<p style='color:#c62828;font:14px system-ui'>No se encontro el proceso de "
-            "la aplicacion. Cierrala desde la terminal con Ctrl+C.</p>")
-        return
-    with open(ruta, encoding='utf-8') as f:
-        pid = int(f.read().strip())
-    for _b in _BOTONES_CIERRE:
-        _b.disabled = True
-    _CERRAR_AVISO.value = (
-        "<div style='font:16px/1.6 system-ui;padding:8px;color:#2b2b2b'>"
-        "<b>Cerrando el simulador...</b></div>")
-    with _CERRAR_SALIDA:
-        _display_real(Javascript(_js or _JS_CERRAR))
-    # El SIGTERM va con retraso y en otro hilo. SIGTERM a Voila se lleva por delante a
-    # ESTE kernel -- comprobado: apaga los siete que llegaron a estar vivos a la vez --,
-    # asi que matarlo aqui mismo cortaria el mensaje de arriba antes de que salga por el
-    # socket y la pestania se quedaria abierta sobre un tablero sin servidor.
-    threading.Timer(0.8, os.kill, (pid, signal.SIGTERM)).start()
-
-
-_BOTONES_CIERRE = []
-
-# UN solo boton, venga de donde venga. Habia dos cuando lo lanzaba el menu -- "Volver al
-# menu" y "Cerrar" --, y hacian lo MISMO con los procesos: el mismo SIGTERM al pid que
-# dejo escrito `app.py`, que se lleva Voila y sus kernels. Solo se diferenciaban en donde
-# dejaban al usuario, y eso no daba para un segundo boton.
-#
-# Apagar las cinco aplicaciones sigue siendo cosa del "Cerrar todo" del menu y de nadie
-# mas: desde aqui se cerraba tambien lo que el usuario no estaba mirando.
-_BOTON_CERRAR_APP = widgets.Button(
-    description='Cerrar', button_style='danger',
-    tooltip='Apaga el simulador y cierra esta pestania',
-    layout=widgets.Layout(width='130px'))
-_BOTON_CERRAR_APP.on_click(_cerrar_aplicacion)
-_BOTONES_CIERRE = [_BOTON_CERRAR_APP]
-
-_BARRA_CERRAR = widgets.HBox(
-    [*_BOTONES_CIERRE, _CERRAR_AVISO, _CERRAR_SALIDA],
-    layout=widgets.Layout(width='100%', justify_content='flex-end', padding='4px 12px'))
-
-'''
-
-
-def preparar_copia() -> Path:
-    documento = json.loads(CUADERNO.read_text("utf-8"))
-    celdas = documento["cells"]
-
-    def parchear(indice: int, funcion) -> None:
-        fuente = "".join(celdas[indice]["source"])
-        celdas[indice]["source"] = funcion(fuente).splitlines(keepends=True)
-
-    # --- celda 1: imports y raiz del paquete -------------------------------------
-    def celda1(f: str) -> str:
-        # Los tres borrados de import que habia aqui -- geopandas, el pipeline del CSV y
-        # el cargador de bolsas -- ya no hacen falta: el cuaderno dejo de importarlos
-        # cuando su arranque paso a `chec_tableros.simulador.derivacion`. Un parche que
-        # quita algo que ya no esta no es inofensivo: aborta la construccion.
-        return _reemplazar(
-            f,
-            "for _path_a_agregar in (ROOT, ROOT / 'src'):\n"
-            "    if str(_path_a_agregar) not in sys.path:\n"
-            "        sys.path.insert(0, str(_path_a_agregar))\n",
-            "for _path_a_agregar in (ROOT, ROOT / 'src'):\n"
-            "    if str(_path_a_agregar) not in sys.path:\n"
-            "        sys.path.insert(0, str(_path_a_agregar))\n"
-            "\n"
-            "# Todo lo que el cuaderno derivaba al arrancar viene ya resuelto de aqui.\n"
-            "PAQUETE = Path(os.environ['PAQUETE_06']).resolve()\n"
-            + _SILENCIO,
-            etiqueta="1: PAQUETE",
-        )
-
-    # --- celda 3: geometria KMeans desde el paquete -------------------------------
-    # Era un reemplazo de RANGO mientras el cuaderno resolvia la geometria en tres
-    # lineas -- ruta por defecto, comprobar si existe, extraerla del cuaderno 04. Ahora
-    # la geometria es un artefacto versionado y el cuaderno la lee en una sola linea,
-    # asi que basta un reemplazo simple.
-    def celda3(f: str) -> str:
-        return _reemplazar(
-            f,
-            "GEOMETRIAS_PATH = ROOT / 'data' / 'geometria_kmeans_014_v1.json'",
-            "GEOMETRIAS_PATH = PAQUETE / 'geometrias_014.json'",
-            etiqueta="3: geometria",
-        )
-
-    # --- celda 4: el arranque se lee en vez de derivarse ---------------------------
-    # Aqui vivian SIETE parches repartidos por cuatro celdas: el pipeline del CSV, la
-    # matriz de bolsas, la tabla, los tres shapefiles y el catalogo de knobs, cada uno
-    # reemplazando un bloque del cuaderno por su equivalente leido del paquete. Eran
-    # siete sitios donde el cuaderno y esta aplicacion tenian que moverse a la vez.
-    #
-    # Ahora el cuaderno dispara su arranque con UNA llamada a
-    # `chec_tableros.simulador.derivacion`, y los dos caminos -- derivar y leer -- son
-    # dos funciones del mismo modulo que devuelven el mismo objeto. El parche se reduce
-    # a cambiar cual de las dos se llama.
-    def celda4(f: str) -> str:
-        f = _reemplazar(
-            f, "COSTOS_ITEMS_PATH = ROOT / 'data' / 'Actividades_mantenimiento_costos_2026.xlsx'",
-            "COSTOS_ITEMS_PATH = PAQUETE / 'Actividades_mantenimiento_costos_2026.xlsx'",
-            etiqueta="4: costos")
-        return _reemplazar_rango(
-            f,
-            "_D = derivacion.derivar(",
-            "clave_espacio=CLAVE_ESPACIO)",
-            "_D = derivacion.cargar(PAQUETE)",
-            etiqueta="4: arranque",
-        )
-
-    # --- celda 16: boton de cerrar dentro del tablero ------------------------------
-    def celda16(f: str) -> str:
-        return _reemplazar(
-            f,
-            # El tablero se arma en dos columnas (`CUERPO`), asi que la barra de cerrar
-            # va ENCIMA de las dos y no dentro de ninguna: es del tablero entero, y
-            # metida en la columna de controles se iria al 30% del ancho.
-            "APP = widgets.VBox([ESTILO, CUERPO], "
-            "layout=widgets.Layout(width='100%'))",
-            _BOTON_CERRAR
-            + "APP = widgets.VBox([_BARRA_CERRAR, ESTILO, CUERPO], "
-              "layout=widgets.Layout(width='100%'))",
-            etiqueta="16: boton de cerrar",
-        )
-
-    def celda16_mostrar(f: str) -> str:
-        # La unica salida que la aplicacion SI muestra.
-        return _reemplazar(f, "display(APP)", "_display_real(APP)",
-                           etiqueta="16: mostrar el tablero")
-
-    # De siete celdas parcheadas a cuatro. Las 5, 6 y 7 ya no se tocan: leen del objeto
-    # que devuelve la celda 4, asi que cambiar esa una vez cambia las tres.
-    for indice, funcion in ((1, celda1), (3, celda3), (4, celda4),
-                            (16, celda16), (16, celda16_mostrar)):
-        parchear(indice, funcion)
-
-    # --- La aplicacion muestra el TABLERO, nada mas --------------------------------
-    # El cuaderno explica: la pregunta que responde el ranking, la matematica de la
-    # busqueda del grupo Bajo, como leer cada panel. Eso es lo que lo hace util como
-    # cuaderno y es justo lo que sobra en una aplicacion, donde el usuario viene a
-    # operar el tablero y no a leer su derivacion. En el cuaderno del repositorio todo
-    # eso se conserva intacto; aqui se retira de dos formas:
-    #
-    #  1. Las celdas de texto se eliminan.
-    #  2. La salida de las celdas de codigo -- los `print` de la carga, la tabla de
-    #     variables, el catalogo de costos -- se silencia en el origen (ver _SILENCIO).
-    #     La entrada ya la esconde Voila por su cuenta.
-    #
-    # Se hace DESPUES de parchear, porque los parches indexan por la numeracion
-    # original del cuaderno y eliminar celdas la corre.
-    celdas[:] = [c for c in celdas if c["cell_type"] != "markdown"]
-
-    mostrar = [c for c in celdas if "_display_real(APP)" in "".join(c["source"])]
-    if len(mostrar) != 1:
-        raise SystemExit(
-            f"Se esperaba exactamente una celda que muestre el tablero, y hay "
-            f"{len(mostrar)}. El cuaderno 06 cambio."
-        )
-
-    # Salidas fuera: la copia del repositorio pesa 261 KB, y una ejecutada local
-    # reincrusta megabytes de imagenes y de estado de widgets.
-    for celda in celdas:
-        if celda["cell_type"] == "code":
-            celda["outputs"] = []
-            celda["execution_count"] = None
-
-    # Kernel PROPIO de la aplicacion, con un nombre que no puede chocar con nada.
-    # El cuaderno declara `python3`, y Voila resuelve ese nombre contra los kernels
-    # instalados EN LA MAQUINA: si el entorno de la aplicacion no registra el suyo,
-    # Voila toma cualquier otro -- se vio arrancando el interprete de otro proyecto,
-    # ya borrado, y respondiendo 500 con un FileNotFoundError sin relacion aparente.
-    # `app.py` registra este nombre dentro del entorno antes de arrancar.
-    documento["metadata"]["kernelspec"] = {
-        "display_name": NOMBRE_KERNEL_VISIBLE,
-        "language": "python",
-        "name": NOMBRE_KERNEL,
+    documento = {
+        "cells": [{"cell_type": "code", "execution_count": None, "metadata": {},
+                   "outputs": [], "source": codigo}],
+        "metadata": {
+            # Kernel PROPIO de la aplicacion, con un nombre que no puede chocar con
+            # nada. `python3` es el que usa todo el mundo, y Voila lo resuelve contra
+            # los kernels instalados EN LA MAQUINA: se vio arrancando el interprete de
+            # otro proyecto, ya borrado, y respondiendo 500 con un FileNotFoundError sin
+            # relacion aparente. `app.py` registra este nombre dentro del entorno de la
+            # aplicacion antes de arrancar.
+            "kernelspec": {"display_name": NOMBRE_KERNEL_VISIBLE,
+                           "language": "python", "name": NOMBRE_KERNEL},
+            "language_info": {"name": "python"},
+        },
+        "nbformat": 4,
+        "nbformat_minor": 5,
     }
-
-    _verificar_copia(celdas)
-
     COPIA.parent.mkdir(parents=True, exist_ok=True)
-    COPIA.write_text(json.dumps(documento, indent=1, ensure_ascii=False), encoding="utf-8")
+    COPIA.write_text(json.dumps(documento, indent=1, ensure_ascii=False),
+                     encoding="utf-8")
     return COPIA
 
 
-def _sin_comentarios(codigo: str) -> str:
-    """Devuelve el codigo sin comentarios ni literales de texto.
-
-    La comprobacion de abajo busca nombres prohibidos, y tiene que mirar lo que se
-    EJECUTA. Los parches dejan comentarios que explican por que esos objetos ya no
-    existen -- y esa explicacion es justo lo que hay que conservar --, asi que
-    compararlos como si fueran codigo convertiria la documentacion en un fallo.
-    """
-    import io
-    import tokenize
-
-    piezas = []
-    try:
-        for token in tokenize.generate_tokens(io.StringIO(codigo).readline):
-            if token.type not in (tokenize.COMMENT, tokenize.STRING):
-                piezas.append(token.string)
-    except tokenize.TokenError:
-        # Una celda que no tokeniza ya fallo en `compile`; aqui no se opina.
-        return codigo
-    return " ".join(piezas)
-
-
-def _verificar_copia(celdas: list) -> None:
-    """Comprueba que la copia compila y que no quedo ninguna referencia al camino caro."""
-    codigo_efectivo = ""
-    for indice, celda in enumerate(celdas):
-        if celda["cell_type"] != "code":
-            continue
-        codigo = "".join(celda["source"])
-        try:
-            compile(codigo, f"copia:celda{indice}", "exec")
-        except SyntaxError as exc:
-            raise SystemExit(
-                f"El parche dejo la celda {indice} sin compilar: {exc}. "
-                "Es un error de esta aplicacion, no del cuaderno."
-            ) from exc
-        codigo_efectivo += _sin_comentarios(codigo) + "\n"
-
-    # `compile` no detecta un nombre usado y nunca definido, que es exactamente el
-    # fallo que dejaria un parche incompleto. Estos cuatro son los caminos caros que
-    # los parches eliminan, asi que su ausencia es la prueba de que no quedo nada
-    # colgando: `context_df` y `Xdf` son los 1.919 MB del pipeline, y `gpd` los
-    # 326 MB de los shapefiles.
-    for prohibido in ("context_df", "Xdf", "procesar_dataset_completo", "gpd"):
-        if prohibido in codigo_efectivo:
-            raise SystemExit(
-                f"La copia del cuaderno todavia EJECUTA {prohibido!r}. El parche quedo "
-                "incompleto y la aplicacion volveria a leer el CSV o los shapefiles."
-            )

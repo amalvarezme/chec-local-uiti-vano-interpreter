@@ -46,6 +46,19 @@ TABLEROS = (
     "04_trayectorias_vanos",
 )
 
+# El unico nombre que cambio de lado en la migracion del simulador. El CONTENIDO no:
+# sha256 `022352cc...` a los dos lados, comprobado.
+#
+# La traduccion vive AQUI y no en el golden a proposito. Un golden es evidencia
+# congelada de como estaba el proyecto antes de tocarlo; reescribirlo para que cuadre
+# con lo de despues es exactamente lo que lo dejaria de servir -- ya no diria nada que
+# no dijera el codigo actual. Anotar el cambio y por que es inofensivo cuesta tres
+# lineas y conserva lo que el golden vale.
+#
+# Se llamaba `geometrias_014.json` dentro del paquete porque un parche de texto buscaba
+# ese nombre en el cuaderno 06. Sin parches, el archivo viaja con su nombre de origen.
+RENOMBRADOS_EN_EL_PAQUETE = {"geometrias_014.json": "geometria_kmeans_014_v1.json"}
+
 sys.path.insert(0, str(RAIZ / "scripts"))
 from capturar_goldenes import bloques_del_payload, huella_de_carpeta  # noqa: E402
 
@@ -118,12 +131,12 @@ def test_reconstruir_el_paquete_del_simulador_reproduce_su_huella():
     de punta a punta. Hasta ahora nada lo hacia, y por eso un import roto en la
     celda 1 del cuaderno 06 convivio con 2.310 pruebas en verde.
 
-    Corre en SUBPROCESO por una razon medida, no por gusto: la celda 1 del
-    cuaderno 06 purga de `sys.modules` todo lo que empiece por `chec_impacto`,
-    `chec_local_interpreter` o `scripts`. Ejecutarla en proceso deja a las pruebas
-    que vengan despues con modulos reimportados a media suite -- reproducido:
-    tumbaba `test_mgcecdl_graph_interpretability` y `test_report_pipeline`, dos
-    ficheros que no tienen nada que ver con el simulador y que pasan solos.
+    Corre en SUBPROCESO. El motivo original era la purga de `sys.modules` de la
+    celda 1 del cuaderno, que reimportaba `chec_impacto` y `chec_local_interpreter`
+    a media suite y tumbaba dos ficheros sin relacion -- eso ya no existe, porque
+    esto dejo de ejecutar celdas. Sigue en subproceso por lo que si sigue siendo
+    cierto: la construccion carga el CSV de 566 MB, el modelo y 199 MB de bolsas, y
+    esa memoria se devuelve al sistema al salir del proceso y no antes.
     """
     subprocess.run(
         [sys.executable, "-c",
@@ -135,6 +148,7 @@ def test_reconstruir_el_paquete_del_simulador_reproduce_su_huella():
     )
     piezas = huella_de_carpeta(RAIZ / "aplicaciones" / "06_simulador" / "paquete")
     for nombre, huella in _golden()["06_simulador"]["piezas"].items():
+        nombre = RENOMBRADOS_EN_EL_PAQUETE.get(nombre, nombre)
         assert piezas.get(nombre) == huella, f"paquete/{nombre} no reproduce"
 
 

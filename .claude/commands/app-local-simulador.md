@@ -7,10 +7,15 @@ description: Abre en el navegador el simulador local de riesgo por vano (cuadern
 > what to report, and the restrictions already met in the field — R3 and R4 are this
 > app's.
 
-Opens the local simulator built from
-`notebooks/base_apps/06_uiti_vano_explicabilidad_simulador.ipynb`: the historical map
+Opens the local simulator built from `src/chec_tableros/simulador/`: the historical map
 and the simulated-criticality one, selection of up to 15 vanos, the 26 simulable
 variables, the top variables per vano, the relevance graph and the cost of the plan.
+
+Nothing in this command changed when the board left
+`notebooks/base_apps/06_uiti_vano_explicabilidad_simulador.ipynb`, and that is the point:
+it drives `aplicaciones/06_simulador` through the shared contract and never touches the
+board's source. The two build outputs below are the same two files — only what writes
+`cuaderno/06_simulador.ipynb` changed (a generator, not a text patcher).
 
 ## This one is not a static document
 

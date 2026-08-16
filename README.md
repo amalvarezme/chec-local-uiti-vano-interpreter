@@ -545,17 +545,19 @@ La carpeta se reorganizó el 2026-08-13: `project_flow/` desapareció y su conte
 |---|---|
 | `05_mil_vano_ventana.ipynb` | Aprendizaje de instancias múltiples sobre bolsas vano × ventana |
 
-**Archivados en `notebooks/base_apps/`.** Los cinco que quedan ahí **son la fuente de las
-cinco aplicaciones de escritorio** — archivar no es dejar de construir desde ellos.
-`aplicaciones/_comun/raiz.py` los apunta con `CUADERNOS_APPS`:
+**En `src/chec_tableros/`** — los cinco tableros de las aplicaciones de escritorio. Vivían
+dentro de un `.ipynb` que cada aplicación ejecutaba con `exec()`; desde agosto de 2026 son
+módulos que se **importan**, y sus cuadernos se fueron borrando a medida que migraban. Sólo
+queda `notebooks/base_apps/06_uiti_vano_explicabilidad_simulador.ipynb`, ya sin consumidor.
 
-| Cuaderno | Qué hace | Lo consume |
+| Módulo | Qué hace | Lo consume |
 |---|---|---|
-| `01_uiti_vano_clima.ipynb` | Panel climático: violines por variable y nube de rezagos horarios, 208 circuitos | `aplicaciones/01_clima` |
-| `02_uiti_vano_kmeans.ipynb` | Agrupamiento de circuitos y de vanos por UITI acumulado y número de eventos | `aplicaciones/02_agrupamiento_vanos` |
-| `03_uiti_vano_trayectorias_circuitos.ipynb` | Trayectorias de circuito por ventanas deslizantes, con mapa geográfico | `aplicaciones/03_trayectorias_circuitos` |
-| `04_uiti_vano_trayectorias_vano.ipynb` | Lo mismo a nivel de vano; ajusta la misma geometría KMeans que 05 y 06 usan | `aplicaciones/04_trayectorias_vanos` |
-| `06_uiti_vano_explicabilidad_simulador.ipynb` | Explicabilidad y simulador de riesgo por vano (requiere kernel vivo) | `aplicaciones/06_simulador` |
+| `chec_tableros.clima` | Panel climático: violines por variable y nube de rezagos horarios, 208 circuitos | `aplicaciones/01_clima` |
+| `chec_tableros.agrupamiento` | Agrupamiento de circuitos y de vanos por UITI acumulado y número de eventos | `aplicaciones/02_agrupamiento_vanos` |
+| `chec_tableros.trayectorias_circuitos` | Trayectorias de circuito por ventanas deslizantes, con mapa geográfico | `aplicaciones/03_trayectorias_circuitos` |
+| `chec_tableros.trayectorias_vanos` | Lo mismo a nivel de vano; ajusta la misma geometría KMeans que 05 y 06 usan | `aplicaciones/04_trayectorias_vanos` |
+| `chec_tableros.simulador.derivacion` | El arranque caro del simulador: CSV, shapefiles y bolsas → un `Derivado` que se congela | `aplicaciones/06_simulador` |
+| `chec_tableros.simulador.tablero` | El tablero vivo de `ipywidgets` que ese `Derivado` alimenta (requiere kernel) | `aplicaciones/06_simulador` |
 
 La geometría KMeans **dejó de ser una dependencia entre cuadernos** el 2026-08-15. Antes `05` y
 `06` la extraían de la salida guardada de `04`, lo que ataba tres cuadernos entre sí y hacía que

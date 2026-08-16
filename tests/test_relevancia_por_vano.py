@@ -21,6 +21,7 @@ import re
 from pathlib import Path
 
 import numpy as np
+import ayudas_tableros
 import pytest
 
 from chec_impacto.models.criticality_assignment import Geometria
@@ -161,18 +162,15 @@ def test_a_climate_family_moves_all_its_lags_as_one_control():
 # OFRECIDOS -- intervencion y escenario -- no es una propiedad de `sensibilidad_minmax_por_vano`
 # sino del argumento que el cuaderno le manda, y por eso se fija aqui contra la fuente.
 
-NOTEBOOK = (
-    Path(__file__).resolve().parents[1]
-    / "notebooks"
-    / "base_apps"
-    / "06_uiti_vano_explicabilidad_simulador.ipynb"
-)
+TABLERO_06 = "06_uiti_vano_explicabilidad_simulador"
 
 
+# El codigo del tablero salio del cuaderno a `src/chec_tableros/simulador/tablero.py`
+# (fase 2 de `sdd/retire-base-apps-notebooks`). Lo que se afirma abajo son invariantes
+# del TABLERO y no del formato en que se guardaba, asi que solo cambia de donde se lee.
 @pytest.fixture(scope="module")
 def fuente() -> str:
-    celdas = json.loads(NOTEBOOK.read_text(encoding="utf-8"))["cells"]
-    return "\n".join("".join(celda["source"]) for celda in celdas)
+    return ayudas_tableros.fuente_de_tablero(TABLERO_06)
 
 
 def test_the_ranking_only_sweeps_the_variables_the_panel_offers(fuente):

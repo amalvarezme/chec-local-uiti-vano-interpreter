@@ -27,24 +27,46 @@ interface.
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 from pathlib import Path
 
+import ayudas_tableros
 import pytest
 
-NOTEBOOK = (
-    Path(__file__).resolve().parents[1]
-    / "notebooks"
-    / "base_apps"
-    / "06_uiti_vano_explicabilidad_simulador.ipynb"
-)
+TABLERO = "06_uiti_vano_explicabilidad_simulador"
+# El cuaderno 06 sigue existiendo hasta la fase 4 de este mismo cambio, y las dos
+# pruebas de formato de mas abajo son lo unico que todavia lo mira: hablan de como se
+# lee COMO DOCUMENTO en Jupyter, que es una propiedad del `.ipynb` y no del tablero.
+# Se van con el.
+CUADERNO = (Path(__file__).resolve().parents[1] / "notebooks" / "base_apps"
+            / f"{TABLERO}.ipynb")
 
 
+# El codigo del tablero salio del cuaderno a `src/chec_tableros/simulador/`
+# (fase 2 de `sdd/retire-base-apps-notebooks`). Lo que se afirma aqui son
+# invariantes del TABLERO y no del formato en que se guardaba, asi que la fuente
+# se pide al ayudante y las afirmaciones no cambian.
 @pytest.fixture(scope="module")
 def fuente() -> str:
-    celdas = json.loads(NOTEBOOK.read_text(encoding="utf-8"))["cells"]
-    return "\n".join("".join(celda["source"]) for celda in celdas)
+    return ayudas_tableros.fuente_de_tablero(TABLERO)
+
+
+def _tiene(fuente: str, fragmento: str) -> bool:
+    """`fragmento` aparece en `fuente`, mirando el codigo y no su sangria.
+
+    El tablero paso de ser celdas de nivel 0 a ser el cuerpo de `construir()`, asi
+    que cada linea gano cuatro espacios y las continuaciones de una expresion
+    multilinea ganaron los suyos. Lo que estas pruebas afirman es que una expresion
+    ESTA, no con cuanta sangria: compararla al pie de la letra convertia la
+    migracion en fallos que no dicen nada de lo que se quiere proteger.
+    """
+    aplanar = lambda texto: re.sub(r"\s+", " ", texto).strip()  # noqa: E731
+    return aplanar(fragmento) in aplanar(fuente)
+
+
+_cuerpo = ayudas_tableros.cuerpo_de_funcion
 
 
 def test_the_box_is_a_map_layer_below_the_traces_and_not_a_trace(fuente):
@@ -83,10 +105,10 @@ def test_the_base_map_has_one_box_layer_per_kmeans_group(fuente):
     # vano queda encerrado en un color y trazado en otro.
     assert "COLORES_CAJA_SELECCION = list(COLORES_GRUPOS)" in fuente
     assert "COLOR_CAJA_SIN_CLASE = COLOR_SIN_GRUPO" in fuente
-    assert (
+    assert _tiene(fuente, (
         "assert [_fig.layout.map.layers[IDX_CAPA_CLASE[_c]].color for _c in range(4)] \\\n"
         "    == [_fig.data[_i].line.color for _i in IDX['clases']] == COLORES_GRUPOS"
-    ) in fuente
+    ))
 
 
 def test_deselecting_a_vano_only_removes_its_box(fuente):
@@ -287,7 +309,7 @@ def test_the_framing_buttons_compute_the_view_at_click_time(fuente):
     # que el tablero va en dos columnas, esa columna es `COLUMNA_FIGURAS`.
     assert "_boton_encuadre('map', 'Centrar mapa base')" in fuente
     assert "_boton_encuadre('map2', 'Centrar mapa simulado')" in fuente
-    assert "COLUMNA_FIGURAS = widgets.VBox(\n    [ENCUADRES, fig]" in fuente
+    assert _tiene(fuente, "COLUMNA_FIGURAS = widgets.VBox(\n    [ENCUADRES, fig]")
 
 
 def test_the_diagnostic_starts_from_what_the_user_marked(fuente):
@@ -423,7 +445,7 @@ def test_every_code_cell_is_collapsed_but_its_output_is_not():
     tablero es una salida -- y el codigo plegado. `jupyter.source_hidden` es lo que
     leen JupyterLab, Notebook 7 y el editor de VS Code; la etiqueta `hide-input` es
     para nbconvert, que no mira `source_hidden` y sin ella exportaria todo el codigo."""
-    celdas = json.loads(NOTEBOOK.read_text(encoding="utf-8"))["cells"]
+    celdas = json.loads(CUADERNO.read_text(encoding="utf-8"))["cells"]
     codigo = [c for c in celdas if c["cell_type"] == "code"]
     assert codigo, "el cuaderno perdio sus celdas de codigo"
     for celda in codigo:
@@ -437,7 +459,7 @@ def test_every_code_cell_is_collapsed_but_its_output_is_not():
 def test_a_markdown_title_introduces_the_dashboard():
     """Sin un titulo antes del tablero, la celda que lo muestra es una mas entre catorce
     plegadas y no hay nada que diga cual ejecutar ni en que orden se usa."""
-    celdas = json.loads(NOTEBOOK.read_text(encoding="utf-8"))["cells"]
+    celdas = json.loads(CUADERNO.read_text(encoding="utf-8"))["cells"]
     i_panel = next(i for i, c in enumerate(celdas) if c["cell_type"] == "code"
                    and "El panel, ARRIBA y del ancho de la figura" in "".join(c["source"]))
     anterior = celdas[i_panel - 1]
@@ -526,7 +548,8 @@ def test_the_figure_has_six_rows_with_the_profile_and_the_graph_sharing_one(fuen
     """
     assert "rows=6, cols=4," in fuente
     # El perfil y el grafo, cada uno en media fila de la misma fila.
-    assert "[{'type': 'xy', 'colspan': 2}, None,\n            {'type': 'xy', 'colspan': 2}, None]" in fuente
+    assert _tiene(fuente, "[{'type': 'xy', 'colspan': 2}, None,\n"
+                          "            {'type': 'xy', 'colspan': 2}, None]")
     # Y la fila que el grafo tenia para el solo ya no existe.
     assert "[None, {'type': 'xy', 'colspan': 2}, None, None]" not in fuente
     # Las barras de UITI y las de costo: los vanos en las columnas 1-3 y el acumulado en
@@ -589,10 +612,8 @@ def test_el_perfil_del_circuito_solo_se_repinta_al_cambiar_de_circuito(fuente):
     colgarlo del repintado del mapa lo pagaria en cada uno de los quince vanos que se
     pueden marcar, para volver a dibujar exactamente las mismas quince barras.
     """
-    cuerpo = fuente.split("def _pintar_circuito(")[1].split("\ndef ")[0]
-    assert "_pintar_perfil_del_circuito(circuito)" in cuerpo
-    mapa = fuente.split("def _redibujar_mapa_historico(")[1].split("\ndef ")[0]
-    assert "_pintar_perfil_del_circuito" not in mapa
+    assert "_pintar_perfil_del_circuito(circuito)" in _cuerpo(fuente, "_pintar_circuito")
+    assert "_pintar_perfil_del_circuito" not in _cuerpo(fuente, "_redibujar_mapa_historico")
 
 
 def test_no_axis_of_the_dashboard_is_logarithmic(fuente):
@@ -620,7 +641,7 @@ def test_the_circular_graph_keeps_its_aspect_at_any_screen_width(fuente):
     # Fila 3 columna 3 desde que el grafo comparte fila con el perfil del circuito.
     assert "scaleanchor=_EJE_X_GRAFO, scaleratio=1.0, row=3, col=3" in fuente
     assert "range=[-RANGO_GRAFO, RANGO_GRAFO], row=3, col=3" in fuente
-    rango = re.search(r"^RANGO_GRAFO = ([\d.]+)$", fuente, re.MULTILINE)
+    rango = re.search(r"^\s*RANGO_GRAFO = ([\d.]+)$", fuente, re.MULTILINE)
     assert rango, "el rango del grafo tiene que ser una constante con su justificacion"
     # Cota inferior: por debajo de `RADIO_ROTULO_GRAFO` el rango caeria DENTRO del anillo
     # y no habria sitio ni para empezar a escribir los nombres.

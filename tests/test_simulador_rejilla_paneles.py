@@ -31,18 +31,35 @@ Consecuencias, las dos medidas en el navegador sobre la aplicacion servida:
     `[-1, 4]` y saca marcas negativas para una caida que no puede serlo.
 
 Por eso lo que se fija aqui no es "el grafo se ve bien" -- eso pide un navegador -- sino
-la propiedad que lo garantiza y que se puede leer del cuaderno: **quien escribe en una
-celda es el panel que vive en ella**.
+la propiedad que lo garantiza y que se puede leer del codigo: **quien escribe en una
+celda de la rejilla es el panel que vive en ella**.
+
+## Que cambio al salir el tablero del cuaderno
+
+Este fichero repartia las llamadas por CELDA del cuaderno, y de ahi sacaba la unica
+distincion que necesita: la figura se arma una vez, y despues cada funcion la repinta.
+Esa frontera era un accidente del formato -- nadie eligio que armar la figura fuera la
+celda 11 -- y desaparecio al juntarlo todo en `construir()`.
+
+La frontera que si existe, y que es la que se queria desde el principio, es de AMBITO:
+armar la figura son sentencias del cuerpo de `construir()`, y repintar son llamadas
+desde dentro de una funcion anidada. Se lee con `ast` en vez de con una expresion
+regular, y de paso desaparecen las dos fragilidades que arrastraba: `_sin_comentarios`
+por lineas -- que no distingue un `#` dentro de una cadena -- y `rows=(\\d+)` sobre el
+texto entero, que en un modulo de 3.600 lineas casa con el `nrows=` de otra llamada.
 """
 
 from __future__ import annotations
 
-import json
+import ast
+import functools
 import re
 from pathlib import Path
 
+import ayudas_tableros
+
 RAIZ = Path(__file__).resolve().parents[1]
-CUADERNO = RAIZ / "notebooks" / "base_apps" / "06_uiti_vano_explicabilidad_simulador.ipynb"
+TABLERO = "06_uiti_vano_explicabilidad_simulador"
 
 # Donde vive cada panel en la rejilla de `make_subplots`, y como se le reconoce en el
 # codigo. La fila del grafo y la del top son vecinas y las dos ocupan las columnas 3-4:
@@ -50,38 +67,76 @@ CUADERNO = RAIZ / "notebooks" / "base_apps" / "06_uiti_vano_explicabilidad_simul
 GRAFO = (3, 3)
 TOP_POR_VANO = (4, 3)
 
-
-def _celdas() -> list[str]:
-    cuaderno = json.loads(CUADERNO.read_text(encoding="utf-8"))
-    return ["".join(c["source"]) for c in cuaderno["cells"] if c["cell_type"] == "code"]
-
-
-def _sin_comentarios(fuente: str) -> str:
-    """El codigo, sin la prosa. Estas celdas explican por extenso en que fila esta cada
-    panel, asi que buscar `row=3` sobre el texto crudo encuentra los comentarios."""
-    return "\n".join(l for l in fuente.splitlines() if not l.lstrip().startswith("#"))
+# El ambito en el que se ARMA la figura. Todo lo demas que le escriba a un eje es un
+# repintado, y un repintado solo puede tocar su propio panel.
+ARMADO = "construir"
 
 
-def _llamadas_a_ejes() -> list[tuple[int, str, int, int]]:
-    """`(celda, llamada, fila, columna)` de cada `update_?axes` con destino explicito."""
-    patron = re.compile(
-        r"(update_[xy]axes)\((?:[^()]|\([^()]*\))*?row=(\d+),\s*col=(\d+)", re.S)
+@functools.cache
+def _arbol() -> ast.Module:
+    """UN solo arbol para todo el fichero.
+
+    `functools.cache` no es una optimizacion: `_ambito_por_nodo` indexa por `id()`
+    del nodo, asi que dos llamadas a `ast.parse` producirian dos arboles cuyos ids
+    no se cruzan nunca y el ambito saldria `<modulo>` para todo.
+    """
+    return ast.parse(ayudas_tableros.fuente_de_tablero(TABLERO))
+
+
+@functools.cache
+def _ambito_por_nodo() -> dict[int, str]:
+    """`id(nodo) -> nombre de la funcion mas interna que lo contiene`.
+
+    `ast` no lleva punteros al padre, asi que se recorre de fuera hacia dentro
+    arrastrando el nombre. Es lo que sustituye al indice de celda.
+    """
+    ambitos: dict[int, str] = {}
+
+    def bajar(nodo, ambito: str) -> None:
+        for hijo in ast.iter_child_nodes(nodo):
+            propio = hijo.name if isinstance(
+                hijo, (ast.FunctionDef, ast.AsyncFunctionDef)) else ambito
+            ambitos[id(hijo)] = propio
+            bajar(hijo, propio)
+
+    bajar(_arbol(), "<modulo>")
+    return ambitos
+
+
+def _llamadas_a_ejes() -> list[tuple[str, str, int, int]]:
+    """`(ambito, llamada, fila, columna)` de cada `update_?axes` con destino explicito."""
+    ambitos = _ambito_por_nodo()
     encontradas = []
-    for i, fuente in enumerate(_celdas()):
-        for m in patron.finditer(_sin_comentarios(fuente)):
-            encontradas.append((i, m.group(0), int(m.group(2)), int(m.group(3))))
+    for nodo in ast.walk(_arbol()):
+        if not (isinstance(nodo, ast.Call) and isinstance(nodo.func, ast.Attribute)):
+            continue
+        if nodo.func.attr not in ("update_xaxes", "update_yaxes"):
+            continue
+        destino = {k.arg: k.value for k in nodo.keywords if k.arg in ("row", "col")}
+        if not (isinstance(destino.get("row"), ast.Constant)
+                and isinstance(destino.get("col"), ast.Constant)):
+            continue
+        encontradas.append((ambitos.get(id(nodo), "<modulo>"), ast.unparse(nodo),
+                            destino["row"].value, destino["col"].value))
     return encontradas
 
 
+def _make_subplots() -> ast.Call:
+    for nodo in ast.walk(_arbol()):
+        if (isinstance(nodo, ast.Call) and isinstance(nodo.func, ast.Name)
+                and nodo.func.id == "make_subplots"):
+            return nodo
+    raise AssertionError("el tablero ya no arma su figura con `make_subplots`")
+
+
+def _llamadas_al_panel(fila: int, columna: int) -> list[str]:
+    return [llamada for _amb, llamada, f, c in _llamadas_a_ejes()
+            if (f, c) == (fila, columna)]
+
+
 def _funcion(nombre: str) -> str:
-    """El cuerpo de una funcion del cuaderno, hasta la siguiente definicion de nivel 0."""
-    for fuente in _celdas():
-        if f"def {nombre}(" not in fuente:
-            continue
-        resto = fuente.split(f"def {nombre}(", 1)[1]
-        corte = re.search(r"\n(?=(?:def |@|[A-Za-z_]+\s*=))", resto)
-        return _sin_comentarios(resto[:corte.start()] if corte else resto)
-    raise AssertionError(f"no se encontro `def {nombre}` en el cuaderno")
+    return ayudas_tableros.cuerpo_de_funcion(
+        ayudas_tableros.fuente_de_tablero(TABLERO), nombre)
 
 
 # ------------------------------------------------------- el fallo, en su sitio exacto
@@ -112,11 +167,11 @@ def test_nadie_mas_que_la_figura_le_toca_el_rango_al_grafo():
     porque `scaleanchor` estira lo que reciba hasta cuadrar los pixeles y conserva el
     CENTRO de lo que le den.
     """
-    celda_figura = next(i for i, f in enumerate(_celdas()) if "make_subplots(" in f)
-    culpables = [(celda, llamada[:90]) for celda, llamada, fila, col in _llamadas_a_ejes()
-                 if (fila, col) == GRAFO and celda != celda_figura]
+    culpables = [(ambito, llamada[:90])
+                 for ambito, llamada, fila, col in _llamadas_a_ejes()
+                 if (fila, col) == GRAFO and ambito != ARMADO]
     assert not culpables, (
-        f"estas llamadas le reescriben los ejes al grafo fuera de la celda que arma la "
+        f"estas llamadas le reescriben los ejes al grafo desde fuera del armado de la "
         f"figura: {culpables}")
 
 
@@ -126,10 +181,8 @@ def test_el_rango_del_grafo_es_simetrico():
     Un rango asimetrico no se ve como un error: se ve como un grafo que se sale por un
     lado y deja una banda blanca por el otro.
     """
-    celda = _sin_comentarios(next(f for f in _celdas() if "make_subplots(" in f))
-    rangos = re.findall(
-        r"update_([xy])axes\((?:[^()]|\([^()]*\))*?range=\[([^\]]+)\]"
-        r"(?:[^()]|\([^()]*\))*?row=3,\s*col=3", celda, re.S)
+    rangos = [m for llamada in _llamadas_al_panel(*GRAFO)
+              for m in re.findall(r"update_([xy])axes\(.*?range=\[([^\]]+)\]", llamada)]
     assert len(rangos) == 2, f"el grafo deberia fijar sus dos ejes; se hallaron {rangos}"
     limites = []
     for eje, valores in rangos:
@@ -156,12 +209,11 @@ def test_el_grafo_encoge_su_recuadro_y_no_su_rango():
     encoge el RECUADRO: el panel se vuelve cuadrado dentro de su celda y el circulo lo
     llena. Lo que sobra se queda dentro de la celda en vez de salirse a la de al lado.
     """
-    celda = _sin_comentarios(next(f for f in _celdas() if "make_subplots(" in f))
     for eje in ("x", "y"):
-        llamada = re.search(
-            rf"update_{eje}axes\((?:[^()]|\([^()]*\))*?row=3,\s*col=3", celda, re.S)
+        llamada = next((l for l in _llamadas_al_panel(*GRAFO)
+                        if f"update_{eje}axes(" in l), None)
         assert llamada, f"el grafo no configura su eje {eje}"
-        assert "constrain='domain'" in llamada.group(0), (
+        assert "constrain='domain'" in llamada, (
             f"el eje {eje} del grafo no lleva `constrain='domain'`: plotly le estirara "
             "el rango y el circulo se quedara pequenio dentro de su panel")
 
@@ -172,10 +224,13 @@ def test_cada_celda_de_la_rejilla_existe_en_las_especificaciones():
     Plotly no avisa: `update_yaxes(row=9, col=9)` no encuentra nada y no hace nada, y el
     panel se queda sin configurar sin que nadie lo diga.
     """
-    celda = next(f for f in _celdas() if "make_subplots(" in f)
-    filas = int(re.search(r"rows=(\d+)", celda).group(1))
-    columnas = int(re.search(r"cols=(\d+)", celda).group(1))
-    for numero, llamada, fila, col in _llamadas_a_ejes():
+    # De los argumentos de `make_subplots`, no de una busqueda por texto: en un modulo
+    # de 3.600 lineas, `rows=(\d+)` casa tambien con el `nrows=` de cualquier otra
+    # llamada, y una rejilla inventada deja pasar todo lo demas.
+    rejilla = {k.arg: k.value.value for k in _make_subplots().keywords
+               if k.arg in ("rows", "cols") and isinstance(k.value, ast.Constant)}
+    filas, columnas = rejilla["rows"], rejilla["cols"]
+    for ambito, llamada, fila, col in _llamadas_a_ejes():
         assert 1 <= fila <= filas and 1 <= col <= columnas, (
-            f"celda {numero}: `{llamada[:80]}` apunta fuera de la rejilla "
+            f"{ambito}: `{llamada[:80]}` apunta fuera de la rejilla "
             f"{filas}x{columnas}")

@@ -28,6 +28,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
+import ayudas_tableros
 import pytest
 
 from chec_local_interpreter.costos_items import (
@@ -268,18 +269,15 @@ def test_an_empty_selection_costs_nothing():
 import json  # noqa: E402
 import re  # noqa: E402
 
-NOTEBOOK = (
-    Path(__file__).resolve().parents[1]
-    / "notebooks"
-    / "base_apps"
-    / "06_uiti_vano_explicabilidad_simulador.ipynb"
-)
+TABLERO_06 = "06_uiti_vano_explicabilidad_simulador"
 
 
+# El codigo del tablero salio del cuaderno a `src/chec_tableros/simulador/tablero.py`
+# (fase 2 de `sdd/retire-base-apps-notebooks`). Lo que se afirma abajo son invariantes
+# del TABLERO y no del formato en que se guardaba, asi que solo cambia de donde se lee.
 @pytest.fixture(scope="module")
 def fuente() -> str:
-    celdas = json.loads(NOTEBOOK.read_text(encoding="utf-8"))["cells"]
-    return "\n".join("".join(celda["source"]) for celda in celdas)
+    return ayudas_tableros.fuente_de_tablero(TABLERO_06)
 
 
 def test_the_cost_is_computed_inside_the_simulate_job(fuente):

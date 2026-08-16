@@ -135,26 +135,42 @@ def test_cada_visor_declara_una_fuente_que_existe(app: Path):
     contra `CUADERNOS_APPS`, que costaba nada y evitaba descubrir un cuaderno
     renombrado despues de crear el entorno virtual y esperar la construccion.
 
-    Los cuatro visores estaticos ya no nombran ningun cuaderno: nombran su modulo
-    de `src/chec_tableros/`, que es donde se movio su codigo. El simulador todavia
-    nombra dos `.ipynb` -- su fuente y la copia parcheada que el mismo escribe --,
-    asi que la comprobacion se bifurca por lo que la aplicacion declara, no por lo
-    que se supone que deberia declarar.
+    Las cinco aplicaciones ya nombran su modulo de `src/chec_tableros/` y ningun
+    `.ipynb`. El simulador lo nombra desde DENTRO de la celda que genera para Voila
+    -- es una cadena de Python dentro de otro archivo de Python --, y por eso se
+    busca por texto y no importando: lo que se quiere saber es que la aplicacion
+    apunta a un modulo que existe, no que este importable desde aqui.
+
+    La rama de `.ipynb` se conserva por lo que cuesta: cero mientras no queden
+    cuadernos, y un mensaje claro el dia que alguien vuelva a apuntar a uno.
     """
     fuentes = set()
     for py in sorted(app.glob("*.py")):
         texto = py.read_text(encoding="utf-8")
         fuentes |= {n for n in re.findall(r"['\"]([\w.]+\.ipynb)['\"]", texto)
                     if (CUADERNOS / n).is_file()}
-        fuentes |= {f"chec_tableros.{m}" for m in
-                    re.findall(r"from chec_tableros import (\w+)", texto)
-                    if (MODULOS_TABLEROS / f"{m}.py").is_file()}
+        # `from chec_tableros import clima` y `from chec_tableros.simulador import
+        # tablero` son la misma declaracion escrita a dos profundidades. El paquete
+        # del simulador esta anidado porque tiene dos piezas con ciclos de vida
+        # distintos -- derivar y dibujar --, no porque sea otra clase de tablero.
+        for paquete, nombres in re.findall(
+                r"from chec_tableros(\.[\w.]+)? import ([\w, ]+)", texto):
+            for nombre in (n.strip() for n in nombres.split(",")):
+                ruta = MODULOS_TABLEROS.joinpath(*paquete.lstrip(".").split(".")) \
+                    if paquete else MODULOS_TABLEROS
+                if (ruta / f"{nombre}.py").is_file():
+                    fuentes.add(f"chec_tableros{paquete}.{nombre}")
         fuentes |= {m for m in re.findall(r"['\"](chec_tableros\.\w+)['\"]", texto)
                     if (MODULOS_TABLEROS / f"{m.split('.')[-1]}.py").is_file()}
 
-    assert len(fuentes) == 1, (
-        f"{app.name} resuelve {sorted(fuentes) or 'ninguna fuente'}. Una aplicacion "
-        "sirve exactamente un tablero, y su fuente tiene que existir.")
+    # El simulador resuelve DOS: `derivacion` y `tablero`. No es una excepcion que
+    # se le concede -- son sus dos mitades, y la aplicacion las nombra a las dos
+    # porque llama a una y le pasa el resultado a la otra.
+    esperadas = 2 if app.name == "06_simulador" else 1
+    assert len(fuentes) == esperadas, (
+        f"{app.name} resuelve {sorted(fuentes) or 'ninguna fuente'} y deberia "
+        f"resolver {esperadas}. Una aplicacion sirve un tablero, y su fuente tiene "
+        "que existir.")
 
 
 @pytest.mark.parametrize("app", TODAS, ids=_ids(TODAS))
@@ -331,48 +347,30 @@ class _Trasto:
         pass
 
 
-def _ejecutar_bloque_de_cierre(menu: str) -> dict:
-    """Ejecuta el bloque que el simulador inyecta, con widgets de mentira.
-
-    Es la unica manera barata de probar esta rama: la de verdad exige Voila, un kernel
-    y PyTorch cargado. Lo que se decide aqui -- que botones existen -- se decide al
-    ejecutar el bloque, antes de que nada de eso importe.
-    """
-    import types
-
-    preparar = _cargar_preparar()
-    widgets = types.SimpleNamespace(
-        HTML=_Trasto, Output=_Trasto, Button=_Trasto, HBox=_Trasto, Layout=_Trasto)
-    espacio = {"widgets": widgets, "_JS_CERRAR": "window.close();"}
-    entorno_previo = os.environ.get("MENU_CRITICIDAD")
-    if menu:
-        os.environ["MENU_CRITICIDAD"] = menu
-    else:
-        os.environ.pop("MENU_CRITICIDAD", None)
-    try:
-        exec(compile(preparar._BOTON_CERRAR, "cierre", "exec"), espacio)  # noqa: S102
-    finally:
-        if entorno_previo is None:
-            os.environ.pop("MENU_CRITICIDAD", None)
-        else:
-            os.environ["MENU_CRITICIDAD"] = entorno_previo
-    return espacio
-
-
-def _cargar_preparar():
+def _cargar_del_simulador(modulo: str):
     sys.path.insert(0, str(APPS / "_comun"))
     sys.path.insert(0, str(APPS / "06_simulador"))
     try:
-        return __import__("preparar")
+        return __import__(modulo)
     finally:
         sys.path.pop(0)
         sys.path.pop(0)
 
 
-def test_el_simulador_sin_menu_trae_solo_su_boton_de_cerrar():
-    espacio = _ejecutar_bloque_de_cierre("")
-    botones = [b.kwargs.get("description") for b in espacio["_BOTONES_CIERRE"]]
-    assert botones == ["Cerrar"]
+# La barra de cierre era una cadena de 85 lineas dentro de `preparar.py`, inyectada
+# en la celda 16 del cuaderno por un reemplazo de texto, y estas pruebas la
+# ejecutaban con `exec` y widgets de mentira -- la unica forma barata de mirar una
+# cadena. Ahora es `aplicaciones/06_simulador/cierre.py`, un modulo de verdad: se
+# importa, se llama y se le miran los widgets que devuelve. Lo que se afirma no
+# cambio; lo que cambio es que ya no hace falta simular ipywidgets para preguntarlo.
+def _barra():
+    return _cargar_del_simulador("cierre").barra()
+
+
+def _botones(barra) -> list[str]:
+    # Por la CLASE y no por tener `description`: en ipywidgets casi todo lo tiene, y
+    # el `HTML` del aviso entraba en la lista como un boton sin nombre.
+    return [h.description for h in barra.children if type(h).__name__ == "Button"]
 
 
 def test_el_simulador_lleva_un_solo_boton_venga_de_donde_venga():
@@ -380,12 +378,10 @@ def test_el_simulador_lleva_un_solo_boton_venga_de_donde_venga():
 
     El simulador no lo sirve `servidor.py` sino Voila, asi que no recibe la barra
     inyectada: sus botones son widgets. Antes la decision se tomaba dentro del kernel
-    leyendo la variable de entorno del menu; ahora no hay nada que decidir.
+    leyendo la variable de entorno del menu; ahora no hay nada que decidir, y por eso
+    `barra()` no recibe ningun parametro que hable del menu.
     """
-    for menu in ("http://127.0.0.1:8800/", ""):
-        espacio = _ejecutar_bloque_de_cierre(menu)
-        botones = [b.kwargs.get("description") for b in espacio["_BOTONES_CIERRE"]]
-        assert botones == ["Cerrar"], f"con menu={menu!r} salen {botones}"
+    assert _botones(_barra()) == ["Cerrar"]
 
 
 def test_el_simulador_no_puede_apagar_a_las_demas_aplicaciones():
@@ -393,35 +389,40 @@ def test_el_simulador_no_puede_apagar_a_las_demas_aplicaciones():
     cerrar el simulador se llevaba por delante los otros cuatro tableros y el menu. El
     apagado general es del menu y de nadie mas; aqui solo se manda `SIGTERM` al pid que
     dejo escrito ESTA aplicacion."""
-    codigo = (APPS / "06_simulador" / "preparar.py").read_text(encoding="utf-8")
+    codigo = (APPS / "06_simulador" / "cierre.py").read_text(encoding="utf-8")
     assert "apagar-todo" not in codigo, "el simulador sigue pudiendo apagarlo todo"
     assert "sendBeacon" not in codigo
-    assert "_JS_CERRAR_TODO" not in codigo
-
-    for menu in ("", "http://127.0.0.1:8800/"):
-        espacio = _ejecutar_bloque_de_cierre(menu)
-        descripciones = [b.kwargs.get("description") for b in espacio["_BOTONES_CIERRE"]]
-        assert "Cerrar todo" not in descripciones
+    assert "signal.SIGTERM" in codigo, "el cierre dejo de senalar al proceso propio"
+    assert "Cerrar todo" not in _botones(_barra())
 
 
 def test_la_barra_del_simulador_lleva_siempre_el_aviso_y_la_salida():
-    """`_CERRAR_SALIDA` es un `Output` y no un `HTML` por una razon que se pierde facil:
+    """El `Output` es un `Output` y no un `HTML` por una razon que se pierde facil:
     el JavaScript de un `HTML` no se ejecuta -- ipywidgets lo mete por `innerHTML` --,
-    asi que sin el `Output` ningun boton podria cerrar la pestania."""
-    for menu in ("", "http://127.0.0.1:8800/"):
-        espacio = _ejecutar_bloque_de_cierre(menu)
-        hijos = espacio["_BARRA_CERRAR"].hijos
-        assert espacio["_CERRAR_AVISO"] in hijos
-        assert espacio["_CERRAR_SALIDA"] in hijos
+    asi que sin el ningun boton podria cerrar la pestania."""
+    clases = [type(h).__name__ for h in _barra().children]
+    assert "Output" in clases, (
+        "la barra perdio su `Output`: sin el, el JavaScript que cierra la pestania "
+        "nunca se ejecuta y el usuario se queda con un tablero sin servidor")
+    assert "HTML" in clases, "la barra perdio el aviso de 'Cerrando el simulador...'"
 
 
 def test_preparar_se_vigila_a_si_mismo_como_insumo():
-    """`preparar.py` ESCRIBE la copia parcheada del cuaderno. Sin el en la lista de
-    insumos, cambiar un bloque inyectado -- la barra de cierre, el silenciador -- no
-    mueve ninguna otra huella, y la aplicacion seguiria sirviendo la copia vieja sin
-    dar ningun error. Es el mismo fallo que se corrigio con `Variables_simular.xlsx`."""
-    preparar = _cargar_preparar()
+    """`preparar.py` ESCRIBE el cuaderno que la aplicacion sirve. Sin el en la lista
+    de insumos, cambiar la celda generada no mueve ninguna otra huella, y la
+    aplicacion seguiria sirviendo el cuaderno viejo sin dar ningun error. Es el mismo
+    fallo que se corrigio con `Variables_simular.xlsx`."""
+    preparar = _cargar_del_simulador("preparar")
     assert any(p.name == "preparar.py" for p in preparar.INSUMOS_POR_CONTENIDO)
+
+
+def test_el_cuaderno_06_ya_no_es_insumo_de_su_aplicacion():
+    """Vigilar un archivo que nadie lee cuesta reconstrucciones de 7 s por nada, y el
+    dia que se borre -- fase 4 de este cambio -- seria la huella de un archivo
+    inexistente: una reconstruccion en CADA apertura, en silencio. Es exactamente el
+    fallo que se corrigio en `construccion.py` al borrar los cuadernos 01-04."""
+    preparar = _cargar_del_simulador("preparar")
+    assert not [p for p in preparar.INSUMOS_POR_CONTENIDO if p.suffix == ".ipynb"]
 
 
 def test_inyectar_el_boton_falla_si_no_encuentra_donde_ponerlo():

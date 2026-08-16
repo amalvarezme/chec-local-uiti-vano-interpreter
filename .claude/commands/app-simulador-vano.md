@@ -2,6 +2,28 @@
 description: Publica el simulador de riesgo por vano del cuaderno 06 como una Databricks App en una URL fija, servido con Voila sobre un kernel vivo. Precalcula fuera de la app todo lo que hoy se deriva del CSV de 540 MB, de modo que el arranque baje de 2.867 MB a 579 MB y de 909 MB leidos a 94,5 MB. Detecta y repara por su cuenta lo que falte. Pregunta solo el nombre de la app y la URL del workspace destino.
 ---
 
+> **FUERA DE SERVICIO desde el 2026-08-16.** El codigo del simulador ya no vive en
+> `notebooks/base_apps/06_uiti_vano_explicabilidad_simulador.ipynb`: la derivacion esta en
+> `src/chec_tableros/simulador/derivacion.py` y el tablero en `.../tablero.py`. Este comando
+> sigue construyendo el paquete **ejecutando las celdas 1-9 del cuaderno por su indice** y
+> sirviendo una copia parcheada de ese mismo cuaderno, y las dos cosas dejaron de ser el
+> camino real. Concretamente falla en tres sitios:
+>
+> 1. **Duplica `derivacion.congelar`** a mano (paso 3). Hoy son dos lineas --
+>    `derivacion.derivar()` y `derivacion.congelar(d, salida)` -- y cualquier cambio en la
+>    derivacion llega al despliegue solo si alguien se acuerda de copiarlo aqui.
+> 2. **Escribe `geometrias_014.json`** dentro del paquete. Ese nombre existia porque un
+>    parche de texto lo buscaba en el cuaderno; el paquete real ya lleva
+>    `geometria_kmeans_014_v1.json`, y la app arrancaria contra un manifiesto que no cuadra.
+> 3. **Sirve una copia "shimeada" del cuaderno** (paso 5). No hay shim: `preparar.py` genera
+>    un cuaderno de UNA celda que importa el modulo.
+>
+> No se repara aqui porque el destino de esta familia es la app consolidada
+> `criticidad-chec` (fase 5 de `sdd/retire-base-apps-notebooks`), que la reescribe entera
+> alrededor del contrato de tres artefactos. Se marca en vez de borrarse porque **lo que
+> este archivo sabe del despliegue sigue valiendo**: por que hace falta un cluster clasico y
+> no Serverless, las nueve restricciones conocidas y el dimensionado de los kernels.
+>
 > **Read `.claude/commands/_contrato-despliegue-databricks.md` before anything else.** It is mandatory and it overrides what follows:
 > - **A. Run log** — open the bitacora *before* asking the user anything, record every numbered step as you finish it, and always close it. Its path and final state are part of the report back to the user.
 > - **B. Never abort** — a restriction gets recorded and worked around; the command runs to the end regardless. Wherever this file says "stop and report", rule B applies instead.

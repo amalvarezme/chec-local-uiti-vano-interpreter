@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from ayudas_tableros import MIGRADOS
+from ayudas_tableros import ESTATICOS, MIGRADOS, SIMULADOR
 
 RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ / "aplicaciones" / "_comun"))
@@ -42,25 +42,53 @@ def test_cada_visor_declara_el_mismo_modulo_que_leen_las_pruebas():
         texto = (app / "construir.py").read_text(encoding="utf-8")
         declarados |= set(re.findall(r'TABLERO = "chec_tableros\.(\w+)"', texto))
 
-    assert declarados == set(MIGRADOS.values()), (
+    assert declarados == set(ESTATICOS.values()), (
         f"las aplicaciones declaran {sorted(declarados)} y las pruebas leen "
-        f"{sorted(MIGRADOS.values())}"
+        f"{sorted(ESTATICOS.values())}"
     )
 
 
-@pytest.mark.parametrize("cuaderno, modulo", sorted(MIGRADOS.items()))
+@pytest.mark.parametrize("cuaderno, modulo", sorted(ESTATICOS.items()))
 def test_el_modulo_del_tablero_existe_y_expone_construir(cuaderno, modulo):
     m = importlib.import_module(f"chec_tableros.{modulo}")
     assert callable(m.construir), f"{modulo} no expone construir()"
 
 
-@pytest.mark.parametrize("cuaderno", sorted(MIGRADOS))
+def test_el_simulador_expone_sus_dos_mitades():
+    """El simulador tambien esta migrado, y su contrato es OTRO.
+
+    Los cuatro estaticos reciben una raiz y devuelven la ruta de un HTML. El
+    simulador es un tablero VIVO: `construir()` recibe el `Derivado` que produce
+    `derivacion` y devuelve un widget, porque lo sirve Voila con un kernel detras.
+    Meterlo en la misma parametrizacion obligaria a poner un `if` en cada prueba de
+    este fichero, que es como una lista deja de decir lo que significa.
+    """
+    from inspect import signature
+
+    derivacion = importlib.import_module("chec_tableros.simulador.derivacion")
+    tablero = importlib.import_module("chec_tableros.simulador.tablero")
+
+    assert callable(derivacion.derivar) and callable(derivacion.cargar)
+    assert callable(tablero.construir)
+    # El primer parametro es el `Derivado`, y es POSICIONAL: es lo que hace que los
+    # dos caminos -- derivar y cargar -- sean intercambiables sin que el tablero
+    # sepa cual corrio.
+    primero = list(signature(tablero.construir).parameters)[0]
+    assert primero == "derivado", f"construir() empieza por {primero!r}"
+
+
+@pytest.mark.parametrize("cuaderno", sorted(ESTATICOS))
 def test_el_cuaderno_del_tablero_migrado_ya_no_existe(cuaderno):
     """Migrar y no borrar deja dos fuentes, y la que se pudre es la que nadie ejecuta.
 
     El `.ipynb` se borro el 2026-08-15. Lo unico que tenia y que el modulo no podia
     heredar era su narrativa -- el `Como leerlo`, que no es codigo --, y esa vive
     ahora en el README de su aplicacion. El codigo esta en `src/chec_tableros/`.
+
+    El cuaderno 06 NO entra aqui todavia: su codigo ya salio, pero borrarlo es la
+    fase 4 de este mismo cambio. Mientras tanto nadie lo ejecuta -- ni `preparar.py`
+    ni ninguna aplicacion lo nombra --, y `test_el_cuaderno_06_ya_no_es_insumo_de_su_
+    aplicacion` es lo que fija que asi siga.
     """
     assert not (RAIZ / "notebooks" / "base_apps" / f"{cuaderno}.ipynb").exists(), (
         f"{cuaderno}.ipynb sigue ahi: el tablero vive en src/chec_tableros/ y dos "
@@ -68,27 +96,37 @@ def test_el_cuaderno_del_tablero_migrado_ya_no_existe(cuaderno):
     )
 
 
-@pytest.mark.parametrize("cuaderno, modulo", sorted(MIGRADOS.items()))
-def test_la_narrativa_del_cuaderno_sobrevivio_en_el_readme_de_su_aplicacion(cuaderno, modulo):
+APPS_DE_TABLERO = {
+    "01_uiti_vano_clima": "01_clima",
+    "02_uiti_vano_kmeans": "02_agrupamiento_vanos",
+    "03_uiti_vano_trayectorias_circuitos": "03_trayectorias_circuitos",
+    "04_uiti_vano_trayectorias_vano": "04_trayectorias_vanos",
+    SIMULADOR: "06_simulador",
+}
+
+
+@pytest.mark.parametrize("cuaderno", sorted(MIGRADOS))
+def test_la_narrativa_del_cuaderno_sobrevivio_en_el_readme_de_su_aplicacion(cuaderno):
     """Borrar el cuaderno no puede costar su documentacion.
 
-    Eran 493 lineas repartidas en los cuatro que explican QUE se esta mirando: que
-    significa un punto, por que los grupos de un tablero no son comparables con los
-    de otro. Nada de eso cabe en el codigo, y es lo primero que busca quien abre la
-    aplicacion.
+    Eran 493 lineas repartidas en los cuatro estaticos, y 790 mas del simulador, que
+    explican QUE se esta mirando: que significa un punto, por que los grupos de un
+    tablero no son comparables con los de otro, de donde sale cada numero. Nada de
+    eso cabe en el codigo, y es lo primero que busca quien abre la aplicacion.
+
+    El simulador entra aqui aunque su cuaderno todavia exista: la narrativa se movio
+    en la misma rebanada que el codigo, para que borrarlo despues sea un `unlink` y
+    no una decision.
     """
-    apps = {
-        "01_uiti_vano_clima": "01_clima",
-        "02_uiti_vano_kmeans": "02_agrupamiento_vanos",
-        "03_uiti_vano_trayectorias_circuitos": "03_trayectorias_circuitos",
-        "04_uiti_vano_trayectorias_vano": "04_trayectorias_vanos",
-    }
-    readme = (RAIZ / "aplicaciones" / apps[cuaderno] / "README.md").read_text(encoding="utf-8")
-    assert "Cómo leer este tablero" in readme, f"{apps[cuaderno]} perdio su narrativa"
-    assert "Como leerlo" in readme or "Cómo leerlo" in readme
+    readme = (RAIZ / "aplicaciones" / APPS_DE_TABLERO[cuaderno] / "README.md").read_text(
+        encoding="utf-8")
+    assert "Cómo leer este tablero" in readme, (
+        f"{APPS_DE_TABLERO[cuaderno]} perdio su narrativa")
+    if cuaderno != SIMULADOR:
+        assert "Como leerlo" in readme or "Cómo leerlo" in readme
 
 
-@pytest.mark.parametrize("modulo", sorted(MIGRADOS.values()))
+@pytest.mark.parametrize("modulo", sorted(ESTATICOS.values()))
 def test_construir_un_tablero_migrado_no_ejecuta_celdas(modulo, monkeypatch, tmp_path):
     """Se rompe `cuaderno.ejecutar` a proposito.
 

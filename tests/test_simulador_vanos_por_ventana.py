@@ -35,21 +35,20 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import ayudas_tableros
 import pytest
 
 RAIZ = Path(__file__).resolve().parents[1]
-NOTEBOOK = (
-    RAIZ / "notebooks" / "base_apps"
-    / "06_uiti_vano_explicabilidad_simulador.ipynb"
-)
+TABLERO = "06_uiti_vano_explicabilidad_simulador"
 
 
+# El codigo del tablero salio del cuaderno a `src/chec_tableros/simulador/`
+# (fase 2 de `sdd/retire-base-apps-notebooks`). Lo que se afirma aqui son
+# invariantes del TABLERO y no del formato en que se guardaba, asi que la fuente
+# se pide al ayudante y las afirmaciones no cambian.
 @pytest.fixture(scope="module")
 def fuente() -> str:
-    celdas = json.loads(NOTEBOOK.read_text(encoding="utf-8"))["cells"]
-    return "\n".join(
-        "".join(celda["source"]) for celda in celdas if celda["cell_type"] == "code"
-    )
+    return ayudas_tableros.fuente_de_tablero(TABLERO)
 
 
 # ------------------------------------------------------- la lista es el circuito
@@ -71,8 +70,7 @@ def test_the_markable_vanos_are_the_circuit_vanos_with_events_in_the_dataset(fue
     periodo. Es la MISMA fuente que usa el tablero de 04, y ese es el punto: dos
     tableros sobre el mismo circuito no pueden ofrecer dos listas distintas.
     """
-    cuerpo = fuente[fuente.index("def _vanos_marcables(circuito):"):]
-    cuerpo = cuerpo[: cuerpo.index("\nvano_widget = ")]
+    cuerpo = ayudas_tableros.cuerpo_de_funcion(fuente, "_vanos_marcables")
     assert "VANOS_POR_CIRCUITO.get(circuito" in cuerpo
     assert "clases_para(" not in cuerpo
     assert "GEO_POR_CIRCUITO" not in cuerpo

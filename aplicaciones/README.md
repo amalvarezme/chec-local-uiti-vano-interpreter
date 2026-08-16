@@ -32,13 +32,17 @@ abierta a mano en vez de duplicarla.
 
 ## Los cinco tableros
 
-| carpeta | qué abre | cuaderno |
+| carpeta | qué abre | módulo |
 |---|---|---|
-| [`01_clima/`](01_clima/) | nube por vano sobre el mapa, con las 6 variables, la serie de doble eje y los 6 violines | `01_uiti_vano_clima.ipynb` |
-| [`02_agrupamiento_vanos/`](02_agrupamiento_vanos/) | agrupamiento de vanos por UITI acumulado y número de eventos | `02_uiti_vano_kmeans.ipynb` |
-| [`03_trayectorias_circuitos/`](03_trayectorias_circuitos/) | trayectoria y agrupamiento de circuitos con ventana deslizante | `03_uiti_vano_trayectorias_circuitos.ipynb` |
-| [`04_trayectorias_vanos/`](04_trayectorias_vanos/) | lo mismo un nivel más abajo: agrupamiento y evolución por vano | `04_uiti_vano_trayectorias_vano.ipynb` |
-| [`06_simulador/`](06_simulador/) | simulador de riesgo por vano: *qué pasaría si* sobre el modelo MIL | `06_uiti_vano_explicabilidad_simulador.ipynb` |
+| [`01_clima/`](01_clima/) | nube por vano sobre el mapa, con las 6 variables, la serie de doble eje y los 6 violines | `chec_tableros.clima` |
+| [`02_agrupamiento_vanos/`](02_agrupamiento_vanos/) | agrupamiento de vanos por UITI acumulado y número de eventos | `chec_tableros.agrupamiento` |
+| [`03_trayectorias_circuitos/`](03_trayectorias_circuitos/) | trayectoria y agrupamiento de circuitos con ventana deslizante | `chec_tableros.trayectorias_circuitos` |
+| [`04_trayectorias_vanos/`](04_trayectorias_vanos/) | lo mismo un nivel más abajo: agrupamiento y evolución por vano | `chec_tableros.trayectorias_vanos` |
+| [`06_simulador/`](06_simulador/) | simulador de riesgo por vano: *qué pasaría si* sobre el modelo MIL | `chec_tableros.simulador` |
+
+Los cinco tableros vivían dentro de un `.ipynb` que cada aplicación ejecutaba con
+`exec()`. Desde agosto de 2026 su código está en `src/chec_tableros/` y las
+aplicaciones lo **importan**.
 
 ## Cómo se usan — y por qué el doble clic es ese y no otro
 
@@ -329,14 +333,18 @@ aplicaciones/
 ```
 
 Las cuatro aplicaciones estáticas son casi sólo declaración: su `construir.py` nombra
-un cuaderno y un título, y `_comun/construccion.py` hace el resto. Agregar una quinta
+un módulo y un título, y `_comun/construccion.py` hace el resto. Agregar una quinta
 es copiar esos dos valores.
 
-Ninguna aplicación modifica su cuaderno. La 06 trabaja sobre una copia parcheada que
-vive dentro de su propia carpeta.
+La 06 es la excepción, y por una razón concreta: su tablero no es un HTML sino
+`ipywidgets` vivos, así que necesita un kernel. `preparar.py` congela lo caro en
+`paquete/` y **genera** un cuaderno de una sola celda que importa el módulo; Voilà
+sirve ese cuaderno. Antes ese cuaderno era una copia del 06 con seis parches de texto
+encima, y cambiar una línea del original rompía la aplicación en un archivo que no la
+mencionaba.
 
 ## Qué NO se guarda en el repositorio
 
 Los entornos (`.venv/`), los tableros construidos (`panel/`), el paquete del
-simulador (`paquete/`) y la copia parcheada del cuaderno (`cuaderno/`) son artefactos
-de cada máquina: se regeneran con `instalar` e `iniciar`.
+simulador (`paquete/`) y el cuaderno generado (`cuaderno/`) son artefactos de cada
+máquina: se regeneran con `instalar` e `iniciar`.

@@ -112,83 +112,81 @@ def test_derivado_trae_los_nombres_que_el_cuaderno_puentea_al_tablero(tmp_path):
     )
 
 
-# Los 23 nombres que las celdas 8-16 leen del arranque, medidos con `ast` sobre el
-# cuaderno. Si el arranque deja de definir uno, el fallo aparece a mitad del tablero,
-# lejos de su causa; aqui aparece en el sitio.
-PUENTE = (
-    "COSTOS_ITEMS_PATH", "VARIABLES_SELECCION_PATH", "label_encoders",
-    "max_values_imputed", "BAG_INDEX", "COLORES_MODALIDAD", "COLUMNAS_MODALIDAD",
-    "FEATURES_MIL", "MIL", "MODALIDADES_MIL", "X_INST", "CIRCUITOS", "DATOS_VENTANA",
-    "GEO_POR_CIRCUITO", "SWITCHES", "TABLA", "TRAFOS", "VANOS_POR_CIRCUITO",
-    "VENTANAS", "VENTANAS_POR_CIRCUITO", "clases_para", "KNOBS", "feature_names",
-)
+# --------------------------------------------------- el puente derivacion -> tablero
 
-_GUION_PUENTE = """
-import json, sys
-sys.path.insert(0, {comun!r})
-import cuaderno
-from pathlib import Path
-espacio = cuaderno.ejecutar(Path({nb!r}), celdas=range(0, 8))
-print("RESULTADO " + json.dumps({{
-    "faltan": [n for n in {puente!r} if n not in espacio],
-    "celdas": len(espacio["TABLA"]),
-    "bolsas": len(espacio["BAG_INDEX"].keys),
-    "knobs": len(espacio["KNOBS"]),
+PAQUETE = RAIZ / "aplicaciones" / "06_simulador" / "paquete"
+
+# Aqui vivian dos pruebas del "puente": los 23 nombres que las celdas 8-16 leian del
+# espacio de nombres que dejaban las celdas 0-7. Se comprobaban ejecutando las celdas
+# de arranque en un subproceso y mirando que ninguno faltara.
+#
+# Ese puente ya no es un espacio de nombres compartido: es la firma
+# `tablero.construir(derivado, ...)`, y `Derivado` es un dataclass, asi que un campo
+# que falte falla al construirlo y no diez pantallas mas abajo. Lo que aquellas dos
+# pruebas querian saber -- "¿el tablero encuentra todo lo que el arranque le deja?" --
+# se contesta mejor haciendolo: se arma el tablero de verdad contra el paquete.
+
+_GUION_TABLERO = """
+import json, os, sys
+sys.path.insert(0, {src!r})
+os.environ['RUTA_VARIABLES_SIMULAR'] = {simular!r}
+from chec_tableros.simulador import derivacion, tablero
+D = derivacion.cargar({paquete!r})
+
+
+def hojas(w):
+    yield w
+    for h in getattr(w, 'children', ()):
+        yield from hojas(h)
+
+
+APP = tablero.construir(D, costos={costos!r})
+figuras = [w for w in hojas(APP) if hasattr(w, 'data') and hasattr(w, 'layout')]
+print('RESULTADO ' + json.dumps({{
+    'widgets': sum(1 for _ in hojas(APP)),
+    'figuras': len(figuras),
+    'trazas': len(figuras[0].data) if figuras else 0,
+    'titulos': [a.text for a in figuras[0].layout.annotations if a.text][:10],
 }}))
 """
 
 
-def _puente_de(notebook: Path, entorno: dict | None = None) -> dict:
-    """Ejecuta las celdas 0-7 de un cuaderno EN SUBPROCESO y reporta el puente.
+@pytest.mark.skipif(not (PAQUETE / "catalogo.joblib").exists(),
+                    reason="requiere el paquete del simulador construido")
+def test_el_tablero_se_arma_entero_contra_el_paquete_congelado():
+    """El camino EXACTO de la aplicacion: `cargar()` y despues `construir()`.
 
-    En subproceso porque la celda 1 purga de `sys.modules` todo `chec_impacto`,
-    `chec_local_interpreter` y `chec_tableros`. Hacerlo en proceso deja a las
-    pruebas siguientes con modulos reimportados a media suite.
+    Corre en subproceso porque arma 593 widgets y un `FigureWidget` con el bundle
+    de plotly.js dentro; eso no se devuelve al proceso de pruebas al terminar.
+
+    No sustituye a `test_simulador_flujo_vivo.py`, que conduce el tablero en un
+    navegador: aqui no se puede pulsar `Simular` -- corre en el bucle de eventos
+    del widget y fuera del navegador deja las barras vacias. Lo que si se afirma es
+    lo que aquel no puede permitirse comprobar en cada arranque, y lo hace en
+    segundos en vez de en ocho minutos.
     """
-    import os
     import subprocess
 
-    guion = _GUION_PUENTE.format(
-        comun=str(RAIZ / "aplicaciones" / "_comun"), nb=str(notebook), puente=PUENTE)
-    salida = subprocess.run(
-        [sys.executable, "-c", guion], check=True, cwd=RAIZ, capture_output=True,
-        text=True, env={**os.environ, **(entorno or {})},
-    ).stdout
-    linea = next(l for l in salida.splitlines() if l.startswith("RESULTADO "))
-    return json.loads(linea[len("RESULTADO "):])
+    guion = _GUION_TABLERO.format(
+        src=str(RAIZ / "src"), paquete=str(PAQUETE),
+        simular=str(PAQUETE / "Variables_simular.xlsx"),
+        costos=str(PAQUETE / "Actividades_mantenimiento_costos_2026.xlsx"))
+    proceso = subprocess.run([sys.executable, "-c", guion], cwd=RAIZ,
+                             capture_output=True, text=True)
+    assert proceso.returncode == 0, proceso.stderr[-3000:]
+    linea = next(l for l in proceso.stdout.splitlines() if l.startswith("RESULTADO "))
+    r = json.loads(linea[len("RESULTADO "):])
 
-
-@requiere_datos
-def test_el_cuaderno_sigue_entregando_al_tablero_los_23_nombres_del_puente():
-    """El cuaderno ahora DISPARA la derivacion en vez de contenerla.
-
-    Mover ese codigo a un modulo es neutral solo si las celdas 8-16 siguen
-    encontrando lo mismo en su espacio de nombres. Ninguna prueba miraba eso, y es
-    justo donde un movimiento asi se rompe en silencio.
-    """
-    r = _puente_de(RAIZ / "notebooks" / "base_apps"
-                   / "06_uiti_vano_explicabilidad_simulador.ipynb")
-    assert r["faltan"] == [], r["faltan"]
-    assert r["celdas"] > 100_000 and r["bolsas"] > 100_000 and r["knobs"] > 0
-
-
-@requiere_datos
-def test_la_copia_servida_entrega_el_mismo_puente_leyendo_el_paquete():
-    """El camino que NUNCA se habia comprobado de forma automatica.
-
-    `preparar_copia()` parchea el cuaderno para que lea del paquete, y hasta ahora
-    la unica forma de saber si el resultado arrancaba era abrir el simulador a
-    mano. Aqui se ejecutan sus celdas de arranque de verdad: si el parche dejara
-    un nombre sin definir, el tablero saldria a medias y nadie se enteraria hasta
-    abrirlo.
-    """
-    sys.path.insert(0, str(RAIZ / "aplicaciones" / "06_simulador"))
-    import preparar
-
-    copia = preparar.preparar_copia()
-    r = _puente_de(copia, {"PAQUETE_06": str(RAIZ / "aplicaciones" / "06_simulador" / "paquete")})
-    assert r["faltan"] == [], r["faltan"]
-    assert r["celdas"] > 100_000 and r["bolsas"] > 100_000 and r["knobs"] > 0
+    assert r["figuras"] == 1, "el tablero tiene UNA figura, con sus ocho paneles dentro"
+    assert r["trazas"] > 50, f"la figura salio con {r['trazas']} trazas"
+    assert r["widgets"] > 300, (
+        f"el tablero armo {r['widgets']} widgets; las casillas de vano, de variable y "
+        "de actividad ya pasan de 200 por su cuenta")
+    # Los tres paneles que dan sentido al tablero: el mapa medido, el simulado y el
+    # grafo. Que la figura tenga trazas no dice que los paneles esten.
+    for panel in ("Criticidad Original", "Criticidad Simulada", "Grafo"):
+        assert any(panel in t for t in r["titulos"]), (
+            f"falta el panel {panel!r}; hay {r['titulos']}")
 
 
 @requiere_datos

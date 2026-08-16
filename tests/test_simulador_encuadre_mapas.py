@@ -33,11 +33,11 @@ import math
 import re
 from pathlib import Path
 
+import ayudas_tableros
 import pytest
 
 RAIZ = Path(__file__).resolve().parents[1]
-CUADERNO = (RAIZ / "notebooks" / "base_apps" /
-            "06_uiti_vano_explicabilidad_simulador.ipynb")
+TABLERO = "06_uiti_vano_explicabilidad_simulador"
 GEO_EMPAQUETADA = RAIZ / "aplicaciones" / "06_simulador" / "paquete" / "geo.json"
 
 TESELA_PX = 512
@@ -47,9 +47,7 @@ ALTO_MAPA_PX = 566.0
 
 
 def _fuente() -> str:
-    nb = json.loads(CUADERNO.read_text(encoding="utf-8"))
-    return "\n".join("".join(c["source"]) for c in nb["cells"]
-                     if c["cell_type"] == "code")
+    return ayudas_tableros.fuente_de_tablero(TABLERO)
 
 
 def _mercator_y(lat: float) -> float:

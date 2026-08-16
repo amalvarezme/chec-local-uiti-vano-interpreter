@@ -100,6 +100,11 @@ Informe_Impacto_CHEC/*
 # pesan 484 MB, 530 MB, 633 MB, 633 MB y 1,6 GB; los tableros construidos van de 10,5 MB
 # a 27,8 MB; el paquete del simulador, 95,2 MB. En total mas de 4 GB que no son fuente.
 aplicaciones/*/.venv/
+# Sin barra final ademas de con ella: en un `git worktree` el entorno no se duplica,
+# se ENLAZA al del arbol principal, y un patron con barra solo casa directorios. Git
+# ve un enlace, asi que sin esta linea el entorno aparece sin seguir en cada
+# `git status` de un worktree y acaba colandose en un `git add -A`.
+aplicaciones/*/.venv
 aplicaciones/*/panel/
 aplicaciones/*/paquete/
 aplicaciones/*/cuaderno/

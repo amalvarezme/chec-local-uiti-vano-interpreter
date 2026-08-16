@@ -1,12 +1,16 @@
-"""Levanta el simulador del cuaderno 06 con Voila, en local.
+"""Levanta el simulador de riesgo por vano con Voila, en local.
 
 ## Por que Voila y no una reescritura
 
-El tablero del cuaderno 06 son ~1.900 lineas de `ipywidgets` sobre un
-`go.FigureWidget`: mapas, 220 casillas, controles de las 26 variables simulables y
-un `asyncio` de rebote. Voila sirve ESE cuaderno tal cual, asi que el cuaderno sigue
-siendo la unica fuente de verdad. Reescribirlo en Dash o Streamlit obligaria a
-mantener dos tableros que tienen que coincidir para siempre.
+El tablero son ~3.200 lineas de `ipywidgets` sobre un `go.FigureWidget`: dos mapas,
+207 casillas, controles de las variables simulables y un `asyncio` de rebote. Vive en
+`src/chec_tableros/simulador/tablero.py`, y lo que Voila sirve es un cuaderno de UNA
+celda que lo importa y lo muestra -- generado por `preparar.py`, no escrito a mano.
+Reescribirlo en Dash o Streamlit obligaria a mantener dos tableros que tienen que
+coincidir para siempre.
+
+Voila hace falta porque `ipywidgets` necesita un kernel al otro lado; lo que ya no
+hace falta es que el codigo del tablero viva dentro de un `.ipynb`.
 
 ## Por que no puede ser un HTML estatico como 01 y 02
 
@@ -29,6 +33,7 @@ sys.path.insert(0, str(AQUI.parent / "_comun"))
 import entorno  # noqa: E402
 import huellas  # noqa: E402
 import preparar  # noqa: E402  -- por el modulo: `huellas_actuales` lee sus listas
+import raiz as _raiz  # noqa: E402
 import servidor  # noqa: E402
 from preparar import (  # noqa: E402
     COPIA,
@@ -60,15 +65,14 @@ def _asegurar_kernel() -> None:
 def _hace_falta_construir() -> str | None:
     """Devuelve el motivo por el que hay que (re)construir, o None si no hace falta.
 
-    No es paranoia: el paquete congela objetos que salen de las celdas de arranque, y
-    el resto del cuaderno los consume suponiendo su forma. Un insumo editado con un
-    paquete viejo es la unica manera de que el tablero dibuje datos que ya no
-    corresponden sin que nada de error.
+    No es paranoia: el paquete congela lo que produce la derivacion, y el tablero lo
+    consume suponiendo su forma. Un insumo editado con un paquete viejo es la unica
+    manera de que el tablero dibuje datos que ya no corresponden sin que nada de error.
 
-    Se miran TODOS los insumos y no solo el cuaderno. Antes solo se comparaba su
-    sha1, y ajustar `data/Variables_simular.xlsx` -- que viaja copiado dentro del
-    paquete y decide que controles ofrece el panel -- dejaba a la aplicacion sirviendo
-    el catalogo anterior, en silencio.
+    Se miran TODOS los insumos. Antes solo se comparaba el sha1 del cuaderno, y
+    ajustar `data/Variables_simular.xlsx` -- que viaja copiado dentro del paquete y
+    decide que controles ofrece el panel -- dejaba a la aplicacion sirviendo el
+    catalogo anterior, en silencio.
     """
     manifiesto = PAQUETE / "manifiesto.json"
     if not manifiesto.exists() or not COPIA.exists():
@@ -138,7 +142,13 @@ def main() -> int:
         os.environ,
         PAQUETE_06=str(PAQUETE),
         ARCHIVO_PID_06=str(archivo_pid),
-        # El cuaderno hace `setdefault` sobre esta variable, asi que ponerla aqui es lo
+        # Donde vive el codigo del tablero y donde vive `cierre.py`. El cuaderno que
+        # sirve Voila tiene una sola celda y no puede deducir ninguna de las dos: un
+        # cuaderno no tiene `__file__`, y el directorio de trabajo lo elige Voila.
+        # Aqui se conocen las dos antes de lanzar nada.
+        RAIZ_SRC_06=str(_raiz.RAIZ_SRC),
+        APP_06=str(AQUI),
+        # El tablero hace `setdefault` sobre esta variable, asi que ponerla aqui es lo
         # que manda la aplicacion a su copia del catalogo en vez de a `data/`.
         RUTA_VARIABLES_SIMULAR=str(PAQUETE / "Variables_simular.xlsx"),
     )

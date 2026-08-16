@@ -65,6 +65,18 @@ def _arbol(name: str) -> ast.Module:
     return ast.parse(fuente_de_tablero(name, solo_codigo=True))
 
 
+def _fuente_de_codigo_del_cuaderno(name: str) -> str:
+    """Las celdas de CODIGO del `.ipynb`, este migrado su tablero o no.
+
+    `fuente_del_cuaderno` devuelve tambien las de texto, que no son Python. Hace
+    falta para lo poco que sigue siendo una propiedad del cuaderno como archivo.
+    """
+    documento = json.loads(
+        (NOTEBOOK_DIR / f"{name}.ipynb").read_text(encoding="utf-8"))
+    return "\n".join("".join(c["source"]) for c in documento["cells"]
+                     if c["cell_type"] == "code")
+
+
 @pytest.fixture(scope="module")
 def sources() -> dict[str, str]:
     return {key: _source(name) for key, name in BOARDS.items()}
@@ -397,6 +409,32 @@ def test_a_migrated_board_leaves_no_deploy_command_promising_the_old_path(board)
 
     assert not sin_aviso, (
         f"{sin_aviso} despliegan {BOARDS[board]} parcheando un codigo que ya no esta ahi"
+    )
+
+
+def test_el_despliegue_del_simulador_avisa_de_que_ya_no_construye_lo_que_promete():
+    """El comando del simulador se rompe de OTRA forma que los cuatro estaticos.
+
+    Aquellos parchean el `.ipynb` buscando una linea por su texto, y por eso
+    `test_a_migrated_board_leaves_no_deploy_command_promising_the_old_path` los
+    encuentra por esa marca. `/app-simulador-vano` no parchea: **ejecuta las celdas
+    1-9 del cuaderno por su INDICE** y despues reescribe a mano lo que hoy hace
+    `derivacion.congelar`. Ninguna de las dos marcas de aquel predicado aparece aqui,
+    asi que se le habria pasado entero.
+
+    Y el fallo es peor por ser parcial: las celdas 1-9 del cuaderno todavia corren, o
+    sea que el comando construye un paquete que PARECE bueno y lo publica con el
+    nombre viejo de la geometria y con una copia del cuaderno que ya no se parece a la
+    que sirve la aplicacion.
+    """
+    texto = (COMMAND_DIR / "app-simulador-vano.md").read_text(encoding="utf-8")
+    ejecuta_celdas = "nb['cells'][i]" in texto or "exec(compile(''.join(c['source'])" in texto
+    if not ejecuta_celdas:
+        pytest.skip("el comando dejo de ejecutar celdas del cuaderno; ya no aplica")
+    assert "FUERA DE SERVICIO" in texto, (
+        "/app-simulador-vano sigue prometiendo un despliegue que construye el paquete "
+        "ejecutando celdas del cuaderno 06 y sirviendo una copia parcheada de el; el "
+        "tablero vive en src/chec_tableros/simulador/ desde el 2026-08-16"
     )
 
 
@@ -884,8 +922,15 @@ def test_board_06_warns_when_the_frontend_cannot_mount_the_figure_widget():
     cuaderno entero y la prueba fallaba por un `raise` de otra celda -- una que
     ademas debe existir. El arbol acota el bloque exacto, y ninguna reescritura de
     los `print` de al lado lo puede mover.
+
+    **Es una propiedad del CUADERNO y no del tablero**, y por eso se lee del `.ipynb`
+    aunque el codigo del tablero ya viva en `src/chec_tableros/simulador/tablero.py`.
+    El aviso solo tiene publico dentro del visor de notebooks de VS Code: la
+    aplicacion la sirve Voila en un navegador, donde el tablero monta -- medido --, y
+    un modulo importado no puede avisarle a nadie de eso. Se va con el cuaderno en la
+    fase 4 de `sdd/retire-base-apps-notebooks`.
     """
-    src = _source("06_uiti_vano_explicabilidad_simulador")
+    src = fuente_del_cuaderno("06_uiti_vano_explicabilidad_simulador")
 
     assert "VSCODE_PID" in src, "sin marcador de entorno el aviso nunca se dispara"
     assert "anywidget" in src, "el aviso confirma el respaldo en vez de suponerlo"
@@ -893,7 +938,8 @@ def test_board_06_warns_when_the_frontend_cannot_mount_the_figure_widget():
 
     guardas = [
         nodo
-        for nodo in ast.walk(_arbol("06_uiti_vano_explicabilidad_simulador"))
+        for nodo in ast.walk(ast.parse(_fuente_de_codigo_del_cuaderno(
+            "06_uiti_vano_explicabilidad_simulador")))
         if isinstance(nodo, ast.If) and "_EN_VSCODE" in ast.dump(nodo.test)
     ]
     assert len(guardas) == 1, "la guarda del aviso tiene que ser una sola"

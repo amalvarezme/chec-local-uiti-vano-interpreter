@@ -38,6 +38,20 @@ import ayudas_simulador as A
 MOTIVO = A.hay_con_que_correr()
 APAGADAS = os.environ.get("SIMULADOR_VIVO", "") not in ("1", "true", "si")
 
+# Pedirlas y que se salten TODAS en silencio es la forma de creer que se corrieron.
+# Paso: una de estas pruebas afirmaba el titulo largo del panel del perfil mucho
+# despues de que `496ee49` lo acortara, y nadie se entero porque el entorno del
+# simulador no estaba instalado y `pytest -q` solo dice "20 skipped". Si se piden
+# explicitamente y el entorno no da, esto es un error de recoleccion -- ruidoso --
+# y no una linea de resumen que se lee igual que un exito.
+if not APAGADAS and MOTIVO is not None:
+    raise RuntimeError(
+        f"SIMULADOR_VIVO esta puesto pero {MOTIVO}. Instala el entorno de la "
+        "aplicacion con `aplicaciones/06_simulador/instalar-en-terminal.command` "
+        "(o enlaza el del arbol principal si estas en un worktree) y construye su "
+        "paquete con `python3 aplicaciones/06_simulador/preparar.py`."
+    )
+
 pytestmark = [
     pytest.mark.skipif(APAGADAS, reason="SIMULADOR_VIVO no esta puesto"),
     pytest.mark.skipif(MOTIVO is not None, reason=str(MOTIVO)),
@@ -120,7 +134,12 @@ def test_al_abrir_estan_los_diez_paneles_y_el_perfil_dice_su_concentracion(nav):
     for esperado in ("Criticidad Original", "Criticidad Simulada",
                      "Grafo - Relaciones relevantes"):
         assert any(esperado in t for t in titulos), f"falta el panel {esperado!r}"
-    perfil = [t for t in titulos if t.startswith("Perfil del circuito")]
+    # `Perfil` a secas y no `Perfil del circuito`: el titulo se acorto en `496ee49`
+    # para que dejara de pisar al panel de al lado, y esta prueba siguio afirmando el
+    # texto largo sin que nadie se enterara -- se salta si el entorno del simulador no
+    # esta instalado, y no lo estaba. Lo que se afirma es que el panel EXISTE y que
+    # publica su concentracion, no como se llama.
+    perfil = [t for t in titulos if t.startswith("Perfil")]
     assert perfil, "no esta el panel del perfil del circuito"
     assert "%" in perfil[0], (
         "el titulo del perfil no publica cuanto concentra el top, que es su lectura")

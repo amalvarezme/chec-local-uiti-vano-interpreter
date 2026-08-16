@@ -27,27 +27,25 @@ pero avisa al construir; aqui se comprueba antes, que es donde cuesta un segundo
 
 from __future__ import annotations
 
-import importlib.util
-import json
 import re
-import sys
 from pathlib import Path
 
+import ayudas_tableros
 import pytest
 
 RAIZ = Path(__file__).resolve().parents[1]
-CUADERNO = RAIZ / "notebooks" / "base_apps" / "06_uiti_vano_explicabilidad_simulador.ipynb"
-PREPARAR = RAIZ / "aplicaciones" / "06_simulador" / "preparar.py"
-
-
-def _celdas() -> list[str]:
-    cuaderno = json.loads(CUADERNO.read_text(encoding="utf-8"))
-    return ["".join(c["source"]) for c in cuaderno["cells"] if c["cell_type"] == "code"]
+TABLERO = "06_uiti_vano_explicabilidad_simulador"
 
 
 def _celda_del_tablero() -> str:
-    """La celda que arma `APP`, que es donde se decide la disposicion."""
-    return next(f for f in _celdas() if "APP = widgets.VBox(" in f)
+    """El codigo que arma `APP`, que es donde se decide la disposicion.
+
+    Era la CELDA que armaba `APP`; ahora es el modulo entero. Lo que se busca abajo
+    son definiciones de nivel de `construir()` -- `CUERPO = widgets.HBox(`,
+    `COLUMNA_FIGURAS = widgets.VBox(` --, que aparecen una sola vez en todo el
+    fichero, asi que la busqueda dice lo mismo sobre un texto mas grande.
+    """
+    return ayudas_tableros.fuente_de_tablero(TABLERO)
 
 
 # ------------------------------------------------------------- las dos columnas
@@ -117,32 +115,22 @@ def test_las_casillas_del_selector_pueden_encoger(atributo: str):
 # --------------------------------------------- el enganche con la aplicacion local
 
 
-def test_los_parches_de_la_aplicacion_local_encuentran_todas_sus_anclas(tmp_path,
-                                                                       monkeypatch):
-    """`preparar.py` parchea el cuaderno por texto literal, y una de sus anclas es la
-    linea del `APP`.
+def test_la_barra_de_cerrar_va_encima_de_las_dos_columnas():
+    """La barra es del tablero ENTERO, no de una de sus columnas.
 
-    Esto no es una prueba de estilo: mover esa linea aborta la construccion de la
-    aplicacion local con `SystemExit`, y el aviso llega al construir -- despues de
-    preparar el paquete entero. Aqui llega en un segundo.
+    Metida dentro de `COLUMNA_CONTROLES` se iria al 30% del ancho, que es la mitad de
+    por que `encabezado` entra en el `VBox` exterior y no en el `HBox`.
+
+    Aqui vivia una prueba de que los seis parches de texto de `preparar.py` seguian
+    encontrando sus anclas en el cuaderno 06 -- entre ellas la linea del `APP`. Los
+    parches ya no existen: el tablero recibe la barra como parametro, asi que lo que
+    antes era un ancla de texto es hoy una firma de funcion, y lo que queda por fijar
+    es DONDE la pone.
     """
-    especificacion = importlib.util.spec_from_file_location("preparar_06", PREPARAR)
-    preparar = importlib.util.module_from_spec(especificacion)
-    sys.modules["preparar_06"] = especificacion.name and preparar
-    especificacion.loader.exec_module(preparar)
-
-    # La copia se escribe donde no moleste: lo que se prueba es que los parches
-    # encuentren su sitio, no donde acaba el archivo.
-    monkeypatch.setattr(preparar, "COPIA", tmp_path / "06_simulador.ipynb")
-    (tmp_path / "06_simulador.ipynb").parent.mkdir(parents=True, exist_ok=True)
-
-    try:
-        copia = preparar.preparar_copia()
-    except SystemExit as fallo:
-        pytest.fail(f"preparar.py ya no encuentra una de sus anclas en el cuaderno:\n"
-                    f"{fallo}")
-    assert copia.exists()
-    documento = json.loads(copia.read_text(encoding="utf-8"))
-    fuentes = "".join("".join(c["source"]) for c in documento["cells"])
-    assert "_BARRA_CERRAR" in fuentes, "la copia se quedo sin boton de cerrar"
-    assert "_display_real(APP)" in fuentes, "la copia no muestra el tablero"
+    fuente = _celda_del_tablero()
+    armado = re.search(r"APP = widgets\.VBox\(\s*\[([^\]]+)\]", fuente)
+    assert armado, "el tablero ya no arma `APP` como un VBox"
+    piezas = [p.strip() for p in armado.group(1).split(",") if p.strip()]
+    assert piezas[0] == "*encabezado", (
+        f"`APP` lleva {piezas}; el encabezado va PRIMERO y fuera del HBox, o la barra "
+        "de cerrar acaba dentro de una columna del 30%")
