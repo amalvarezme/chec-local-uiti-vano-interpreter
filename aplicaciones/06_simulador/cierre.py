@@ -12,6 +12,7 @@ aqui solo aparecia al arrancar la aplicacion, dentro del kernel.
 """
 from __future__ import annotations
 
+import json
 import os
 import signal
 import threading
@@ -46,6 +47,71 @@ setTimeout(function () {
 ESPERA_ANTES_DE_APAGAR = 0.8
 
 VARIABLE_PID = "ARCHIVO_PID_06"
+
+# La URL del menu, que `menu.py` ya ponia en el entorno de toda aplicacion que lanza y que
+# hasta ahora no leia nadie. Es la unica via de apagado que no necesita NI el kernel NI el
+# pid: la pide el navegador y la atiende el menu, que es otro proceso.
+VARIABLE_MENU = "MENU_CRITICIDAD"
+
+# Con que clave conoce el menu a esta aplicacion. Es la misma de `tableros.py`.
+CLAVE_APP = "simulador"
+
+# La marca por la que el JS encuentra el boton. Un `widgets.Button` no trae id estable, y
+# `add_class` es lo unico que le deja una a la que agarrarse. Vive aqui, en un solo sitio:
+# escrita dos veces -- en Python y en el guion -- se separan sin que nada falle.
+CLASE_BOTON = "chec-cerrar-simulador"
+
+# --- El camino que NO pasa por el kernel ---------------------------------------------
+# El boton es un `widgets.Button`: su clic viaja por el comm al kernel. Sin kernel no hay
+# quien lo atienda, y el widget no avisa -- se queda mudo. MEDIDO: con el kernel muerto se
+# pulsa Cerrar y durante ocho segundos no aparece ni "Cerrando...", ni "Simulador cerrado",
+# ni el aviso de que no encontro el proceso. Y el servidor sigue en pie.
+#
+# El kernel se va solo por dos caminos normales, ninguno de ellos un fallo:
+#   * Voila lo recicla a los 180 s de inactividad (`cull_idle_timeout` en `app.py`), que es
+#     lo que deja una desconexion pasajera: la tapa del portatil, el wifi;
+#   * o se cae por memoria -- cada kernel de esta aplicacion pesa ~780 MB medidos, y el
+#     propio `app.py` documenta haber visto siete vivos a la vez.
+#
+# Asi que el clic se atiende TAMBIEN en el navegador, en fase de CAPTURA: corre antes que
+# el widget y corre aunque el widget ya no exista al otro lado. Escribe el aviso el mismo,
+# porque `aviso.value` es otra cosa que necesita kernel.
+JS_ENGANCHE = """
+(function () {
+  var MENU = %(menu)s, CLAVE = %(clave)s, CLASE = %(clase)s;
+  // Marca de que el guion llego a correr, para poder comprobarlo desde fuera.
+  window.__chec_cierre_enganchado = true;
+  // DELEGACION sobre `document`, y no `addEventListener` sobre el boton. El guion se
+  // muestra desde un `Output` cuya salida forma parte del estado inicial de los widgets,
+  // asi que corre ANTES de que el boton exista en el DOM: buscarlo en ese momento
+  // devolvia null y el enganche se perdia en silencio -- MEDIDO, el arreglo no hacia nada
+  // hasta cambiar a esto. Delegando no hay orden que respetar.
+  document.addEventListener('click', function (ev) {
+    var boton = ev.target && ev.target.closest ? ev.target.closest('.' + CLASE) : null;
+    if (!boton) { return; }
+    // Primero el aviso, y lo escribe el navegador: con el kernel muerto un `aviso.value`
+    // desde Python no llega a ninguna parte, y el boton parecia inerte.
+    var caja = boton.parentNode || document.body;
+    var nota = caja.querySelector('.chec-aviso-cierre');
+    if (!nota) {
+      nota = document.createElement('span');
+      nota.className = 'chec-aviso-cierre';
+      nota.style.cssText = 'font:16px/1.6 system-ui;padding:8px;color:#2b2b2b';
+      caja.appendChild(nota);
+    }
+    nota.innerHTML = '<b>Cerrando el simulador...</b>';
+    // Y despues se le pide al menu que la detenga. `keepalive` porque la pestania se esta
+    // cerrando: sin el, el navegador cancela la peticion en vuelo.
+    if (MENU) {
+      try {
+        fetch(MENU + 'detener?app=' + encodeURIComponent(CLAVE),
+              {method: 'POST', keepalive: true}).catch(function () {});
+      } catch (e) { /* sin menu no hay a quien pedirselo; queda el camino del kernel */ }
+    }
+    setTimeout(function () { %(cerrar)s }, 400);
+  }, true);
+})();
+"""
 
 
 def barra(*, js: str | None = None) -> widgets.HBox:
@@ -90,7 +156,30 @@ def barra(*, js: str | None = None) -> widgets.HBox:
             display(Javascript(js or JS_CERRAR))
         threading.Timer(ESPERA_ANTES_DE_APAGAR, os.kill, (pid, signal.SIGTERM)).start()
 
+    # El camino del kernel se queda: es el UNICO cuando el simulador se abre solo, sin
+    # menu, y es el que manda el SIGTERM al pid de Voila.
     boton.on_click(cerrar)
+
+    # Y encima, el que no lo necesita. La clase es por donde el JS encuentra el boton.
+    boton.add_class(CLASE_BOTON)
+    menu = os.environ.get(VARIABLE_MENU) or ""
+    if menu and not menu.endswith("/"):
+        menu += "/"
+    # El guion se muestra por el `Output` y no por un `HTML` por la misma razon que el JS
+    # de cierre: ipywidgets mete el HTML por `innerHTML`, y el navegador NO ejecuta los
+    # `<script>` que llegan asi.
+    #
+    # Corre UNA vez, al construir la barra -- cuando el kernel esta vivo por definicion --,
+    # y lo que deja atras es un manejador que ya vive en el navegador. De ahi que siga
+    # funcionando cuando el kernel se va.
+    with salida:
+        display(Javascript(JS_ENGANCHE % {
+            "menu": json.dumps(menu or None),
+            "clave": json.dumps(CLAVE_APP),
+            "clase": json.dumps(CLASE_BOTON),
+            "cerrar": js or JS_CERRAR,
+        }))
+
     return widgets.HBox(
         [boton, aviso, salida],
         layout=widgets.Layout(width="100%", justify_content="flex-end",
