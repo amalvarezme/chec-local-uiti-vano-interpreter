@@ -56,7 +56,7 @@ Needs at minimum `Indicadores_vano_v3.csv` (all 6) and `GEO/MVLINSEC.shp` (01, 0
 Two more prerequisites belong to `05`/`06` specifically and are easy to miss because they are not what those notebooks *read first*:
 
 - `models/mgcecdl_classifier_best.zip` (`06`'s SEAM cell) and `models/mil_vano_ventana_v1.pt` (`05`'s viewer mode, which is its **default** — it only retrains when `ENTRENAR` is set).
-- `derived/geometrias_014.json`. Both notebooks replay `04`'s KMeans geometry through `chec_local_interpreter.ventanas_015`, and its `cargar_clases_desde_014` regenerates that JSON **by parsing the `04` notebook file** when it is absent. In Databricks the notebook is a Workspace object, not a file on disk, so that regeneration cannot happen — the JSON has to already be in the Volume, or both notebooks fail at their geometry check. Locally it is produced by `python scripts/extract_geometrias_014.py` and it is **gitignored** (`.gitignore:8`, `data/*`), so a fresh checkout does not have it either: generate it locally first, then run `/subir-datos-databricks`.
+- `geometria_kmeans_014_v1.json`. Both notebooks replay the KMeans geometry through `chec_local_interpreter.ventanas_015.cargar_clases_criticidad`. **This one stopped being a prerequisite you have to prepare**: since 2026-08-15 the file is tracked in git at `data/geometria_kmeans_014_v1.json` (310 bytes), so a fresh checkout already has it and `/subir-datos-databricks` carries it with the rest of `data/`. The old failure mode is gone with it — there is no lazy regeneration left that could try to parse the `04` notebook, which in Databricks is a Workspace object rather than a file on disk. If you ever need to rebuild it, `python scripts/exportar_geometria.py` refits it from the CSV.
 
 ## 3. Verbatim import of the three source roots
 
@@ -73,7 +73,9 @@ databricks workspace import-dir src/chec_impacto /Workspace/Users/<userName>/dat
 databricks workspace import-dir scripts /Workspace/Users/<userName>/databricks-integration/scripts_src/scripts --overwrite -p <profile>
 ```
 
-**`scripts/` is a third source root and it is not optional.** `src/chec_local_interpreter/ventanas_015.py` does `from scripts.extract_geometrias_014 import ...` at **module import time** (line 43), so `05` and `06` do not merely fail late at the geometry step — they fail on the import itself with `ModuleNotFoundError: No module named 'scripts'`. `scripts/` is a real package (it has `__init__.py`), which is why it uploads and imports like the other two. Its `sys.path` entry is part of the canonical shim block in step 4.
+**`scripts/` used to be a mandatory third source root; since 2026-08-15 it is not.** The reason it was mandatory was that `src/chec_local_interpreter/ventanas_015.py` did `from scripts.extract_geometrias_014 import ...` at **module import time**, so `05` and `06` failed on the import itself with `ModuleNotFoundError: No module named 'scripts'` rather than late at the geometry step. That import is gone along with the module — verified: nothing under `src/` or in either notebook imports the `scripts` package any more, only mentions it in prose.
+
+The upload and its `sys.path` entry are kept below because they are harmless and cost one call, and because dropping them is a deploy-behaviour change that has not been exercised against a live workspace. Treat them as optional, not as a prerequisite: their absence no longer explains an import failure.
 
 If `import-dir` rejects a non-notebook file in any of the three, fall back to individual `databricks workspace import <target_path> --file <local_file> --language PYTHON --format RAW --overwrite -p <profile>` calls for the rejected files.
 

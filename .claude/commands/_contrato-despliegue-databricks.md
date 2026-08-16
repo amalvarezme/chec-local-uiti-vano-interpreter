@@ -290,9 +290,12 @@ rest of the command (the HTML still gets generated and verified).
 
 - `databricks workspace import --format JUPYTER` enforces a **10 MB** payload
   limit. Always strip `outputs` and `execution_count` from the staged copy.
-  **Exception: notebook 04's stored output must not be stripped in the repo** —
-  `scripts/extract_geometrias_014.py` reads its K-Means geometry out of it. Strip
-  the staged copy only.
+  **Exception: notebook 04's stored output must not be stripped in the repo** — it
+  is the board published as-is, so a stale one ships controls the source already
+  removed. Strip the staged copy only. (Before 2026-08-15 the reason was that a
+  script parsed its HTML for the K-Means geometry; that geometry is now tracked at
+  `data/geometria_kmeans_014_v1.json` and the script is gone. The exception stands
+  on the publishing argument alone.)
 - `databricks fs cp -r` and `workspace import-dir` have **no exclude flag**. They
   will upload `.DS_Store`, `.gitkeep`, `.openmeteo_cache.sqlite` and
   `__pycache__/*.pyc`. Clean up afterwards with `fs rm` / `workspace delete

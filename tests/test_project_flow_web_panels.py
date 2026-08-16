@@ -347,15 +347,22 @@ def test_databricks_command_shim_anchors_still_exist_in_the_notebook(sources, bo
         )
 
 
-def test_board_04_keeps_its_rendered_output_because_the_pipeline_reads_it():
-    """`04`'s cell-7 `text/html` output is an INPUT, not a leftover.
+def test_board_04_keeps_its_rendered_output_because_it_is_what_gets_published():
+    """`04`'s cell-7 `text/html` output is what ships, not a leftover.
 
-    `scripts/extract_geometrias_014.py` pulls the K-Means `geometrias` and `grupos` blocks
-    straight out of that stored output and caches them as `data/derived/geometrias_014.json`,
-    which `chec_impacto.models.criticality_assignment` then loads and checks against a pinned
-    sha1. Clearing the output -- an obvious-looking way to shrink a 12 MB notebook, and the
-    right call for `01`/`02`/`03`, whose outputs nothing reads -- breaks that chain with a
-    `ValueError: No se encontró la clave 'geometrias'`, far from the notebook that caused it.
+    This test's ORIGINAL reason died on 2026-08-15: `scripts/extract_geometrias_014.py`
+    used to pull the K-Means `geometrias` and `grupos` blocks straight out of that stored
+    output and cache them as `data/derived/geometrias_014.json`. That script no longer
+    exists -- the geometry is tracked at `data/geometria_kmeans_014_v1.json` and refitted
+    from the CSV by `scripts/exportar_geometria.py`, so nothing parses this HTML any more.
+
+    The assertions survive on a different argument, and it is worth stating plainly rather
+    than leaving a test whose name promises a dependency that is gone. `04` is the one
+    board published from its stored output, so clearing it -- an obvious-looking way to
+    shrink a 12 MB notebook, and the right call for `01`/`02`/`03` -- means the next
+    publish ships nothing, or ships whatever stale render happens to be there. That is the
+    failure `test_board_04_stored_output_carries_the_fixed_space_too` catches downstream,
+    and it needs the output to exist at all.
     """
     notebook = json.loads(
         (NOTEBOOK_DIR / f"{BOARDS['04']}.ipynb").read_text(encoding="utf-8"))
@@ -419,9 +426,9 @@ def test_space_keyed_lookups_use_the_literal_key_not_a_dead_variable(sources, bo
 def test_board_04_stored_output_carries_the_fixed_space_too():
     """`04`'s cell-7 output is preserved, so a stale one keeps the old controls alive.
 
-    Unlike the other three boards, `04`'s rendered output is an input to the geometry
-    pipeline and is never cleared, which means the source can be right while the output the
-    Databricks command publishes still ships the removed checkboxes. The two must agree.
+    Unlike the other three boards, `04`'s rendered output is published as-is and is never
+    cleared, which means the source can be right while the output the Databricks command
+    publishes still ships the removed checkboxes. The two must agree.
     """
     notebook = json.loads(
         (NOTEBOOK_DIR / f"{BOARDS['04']}.ipynb").read_text(encoding="utf-8"))

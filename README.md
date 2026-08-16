@@ -355,6 +355,14 @@ El diagrama vive acá, en el README, y no en un `.mmd` y un `.svg` aparte: las c
 sueltas de `docs/` se quedaban atrás del flujo cada vez que este cambiaba, y un diagrama
 desactualizado engaña más que la ausencia de diagrama.
 
+**La calle de publicación es presentación, no flujo del proyecto.** El sitio de Astro
+(`astro.config.mjs` con `srcDir: ./site`, publicado por `.github/workflows/deploy-pages.yml`
+en GitHub Pages) muestra hacia afuera reportes que ya existen; no produce ninguno, y nada
+del pipeline lo lee de vuelta. Por eso su flecha entra punteada. Si el sitio no se despliega
+nunca, el proyecto funciona igual: se pierde la vitrina, no un paso. La única excepción es
+`site/data/variables.json`, que sí es un insumo — temático y opcional — del cuaderno 05, y
+que vive bajo `site/` por historia, no porque el sitio lo produzca.
+
 ### Diagrama de la familia de comandos de reporte
 
 Los cinco comandos que operan sobre el pipeline de reportes — `/report`, `/reporte-lote`,
@@ -546,12 +554,15 @@ cinco aplicaciones de escritorio** — archivar no es dejar de construir desde e
 | `01_uiti_vano_clima.ipynb` | Panel climático: violines por variable y nube de rezagos horarios, 208 circuitos | `aplicaciones/01_clima` |
 | `02_uiti_vano_kmeans.ipynb` | Agrupamiento de circuitos y de vanos por UITI acumulado y número de eventos | `aplicaciones/02_agrupamiento_vanos` |
 | `03_uiti_vano_trayectorias_circuitos.ipynb` | Trayectorias de circuito por ventanas deslizantes, con mapa geográfico | `aplicaciones/03_trayectorias_circuitos` |
-| `04_uiti_vano_trayectorias_vano.ipynb` | Lo mismo a nivel de vano; **dueño de la geometría KMeans** que 05 y 06 replican | `aplicaciones/04_trayectorias_vanos` y `scripts/extract_geometrias_014.py` |
+| `04_uiti_vano_trayectorias_vano.ipynb` | Lo mismo a nivel de vano; ajusta la misma geometría KMeans que 05 y 06 usan | `aplicaciones/04_trayectorias_vanos` |
 | `06_uiti_vano_explicabilidad_simulador.ipynb` | Explicabilidad y simulador de riesgo por vano (requiere kernel vivo) | `aplicaciones/06_simulador` |
 
-La única dependencia dura es la geometría de `04`: `05` y `06` la reutilizan vía
-`chec_local_interpreter.ventanas_015`, que la extrae del archivo de `04` y verifica su sha1, de
-modo que un cambio de centroides falla ruidosamente en vez de derivar en silencio.
+La geometría KMeans **dejó de ser una dependencia entre cuadernos** el 2026-08-15. Antes `05` y
+`06` la extraían de la salida guardada de `04`, lo que ataba tres cuadernos entre sí y hacía que
+un checkout limpio no pudiera asignar clases. Ahora vive en `data/geometria_kmeans_014_v1.json`,
+versionada en git y reproducible con `scripts/exportar_geometria.py`, que la reajusta desde el
+CSV. `chec_local_interpreter.ventanas_015.cargar_clases_criticidad` la lee de ahí y verifica su
+sha1, de modo que un cambio de centroides falla ruidosamente en vez de derivar en silencio.
 
 **El pipeline MGCECDL original se borró del árbol el 2026-08-14** (`07_relevancia_lote_por_vano`
 y los ocho `base_apps/0{2,3,4,5,6,7,8,9}_*`). Ninguno se ejecutaba ni se importaba: solo los

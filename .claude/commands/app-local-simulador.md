@@ -36,14 +36,14 @@ already prefers when launched by double-click, so both paths land on the same UR
 ## Extra preflight, specific to this one
 
 Beyond the contract's checks, the **build** needs artifacts no other app does. Check
-before building, and if one is missing stop with the name of the notebook that produces
-it — nothing here can regenerate them:
+before building, and if one is missing stop with the name of whatever produces it. Only
+the geometry can be regenerated from this repo; the rest cannot:
 
 | file | produced by |
 |---|---|
 | `data/models/mil_vano_ventana_v1.pt` | `05_mil_vano_ventana.ipynb` |
 | `data/derived/bolsas_mil_full.joblib` | `05_mil_vano_ventana.ipynb` |
-| `data/derived/geometrias_014.json` | extracted from `04_uiti_vano_trayectorias_vano.ipynb` |
+| `data/geometria_kmeans_014_v1.json` | tracked in git; reproducible with `scripts/exportar_geometria.py` |
 | `data/GEO/MVLINSEC.shp` | not regenerable |
 
 Once the package is built, none of them is opened again.

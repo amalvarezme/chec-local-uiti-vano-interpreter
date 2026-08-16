@@ -1850,9 +1850,10 @@ visor no dependa de `data/derived/`, que `.gitignore` excluye.
 - **La descripcion de la base.** Mostrar como se ven los datos crudos exige
   abrir el CSV. No hay forma de describir una base sin mirarla; lo que si se
   puede es mirarla barata (ver la celda de vista preliminar).
-- **El codigo.** Los modulos de `src/chec_impacto/` y `scripts/` se importan por
-  ruta. Es la unica dependencia que NO conviene eliminar: son miles de lineas con
-  pruebas propias.
+- **El codigo.** Los modulos de `src/chec_impacto/` y `src/chec_local_interpreter/`
+  se importan por ruta. Es la unica dependencia que NO conviene eliminar: son miles
+  de lineas con pruebas propias. Del paquete `scripts/` este cuaderno ya no importa
+  nada; solo lo nombra al citar quien produce la geometria.
 
 ### Las alternativas, con lo que cuesta cada una
 

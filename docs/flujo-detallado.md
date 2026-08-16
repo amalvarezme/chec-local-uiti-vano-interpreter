@@ -256,8 +256,9 @@ usándose; lo que ya no está en el árbol es el código que los generó.
 
 El nombre de la carpeta engaña, y por eso conviene decirlo: **estar en `base_apps/` no significa
 estar muerto.** Los cinco que quedan son justo lo que construyen las cinco aplicaciones de
-escritorio, vía `CUADERNOS_APPS` en `aplicaciones/_comun/raiz.py`. El `04` además es el dueño de
-la geometría KMeans que `scripts/extract_geometrias_014.py` extrae de su salida guardada.
+escritorio, vía `CUADERNOS_APPS` en `aplicaciones/_comun/raiz.py`. El `04` ajusta la geometría
+KMeans que `05` y `06` también usan; desde el 2026-08-15 esa geometría no se extrae de su salida
+guardada, sino que vive versionada en `data/geometria_kmeans_014_v1.json`.
 
 ```
 01_uiti_vano_clima                     panel climático (violines + nube de rezagos)

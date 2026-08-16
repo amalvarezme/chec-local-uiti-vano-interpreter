@@ -79,7 +79,7 @@ Never write it as `git status --porcelain <path> && echo ok` — git exits 0 on 
 
 **Strip every code cell's `outputs` and `execution_count`.** `03` no longer stores its rendered board in the repo — cell 7's `display_data` is committed empty, matching `01` and `02`, whose boards are likewise reachable as standalone HTML under `reports/paneles/`. Strip anyway: a local run repopulates cell 7 with ~11 MB of `text/html`, and a staged copy taken right after one is over the 10 MB `--format JUPYTER` import limit outright.
 
-Note this is `03`-only. **`04`'s output must never be stripped in the repo**: `scripts/extract_geometrias_014.py` reads its K-Means geometry out of that stored HTML. Nothing reads `03`'s.
+Note this is `03`-only. **`04`'s output must never be stripped in the repo**: it is the one board published as-is, so a stale stored output ships controls the source already removed. Nothing reads `03`'s. (Until 2026-08-15 the reason was different — a script parsed `04`'s HTML for the K-Means geometry. That geometry is now tracked at `data/geometria_kmeans_014_v1.json`; the rule outlived its original cause.)
 
 Four edits; everything else byte-identical.
 

@@ -97,7 +97,9 @@ Warn first: `data/Indicadores_vano_v3.csv` is **566 MB** (Git-LFS tracked) and d
 
 **Strip every code cell's `outputs` and `execution_count` first — in the STAGED COPY only.** The repo file is 12.3 MB on disk, almost all of it cell 7's embedded `text/html`; stripped it is **0.08 MB** (measured). `databricks workspace import --format JUPYTER` enforces a 10 MB limit, so an unstripped copy is over the ceiling outright — this is the difference between the upload working and failing, not hygiene.
 
-**Never strip the committed notebook.** Unlike `03`, `04`'s stored output is an *input*: `scripts/extract_geometrias_014.py` reads the K-Means `geometrias` and `grupos` blocks out of cell 7's `text/html` and caches them for `chec_impacto.models.criticality_assignment`, which verifies them against a pinned sha1. Clearing it in the repo breaks that chain with a `ValueError: No se encontró la clave 'geometrias'` raised far from the notebook that caused it. `tests/test_project_flow_web_panels.py` pins this.
+**Never strip the committed notebook.** Unlike `03`, `04`'s stored output is what gets published, so the source can be right while the panel still ships the `v4-logx`/`v4-logy`/`v4-prep` controls that were removed. Clearing it hides that mismatch instead of surfacing it. `tests/test_project_flow_web_panels.py` pins this.
+
+The stronger reason this rule used to have is **gone**: until 2026-08-15 `scripts/extract_geometrias_014.py` parsed the K-Means `geometrias` and `grupos` blocks out of cell 7's `text/html`. That script no longer exists — the geometry is tracked at `data/geometria_kmeans_014_v1.json` and refitted from the CSV by `scripts/exportar_geometria.py`. Nothing reads this notebook's HTML any more, so a `ValueError: No se encontró la clave 'geometrias'` is no longer the failure to expect.
 
 Four edits, everything else byte-identical. Assert each match is unique and fail loudly if not.
 

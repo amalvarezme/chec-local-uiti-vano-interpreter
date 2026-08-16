@@ -25,9 +25,12 @@ sliding window driving both views at once.
 
 ## What is specific to this one
 
-- **Never clean this notebook's stored output.** It is the only one of the five whose
-  saved output is an INPUT: `scripts/extract_geometrias_014.py` reads the K-Means
-  geometry out of it, and notebooks 05 and 06 share that geometry. Building does not
+- **Never clean this notebook's stored output.** The old reason is gone — the K-Means
+  geometry now lives in `data/geometria_kmeans_014_v1.json`, tracked in git and
+  refitted from the CSV by `scripts/exportar_geometria.py`, so nothing parses this
+  notebook's HTML any more. The rule survives on a different one: this is the only board
+  whose output is published as-is, so a stale one ships removed controls while the source
+  looks right. `tests/test_project_flow_web_panels.py` pins that. Building does not
   touch it — `_comun/cuaderno.py` reads the document and `exec`s the sources, never
   writing back — and that is verified: after a build, `git status --porcelain notebooks/`
   comes back empty. Check it anyway if you ever rebuild.
