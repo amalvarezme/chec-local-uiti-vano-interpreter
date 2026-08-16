@@ -492,11 +492,14 @@ def preparar_copia() -> Path:
         )
 
     # --- celda 3: geometria KMeans desde el paquete -------------------------------
+    # Era un reemplazo de RANGO mientras el cuaderno resolvia la geometria en tres
+    # lineas -- ruta por defecto, comprobar si existe, extraerla del cuaderno 04. Ahora
+    # la geometria es un artefacto versionado y el cuaderno la lee en una sola linea,
+    # asi que basta un reemplazo simple.
     def celda3(f: str) -> str:
-        return _reemplazar_rango(
+        return _reemplazar(
             f,
-            "GEOMETRIAS_PATH = DEFAULT_OUTPUT_PATH",
-            "    extraer_geometrias_014(DEFAULT_NOTEBOOK_PATH, GEOMETRIAS_PATH)",
+            "GEOMETRIAS_PATH = ROOT / 'data' / 'geometria_kmeans_014_v1.json'",
             "GEOMETRIAS_PATH = PAQUETE / 'geometrias_014.json'",
             etiqueta="3: geometria",
         )
