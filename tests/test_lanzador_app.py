@@ -54,8 +54,9 @@ import pytest
 RAIZ = Path(__file__).resolve().parents[1]
 APPS = RAIZ / "aplicaciones"
 
-TODAS = sorted(d for d in APPS.iterdir()
-               if d.is_dir() and not d.name.startswith((".", "_")))
+from ayudas_aplicaciones import locales  # noqa: E402
+
+TODAS = locales()
 IDS = [d.name for d in TODAS]
 
 BUNDLE = "Iniciar.app"

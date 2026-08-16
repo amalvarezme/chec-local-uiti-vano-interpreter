@@ -101,6 +101,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import entorno  # noqa: E402
 import servidor as _servidor  # noqa: E402
+import tableros as _tableros  # noqa: E402
 import terminal as _terminal  # noqa: E402
 from menu_pagina import pagina  # noqa: E402
 
@@ -176,31 +177,32 @@ class Aplicacion:
         return self.proceso is not None and self.proceso.poll() is None
 
 
+# El puerto de cada tablero. Vive AQUI y no en `tableros.py` porque es del menu local
+# y de nadie mas: la app consolidada de Databricks sirve los mismos tableros bajo rutas
+# de un solo puerto. Son los que fija `.claude/commands/_contrato-apps-locales.md`, para
+# que una aplicacion abierta desde el menu y otra abierta a mano se reconozcan entre si
+# en vez de duplicarse en dos puertos distintos.
+PUERTOS = {
+    "clima": 8801,
+    "agrupamiento": 8802,
+    "trayectorias_circuitos": 8803,
+    "trayectorias_vanos": 8804,
+    "simulador": 8866,
+}
+
+
 def catalogo() -> dict[str, Aplicacion]:
     """Las cinco aplicaciones, en el orden en que se muestran.
 
-    Los puertos son los mismos que fija `.claude/commands/_contrato-apps-locales.md`,
-    para que una aplicacion abierta desde el menu y otra abierta a mano se reconozcan
-    entre si en vez de duplicarse en dos puertos distintos.
+    Los titulos y las descripciones salen de `tableros.py`, que es la unica lista, y
+    aqui se les agrega lo que solo el menu necesita: el puerto y el proceso. Estaban
+    escritos aqui dentro hasta el 2026-08-16; se movieron cuando aparecio un segundo
+    consumidor -- la app consolidada de Databricks -- y dos copias del mismo titulo
+    pasaron a ser dos nombres para el mismo tablero segun por donde entrara el usuario.
     """
-    return {a.clave: a for a in (
-        Aplicacion("clima", "01_clima", "Nube por vano y clima",
-                   "La nube por vano sobre el mapa, con las 6 variables, la serie de "
-                   "doble eje y los 6 violines.", 8801),
-        Aplicacion("agrupamiento", "02_agrupamiento_vanos", "Agrupamiento de vanos",
-                   "Agrupamiento por UITI acumulado y numero de eventos.", 8802),
-        Aplicacion("trayectorias_circuitos", "03_trayectorias_circuitos",
-                   "Trayectorias de circuitos",
-                   "Trayectoria y agrupamiento de circuitos con ventana deslizante.",
-                   8803),
-        Aplicacion("trayectorias_vanos", "04_trayectorias_vanos",
-                   "Trayectorias de vanos",
-                   "Lo mismo un nivel mas abajo: agrupamiento y evolucion por vano.",
-                   8804),
-        Aplicacion("simulador", "06_simulador", "Simulador de riesgo por vano",
-                   "Que pasaria si: corre el modelo MIL sobre los vanos y valores que "
-                   "elijas. Es la unica que necesita Python vivo.", 8866, voila=True),
-    )}
+    return {t.clave: Aplicacion(t.clave, t.carpeta, t.titulo, t.descripcion,
+                                PUERTOS[t.clave], voila=t.vivo)
+            for t in _tableros.TABLEROS}
 
 
 class Control:

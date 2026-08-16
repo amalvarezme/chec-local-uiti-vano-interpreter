@@ -1,0 +1,9 @@
+command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+
+env:
+  # El catalogo y el esquema se RESUELVEN en cada despliegue (contrato C): 
+  # `workspace.default` no existe en todos los workspaces, y el de CHEC es uno de 
+  # los que no lo tiene (D1). `/app-criticidad-chec` sustituye este valor por el 
+  # que resolvio antes de subir este archivo.
+  - name: RAIZ_PANELES
+    value: "/Volumes/workspace/default/chec-simulador/paneles"

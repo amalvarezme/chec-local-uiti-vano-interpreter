@@ -131,7 +131,11 @@ def _estado_final(datos: dict) -> str:
 def _render_encabezado(datos: dict) -> list[str]:
     filas = [
         ("Comando", datos.get("comando")),
-        ("Cuaderno", datos.get("cuaderno")),
+        # La bandera se sigue llamando `--cuaderno` -- renombrarla romperia las
+        # bitacoras ya escritas y los comandos que la pasan --, pero lo que se
+        # despliega dejo de ser un `.ipynb` en agosto de 2026: hoy es un modulo de
+        # `src/chec_tableros/` o el cuaderno 05. El ROTULO dice lo que hay.
+        ("Fuente", datos.get("cuaderno")),
         ("Workspace", datos.get("workspace")),
         ("App", datos.get("app")),
         ("Perfil", datos.get("perfil")),

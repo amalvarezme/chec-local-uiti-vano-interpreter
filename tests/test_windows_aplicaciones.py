@@ -22,8 +22,9 @@ RAIZ = Path(__file__).resolve().parents[1]
 APPS = RAIZ / "aplicaciones"
 COMUN = APPS / "_comun"
 
-TODAS = sorted(d for d in APPS.iterdir()
-               if d.is_dir() and not d.name.startswith((".", "_")))
+from ayudas_aplicaciones import locales  # noqa: E402
+
+TODAS = locales()
 IDS = [d.name for d in TODAS]
 
 # Lo que Windows NO tiene. `SIGKILL` es el que muerde: existe en POSIX, no en Windows, y

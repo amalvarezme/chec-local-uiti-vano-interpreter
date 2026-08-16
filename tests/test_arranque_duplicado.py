@@ -242,9 +242,10 @@ def test_servir_deja_su_pid_y_lo_borra_al_salir(visor):
 # ------------------------------------------------------------ que nadie se lo salte
 
 
-TODAS = sorted(d for d in APPS.iterdir()
-               if d.is_dir() and not d.name.startswith((".", "_")))
-VISORES = [d for d in TODAS if d.name != "00_criticidad_chec"]
+from ayudas_aplicaciones import locales, visores  # noqa: E402
+
+TODAS = locales()
+VISORES = visores()
 
 
 @pytest.mark.parametrize("app", TODAS, ids=[d.name for d in TODAS])

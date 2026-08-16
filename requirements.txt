@@ -47,6 +47,16 @@ anywidget  # backs plotly>=6's go.FigureWidget -- without it FigureWidget() rais
 
 # === Testing ===
 pytest
+# Para probar `aplicaciones/databricks/criticidad_chec`, la app consolidada que sirve
+# los cuatro tableros en Databricks. Su `app.py` no corre en este entorno -- corre en
+# el contenedor de la app --, pero SI se prueba aqui: enrutado, negociacion de gzip y
+# cabeceras de cache. Sin estas dos, esa prueba se saltaria, y una prueba que se salta
+# en silencio se lee igual que una que pasa.
+#
+# `databricks-sdk` NO hace falta: la prueba lo sustituye por un doble que lee del
+# disco. Es la unica llamada que este entorno no puede hacer de verdad.
+fastapi   # la app consolidada de Databricks
+httpx     # lo necesita `fastapi.testclient.TestClient`
 
 # === Kaggle experiment CLI ===
 kaggle  # used by /experimento-kaggle's auth/config + push/status/output commands

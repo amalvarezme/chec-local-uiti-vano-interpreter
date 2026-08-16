@@ -60,10 +60,10 @@ MENU = "00_criticidad_chec"
 
 
 def _aplicaciones() -> list[Path]:
-    return sorted(
-        d for d in APPS.iterdir()
-        if d.is_dir() and not d.name.startswith((".", "_"))
-    )
+    """Las aplicaciones LOCALES de escritorio. El criterio vive en el ayudante."""
+    from ayudas_aplicaciones import locales
+
+    return locales()
 
 
 def _ids(rutas: list[Path]) -> list[str]:

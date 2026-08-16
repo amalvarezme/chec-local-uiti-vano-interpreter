@@ -24,6 +24,7 @@ BITACORA = PROJECT_ROOT / "scripts" / "bitacora_despliegue.py"
 
 FAMILIA = (
     "app-agrupamiento-vanos-circuitos.md",
+    "app-criticidad-chec.md",
     "app-simulador-vano.md",
     "app-trayectorias-circuitos.md",
     "app-trayectorias-vanos.md",

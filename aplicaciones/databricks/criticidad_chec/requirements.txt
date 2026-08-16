@@ -1,0 +1,12 @@
+# Dependencias de la app consolidada. Tres, y ninguna es de datos.
+#
+# Es lo que la separa de las aplicaciones de escritorio: aqui no se construye ningun
+# tablero. Los cuatro paneles se construyen ANTES de desplegar, con el entorno del
+# repositorio -- que si tiene pandas, geopandas y plotly --, y esto solo sirve los
+# archivos que salieron de ahi. Por eso arranca en segundos.
+fastapi
+uvicorn
+# La Files API de Unity Catalog. `/Volumes/...` NO esta montado por FUSE dentro del
+# contenedor de una app -- da 403, medido (contrato D2) --, asi que leer el Volume
+# pasa por aqui obligatoriamente.
+databricks-sdk
