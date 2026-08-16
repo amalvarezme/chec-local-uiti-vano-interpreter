@@ -1169,11 +1169,15 @@ def construir(
                  layers=CAPAS_CAJA_SELECCION),
         map2=dict(style='carto-positron', center=dict(lat=5.07, lon=-75.52), zoom=10,
                   layers=CAPAS_CAJA_SIMULADA),
-        # El titulo se ANCLA arriba del contenedor en vez de dejar que Plotly lo centre en
-        # el margen: ahi es donde ahora vive la leyenda, y un titulo auto-centrado se le
-        # monta encima. Medido con el margen en 108 y el titulo suelto: la leyenda ocupaba
-        # de 25 a 92 px y el titulo caia en 45-66, dentro de ella.
-        title=dict(text='Simulador Criticidad', y=1.0, yanchor='top', yref='container'),
+        # SIN titulo de figura. "Simulador Criticidad" paso a ser un rotulo del ENCABEZADO,
+        # encima del panel de control y a la izquierda del todo: dentro de la figura quedaba
+        # centrado sobre el area de dibujo -- o sea a la derecha del panel, no encima -- y
+        # ademas competia por el margen superior con la leyenda de los mapas, que subio a
+        # ese mismo hueco. Ver `ENCABEZADO_TITULO`.
+        #
+        # Con el titulo fuera, el margen de arriba deja de tener que alojarlo: 132 - 22 de
+        # titulo - 24 de su aire = 86, que es lo que piden la leyenda (67) y la banda de los
+        # titulos de los mapas (19).
         # Margenes explicitos. Los de Plotly por defecto (l=80, r=80, t=100, b=80) se llevaban
         # 160 px de ancho -- medido, el 8,5% de una pantalla de 1.920 -- y a la derecha no hay
         # nada que rotular. El izquierdo NO puede bajar a cero: es donde viven el titulo y las
@@ -1181,17 +1185,16 @@ def construir(
         # El margen de arriba sube de 78 a 132 px, y no es un numero redondo: es la suma de
         # lo que hay que apilar ahi, todo MEDIDO en el navegador.
         #
-        #     titulo de la figura, anclado arriba          22 px
-        #     leyenda horizontal, que envuelve en 3 filas   67
+        #     leyenda horizontal, que envuelve en 3 filas   67 px
         #     banda de los titulos de los mapas             19
-        #     aire entre las tres                           24
+        #     aire entre las dos                            20
         #                                                  ---
-        #                                                  132
+        #                                                  106
         #
         # La leyenda son 67 px y no 20 porque son siete nombres con `tracegroupgap=22`: no
-        # caben en una fila y Plotly las envuelve. Contar una sola fila era lo que dejaba el
-        # titulo dentro de la leyenda.
-        margin=dict(l=52, r=14, t=132, b=44),
+        # caben en una fila y Plotly las envuelve. Contar una sola fila fue lo que una vez
+        # dejo el titulo de la figura dentro de la leyenda -- ese titulo ya no esta aqui.
+        margin=dict(l=52, r=14, t=106, b=44),
         barmode='group', bargap=0.25, bargroupgap=0.05,
         # SIN `width`: con un ancho fijo Plotly ignora el contenedor. Pero dejarlo en None NO
         # basta por si solo -- `autosize` mide el contenedor UNA vez, al montar, y el widget
@@ -3575,8 +3578,10 @@ def construir(
 
     PANEL = widgets.VBox(
         [
-            _grupo(_titulo('Circuito'), circuito_widget),
-            _grupo(_titulo('Ventana'), ventana_widget),
+            # Sin rotulo: el desplegable MUESTRA el circuito y el deslizador su rango al
+            # lado, asi que nombrarlos era repetir lo que el propio control ya dice.
+            _grupo(circuito_widget),
+            _grupo(ventana_widget),
             _grupo(vano_widget,
                    widgets.HBox([boton_desmarcar, boton_top_ventana]),
                    AVISO_VANOS),
@@ -3656,7 +3661,24 @@ def construir(
     # alta, y la corta queda con un vacio abajo que se lee como un panel a medio cargar.
     CUERPO = widgets.HBox([COLUMNA_CONTROLES, COLUMNA_FIGURAS],
                           layout=widgets.Layout(width='100%', align_items='flex-start'))
-    APP = widgets.VBox([*encabezado, ESTILO, CUERPO],
+    # El encabezado: el titulo a la IZQUIERDA del todo y lo que traiga la aplicacion -- su
+    # barra de cerrar -- a la derecha, en la misma fila.
+    #
+    # `space-between` y no dos cajas al 50%: el titulo mide lo que mide y el boton tambien,
+    # y repartir a medias deja a uno de los dos flotando en su mitad.
+    #
+    # Cuando nadie pasa `encabezado` -- el tablero dentro de un cuaderno, sin aplicacion que
+    # cerrar -- la fila se queda solo con el titulo, y `space-between` sobre un unico hijo
+    # lo deja donde tiene que estar: a la izquierda.
+    ENCABEZADO_TITULO = widgets.HTML(
+        '<span style="font-family:system-ui,-apple-system,\'Segoe UI\',sans-serif;'
+        'font-size:19px;color:#2b2b2b;"><b>Simulador Criticidad</b></span>')
+    ENCABEZADO = widgets.HBox(
+        [ENCABEZADO_TITULO, *encabezado],
+        layout=widgets.Layout(width='100%', justify_content='space-between',
+                              align_items='center', padding='4px 12px'))
+
+    APP = widgets.VBox([ENCABEZADO, ESTILO, CUERPO],
                        layout=widgets.Layout(width='100%'))
     APP.add_class('app-v15')
     # `display` explicito y una sola vez. `add_class` devuelve el propio widget, asi que

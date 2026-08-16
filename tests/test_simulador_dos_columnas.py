@@ -131,6 +131,17 @@ def test_la_barra_de_cerrar_va_encima_de_las_dos_columnas():
     armado = re.search(r"APP = widgets\.VBox\(\s*\[([^\]]+)\]", fuente)
     assert armado, "el tablero ya no arma `APP` como un VBox"
     piezas = [p.strip() for p in armado.group(1).split(",") if p.strip()]
-    assert piezas[0] == "*encabezado", (
-        f"`APP` lleva {piezas}; el encabezado va PRIMERO y fuera del HBox, o la barra "
-        "de cerrar acaba dentro de una columna del 30%")
+    assert piezas[0] == "ENCABEZADO", (
+        f"`APP` lleva {piezas}; la fila del encabezado va PRIMERA y fuera del HBox, o la "
+        "barra de cerrar acaba dentro de una columna del 30%")
+    # Y dentro de esa fila, el `encabezado` que pasa la aplicacion se DESPLIEGA junto al
+    # titulo. Antes iba suelto en el `VBox`; ahora comparte fila con "Simulador
+    # Criticidad", que va a la izquierda mientras la barra queda a la derecha. Lo que la
+    # prueba persigue no ha cambiado: que la barra sea del tablero entero y no de una
+    # columna.
+    fila = re.search(r"ENCABEZADO = widgets\.HBox\(\s*\[([^\]]+)\]", fuente)
+    assert fila, "el tablero ya no arma la fila del encabezado"
+    dentro = [p.strip() for p in fila.group(1).split(",") if p.strip()]
+    assert "*encabezado" in dentro, (
+        f"la fila del encabezado lleva {dentro}; sin `*encabezado` la barra de cerrar no "
+        "llega a ninguna parte")
