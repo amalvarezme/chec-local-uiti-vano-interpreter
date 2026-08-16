@@ -902,7 +902,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     fig_vano = make_subplots(
         # DOS filas y TRES columnas, con las cinco casillas ocupadas.
         #
-        #   fila 1:  barras por grupo | dispersion vano x ventana | top 10 clase Alto
+        #   fila 1:  barras por grupo | dispersion vano x ventana | top 10 Medio-Alto+Alto
         #   fila 2:  violines de UITI | ranking de circuitos, sobre esas dos columnas
         #
         # Arriba queda la lectura por VANO -- cuantos hay en cada grupo, donde caen en el
@@ -938,7 +938,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         # por FILAS y no por nombre: reordenar la rejilla sin reordenar esta tupla le pone a
         # cada panel el titulo del vecino, sin dar error.
         subplot_titles=('Vanos por grupo', '',
-                        'Top 10 clase Alto',
+                        'Top 10 Medio-Alto + Alto',
                         'UITI acumulado',
                         'Grupos Circuitos: Vanos en clase Medio-Alto y Alto por circuito'),
     )
@@ -970,7 +970,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         textfont=dict(size=11, color=['rgb(40,10,12)', 'rgb(40,10,12)', 'white', 'white']),
         showlegend=False, hoverinfo='skip',
     ), row=1, col=1)
-    # 15-18: top 10 de circuitos por cantidad de vanos en clase Alto, una traza por clase,
+    # 15-18: top 10 de circuitos por vanos en las DOS clases criticas, una traza por clase,
     # APILADAS y en porcentaje. La pregunta que responde no es "cuantos vanos tiene" sino
     # "como se reparte ese circuito entre las cuatro clases", asi que cada barra suma 100%% y
     # los circuitos se pueden comparar aunque tengan tamanos muy distintos. El orden y los
@@ -1112,7 +1112,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     # al generar en vez de reescribir el titulo equivocado.
     TITULOS_N_VANO = {}
     for _clave, _texto in [('barras', 'Vanos por grupo'),
-                           ('top', 'Top 10 clase Alto'),
+                           ('top', 'Top 10 Medio-Alto + Alto'),
                            ('altoCirc', 'Grupos Circuitos: Vanos en clase Medio-Alto y Alto por circuito'),
                            ('violinU', 'UITI acumulado')]:
         _pos = [i for i, _a in enumerate(fig_vano.layout.annotations) if _a.text == _texto]
@@ -1578,7 +1578,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     }, [CTX.idx.pct]);
     Plotly.restyle(gd, {x: vg, y: vy}, CTX.idx.violinUiti);
 
-    // --- Top 10 de circuitos por vanos en clase Alto --------------------------------
+    // --- Top 10 de circuitos por vanos en Medio-Alto + Alto -------------------------
     // Se cuenta sobre los MISMOS grupos que se acaban de calcular para el scatter, asi
     // que el ranking responde al rango de fechas elegido y no a una foto
     // fija. Se muestra en PORCENTAJE y no en conteo porque la pregunta es como se
@@ -1610,11 +1610,22 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     });
     var ALTO = CTX.grupos.length - 1;             // la clase mas critica es la ultima
     function totalDe(c) { var t = 0, k; for (k = 0; k < 4; k++) { t += porCirc[c][k]; } return t; }
+    // Las DOS clases criticas, Medio-Alto (ALTO - 1) y Alto. Es la unica definicion de
+    // "vano critico" del tablero, y la comparten el top 10 de aqui arriba y el ranking
+    // de la fila de abajo. Vivia mas abajo, junto al ranking, y el top ordenaba por
+    // `porCirc[c][ALTO]` a secas: dos paneles vecinos respondiendo la misma pregunta con
+    // criterios distintos. MEDIDO sobre la ventana completa: de los diez circuitos del
+    // top solo DOS estaban entre los diez ultimos del ranking. Ocho no. Uno al lado del
+    // otro eso se lee como un error de datos.
+    // El motivo de sumarlas es el que ya declaraba el panel de abajo: un circuito con
+    // muchos vanos a un paso de la clase peor es tan accionable como uno que ya los
+    // tiene ahi, y mirando solo Alto esa poblacion queda invisible.
+    function critDe(c) { return porCirc[c][ALTO - 1] + porCirc[c][ALTO]; }
     // Desempate explicito por total de vanos y luego por nombre: sin el, dos circuitos
-    // con los mismos vanos en Alto podrian intercambiarse entre repintados segun el
+    // con los mismos vanos criticos podrian intercambiarse entre repintados segun el
     // orden en que Object.keys devuelva las llaves.
     var ranking = Object.keys(porCirc).sort(function (a, b) {
-      return (porCirc[b][ALTO] - porCirc[a][ALTO]) || (totalDe(b) - totalDe(a)) ||
+      return (critDe(b) - critDe(a)) || (totalDe(b) - totalDe(a)) ||
              (a < b ? -1 : 1);
     }).slice(0, 10);
     var nCircuitos = Object.keys(porCirc).length;
@@ -1633,9 +1644,14 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         xs2.push(pct);
         // Sin decimales: con tramos de ~20 px "42%%" entra y "42.3%%" no.
         ls2.push(pct >= MIN_PCT_TEXTO ? Math.round(pct) + '%%' : '');
+        // La suma que ORDENA la lista va en el hover: sin ella el panel muestra
+        // porcentajes de cuatro clases y el motivo del puesto se queda fuera.
         ts2.push('<b>' + ranking[i] + '</b><br>' + CTX.grupos[g] + ': ' + cc[g] +
                  ' de ' + tot + ' vanos (' + pct.toFixed(1) + '%%)' +
-                 '<br>En clase ' + CTX.grupos[ALTO] + ': ' + cc[ALTO]);
+                 '<br>' + CTX.grupos[ALTO - 1] + ' + ' + CTX.grupos[ALTO] + ': ' +
+                 critDe(ranking[i]) +
+                 '<br>  ' + CTX.grupos[ALTO - 1] + ': ' + cc[ALTO - 1] +
+                 '<br>  ' + CTX.grupos[ALTO] + ': ' + cc[ALTO]);
       }
       topX.push(xs2); topY.push(ranking.slice()); topT.push(ts2); topL.push(ls2);
     }
@@ -1645,9 +1661,8 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     // Solo entran los circuitos con AL MENOS UNO. Con los demas incluidos los tres
     // cuartiles caen en cero (163 de 208 circuitos no tienen ninguno sobre esta base) y
     // el grafico deja de decir nada: una hilera de ceros y un puñado de barras al final.
-    // Las dos clases criticas: Medio-Alto (ALTO - 1) y Alto. El conteo, el orden y los
-    // cuartiles salen todos de esta suma, no de Alto sola.
-    function critDe(c) { return porCirc[c][ALTO - 1] + porCirc[c][ALTO]; }
+    // El conteo, el orden y los cuartiles salen todos de `critDe` -- declarada arriba,
+    // junto al top 10, porque ahora los DOS paneles ordenan por ella.
     // .slice() antes de ordenar: CTX.circuitosNombres es la paleta que resuelve circDe(),
     // y ordenarla en el sitio desalinearia todos los indices de CTX.circuitos.
     var conAlto = CTX.circuitosNombres.slice();
