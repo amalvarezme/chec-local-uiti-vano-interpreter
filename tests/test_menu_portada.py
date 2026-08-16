@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import re
 import sys
+import unicodedata
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parents[1]
@@ -123,28 +124,38 @@ def test_el_diagrama_es_svg_en_linea():
 def test_el_diagrama_explica_el_simulador_con_su_vocabulario_real():
     """El diagrama dejo de listar los cinco tableros para explicar el simulador.
 
-    Y lo hace con las palabras que el tablero usa de verdad: `Diagnostico`, `Intervencion`,
-    `Escenario` y `Simular` son botones que existen, no invenciones de la portada. Un
-    diagrama que renombre lo que el usuario va a ver es peor que no tenerlo.
+    Aqui se fijaban ademas "Modelo MIL", "Sensibilidad min-max" y "no es SHAP". Esa
+    exigencia se cayo a proposito: las tres eran el diagrama explicando la TECNICA -- que
+    arquitectura tiene el modelo, que algoritmo corre el estudio, con cual no confundirlo
+    -- a un lector que viene a saber que hace el tablero. Ahora los tres bloques lo dicen
+    en castellano llano y su contrato vive en `test_menu_diagrama_y_titulo.py`.
 
-    "Sensibilidad min-max" se comprueba aparte y con enfasis: el modulo que la calcula
-    documenta que su ranking NO es SHAP, y llamarlo asi en la portada seria prometer una
-    tecnica que no se corre.
+    Lo que SI sigue siendo contrato es el vocabulario de la INTERFAZ: `Diagnostico`,
+    `Intervencion`, `Escenario` y `Simular` son botones que existen, no invenciones de la
+    portada. Un diagrama que renombre lo que el usuario va a ver es peor que no tenerlo.
     """
     pagina = _pagina()
     svg = pagina[pagina.index("<svg"):pagina.index("</svg>")]
-    for pieza in ("Modelo MIL", "Sensibilidad min-max", "Diagnostico semi-automatico",
-                  "Intervencion", "Escenario", "Grafo de relaciones", "Que pasa si?"):
+    for pieza in ("Intervencion", "Escenario", "Que pasa si?", "Simular"):
         assert pieza in svg, f"el diagrama no nombra {pieza!r}"
-    assert "SHAP" in svg and "no es SHAP" in svg, (
-        "el diagrama no aclara que la sensibilidad NO es SHAP")
+
+
+def _sin_tildes(texto: str) -> str:
+    """Para comparar rotulos con nombres de botones sin que una tilde cuente como otro nombre."""
+    return unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode("ascii")
 
 
 def test_los_botones_que_el_diagrama_nombra_existen_de_verdad():
-    """Si el tablero renombra un boton, la portada tiene que enterarse."""
+    """Si el tablero renombra un boton, la portada tiene que enterarse.
+
+    La comparacion PLIEGA las tildes. El rotulo del diagrama dice "Diagnóstico" y el
+    boton del tablero `Diagnostico`: quien lee el diagrama encuentra el boton igual, asi
+    que exigir los mismos bytes convertiria una diferencia ortografica en un fallo de
+    contrato -- y empujaria a "arreglarlo" cambiando un texto que el usuario escribio.
+    """
     tablero = (RAIZ / "src" / "chec_tableros" / "simulador" / "tablero.py").read_text(
         encoding="utf-8")
-    svg = _pagina()
+    svg = _sin_tildes(_pagina())
     for boton in ("Diagnostico", "Simular"):
         assert f"description='{boton}'" in tablero, (
             f"el simulador ya no tiene un boton {boton!r}; la portada lo sigue nombrando")

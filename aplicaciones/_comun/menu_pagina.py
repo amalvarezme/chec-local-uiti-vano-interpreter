@@ -60,11 +60,11 @@ def _logo(nombre: str) -> str:
 # vale mas que atender una preferencia que los tableros ignoran.
 _ESTILO = Template("""
 * { box-sizing: border-box; }
-body { margin: 0; padding: 12px; font: 15px/1.55 $FUENTE;
+body { margin: 0; padding: 12px; font: 14px/1.55 $FUENTE;
        background: $FONDO; color: $TEXTO; }
-/* 1.720 y no 1.180: con la columna de botones al triple -- 760 px -- un tope de 1.180
-   dejaba al diagrama con 386 px, y a ese tamanio su texto no se lee. El tope existe para
-   que la portada no se estire sin fin en un monitor ancho, no para apretarla. */
+/* 1.720 y no 1.180: con la columna de botones en 950 px un tope de 1.180 dejaria al
+   diagrama con 200, y a ese tamanio su texto no se lee. El tope existe para que la
+   portada no se estire sin fin en un monitor ancho, no para apretarla. */
 .envoltura { max-width: 1720px; margin: 0 auto; padding: 20px 8px 60px; }
 
 /* La portada: los botones a la izquierda y el diagrama a la derecha.
@@ -73,12 +73,18 @@ body { margin: 0; padding: 12px; font: 15px/1.55 $FUENTE;
    y el diagrama, que es lo que hay que leer de un vistazo, se queda con una franja.
    `minmax(0, 1fr)` en la derecha y no `1fr` a secas: una celda de rejilla no baja de su
    contenido minimo, y el SVG tiene uno propio. */
-.portada { display: grid; grid-template-columns: 760px minmax(0, 1fr); gap: 34px;
+.portada { display: grid; grid-template-columns: 950px minmax(0, 1fr); gap: 34px;
            align-items: start; }
-/* 760 px y no 420: el texto y los botones de esta columna van al TRIPLE, y una columna
-   que no crece con ellos parte cada tarjeta en tres renglones. */
-/* Y en pantalla estrecha se apilan, con los botones primero: son lo unico accionable. */
-@media (max-width: 1240px) { .portada { grid-template-columns: 1fr; } }
+/* 950 px: el texto y los botones de esta columna van al TRIPLE, y una columna que no
+   crece con ellos parte cada tarjeta en tres renglones. */
+/* Y en pantalla estrecha se apilan, con los botones primero: son lo unico accionable.
+   El umbral sube CON la columna, y no a ojo: 1.544 es el ancho exacto al que el SVG sale
+   a escala 1:1 -- 24 de `body` + 16 de `.envoltura` + 950 de columna + 34 de hueco + los
+   520 de su `viewBox` --. Por debajo de eso el diagrama se dibuja MAS PEQUENIO de lo
+   disenado, asi que su letra de 9 baja de 9. Dejar el umbral en 1.240, como estaba
+   cuando la columna medida 760, abria una franja entera de anchos en dos columnas con la
+   derecha ilegible. */
+@media (max-width: 1544px) { .portada { grid-template-columns: 1fr; } }
 
 /* Los logos, debajo de los botones y CENTRADOS. Viajan tal cual los aprobo la marca: aqui
    no se recolorean. */
@@ -90,13 +96,20 @@ body { margin: 0; padding: 12px; font: 15px/1.55 $FUENTE;
    producto sino la firma de quien lo hizo, y al mismo tamanio se leerian como iguales. */
 .logos .firma { margin-top: 30px; display: flex; align-items: center;
                 justify-content: center; gap: 16px; }
-.logos .firma span { font-size: 26px; color: $TENUE; }
+.logos .firma span { font-size: 25px; color: $TENUE; }
 .logos .firma img { height: 78px; width: auto; }
 
 .col-der svg { width: 100%; height: auto; }
-header { display: flex; align-items: flex-start; justify-content: space-between;
+/* La cabecera se quedo con un solo hijo -- el boton -- desde que el titulo bajo a la
+   columna izquierda. `flex-end` y no `space-between`: con un solo hijo, repartir el
+   espacio entre los extremos lo deja pegado a la IZQUIERDA. */
+header { display: flex; align-items: flex-start; justify-content: flex-end;
          gap: 20px; margin-bottom: 22px; }
-h1 { font-size: 25px; margin: 0; letter-spacing: -.01em; }
+h1 { font-size: 24px; margin: 0; letter-spacing: -.01em; }
+/* El titulo del panel, al doble del `h1` base y centrado en su columna. Va aqui y no en
+   `h1` a secas porque `.cerrado h1` -- la pantalla de despedida, que escribe el
+   JavaScript -- es otra cosa y no tiene por que crecer con este. */
+.col-izq h1 { font-size: 48px; text-align: center; margin-bottom: 22px; }
 
 /* El filo izquierdo rojo es el gesto que repiten los cinco tableros en sus paneles de
    control. Cada aplicacion del menu es una tarjeta con ese mismo filo, asi que la
@@ -106,26 +119,30 @@ h1 { font-size: 25px; margin: 0; letter-spacing: -.01em; }
    mismo -- a 4 px se pierde contra una tarjeta tres veces mas alta. */
 .tarjeta { display: flex; align-items: center; gap: 48px; background: $PANEL;
            border: 1px solid $BORDE; border-left: 12px solid $ACENTO; border-radius: 10px;
-           padding: 26px 32px; margin-bottom: 18px; font-size: 45px; line-height: 1.25; }
+           padding: 26px 32px; margin-bottom: 18px; font-size: 44px; line-height: 1.25; }
 .texto { flex: 1; min-width: 0; }
 .titulo { font-weight: 600; margin-bottom: 2px; }
-.desc { color: $TENUE; font-size: 36px; }
+.desc { color: $TENUE; font-size: 35px; }
 /* El aviso de la emergente bloqueada. En el acento y no en el gris de `.desc`: es lo
    unico que explica por que un tablero que dice "corriendo" no se ve en ninguna parte. */
-.aviso { color: $ACENTO_OSCURO; font-size: 12px; margin-top: 4px; }
+.aviso { color: $ACENTO_OSCURO; font-size: 11px; margin-top: 4px; }
 .punto { width: 27px; height: 27px; border-radius: 50%; flex: none;
          background: $BORDE_FUERTE; }
 .punto.corriendo { background: $ACENTO; }
 .punto.preparando { background: $BORDE_FUERTE; box-shadow: 0 0 0 3px $BORDE; }
 .punto.fallo { background: $ACENTO_OSCURO; }
 
-button { font: inherit; font-size: 13px; font-weight: 600; padding: 6px 12px;
+button { font: inherit; font-size: 12px; font-weight: 600; padding: 6px 12px;
          border-radius: 4px; border: 1px solid $BORDE_FUERTE; background: $FONDO;
          color: $TEXTO; cursor: pointer; white-space: nowrap; }
-/* Los de las TARJETAS al triple. `Cerrar todo` no: vive en la cabecera, no en la columna,
-   y ampliarlo lo pondria a competir con el titulo. */
-.tarjeta button { font-size: 39px; padding: 18px 36px; border-radius: 10px;
+/* Los de las TARJETAS al triple. */
+.tarjeta button { font-size: 38px; padding: 18px 36px; border-radius: 10px;
                   border-width: 3px; }
+/* `Cerrar todo` al DOBLE del boton base. La caja dobla con el texto: ampliar solo la
+   letra la desborda, porque el relleno esta en pixeles y no en `em`. El radio y el filo
+   suben con ella o se pierden contra un boton dos veces mas grande. */
+#cerrar-todo { font-size: 24px; padding: 12px 24px; border-radius: 8px;
+               border-width: 2px; }
 button:hover:not(:disabled) { background: $PANEL; }
 button:disabled { opacity: .55; cursor: default; }
 /* Rojo lleno para la accion principal, igual que los botones de los tableros. */
@@ -387,28 +404,42 @@ _GUION = _paleta.aplicar(_GUION)
 def _diagrama(titulos: list[str]) -> str:
     """El diagrama de la portada, centrado en el simulador "Que pasa si?".
 
-    Resume el camino real y con el vocabulario real del tablero -- `Diagnostico`,
-    `Intervencion`, `Escenario`, `Simular` son los botones que existen, y "sensibilidad
-    min-max" es como el propio codigo llama a ese estudio y NUNCA "SHAP".
+    Cinco pasos, del que elige el usuario al que pulsa Simular. Los nombres de los
+    botones son los REALES -- `Diagnostico`, `Intervencion`, `Escenario`, `Simular`
+    existen en el tablero --, porque un diagrama que renombre lo que el usuario va a ver
+    es peor que no tenerlo.
+
+    ## Las llaves de la hoja, y por que importan
+
+    Este texto NO es un f-string ni pasa por `.format`: lo unico que lo toca es
+    `Template.substitute`, que solo resuelve `$TOKEN`. Asi que las llaves del CSS van
+    SIMPLES. Escritas dobles -- resto de cuando esto si era un f-string -- viajaban tal
+    cual hasta el navegador, que leia `.dn {{ ... }}` como un bloque dentro de otro, se
+    quedaba con la regla VACIA y dibujaba todo el diagrama al 15px negro del `body`, sin
+    ninguna flecha: un `path` sin `stroke` no pinta nada.
+
+    ## Donde acaba
+
+    En la pregunta. Detras hubo una seccion con las cuatro lecturas del tablero y un pie
+    con una moraleja; las dos contaban lo que se ve nada mas abrir el simulador, que es
+    justo lo que el simulador ya muestra.
 
     `titulos` entra para dejar constancia de que los cinco tableros son la familia de la
     que sale el simulador; se nombra el ultimo, que es el.
     """
     _ = titulos
     return """
-<svg viewBox="0 0 520 792" role="img"
+<svg viewBox="0 0 520 514" role="img"
      aria-label="Como funciona el simulador Que pasa si de CriticidadCHEC">
   <defs>
     <marker id="pf" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7"
             orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="$BORDE_FUERTE"/></marker>
   </defs>
   <style>
-    .db {{ font: 11.5px $FUENTE; fill: $TEXTO; }}
-    .dt {{ font: 600 12.5px $FUENTE; fill: $TEXTO; }}
-    .dn {{ font: 10px $FUENTE; fill: $TENUE; }}
-    .dh {{ font: 600 10.5px $FUENTE; fill: $TENUE; letter-spacing: .06em; }}
-    .fl {{ stroke: $BORDE_FUERTE; stroke-width: 1.4; fill: none; marker-end: url(#pf); }}
-    .fp {{ stroke: $ACENTO_CLARO; stroke-width: 2; fill: none; marker-end: url(#pf); }}
+    .dt { font: 600 11.5px $FUENTE; fill: $TEXTO; }
+    .dn { font: 9px $FUENTE; fill: $TENUE; }
+    .dh { font: 600 9.5px $FUENTE; fill: $TENUE; letter-spacing: .06em; }
+    .fl { stroke: $BORDE_FUERTE; stroke-width: 1.4; fill: none; marker-end: url(#pf); }
   </style>
 
   <text x="12" y="18" class="dh">1 &middot; LO QUE ELIGES</text>
@@ -418,84 +449,57 @@ def _diagrama(titulos: list[str]) -> str:
   <path d="M260 72 V92" class="fl"/>
 
   <text x="12" y="110" class="dh">2 &middot; EL MODELO</text>
-  <rect x="12" y="118" width="496" height="62" rx="6" fill="$ACENTO" stroke="$ACENTO"/>
-  <text x="260" y="139" text-anchor="middle" class="dt" style="fill:#fff">Modelo MIL congelado</text>
-  <text x="260" y="155" text-anchor="middle" class="dn" style="fill:#fff">la bolsa es el par vano x ventana; atencion por segmento y fusion FiLM</text>
-  <text x="260" y="170" text-anchor="middle" class="dn" style="fill:#fff">compuertas por arista sobre el grafo experto, que no se reentrena</text>
-  <path d="M140 180 V204" class="fl"/>
-  <path d="M380 180 V204" class="fl"/>
+  <rect x="12" y="118" width="496" height="52" rx="6" fill="$ACENTO" stroke="$ACENTO"/>
+  <text x="260" y="139" text-anchor="middle" class="dt" style="fill:#fff">Modelo de IA predictiva restringida por la física</text>
+  <text x="260" y="156" text-anchor="middle" class="dn" style="fill:#fff">para estudiar las posibles causas de los fallos a nivel vano</text>
+  <path d="M140 170 V194" class="fl"/>
+  <path d="M380 170 V194" class="fl"/>
 
-  <text x="12" y="222" class="dh">3 &middot; LO QUE EL TABLERO ESTUDIA POR TI</text>
-  <rect x="12" y="230" width="240" height="86" rx="6" fill="$PANEL" stroke="$BORDE"/>
-  <text x="132" y="250" text-anchor="middle" class="dt">Sensibilidad min-max</text>
-  <text x="132" y="266" text-anchor="middle" class="dn">barre cada variable de su minimo</text>
-  <text x="132" y="279" text-anchor="middle" class="dn">a su maximo, vano por vano</text>
-  <text x="132" y="299" text-anchor="middle" class="dn">no es SHAP: es un barrido medido</text>
+  <text x="12" y="212" class="dh">3 &middot; LO QUE EL TABLERO ESTUDIA POR TI</text>
+  <rect x="12" y="220" width="240" height="52" rx="6" fill="$PANEL" stroke="$BORDE"/>
+  <text x="132" y="241" text-anchor="middle" class="dt">Sensibilidad de las variables</text>
+  <text x="132" y="258" text-anchor="middle" class="dn">para disminuir el impacto en UITI</text>
 
-  <rect x="268" y="230" width="240" height="86" rx="6" fill="$PANEL" stroke="$BORDE"/>
-  <text x="388" y="250" text-anchor="middle" class="dt">Diagnostico semi-automatico</text>
-  <text x="388" y="266" text-anchor="middle" class="dn">toma los vanos marcados y, si faltan,</text>
-  <text x="388" y="279" text-anchor="middle" class="dn">completa con los de mayor UITI</text>
-  <text x="388" y="299" text-anchor="middle" class="dn">y propone que mover en cada uno</text>
-  <path d="M132 316 V344" class="fl"/>
-  <path d="M388 316 V344" class="fl"/>
+  <rect x="268" y="220" width="240" height="52" rx="6" fill="$PANEL" stroke="$BORDE"/>
+  <text x="388" y="241" text-anchor="middle" class="dt">Diagnóstico semi-automático</text>
+  <text x="388" y="258" text-anchor="middle" class="dn">de los vanos más críticos</text>
+  <path d="M132 272 V300" class="fl"/>
+  <path d="M388 272 V300" class="fl"/>
 
-  <text x="12" y="362" class="dh">4 &middot; LOS DOS RANKINGS</text>
-  <rect x="12" y="370" width="240" height="70" rx="6" fill="#fff" stroke="$BORDE_FUERTE"/>
-  <text x="132" y="390" text-anchor="middle" class="dt">Top: que baja el UITI</text>
-  <text x="132" y="406" text-anchor="middle" class="dn">las variables ordenadas por la</text>
-  <text x="132" y="419" text-anchor="middle" class="dn">caida que consiguen en cada vano</text>
+  <text x="12" y="318" class="dh">4 &middot; LOS DOS RANKINGS</text>
+  <rect x="12" y="326" width="240" height="70" rx="6" fill="#fff" stroke="$BORDE_FUERTE"/>
+  <text x="132" y="346" text-anchor="middle" class="dt">Top: que baja el UITI</text>
+  <text x="132" y="362" text-anchor="middle" class="dn">las variables ordenadas por la</text>
+  <text x="132" y="375" text-anchor="middle" class="dn">caida que consiguen en cada vano</text>
 
-  <rect x="268" y="370" width="115" height="70" rx="6" fill="#fff" stroke="$BORDE_FUERTE"/>
-  <text x="325" y="390" text-anchor="middle" class="dt">Intervencion</text>
-  <text x="325" y="408" text-anchor="middle" class="dn">que HACER</text>
-  <text x="325" y="421" text-anchor="middle" class="dn">valor sugerido</text>
+  <rect x="268" y="326" width="115" height="70" rx="6" fill="#fff" stroke="$BORDE_FUERTE"/>
+  <text x="325" y="346" text-anchor="middle" class="dt">Intervencion</text>
+  <text x="325" y="364" text-anchor="middle" class="dn">que HACER</text>
+  <text x="325" y="377" text-anchor="middle" class="dn">valor sugerido</text>
 
-  <rect x="393" y="370" width="115" height="70" rx="6" fill="#fff" stroke="$BORDE_FUERTE"/>
-  <text x="450" y="390" text-anchor="middle" class="dt">Escenario</text>
-  <text x="450" y="408" text-anchor="middle" class="dn">bajo que</text>
-  <text x="450" y="421" text-anchor="middle" class="dn">CONDICIONES</text>
+  <rect x="393" y="326" width="115" height="70" rx="6" fill="#fff" stroke="$BORDE_FUERTE"/>
+  <text x="450" y="346" text-anchor="middle" class="dt">Escenario</text>
+  <text x="450" y="364" text-anchor="middle" class="dn">bajo que</text>
+  <text x="450" y="377" text-anchor="middle" class="dn">CONDICIONES</text>
 
   <!-- Los tres rankings bajan a un mismo canal y de ahi UNA flecha a la pregunta. Con
        tres trazos convergiendo directamente, los dos que llegaban en diagonal se leian
        como una cunia rellena y no como dos lineas. -->
-  <path d="M132 440 V464" style="stroke:$BORDE_FUERTE;stroke-width:1.4;fill:none"/>
-  <path d="M325 440 V464" style="stroke:$BORDE_FUERTE;stroke-width:1.4;fill:none"/>
-  <path d="M450 440 V464" style="stroke:$BORDE_FUERTE;stroke-width:1.4;fill:none"/>
-  <path d="M132 464 H450" style="stroke:$BORDE_FUERTE;stroke-width:1.4;fill:none"/>
-  <path d="M260 464 V498" class="fl"/>
+  <path d="M132 396 V420" style="stroke:$BORDE_FUERTE;stroke-width:1.4;fill:none"/>
+  <path d="M325 396 V420" style="stroke:$BORDE_FUERTE;stroke-width:1.4;fill:none"/>
+  <path d="M450 396 V420" style="stroke:$BORDE_FUERTE;stroke-width:1.4;fill:none"/>
+  <path d="M132 420 H450" style="stroke:$BORDE_FUERTE;stroke-width:1.4;fill:none"/>
+  <path d="M260 420 V454" class="fl"/>
 
-  <text x="12" y="492" class="dh">5 &middot; LA PREGUNTA</text>
+  <text x="12" y="448" class="dh">5 &middot; LA PREGUNTA</text>
   <!-- Ancha de verdad: el subtitulo mide lo que mide y una caja de 220 px lo dejaba
        saliendose por los dos lados. -->
-  <rect x="60" y="498" width="400" height="46" rx="6" fill="$ACENTO_CLARO" stroke="$ACENTO"/>
-  <text x="260" y="518" text-anchor="middle" class="dt">Que pasa si?</text>
-  <text x="260" y="535" text-anchor="middle" class="dn">aplicas lo sugerido, o lo mueves a mano, y pulsas Simular</text>
-  <path d="M260 544 V584" class="fp"/>
-
-  <text x="12" y="584" class="dh">6 &middot; LAS CUATRO LECTURAS</text>
-  <rect x="12" y="592" width="240" height="62" rx="6" fill="$PANEL" stroke="$BORDE"/>
-  <text x="132" y="612" text-anchor="middle" class="dt">Mapa simulado</text>
-  <text x="132" y="629" text-anchor="middle" class="dn">el circuito con la criticidad</text>
-  <text x="132" y="642" text-anchor="middle" class="dn">de despues, junto al de antes</text>
-
-  <rect x="268" y="592" width="240" height="62" rx="6" fill="$PANEL" stroke="$BORDE"/>
-  <text x="388" y="612" text-anchor="middle" class="dt">UITI medido contra simulado</text>
-  <text x="388" y="629" text-anchor="middle" class="dn">vano por vano, con la barra</text>
-  <text x="388" y="642" text-anchor="middle" class="dn">de error del desfase del modelo</text>
-
-  <rect x="12" y="664" width="240" height="62" rx="6" fill="$PANEL" stroke="$BORDE"/>
-  <text x="132" y="684" text-anchor="middle" class="dt">Grafo de relaciones</text>
-  <text x="132" y="701" text-anchor="middle" class="dn">lo que la simulacion MOVIO:</text>
-  <text x="132" y="714" text-anchor="middle" class="dn">grafo base menos grafo simulado</text>
-
-  <rect x="268" y="664" width="240" height="62" rx="6" fill="$PANEL" stroke="$BORDE"/>
-  <text x="388" y="684" text-anchor="middle" class="dt">Costo del plan</text>
-  <text x="388" y="701" text-anchor="middle" class="dn">las actividades del contrato por</text>
-  <text x="388" y="714" text-anchor="middle" class="dn">vano y su acumulado</text>
-
-  <rect x="12" y="742" width="496" height="38" rx="6" fill="#fff" stroke="$BORDE"/>
-  <text x="260" y="766" text-anchor="middle" class="dn">El riesgo lo estima el modelo y el costo lo suma la lista: unirlos es tu decision</text>
+  <rect x="60" y="454" width="400" height="46" rx="6" fill="$ACENTO_CLARO" stroke="$ACENTO"/>
+  <text x="260" y="474" text-anchor="middle" class="dt">Que pasa si?</text>
+  <!-- El gris de `.dn` sobre este verde da 1,9:1. Se veia negro mientras la hoja estuvo
+       inerte; en cuanto la regla empezo a aplicarse, aqui -- y solo aqui, que es la unica
+       caja de fondo saturado sin texto blanco -- el subtitulo se perdia. -->
+  <text x="260" y="491" text-anchor="middle" class="dn" style="fill:$TEXTO">aplicas lo sugerido, o lo mueves a mano, y pulsas Simular</text>
 </svg>
 """
 
@@ -518,15 +522,13 @@ def pagina() -> str:
 <body>
 <div class="envoltura">
   <header>
-    <div>
-      <h1>CriticidadCHEC</h1>
-    </div>
     <button id="cerrar-todo" class="peligro"
       title="Apaga los cinco tableros, libera sus puertos y cierra las ventanas de
 terminal que abrieron. Despues cierra este menu.">Cerrar todo</button>
   </header>
   <div class="portada">
     <div class="col-izq">
+      <h1>IA + Criticidad CHEC</h1>
       <div id="lista"></div>
       <div class="logos">
         <div class="marca">{_marca_chec}</div>

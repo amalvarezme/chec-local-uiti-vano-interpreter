@@ -521,8 +521,11 @@ def test_el_menu_no_explica_como_funciona_por_encima_de_la_lista():
     for frase in ("su propio proceso", "los abre, los vigila", "en su propia pestana",
                   "apaga\n     las cinco aplicaciones", "Cada tablero abre"):
         assert frase not in pagina, f"la pagina del menu todavia explica: {frase!r}"
-    # Lo que si tiene que quedar: el titulo y el unico boton que apaga todo.
-    assert "<h1>CriticidadCHEC</h1>" in pagina
+    # Lo que si tiene que quedar: el titulo y el unico boton que apaga todo. El titulo
+    # bajo de la cabecera a la columna izquierda y pasa a decir "IA + Criticidad CHEC";
+    # lo que esta prueba vigila no es su texto sino que la portada siga teniendo UNO --
+    # una pagina sin titulo es la otra forma de quedarse sin decir que es esto.
+    assert "<h1>IA + Criticidad CHEC</h1>" in pagina
     assert 'id="cerrar-todo"' in pagina
 
 
