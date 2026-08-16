@@ -49,20 +49,37 @@ def _sin_comentarios(fuente: str) -> str:
 # ------------------------------------------------- las once fechas de la evolucion
 
 
+# El cuaderno y la COLUMNA en la que vive su panel de evolucion. No es la misma en los
+# dos: en el 04 el perfil del circuito entro a su izquierda y la corrio de la 1 a la 6.
+# Se parametriza en vez de aceptar cualquier columna porque lo que se vigila es el angulo
+# de ESE panel, y un patron laxo pasaria mirando el de al lado.
+COLUMNA_EVOLUCION = {
+    "03_uiti_vano_trayectorias_circuitos.ipynb": 1,
+    "04_uiti_vano_trayectorias_vano.ipynb": 6,
+}
+
+
 @pytest.mark.parametrize("nombre", VENTANA)
 def test_las_fechas_de_la_ventana_van_bastante_inclinadas(nombre: str):
-    """A 55 grados y no a 30.
+    """A 55 grados como MINIMO, y hoy a 90.
 
-    El panel de la evolucion mide 396 px a 1.280 px de ventana para las once ventanas
-    del periodo, o sea 36 px por marca. Una etiqueta '11-01 a 11-30' mide 65 px: a 30
-    grados ocupa 56 px de ancho y las once se pisaban en cadena -- diez traslapes
-    medidos --; a 55 ocupa 37 y ninguna toca a su vecina.
+    La cuenta original: el panel de la evolucion media 396 px a 1.280 px de ventana para
+    las once ventanas del periodo, o sea 36 px por marca. Una etiqueta '11-01 a 11-30'
+    mide 65 px; a 30 grados ocupa 56 px de ancho y las once se pisaban en cadena -- diez
+    traslapes medidos --, y a 55 ocupa 37 y justo cabia.
 
-    Se fija el MINIMO de inclinacion, no el valor exacto: mas inclinado tambien sirve.
+    Ese "justo" se acabo cuando el perfil del circuito entro a su izquierda: la evolucion
+    paso de 6 de 15 columnas (40%) a 5 de 20 (25%), un 37% menos de ancho, o sea unos 22
+    px por marca. A 55 grados volverian a pisarse. A 90 lo que ocupa la etiqueta ya no es
+    su ancho proyectado sino su ALTURA de linea -- unos 12 px --, que entra de sobra.
+
+    Se fija el MINIMO y no el valor exacto, que es lo que deja que esto suba sin tocar la
+    prueba. Lo que la prueba impide es que BAJE.
     """
     fuente = _sin_comentarios(_fuente(nombre))
     angulo = re.search(
-        r"update_xaxes\(tickangle=(-?\d+)(?:[^()]|\([^()]*\))*?row=2,\s*col=1",
+        rf"update_xaxes\(tickangle=(-?\d+)(?:[^()]|\([^()]*\))*?"
+        rf"row=2,\s*col={COLUMNA_EVOLUCION[nombre]}\b",
         fuente, re.S)
     assert angulo, f"{nombre} ya no fija el angulo de las marcas de la evolucion"
     assert int(angulo.group(1)) <= -50, (

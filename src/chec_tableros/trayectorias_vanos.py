@@ -447,25 +447,49 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         #     area  = 396 + 311 + 96,5 (un solo hueco ahora) = 803,5
         #     filas = 396/707 y 311/707                      = 0.56 y 0.44
         #     hueco = 96,5 / 803,5                           = 0.12
-        rows=2, cols=15,
+        # VEINTE columnas y no quince. El perfil del circuito vuelve a la figura, en la fila
+        # de abajo y a la izquierda de la evolucion, asi que esa fila pasa de cuatro paneles
+        # a CINCO. Con quince no caben: las columnas EN BLANCO entre panel y panel no son
+        # decoracion -- son los canales donde cada eje y dibuja sus marcas, y donde el eje
+        # DERECHO de la evolucion pone las suyas y su rotulo "Eventos" --, y la cuenta mas
+        # apretada que respeta los canales se pasa:
+        #
+        #     perfil 3 + canal 1 + evolucion 3 + canal 1 + 3 x (panel 2 + canal 1) = 17
+        #
+        # Con veinte cierra sin dejar a nadie en una sola columna:
+        #
+        #     fila 1:  nube 9 | canal 2 | mapa 9
+        #     fila 2:  perfil 4 | canal 1 | evolucion 5 | canal 1 | 3 x (2 + 1)
+        #
+        # El reparto sigue siendo proporcional, no en pixeles, y crece con la ventana.
+        rows=2, cols=20,
         row_heights=[0.56, 0.44],
-        column_widths=[1 / 15] * 15,
+        column_widths=[1 / 20] * 20,
         vertical_spacing=0.12, horizontal_spacing=0.012,
-        specs=[[{'colspan': 7}, None, None, None, None, None, None,
+        specs=[[{'colspan': 9}, None, None, None, None, None, None, None, None,
+                None, None,
+                {'type': 'map', 'colspan': 9}, None, None, None, None, None, None, None,
+                None],
+               [{'colspan': 4}, None, None, None,
                 None,
-                {'type': 'map', 'colspan': 7}, None, None, None, None, None, None],
-               [{'secondary_y': True, 'colspan': 6}, None, None, None, None, None,
+                {'secondary_y': True, 'colspan': 5}, None, None, None, None,
                 None,
                 {'colspan': 2}, None,
                 None,
                 {'colspan': 2}, None,
                 None,
-                {'colspan': 2}, None]],
+                {'colspan': 2}, None,
+                None]],
         # El orden es por filas sobre las celdas con spec. Los tres de abajo van cortos a
         # proposito: en un sexto del ancho un titulo largo se recorta, y ademas les entra el
         # conteo de muestras que el panel les agrega.
+        # El orden es por FILAS sobre las casillas con spec, no por nombre. El perfil entra
+        # antes que la evolucion porque va a su izquierda; meterlo al final -- que es donde
+        # estaba cuando era una tercera fila -- le pone a cada panel el titulo del vecino
+        # sin dar ningun error.
         subplot_titles=('Agrupamiento vano x ventana',
                         'Mapa del circuito -- grupo de cada vano en la ventana',
+                        'Perfil del circuito',
                         'Evolucion (llena UITI, punteada eventos)',
                         'Vanos',
                         'UITI',
@@ -538,7 +562,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
                         color=[COLOR_SIN_GRUPO] * len(VENTANAS),
                         line=dict(width=1.3, color='white')),
             hovertext=[], hoverinfo='text',
-        ), row=2, col=1, secondary_y=False)
+        ), row=2, col=6, secondary_y=False)
     for s in range(MAX_VANOS_RESALTADOS):                            # eventos por cupo
         fig.add_trace(go.Scatter(
             x=PERIODOS_CORTOS, y=list(_VACIO), mode='lines+markers', name='',
@@ -548,7 +572,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
                         color=[COLOR_SIN_GRUPO] * len(VENTANAS),
                         line=dict(width=1.2, color='white')),
             hovertext=[], hoverinfo='text',
-        ), row=2, col=1, secondary_y=True)
+        ), row=2, col=6, secondary_y=True)
 
     # El porcentaje va DENTRO de la barra y GIRADO -90 grados, o sea leyendose de abajo hacia
     # arriba: vertical ocupa el ancho de UN renglon en vez del de la cadena entera, que es lo
@@ -567,7 +591,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         marker=dict(color=COLORES_GRUPOS, line=dict(width=0.5, color='rgba(60,10,10,0.6)')),
         showlegend=False, cliponaxis=False,
         hovertemplate='%{x}: %{y} celdas<extra></extra>',
-    ), row=2, col=8)
+    ), row=2, col=12)
     # El conteo queda AFUERA, arriba de la barra. Una traza de barras tiene un solo `text` y
     # ese ya lo ocupa el porcentaje, asi que hacen falta dos. Se agrega al final para no
     # correr indices.
@@ -576,9 +600,9 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         textposition='top center',
         textfont=dict(size=11, color='rgb(90,15,20)'),
         showlegend=False, hoverinfo='skip', cliponaxis=False,
-    ), row=2, col=8)
+    ), row=2, col=12)
 
-    for fila, columna, etiqueta in [(2, 11, 'UITI acumulado'), (2, 14, 'Numero de eventos')]:
+    for fila, columna, etiqueta in [(2, 15, 'UITI acumulado'), (2, 18, 'Numero de eventos')]:
         for g in range(4):                                           # violines
             fig.add_trace(go.Violin(
                 x=[], y=[], name=NOMBRES_GRUPOS[g], legendgroup=NOMBRES_GRUPOS[g],
@@ -602,7 +626,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
             lat=[], lon=[], mode='lines', name=NOMBRES_GRUPOS[g], legendgroup=NOMBRES_GRUPOS[g],
             showlegend=False, line=dict(width=ANCHO_MAPA, color=COLORES_GRUPOS[g]),
             hovertext=[], hoverinfo='text', customdata=[],
-        ), row=1, col=9)
+        ), row=1, col=12)
     # La estructura del circuito: los vanos SIN eventos en la ventana activa. Antes eran todos,
     # y por eso esta traza se dibujaba encima de las de grupo y las habria tapado. Ahora los
     # dos conjuntos son disjuntos -- con celda arriba, sin celda aqui -- que es el mismo
@@ -614,7 +638,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         lat=[], lon=[], mode='lines', name='Sin eventos en la ventana', showlegend=False,
         line=dict(width=ANCHO_SIN_EVENTOS, color=COLOR_SIN_EVENTO),
         hovertext=[], hoverinfo='text', customdata=[],
-    ), row=1, col=9)
+    ), row=1, col=12)
     # Halo: una sola traza blanca y ancha DEBAJO de los marcados. El ancho de linea sube un
     # 40%, que sobre 3.5 px son 1.4 px de diferencia: medible, pero invisible entre decenas de
     # tramos. El halo despega el vano marcado del resto sin tocar ese ancho, que es la tecnica
@@ -622,7 +646,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     fig.add_trace(go.Scattermap(                                     # halo de los marcados
         lat=[], lon=[], mode='lines', name='', showlegend=False,
         line=dict(width=ANCHO_MAPA_RESALTE * 2.6, color='white'), hoverinfo='skip',
-    ), row=1, col=9)
+    ), row=1, col=12)
     # Los marcados van por encima de los tramos -- pero por DEBAJO de los equipos, que se
     # agregan despues de este bloque -- y repiten grupo por grupo la MISMA paleta que las trazas de arriba: en el mapa el color es siempre el grupo,
     # incluso en lo resaltado. Lo unico que cambia al marcar es el ancho y el halo; el mapa no
@@ -632,7 +656,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
             lat=[], lon=[], mode='lines', name=NOMBRES_GRUPOS[g], legendgroup=NOMBRES_GRUPOS[g],
             showlegend=False, line=dict(width=ANCHO_MAPA_RESALTE, color=COLORES_GRUPOS[g]),
             hovertext=[], hoverinfo='text', customdata=[],
-        ), row=1, col=9)
+        ), row=1, col=12)
     # Y el marcado que en esta ventana no tuvo eventos: negro, pero con el ancho del resaltado.
     # No tiene grupo -- eso no es el grupo mas bajo, es la ausencia del dato --, y sin esta
     # traza el halo blanco de 25 px le quedaba encima de una linea de 1,5 y el vano marcado
@@ -641,7 +665,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         lat=[], lon=[], mode='lines', name='Marcado sin eventos', showlegend=False,
         line=dict(width=ANCHO_MAPA_RESALTE, color=COLOR_SIN_EVENTO),
         hovertext=[], hoverinfo='text', customdata=[],
-    ), row=1, col=9)
+    ), row=1, col=12)
     # Los equipos van AL FINAL, que es donde los ponen 01 y 03: en MapLibre el orden de las
     # trazas ES el orden de las capas, asi que lo que se agrega despues tapa lo anterior.
     # Antes iban antes del halo y del resaltado, y con el halo en 25 px el mapa perdia equipos:
@@ -658,7 +682,34 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         fig.add_trace(go.Scattermap(                                 # equipos
             lat=[], lon=[], mode='markers', name=_nombre_eq, showlegend=False,
             marker=dict(size=_tam_eq, color=_color_eq), hovertext=[], hoverinfo='text',
-        ), row=1, col=9)
+        ), row=1, col=12)
+
+    # --- El perfil del circuito, en la fila de abajo y a la izquierda ---------------
+    # Los quince vanos que mas UITI acumulan en TODA la serie, de mayor a menor. Contesta
+    # la pregunta con la que se aterriza en un circuito -- donde esta concentrado el
+    # riesgo --, que ningun otro panel contesta: la nube, el mapa y la evolucion miran una
+    # ventana a la vez.
+    #
+    # Comparte fila con la evolucion, asi que HEREDA su alto: no hay nada que fijar aqui.
+    #
+    # Va la ULTIMA de las trazas a proposito. El inventario `IDX` de mas abajo esta escrito
+    # como aritmetica sobre el numero de cupos, asi que insertar una traza en medio correria
+    # en silencio todo lo que viene despues.
+    fig.add_trace(go.Bar(
+        x=[], y=[], name='UITI acumulado del periodo', showlegend=False,
+        marker=dict(color=COLOR_BARRA_PERFIL,
+                    line=dict(width=0.4, color='rgba(60,10,10,0.6)')),
+        hovertext=[], hoverinfo='text',
+    ), row=2, col=1)
+    # `type='category'`: los fid son cadenas de digitos y sin esto plotly los leeria como
+    # numeros, con lo que las quince barras se repartirian por su VALOR sobre un eje
+    # continuo -- quince postes separados por millones de unidades vacias -- en vez de
+    # quedar una al lado de la otra en el orden del ranking.
+    # Girados: en cuatro de veinte columnas quince rotulos de ocho digitos no caben de pie.
+    fig.update_xaxes(title_text='Vano', type='category', tickfont=dict(size=9),
+                     tickangle=-90, row=2, col=1)
+    fig.update_yaxes(title_text='UITI acumulado', rangemode='tozero',
+                     tickfont=dict(size=9), row=2, col=1)
 
     # El recuadro vive en el LAYOUT del mapa y no en el inventario de trazas, igual que en el
     # cuaderno 06: `below='traces'` lo deja debajo de todos los tramos, con lo que no intercepta
@@ -709,26 +760,35 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     # -55 grados y no -30: a 1.280 px el panel de la evolucion mide 396 px para once
     # ventanas, o sea 36 px por marca, y una etiqueta '11-01 a 11-30' de 65 px inclinada 30
     # grados ocupa 56 px de ancho. A 55 grados ocupa 37. Medido: a -30 se pisaban las once.
-    fig.update_xaxes(tickangle=-55, tickfont=dict(size=9), row=2, col=1)
+    # -90 y ya no -55. La evolucion paso de 6 de 15 columnas (40%) a 5 de 20 (25%) al
+    # entrar el perfil a su izquierda, o sea un 37% menos de ancho. La cuenta que sostenia
+    # los -55 grados se cae con eso: a 1.280 px de ventana eran 36 px por marca y una
+    # etiqueta '11-01 a 11-30' inclinada 55 grados ocupa 37 px de ancho -- justo cabia. Con
+    # el ancho nuevo quedan ~22 px por marca y las once se volverian a pisar.
+    #
+    # A 90 grados lo que ocupa la etiqueta ya no es su ancho proyectado sino su ALTURA de
+    # linea, unos 12 px, que entra de sobra. Es lo mismo que hace el perfil de al lado con
+    # sus quince rotulos.
+    fig.update_xaxes(tickangle=-90, tickfont=dict(size=9), row=2, col=6)
     # Los tres paneles de reparto y el eje DERECHO de la evolucion se reparten canales de
     # ~55 px -- eran 98 px cuando la figura ocupaba la pantalla entera. En ese hueco caben
     # las marcas de un panel, el rotulo 'Eventos' y las marcas del vecino solo si la letra
     # baja de la 12 por defecto a la 9, y si el rotulo se pega a sus propias marcas.
-    for _col_reparto in (8, 11, 14):
+    for _col_reparto in (12, 15, 18):
         fig.update_yaxes(tickfont=dict(size=9), row=2, col=_col_reparto)
         fig.update_xaxes(tickfont=dict(size=9), row=2, col=_col_reparto)
     fig.update_yaxes(tickfont=dict(size=9), title_standoff=4,
-                     row=2, col=1, secondary_y=True)
-    fig.update_yaxes(tickfont=dict(size=9), row=2, col=1, secondary_y=False)
+                     row=2, col=6, secondary_y=True)
+    fig.update_yaxes(tickfont=dict(size=9), row=2, col=6, secondary_y=False)
     # Y la fila de arriba, donde la marca '0' del eje x y la mas baja del eje y se tocaban
     # en la esquina: con letra 9 la etiqueta del eje y mide 22 px en vez de 30.
     fig.update_yaxes(tickfont=dict(size=9), row=1, col=1)
     fig.update_xaxes(tickfont=dict(size=9), row=1, col=1)
-    fig.update_yaxes(title_text='UITI acumulado', row=2, col=1, secondary_y=False)
-    fig.update_yaxes(title_text='Eventos', row=2, col=1, secondary_y=True, showgrid=False)
+    fig.update_yaxes(title_text='UITI acumulado', row=2, col=6, secondary_y=False)
+    fig.update_yaxes(title_text='Eventos', row=2, col=6, secondary_y=True, showgrid=False)
     # Sin title_text: el titulo del subplot ya nombra el panel y le suma el conteo, y el
     # rotulo del eje solo empujaba las marcas contra el panel vecino.
-    fig.update_yaxes(rangemode='tozero', row=2, col=8)
+    fig.update_yaxes(rangemode='tozero', row=2, col=12)
     for _a in fig.layout.annotations:
         _a.font.size = 12
 
@@ -765,8 +825,10 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         'mapaResaltadoSinDato': 22 + 3 * _n + 2 * _c,
         'mapaTrafos': 23 + 3 * _n + 2 * _c,
         'mapaSwitches': 24 + 3 * _n + 2 * _c,
+        'perfil': 25 + 3 * _n + 2 * _c,
     }
-    assert len(fig.data) == 25 + 3 * _n + 2 * _c, len(fig.data)
+    assert len(fig.data) == 26 + 3 * _n + 2 * _c, len(fig.data)
+    assert fig.data[IDX['perfil']].type == 'bar'
     assert fig.data[IDX['contorno']].type == 'contour'
     assert fig.data[IDX['barras']].type == 'bar'
     assert fig.data[IDX['conteo']].mode == 'text'
@@ -793,9 +855,13 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     # El orden de las trazas ES el z-order de las capas de MapLibre. Los equipos van despues de
     # todo lo que dibuja vanos, o el halo de 25 px se los come.
     assert min(IDX['mapaTrafos'], IDX['mapaSwitches']) > IDX['mapaResaltadoSinDato']
-    # Los equipos son las ULTIMAS trazas desde que el perfil se fue a su propia figura.
-    # La regla persigue las trazas de MAPA, que son las que MapLibre apila por orden.
-    assert IDX['mapaSwitches'] == len(fig.data) - 1, (
+    # El perfil es una barra sobre un subplot xy, no una capa del mapa, asi que ir despues
+    # de los equipos no los tapa. Lo que la regla persigue son las trazas de MAPA, que son
+    # las que MapLibre apila por orden.
+    assert all(fig.data[i].type != 'scattermap'
+               for i in range(IDX['mapaSwitches'] + 1, len(fig.data))), (
+        'ninguna traza de mapa puede ir despues de los equipos: el orden ES el z-order')
+    assert IDX['mapaSwitches'] == len(fig.data) - 2, (
         'los equipos son las ULTIMAS trazas de la figura: cualquier traza de mapa agregada '
         'despues los taparia')
     # El recuadro son CINCO capas -- una por grupo mas la del marcado sin celda -- y todas
@@ -862,7 +928,8 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     TITULOS_N = {}
     for _clave, _texto in [('barras', 'Vanos'),
                            ('violinU', 'UITI'),
-                           ('violinN', 'Eventos')]:
+                           ('violinN', 'Eventos'),
+                           ('perfil', 'Perfil del circuito')]:
         _pos = [i for i, _a in enumerate(fig.layout.annotations) if _a.text == _texto]
         assert len(_pos) == 1, (_texto, _pos)
         TITULOS_N[_clave] = [_pos[0], _texto]
@@ -875,51 +942,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     print(f'{len(fig.data)} trazas ({MAX_VANOS_RESALTADOS} cupos de resaltado x 4: nube, '
           f'UITI, eventos y mapa) | ejes: {EJES}')
 
-    # --- El perfil del circuito, en su PROPIA figura -------------------------------
-    # Los quince vanos que mas UITI acumulan en TODA la serie, de mayor a menor. Contesta
-    # la pregunta con la que se aterriza en un circuito -- donde esta concentrado el
-    # riesgo --, que ningun otro panel de este tablero contesta: la nube, el mapa y la
-    # evolucion miran una ventana a la vez.
-    #
-    # Va en su propia figura, y no como tercera fila de la grande, porque su sitio es
-    # DEBAJO DEL PANEL y con el ancho del panel -- o sea la columna de la izquierda --, y
-    # un subplot no puede salirse de su figura.
-    #
-    # Eso cambia tres cosas que el JS tenia que saber: la traza es la 0 de esta figura y
-    # no la ultima de la grande; el titulo es el titulo de la figura y no una anotacion
-    # de subplot; y el div es otro.
-    fig_perfil = go.Figure()
-    fig_perfil.add_trace(go.Bar(
-        x=[], y=[], name='UITI acumulado del periodo', showlegend=False,
-        marker=dict(color=COLOR_BARRA_PERFIL,
-                    line=dict(width=0.4, color='rgba(60,10,10,0.6)')),
-        hovertext=[], hoverinfo='text',
-    ))
-    # `type='category'`: los fid son cadenas de digitos y sin esto plotly los leeria
-    # como numeros, con lo que las quince barras se repartirian por su VALOR sobre un
-    # eje continuo -- quince postes separados por millones de unidades vacias -- en vez
-    # de quedar una al lado de la otra en el orden del ranking.
-    fig_perfil.update_xaxes(title_text='Vano', type='category', tickfont=dict(size=9),
-                            tickangle=-90)
-    fig_perfil.update_yaxes(title_text='UITI acumulado del periodo', rangemode='tozero',
-                            tickfont=dict(size=9))
-    fig_perfil.update_layout(
-        # El titulo va en DOS lineas y la segunda en `<sup>`: en la columna de controles
-        # hay unos 500 px, y la frase entera -- "Perfil del circuito -- 15 de 47 vanos con
-        # eventos concentran el 88,3% del UITI del periodo" -- se salia por los dos lados,
-        # cortada. Plotly no parte titulos solo; el `<br>` es la unica forma.
-        title=dict(text='Perfil del circuito', x=0.5, xanchor='center',
-                   font=dict(size=13)),
-        # En la columna de controles el ancho es el 30% de la pantalla, asi que los quince
-        # rotulos de ocho digitos van GIRADOS -- `tickangle=-90` arriba -- y el margen de
-        # abajo tiene que darles sitio.
-        margin=dict(t=48, r=10, b=64, l=56),
-        height=300, template='plotly_white', bargap=0.25,
-    )
-    assert len(fig_perfil.data) == 1 and fig_perfil.data[0].type == 'bar'
-
     DIV = 'vano-ventana'
-    DIV_PERFIL = 'perfil-circuito' 
 
     # --- El top del PERIODO por circuito ---------------------------------------------------
     # A quien se le marca la casilla sola al ELEGIR CIRCUITO: los vanos que mas UITI acumulan
@@ -998,7 +1021,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     _ci_celda = TABLA['CIRCUITO'].astype(str).map({c: i for i, c in enumerate(CIRCUITOS)})
     assert _ci_celda.notna().all(), 'hay celdas con un circuito fuera de CIRCUITOS'
     CONTEXTO = {
-        'div': DIV, 'divPerfil': DIV_PERFIL,
+        'div': DIV,
         'ventanas': [{'etiqueta': v['etiqueta'], 'periodo': v['periodo']} for v in VENTANAS],
         'periodosCortos': PERIODOS_CORTOS,
         'circuitos': CIRCUITOS,
@@ -1179,20 +1202,17 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
   // Devuelve el cambio de titulo para que lo mande el relayout de aplicar(), por el
   // mismo motivo que el reparto: cada llamada a Plotly cuesta un redibujado entero.
   //
-  // Vive en SU PROPIA figura desde que bajo debajo del panel, asi que aqui la traza es
-  // la 0 de `gdPerfil` -- no la ultima de la figura grande -- y el titulo es el titulo
-  // de esa figura, que se cambia con un relayout sobre su div. Antes era una anotacion
-  // de subplot que se mutaba por posicion: fuera de la figura grande ese indice apunta a
-  // otro panel, y mutarlo le reescribiria el titulo sin fallar.
-  function pintarPerfil(circuito) {
-    var gdPerfil = d.getElementById(CTX.divPerfil);
-    if (!gdPerfil) { return; }
+  // Devuelve el cambio de titulo para que lo mande el relayout de aplicar(), por el mismo
+  // motivo que el reparto: cada llamada a Plotly cuesta un redibujado entero.
+  function pintarPerfil(gd, circuito) {
     var p = CTX.perfil[circuito];
     if (!p || !p.fid.length) {
-      Plotly.restyle(gdPerfil, {x: [[]], y: [[]], hovertext: [[]]}, [0]);
-      Plotly.relayout(gdPerfil, {'title.text':
-        'Perfil del circuito<br><sup>sin eventos en el periodo</sup>'});
-      return;
+      Plotly.restyle(gd, {x: [[]], y: [[]], hovertext: [[]]}, [CTX.idx.perfil]);
+      // En DOS lineas y la segunda en `<sup>`: el panel ocupa 4 de 20 columnas -- unos
+      // 220 px medidos --, y de una sola linea el titulo se salia por los dos lados y se
+      // montaba sobre el de la evolucion, que es su vecino. Una anotacion de subplot no
+      // parte sola; el `<br>` es la unica forma.
+      return 'Perfil del circuito<br><sup>sin eventos en el periodo</sup>';
     }
     var txt = [], concentracion = 0;
     for (var i = 0; i < p.fid.length; i++) {
@@ -1203,14 +1223,13 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
                ' de ' + CTX.ventanasDelPeriodo + ' ventanas<br>' +
                (100 * p.part[i]).toFixed(1) + '%% del UITI del circuito');
     }
-    Plotly.restyle(gdPerfil, {x: [p.fid], y: [p.uiti], hovertext: [txt]}, [0]);
+    Plotly.restyle(gd, {x: [p.fid], y: [p.uiti], hovertext: [txt]},
+                   [CTX.idx.perfil]);
     // El denominador son TODOS los vanos del circuito con eventos, no los quince
-    // dibujados: la frase dice cuanto del circuito cabe en el panel, y sobre los
-    // dibujados diria siempre el 100%%.
-    Plotly.relayout(gdPerfil, {'title.text':
-      'Perfil del circuito<br><sup>' + p.fid.length + ' de ' + p.vanos +
-      ' vanos con eventos concentran el ' + (100 * concentracion).toFixed(1) +
-      '%% del UITI del periodo</sup>'});
+    // dibujados: la frase dice cuanto del circuito cabe en el panel, y sobre los dibujados
+    // diria siempre el 100%%. Redactada corta porque el panel es estrecho.
+    return 'Perfil del circuito<br><sup>' + p.fid.length + ' de ' + p.vanos +
+           ' vanos: ' + (100 * concentracion).toFixed(1) + '%% del UITI</sup>';
   }
 
   function dibujarReparto(gd, act, circuito, cu) {
@@ -2005,13 +2024,14 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     // pregunta con la que se llega -- donde esta concentrado el riesgo de este circuito --
     // y deja a la evolucion de abajo contando la historia de esos mismos quince vanos. El
     // top de la ventana llega despues, en cuanto se toca el deslizador.
+    var tituloPerfil = null;
     if (circuito !== ULTIMO_CIRCUITO) {
       ULTIMO_CIRCUITO = circuito;
       poblarLista(circuito);
       marcarSolo(CTX.topPeriodo[circuito] || []);
       // Aqui y no en cada pasada: el perfil no depende ni de la ventana ni de la
       // seleccion, que son las dos cosas que hacen volver a aplicar().
-      pintarPerfil(circuito);
+      tituloPerfil = pintarPerfil(gd, circuito);
     }
     var sel = elegidos(), cu = cuposDe(sel);
 
@@ -2169,6 +2189,12 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     // rangos de eje se le suman solo cuando el espacio cambio.
     // Los cambios de layout de toda la pasada -- flechas, ejes y lo que el reparto
     // haya devuelto -- viajan en UNA llamada.
+    if (tituloPerfil !== null && fig_anotaciones[CTX.titulos.perfil[0]]) {
+      // Mutar el objeto basta: `fig_anotaciones` es una copia SUPERFICIAL de
+      // `gd.layout.annotations`, asi que el array que se manda abajo lleva estas mismas
+      // referencias ya actualizadas.
+      fig_anotaciones[CTX.titulos.perfil[0]].text = tituloPerfil;
+    }
     var cambios = {annotations: fig_anotaciones.concat(flechas)};
     for (var cl in layoutReparto) {
       if (Object.prototype.hasOwnProperty.call(layoutReparto, cl)) {
@@ -2335,38 +2361,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     # libreria viajan juntos, de modo que el tablero se ve igual exportado a HTML o en nbviewer.
     # `default_width='100%'` solo surte efecto porque la figura NO lleva `width` (ver la celda
     # anterior), y `responsive` la recalcula al cambiar el tamano de la ventana.
-    # OJO con el `include_plotlyjs`: lo lleva el PERFIL y no la figura grande, porque el
-    # perfil va antes en el documento -- columna izquierda, debajo del panel -- y el guion
-    # que plotly emite para cada div corre en cuanto se lee. Si la libreria viajara con la
-    # figura grande, el guion del perfil se ejecutaria con `Plotly` sin definir.
-    # El perfil baja 50 px respecto del panel. Medido antes: el hueco eran 6 px -- el
-    # `margin-bottom` del propio panel --, asi que el perfil arrancaba pegado al borde de
-    # la caja de controles y los dos se leian como una sola pieza.
-    #
-    # Va en un ENVOLTORIO y no en el `margin.t` de la figura: subir el margen de la figura
-    # mueve el area de dibujo DENTRO de un div que sigue donde estaba -- baja las barras y
-    # deja el titulo flotando --, mientras que el envoltorio mueve las dos cosas juntas y
-    # no toca la figura.
-    #
-    # Y es `padding-top` y no `margin-top`, que es lo primero que se prueba y NO da 50 px
-    # de desplazamiento: los margenes verticales de hermanos adyacentes COLAPSAN al mayor,
-    # asi que contra el `margin-bottom: 6px` del panel un `margin-top: 50px` deja el hueco
-    # en 50 -- medido -- y el perfil baja 44, no 50. El relleno no colapsa: 6 + 50 = 56 de
-    # hueco, que son los 50 px de bajada pedidos.
-    #
-    # Y no va en `CSS_DOS_COLUMNAS`: ese bloque viaja COPIADO en el 01 y en el 04, y una
-    # prueba exige que las copias sean identicas byte a byte. Una regla que solo necesita
-    # este tablero lo separaria de su gemelo.
-    PERFIL_HTML = f'''
-<style>
-  .caja-perfil {{ padding-top: 50px; }}
-</style>
-<div class="caja-perfil">{pio.to_html(fig_perfil, include_plotlyjs=True,
-                                      full_html=False, div_id=DIV_PERFIL,
-                                      default_width='100%',
-                                      config={'responsive': True})}</div>
-'''
-    FIGURA_HTML = pio.to_html(fig, include_plotlyjs=False, full_html=False, div_id=DIV,
+    FIGURA_HTML = pio.to_html(fig, include_plotlyjs=True, full_html=False, div_id=DIV,
                               default_width='100%', config={'responsive': True})
 
     CSS_DOS_COLUMNAS = '''
@@ -2464,11 +2459,10 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
 </div>
 """
 
-    # El perfil va DEBAJO del panel y dentro de la columna de controles: es de ahi de donde
-    # saca el mismo ancho que el panel. La barra del boton, arriba de la columna de figuras.
+    # La barra del boton, arriba de la columna de figuras.
     PANEL_COMPLETO = CSS_DOS_COLUMNAS + (
         '<div class="cuerpo-2col">'
-        f'<div class="col-controles">{PANEL_HTML}{PERFIL_HTML}</div>'
+        f'<div class="col-controles">{PANEL_HTML}</div>'
         f'<div class="col-figuras">{BARRA_ENCUADRE}{FIGURA_HTML}</div>'
         '</div>'
     ) + PANEL_JS

@@ -93,73 +93,87 @@ def test_el_aviso_ya_no_manda_al_usuario_a_la_evolucion():
         "el aviso sigue mandando a la evolucion de abajo")
 
 
-# --------------------------------------------------------- el perfil, en su propia figura
+# ------------------------------------------------- el perfil, de vuelta en la figura
 
 
-def test_el_perfil_sale_de_la_figura_grande():
-    """Ni traza, ni fila, ni titulo de subplot dentro de `fig`."""
-    fuente = _sin_comentarios(_fuente())
-    assert "'Perfil del circuito')," not in fuente, (
-        "`subplot_titles` sigue nombrando el perfil")
-    assert not re.search(r"row=3, col=1\)", fuente), (
-        "queda algo en la fila 3 de la figura grande")
-    idx = re.search(r"IDX = \{(.*?)\n    \}", fuente, re.S)
-    assert idx, "no se pudo leer `IDX`"
-    assert "'perfil'" not in idx.group(1), (
-        "`IDX` de la figura grande sigue declarando el perfil")
+def test_el_perfil_es_un_subplot_de_la_figura_grande():
+    """Vuelve a la figura, en la ULTIMA fila y a la izquierda de la evolucion.
 
+    Estuvo un tiempo en su propia figura, debajo del panel. Alli tenia el ancho del panel
+    -- una columna del 30% -- y su titulo se salia por los dos lados; aqui comparte fila
+    con la evolucion y hereda su alto, que es lo que se pidio.
 
-def test_la_figura_grande_vuelve_a_dos_filas_con_su_alto_recalculado():
-    """Quitar una fila sin tocar el alto estira las dos que quedan.
-
-    `row_heights` es una fraccion de lo que sobra DESPUES del espaciado, asi que el alto
-    total, las fracciones y el espaciado se recalculan a la vez para que las filas 1 y 2
-    conserven los pixeles que median.
+    Volver NO es deshacer: la fila de abajo pasa de cuatro paneles a CINCO, y en quince
+    columnas no caben. Ver `test_la_rejilla_crece_a_veinte_columnas`.
     """
     fuente = _sin_comentarios(_fuente())
-    filas = re.search(r"rows=(\d+), cols=15", fuente)
-    assert filas and filas.group(1) == "2", (
-        f"la figura grande declara {filas.group(1) if filas else '?'} filas")
-    alturas = re.search(r"row_heights=\[([^\]]+)\]", fuente)
-    assert alturas, "no se declaran `row_heights`"
-    assert len([x for x in alturas.group(1).split(",")]) == 2, (
-        f"`row_heights` sigue teniendo tres fracciones: {alturas.group(1)}")
+    assert "fig_perfil" not in fuente, "sigue existiendo la figura aparte del perfil"
+    assert "DIV_PERFIL" not in fuente, "sigue existiendo el div aparte del perfil"
+    assert "caja-perfil" not in fuente, "sigue el envoltorio que lo bajaba 50 px"
+    assert re.findall(r"\), row=2, col=1\)", fuente), (
+        "ninguna traza va a (2,1), que es donde va el perfil")
 
 
-def test_el_perfil_tiene_su_figura_y_su_div():
-    """Traza 0 de una figura propia, con su propio div y su propio titulo."""
-    fuente = _sin_comentarios(_fuente())
-    assert "fig_perfil" in fuente, "no existe la figura del perfil"
-    assert re.search(r"DIV_PERFIL\s*=", fuente), "el perfil no tiene div propio"
-    assert re.search(r"pio\.to_html\(fig_perfil", fuente), (
-        "la figura del perfil no se serializa")
+def test_la_rejilla_crece_a_veinte_columnas():
+    """Cinco paneles y sus cuatro canales no caben en quince.
 
+    Las columnas EN BLANCO entre panel y panel no son decoracion: son los canales donde
+    cada eje y dibuja sus marcas, y donde el eje DERECHO de la evolucion pone las suyas.
+    Sin ellos las etiquetas de un panel se superponen con el vecino.
 
-def test_el_perfil_va_en_la_columna_izquierda_debajo_del_panel():
-    """Mismo ancho que el panel, que es lo que da la columna de controles."""
-    fuente = _sin_comentarios(_fuente())
-    col = re.search(r"col-controles\">\{(\w+)\}\{(\w+)\}</div>", fuente)
-    assert col, (
-        "la columna de controles no lleva dos piezas; el perfil tiene que ir debajo "
-        "del panel")
-    assert col.group(1) == "PANEL_HTML" and col.group(2) == "PERFIL_HTML", (
-        f"el orden de la columna izquierda no es panel y luego perfil: {col.groups()}")
+    La cuenta con quince, dandole dos columnas a cada panel pequenio:
 
+        perfil 3 + canal 1 + evolucion 3 + canal 1 + 3 x (2 + 1) = 17 > 15
 
-def test_el_titulo_del_perfil_deja_de_ser_una_anotacion_de_subplot():
-    """Ahora es el titulo de SU figura, y se cambia con un relayout sobre su div.
-
-    Mutar `fig_anotaciones[CTX.titulos.perfil[0]]` era correcto mientras el perfil fuera
-    un subplot de la figura grande. Fuera de ella ese indice apunta a otra cosa, y mutarlo
-    reescribiria el titulo de un panel vecino sin fallar.
+    Con veinte cierra sin apretar a nadie: 4 + 1 + 5 + 1 + 2 + 1 + 2 + 1 + 2 + 1.
     """
     fuente = _sin_comentarios(_fuente())
-    assert "CTX.titulos.perfil" not in fuente, (
-        "el JS sigue tratando el titulo del perfil como una anotacion de la figura grande")
-    assert "('perfil', 'Perfil del circuito')" not in fuente, (
-        "`TITULOS_N` sigue declarando el perfil")
-    assert re.search(r"Plotly\.relayout\(\s*gdPerfil", fuente), (
-        "el titulo del perfil no se cambia con un relayout sobre su propio div")
+    cols = re.search(r"rows=2, cols=(\d+)", fuente)
+    assert cols and cols.group(1) == "20", (
+        f"la rejilla declara {cols.group(1) if cols else '?'} columnas")
+    anchos = re.search(r"column_widths=\[1 / (\d+)\] \* (\d+)", fuente)
+    assert anchos and anchos.group(1) == anchos.group(2) == "20", (
+        "los anchos de columna no siguen a `cols`; escritos aparte se separan")
+
+
+def test_los_titulos_siguen_el_orden_de_lectura():
+    """Plotly los reparte por filas sobre las casillas CON spec, no por nombre.
+
+    El perfil entra ANTES que la evolucion porque va a su izquierda. Meterlo al final
+    -- que es donde estaba cuando era la fila 3 -- le pone a cada panel el titulo del
+    vecino, y no da ningun error.
+    """
+    fuente = _sin_comentarios(_fuente())
+    titulos = re.search(r"subplot_titles=\((.*?)\),\n", fuente, re.S)
+    assert titulos, "no se pudo leer `subplot_titles`"
+    textos = re.findall(r"'([^']*)'", titulos.group(1))
+    assert len(textos) == 7, f"son 7 casillas con spec, hay {len(textos)} titulos: {textos}"
+    assert textos[2] == "Perfil del circuito", (
+        f"el tercer titulo es el de (2,1), el perfil: {textos}")
+    assert textos[3].startswith("Evolucion"), (
+        f"el cuarto es el de la evolucion, a su derecha: {textos}")
+
+
+def test_el_titulo_del_perfil_vuelve_a_ser_una_anotacion():
+    """Dentro de la figura el titulo de un subplot ES una anotacion.
+
+    Cuando el perfil vivia aparte era el titulo de SU figura y se cambiaba con un
+    relayout sobre su div. De vuelta aqui ese div no existe.
+    """
+    fuente = _sin_comentarios(_fuente())
+    assert "gdPerfil" not in fuente, (
+        "el JS sigue buscando el div de la figura aparte, que ya no existe")
+    assert "('perfil', 'Perfil del circuito')" in fuente, (
+        "`TITULOS_N` no vuelve a declarar el perfil")
+    assert "CTX.titulos.perfil" in fuente, (
+        "el JS no reescribe el titulo del perfil por su anotacion")
+
+
+def test_la_columna_de_controles_vuelve_a_llevar_solo_el_panel():
+    """Sin el perfil debajo, no queda nada mas que poner ahi."""
+    fuente = _sin_comentarios(_fuente())
+    assert re.search(r'col-controles">\{PANEL_HTML\}</div>', fuente), (
+        "la columna de controles no lleva solo el panel")
 
 
 # --------------------------------------------------------------- el boton de encuadre
@@ -184,35 +198,3 @@ def test_la_barra_del_04_se_alinea_con_su_mapa():
         "la barra no calcula su sangria")
     assert re.search(r"MAPA_IZQ\s*=\s*float\(fig\.layout\.map\.domain\.x\[0\]\)", fuente), (
         "`MAPA_IZQ` no se lee de la figura")
-
-
-def test_el_perfil_baja_50px_respecto_del_panel():
-    """Cincuenta pixeles de aire entre el panel y el perfil.
-
-    Medido antes: el hueco eran 6 px -- el `margin-bottom` del propio panel --, asi que el
-    perfil arrancaba pegado al borde de la caja de controles y los dos se leian como una
-    sola pieza.
-
-    El desplazamiento va en un envoltorio y NO en el `margin.t` de la figura. Subir el
-    margen de la figura mueve el area de dibujo DENTRO de un div que sigue donde estaba:
-    baja las barras y deja el titulo flotando, en vez de bajar el panel entero. El
-    envoltorio mueve las dos cosas juntas y no toca la figura.
-
-    Y es `padding-top`, no `margin-top`. Los margenes verticales de hermanos adyacentes
-    COLAPSAN al mayor: contra el `margin-bottom: 6px` del panel, un `margin-top: 50px`
-    deja el hueco en 50 -- medido -- y el perfil baja 44, no 50. El relleno no colapsa.
-
-    Tampoco va en `CSS_DOS_COLUMNAS`: ese bloque viaja COPIADO en el 01 y en el 04 y una
-    prueba exige que las copias sean identicas byte a byte, asi que una regla que solo
-    necesita este tablero lo separaria de su gemelo.
-    """
-    fuente = _sin_comentarios(_fuente())
-    assert re.search(r"\.caja-perfil \{\{[^}]*padding-top:\s*50px", fuente), (
-        "el perfil no baja 50 px respecto del panel")
-    assert not re.search(r"\.caja-perfil \{\{[^}]*margin-top", fuente), (
-        "usa `margin-top`, que colapsa contra el margen del panel y baja menos de 50 px")
-    assert re.search(r'<div class="caja-perfil">', fuente), (
-        "el perfil no va dentro de su envoltorio")
-    css_compartido = re.search(r"CSS_DOS_COLUMNAS = '''(.*?)'''", _fuente(), re.S)
-    assert css_compartido and "caja-perfil" not in css_compartido.group(1), (
-        "la regla se colo en el CSS que este tablero comparte byte a byte con el 01")
