@@ -29,7 +29,8 @@ vecino inmediato (confundir Bajo con Alto ocurre 1 vez en 13.323).
 
 ## 2. Acople a 06
 
-El SEAM de la celda 5 de `06_uiti_vano_explicabilidad_simulador` debe quedar así:
+El SEAM del simulador —hoy `src/chec_tableros/simulador/derivacion.py`, entonces la
+celda 5 de `06_uiti_vano_explicabilidad_simulador.ipynb`— debe quedar así:
 
 ```python
 # --- SEAM D1: MIL -------------------------------------------------------

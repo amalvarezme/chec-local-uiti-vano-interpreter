@@ -131,8 +131,8 @@ def test_los_lanzadores_llaman_al_gestor_de_la_carpeta_de_al_lado(app: Path):
 def test_cada_visor_declara_una_fuente_que_existe(app: Path):
     """Cada aplicacion tiene que resolver EXACTAMENTE una fuente, y tenerla ahi.
 
-    Antes esa fuente era siempre un `.ipynb` y se comprobaba con un `is_file()`
-    contra `CUADERNOS_APPS`, que costaba nada y evitaba descubrir un cuaderno
+    Antes esa fuente era siempre un `.ipynb` de `notebooks/base_apps/` y se
+    comprobaba con un `is_file()`, que costaba nada y evitaba descubrir un cuaderno
     renombrado despues de crear el entorno virtual y esperar la construccion.
 
     Las cinco aplicaciones ya nombran su modulo de `src/chec_tableros/` y ningun
@@ -141,8 +141,11 @@ def test_cada_visor_declara_una_fuente_que_existe(app: Path):
     busca por texto y no importando: lo que se quiere saber es que la aplicacion
     apunta a un modulo que existe, no que este importable desde aqui.
 
-    La rama de `.ipynb` se conserva por lo que cuesta: cero mientras no queden
-    cuadernos, y un mensaje claro el dia que alguien vuelva a apuntar a uno.
+    La rama de `.ipynb` se conserva y no es codigo muerto: sigue quedando un
+    cuaderno en el proyecto (`notebooks/05_mil_vano_ventana.ipynb`), y una
+    aplicacion que empezara a nombrarlo contaria como una segunda fuente. Es un
+    limite mas estrecho que el de `test_ningun_modulo_ejecuta_un_ipynb.py`, que
+    prohibe EJECUTARLOS pero no nombrarlos.
     """
     fuentes = set()
     for py in sorted(app.glob("*.py")):
@@ -676,8 +679,7 @@ def test_el_visor_construido_registra_de_que_insumos_salio(app: Path):
         f"{app.name}: no vigila el dataset, que es lo que mas cambia")
 
 
-@pytest.mark.parametrize("app", ESTATICOS, ids=_ids(ESTATICOS))
-def test_un_visor_al_dia_no_se_reconstruye(app: Path, tmp_path: Path):
+def test_un_visor_al_dia_no_se_reconstruye(tmp_path: Path):
     """El otro lado del trato: vigilar no puede volverse reconstruir siempre. Un visor
     tarda entre 4 y 8 s en construirse, y hacerlo en cada apertura anularia el motivo
     de que exista el paquete.
@@ -690,43 +692,35 @@ def test_un_visor_al_dia_no_se_reconstruye(app: Path, tmp_path: Path):
     cambio en `src/` y pasaba en la segunda, porque otra prueba habia reconstruido
     los paneles por el camino. Un fallo que se arregla solo al repetir es peor que
     ninguno: ensena a repetir.
+
+    Se corria una vez por visor. Ya no: desde que los cuatro comparten la misma lista
+    de insumos -- todo `src/` como un arbol --, `huellas_actuales()` ni siquiera
+    pregunta cual es, asi que las cuatro corridas eran la misma afirmacion repetida.
     """
     construccion = _comun("construccion")
-    cuaderno = _cuaderno_de(app)
     (tmp_path / "index.html").write_text("", encoding="utf-8")
     (tmp_path / "manifiesto.json").write_text(
-        json.dumps({"insumos": construccion.huellas_actuales(cuaderno)}),
+        json.dumps({"insumos": construccion.huellas_actuales()}),
         encoding="utf-8")
-    assert construccion.motivo_de_reconstruccion(tmp_path, cuaderno) is None
+    assert construccion.motivo_de_reconstruccion(tmp_path) is None
 
 
-@pytest.mark.parametrize("app", ESTATICOS, ids=_ids(ESTATICOS))
-def test_mover_el_dataset_obliga_a_reconstruir_el_visor(app: Path):
+def test_mover_el_dataset_obliga_a_reconstruir_el_visor():
     """Se compara contra un manifiesto con la huella del CSV falseada, que es lo que
-    veria la aplicacion despues de que alguien actualice los datos."""
+    veria la aplicacion despues de que alguien actualice los datos.
+
+    Una sola corrida y no una por visor, por lo mismo que arriba: la lista de insumos
+    es UNA para los cuatro.
+    """
     huellas = _comun("huellas")
     construccion = _comun("construccion")
 
-    actuales = construccion.huellas_actuales(_cuaderno_de(app))
+    actuales = construccion.huellas_actuales()
     guardadas = dict(actuales)
     guardadas["Indicadores_vano_v3.csv"] = {"bytes": 1, "mtime_ns": 1}
 
     motivo = huellas.motivo_de_reconstruccion(guardadas, actuales)
     assert motivo and "Indicadores_vano_v3.csv" in motivo
-
-
-def _cuaderno_de(app: Path) -> str:
-    """El TABLERO que declara `construir.py`, leido sin importarlo.
-
-    Importarlo tiraria del `_comun` de la aplicacion y de la construccion entera.
-    Se acepta `TABLERO` -- el modulo de `src/chec_tableros/`, que es lo que declaran
-    los cuatro visores desde el 2026-08-15 -- y el viejo `CUADERNO`, que solo queda
-    donde todavia hay un `.ipynb`.
-    """
-    texto = (app / "construir.py").read_text(encoding="utf-8")
-    m = re.search(r'^(?:TABLERO|CUADERNO)\s*=\s*"([^"]+)"', texto, re.M)
-    assert m, f"{app.name}/construir.py no declara ni TABLERO ni CUADERNO"
-    return m.group(1)
 
 
 def test_todo_insumo_que_el_simulador_exige_esta_ademas_vigilado():
@@ -786,7 +780,7 @@ def test_las_cinco_vigilan_el_codigo_de_las_librerias():
     que tarda un visor en servirse.
     """
     construccion = _comun("construccion")
-    huellas_visor = construccion.huellas_actuales("01_uiti_vano_clima.ipynb")
+    huellas_visor = construccion.huellas_actuales()
 
     sys.path.insert(0, str(APPS / "06_simulador"))
     try:

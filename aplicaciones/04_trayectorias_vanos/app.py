@@ -14,10 +14,10 @@ sys.path.insert(0, str(AQUI.parent / "_comun"))
 sys.path.insert(0, str(AQUI))
 
 import construccion  # noqa: E402
-# Por el modulo y no por `runpy`: de el sale el nombre del cuaderno, que es lo
-# que hace falta para saber si el tablero sigue al dia. Importarlo no construye
-# nada -- eso vive detras de su `if __name__ == "__main__"`.
-import construir  # noqa: E402
+# `construir` ya no se importa. Estuvo aqui por su `TABLERO`, que hacia falta para
+# preguntar si el tablero seguia al dia; desde que los cuatro visores comparten la
+# misma lista de insumos -- todo `src/` como un arbol --, esa pregunta no depende de
+# cual sea. Se construye con `runpy`, mas abajo y solo cuando hace falta.
 import servidor  # noqa: E402
 
 PANEL = AQUI / "panel"
@@ -50,8 +50,7 @@ def main() -> int:
     # construido con datos que ya cambiaron se ve perfectamente bien y dibuja cifras que
     # ya no corresponden; que la aplicacion lo note sola es la unica defensa, porque
     # nada mas en el sistema va a avisar. Cuesta unos milisegundos.
-    motivo = None if args.reconstruir else construccion.motivo_de_reconstruccion(
-        PANEL, construir.TABLERO)
+    motivo = None if args.reconstruir else construccion.motivo_de_reconstruccion(PANEL)
     if args.reconstruir or motivo:
         print(f"Reconstruyendo el tablero: {motivo}." if motivo
               else "Reconstruyendo el tablero.")

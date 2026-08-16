@@ -27,12 +27,16 @@ CUADERNOS = RAIZ_REPO / "notebooks"
 # importen desde aqui en adelante (`chec_local_interpreter`, `chec_impacto`) resuelva.
 RAIZ_SRC = RAIZ_REPO / "src"
 
-# De donde salen las cinco aplicaciones: los cuadernos 01, 02, 03, 04 y 06 son su UNICA
-# fuente. La carpeta se llamaba `old_version/` hasta el 2026-08-14, y ese nombre costo
-# caro -- invitaba a borrarla, cuando lo que hay dentro es justo lo que se construye. Se
-# renombro a `base_apps/` para que diga lo que es. Va aparte de `CUADERNOS` para que
-# mover la carpeta se arregle SOLO aqui.
-CUADERNOS_APPS = CUADERNOS / "base_apps"
+# Aqui vivia `CUADERNOS_APPS = CUADERNOS / "base_apps"`, la carpeta de la que salian las
+# cinco aplicaciones. Ya no existe: su codigo esta en `src/chec_tableros/` y las
+# aplicaciones lo importan. Se retira la constante entera y no se deja apuntando a una
+# carpeta vacia, porque una ruta que ya nadie resuelve es la que reaparece en el proximo
+# `Path` sin que nadie compruebe que existe.
+#
+# La carpeta se llamo `old_version/` hasta el 2026-08-14, y ese nombre costo caro:
+# invitaba a borrarla cuando lo que tenia dentro era justo lo que se construia. Se
+# renombro a `base_apps/` para que dijera lo que era, y se vacio dos dias despues por el
+# camino correcto -- migrando lo de dentro primero.
 
 
 def verificar_repo() -> None:

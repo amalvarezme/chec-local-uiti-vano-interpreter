@@ -1,12 +1,13 @@
-"""Construye el tablero de 04_trayectorias_vanos: ejecuta el cuaderno y empaqueta su salida.
+"""Construye el tablero de 04_trayectorias_vanos: llama a su modulo y empaqueta su salida.
 
 Se corre solo, o a traves de `iniciar`, que lo invoca cuando falta el tablero.
 
-Este cuaderno tiene una particularidad que conviene no descubrir por las malas: su
-salida GUARDADA en el .ipynb es un insumo de `scripts/extract_geometrias_014.py`, que
-lee de ahi la geometria K-Means que comparten los cuadernos 05 y 06. Construir no la
-toca -- `cuaderno.ejecutar` lee el documento y ejecuta las fuentes con `exec`, sin
-escribir nunca de vuelta --, pero por eso mismo nadie debe "limpiar" ese cuaderno.
+Aqui vivia la advertencia mas repetida del proyecto: la salida GUARDADA dentro del
+`.ipynb` de este tablero era un insumo -- de ahi se extraia la geometria K-Means que
+comparten el 05 y el simulador --, asi que nadie debia "limpiar" ese cuaderno. La regla
+esta RETIRADA, con sus dos motivos: la geometria es hoy un artefacto versionado
+(`data/geometria_kmeans_014_v1.json`, producido por `scripts/exportar_geometria.py`) y el
+cuaderno ya no existe -- su codigo es `src/chec_tableros/trayectorias_vanos.py`.
 """
 import sys
 from pathlib import Path

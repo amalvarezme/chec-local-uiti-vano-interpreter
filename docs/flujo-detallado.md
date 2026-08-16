@@ -244,21 +244,26 @@ Voronoi, los mapas MapLibre). Las Databricks Apps sí, y son el único camino de
 
 ## 7. Los cuadernos
 
-En `notebooks/` queda **uno**: `05_mil_vano_ventana` (el modelo). En
-`notebooks/base_apps/` quedan **cinco**: los tableros `uiti_vano` (`01`-`04` y `06`) que son la
-fuente de las aplicaciones.
+Queda **uno**: `notebooks/05_mil_vano_ventana.ipynb`, el modelo. Es también salida generada
+de `scripts/generate_notebook_10.py`, así que editarlo a mano lo borra la próxima
+regeneración.
 
-Eran quince hasta el 2026-08-14. Se borraron nueve: `07_relevancia_lote_por_vano` y los ocho del
-pipeline MGCECDL original. Ninguno se ejecutaba ni se importaba desde ningún sitio — solo los
-nombraba prosa. Están en el historial de git, y los artefactos que produjeron (el clasificador
-congelado de `data/models/`, el grafo experto de `data/graphs/`) siguen en su sitio y siguen
-usándose; lo que ya no está en el árbol es el código que los generó.
+Eran quince hasta el 2026-08-14. Se borraron nueve ese día: `07_relevancia_lote_por_vano` y
+los ocho del pipeline MGCECDL original. Ninguno se ejecutaba ni se importaba desde ningún
+sitio — solo los nombraba prosa. Están en el historial de git, y los artefactos que
+produjeron (el clasificador congelado de `data/models/`, el grafo experto de `data/graphs/`)
+siguen en su sitio y siguen usándose; lo que ya no está en el árbol es el código que los
+generó.
 
-El nombre de la carpeta engaña, y por eso conviene decirlo: **estar en `base_apps/` no significa
-estar muerto.** Los cinco que quedan son justo lo que construyen las cinco aplicaciones de
-escritorio, vía `CUADERNOS_APPS` en `aplicaciones/_comun/raiz.py`. El `04` ajusta la geometría
-KMeans que `05` y `06` también usan; desde el 2026-08-15 esa geometría no se extrae de su salida
-guardada, sino que vive versionada en `data/geometria_kmeans_014_v1.json`.
+Los cinco restantes eran los tableros `uiti_vano` (`01`-`04` y `06`), y **eran la fuente de
+las cinco aplicaciones**: `aplicaciones/_comun/cuaderno.py` leía el `.ipynb` y ejecutaba sus
+celdas con `exec()`. Se migraron a `src/chec_tableros/` entre el 15 y el 16 de agosto de
+2026, uno por rebanada y cada uno verificado contra un golden congelado antes de empezar.
+`notebooks/base_apps/` y el ejecutor ya no existen; que nadie vuelva a ejecutar un `.ipynb`
+lo fija `tests/test_ningun_modulo_ejecuta_un_ipynb.py`.
+
+La geometría KMeans era del `04`, y `05` y `06` la extraían de su salida guardada. Desde el
+2026-08-15 vive versionada en `data/geometria_kmeans_014_v1.json`.
 
 ```
 chec_tableros.clima                    panel climático (violines + nube de rezagos)

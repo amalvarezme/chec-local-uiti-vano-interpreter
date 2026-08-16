@@ -1,16 +1,19 @@
 """Construccion compartida de los cuatro visores de tablero (01, 02, 03 y 04).
 
-Los cuatro cuadernos terminan igual: escriben un documento HTML autocontenido en
-`reports/paneles/` y devuelven su ruta en `RUTA_PANEL`. Lo unico que cambia entre
-ellos es el archivo y el titulo, asi que el procedimiento vive aqui una sola vez.
+Los cuatro modulos de `src/chec_tableros/` terminan igual: `construir()` escribe un
+documento HTML autocontenido en `reports/paneles/` y devuelve su ruta. Lo unico que
+cambia entre ellos es el modulo y el titulo, asi que el procedimiento vive aqui una
+sola vez.
 
-El cuaderno se ejecuta con una unica sustitucion, `ABRIR_EN_NAVEGADOR = False`: sin
-ella la construccion abriria el navegador con el documento de 27,8 MB antes de
-empaquetarlo, que es justo lo que estas aplicaciones existen para no hacer.
+Se les pasa `abrir=False`: sin eso la construccion abriria el navegador con el
+documento de 27,8 MB antes de empaquetarlo, que es justo lo que estas aplicaciones
+existen para no hacer. Fue una sustitucion de texto sobre el `.ipynb`
+(`ABRIR_EN_NAVEGADOR = True` -> `False`) mientras el codigo vivio ahi; hoy es un
+argumento, que es lo mismo dicho donde el lenguaje lo puede comprobar.
 
 ## Por que aqui tambien se vigilan los insumos
 
-Un visor CONGELA el resultado del cuaderno en un HTML, igual que el simulador congela
+Un visor CONGELA el resultado en un HTML, igual que el simulador congela
 su paquete. Y tenia el mismo modo de fallo sin la misma defensa: su unica condicion
 para reconstruir era que faltara `index.html`. Se actualizaba
 `Indicadores_vano_v3.csv`, se abria el tablero, y el tablero seguia dibujando los datos
@@ -21,7 +24,7 @@ Asi que al construir se guarda la huella de cada insumo en el manifiesto y al ar
 se compara. Misma maquinaria que el simulador (`huellas.py`), mismas dos formas de
 huella y el mismo criterio: contenido para lo pequenio, marca para lo pesado.
 
-**La lista de insumos es UNA para los cuatro**, aunque el cuaderno 02 no abra ningun
+**La lista de insumos es UNA para los cuatro**, aunque el tablero 02 no abra ningun
 shapefile. Vigilar de mas cuesta una reconstruccion que no hacia falta -- 3 a 8 s, y
 solo el dia que alguien cambie un shapefile, que es casi nunca --; vigilar de menos
 cuesta un tablero que miente. La misma asimetria que ya gobierna la eleccion entre sha1
@@ -34,7 +37,6 @@ import sys
 import time
 from pathlib import Path
 
-import cuaderno as _cuaderno
 import empaquetar as _empaquetar
 import huellas as _huellas
 import raiz as _raiz
@@ -47,22 +49,24 @@ import raiz as _raiz
 if str(_raiz.RAIZ_SRC) not in sys.path:
     sys.path.insert(0, str(_raiz.RAIZ_SRC))
 
-# Lo que le da forma al tablero sin ser un dato: el cuaderno y el codigo que lo ejecuta
-# y lo empaqueta. Va por contenido -- son unos cientos de KB -- y hace falta: un cambio
-# en el empaquetador o en el boton de cerrar no mueve ningun archivo de `data/`, asi que
-# sin estas lineas el visor seguiria sirviendo el HTML anterior. Ya paso al cambiar el
-# texto de reapertura en `empaquetar.py`.
+# Lo que le da forma al tablero sin ser un dato: este archivo y el que empaqueta. Va por
+# contenido -- son unos cientos de KB -- y hace falta: un cambio en el empaquetador o en
+# el boton de cerrar no mueve ningun archivo de `data/`, asi que sin estas lineas el
+# visor seguiria sirviendo el HTML anterior. Ya paso al cambiar el texto de reapertura en
+# `empaquetar.py`.
+#
+# Eran tres. La tercera era `cuaderno.py`, el ejecutor de `.ipynb`, y se fue con el
+# ultimo cuaderno el 2026-08-16.
 _CODIGO = (
     Path(__file__).resolve(),
     Path(__file__).resolve().parent / "empaquetar.py",
-    Path(__file__).resolve().parent / "cuaderno.py",
 )
 
-# Y el codigo que el CUADERNO importa, que es la mayor parte de lo que decide como se ve
-# el tablero: el agrupamiento, las capas del mapa, la construccion de ventanas. Eran 67
-# archivos sin vigilar, medidos, y es el mismo modo de fallo que las tres lineas de
-# arriba -- se toca `clases_para` y el visor sigue sirviendo el HTML anterior sin dar
-# ningun error -- solo que mucho mas ancho.
+# Y el codigo que el TABLERO importa, que es la mayor parte de lo que decide como se ve:
+# el agrupamiento, las capas del mapa, la construccion de ventanas. Eran 67 archivos sin
+# vigilar, medidos, y es el mismo modo de fallo que las dos lineas de arriba -- se toca
+# `clases_para` y el visor sigue sirviendo el HTML anterior sin dar ningun error -- solo
+# que mucho mas ancho.
 #
 # Entra como UNA huella del arbol y no como 67 sueltas: las huellas se indexan por nombre
 # de archivo y los dos paquetes tienen su propio `__init__.py`, asi que sueltas se
@@ -83,36 +87,39 @@ _DATOS = (
 )
 
 
-# Un TABLERO se nombra por su modulo (`chec_tableros.clima`) o, mientras quede alguno
-# sin migrar, por su cuaderno (`0X_....ipynb`). Los cuatro visores estaticos ya no
-# nombran ningun cuaderno: su codigo se fue a `src/chec_tableros/` y sus `.ipynb` se
-# borraron el 2026-08-15.
-def _es_modulo(tablero: str) -> bool:
-    return tablero.startswith("chec_tableros.")
-
-
+# Un TABLERO se nombra SIEMPRE por su modulo (`chec_tableros.clima`). Hubo una segunda
+# forma -- el nombre de su cuaderno -- mientras quedaba alguno sin migrar; se retiro el
+# 2026-08-16, con el ultimo `.ipynb`. Una bifurcacion que ya no se toma es peor que
+# ninguna: parece que el otro camino sigue disponible.
 def _construir_con_modulo(modulo: str) -> Path:
     from importlib import import_module
 
     return import_module(modulo).construir(raiz=_raiz.RAIZ_REPO, abrir=False)
 
 
-def huellas_actuales(tablero: str) -> dict:
-    """La huella de cada insumo de ese visor, ahora mismo.
+def huellas_actuales() -> dict:
+    """La huella de cada insumo de los visores, ahora mismo.
 
-    Un tablero que ya es un modulo no tiene `.ipynb` que vigilar: su codigo esta bajo
-    `src/`, que entra entero por `_ARBOLES`. Pedir ademas la huella de un archivo que
-    no existe haria que la aplicacion se reconstruyera en cada apertura.
+    **No recibe el tablero, y eso es una afirmacion y no un descuido**: la respuesta ya
+    no depende de cual sea. Su codigo esta bajo `src/`, que entra entero como UN arbol,
+    asi que los cuatro comparten exactamente la misma lista. Tocar `clima.py` marca los
+    cuatro como desactualizados; es la misma asimetria que gobierna el resto de este
+    archivo -- reconstruir de mas cuesta segundos, servir un tablero viejo cuesta cifras
+    que se ven perfectamente bien.
+
+    Hasta el 2026-08-16 si recibia el tablero, porque cada uno aportaba la huella de su
+    propio `.ipynb`. Quitar esa parte a tiempo importo: pedir la huella de un cuaderno
+    ya borrado habria hecho que la aplicacion se reconstruyera en CADA apertura -- 4 a
+    8 s, en silencio.
     """
-    propios = () if _es_modulo(tablero) else (_raiz.CUADERNOS_APPS / tablero,)
     return _huellas.huellas_de_insumos(
-        por_contenido=(*propios, *_CODIGO),
+        por_contenido=_CODIGO,
         por_marca=_DATOS,
         arboles=_ARBOLES,
     )
 
 
-def motivo_de_reconstruccion(destino: Path, tablero: str) -> str | None:
+def motivo_de_reconstruccion(destino: Path) -> str | None:
     """Por que hay que reconstruir el visor de `destino`, o None si esta al dia.
 
     Un tablero sin construir tambien es un motivo, y se dice con esas palabras: es lo
@@ -122,14 +129,11 @@ def motivo_de_reconstruccion(destino: Path, tablero: str) -> str | None:
     if not (Path(destino) / "index.html").exists() or not manifiesto.exists():
         return "todavia no esta construido"
     guardadas = json.loads(manifiesto.read_text(encoding="utf-8")).get("insumos")
-    return _huellas.motivo_de_reconstruccion(guardadas, huellas_actuales(tablero))
+    return _huellas.motivo_de_reconstruccion(guardadas, huellas_actuales())
 
 
 def construir_tablero(tablero: str, destino: Path, *, titulo: str) -> None:
     _raiz.verificar_repo()
-    ruta_cuaderno = _raiz.CUADERNOS_APPS / tablero
-    if not _es_modulo(tablero) and not ruta_cuaderno.exists():
-        raise SystemExit(f"No existe {ruta_cuaderno}")
 
     csv = _raiz.datos("Indicadores_vano_v3.csv")
     if not csv.exists():
@@ -141,16 +145,8 @@ def construir_tablero(tablero: str, destino: Path, *, titulo: str) -> None:
         )
 
     t0 = time.perf_counter()
-    if _es_modulo(tablero):
-        print(f"[1/2] construyendo {tablero}")
-        fuente = _construir_con_modulo(tablero)
-    else:
-        print(f"[1/2] ejecutando {tablero}")
-        espacio = _cuaderno.ejecutar(
-            ruta_cuaderno,
-            sustituciones={"ABRIR_EN_NAVEGADOR = True": "ABRIR_EN_NAVEGADOR = False"},
-        )
-        fuente = Path(espacio["RUTA_PANEL"])
+    print(f"[1/2] construyendo {tablero}")
+    fuente = _construir_con_modulo(tablero)
     print(f"      tablero completo en {time.perf_counter() - t0:.1f} s")
 
     if not fuente.exists():
@@ -162,7 +158,7 @@ def construir_tablero(tablero: str, destino: Path, *, titulo: str) -> None:
     # entro en el tablero. Tomarlas antes registraria un estado que el tablero no vio, y
     # la siguiente apertura lo daria por al dia.
     paquete = _empaquetar.empaquetar(fuente.read_text("utf-8"), destino, titulo=titulo,
-                                     insumos=huellas_actuales(tablero))
+                                     insumos=huellas_actuales())
     print()
     print(paquete.resumen())
     print()

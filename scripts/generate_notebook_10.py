@@ -2612,10 +2612,10 @@ construye ni corre el simulador; solo verifica el contrato que el simulador exig
 _MD_SIMULADOR = '''\
 ## Que hace el simulador con lo que sale de aqui
 
-El simulador (`06_uiti_vano_explicabilidad_simulador`, servido como aplicacion)
-carga el artefacto de este cuaderno y responde tres preguntas distintas. Ninguna
-de las tres se calcula aqui, pero las tres dependen de decisiones que si se toman
-aqui.
+El simulador (`chec_tableros.simulador`, servido como aplicacion local por
+`aplicaciones/06_simulador`) carga el artefacto de este cuaderno y responde tres
+preguntas distintas. Ninguna de las tres se calcula aqui, pero las tres dependen
+de decisiones que si se toman aqui.
 
 ### 1. Prediccion de grupo
 

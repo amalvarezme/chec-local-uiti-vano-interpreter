@@ -547,8 +547,9 @@ La carpeta se reorganizó el 2026-08-13: `project_flow/` desapareció y su conte
 
 **En `src/chec_tableros/`** — los cinco tableros de las aplicaciones de escritorio. Vivían
 dentro de un `.ipynb` que cada aplicación ejecutaba con `exec()`; desde agosto de 2026 son
-módulos que se **importan**, y sus cuadernos se fueron borrando a medida que migraban. Sólo
-queda `notebooks/base_apps/06_uiti_vano_explicabilidad_simulador.ipynb`, ya sin consumidor.
+módulos que se **importan**. `notebooks/base_apps/` se vació y ya no existe, y con ella el
+ejecutor `aplicaciones/_comun/cuaderno.py`. `notebooks/05_mil_vano_ventana.ipynb` es el
+único cuaderno del proyecto, y se ejecuta **como cuaderno**: entrena el modelo MIL.
 
 | Módulo | Qué hace | Lo consume |
 |---|---|---|

@@ -127,26 +127,33 @@ def test_la_narrativa_del_cuaderno_sobrevivio_en_el_readme_de_su_aplicacion(cuad
 
 
 @pytest.mark.parametrize("modulo", sorted(ESTATICOS.values()))
-def test_construir_un_tablero_migrado_no_ejecuta_celdas(modulo, monkeypatch, tmp_path):
-    """Se rompe `cuaderno.ejecutar` a proposito.
+def test_construir_un_tablero_migrado_pasa_por_el_modulo(modulo, monkeypatch, tmp_path):
+    """El CAMINO, no el resultado: `construir_tablero` llama al modulo y a nadie mas.
 
-    Sin esto la prueba seria una promesa: bastaria con que el HTML saliera bien, y
-    saldria bien por cualquiera de los dos caminos. Lo que se comprueba es el CAMINO.
+    Antes esto se comprobaba rompiendo `cuaderno.ejecutar` a proposito, porque habia
+    dos caminos posibles y el HTML salia bien por los dos. Ese ayudante se borro con
+    el ultimo `.ipynb`, asi que ya no hay nada que romper: lo que queda por fijar es
+    que la unica llamada que construye sea la del modulo, y que reciba EL modulo que
+    la aplicacion declaro.
+
+    Que ningun modulo del proyecto pueda volver a ejecutar un cuaderno lo fija
+    `test_ningun_modulo_ejecuta_un_ipynb.py`, que lo mira de forma estructural.
     """
     construccion = _construccion()
-    modulo_cuaderno = importlib.import_module("cuaderno")
+    pedidos = []
 
-    def _prohibido(*_a, **_k):
-        raise AssertionError(f"{modulo} se construyo ejecutando celdas")
+    def _espia(nombre_modulo: str) -> Path:
+        pedidos.append(nombre_modulo)
+        return _fingir_html(tmp_path)
 
-    monkeypatch.setattr(modulo_cuaderno, "ejecutar", _prohibido)
-    monkeypatch.setattr(
-        construccion, "_construir_con_modulo",
-        lambda _m: _fingir_html(tmp_path))
+    monkeypatch.setattr(construccion, "_construir_con_modulo", _espia)
     monkeypatch.setattr(construccion._empaquetar, "empaquetar", lambda *a, **k: _Vacio())
 
     construccion.construir_tablero(f"chec_tableros.{modulo}", tmp_path / "panel",
                                    titulo="x")
+
+    assert pedidos == [f"chec_tableros.{modulo}"], (
+        f"se construyo {pedidos} y se pedia chec_tableros.{modulo}")
 
 
 def _fingir_html(tmp_path: Path) -> Path:

@@ -899,57 +899,21 @@ def test_board_06_draws_the_vano_without_events_as_structure_not_as_data():
         "the notebook must assert it too, where the traces are built")
 
 
-# --- El cuaderno 06 avisa cuando el visor no puede montar su tablero ----------------------
-
-
-def test_board_06_warns_when_the_frontend_cannot_mount_the_figure_widget():
-    """El tablero del 06 es un `go.FigureWidget`, y desde plotly 6.0 eso lo respalda
-    `anywidget`. El visor de notebooks de VS Code falla al cargar esa vista, y falla
-    MUDO: medido, el kernel ejecuta las catorce celdas sin un solo error, construye el
-    widget y lo serializa entero -- cero widgets defectuosos --, y la celda del tablero
-    sale en blanco.
-
-    Sin aviso eso se lee como que el cuaderno esta roto. Este cuaderno ya tiene esa
-    filosofia en su sonda `_sonda`, que falla en la PRIMERA celda con instrucciones en
-    vez de reventar diez minutos mas abajo.
-
-    Avisa y NO interrumpe: el soporte depende de la version de la extension Jupyter de
-    VS Code, asi que a alguien le puede funcionar, y abortar seria peor que el aviso.
-
-    La guarda se recorta con `ast` y no partiendo el texto. Antes se buscaba una linea
-    de 78 iguales como separador, y en el cuaderno esa linea no esta escrita: esta
-    CALCULADA (`'=' * 78`). El corte no encontraba nada, se quedaba con el resto del
-    cuaderno entero y la prueba fallaba por un `raise` de otra celda -- una que
-    ademas debe existir. El arbol acota el bloque exacto, y ninguna reescritura de
-    los `print` de al lado lo puede mover.
-
-    **Es una propiedad del CUADERNO y no del tablero**, y por eso se lee del `.ipynb`
-    aunque el codigo del tablero ya viva en `src/chec_tableros/simulador/tablero.py`.
-    El aviso solo tiene publico dentro del visor de notebooks de VS Code: la
-    aplicacion la sirve Voila en un navegador, donde el tablero monta -- medido --, y
-    un modulo importado no puede avisarle a nadie de eso. Se va con el cuaderno en la
-    fase 4 de `sdd/retire-base-apps-notebooks`.
-    """
-    src = fuente_del_cuaderno("06_uiti_vano_explicabilidad_simulador")
-
-    assert "VSCODE_PID" in src, "sin marcador de entorno el aviso nunca se dispara"
-    assert "anywidget" in src, "el aviso confirma el respaldo en vez de suponerlo"
-    assert "jupyter lab" in src, "un aviso sin salida deja al usuario igual de atascado"
-
-    guardas = [
-        nodo
-        for nodo in ast.walk(ast.parse(_fuente_de_codigo_del_cuaderno(
-            "06_uiti_vano_explicabilidad_simulador")))
-        if isinstance(nodo, ast.If) and "_EN_VSCODE" in ast.dump(nodo.test)
-    ]
-    assert len(guardas) == 1, "la guarda del aviso tiene que ser una sola"
-    cuerpo = list(ast.walk(guardas[0]))
-    assert not any(isinstance(nodo, ast.Raise) for nodo in cuerpo), (
-        "la guarda no puede abortar: bloquearia a quien SI ve el tablero"
-    )
-    assert not any(
-        isinstance(nodo, ast.Attribute) and nodo.attr == "exit" for nodo in cuerpo
-    ), "la guarda no puede abortar: bloquearia a quien SI ve el tablero"
+# --- El aviso de VS Code del cuaderno 06, retirado con el cuaderno ------------------------
+#
+# El tablero del simulador es un `go.FigureWidget`, y desde plotly 6.0 eso lo respalda
+# `anywidget`. El visor de notebooks de VS Code fallaba al montar esa vista, y fallaba
+# MUDO: el kernel ejecutaba las catorce celdas sin un error, construia el widget entero,
+# y la celda del tablero salia en blanco. La celda 1 del cuaderno avisaba de eso -- sin
+# abortar, porque dependia de la version de la extension --, y aqui se fijaba que el
+# aviso siguiera existiendo y siguiera sin abortar.
+#
+# Se retira el 2026-08-16 con el propio cuaderno, y el motivo es que su PUBLICO
+# desaparecio, no que la advertencia fuera falsa: el aviso solo se leia dentro del visor
+# de VS Code. La aplicacion la sirve Voila en un navegador, donde el tablero monta
+# (medido, `tests/test_simulador_flujo_vivo.py`), y un modulo importado no tiene a quien
+# avisarle. Queda anotado aqui y no se convierte en una comprobacion sobre `tablero.py`,
+# porque seria una guarda contra un modo de fallo que ese archivo no puede tener.
 
 
 def test_board_04_draws_its_equipment_on_top_like_boards_01_and_03():

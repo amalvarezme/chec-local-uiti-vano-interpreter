@@ -36,12 +36,6 @@ import ayudas_tableros
 import pytest
 
 TABLERO = "06_uiti_vano_explicabilidad_simulador"
-# El cuaderno 06 sigue existiendo hasta la fase 4 de este mismo cambio, y las dos
-# pruebas de formato de mas abajo son lo unico que todavia lo mira: hablan de como se
-# lee COMO DOCUMENTO en Jupyter, que es una propiedad del `.ipynb` y no del tablero.
-# Se van con el.
-CUADERNO = (Path(__file__).resolve().parents[1] / "notebooks" / "base_apps"
-            / f"{TABLERO}.ipynb")
 
 
 # El codigo del tablero salio del cuaderno a `src/chec_tableros/simulador/`
@@ -440,35 +434,17 @@ def test_the_window_slider_opens_on_the_most_recent_window(fuente):
     assert "ventana_widget.value = _vigente if _vigente in _disponibles else _disponibles[-1]" in fuente
 
 
-def test_every_code_cell_is_collapsed_but_its_output_is_not():
-    """El cuaderno se lee como documento: el texto y las SALIDAS a la vista -- el
-    tablero es una salida -- y el codigo plegado. `jupyter.source_hidden` es lo que
-    leen JupyterLab, Notebook 7 y el editor de VS Code; la etiqueta `hide-input` es
-    para nbconvert, que no mira `source_hidden` y sin ella exportaria todo el codigo."""
-    celdas = json.loads(CUADERNO.read_text(encoding="utf-8"))["cells"]
-    codigo = [c for c in celdas if c["cell_type"] == "code"]
-    assert codigo, "el cuaderno perdio sus celdas de codigo"
-    for celda in codigo:
-        meta = celda.get("metadata", {})
-        assert meta.get("jupyter", {}).get("source_hidden") is True
-        assert "hide-input" in meta.get("tags", [])
-        # La SALIDA no se pliega: es lo unico que queda para ver.
-        assert meta.get("jupyter", {}).get("outputs_hidden") is not True
-
-
-def test_a_markdown_title_introduces_the_dashboard():
-    """Sin un titulo antes del tablero, la celda que lo muestra es una mas entre catorce
-    plegadas y no hay nada que diga cual ejecutar ni en que orden se usa."""
-    celdas = json.loads(CUADERNO.read_text(encoding="utf-8"))["cells"]
-    i_panel = next(i for i, c in enumerate(celdas) if c["cell_type"] == "code"
-                   and "El panel, ARRIBA y del ancho de la figura" in "".join(c["source"]))
-    anterior = celdas[i_panel - 1]
-    assert anterior["cell_type"] == "markdown"
-    texto = "".join(anterior["source"])
-    assert "## El tablero" in texto
-    # Nombra los pasos, que es lo que lo hace util y no decorativo.
-    for paso in ("Diagnostico", "Aplicar intervencion", "Simular"):
-        assert paso in texto
+# Aqui vivian dos pruebas del cuaderno COMO DOCUMENTO: que toda celda de codigo
+# estuviera plegada con `jupyter.source_hidden` y la etiqueta `hide-input`, y que un
+# titulo de markdown ("## El tablero", con sus pasos) precediera a la celda del panel.
+# Eran correctas y utiles: sin ellas, quien abria el `.ipynb` en JupyterLab se topaba
+# con catorce celdas de codigo y nada que dijera cual ejecutar.
+#
+# Su sujeto desaparecio el 2026-08-16 con el propio cuaderno. Lo que las sustituye no es
+# otra prueba sino el hecho de que no hay documento que leer: la aplicacion sirve un
+# cuaderno generado de UNA celda, y la explicacion que aquel titulo daba -- por donde
+# empezar, que hace cada boton -- se conservo en el README de la aplicacion
+# (`tests/test_tableros_migrados.py::test_la_narrativa_del_cuaderno_sobrevivio_...`).
 
 
 # El arranque dejo de vivir en las celdas del cuaderno y vive en

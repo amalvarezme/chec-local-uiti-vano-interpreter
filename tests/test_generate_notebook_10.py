@@ -354,15 +354,21 @@ def test_generator_output_path_targets_notebook_10_only():
 
 
 def test_generator_never_edits_upstream_notebooks_or_variable_selection(tmp_path):
-    # Los tres cuadernos de tablero que se vigilaban aqui se borraron el 2026-08-15
-    # (`sdd/retire-base-apps-notebooks`, fase 3): su codigo vive en
+    # Los cuadernos de tablero que se vigilaban aqui ya no existen
+    # (`sdd/retire-base-apps-notebooks`, fases 3 y 4): su codigo vive en
     # `src/chec_tableros/`. Se vigilan los MODULOS en su lugar, que es lo que el
-    # generador podria pisar ahora, mas los dos cuadernos que quedan.
+    # generador podria pisar ahora.
+    #
+    # El del simulador entra como sus DOS mitades. Es la que mas importa de la lista:
+    # el generador escribe `notebooks/05_mil_vano_ventana.ipynb`, y el `05` produce el
+    # modelo y el cache de bolsas que la derivacion del simulador consume. Un generador
+    # que tocara ese lado escribiria sobre su propio consumidor.
     watched_paths = [
         "src/chec_tableros/agrupamiento.py",
         "src/chec_tableros/trayectorias_circuitos.py",
         "src/chec_tableros/trayectorias_vanos.py",
-        "notebooks/base_apps/06_uiti_vano_explicabilidad_simulador.ipynb",
+        "src/chec_tableros/simulador/derivacion.py",
+        "src/chec_tableros/simulador/tablero.py",
         "data/Variables_seleccion.xlsx",
     ]
     # Every watched path must exist: a rename upstream has to fail this test loudly

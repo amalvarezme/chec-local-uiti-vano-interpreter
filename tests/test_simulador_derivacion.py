@@ -189,22 +189,27 @@ def test_el_tablero_se_arma_entero_contra_el_paquete_congelado():
             f"falta el panel {panel!r}; hay {r['titulos']}")
 
 
-@requiere_datos
-def test_derivar_no_ejecuta_ninguna_celda_del_cuaderno(monkeypatch):
+def test_derivar_no_necesita_ningun_cuaderno():
     """Lo que esta rebanada existe para lograr, comprobado y no prometido.
 
-    Se rompe `cuaderno.ejecutar` a proposito: si `derivar()` siguiera pasando por
-    ahi, la prueba falla. Sin esto, el modulo podria envolver la ejecucion de
-    celdas y las huellas cuadrarian igual.
+    Se comprobaba rompiendo `cuaderno.ejecutar` a proposito, y era la forma correcta
+    mientras existia: sin eso, el modulo podia envolver la ejecucion de celdas y las
+    huellas cuadraban igual. Ese ayudante se borro con el ultimo `.ipynb`, asi que la
+    pregunta se contesta un nivel mas arriba y sin datos: `derivacion` no nombra
+    ningun cuaderno ni ningun `exec`.
+
+    La version cara -- que `derivar()` produce el paquete byte a byte -- ya la
+    comprueba `test_derivar_reproduce_el_paquete_golden` mas arriba.
     """
-    sys.path.insert(0, str(RAIZ / "aplicaciones" / "_comun"))
-    import cuaderno as _cuaderno
+    import ast
 
-    def _prohibido(*_a, **_k):
-        raise AssertionError("derivar() ejecuto celdas del cuaderno 06")
+    fuente = (RAIZ / "src" / "chec_tableros" / "simulador" / "derivacion.py").read_text(
+        encoding="utf-8")
+    arbol = ast.parse(fuente)
 
-    monkeypatch.setattr(_cuaderno, "ejecutar", _prohibido)
-
-    from chec_tableros.simulador import derivacion
-
-    assert derivacion.derivar().tabla is not None
+    llamadas = {ast.unparse(n.func) for n in ast.walk(arbol) if isinstance(n, ast.Call)}
+    assert not {"exec", "eval"} & llamadas
+    assert ".ipynb" not in {
+        n.value for n in ast.walk(arbol)
+        if isinstance(n, ast.Constant) and isinstance(n.value, str)
+    }
