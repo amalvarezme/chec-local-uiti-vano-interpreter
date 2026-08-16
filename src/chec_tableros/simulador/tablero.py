@@ -1051,7 +1051,7 @@ def construir(
                       scaleanchor=_EJE_X_GRAFO, scaleratio=1.0)
     _fig_grafo.add_annotation(text='', xref=f'{_EJE_X_GRAFO} domain', yref=f'{_EJE_Y_GRAFO} domain',
                         x=0.5, y=0.5, showarrow=False, align='center',
-                        font=dict(size=11, color='#7a5c58'))
+                        font=dict(size=11, color='#747378'))
     IDX_ANOTACION_GRAFO = len(_fig_grafo.layout.annotations) - 1
 
     # Un rotulo por nodo, como ANOTACION y no como texto de la traza, para poder girarlo.
@@ -1129,7 +1129,7 @@ def construir(
     _EJE_Y_BARRAS = _fig.data[IDX['barra_observada']].yaxis or 'y'
     _fig.add_annotation(text='', xref=f'{_EJE_X_BARRAS} domain', yref=f'{_EJE_Y_BARRAS} domain',
                         x=0.5, y=0.5, showarrow=False, align='center',
-                        font=dict(size=11, color='#7a5c58'))
+                        font=dict(size=11, color='#747378'))
     IDX_ANOTACION_BARRAS = len(_fig.layout.annotations) - 1
     # El titulo del panel se reescribe en cada simulacion para publicar la reduccion, asi que
     # hace falta su indice. Se BUSCA por el texto con que nacio en vez de contar posiciones:
@@ -1179,7 +1179,7 @@ def construir(
     _EJE_Y_COSTOS = _fig.data[IDX['costos']].yaxis or 'y'
     _fig.add_annotation(text='', xref=f'{_EJE_X_COSTOS} domain', yref=f'{_EJE_Y_COSTOS} domain',
                         x=0.5, y=0.5, showarrow=False, align='center',
-                        font=dict(size=11, color='#7a5c58'))
+                        font=dict(size=11, color='#747378'))
     IDX_ANOTACION_COSTOS = len(_fig.layout.annotations) - 1
 
     # El aviso del mapa simulado va en coordenadas de PAPEL y no de eje: un subplot de tipo
@@ -1191,7 +1191,7 @@ def construir(
         x=(_dominio_simulado.x[0] + _dominio_simulado.x[1]) / 2.0,
         y=(_dominio_simulado.y[0] + _dominio_simulado.y[1]) / 2.0,
         showarrow=False, align='center', font=dict(size=13, color='#5b4a48'),
-        bgcolor='rgba(255,255,255,0.88)', bordercolor='#e4c4c0', borderwidth=1, borderpad=8,
+        bgcolor='rgba(255,255,255,0.88)', bordercolor='#cfe3ac', borderwidth=1, borderpad=8,
     )
     IDX_ANOTACION_SIMULADO = len(_fig.layout.annotations) - 1
 
@@ -2802,7 +2802,7 @@ def construir(
             filas.append(fila)
         _costos_por_vano[fid] = controles
         return [widgets.HTML(
-            '<div style="font-size:11px;color:#5b4a48;border-top:1px solid #e4c4c0;'
+            '<div style="font-size:11px;color:#5b4a48;border-top:1px solid #cfe3ac;'
             'margin-top:6px;padding-top:4px;">Actividades del contrato</div>'), *filas]
 
 
@@ -2903,7 +2903,7 @@ def construir(
                 controles[knob_id] = _control_con_valor(knob, valores.get(fid, {}).get(knob_id))
             _controles_por_vano[fid] = controles
             encabezado = widgets.HTML(
-                f'<div style="font-weight:600;border-bottom:2px solid rgb(203,24,29);'
+                f'<div style="font-weight:600;border-bottom:2px solid rgb(0,128,36);'
                 f'padding-bottom:2px;margin-bottom:4px;">{fid}</div>')
             columnas.append((fid, widgets.VBox(
                 [encabezado, *controles.values(), *_bloque_de_costos(fid)],
@@ -3565,7 +3565,7 @@ def construir(
 <style>
   .panel-v15 {
     box-sizing: border-box;
-    border-radius: 6px; background: #fdf7f6; color: #2b2b2b; font-size: 13px;
+    border-radius: 6px; background: #f3f8ec; color: #2b2b2b; font-size: 13px;
   }
   /* Cada grupo, un renglon completo: el panel es una columna, no una grilla. */
   .panel-v15 .grupo-v15 { margin: 0 0 10px 0; width: 100%; }
@@ -3585,8 +3585,11 @@ def construir(
      con `connect: true`, verificado en `widget_selection.js` --, asi que se pinta esa.
      Vale para TODOS los deslizadores del panel y no solo el de ventana: una barra roja
      al lado de las azules de los controles se lee como un error, no como jerarquia. */
-  .app-v15 .noUi-connect { background: rgb(203,24,29); }
-  .app-v15 .noUi-handle { border-color: rgb(203,24,29); }
+  /* El tramo lleno del deslizador va en el verde CITRICO, que es el color PRIMARIO de la
+     marca. El asa se queda en el bosque: es el borde de un control que se toca y necesita
+     el contraste que el citrico no da. */
+  .app-v15 .noUi-connect { background: rgb(139,194,27); }
+  .app-v15 .noUi-handle { border-color: rgb(0,128,36); }
   .lista-vanos, .lista-variables, .lista-items { font-size: 12px; }
   .lista-vanos .widget-checkbox label,
   .lista-variables .widget-checkbox label { white-space: nowrap; font-weight: 400; }
@@ -3661,8 +3664,8 @@ def construir(
         layout=widgets.Layout(
             width='100%', align_items='flex-start',
             padding=f'12px {_RELLENO_DER}px 12px {_RELLENO_IZQ}px', margin='0 0 6px 0',
-            border=f'{_BORDE}px solid #e4c4c0',
-            border_left=f'{_BORDE_IZQ}px solid rgb(203,24,29)',
+            border=f'{_BORDE}px solid #cfe3ac',
+            border_left=f'{_BORDE_IZQ}px solid rgb(0,128,36)',
         ),
     )
     PANEL.add_class('panel-v15')

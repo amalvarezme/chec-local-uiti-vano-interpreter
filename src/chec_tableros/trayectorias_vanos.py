@@ -1068,7 +1068,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
                     for i, c in enumerate(CIRCUITOS))
     _escala = '<span style="display:inline-flex;gap:2px;align-items:center;">' + ''.join(
         f'<span style="display:inline-block;width:20px;height:10px;background:{c};"></span>'
-        f'<span style="font-size:10px;color:#7a5c58;margin-right:8px;">{n}</span>'
+        f'<span style="font-size:10px;color:#747378;margin-right:8px;">{n}</span>'
         for n, c in zip(NOMBRES_GRUPOS, COLORES_GRUPOS)) + '</span>'
     # La barra del panel se queda solo con la escala del mapa. Lo que hace la seleccion --
     # color propio, leyenda, halo, trazo mas ancho, el tope de ocho -- se lee en la leyenda de
@@ -1085,23 +1085,23 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
        `border-box` mantiene relleno y bordes DENTRO de ese ancho y no encima. */
     width: 100%; box-sizing: border-box;
     margin: 0 0 6px 0; padding: 12px 14px;
-    border: 1px solid #e4c4c0; border-left: 4px solid rgb(203,24,29);
-    border-radius: 6px; background: #fdf7f6; color: #2b2b2b;
+    border: 1px solid #cfe3ac; border-left: 4px solid rgb(0,128,36);
+    border-radius: 6px; background: #f3f8ec; color: #2b2b2b;
   }}
   .panel-v4 label {{ display: block; font-weight: 600; margin-bottom: 4px; }}
-  .panel-v4 select {{ font: inherit; padding: 4px 6px; border: 1px solid #c9a9a5;
+  .panel-v4 select {{ font: inherit; padding: 4px 6px; border: 1px solid #a8c97a;
     border-radius: 4px; background: #fff; min-width: 140px; }}
   .panel-v4 .chk {{ font-weight: 600; display: flex; align-items: center; gap: 6px; }}
   .panel-v4 .col {{ display: flex; flex-direction: column; gap: 6px; }}
   .panel-v4 button {{ font: inherit; font-weight: 600; padding: 5px 10px; cursor: pointer;
-    border: 1px solid rgb(203,24,29); border-radius: 4px; background: rgb(203,24,29);
+    border: 1px solid rgb(0,128,36); border-radius: 4px; background: rgb(0,128,36);
     color: #fff; }}
   .panel-v4 .lista {{ flex-basis: 100%; max-height: 132px; overflow-y: auto;
-    border: 1px solid #e4c4c0; border-radius: 4px; background: #fff; padding: 6px 8px;
+    border: 1px solid #cfe3ac; border-radius: 4px; background: #fff; padding: 6px 8px;
     display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 12px; }}
   .panel-v4 .lista label {{ font-weight: 400; margin: 0; display: flex; gap: 5px;
     align-items: center; white-space: nowrap; }}
-  .panel-aviso {{ flex-basis: 100%; font-size: 12px; color: #7a5c58; margin: 0; }}
+  .panel-aviso {{ flex-basis: 100%; font-size: 12px; color: #747378; margin: 0; }}
 </style>
 <div class="panel-v4">
   <div><label for="v4-circuito">Circuito</label>
@@ -1116,12 +1116,12 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     <label for="v4-ventana">Ventana</label>
     <div style="display:flex; align-items:center; gap:8px;">
       <input type="range" id="v4-ventana" min="0" max="{len(VENTANAS) - 1}" value="0" step="1"
-             style="flex:1; accent-color: rgb(203,24,29);">
+             style="flex:1; accent-color: rgb(139,194,27);">
       <span id="v4-ventana-txt" style="font-weight:600; white-space:nowrap;
             min-width:190px;"></span>
     </div>
   </div>
-  <div class="lista" id="v4-vanos"><em style="color:#7a5c58;">Seleccione un circuito para listar sus vanos.</em></div>
+  <div class="lista" id="v4-vanos"><em style="color:#747378;">Seleccione un circuito para listar sus vanos.</em></div>
   <div style="flex-basis:100%; font-size:11.5px; color:#5b4a48; margin-top:-2px;">
     Lista de vanos con eventos del circuito en el periodo: <b>{PERIODO_ANALISIS}</b>
   </div>
@@ -1465,7 +1465,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     var caja = d.getElementById('v4-vanos');
     var vanos = CTX.vanosPorCircuito[circuito] || [];
     if (!vanos.length) {
-      caja.innerHTML = '<em style="color:#7a5c58;">Seleccione un circuito para listar sus vanos.</em>';
+      caja.innerHTML = '<em style="color:#747378;">Seleccione un circuito para listar sus vanos.</em>';
       return;
     }
     var html = '';

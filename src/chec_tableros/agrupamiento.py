@@ -462,12 +462,12 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 13px;
     display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-end;
     max-width: 100%; margin: 0 0 6px 0; padding: 12px 14px;
-    border: 1px solid #e4c4c0; border-left: 4px solid rgb(203,24,29);
-    border-radius: 6px; background: #fdf7f6; color: #2b2b2b;
+    border: 1px solid #cfe3ac; border-left: 4px solid rgb(0,128,36);
+    border-radius: 6px; background: #f3f8ec; color: #2b2b2b;
   }
   .panel-agrup label { display: block; font-weight: 600; margin-bottom: 4px; }
   .panel-agrup input[type="date"], .panel-agrup select {
-    font: inherit; padding: 4px 6px; border: 1px solid #c9a9a5;
+    font: inherit; padding: 4px 6px; border: 1px solid #a8c97a;
     border-radius: 4px; background: #fff; color: #2b2b2b;
   }
   .panel-agrup .chk { font-weight: 600; display: flex; align-items: center; gap: 6px; }
@@ -475,12 +475,12 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
   .panel-agrup .grupo-chk { display: flex; flex-direction: column; gap: 6px; }
   .panel-agrup button {
     font: inherit; font-weight: 600; padding: 6px 12px; cursor: pointer;
-    border: 1px solid rgb(203,24,29); border-radius: 4px;
-    background: rgb(203,24,29); color: #fff;
+    border: 1px solid rgb(0,128,36); border-radius: 4px;
+    background: rgb(0,128,36); color: #fff;
   }
-  .panel-agrup button:hover { background: rgb(165,15,21); }
+  .panel-agrup button:hover { background: rgb(0,102,29); }
   .panel-aviso {
-    flex-basis: 100%; font-size: 12px; color: #7a5c58; margin: 0; font-weight: 400;
+    flex-basis: 100%; font-size: 12px; color: #747378; margin: 0; font-weight: 400;
   }
 </style>
 '''

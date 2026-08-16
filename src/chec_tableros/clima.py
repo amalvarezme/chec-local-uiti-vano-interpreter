@@ -1110,35 +1110,35 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         '</optgroup>')
 
     # Mismo estilo de panel (tema rojo) que 03/04 y que la version anterior de este
-    # cuaderno: borde/acento rgb(203,24,29), fondo/texto neutros -- sin ningun azul.
+    # cuaderno: borde/acento rgb(0,128,36), fondo/texto neutros -- sin ningun azul.
     PANEL_HTML = f'''
 <style>
   .panel-clima {{
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 24px;
     display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end;
     max-width: 100%; margin: 0 0 6px 0; padding: 12px 14px; box-sizing: border-box;
-    border: 1px solid #e4c4c0; border-left: 4px solid rgb(203,24,29);
-    border-radius: 6px; background: #fdf7f6; color: #2b2b2b;
+    border: 1px solid #cfe3ac; border-left: 4px solid rgb(0,128,36);
+    border-radius: 6px; background: #f3f8ec; color: #2b2b2b;
   }}
   .panel-clima label {{ display: block; font-weight: 600; margin-bottom: 8px; }}
   .panel-clima select {{
-    font: inherit; padding: 8px 12px; border: 1px solid #c9a9a5;
+    font: inherit; padding: 8px 12px; border: 1px solid #a8c97a;
     border-radius: 4px; background: #fff; color: #2b2b2b; min-width: 280px;
   }}
   /* Los sliders tambien crecen: con texto de 26 px una barra de 4 px se pierde. */
   .panel-clima input[type="range"] {{ height: 28px; }}
   .panel-clima button {{
     font: inherit; font-weight: 600; padding: 6px 14px; cursor: pointer;
-    border: 1px solid rgb(203,24,29); border-radius: 4px;
-    background: rgb(203,24,29); color: #fff;
+    border: 1px solid rgb(0,128,36); border-radius: 4px;
+    background: rgb(0,128,36); color: #fff;
   }}
-  .panel-clima button:hover {{ background: rgb(165,15,21); }}
+  .panel-clima button:hover {{ background: rgb(0,102,29); }}
   .panel-aviso {{
-    flex-basis: 100%; font-size: 22px; color: #7a5c58; margin: 0; font-weight: 400;
+    flex-basis: 100%; font-size: 22px; color: #747378; margin: 0; font-weight: 400;
   }}
   #cl-info {{
     flex-basis: 100%; font-size: 23px; color: #2b2b2b; margin: 0; padding: 12px 16px;
-    background: #fdf7f6; border: 1px solid #e4c4c0; border-radius: 4px;
+    background: #f3f8ec; border: 1px solid #cfe3ac; border-radius: 4px;
   }}
   /* Sin detalle que mostrar no hay caja: ni recuadro, ni relleno, ni sitio ocupado. */
   #cl-info:empty {{ display: none; }}
@@ -1177,14 +1177,14 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
   <div style="flex-basis:100%; display:flex; align-items:center; gap:10px;">
     <label for="cl-dia" id="cl-dia-lbl" style="margin:0; white-space:nowrap;">Dia</label>
     <input type="range" id="cl-dia" min="0" max="{len(POR_CIRCUITO[CIRCUITO]['dias']) - 1}" value="0" step="1"
-           style="flex:1; accent-color: rgb(203,24,29);">
+           style="flex:1; accent-color: rgb(139,194,27);">
     <span id="cl-dia-txt" style="font-weight:600; white-space:nowrap; min-width:300px;"></span>
   </div>
   <div style="flex-basis:100%; display:flex; align-items:center; gap:10px;">
     <label for="cl-hora" id="cl-hora-lbl" style="margin:0; white-space:nowrap;">
       Horas antes del evento (0 = hora del evento)</label>
     <input type="range" id="cl-hora" min="0" max="{LAG_MAX}" value="0" step="1"
-           style="flex:1; accent-color: rgb(203,24,29);">
+           style="flex:1; accent-color: rgb(139,194,27);">
     <span id="cl-hora-txt" style="font-weight:600; white-space:nowrap; min-width:220px;"></span>
   </div>
   <div style="flex-basis:100%; font-size:21px; display:flex; flex-wrap:wrap;
@@ -1576,7 +1576,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
       out += '<span style="display:inline-block;margin-right:16px;">' +
              '<span style="display:inline-block;width:40px;height:20px;background:' +
              CTX.colores[i] + ';vertical-align:middle;"></span>' +
-             '<span style="font-size:18px;color:#7a5c58;vertical-align:middle;">' +
+             '<span style="font-size:18px;color:#747378;vertical-align:middle;">' +
              CTX.clases[i] + ' (' + cc.rotulos[i] + ')</span></span>';
     }
     return out + '</span>';
@@ -1594,9 +1594,9 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
       // entre el recuadro y su numero, cada valor queda junto al color equivocado.
       partes.push(
         '<span style="display:inline-block;margin-right:16px;">' +
-        '<span style="display:inline-block;width:40px;height:20px;border:1px solid #e4c4c0;' +
+        '<span style="display:inline-block;width:40px;height:20px;border:1px solid #cfe3ac;' +
         'background:' + color + ';opacity:' + cfg.opacidad + ';vertical-align:middle;"></span>' +
-        '<span style="font-size:18px;color:#7a5c58;vertical-align:middle;">' +
+        '<span style="font-size:18px;color:#747378;vertical-align:middle;">' +
         valor.toFixed(1) + '</span></span>'
       );
     }

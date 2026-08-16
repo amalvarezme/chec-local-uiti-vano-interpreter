@@ -914,7 +914,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     # se imprimen una sola vez aqui en vez de reescribirse en el navegador por circuito.
     _escala_html = '<span style="display:inline-flex;gap:2px;align-items:center;">' + ''.join(
         f'<span style="display:inline-block;width:20px;height:10px;background:{c};"></span>'
-        f'<span style="font-size:10px;color:#7a5c58;margin-right:8px;">{n} ({r})</span>'
+        f'<span style="font-size:10px;color:#747378;margin-right:8px;">{n} ({r})</span>'
         for n, c, r in zip(CLASES_MAPA, COLORES_MAPA, ROTULOS_MAPA)) + '</span>'
 
     PANEL_HTML = f'''
@@ -931,12 +931,12 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
        `border-box` mantiene relleno y bordes DENTRO de ese ancho y no encima. */
     width: 100%; box-sizing: border-box;
     margin: 0 0 6px 0; padding: 9px 14px;
-    border: 1px solid #e4c4c0; border-left: 4px solid rgb(203,24,29);
-    border-radius: 6px; background: #fdf7f6; color: #2b2b2b;
+    border: 1px solid #cfe3ac; border-left: 4px solid rgb(0,128,36);
+    border-radius: 6px; background: #f3f8ec; color: #2b2b2b;
   }}
   .panel-tray label {{ display: block; font-weight: 600; margin-bottom: 4px; }}
   .panel-tray select {{
-    font: inherit; padding: 4px 6px; border: 1px solid #c9a9a5;
+    font: inherit; padding: 4px 6px; border: 1px solid #a8c97a;
     border-radius: 4px; background: #fff; color: #2b2b2b; min-width: 140px;
   }}
   .panel-tray .chk {{ font-weight: 600; display: flex; align-items: center; gap: 6px; }}
@@ -944,12 +944,12 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
   .panel-tray .grupo-chk {{ display: flex; flex-direction: column; gap: 6px; }}
   .panel-tray button {{
     font: inherit; font-weight: 600; padding: 6px 12px; cursor: pointer;
-    border: 1px solid rgb(203,24,29); border-radius: 4px;
-    background: rgb(203,24,29); color: #fff;
+    border: 1px solid rgb(0,128,36); border-radius: 4px;
+    background: rgb(0,128,36); color: #fff;
   }}
-  .panel-tray button:hover {{ background: rgb(165,15,21); }}
+  .panel-tray button:hover {{ background: rgb(0,102,29); }}
   .panel-aviso {{
-    flex-basis: 100%; font-size: 12px; color: #7a5c58; margin: 0; font-weight: 400;
+    flex-basis: 100%; font-size: 12px; color: #747378; margin: 0; font-weight: 400;
   }}
 </style>
 <div class="panel-tray">
@@ -960,7 +960,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
   <div style="flex:1 1 420px; display:flex; align-items:center; gap:10px;">
     <label for="tr-ventana" style="margin:0; white-space:nowrap;">Ventana</label>
     <input type="range" id="tr-ventana" min="0" max="{len(VENTANAS) - 1}" value="0" step="1"
-           style="flex:1; accent-color: rgb(203,24,29);">
+           style="flex:1; accent-color: rgb(139,194,27);">
     <span id="tr-ventana-txt" style="font-weight:600; white-space:nowrap; min-width:190px;"></span>
   </div>
   <div style="flex-basis:100%; font-size:11.5px; display:flex; flex-wrap:wrap;

@@ -17,29 +17,44 @@ dice exactamente cual token se quedo atras -- que es el aviso que hoy no existia
 """
 from __future__ import annotations
 
-# Fondo de pagina. Blanco puro, como `html,body{background:#fff}` de los cuadernos.
+# Fondo de pagina. Blanco puro, como `html,body{background:#fff}` de los cuadernos, y
+# tambien el soporte de fondo generico que pide el manual de marca de EPM.
 FONDO = "#fff"
 
 # Texto principal. No es negro: `#000` sobre blanco cansa y ninguno de los tableros
 # lo usa.
 TEXTO = "#2b2b2b"
 
-# El acento. Es el rojo fuerte de la escala `Reds` de los datos, asi que un boton de
-# accion y el extremo caliente de un mapa son literalmente el mismo color.
-ACENTO = "rgb(203,24,29)"
-ACENTO_OSCURO = "rgb(165,15,21)"      # solo para `:hover`
+# El acento: el VERDE BOSQUE de CHEC / Grupo EPM. Muestreado del propio `checlogo.png`
+# del repositorio -- #008024 -- y coincide con el PANTONE 355 del manual de marca de EPM
+# (RGB 0/121/52), que es su color secundario. Se usa el bosque y no el verde citrico
+# porque los botones llevan texto blanco encima y el citrico no da contraste.
+#
+# Antes era el rojo fuerte de la escala `Reds` de los datos, y esa coincidencia -- boton
+# de accion y extremo caliente de un mapa, el mismo color -- se acabo A PROPOSITO: la
+# marca manda en el chrome y la escala de los datos se queda como esta. Son dos cosas
+# distintas y ahora se ven distintas.
+ACENTO = "rgb(0,128,36)"
+ACENTO_OSCURO = "rgb(0,102,29)"       # solo para `:hover`
 
-# Fondo de los bloques de control. Un rosa palidisimo que separa el panel del lienzo
-# sin dibujarle una caja gris encima.
-PANEL = "#fdf7f6"
+# El VERDE CITRICO, color PRIMARIO de la marca (#8bc21b en el logo; PANTONE 375 en el
+# manual). No sirve de fondo de boton -- no contrasta con texto blanco -- pero si de
+# realce y de filo, que es donde la marca se reconoce.
+ACENTO_CLARO = "rgb(139,194,27)"
+
+# Fondo de los bloques de control. Un lavado citrico palidisimo que separa el panel del
+# lienzo sin dibujarle una caja gris encima. Es el mismo papel que hacia el rosa.
+PANEL = "#f3f8ec"
 
 # Bordes. El suave delimita bloques; el fuerte, controles que se pueden tocar
 # (`select`, `input`), donde hace falta mas contraste para que se lean como tales.
-BORDE = "#e4c4c0"
-BORDE_FUERTE = "#c9a9a5"
+BORDE = "#cfe3ac"
+BORDE_FUERTE = "#a8c97a"
 
-# Texto secundario: avisos, notas al pie, lo que acompania sin competir.
-TENUE = "#7a5c58"
+# Texto secundario: avisos, notas al pie, lo que acompania sin competir. Es el GRIS de
+# la marca -- #747378 en el logo, PANTONE Cool Gray 8 en el manual --, que alli cumple
+# exactamente el mismo papel: acompaniar y neutralizar sin competir con el verde.
+TENUE = "#747378"
 
 # El grosor y el color del filo izquierdo de un panel. Es el gesto que mas repiten los
 # cinco tableros, y lo que hace que un bloque se lea como "panel de este proyecto".
@@ -55,6 +70,7 @@ TOKENS = {
     "BORDE": BORDE,
     "BORDE_FUERTE": BORDE_FUERTE,
     "TENUE": TENUE,
+    "ACENTO_CLARO": ACENTO_CLARO,
 }
 
 # La misma pila de fuentes que fijan los cuadernos. Va aqui por lo mismo que los
