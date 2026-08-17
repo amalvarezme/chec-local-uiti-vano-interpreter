@@ -14,6 +14,7 @@ from __future__ import annotations
 import pytest
 
 from chec_local_interpreter.glosario_variables import (
+    FAMILIAS_CLIMA,
     NOMBRE_NATURAL,
     nombre_con_codigo,
     nombre_natural,
@@ -22,7 +23,7 @@ from chec_local_interpreter.glosario_variables import (
 
 def test_una_variable_se_presenta_como_nombre_y_codigo_entre_parentesis():
     """El codigo no se pierde: es lo que hay que buscar en el dataset o en el tablero."""
-    assert nombre_con_codigo("NR_T") == "Riesgo por vegetacion cercana al vano (NR_T)"
+    assert nombre_con_codigo("NR_T") == "Riesgo por vegetación cercana al vano (NR_T)"
     assert nombre_con_codigo("DDT") == "Densidad de descargas a tierra (DDT)"
 
 
@@ -31,15 +32,15 @@ def test_una_variable_climatica_con_rezago_conserva_su_rezago_en_el_codigo():
     traducir borraria justo lo que distingue un rezago de otro, que es de lo que habla
     el analisis de estres acumulado."""
     assert nombre_con_codigo("temp_3") == "Temperatura del aire (temp_3)"
-    assert nombre_con_codigo("wind_gust_spd_11") == "Rafagas de viento (wind_gust_spd_11)"
-    assert nombre_con_codigo("PREP_0") == "Precipitacion (PREP_0)"
+    assert nombre_con_codigo("wind_gust_spd_11") == "Ráfagas de viento (wind_gust_spd_11)"
+    assert nombre_con_codigo("PREP_0") == "Precipitación (PREP_0)"
 
 
 def test_la_familia_sin_rezago_tambien_se_traduce():
     """El grafo del informe PLIEGA los rezagos, asi que le llegan `temp` y `PREP` a
     secas. Sin esta rama, justo los nodos del anillo se quedarian sin traducir."""
     assert nombre_natural("temp") == "Temperatura del aire"
-    assert nombre_natural("PREP") == "Precipitacion"
+    assert nombre_natural("PREP") == "Precipitación"
 
 
 def test_una_variable_que_no_esta_en_el_glosario_se_deja_como_esta():
@@ -129,7 +130,7 @@ def test_los_grupos_de_variables_traen_el_nombre_natural_de_cada_una():
 
     grupos = domain_context_payload()["variable_groups"]
     entorno = grupos["Entorno/Riesgo"]
-    assert "Riesgo por vegetacion cercana al vano (NR_T)" in entorno["variables_nombradas"]
+    assert "Riesgo por vegetación cercana al vano (NR_T)" in entorno["variables_nombradas"]
     # el listado de codigos sigue estando: es lo que hay que cruzar contra el dataset
     assert "NR_T" in entorno["variables"]
 
@@ -142,11 +143,11 @@ def test_el_comodin_de_rezago_de_la_documentacion_tambien_se_traduce():
     porque si no `TIPO_TAX` se fundiria con `TIPO` --, asi que estas se colaban sin
     traducir justo en la lista que el agente recibe.
     """
-    assert nombre_natural("PREP_i") == "Precipitacion"
+    assert nombre_natural("PREP_i") == "Precipitación"
     assert nombre_con_codigo("TEMP_i") == "Temperatura del aire (TEMP_i)"
-    assert nombre_con_codigo("WIND_GUST_SPD_i") == "Rafagas de viento (WIND_GUST_SPD_i)"
+    assert nombre_con_codigo("WIND_GUST_SPD_i") == "Ráfagas de viento (WIND_GUST_SPD_i)"
     # y la guarda sigue en pie
-    assert nombre_natural("TIPO_TAX") == "Taxonomia constructiva del vano"
+    assert nombre_natural("TIPO_TAX") == "Taxonomía constructiva del vano"
 
 
 def test_el_contexto_de_inferencia_tambien_recibe_los_nombres():
@@ -181,9 +182,45 @@ def test_el_contexto_de_inferencia_tambien_recibe_los_nombres():
         recursos, circuito="C1", fecha_inicio="2026-01-01", fecha_fin="2026-01-31")
 
     assert contexto["features_nombradas"] == [
-        "Riesgo por vegetacion cercana al vano (NR_T)",
+        "Riesgo por vegetación cercana al vano (NR_T)",
         "Densidad de descargas a tierra (DDT)",
         "Temperatura del aire (temp_0)",
     ]
     # los codigos siguen: son la clave contra el modelo y contra el dataset
     assert contexto["features"] == ["NR_T", "DDT", "temp_0"]
+
+
+# ---------------------------------------------------------------------------
+# Ortografia: esto SI llega a la pantalla.
+# ---------------------------------------------------------------------------
+
+
+def test_el_glosario_lleva_tildes_porque_se_imprime():
+    """El repositorio escribe sin tildes a proposito, pero esa regla vale para el CODIGO.
+
+    Este glosario es lo contrario: cada cadena de aqui se imprime tal cual dentro del
+    informe. Escrito sin tildes salieron 22 "vegetacion", 23 "proteccion" y 13
+    "intervencion" en un informe para operacion.
+    """
+    import unicodedata
+
+    sin_tilde = []
+    for codigo, nombre in NOMBRE_NATURAL.items():
+        plegado = unicodedata.normalize("NFKD", nombre).encode("ascii", "ignore").decode()
+        # heuristica barata y suficiente: las terminaciones que SIEMPRE llevan tilde
+        for sufijo in ("cion", "sion"):
+            for palabra in plegado.split():
+                if palabra.lower().endswith(sufijo) and palabra.lower() != "vision":
+                    if nombre == plegado:
+                        sin_tilde.append((codigo, nombre))
+    assert not sin_tilde, f"nombres que se imprimen sin tilde: {sin_tilde}"
+
+
+def test_las_familias_de_clima_tambien():
+    import unicodedata
+
+    for clave, nombre in FAMILIAS_CLIMA.items():
+        plegado = unicodedata.normalize("NFKD", nombre).encode("ascii", "ignore").decode()
+        for palabra in plegado.split():
+            if palabra.lower().endswith(("cion", "sion")) and palabra.lower() not in {"vision"}:
+                assert nombre != plegado, f"{clave}: {nombre!r} se imprime sin tilde"

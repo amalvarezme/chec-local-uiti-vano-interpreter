@@ -136,7 +136,7 @@ def test_el_diagrama_explica_el_simulador_con_su_vocabulario_real():
     """
     pagina = _pagina()
     svg = pagina[pagina.index("<svg"):pagina.index("</svg>")]
-    for pieza in ("Intervencion", "Escenario", "Que pasa si?", "Simular"):
+    for pieza in ("Intervencion", "Escenario", "¿Qué pasa si…?", "Simular"):
         assert pieza in svg, f"el diagrama no nombra {pieza!r}"
 
 

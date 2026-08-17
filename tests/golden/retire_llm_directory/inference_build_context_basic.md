@@ -1097,6 +1097,35 @@ Al escribir cualquiera de las dos, di de que es: "el circuito esta en Riesgo Med
 "nueve vanos estan en Medio-Alto". Sin ese sujeto, un lector que ve las dos frases seguidas
 cree que el informe se contradice.
 
+### Ortografia y gramatica: el informe se escribe en castellano correcto
+
+Todo lo que escribes se imprime tal cual en un documento que lee personal de la empresa.
+**Escribe con tildes.** Un informe sin tildes se lee como una salida de maquina, y ese es
+justo el efecto contrario al que este documento busca.
+
+Las que mas se escapan, y estan en casi todas las frases de este dominio:
+
+| Sin tilde (mal) | Con tilde (bien) |
+| --- | --- |
+| vegetacion, proteccion, intervencion, simulacion, ubicacion, radiacion, precipitacion, presion, duracion, interrupcion, energizacion, relacion, seccion, atencion, correlacion | vegetación, protección, intervención, simulación, ubicación, radiación, precipitación, presión, duración, interrupción, energización, relación, sección, atención, correlación |
+| analisis, diagnostico, hipotesis, metrica, periodo, maximo, minimo, numero, indice, ultimo, proximo, energia, topologia, taxonomia, categoria, dia | análisis, diagnóstico, hipótesis, métrica, período, máximo, mínimo, número, índice, último, próximo, energía, topología, taxonomía, categoría, día |
+| electrica, mecanica, fisica, climatica, atmosferica, geografica, critico, tecnico, practico, automatico | eléctrica, mecánica, física, climática, atmosférica, geográfica, crítico, técnico, práctico, automático |
+| esta (verbo), mas, aun, solo (adverbio), asi, tambien, ademas, segun, despues, aqui, alli, quiza | está, más, aún, sólo→**solo** (ya no se tilda), así, también, además, según, después, aquí, allí, quizá |
+
+Reglas que ademas se olvidan:
+
+- Las interrogaciones y exclamaciones llevan **los dos** signos: `¿...?`, `¡...!`.
+- La `ñ` es una letra: `año`, `diseño`, `mañana`, `pequeño`. Nunca `anio` ni `ano` —
+  "ano" y "año" no significan lo mismo, y el error es visible.
+- Los nombres de columna del dataset **no se acentuan ni se traducen dentro del
+  parentesis**: se escribe `Precipitación (PREP_0)`, nunca `Precipitación (PREP_0́)`.
+- Concordancia de genero y numero: "el modelo restringido", "la ventana estudiada",
+  "los nueve vanos criticos" -> "los nueve vanos críticos".
+- Los numeros con decimales van con coma decimal y punto de miles: `6.729,53`.
+
+Antes de entregar, relee tu texto buscando terminaciones en `-cion`, `-sion`, `-ia`,
+`-ico` y `-ica` sin tilde: ahi esta la mayoria de los errores.
+
 ---
 
 # Skill: 05_llm_output_validator.md

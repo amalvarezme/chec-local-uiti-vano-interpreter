@@ -98,8 +98,8 @@ def _panel_relevancia(relevancia: Mapping[str, Any], destino: Path,
     plt, fig, ax = _lienzo(alto=max(2.4, 0.32 * len(filas)))
     etiquetas = [f[0] for f in reversed(filas)]
     ax.barh(etiquetas, [f[1] for f in reversed(filas)], color=COLOR_SIMULADO)
-    ax.set_xlabel("Caida alcanzable de UITI (log10)")
-    ax.set_title("Relevancia: que baja el UITI de cada vano")
+    ax.set_xlabel("Caída alcanzable de UITI (log10)")
+    ax.set_title("Relevancia: qué baja el UITI de cada vano")
     ax.grid(axis="x", alpha=0.25)
     return _guardar(plt, fig, destino, f"{clave}_relevancia.png")
 
@@ -132,7 +132,7 @@ def _panel_uiti(simulacion: Mapping[str, Any], destino: Path,
     ax.set_xticklabels([v["fid"] for v in vanos], rotation=45, ha="right", fontsize=7)
     ax.set_ylabel("UITI acumulado")
     ax.set_title("UITI medido contra estimado, con su grupo de criticidad "
-                 "(solo palancas de intervencion)")
+                 "(solo palancas de intervención)")
     ax.legend(fontsize=8)
     ax.grid(axis="y", alpha=0.25)
     return _guardar(plt, fig, destino, f"{clave}_uiti.png")
@@ -156,10 +156,10 @@ def datos_grafo_radial(
     px de arco.
     """
     if not grafo:
-        return None, "La simulacion no produjo grafo para esta ventana."
+        return None, "La simulación no produjo grafo para esta ventana."
     if grafo.get("voided") or grafo.get("matriz") is None:
-        return None, ("El grafo se reconstruye con al menos tres vanos; esta seleccion "
-                      "no llega, asi que no se dibuja en vez de mostrarse vacio.")
+        return None, ("El grafo se reconstruye con al menos tres vanos; esta selección "
+                      "no llega, así que no se dibuja en vez de mostrarse vacío.")
 
     import numpy as np
 
@@ -167,7 +167,7 @@ def datos_grafo_radial(
 
     matriz = np.abs(np.asarray(grafo["matriz"], dtype=float))
     if not float(matriz.max(initial=0.0)):
-        return None, "La intervencion no movio ninguna relacion del grafo."
+        return None, "La intervención no movió ninguna relación del grafo."
 
     # La matriz manda: una lista de nombres mas corta se rellena con `f<k>` en vez de
     # tumbar el panel. Es la tolerancia que tenia el dibujo anterior, y sigue siendo
@@ -179,12 +179,12 @@ def datos_grafo_radial(
     if not float(np.abs(plegada).max(initial=0.0)):
         # Todo lo que se movio estaba DENTRO de una familia de rezagos, y eso plegado
         # es un lazo de un nodo a si mismo: en un anillo, un punto.
-        return None, ("Lo unico que movio la intervencion fueron relaciones dentro de "
+        return None, ("Lo único que movió la intervención fueron relaciones dentro de "
                       "una misma familia de rezagos, que plegadas no son una arista.")
 
     trazas = trazas_grafo(plegada, nombres)
     if not trazas["nodos"]["texto"]:
-        return None, "La intervencion no movio ninguna relacion del grafo."
+        return None, "La intervención no movió ninguna relación del grafo."
     return trazas, ""
 
 
@@ -249,7 +249,7 @@ def _panel_grafo(grafo: Mapping[str, Any] | None, features: Sequence[str],
     ax.set_ylim(-1.55, 1.55)
     ax.set_aspect("equal")
     ax.axis("off")
-    ax.set_title("Grafo del escenario: que variables se mueven juntas", fontsize=10)
+    ax.set_title("Grafo del escenario: qué variables se mueven juntas", fontsize=10)
     return _guardar(plt, fig, destino, f"{clave}_grafo.png"), ""
 
 

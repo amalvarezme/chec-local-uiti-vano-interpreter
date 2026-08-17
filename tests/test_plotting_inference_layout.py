@@ -83,7 +83,10 @@ def test_figure_html_nonexistent_png_path_falls_back_without_crash(tmp_path):
     html = html_path.read_text(encoding="utf-8")
 
     assert "No se pudo renderizar" in html
-    assert "<img" not in html
+    # `embedded-figure` y no `<img` a secas: el informe lleva ahora el escudo de CHEC
+    # embebido en su cabecera, que es otra imagen y no tiene nada que ver con esta
+    # figura. La afirmacion es que la FIGURA ausente no dibuja nada.
+    assert "<img class='embedded-figure'" not in html
 
 
 def _resultado_de_ventana(ventana, nombre, png=None):
@@ -190,7 +193,7 @@ def test_the_reduction_scenario_shows_measured_against_simulated_with_its_group(
         output_dir=tmp_path,
     ).read_text(encoding="utf-8")
 
-    assert "Escenario de disminucion" in html
+    assert "Escenario de disminución" in html
     assert "Alto" in html and "Medio" in html
     assert "Palancas movidas (solo intervencion): ALTURA" in html
 
@@ -519,10 +522,13 @@ class _MapaFalso:
 def _mapas_de_tres_ventanas():
     return [
         {"ventana": "V9", "periodo": "2026-03-01 a 2026-03-31", "n_vanos": 103,
+         "top_uiti": ["V1"],
          "base": {"valor": {"V1": 3, "V2": 1}, "clase": {"V1": "Alto", "V2": "Medio"}}},
         {"ventana": "V10", "periodo": "2026-04-01 a 2026-04-14", "n_vanos": 102,
+         "top_uiti": ["V2"],
          "base": {"valor": {"V1": 2, "V2": 1}, "clase": {"V1": "Medio-Alto", "V2": "Medio"}}},
         {"ventana": "V11", "periodo": "2026-04-15 a 2026-04-30", "n_vanos": 116,
+         "top_uiti": ["V1", "V2"],
          "base": {"valor": {"V1": 1, "V2": 0}, "clase": {"V1": "Medio", "V2": "Bajo"}}},
     ]
 
@@ -637,7 +643,7 @@ def test_las_variables_asociadas_se_escriben_en_castellano_con_su_codigo(tmp_pat
         "analisis_causas": "a",
     }])
 
-    assert "Riesgo por vegetacion cercana al vano (NR_T)" in html
+    assert "Riesgo por vegetación cercana al vano (NR_T)" in html
     assert "Densidad de descargas a tierra (DDT)" in html
 
 
@@ -665,3 +671,122 @@ def test_una_variable_fuera_del_glosario_se_muestra_tal_cual(tmp_path):
 
     assert "COLUMNA_RARA" in html
     assert "COLUMNA_RARA (COLUMNA_RARA)" not in html
+
+
+# ---------------------------------------------------------------------------
+# Estilo: las tablas de variables usan una clase que EXISTE.
+# ---------------------------------------------------------------------------
+
+
+def test_ninguna_tabla_usa_una_clase_sin_definir(tmp_path, monkeypatch):
+    """Las tablas de intervención y de escenario salían sin divisiones de fila ni
+    columna, y no por una decisión de estilo: llevaban `class='report-table'`, una
+    clase que el informe NUNCA define. Cero reglas CSS.
+
+    La comprobación es estructural y no una lista de nombres a mano: para cada clase
+    que aparece en un `class='...'` de una tabla, la hoja tiene que declararla.
+    """
+    import re
+
+    html = render_llm_analysis(
+        validation_data={},
+        raw_df=_minimal_raw_df(),
+        selected_circuitos=["C1"],
+        inference_results={"V11": _resultado_de_ventana("V11", "C1 -- ventana V11")},
+        inference_analysis={},
+        output_dir=tmp_path,
+    ).read_text(encoding="utf-8")
+
+    hoja = html[html.index("<style>"):html.index("</style>")]
+    clases_de_tabla = set(re.findall(r"<table class='([\w-]+)'", html))
+    assert clases_de_tabla, "el informe no dibujó ninguna tabla; la prueba no vale"
+    for clase in clases_de_tabla:
+        assert f".{clase}" in hoja, (
+            f"la tabla usa `{clase}` y la hoja no la define: sale sin bordes")
+
+
+def test_el_panel_del_grafo_ocupa_la_mitad(tmp_path):
+    """El anillo es cuadrado y con `width: 100%` se comía una franja del informe tan
+    alta como ancha. Se muestra a la mitad y centrado.
+
+    Se reduce lo que se VE, no el PNG: encoger el lienzo dejaría los rótulos de las
+    variables ilegibles, que es lo único que el anillo tiene que dejar leer.
+    """
+    html = render_llm_analysis(
+        validation_data={},
+        raw_df=_minimal_raw_df(),
+        selected_circuitos=["C1"],
+        inference_results={"V11": _resultado_de_ventana("V11", "C1 -- ventana V11")},
+        inference_analysis={},
+        output_dir=tmp_path,
+    ).read_text(encoding="utf-8")
+
+    hoja = html[html.index("<style>"):html.index("</style>")]
+    assert ".figura-mitad" in hoja, "no existe la regla que reduce el grafo"
+    assert "50%" in hoja[hoja.index(".figura-mitad"):hoja.index(".figura-mitad") + 200]
+
+
+def test_el_escudo_de_chec_va_arriba_a_la_derecha(tmp_path):
+    html = render_llm_analysis(
+        validation_data={}, raw_df=_minimal_raw_df(), selected_circuitos=["C1"],
+        inference_results=None, inference_analysis={}, output_dir=tmp_path,
+    ).read_text(encoding="utf-8")
+
+    assert "class='escudo-chec'" in html or 'class="escudo-chec"' in html
+    assert "data:image/png;base64" in html, "el escudo tiene que viajar DENTRO del HTML"
+
+
+def test_el_pie_declara_que_lo_construyeron_agentes(tmp_path):
+    """Quien recibe el informe tiene que saber como se produjo, sin buscarlo."""
+    html = render_llm_analysis(
+        validation_data={}, raw_df=_minimal_raw_df(), selected_circuitos=["C1"],
+        inference_results=None, inference_analysis={}, output_dir=tmp_path,
+    ).read_text(encoding="utf-8")
+
+    assert "Reporte construido por agentes de IA" in html
+
+
+# ---------------------------------------------------------------------------
+# UN mapa con deslizador, no tres apilados.
+# ---------------------------------------------------------------------------
+
+
+def test_los_mapas_van_en_un_solo_visor_con_deslizador(tmp_path, monkeypatch):
+    """Tres mapas apilados obligan a bajar y subir para comparar, y a esa distancia
+    la comparación se hace de memoria. En el mismo sitio, uno encima del otro, el
+    cambio entre ventanas se ve como un movimiento."""
+    html, llamadas = _render_con_mapas(tmp_path, monkeypatch, _mapas_de_tres_ventanas())
+
+    assert len(llamadas) == 3, "se siguen dibujando los tres, uno por ventana"
+    assert "type='range'" in html or 'type="range"' in html, "no hay deslizador"
+    # prefijo, no cadena exacta: la primera capa lleva ademas ` activa`
+    assert html.count("class='mapa-ventana") == 3
+    # solo uno visible al abrir
+    assert html.count("class='mapa-ventana activa'") == 1
+
+
+def test_el_deslizador_recorre_las_ventanas_en_orden(tmp_path, monkeypatch):
+    html, _ = _render_con_mapas(tmp_path, monkeypatch, _mapas_de_tres_ventanas())
+
+    assert "min='0'" in html and "max='2'" in html
+    # el rótulo de cada posición existe para que el deslizador no sea un número suelto
+    for ventana in ("V9", "V10", "V11"):
+        assert ventana in html
+
+
+def test_el_mapa_destaca_el_top_15_por_uiti_acumulado(tmp_path, monkeypatch):
+    """El color dice el grupo; el destacado dice dónde está el impacto."""
+    html, llamadas = _render_con_mapas(tmp_path, monkeypatch, _mapas_de_tres_ventanas())
+
+    destacados = [k.get("vanos_destacados") for k in llamadas]
+    assert destacados[0] == {"V1"}
+    assert destacados[1] == {"V2"}
+    assert destacados[2] == {"V1", "V2"}
+
+
+def test_un_solo_mapa_no_necesita_deslizador(tmp_path, monkeypatch):
+    """Un deslizador de una sola posición es un control que no hace nada."""
+    html, _ = _render_con_mapas(tmp_path, monkeypatch, _mapas_de_tres_ventanas()[:1])
+
+    assert "type='range'" not in html
+    assert html.count("class='mapa-ventana activa'") == 1

@@ -839,9 +839,21 @@ def mapa_base_de_escenario(escenario: Mapping[str, Any]) -> dict[str, Any]:
             "clase": {fid: _nombre_clase(idx) for fid, idx in indices.items()},
         }
 
+    # Los quince de mayor UITI acumulado ESTIMADO, de mayor a menor. El color del mapa
+    # dice en que grupo esta cada vano; esta lista dice cuales concentran el impacto,
+    # que es otra pregunta: un vano en Alto con poco UITI acumulado no es por donde
+    # empieza una cuadrilla. Se ordena por `u_base`, la misma magnitud que usan el
+    # diagnostico y la tabla del plan, para que las tres hablen de lo mismo.
+    _por_uiti = sorted(
+        ((str(fid), float(entrada.get("u_base", 0.0)))
+         for fid, entrada in (relevancia.get("vanos", {}) or {}).items()),
+        key=lambda par: par[1], reverse=True,
+    )
+
     return {
         "ventana": str((escenario or {}).get("ventana", "")),
         "base": _capa(base_idx),
+        "top_uiti": [fid for fid, _ in _por_uiti[:TOP_VANOS_DIAGNOSTICO]],
         "n_vanos": len(base_idx),
     }
 

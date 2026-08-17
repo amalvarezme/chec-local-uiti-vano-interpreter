@@ -444,7 +444,7 @@ def _diagrama(titulos: list[str]) -> str:
     _ = titulos
     return """
 <svg viewBox="0 0 520 514" role="img"
-     aria-label="Como funciona el simulador Que pasa si de CriticidadCHEC">
+     aria-label="Cómo funciona el simulador ¿Qué pasa si…? de CriticidadCHEC">
   <defs>
     <marker id="pf" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7"
             orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="$BORDE_FUERTE"/></marker>
@@ -459,42 +459,42 @@ def _diagrama(titulos: list[str]) -> str:
   <text x="12" y="18" class="dh">1 &middot; LO QUE ELIGES</text>
   <rect x="12" y="26" width="496" height="46" rx="6" fill="$PANEL" stroke="$BORDE"/>
   <text x="260" y="45" text-anchor="middle" class="dt">Circuito, ventana y vanos marcados</text>
-  <text x="260" y="61" text-anchor="middle" class="dn">mas las variables y las actividades del contrato que quieras mover</text>
+  <text x="260" y="61" text-anchor="middle" class="dn">más las variables y las actividades del contrato que quieras modificar</text>
   <path d="M260 72 V92" class="fl"/>
 
   <text x="12" y="110" class="dh">2 &middot; EL MODELO</text>
   <rect x="12" y="118" width="496" height="52" rx="6" fill="$ACENTO" stroke="$ACENTO"/>
-  <text x="260" y="139" text-anchor="middle" class="dt" style="fill:#fff">Modelo de IA predictiva restringida por la física</text>
-  <text x="260" y="156" text-anchor="middle" class="dn" style="fill:#fff">para estudiar las posibles causas de los fallos a nivel vano</text>
+  <text x="260" y="139" text-anchor="middle" class="dt" style="fill:#fff">Modelo de IA predictiva restringido por la física</text>
+  <text x="260" y="156" text-anchor="middle" class="dn" style="fill:#fff">para estudiar las posibles causas de los fallos en cada vano</text>
   <path d="M140 170 V194" class="fl"/>
   <path d="M380 170 V194" class="fl"/>
 
   <text x="12" y="212" class="dh">3 &middot; LO QUE EL TABLERO ESTUDIA POR TI</text>
   <rect x="12" y="220" width="240" height="52" rx="6" fill="$PANEL" stroke="$BORDE"/>
   <text x="132" y="241" text-anchor="middle" class="dt">Sensibilidad de las variables</text>
-  <text x="132" y="258" text-anchor="middle" class="dn">para disminuir el impacto en UITI</text>
+  <text x="132" y="258" text-anchor="middle" class="dn">para disminuir el impacto en el UITI</text>
 
   <rect x="268" y="220" width="240" height="52" rx="6" fill="$PANEL" stroke="$BORDE"/>
-  <text x="388" y="241" text-anchor="middle" class="dt">Diagnóstico semi-automático</text>
+  <text x="388" y="241" text-anchor="middle" class="dt">Diagnóstico semiautomático</text>
   <text x="388" y="258" text-anchor="middle" class="dn">de los vanos más críticos</text>
   <path d="M132 272 V300" class="fl"/>
   <path d="M388 272 V300" class="fl"/>
 
   <text x="12" y="318" class="dh">4 &middot; LOS DOS RANKINGS</text>
   <rect x="12" y="326" width="240" height="70" rx="6" fill="#fff" stroke="$BORDE_FUERTE"/>
-  <text x="132" y="346" text-anchor="middle" class="dt">Top: que baja el UITI</text>
-  <text x="132" y="362" text-anchor="middle" class="dn">las variables ordenadas por la</text>
-  <text x="132" y="375" text-anchor="middle" class="dn">caida que consiguen en cada vano</text>
+  <text x="132" y="346" text-anchor="middle" class="dt">Top: lo que más reduce el UITI</text>
+  <text x="132" y="362" text-anchor="middle" class="dn">las variables ordenadas según la reducción</text>
+  <text x="132" y="375" text-anchor="middle" class="dn">del UITI que logran en cada vano</text>
 
   <rect x="268" y="326" width="115" height="70" rx="6" fill="#fff" stroke="$BORDE_FUERTE"/>
   <text x="325" y="346" text-anchor="middle" class="dt">Intervencion</text>
-  <text x="325" y="364" text-anchor="middle" class="dn">que HACER</text>
+  <text x="325" y="364" text-anchor="middle" class="dn">qué hacer</text>
   <text x="325" y="377" text-anchor="middle" class="dn">valor sugerido</text>
 
   <rect x="393" y="326" width="115" height="70" rx="6" fill="#fff" stroke="$BORDE_FUERTE"/>
   <text x="450" y="346" text-anchor="middle" class="dt">Escenario</text>
-  <text x="450" y="364" text-anchor="middle" class="dn">bajo que</text>
-  <text x="450" y="377" text-anchor="middle" class="dn">CONDICIONES</text>
+  <text x="450" y="364" text-anchor="middle" class="dn">bajo qué</text>
+  <text x="450" y="377" text-anchor="middle" class="dn">condiciones</text>
 
   <!-- Los tres rankings bajan a un mismo canal y de ahi UNA flecha a la pregunta. Con
        tres trazos convergiendo directamente, los dos que llegaban en diagonal se leian
@@ -509,11 +509,11 @@ def _diagrama(titulos: list[str]) -> str:
   <!-- Ancha de verdad: el subtitulo mide lo que mide y una caja de 220 px lo dejaba
        saliendose por los dos lados. -->
   <rect x="60" y="454" width="400" height="46" rx="6" fill="$ACENTO_CLARO" stroke="$ACENTO"/>
-  <text x="260" y="474" text-anchor="middle" class="dt">Que pasa si?</text>
+  <text x="260" y="474" text-anchor="middle" class="dt">¿Qué pasa si…?</text>
   <!-- El gris de `.dn` sobre este verde da 1,9:1. Se veia negro mientras la hoja estuvo
        inerte; en cuanto la regla empezo a aplicarse, aqui -- y solo aqui, que es la unica
        caja de fondo saturado sin texto blanco -- el subtitulo se perdia. -->
-  <text x="260" y="491" text-anchor="middle" class="dn" style="fill:$TEXTO">aplicas lo sugerido, o lo mueves a mano, y pulsas Simular</text>
+  <text x="260" y="491" text-anchor="middle" class="dn" style="fill:$TEXTO">aplicas lo sugerido o lo modificas manualmente y pulsas «Simular»</text>
 </svg>
 """
 

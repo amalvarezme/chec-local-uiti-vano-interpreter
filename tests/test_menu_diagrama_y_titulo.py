@@ -216,8 +216,8 @@ def test_el_bloque_del_modelo_dice_que_es_en_castellano_llano():
     el modelo, no como esta armado por dentro.
     """
     svg = _svg()
-    for pieza in ("Modelo de IA predictiva restringida por la física",
-                  "para estudiar las posibles causas de los fallos a nivel vano"):
+    for pieza in ("Modelo de IA predictiva restringido por la física",
+                  "para estudiar las posibles causas de los fallos en cada vano"):
         assert pieza in svg, f"el bloque del modelo no dice {pieza!r}"
     for jerga in ("Modelo MIL congelado", "la bolsa es el par vano", "FiLM",
                   "compuertas por arista"):
@@ -228,8 +228,8 @@ def test_los_dos_estudios_se_nombran_por_lo_que_sirven():
     """No por su tecnica: "min-max", "barrido", "no es SHAP" contestaban una pregunta que
     la portada no plantea."""
     svg = _svg()
-    for pieza in ("Sensibilidad de las variables", "para disminuir el impacto en UITI",
-                  "Diagnóstico semi-automático", "de los vanos más críticos"):
+    for pieza in ("Sensibilidad de las variables", "para disminuir el impacto en el UITI",
+                  "Diagnóstico semiautomático", "de los vanos más críticos"):
         assert pieza in svg, f"el diagrama no dice {pieza!r}"
     for viejo in ("min-max", "SHAP", "barre cada variable", "completa con los de mayor UITI"):
         assert viejo not in svg, f"el diagrama sigue explicando la tecnica: {viejo!r}"

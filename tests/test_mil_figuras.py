@@ -193,7 +193,7 @@ def test_el_grafo_anulado_dice_por_que_en_vez_de_dibujar_un_anillo_vacio():
     import numpy as np
     datos, motivo = datos_grafo_radial(
         {"voided": False, "matriz": np.zeros((3, 3)).tolist()}, ["A", "B", "C"])
-    assert datos is None and "no movio" in motivo
+    assert datos is None and "no movió" in motivo
 
 
 def test_una_matriz_mas_grande_que_la_lista_de_nombres_no_tumba_el_anillo():

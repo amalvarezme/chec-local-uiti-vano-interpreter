@@ -615,6 +615,7 @@ def plot_circuit_map_folium(
     metric_column: str | None = None,
     metric_class_by_vano=None,
     metric_class_column: str | None = None,
+    vanos_destacados=None,
 ):
     """Build the same layered GEO HTML map used in notebook 03, enriched with V3 metrics."""
     os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "chec_local_matplotlib"))
@@ -727,15 +728,28 @@ def plot_circuit_map_folium(
         "Muy alto": "#c62828",
     }
 
+    # Los vanos a destacar, con el mismo normalizador de id que usa el resto del mapa:
+    # `FID_VANO` llega con sufijo `.0` inconsistente y sin normalizar el conjunto no
+    # coincide con NINGUNA geometria, asi que el destacado no se veria y nada fallaria.
+    destacados = set()
+    if vanos_destacados:
+        destacados = set(_norm_map_id(pd.Series(list(vanos_destacados), dtype="object")))
+
     def style_line(feature):
         value = feature["properties"].get(metric_column)
         has_value = bool(feature["properties"].get("has_v3_event"))
+        # Grosor y no color: el color ya significa el GRUPO de criticidad, y darle un
+        # segundo significado dejaria el semaforo sin poder leerse.
+        resaltado = str(feature["properties"].get("FID_VANO_GEO", "")) in destacados
+        grosor = 8 if resaltado else 4
         if has_value:
             class_value = feature["properties"].get(metric_class_column) if metric_class_column else None
             if class_value in class_colors:
-                return {"color": class_colors[class_value], "weight": 4, "opacity": 0.88}
+                return {"color": class_colors[class_value], "weight": grosor,
+                        "opacity": 1.0 if resaltado else 0.88}
             rgba = mapper.to_rgba(min(float(value or 0), vmax_robust), bytes=True)
-            return {"color": f"#{rgba[0]:02x}{rgba[1]:02x}{rgba[2]:02x}", "weight": 4, "opacity": 0.85}
+            return {"color": f"#{rgba[0]:02x}{rgba[1]:02x}{rgba[2]:02x}", "weight": grosor,
+                    "opacity": 1.0 if resaltado else 0.85}
         return {"color": "#9ca3af", "weight": 2, "opacity": 0.45}
 
     if not geo_plot.empty:
@@ -1243,12 +1257,14 @@ def render_llm_analysis(
         if not ventanas:
             return ""
 
-        paneles = []
+        capas = []
+        etiquetas = []
         fallos = []
         for mapa in ventanas:
             base = mapa.get("base") or {}
             etiqueta = _escape(mapa.get("ventana") or "")
             periodo = _escape(mapa.get("periodo") or "")
+            destacados = {str(f) for f in (mapa.get("top_uiti") or [])}
             try:
                 dibujado = plot_circuit_map_folium(
                     raw_df,
@@ -1259,36 +1275,66 @@ def render_llm_analysis(
                     metric_column="grupo_base",
                     metric_class_by_vano=pd.Series(base.get("clase") or {}, dtype="object"),
                     metric_class_column="clase",
+                    vanos_destacados=destacados,
                 )
             except Exception as exc:
                 # Una ventana que no se puede dibujar no puede llevarse las otras dos.
                 fallos.append(f"{etiqueta}: {_escape(exc)}")
                 continue
-            titulo = f"Ventana {etiqueta}" + (f" ({periodo})" if periodo else "")
-            paneles.append(_chart_panel(
-                titulo, _iframe_srcdoc(dibujado.get_root().render(), height=560)))
+            etiquetas.append(etiqueta)
+            activa = " activa" if not capas else ""
+            capas.append(
+                f"<div class='mapa-ventana{activa}' data-indice='{len(capas)}'>"
+                f"<p class='muted' style='margin:0 0 6px 0;'>Ventana <b>{etiqueta}</b>"
+                f"{f' &mdash; {periodo}' if periodo else ''} &middot; "
+                f"{len(destacados)} vanos de mayor UITI acumulado resaltados</p>"
+                f"{_iframe_srcdoc(dibujado.get_root().render(), height=560)}</div>"
+            )
 
-        if not paneles:
+        if not capas:
             return (f"<p class='muted'>No se pudieron renderizar los mapas por ventana: "
                     f"{'; '.join(fallos)}</p>")
+
+        # UN visor. Tres mapas apilados obligan a bajar y subir para compararlos, y a esa
+        # distancia la comparacion se hace de memoria; en el mismo sitio, uno encima del
+        # otro, el cambio entre ventanas se ve como un movimiento.
+        #
+        # El deslizador solo aparece cuando hay mas de una ventana: un control de una
+        # sola posicion no hace nada y se lee como que algo se rompio.
+        control = ""
+        if len(capas) > 1:
+            marcas = "".join(
+                f"<span style='flex:1;text-align:center;'>{e}</span>" for e in etiquetas)
+            control = (
+                "<div class='mapa-control'>"
+                f"<input type='range' min='0' max='{len(capas) - 1}' value='0' step='1' "
+                "class='mapa-deslizador' aria-label='Ventana del mapa'>"
+                f"<div class='mapa-marcas'>{marcas}</div>"
+                "</div>"
+            )
 
         aviso = (f"<p class='muted'>Sin mapa: {'; '.join(fallos)}</p>" if fallos else "")
         nota = (
             "<div class='summary-box'>"
-            "<h3 style='margin-top:0;'>Como leer los mapas</h3>"
+            "<h3 style='margin-top:0;'>Cómo leer el mapa</h3>"
             "<ul class='report-list'>"
-            "<li>Cada mapa es una ventana del circuito, en orden de tiempo: la primera "
-            "es la que mas peso tuvo y la ultima es como esta hoy.</li>"
+            "<li>Es un solo mapa: el deslizador cambia la ventana que se muestra, en "
+            "orden de tiempo. La primera es la que más peso tuvo y la última es cómo "
+            "está el circuito hoy.</li>"
             "<li>El color de cada vano es su grupo de criticidad en esa ventana, el "
-            "mismo que usa el diagnostico.</li>"
-            "<li>Se dibujan TODOS los vanos de la ventana, no solo los del diagnostico: "
+            "mismo que usa el diagnóstico.</li>"
+            "<li>Los trazos <b>gruesos</b> son los quince vanos de mayor UITI acumulado "
+            "de esa ventana. El color dice en qué grupo está un vano; el grosor, cuáles "
+            "concentran el impacto — que no siempre son los mismos.</li>"
+            "<li>Se dibujan TODOS los vanos de la ventana, no solo los del diagnóstico: "
             "un vano sin marcar es un vano que no necesita obra, no un vano sin datos.</li>"
-            "<li>Comparando un mapa con el siguiente se ve si el problema se queda en el "
-            "mismo tramo o se mueve por el circuito.</li>"
+            "<li>Moviendo el deslizador se ve si el problema se queda en el mismo tramo "
+            "o se mueve por el circuito.</li>"
             "</ul></div>"
         )
         return (f"<h3>Estado del circuito en las ventanas estudiadas</h3>"
-                f"<div class='chart-grid'>{''.join(paneles)}</div>{aviso}{nota}")
+                f"<div class='visor-mapas'>{control}{''.join(capas)}</div>"
+                f"{aviso}{nota}")
 
     def _orden_ventana(etiqueta):
         resto = str(etiqueta).lstrip("Vv")
@@ -1324,13 +1370,17 @@ def render_llm_analysis(
                 f"<td>{avance_txt}</td>"
                 "</tr>"
             )
+        # `compact-table`, la MISMA de "Variables a priorizar". Antes era
+        # `report-table`, una clase que el informe usa en dos sitios y no declara en
+        # ninguno: cero reglas CSS, asi que estas tablas salian sin una sola division
+        # de fila ni de columna mientras su vecina si las tenia.
         return (
             f"<h4>{_escape(titulo)}</h4>"
             f"<p class='muted' style='margin-top:-6px;'>{_escape(nota)}</p>"
-            "<table class='report-table'>"
-            "<tr><th style='text-align:left;'>Variable</th><th>Valor que consigue el minimo</th>"
-            "<th>Vanos que alcanzan Bajo</th><th>Avance mediano hacia Bajo</th></tr>"
-            f"{''.join(celdas)}</table>"
+            "<div class='table-scroll'><table class='compact-table'>"
+            "<thead><tr><th>Variable</th><th>Valor que consigue el mínimo</th>"
+            "<th>Vanos que alcanzan Bajo</th><th>Avance mediano hacia Bajo</th></tr></thead>"
+            f"<tbody>{''.join(celdas)}</tbody></table></div>"
         )
 
     def _tabla_simulacion(simulacion):
@@ -1367,12 +1417,12 @@ def render_llm_analysis(
                "ventana: las variables de escenario entran con su valor observado y no "
                "se mueven.</p>")
         return (
-            "<h4>Escenario de disminucion</h4>"
-            "<table class='report-table'>"
-            "<tr><th style='text-align:left;'>Vano</th><th>UITI medido</th>"
+            "<h4>Escenario de disminución</h4>"
+            "<div class='table-scroll'><table class='compact-table'>"
+            "<thead><tr><th>Vano</th><th>UITI medido</th>"
             "<th>UITI simulado</th><th>Grupo actual</th><th>Grupo simulado</th>"
-            "<th>Pasos</th></tr>"
-            f"{''.join(filas)}</table>{pie}"
+            "<th>Pasos</th></tr></thead>"
+            f"<tbody>{''.join(filas)}</tbody></table></div>{pie}"
         )
 
     def _render_inference_layout(results, analysis):
@@ -1414,7 +1464,13 @@ def render_llm_analysis(
             # Un grafo ausente se EXPLICA. Callarlo se lee como que la intervencion no
             # movio nada, que es lo contrario de "no hay vanos suficientes para
             # reconstruirlo".
+            # A la mitad y centrado: el anillo es CUADRADO, asi que a ancho completo se
+            # comia una franja del informe tan alta como ancha. Se reduce lo que se VE y
+            # no el lienzo: encogiendo el PNG los rotulos de las variables se vuelven
+            # ilegibles, que es lo unico que el anillo tiene que dejar leer.
             html_grafo = _figure_html(resultado.get("fig_grafo"), f"Grafo - {titulo}")
+            if html_grafo:
+                html_grafo = f"<div class='figura-mitad'>{html_grafo}</div>"
             if not html_grafo and resultado.get("grafo_motivo"):
                 partes.append(
                     f"<div class='content-box'><em>{_escape(resultado['grafo_motivo'])}</em></div>")
@@ -1426,7 +1482,7 @@ def render_llm_analysis(
                              _figure_html(resultado.get("fig_barras"), titulo)),
                 _chart_panel(f"UITI medido vs estimado - {titulo}",
                              _figure_html(resultado.get("fig_uiti"), titulo)),
-                _chart_panel(f"Que variables se mueven juntas - {titulo}", html_grafo),
+                _chart_panel(f"Qué variables se mueven juntas &mdash; {titulo}", html_grafo),
             ]
             partes.append(
                 f"<div class='chart-grid two-col'>{''.join(p for p in paneles if p)}</div>")
@@ -1553,6 +1609,19 @@ def render_llm_analysis(
             )
     else:
         subtitle_info = f"Período de análisis: {period_str} | (Solo visualización, sin análisis LLM)"
+
+    # El escudo viaja DENTRO del HTML como `data:` URI. El informe se abre desde
+    # cualquier carpeta del disco y se manda por correo: un `<img src="site/...">`
+    # daria un icono roto en cuanto el archivo cambie de sitio. Si el PNG falta, no se
+    # dibuja nada -- un informe no se pierde por un adorno.
+    escudo_html = ""
+    _ruta_escudo = PROJECT_ROOT / "site" / "assets" / "site" / "logos" / "checlogo.png"
+    if _ruta_escudo.is_file():
+        import base64 as _b64
+
+        _dato = _b64.b64encode(_ruta_escudo.read_bytes()).decode("ascii")
+        escudo_html = (f"<img class='escudo-chec' alt='CHEC Grupo EPM' "
+                       f"src='data:image/png;base64,{_dato}'>")
 
     title_html = f"Reporte Criticidad - Circuito: {primary_circuit}<br><span style='font-size: 0.6em; color: #64748b;'>{subtitle_info}</span>"
 
@@ -1687,7 +1756,7 @@ def render_llm_analysis(
         <title>{title_str}</title>
         <style>
             body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f8fafc; color: #334155; margin: 0; padding: 20px; }}
-            .container {{ max-width: 1200px; margin: auto; padding: 25px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }}
+            .container {{ position: relative; max-width: 1200px; margin: auto; padding: 25px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }}
             h1 {{ color: #0f172a; border-bottom: 3px solid #2563eb; padding-bottom: 10px; }}
             h2 {{ color: #1e3a8a; margin-top: 30px; }}
             h3 {{ color: #1e40af; margin-top: 18px; margin-bottom: 8px; font-size: 1rem; }}
@@ -1704,6 +1773,26 @@ def render_llm_analysis(
             .chart-panel {{ border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; background: #ffffff; min-width: 0; }}
             .chart-panel h3 {{ margin: 0; padding: 10px 14px; background: #f8fafc; color: #1e3a8a; font-size: 15px; border-bottom: 1px solid #e2e8f0; }}
             .embedded-figure {{ display: block; width: 100%; height: auto; padding: 12px; box-sizing: border-box; }}
+            /* El anillo del grafo, a la mitad y centrado. Cuadrado a ancho completo
+               ocupa tanto alto como ancho y desplaza al resto de la seccion. */
+            .figura-mitad .embedded-figure {{ width: 50%; margin: 0 auto; }}
+            /* El escudo, fijo arriba a la derecha de cada pagina del informe. */
+            .escudo-chec {{ position: absolute; top: 18px; right: 22px; height: 54px;
+                            width: auto; }}
+            .pie-agentes {{ text-align: right; color: #64748b; font-size: 12px;
+                            padding: 14px 22px 8px 0; border-top: 1px solid #e2e8f0;
+                            margin-top: 26px; }}
+            /* UN visor de mapa: las capas se apilan en el mismo sitio y el deslizador
+               elige cual se ve. Tres mapas seguidos obligan a bajar y subir, y a esa
+               distancia la comparacion se hace de memoria. */
+            .visor-mapas {{ border: 1px solid #e2e8f0; border-radius: 8px;
+                            background: #ffffff; padding: 12px; }}
+            .mapa-ventana {{ display: none; }}
+            .mapa-ventana.activa {{ display: block; }}
+            .mapa-control {{ margin: 0 0 12px 0; }}
+            .mapa-deslizador {{ width: 100%; accent-color: #2563eb; }}
+            .mapa-marcas {{ display: flex; color: #64748b; font-size: 12px;
+                            margin-top: 2px; }}
             .graph-panel iframe {{ width: 100%; height: 620px; border: 0; background: #ffffff; }}
             .graph-actions {{ padding: 10px 14px; border-bottom: 1px solid #e2e8f0; background: #ffffff; }}
             .graph-actions a {{ color: #1d4ed8; font-weight: 600; text-decoration: none; }}
@@ -1724,6 +1813,7 @@ def render_llm_analysis(
     </head>
     <body>
         <div class="container">
+            {escudo_html}
             <h1>📊 {title_html}</h1>
             <div class="tabs">
                 <div class="tab-nav" role="tablist" aria-label="Secciones del reporte">
@@ -1737,6 +1827,7 @@ def render_llm_analysis(
                     {html_expert_alignment}
                 </section>
             </div>
+            <div class="pie-agentes">Reporte construido por agentes de IA</div>
         </div>
         <script>
             document.querySelectorAll('.tab-button').forEach(function(button) {{
@@ -1775,6 +1866,30 @@ def render_llm_analysis(
                             }});
                         }}
                     }});
+                }});
+            }});
+
+            // El deslizador del mapa. Las capas ya estan dibujadas y apiladas: mover
+            // el control solo cambia cual se ve, asi que no hay que esperar a nada ni
+            // volver a pedir geometria.
+            document.addEventListener('DOMContentLoaded', function() {{
+                document.querySelectorAll('.visor-mapas').forEach(function(visor) {{
+                    var deslizador = visor.querySelector('.mapa-deslizador');
+                    if (!deslizador) {{ return; }}
+                    var capas = visor.querySelectorAll('.mapa-ventana');
+                    var marcas = visor.querySelectorAll('.mapa-marcas span');
+                    function mostrar() {{
+                        var i = parseInt(deslizador.value, 10);
+                        capas.forEach(function(capa, k) {{
+                            capa.classList.toggle('activa', k === i);
+                        }});
+                        marcas.forEach(function(marca, k) {{
+                            marca.style.fontWeight = (k === i) ? '700' : '400';
+                            marca.style.color = (k === i) ? '#1e3a8a' : '#64748b';
+                        }});
+                    }}
+                    deslizador.addEventListener('input', mostrar);
+                    mostrar();
                 }});
             }});
         </script>

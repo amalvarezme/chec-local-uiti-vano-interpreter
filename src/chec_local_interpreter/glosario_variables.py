@@ -15,8 +15,11 @@ coinciden con los que ya usa el tablero del clima (`src/chec_tableros/clima.py`)
 dos que ese tablero pinta. Un tercer juego de nombres para las mismas columnas seria
 exactamente el problema que este modulo existe para cerrar.
 
-Sin tildes, como el resto del codigo del repositorio. Lo que llega a la pantalla del
-usuario se acentua en el sitio que lo pinta.
+**Los VALORES llevan tilde; los comentarios y los nombres de codigo, no.** El repositorio
+escribe sin tildes a proposito, pero esa convencion vale para el CODIGO: estas cadenas se
+imprimen tal cual dentro del informe, asi que caen del lado de "lo que llega a la
+pantalla". Escritas sin tilde produjeron 22 "vegetacion", 23 "proteccion" y 13
+"intervencion" en un informe para operacion. Hay una prueba que lo impide.
 """
 
 from __future__ import annotations
@@ -28,17 +31,17 @@ import re
 NOMBRE_NATURAL: dict[str, str] = {
     # --- Evento, impacto e indicadores ---
     "FECHA": "Fecha de la falla",
-    "DURACION": "Duracion de la interrupcion",
-    "UITI": "Usuarios interrumpidos por tiempo de interrupcion",
+    "DURACION": "Duración de la interrupción",
+    "UITI": "Usuarios interrumpidos por tiempo de interrupción",
     "UITI_VANO": "UITI atribuido al vano",
     "TOT_USUS": "Usuarios afectados",
     "CNT_TRF": "Transformadores afectados",
-    "COD_CAUSA": "Codigo de causa de la falla",
+    "COD_CAUSA": "Código de causa de la falla",
     "DESC_CAUSA": "Causa de la falla",
     # --- Proteccion y maniobra ---
-    "FID_SW": "Equipo de proteccion del vano",
-    "COD_EQ_PROTEGE": "Codigo del equipo que protege",
-    "TIPO": "Tipo de equipo de proteccion",
+    "FID_SW": "Equipo de protección del vano",
+    "COD_EQ_PROTEGE": "Código del equipo que protege",
+    "TIPO": "Tipo de equipo de protección",
     "CNT_VN_SW": "Vanos protegidos por el equipo",
     "T_USUS_EQ_PROT": "Usuarios protegidos por el equipo",
     # --- Topologia ---
@@ -49,23 +52,23 @@ NOMBRE_NATURAL: dict[str, str] = {
     "Y1": "Coordenada inicial del vano (latitud)",
     "X2": "Coordenada final del vano (longitud)",
     "Y2": "Coordenada final del vano (latitud)",
-    "LVSW": "Distancia del vano al equipo de proteccion",
+    "LVSW": "Distancia del vano al equipo de protección",
     "CNT_VN": "Vanos del circuito",
     "PORC_APORTE_VANO": "Aporte del vano al equipo que lo protege",
     # --- Fisicas y electricas del vano ---
-    "FECHA_OPERACION_VANO": "Fecha de energizacion del vano",
+    "FECHA_OPERACION_VANO": "Fecha de energización del vano",
     "LONGITUD": "Longitud del vano",
-    "CNT_FASES": "Fases electricas del vano",
+    "CNT_FASES": "Fases eléctricas del vano",
     "CONDUCTOR": "Material del conductor",
     "CALIBRE_NEUTRO": "Calibre del cable neutro",
     "NG_RED": "Cable de guarda o neutro",
-    "PROMEDIO_KWH_VANO": "Energia mensual que circula por el vano",
-    "TIPO_TAX": "Taxonomia constructiva del vano",
+    "PROMEDIO_KWH_VANO": "Energía mensual que circula por el vano",
+    "TIPO_TAX": "Taxonomía constructiva del vano",
     # --- Activos: apoyo final y transformador ---
-    "COD_APOYO_FIN": "Codigo del apoyo final",
+    "COD_APOYO_FIN": "Código del apoyo final",
     "FID_APOYO_FIN": "Apoyo final del vano",
     "PROPIETARIO": "Propietario del apoyo",
-    "CLASE": "Clase mecanica del apoyo",
+    "CLASE": "Clase mecánica del apoyo",
     "ELEMENTO": "Tipo de soporte",
     "NORMA": "Norma de la estructura",
     "ALTURA": "Altura del apoyo",
@@ -73,13 +76,13 @@ NOMBRE_NATURAL: dict[str, str] = {
     "CANTIDAD_TIERRA": "Puesta a tierra del apoyo",
     "VAL_CRIT_APOYO": "Criticidad del apoyo",
     "FID_TRAFO": "Transformador del apoyo final",
-    "CODIGO": "Codigo del transformador",
+    "CODIGO": "Código del transformador",
     "CAPACIDAD_NOMINAL": "Capacidad del transformador",
     "CNT_USUS": "Usuarios conectados al transformador",
-    "FECHA_OPERACION_TRF": "Fecha de energizacion del transformador",
-    "PROMEDIO_KWH_TRF": "Energia mensual del transformador",
+    "FECHA_OPERACION_TRF": "Fecha de energización del transformador",
+    "PROMEDIO_KWH_TRF": "Energía mensual del transformador",
     # --- Entorno y riesgo ---
-    "NR_T": "Riesgo por vegetacion cercana al vano",
+    "NR_T": "Riesgo por vegetación cercana al vano",
     "DDT": "Densidad de descargas a tierra",
 }
 
@@ -87,16 +90,16 @@ NOMBRE_NATURAL: dict[str, str] = {
 #: pegado (`temp_0` .. `temp_11`) y el nombre es el mismo para los doce: lo que cambia es
 #: cuantas horas antes del evento se midio, y eso ya lo dice el propio codigo.
 FAMILIAS_CLIMA: dict[str, str] = {
-    "PREP": "Precipitacion",
+    "PREP": "Precipitación",
     "CLOUDS": "Nubosidad",
     "VIS": "Visibilidad",
     "WIND_SPD": "Velocidad del viento",
-    "WIND_GUST_SPD": "Rafagas de viento",
+    "WIND_GUST_SPD": "Ráfagas de viento",
     "TEMP": "Temperatura del aire",
-    "PRES": "Presion atmosferica al nivel del mar",
-    "SP": "Presion atmosferica en superficie",
+    "PRES": "Presión atmosférica al nivel del mar",
+    "SP": "Presión atmosférica en superficie",
     "RH": "Humedad relativa",
-    "SOLAR_RAD": "Radiacion solar",
+    "SOLAR_RAD": "Radiación solar",
 }
 
 # Un sufijo de rezago es TODO digitos. `X2` y `TIPO_TAX` no son rezagos, y recortarlos

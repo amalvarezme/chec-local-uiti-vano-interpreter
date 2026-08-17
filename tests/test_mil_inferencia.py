@@ -710,3 +710,33 @@ def test_the_per_edge_variance_diagnostic_never_reaches_the_agent_context():
 
     colapso = escenario["simulacion"]["grafo_diferencia"]["colapso"]
     assert colapso == {"variance": 0.31}
+
+
+def test_el_mapa_declara_los_quince_vanos_de_mayor_uiti_acumulado():
+    """El mapa marca el top 15 por UITI acumulado, no solo colorea por clase.
+
+    El color dice en qué grupo está cada vano; el destacado dice cuáles concentran el
+    impacto. Son preguntas distintas: un vano en Alto con poco UITI acumulado no es
+    donde empieza una cuadrilla.
+
+    Se ordena por `u_base`, que es el UITI acumulado que el modelo estima para esa
+    bolsa -- la misma magnitud que el diagnóstico y la tabla del plan usan.
+    """
+    escenario = _escenario_de_mapas()
+
+    mapa = mapa_base_de_escenario(escenario)
+
+    # A(9,0) > B(4,0) > C(0,2)
+    assert mapa["top_uiti"] == ["A", "B", "C"]
+
+
+def test_el_top_de_uiti_se_corta_en_quince():
+    escenario = {"ventana": "V1", "relevancia": {"vanos": {
+        f"V{i}": {"u_base": float(i), "clase_base": 1} for i in range(40)
+    }}}
+
+    mapa = mapa_base_de_escenario(escenario)
+
+    assert len(mapa["top_uiti"]) == 15
+    assert mapa["top_uiti"][0] == "V39", "tiene que ir de mayor a menor"
+    assert mapa["top_uiti"][-1] == "V25"
