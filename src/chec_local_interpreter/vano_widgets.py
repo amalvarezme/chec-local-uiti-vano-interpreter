@@ -562,12 +562,14 @@ avanza. Los controles de los vanos que no estan en pantalla siguen existiendo y
 conservando su valor, asi que la simulacion los aplica igual.
 """
 
-VANOS_POR_PAGINA = 4
+VANOS_POR_PAGINA = 2
 """Cuantas columnas de controles se muestran a la vez en la rejilla del 06.
 
-Cuatro es lo que cabe legible a lo ancho del panel. Por encima, las columnas se
-estrechan hasta que el nombre de la variable y su deslizador dejan de caber en la
-misma linea, y la rejilla se vuelve un muro.
+DOS, y no cuatro. El razonamiento de los cuatro daba por hecho un panel a lo ancho
+de la pantalla; el panel de control es una COLUMNA del 30%, asi que cada una de las
+cuatro se quedaba con una franja donde el nombre de la variable y su deslizador ya
+no caben en la misma linea. Por encima de dos, las columnas se estrechan hasta que
+la rejilla se vuelve un muro.
 """
 
 

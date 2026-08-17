@@ -2923,9 +2923,15 @@ def construir(
             encabezado = widgets.HTML(
                 f'<div style="font-weight:600;border-bottom:2px solid rgb(0,128,36);'
                 f'padding-bottom:2px;margin-bottom:4px;">{fid}</div>')
+            # `flex: 1 1 0%` reparte la fila entre las columnas que haya, y `min-width: 0`
+            # apaga el `min-width: auto` que trae todo hijo de flex: sin el, la variable de
+            # nombre mas largo manda sobre el reparto, la segunda columna se pasa del ancho
+            # y el `row wrap` la baja a la fila siguiente -- justo lo que hay que evitar
+            # cuando se quieren DOS por fila.
             columnas.append((fid, widgets.VBox(
                 [encabezado, *controles.values(), *_bloque_de_costos(fid)],
-                layout=widgets.Layout(margin='0 14px 0 0', align_items='flex-start'))))
+                layout=widgets.Layout(margin='0 14px 0 0', align_items='flex-start',
+                                      flex='1 1 0%', min_width='0'))))
 
         # Un vano marcado SIN celda en la ventana activa no tiene de donde sacar un valor
         # inicial, asi que no recibe columna. Se dice: medido, con 5 vanos marcados la rejilla

@@ -145,3 +145,33 @@ def test_la_barra_de_cerrar_va_encima_de_las_dos_columnas():
     assert "*encabezado" in dentro, (
         f"la fila del encabezado lleva {dentro}; sin `*encabezado` la barra de cerrar no "
         "llega a ninguna parte")
+
+
+def test_la_rejilla_muestra_dos_vanos_por_fila():
+    """Cuatro columnas de controles en un panel que ocupa el 30% del ancho no se leen.
+
+    El panel de control es una COLUMNA -- no una barra a lo ancho --, asi que cada una de
+    las cuatro se quedaba con una franja donde el nombre de la variable y su deslizador ya
+    no caben en la misma linea. Con dos, cada vano tiene la mitad del panel.
+    """
+    from chec_local_interpreter.vano_widgets import VANOS_POR_PAGINA
+    assert VANOS_POR_PAGINA == 2, (
+        f"la rejilla muestra {VANOS_POR_PAGINA} vanos por pagina y no dos")
+
+
+def test_las_dos_columnas_reparten_la_fila_a_medias():
+    """`row wrap` con anchos automaticos no garantiza DOS por fila: con un nombre de
+    variable largo la segunda columna se pasa del ancho y baja a la fila siguiente.
+
+    `flex: 1 1 0%` reparte la fila entre las columnas que haya, y `min-width: 0` apaga el
+    `min-width: auto` que trae todo hijo de flex -- sin el, el contenido mas ancho de la
+    columna manda sobre el reparto y el wrap vuelve.
+    """
+    fuente = (RAIZ / "src" / "chec_tableros" / "simulador" / "tablero.py").read_text(
+        encoding="utf-8")
+    bloque = fuente[fuente.index("columnas.append((fid, widgets.VBox("):]
+    bloque = bloque[:bloque.index("))")]
+    assert "flex='1 1 0%'" in bloque, (
+        f"las columnas de la rejilla no reparten la fila a medias: {bloque}")
+    assert "min_width='0'" in bloque, (
+        f"el contenido mas ancho puede seguir mandando sobre el reparto: {bloque}")
