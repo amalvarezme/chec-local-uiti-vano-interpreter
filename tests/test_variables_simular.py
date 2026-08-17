@@ -154,31 +154,62 @@ def test_las_opciones_de_texto_no_se_confunden_con_numeros(tmp_path):
 
 def test_el_archivo_real_no_ofrece_ningun_deslizador_continuo_sobre_una_variable_entera():
     """Un deslizador continuo sobre una variable que solo toma enteros ofrece 2,37
-    fases o media puesta a tierra: un escenario que no existe y que el modelo puntua
-    igual, sin avisar de nada.
+    fases o un nivel de riesgo por vegetacion de 37,42: un escenario que no existe y
+    que el modelo puntua igual, sin avisar de nada.
 
-    Cuales son enteras no se opina, se MIDE sobre la matriz de instancias del modelo
-    (288.632 filas): estas diez toman unicamente valores enteros. `LONG_CRUCETA`
-    (0,4 | 2,3 | 3,5 m) y `CAPACIDAD_NOMINAL` (0,5 | 37,5 kVA) no, y por eso siguen
-    siendo continuas -- la regla es la evidencia, no el nombre de la variable.
+    Cuales son enteras no se opina, se MIDE. Sobre las 159.470 filas del dataset, las
+    seis que el archivo declara `int` toman unicamente valores enteros y su rango real
+    coincide EXACTAMENTE con el declarado: `NR_T` 0-116, `VAL_CRIT_APOYO` 1-10,
+    `CNT_VN` 1-120, `CNT_TRF` 1-401 y las dos fechas de operacion 1950-2026.
 
-    Sustituye a una prueba que exigia `selector` con lista cerrada para ALTURA,
-    CANTIDAD_TIERRA, LONG_CRUCETA y NG_RED. Esa lista la contradicen los datos: la
-    base trae 20 alturas distintas entre 4 y 25 m, no las tres del inventario que el
-    archivo viejo declaraba.
+    ## Dos vueltas de esta prueba, y por que
+
+    Nacio exigiendo `selector` con lista cerrada para ALTURA, CANTIDAD_TIERRA,
+    LONG_CRUCETA y NG_RED. Se cambio a deslizador de enteros con el argumento de que la
+    base trae 20 alturas distintas entre 4 y 25 m, no las tres del inventario.
+
+    El archivo volvio a la lista cerrada, y esta vez es una decision tomada a la vista
+    del dato: `ALTURA` ofrece 12|16|18 y `LONG_CRUCETA` sus 19 valores, sabiendo que la
+    base tiene mas. Ofrecer solo los apoyos que se compran es una restriccion del
+    INVENTARIO, no un desacuerdo con la medicion. Lo que esta prueba fija ya no es cual
+    de las dos formas es correcta -- eso lo decide el archivo -- sino que la forma
+    elegida se respete: con lista, selector; sin lista y entera, deslizador de enteros.
     """
     catalogo = catalogo_simulacion(RUTA_REAL)
-    enteras = ("ALTURA", "CANTIDAD_TIERRA", "CNT_FASES", "NG_RED", "NR_T",
-               "VAL_CRIT_APOYO", "CNT_VN", "CNT_TRF", "FECHA_OPERACION_TRF",
-               "FECHA_OPERACION_VANO")
+
+    # Sin lista y declaradas enteras: deslizador de enteros, con rango entero. Si `vmin`
+    # trajera decimales, `IntSlider(min=int(vmin))` recortaria el limite sin decirlo.
+    enteras = ("NR_T", "VAL_CRIT_APOYO", "CNT_VN", "CNT_TRF",
+               "FECHA_OPERACION_TRF", "FECHA_OPERACION_VANO")
     for nombre in enteras:
+        assert catalogo[nombre].tipo == "int", nombre
         assert catalogo[nombre].control == "deslizador-entero", nombre
-        # Y su rango declarado tiene que ser entero, o `IntSlider(min=int(vmin))`
-        # recortaria el limite sin decirlo.
         assert float(catalogo[nombre].vmin).is_integer(), nombre
         assert float(catalogo[nombre].vmax).is_integer(), nombre
-    for nombre in ("LONG_CRUCETA", "CAPACIDAD_NOMINAL", "DDT", "LONGITUD"):
+        assert not catalogo[nombre].opciones, nombre
+
+    # Con lista: selector, sea la lista de numeros o de texto.
+    con_lista = ("ALTURA", "CANTIDAD_TIERRA", "CNT_FASES", "NG_RED", "LONG_CRUCETA",
+                 "CONDUCTOR", "TIPO", "TIPO_TAX", "CALIBRE_NEUTRO")
+    for nombre in con_lista:
+        assert catalogo[nombre].opciones, nombre
+        assert catalogo[nombre].control == "selector", nombre
+
+    # Continuas de verdad: el dato tiene decimales y no hay lista que lo cierre.
+    for nombre in ("CAPACIDAD_NOMINAL", "DDT", "LONGITUD", "PROMEDIO_KWH_VANO"):
         assert catalogo[nombre].control == "deslizador", nombre
+
+
+def test_ninguna_lista_cerrada_del_archivo_trae_una_opcion_vacia():
+    """`LONG_CRUCETA` se escribe `0|0.4|...|9|`, con la barra final colgando.
+
+    Una opcion vacia en un `Dropdown` es una entrada seleccionable que no significa
+    nada y que, elegida, manda `''` al codificador.
+    """
+    catalogo = catalogo_simulacion(RUTA_REAL)
+
+    for variable in catalogo.values():
+        assert all(o.strip() for o in variable.opciones), variable.variable
 
 
 # --------------------------------------------------------------------------------
@@ -383,3 +414,62 @@ def test_un_knob_sin_entrada_en_el_archivo_conserva_el_control_de_siempre(tmp_pa
                               catalogo=catalogo)
     assert isinstance(control, widgets.FloatSlider)
     assert control.max == pytest.approx(7.0)
+
+
+def test_el_valor_que_sale_de_cada_control_llega_al_modelo_sin_deformarse():
+    """El ultimo tramo: del widget a la columna de la matriz de instancias.
+
+    Tres formas de valor conviven, y cada una tiene su via:
+
+    * el deslizador de enteros entrega un `int` de Python;
+    * el selector de opciones numericas entrega un `float` -- por eso viaja como
+      `(etiqueta, valor)` y no como la cadena "12";
+    * el selector de texto entrega la categoria, que el codificador del modelo tiene
+      que convertir en su indice.
+
+    Medido contra el modelo real: `NR_T` 0 y 116 llegan como 0,0 y 116,0 exactos;
+    `ALTURA` 12 llega como 12,0; `CONDUCTOR` "2-ACSR-CUBIERTO" llega como 5,0 y `TIPO`
+    "1CC" como 0,0. Ninguna deriva, ninguna excepcion.
+    """
+    pytest.importorskip("torch")
+    from pathlib import Path
+
+    from chec_local_interpreter.config import (
+        DEFAULT_DATA_PATH,
+        DEFAULT_VARIABLES_SELECCION_PATH,
+    )
+    from chec_local_interpreter.mil_inferencia import catalogo_de_controles
+    from chec_local_interpreter.simulator import _coerce_original_value_for_model
+
+    if not Path(DEFAULT_DATA_PATH).exists():
+        pytest.skip("el dataset no esta en esta copia")
+
+    controles = catalogo_de_controles(Path(DEFAULT_DATA_PATH),
+                                      Path(DEFAULT_VARIABLES_SELECCION_PATH))
+    codificadores = dict(controles.label_encoders or {})
+    maximos = dict(controles.max_values_imputed or {})
+    catalogo = catalogo_simulacion(RUTA_REAL)
+    conocidos = {k.id for k in controles.knobs}
+
+    for entrada in catalogo.values():
+        if entrada.knob_id not in conocidos or entrada.knob_id.startswith("clima:"):
+            continue
+        if entrada.control == "selector":
+            muestras = (list(entrada.valores_numericos) if entrada.opciones_numericas
+                        else list(entrada.opciones))
+        elif entrada.control == "deslizador-entero":
+            muestras = [int(entrada.vmin), int(entrada.vmax)]
+        else:
+            muestras = [float(entrada.vmin), float(entrada.vmax)]
+
+        for valor in muestras:
+            convertido = _coerce_original_value_for_model(
+                entrada.knob_id, valor,
+                label_encoders=codificadores, max_values_imputed=maximos)
+            assert isinstance(convertido, (int, float)), (entrada.knob_id, valor)
+            assert convertido == convertido, (entrada.knob_id, valor)  # nunca NaN
+            if isinstance(valor, (int, float)) and not isinstance(valor, bool):
+                # Los numeros no pasan por el codificador: tienen que llegar IGUALES.
+                assert float(convertido) == pytest.approx(float(valor)), (
+                    f"{entrada.knob_id}: el control entrega {valor} y al modelo le "
+                    f"llega {convertido}")

@@ -638,3 +638,161 @@ def test_a_thin_bar_gets_no_label_anywhere():
 def test_neither_inside_nor_above_leaves_it_empty():
     """Si tampoco hay hueco arriba, se sigue prefiriendo ninguno a uno cortado."""
     assert rotulo_y_posicion("PROMEDIO_KWH_TRF", 4.0, hueco_px=5.0) == ("", "inside")
+
+
+# --- El codigo de columna en las cinco primeras barras del top --------------------
+
+
+def test_el_codigo_de_columna_se_escribe_SIEMPRE_dentro_o_encima():
+    """Las cinco primeras barras del top llevan el codigo de la columna, pase lo que pase.
+
+    La cascada anterior (`rotulo_y_posicion`) podia acabar en cadena vacia: resumen, si no
+    abreviatura, si no iniciales, si no nada. Para estas cinco eso ya no vale -- el codigo
+    es lo que permite cruzar la barra con la tabla de vanos --, asi que solo se decide
+    DONDE: dentro si cabe a lo largo de la barra, encima si no.
+    """
+    from chec_local_interpreter.simulador_variables import rotulo_de_codigo
+
+    largo, _ = rotulo_de_codigo("NR_T", largo_px=200.0, hueco_px=10.0)
+    corto, donde_corto = rotulo_de_codigo("NR_T", largo_px=2.0, hueco_px=300.0)
+
+    assert largo == "NR_T"
+    assert corto == "NR_T", "una barra corta no puede quedarse sin su codigo"
+    assert donde_corto == "outside"
+
+
+def test_dentro_se_prefiere_a_encima():
+    """Encima compite con la barra siguiente del grupo; dentro va pegado al dato."""
+    from chec_local_interpreter.simulador_variables import rotulo_de_codigo
+
+    _, donde = rotulo_de_codigo("NR_T", largo_px=200.0, hueco_px=300.0)
+
+    assert donde == "inside"
+
+
+def test_un_codigo_largo_en_una_barra_diminuta_sigue_saliendo():
+    """`PROMEDIO_KWH_VANO` no cabe ni a lo largo de la barra ni en el hueco de arriba.
+
+    Se escribe igual, encima. Es lo pedido: en este panel vale mas un codigo que se sale
+    del hueco que una barra anonima, porque sin el no hay como cruzarla con la tabla.
+    """
+    from chec_local_interpreter.simulador_variables import rotulo_de_codigo
+
+    texto, donde = rotulo_de_codigo("PROMEDIO_KWH_VANO", largo_px=3.0, hueco_px=4.0)
+
+    assert texto == "PROMEDIO_KWH_VANO"
+    assert donde == "outside"
+
+
+def test_el_ancho_del_texto_escala_con_el_tamanio_de_fuente():
+    """Las constantes de px por caracter se midieron a 8 px, y el panel pasa a 9.
+
+    Usarlas tal cual subestimaria el ancho un 12,5% y metaria dentro de la barra un
+    rotulo que se sale por las dos puntas.
+    """
+    from chec_local_interpreter.simulador_variables import TAM_FUENTE_MEDIDO, ancho_px
+
+    a_ocho = ancho_px("NR_T")
+    a_nueve = ancho_px("NR_T", tam_fuente=9)
+
+    assert TAM_FUENTE_MEDIDO == 8
+    assert a_nueve == pytest.approx(a_ocho * 9 / 8)
+
+
+def test_el_alto_del_renglon_tambien_escala():
+    """Es lo que se compara contra el GROSOR de la barra: el rotulo va girado."""
+    from chec_local_interpreter.simulador_variables import (
+        ALTO_RENGLON_PX,
+        alto_renglon_px,
+    )
+
+    assert alto_renglon_px(8) == pytest.approx(ALTO_RENGLON_PX)
+    assert alto_renglon_px(9) == pytest.approx(ALTO_RENGLON_PX * 9 / 8)
+
+
+# --- El vocabulario de `Tipo` del archivo -----------------------------------------
+
+
+def test_una_variable_declarada_int_ofrece_un_deslizador_de_enteros():
+    """El archivo dice `int`; el codigo preguntaba por `numeric-entero`.
+
+    Ese nombre es el que el archivo usaba ANTES. Al renombrarse la columna, las seis
+    filas enteras -- `NR_T`, `VAL_CRIT_APOYO`, `CNT_VN`, `CNT_TRF` y las dos fechas de
+    operacion -- cayeron al deslizador CONTINUO sin que nada fallara: el panel dejaba
+    simular un nivel de riesgo por vegetacion de 37,42 sobre una columna cuyos 159.470
+    valores son todos enteros.
+    """
+    from chec_local_interpreter.simulador_variables import (
+        CONTROL_DESLIZADOR_ENTERO,
+        VariableSimulable,
+    )
+
+    entera = VariableSimulable(
+        knob_id="NR_T", variable="NR_T", controla=1, tipo="int",
+        vmin=0.0, vmax=116.0, unidad="", opciones=(),
+        veredicto="Si -- intervencion", motivo="",
+    )
+
+    assert entera.control == CONTROL_DESLIZADOR_ENTERO
+
+
+def test_el_nombre_anterior_del_tipo_entero_se_sigue_entendiendo():
+    """`numeric-entero` vivio en el archivo hasta hoy y puede volver en una copia vieja
+    -- la aplicacion empaquetada sirve la suya --. Entenderlo no cuesta nada; no
+    entenderlo degrada en silencio a deslizador continuo, que es como paso esto."""
+    from chec_local_interpreter.simulador_variables import (
+        CONTROL_DESLIZADOR_ENTERO,
+        VariableSimulable,
+    )
+
+    vieja = VariableSimulable(
+        knob_id="NR_T", variable="NR_T", controla=1, tipo="numeric-entero",
+        vmin=0.0, vmax=116.0, unidad="", opciones=(),
+        veredicto="Si -- intervencion", motivo="",
+    )
+
+    assert vieja.control == CONTROL_DESLIZADOR_ENTERO
+
+
+def test_una_categorical_con_opciones_numericas_sigue_siendo_un_selector():
+    """`ALTURA` paso de `numeric-entero` a `categorical` con `12|16|18`.
+
+    El tipo no manda sobre la lista: si el archivo declara cuales son los valores, el
+    control es cerrado. Es la diferencia entre ofrecer los apoyos que existen y ofrecer
+    cualquier altura entera entre 4 y 25.
+    """
+    from chec_local_interpreter.simulador_variables import (
+        CONTROL_SELECTOR,
+        VariableSimulable,
+    )
+
+    altura = VariableSimulable(
+        knob_id="ALTURA", variable="ALTURA", controla=1, tipo="categorical",
+        vmin=12.0, vmax=18.0, unidad="m", opciones=("12", "16", "18"),
+        veredicto="Si -- intervencion", motivo="",
+    )
+
+    assert altura.control == CONTROL_SELECTOR
+    assert altura.opciones_numericas
+    assert altura.valores_numericos == (12.0, 16.0, 18.0)
+
+
+def test_el_archivo_real_no_deja_ni_una_columna_entera_con_deslizador_continuo():
+    """Contra el archivo de verdad, no contra un doble.
+
+    Las dos que llegan al panel son `NR_T` y `VAL_CRIT_APOYO`; las otras cuatro filas
+    `int` las excluye su propio veredicto. Se comprueban TODAS igual: si maniana una
+    cambia de veredicto y entra al panel, tiene que entrar con el control correcto.
+    """
+    from chec_local_interpreter.simulador_variables import (
+        CONTROL_DESLIZADOR,
+        catalogo_simulacion,
+    )
+
+    catalogo = catalogo_simulacion()
+    enteras = [v for v in catalogo.values() if v.tipo in ("int", "numeric-entero")]
+
+    assert enteras, "el archivo real ya no declara ninguna variable entera"
+    for variable in enteras:
+        assert variable.control != CONTROL_DESLIZADOR, (
+            f"{variable.variable} es entera y saldria con deslizador continuo")

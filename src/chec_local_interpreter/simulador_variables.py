@@ -114,6 +114,13 @@ CONTROL_SELECTOR = "selector"
 CONTROL_DESLIZADOR = "deslizador"
 CONTROL_DESLIZADOR_ENTERO = "deslizador-entero"
 
+#: Los nombres con los que el archivo ha declarado una variable ENTERA. `int` es el
+#: vigente; `numeric-entero` es el anterior y se sigue entendiendo porque la aplicacion
+#: empaquetada sirve SU copia del archivo y puede ir por detras del repositorio. No
+#: entenderlo no falla: degrada en silencio a deslizador continuo, que es exactamente
+#: como se colo este defecto al renombrarse la columna.
+TIPOS_ENTEROS = ("int", "numeric-entero")
+
 
 @dataclass(frozen=True)
 class VariableSimulable:
@@ -137,10 +144,16 @@ class VariableSimulable:
         La lista de valores posibles manda sobre el tipo: si el archivo declara cuales
         son, el control es cerrado aunque el modelo vea un numero continuo. Es la
         diferencia entre ofrecer los apoyos que existen y ofrecer cualquier altura.
+        Por eso `ALTURA`, declarada `categorical` con `12|16|18`, sale como selector y no
+        como deslizador aunque sus tres valores sean numeros.
+
+        Sin lista, manda el tipo: entero -> deslizador de enteros, y lo demas ->
+        deslizador continuo. Se comparan contra `TIPOS_ENTEROS` y no contra una sola
+        cadena porque el archivo ya renombro ese tipo una vez.
         """
         if self.opciones:
             return CONTROL_SELECTOR
-        if self.tipo == "numeric-entero":
+        if self.tipo in TIPOS_ENTEROS:
             return CONTROL_DESLIZADOR_ENTERO
         return CONTROL_DESLIZADOR
 
@@ -406,11 +419,26 @@ TAM_FUENTE_MEDIDO = 8
 ALTO_RENGLON_PX = 11.0
 
 
-def ancho_px(texto: str) -> float:
-    """Cuanto mide `texto` escrito dentro de una barra, a `TAM_FUENTE_MEDIDO` px."""
+def ancho_px(texto: str, tam_fuente: float = TAM_FUENTE_MEDIDO) -> float:
+    """Cuanto mide `texto` escrito dentro de una barra, al tamanio de fuente que se pida.
+
+    Las dos constantes de px por caracter se MIDIERON a `TAM_FUENTE_MEDIDO` (8 px). El
+    avance de un caracter escala con el tamanio de la fuente en la misma tipografia, asi
+    que se escala en vez de fingir una segunda medicion. Importa: el panel del top pasa a
+    9 px para igualar sus marcas de eje, y usar los numeros de 8 tal cual subestimaria el
+    ancho un 12,5% y meteria dentro de la barra un rotulo que se sale por las dos puntas.
+    """
     por_caracter = (PX_POR_CARACTER_MAYUSCULAS if texto.isupper()
                     else PX_POR_CARACTER_MIXTO)
-    return len(texto) * por_caracter
+    return len(texto) * por_caracter * (tam_fuente / TAM_FUENTE_MEDIDO)
+
+
+def alto_renglon_px(tam_fuente: float = TAM_FUENTE_MEDIDO) -> float:
+    """El alto del renglon al tamanio que se pida, escalado desde el medido.
+
+    Es lo que se compara contra el GROSOR de la barra, porque el rotulo va girado -90.
+    """
+    return ALTO_RENGLON_PX * (tam_fuente / TAM_FUENTE_MEDIDO)
 
 
 def abreviatura(label: str) -> str:
@@ -509,6 +537,50 @@ def rotulo_y_posicion(
         if texto and hueco_px >= ancho_px(texto) + holgura_px:
             return texto, "outside"
     return "", "inside"
+
+
+#: Cuantas posiciones del top llevan el CODIGO de columna escrito. Las demas se quedan
+#: sin rotulo: con diez por vano no hay panel que las sostenga, y las cinco primeras son
+#: donde se decide una obra.
+TOP_POSICIONES_ROTULADAS = 5
+
+
+def rotulo_de_codigo(
+    codigo: str,
+    largo_px: float,
+    *,
+    hueco_px: float,
+    holgura_px: float = HOLGURA_PX,
+    tam_fuente: float = TAM_FUENTE_MEDIDO,
+) -> tuple[str, str]:
+    """El codigo de columna y DONDE va: `('NR_T', 'inside')` o `('NR_T', 'outside')`.
+
+    Nunca devuelve vacio, y ahi esta toda la diferencia con `rotulo_y_posicion`. Aquella
+    baja por una cascada -- resumen, abreviatura, iniciales, nada -- porque escribe el
+    nombre en palabras y un nombre cortado no dice nada que el hover no diga mejor. Este
+    escribe el CODIGO DE LA COLUMNA, que es lo que permite cruzar la barra con la tabla
+    de vanos: sin el, la barra es anonima y no hay hover que la cruce por el usuario.
+
+    Asi que solo se decide el sitio. Dentro se prefiere a encima -- pegado al dato, sin
+    competir con la barra siguiente del grupo --, y encima es la salida cuando el largo
+    de la barra no da.
+
+    Un codigo que tampoco cabe en el hueco de arriba se escribe IGUAL, encima. Es lo
+    pedido y es defendible aqui: en este panel vale mas un codigo que se sale de su hueco
+    que una barra sin identificar.
+
+    Lo que este modulo NO puede decidir es el traslape entre barras VECINAS: el rotulo va
+    girado -90, asi que su renglon se apoya contra el GROSOR de la barra, y ese numero
+    depende del ancho del panel y de cuantos vanos hay marcados. Medido sobre el panel
+    mas estrecho que el tablero soporta (719 px) y a fuente 9: la barra mide 12,81 px con
+    cuatro vanos marcados contra 12,38 de renglon, y 10,25 px con cinco. Con cuatro o
+    menos los cinco rotulos no se tocan; de cinco en adelante si.
+    """
+    if not codigo:
+        return "", "inside"
+    if largo_px >= ancho_px(codigo, tam_fuente) + holgura_px:
+        return codigo, "inside"
+    return codigo, "outside"
 
 
 RUTA_DICCIONARIO = "data/Variables_seleccion.xlsx"

@@ -81,7 +81,9 @@ from chec_local_interpreter.simulador_variables import (
     knobs_bloqueados,
     knobs_simulables,
     rotacion_radial,
-    rotulo_y_posicion,
+    TOP_POSICIONES_ROTULADAS,
+    alto_renglon_px,
+    rotulo_de_codigo,
 )
 from chec_local_interpreter.vano_app_015 import (
     DEBOUNCE_SEGUNDOS,
@@ -302,11 +304,17 @@ TOP_VANOS_CIRCUITO = 15
 # variable necesaria sino ruido en la tabla.
 TOP_INTERVENCION_CIRCUITO = None
 TOP_ESCENARIO_CIRCUITO = None
-# Fuente del rotulo dentro de la barra. Los anchos de caracter con los que
-# `rotulo_en_barra` decide si el nombre cabe estan MEDIDOS a este tamanio
-# (`simulador_variables.TAM_FUENTE_MEDIDO`): cambiarlo aqui sin volver a medir en el
-# modulo deja al panel decidiendo con numeros de otra fuente.
-TAM_FUENTE_BARRA = 8
+# Fuente del rotulo dentro de la barra. Es la MISMA que la de las marcas del eje x de ese
+# panel (`tickfont=dict(size=9)`, fila 4): el codigo de columna escrito en la barra y el
+# identificador del vano escrito debajo son dos etiquetas del mismo dibujo, y a tamanios
+# distintos una de las dos se lee como subordinada de la otra.
+#
+# Los anchos de caracter con los que se decide si el rotulo cabe estan MEDIDOS a 8 px
+# (`simulador_variables.TAM_FUENTE_MEDIDO`). No se re-miden: `ancho_px` y
+# `alto_renglon_px` los escalan, porque el avance de un caracter escala con el tamanio
+# de la fuente en la misma tipografia. Cambiar este numero sin pasarlo a esas dos
+# funciones si dejaria al panel decidiendo con los numeros de otra fuente.
+TAM_FUENTE_BARRA = 9
 # La fuente de los nombres de nodo del grafo. Manda el ESPACIO: son 66 nombres alrededor
 # del anillo, y el arco disponible para cada uno es 2*pi*radio/66. Con el grafo en las
 # columnas 2-3 el radio ronda los 150 px, o sea 14 px de arco por nombre: a 14 se tocan y
@@ -2396,10 +2404,28 @@ def construir(
                     default=0.0)
         _rango = _tope * 1.15 if _tope > 0 else 1.0
         _px_por_unidad = ALTO_PANEL_TOP_PX / _rango
-        # Cada casilla del eje x es un vano y dentro van las diez posiciones del top: con
-        # ocho vanos marcados la barra queda en 3,6 px y no cabe ningun rotulo.
+        # El grosor de la barra ya NO decide si se escribe el rotulo: las cinco primeras
+        # posiciones llevan su codigo siempre. Pero el numero no desaparece por dejar de
+        # consultarlo -- el rotulo va girado -90, asi que su renglon se apoya contra este
+        # ancho --, asi que se sigue calculando y se DECLARA en la etiqueta del mouse.
+        # Medido sobre el panel mas estrecho que el tablero soporta, 719 px, a fuente 9 y
+        # con renglon de 12,38 px:
+        #
+        #     3 vanos marcados -> barra de 17,08 px    no se tocan
+        #     4 vanos          -> barra de 12,81 px    no se tocan
+        #     5 vanos          -> barra de 10,25 px    SE TOCAN
+        #     8 vanos          -> barra de  6,40 px    SE TOCAN
+        #
+        # De cinco vanos en adelante los cinco codigos de un grupo se montan. Es el precio
+        # del "siempre" y se paga a sabiendas: una barra sin codigo no se puede cruzar con
+        # la tabla de vanos, y ese cruce es para lo que existe este panel. Decirlo en el
+        # hover evita que se lea como un fallo del tablero.
         _grosor_barra_px = (ANCHO_PANEL_TOP_PX_MINIMO / max(1, len(vanos))
                             / TOP_VARIABLES_POR_VANO * FRACCION_UTIL_BARRA)
+        _nota_traslape = (
+            '<br><i>Con esta cantidad de vanos marcados los códigos se enciman; '
+            'marca menos para leerlos sueltos.</i>'
+            if _grosor_barra_px < alto_renglon_px(TAM_FUENTE_BARRA) else '')
         with fig.batch_update():
             # Fila 4 y no 3: la 3 es el GRAFO. El top bajo una fila cuando el perfil del
             # circuito entro como fila nueva, y esta llamada se quedo donde estaba. Le
@@ -2426,10 +2452,22 @@ def construir(
                     # segundo es casi todo el panel, y es lo que permite que el rotulo se
                     # vaya ENCIMA en vez de perderse.
                     _largo_px = _fila['caida_log'] * _px_por_unidad
-                    _rotulo, _posicion_texto = rotulo_y_posicion(
-                        _fila['label'], _largo_px,
-                        hueco_px=ALTO_PANEL_TOP_PX - _largo_px,
-                        grosor_px=_grosor_barra_px)
+                    if _posicion < TOP_POSICIONES_ROTULADAS:
+                        # Las cinco primeras llevan el CODIGO DE COLUMNA y lo llevan
+                        # SIEMPRE: es lo que permite cruzar la barra con la tabla de
+                        # vanos, y una barra corta sin el queda sin identificar. Aqui no
+                        # se consulta el grosor a proposito -- ver `rotulo_de_codigo` --:
+                        # el grosor decide si dos rotulos VECINOS se tocan, y con cinco
+                        # vanos marcados o mas se tocan. Es el precio del "siempre".
+                        _rotulo, _posicion_texto = rotulo_de_codigo(
+                            str(_fila['knob_id']), _largo_px,
+                            hueco_px=ALTO_PANEL_TOP_PX - _largo_px,
+                            tam_fuente=TAM_FUENTE_BARRA)
+                    else:
+                        # De la sexta en adelante, ninguno. Cincuenta rotulos por panel no
+                        # los sostiene ningun ancho, y donde se decide una obra es arriba.
+                        # El nombre completo sigue en la etiqueta del mouse.
+                        _rotulo, _posicion_texto = '', 'inside'
                     _texto.append(_rotulo)
                     _donde.append(_posicion_texto)
                     # VERDE si esa sola variable basta para caer en el grupo Bajo. Es el
@@ -2456,6 +2494,7 @@ def construir(
                         f'<br>Caida: {_fila["caida_log"]:.2f} ordenes de magnitud'
                         f'{_avance}<br>{_meta}'
                         + ('<br><b>Sola alcanza el grupo Bajo</b>' if _fila['alcanza'] else '')
+                        + (_nota_traslape if _posicion < TOP_POSICIONES_ROTULADAS else '')
                     )
                 _traza.x, _traza.y = _x, _y
                 _traza.text, _traza.hovertext = _texto, _hover
@@ -3546,7 +3585,7 @@ def construir(
             f'<b>solo variables de {_activos}</b>'
             + ('.' if len(_GRUPOS_APLICADOS) == len(GRUPOS_SUGERIDOS) else
                f'; presiona también el otro botón si quieres las dos mitades.')
-            + ' Presiona <b>Simular</b> para ver el efecto.</span>')
+            + ' Presiona <b>Simular</b>.</span>')
 
 
     boton_aplicar_intervencion.on_click(

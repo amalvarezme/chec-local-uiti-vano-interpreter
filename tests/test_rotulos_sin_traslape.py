@@ -115,28 +115,56 @@ def test_los_paneles_por_vano_del_simulador_declaran_su_eje_categorico():
 # --------------------------------------- el rotulo dentro de la barra, por sus dos lados
 
 
-def test_el_top_por_vano_decide_su_rotulo_mirando_el_grosor_de_la_barra():
-    """El rotulo va girado -90: la barra lo limita por sus DOS lados.
+def test_el_top_por_vano_avisa_cuando_sus_codigos_se_encimaran():
+    """El grosor de la barra dejo de VETAR el rotulo, y pasa a DECLARARSE.
 
-    La cascada solo miraba el LARGO -- si el texto cabe escrito --. El GROSOR es lo que
-    decide si cabe SIN montarse sobre la barra de al lado, y con ocho vanos por diez
-    posiciones cada barra mide 3,6 px contra los 11 que mide el renglon del texto.
-    Resultado medido: **81 traslapes**, ochenta rotulos verticales unos sobre otros.
+    ## De donde viene este guardian
 
-    La llamada paso de `rotulo_en_barra` a `rotulo_y_posicion` cuando el rotulo que no
-    cabe dentro dejo de perderse y se fue ENCIMA de la barra. El grosor no cambia con esa
-    mudanza y por eso este guardian sigue: girado -90, el renglon se apoya contra el ancho
-    de la barra tanto dentro como fuera. Se comprueba sobre el nombre nuevo.
+    El rotulo va girado -90, asi que la barra lo limita por sus DOS lados: el largo dice
+    si el texto cabe escrito, el GROSOR dice si cabe sin montarse sobre la barra vecina.
+    La cascada solo miraba el largo, y con ocho vanos por diez posiciones cada barra
+    media 3,6 px contra los 11 del renglon: **81 traslapes medidos**, ochenta rotulos
+    verticales unos sobre otros. De ahi salio la compuerta de grosor.
+
+    ## Por que ya no veta
+
+    Decision del usuario, tomada a sabiendas: las CINCO primeras posiciones llevan el
+    codigo de su columna SIEMPRE, dentro de la barra o encima. Una barra sin codigo no se
+    puede cruzar con la tabla de vanos, y ese cruce es para lo que existe el panel; el
+    nombre en palabras del hover no lo resuelve, porque el hover se consulta de a uno.
+
+    ## Lo que se fija en su lugar
+
+    El numero no desaparece por dejar de vetar. Se sigue calculando y el panel lo declara
+    en la etiqueta del mouse, para que los rotulos encimados no se lean como un fallo del
+    tablero. Medido de nuevo sobre el panel mas estrecho que se soporta -- 719 px -- y a
+    fuente 9, con renglon de 12,38 px: con cuatro vanos marcados la barra mide 12,81 px y
+    los codigos no se tocan; con cinco mide 10,25 px y si.
     """
     fuente = _fuente(SIMULADOR)
-    llamada = re.search(r"rotulo_y_posicion\((?:[^()]|\([^()]*\))*?\)", fuente, re.S)
-    assert llamada, "el simulador ya no elige el rotulo del top con la cascada medida"
-    assert "grosor_px=" in llamada.group(0), (
-        "el top por vano decide su rotulo sin mirar el grosor de la barra; con ocho "
-        "vanos marcados eso escribe ochenta rotulos encimados")
+    llamada = re.search(r"rotulo_de_codigo\((?:[^()]|\([^()]*\))*?\)", fuente, re.S)
+    assert llamada, "el top por vano ya no escribe el codigo de columna de sus barras"
     assert "hueco_px=" in llamada.group(0), (
-        "no se le pasa el hueco hasta el techo del eje, asi que el rotulo que no cabe "
-        "dentro se pierde en vez de irse encima de la barra")
+        "no se le pasa el hueco hasta el techo del eje, asi que el codigo que no cabe "
+        "dentro no puede irse encima de la barra")
+    assert "tam_fuente=" in llamada.group(0), (
+        "decide con los anchos medidos a 8 px mientras el panel escribe a otro tamanio")
+    assert "alto_renglon_px(" in fuente, (
+        "el grosor de la barra dejo de calcularse: sin el, el panel no puede avisar de "
+        "que sus codigos se enciman y el traslape se lee como un fallo")
+
+
+def test_el_rotulo_del_top_usa_la_misma_fuente_que_las_marcas_de_su_eje():
+    """El codigo escrito en la barra y el vano escrito debajo son dos etiquetas del mismo
+    dibujo. A tamanios distintos, una se lee como subordinada de la otra."""
+    fuente = _fuente(SIMULADOR)
+
+    tam_barra = re.search(r"TAM_FUENTE_BARRA\s*=\s*(\d+)", fuente)
+    eje = re.search(r"update_xaxes\([^)]*tickfont=dict\(size=(\d+)\)[^)]*row=4", fuente, re.S)
+
+    assert tam_barra and eje, "no se encuentran los dos tamanios del panel del top"
+    assert tam_barra.group(1) == eje.group(1), (
+        f"el rotulo va a {tam_barra.group(1)} px y las marcas del eje a {eje.group(1)}")
 
 
 def test_el_ancho_supuesto_del_panel_es_el_medido_en_la_pantalla_mas_estrecha():
@@ -168,3 +196,16 @@ def test_el_ancho_supuesto_del_panel_es_el_medido_en_la_pantalla_mas_estrecha():
     assert ancho >= 640.0, (
         f"ANCHO_PANEL_TOP_PX_MINIMO = {ancho} se queda MUY corto de los 719 px medidos, y "
         "una suposicion baja apaga los rotulos que si caben")
+
+
+def test_el_aviso_de_aplicar_no_explica_lo_que_el_boton_ya_dice():
+    """"Presiona Simular", y nada mas.
+
+    El aviso ya trae tres cifras -- vanos marcados, controles abiertos, que mitades van a
+    entrar --; el "para ver el efecto" era la cuarta linea de un mensaje que se lee de
+    pasada, y decia lo que el propio boton "Simular" ya dice.
+    """
+    fuente = _fuente(SIMULADOR)
+
+    assert "para ver el efecto" not in fuente
+    assert "Presiona <b>Simular</b>." in fuente
