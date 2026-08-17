@@ -632,7 +632,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
                       '<br>UITI acumulado: %{y:,.1f}<extra></extra>',
     ), row=2, col=1, secondary_y=False)
     fig.add_trace(go.Scatter(
-        x=PERIODOS_CORTOS, y=[None] * len(VENTANAS), mode='lines+markers', name='Numero de eventos',
+        x=PERIODOS_CORTOS, y=[None] * len(VENTANAS), mode='lines+markers', name='Número de eventos',
         line=dict(color=COLOR_LINEA_EVENTOS, width=2, dash='dot'),
         marker=dict(size=[SERIE_TAM_EVENTOS] * len(VENTANAS), symbol='square',
                     color=[COLOR_SIN_GRUPO] * len(VENTANAS),
@@ -671,7 +671,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         textfont=dict(size=11, color='rgb(90,15,20)'),
         showlegend=False, hoverinfo='skip', cliponaxis=False,
     ), row=2, col=8)
-    for fila, columna, etiqueta in [(2, 11, 'UITI acumulado'), (2, 14, 'Numero de eventos')]:  # trazas 10-17
+    for fila, columna, etiqueta in [(2, 11, 'UITI acumulado'), (2, 14, 'Número de eventos')]:  # trazas 10-17
         for g in range(4):
             fig.add_trace(go.Violin(
                 x=[], y=[], name=NOMBRES_GRUPOS[g], legendgroup=NOMBRES_GRUPOS[g],
@@ -741,7 +741,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         # nube y el mapa a 224 px se quedaban cortas.
         height=867, template='plotly_white', bargap=0.45, violingap=0.3,
     )
-    fig.update_xaxes(title_text='Numero de eventos en la ventana', row=1, col=1)
+    fig.update_xaxes(title_text='Número de eventos en la ventana', row=1, col=1)
     fig.update_yaxes(title_text='UITI acumulado en la ventana', row=1, col=1)
     # -55 grados y no -30: a 1.280 px el panel de la evolucion mide 396 px para once
     # ventanas, o sea 36 px por marca, y una etiqueta '11-01 a 11-30' de 65 px inclinada 30

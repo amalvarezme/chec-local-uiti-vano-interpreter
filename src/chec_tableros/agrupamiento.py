@@ -359,7 +359,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     ), row=3, col=1)
     # Trazas 14-17 y 18-21: distribucion completa por grupo de cada variable. `box_visible`
     # deja la mediana a la vista, que es exactamente el criterio con que se nombran los grupos.
-    for fila, (clave, etiqueta) in enumerate([('y', 'UITI acumulado'), ('x', 'Numero de eventos')]):
+    for fila, (clave, etiqueta) in enumerate([('y', 'UITI acumulado'), ('x', 'Número de eventos')]):
         for g in range(4):
             fig.add_trace(go.Violin(
                 x=[NOMBRES_GRUPOS[g]] * len(grupos_ini[g][clave]), y=grupos_ini[g][clave],
@@ -385,7 +385,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
 
     fig.update_layout(
         title=dict(
-            text='Agrupamiento de circuitos por UITI acumulado y numero de eventos'
+            text='Agrupamiento de circuitos por UITI acumulado y número de eventos'
                  '<br><sup>K-Means (k=4); los grupos se nombran por el ranking de la mediana '
                  'del UITI acumulado</sup>',
             x=0.5, xanchor='center', yref='container', y=0.96, yanchor='top',
@@ -402,7 +402,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     # categorico y queda independiente a proposito.
     fig.update_xaxes(matches='x3', row=1, col=1)
     fig.update_yaxes(matches='y3', row=2, col=2)
-    fig.update_xaxes(title_text='Numero de eventos', row=2, col=1)
+    fig.update_xaxes(title_text='Número de eventos', row=2, col=1)
     fig.update_yaxes(title_text='UITI acumulado', row=2, col=1)
     # La densidad se lee por forma, no por valor: sus ticks solo agregan ruido (y sobre el eje del
     # UITI salen en notacion micro, porque la densidad esta en unidades de 1/UITI).
@@ -412,7 +412,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     fig.update_xaxes(visible=False, row=1, col=2)
     fig.update_yaxes(visible=False, row=1, col=2)
     fig.update_yaxes(title_text='UITI acumulado', row=4, col=1)
-    fig.update_yaxes(title_text='Numero de eventos', row=5, col=1)
+    fig.update_yaxes(title_text='Número de eventos', row=5, col=1)
     for fila_vacia in (3, 4, 5):
         fig.update_xaxes(visible=False, row=fila_vacia, col=2)
         fig.update_yaxes(visible=False, row=fila_vacia, col=2)
@@ -428,7 +428,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
               'violinU': _clave_eje(fig.data[14], 'y'),
               'violinN': _clave_eje(fig.data[18], 'y')}
     TITULOS_N = {'barras': 'Circuitos', 'violinU': 'UITI acumulado',
-                 'violinN': 'Numero de eventos'}
+                 'violinN': 'Número de eventos'}
     assert fig.data[13].type == 'bar' and fig.data[14].type == fig.data[18].type == 'violin'
 
     # El print cierra la celda a proposito: si terminara en un update_*(), Jupyter mostraria
@@ -1035,7 +1035,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
 
     fig_vano.update_layout(
         title=dict(
-            text='Agrupamiento de vanos por UITI acumulado y numero de eventos'
+            text='Agrupamiento de vanos por UITI acumulado y número de eventos'
                  '<br><sup>K-Means (k=4) sobre 27.390 vanos; grupos nombrados por el ranking de la '
                  'mediana del UITI acumulado</sup>',
             x=0.5, xanchor='center', yref='container', y=0.97, yanchor='top',
@@ -1069,7 +1069,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         # encogerse) pisaba el rotulo del eje x de la fila 1 contra el titulo de la 2.
         height=1023, template='plotly_white', bargap=0.45, violingap=0.3,
     )
-    fig_vano.update_xaxes(title_text='Numero de eventos por vano', row=1, col=2)
+    fig_vano.update_xaxes(title_text='Número de eventos por vano', row=1, col=2)
     fig_vano.update_yaxes(title_text='UITI acumulado por vano', row=1, col=2)
     # Eje de las barras horizontales: porcentaje 0-100 fijo, para que las 10 barras se lean
     # como proporciones comparables y no se reencuadren al cambiar de rango.

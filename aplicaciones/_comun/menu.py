@@ -696,7 +696,7 @@ class _Manejador(http.server.BaseHTTPRequestHandler):
 
         clave = _parametro(self.path, "app")
         if clave not in self.control.apps:
-            self.send_error(404, "Esa aplicacion no existe")
+            self.send_error(404, "Esa aplicación no existe")
             return
         if ruta == "/abrir":
             self._json(self.control.abrir(clave))

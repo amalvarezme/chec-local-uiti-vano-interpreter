@@ -57,7 +57,7 @@ TABLEROS: tuple[Tablero, ...] = (
     Tablero(
         "agrupamiento", "02_agrupamiento_vanos", "chec_tableros.agrupamiento",
         "Agrupamiento de vanos",
-        "Agrupamiento por UITI acumulado y numero de eventos.",
+        "Agrupamiento por UITI acumulado y número de eventos.",
     ),
     Tablero(
         "trayectorias_circuitos", "03_trayectorias_circuitos",
@@ -74,7 +74,7 @@ TABLEROS: tuple[Tablero, ...] = (
     Tablero(
         "simulador", "06_simulador", "chec_tableros.simulador",
         "Simulador de riesgo por vano",
-        "Que pasaria si: corre el modelo MIL sobre los vanos y valores que elijas. "
+        "Qué pasaría si: corre el modelo MIL sobre los vanos y valores que elijas. "
         "Es la unica que necesita Python vivo.",
         vivo=True,
     ),

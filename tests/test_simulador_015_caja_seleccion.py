@@ -667,7 +667,14 @@ def test_the_graph_panel_shows_what_the_simulation_moved(fuente):
     assert "grafo_diferencia(gates_base, gates_simuladas" in fuente
     assert "metadata['X_simulado']" in fuente
     # Una matriz toda en cero es un RESULTADO y se dice, no se deja como panel vacio.
-    assert "La simulacion no movio ninguna relacion del grafo." in fuente
+    #
+    # Se compara SIN TILDES a proposito. Lo que este guardian defiende es que el caso
+    # vacio tenga mensaje, no como se escriba: fijar la ortografia exacta convertia una
+    # correccion de acentos -- que es justo lo que este texto necesitaba, porque se ve en
+    # pantalla -- en una prueba en rojo.
+    import unicodedata
+    plano = unicodedata.normalize("NFKD", fuente).encode("ascii", "ignore").decode("ascii")
+    assert "La simulacion no movio ninguna relacion del grafo." in plano
 
 
 def test_the_bars_headline_carries_the_models_own_offset(fuente):

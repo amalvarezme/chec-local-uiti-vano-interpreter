@@ -602,7 +602,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         showlegend=False, hoverinfo='skip', cliponaxis=False,
     ), row=2, col=12)
 
-    for fila, columna, etiqueta in [(2, 15, 'UITI acumulado'), (2, 18, 'Numero de eventos')]:
+    for fila, columna, etiqueta in [(2, 15, 'UITI acumulado'), (2, 18, 'Número de eventos')]:
         for g in range(4):                                           # violines
             fig.add_trace(go.Violin(
                 x=[], y=[], name=NOMBRES_GRUPOS[g], legendgroup=NOMBRES_GRUPOS[g],
@@ -755,7 +755,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         # las filas. Medido: 803,5 + 181 + 60.
         height=1045, template='plotly_white', bargap=0.45, violingap=0.3,
     )
-    fig.update_xaxes(title_text='Numero de eventos en la ventana', row=1, col=1)
+    fig.update_xaxes(title_text='Número de eventos en la ventana', row=1, col=1)
     fig.update_yaxes(title_text='UITI acumulado en la ventana', row=1, col=1)
     # -55 grados y no -30: a 1.280 px el panel de la evolucion mide 396 px para once
     # ventanas, o sea 36 px por marca, y una etiqueta '11-01 a 11-30' de 65 px inclinada 30

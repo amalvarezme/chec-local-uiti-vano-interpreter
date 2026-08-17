@@ -546,7 +546,7 @@ def construir(
         _it.nombre: (f'{_it.nombre}\n'
                      f'Tipo: {_it.tipo or "sin tipo"}  |  '
                      f'Unidad: {_it.unidad or "sin unidad"}  |  '
-                     f'Codigo maximo: {_it.codigo_maximo or "sin codigo"}\n'
+                     f'Código máximo: {_it.codigo_maximo or "sin código"}\n'
                      f'{_it.descripcion}')
         for _it in CATALOGO_COSTOS.items
     }
@@ -554,7 +554,7 @@ def construir(
         _it.nombre: (f'<b>{_it.nombre}</b><br>'
                      f'Tipo: {_it.tipo or "sin tipo"} &nbsp;|&nbsp; '
                      f'Unidad: {_it.unidad or "sin unidad"} &nbsp;|&nbsp; '
-                     f'Codigo maximo: {_it.codigo_maximo or "sin codigo"}<br>'
+                     f'Código máximo: {_it.codigo_maximo or "sin código"}<br>'
                      f'<span style="color:#4b5563;">{_it.descripcion}</span>')
         for _it in CATALOGO_COSTOS.items
     }
@@ -957,7 +957,7 @@ def construir(
             hovertext=[], hoverinfo='text',
         ), 4, 1) for _p in range(TOP_VARIABLES_POR_VANO)
     ]
-    _fig.update_yaxes(title_text='Caida de UITI (ordenes de magnitud)',
+    _fig.update_yaxes(title_text='Caída de UITI (órdenes de magnitud)',
                       title_standoff=6, tickfont=dict(size=9), row=4, col=1)
     _fig.update_xaxes(title_text='Vano', type='category', tickfont=dict(size=9),
                       row=4, col=1)
@@ -1903,7 +1903,7 @@ def construir(
         _vanos_marcables(circuito_widget.value),
         # Lo que se lee dentro de la caja cuando el circuito no tiene un solo evento en todo
         # el dataset. Una caja vacia y muda se lee como que el tablero se rompio.
-        mensaje_vacio='Circuito sin eventos: no registro ningun evento en todo el periodo, '
+        mensaje_vacio='Circuito sin eventos: no registró ningún evento en todo el periodo, '
                       'asi que no hay vanos que simular. Elige otro circuito.')
 
 
@@ -2251,7 +2251,7 @@ def construir(
         if not diag['vanos']:
             _marcados_sin = diag['seleccion']['sin_eventos']
             _por_lo_marcado = (
-                f' Los {len(_marcados_sin)} vanos que marcaste tampoco tienen eventos ahi.'
+                f' Los {len(_marcados_sin)} vanos que marcaste tampoco tienen eventos ahí.'
                 if _marcados_sin else '')
             return ('<span style="font-size:12px;color:#b91c1c;">En '
                     f'{diag["circuito"]}, {diag["ventana"]["etiqueta"]} no hay ningun vano con '
@@ -2331,9 +2331,9 @@ def construir(
             '<div style="margin-right:26px;"><b>Vanos (grupo, UITI, eventos)</b>'
             f'<table style="font-size:11px;border-collapse:collapse;">{_filas_vanos}</table>'
             '</div>'
-            + _lista('Intervencion &mdash; que HACER (valor sugerido, caida media)', diag['intervencion'],
+            + _lista('Intervención &mdash; qué HACER (valor sugerido, caída media)', diag['intervencion'],
                      '#0072b2')
-            + _lista('Escenario &mdash; bajo que CONDICIONES (valor, caida media)', diag['escenario'], '#b45309')
+            + _lista('Escenario &mdash; bajo qué CONDICIONES (valor, caída media)', diag['escenario'], '#b45309')
             + '</div></div>')
 
     def _pintar_top_por_vano(por_vano):
@@ -2879,7 +2879,7 @@ def construir(
         if seleccion is None:
             _COLUMNAS_VANO.clear()
             controles_knob_box.children = [widgets.HTML(
-                '<span style="font-size:12px;color:#5b4a48;">Esta seleccion no tiene celdas '
+                '<span style="font-size:12px;color:#5b4a48;">Esta selección no tiene celdas '
                 '(vano x ventana) en la ventana activa: no hay valores desde donde '
                 'arrancar.</span>')]
             return
@@ -3140,17 +3140,17 @@ def construir(
     filas tiene rango 1). Dibujar igual seria presentar el grafo experto FIJO como si
     lo hubiera estimado esta seleccion."""
         if grafo is None:
-            trazas, mensaje = GRAFO_VACIO, 'Presiona "Simular" para ver que movio el grafo.'
+            trazas, mensaje = GRAFO_VACIO, 'Presiona "Simular" para ver qué movió el grafo.'
         elif grafo['voided']:
             trazas = GRAFO_VACIO
             mensaje = (f'Grafo no estimable: las compuertas no varian entre los '
-                       f'{grafo["n_vanos"]} vanos de la seleccion.<br>'
+                       f'{grafo["n_vanos"]} vanos de la selección.<br>'
                        '<sup>Hacen falta al menos 3 vanos con comportamiento distinto.</sup>')
         elif not float(np.abs(grafo['matriz']).max()):
             # Todo en cero es un RESULTADO, no un panel vacio: la simulacion no movio una
             # sola relacion. Decirlo evita que se lea como que el grafo fallo.
             trazas = GRAFO_VACIO
-            mensaje = ('La simulacion no movio ninguna relacion del grafo.<br>'
+            mensaje = ('La simulación no movió ninguna relación del grafo.<br>'
                        '<sup>Las variables aplicadas no cambian las compuertas de estos '
                        'vanos.</sup>')
         else:
@@ -3478,10 +3478,10 @@ def construir(
                               if g in _GRUPOS_APLICADOS)
         AVISO_APLICAR.value = (
             f'<span style="font-size:12px;color:#15803d;">{len(fids)} vanos marcados y '
-            f'{aplicados} controles abiertos en su valor sugerido. La simulacion va a usar '
+            f'{aplicados} controles abiertos en su valor sugerido. La simulación va a usar '
             f'<b>solo variables de {_activos}</b>'
             + ('.' if len(_GRUPOS_APLICADOS) == len(GRUPOS_SUGERIDOS) else
-               f'; presiona tambien el otro boton si quieres las dos mitades.')
+               f'; presiona también el otro botón si quieres las dos mitades.')
             + ' Presiona <b>Simular</b> para ver el efecto.</span>')
 
 

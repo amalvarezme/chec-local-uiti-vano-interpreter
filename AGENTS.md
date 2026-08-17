@@ -34,6 +34,12 @@ itself, never a Python call to Gemini/OpenAI.
   user-chosen points table for a **day or date range**, appending wide `hours × variables` columns
   and embedding an `origen_id` so same-origin outputs can be unified/concatenated. Engine:
   `src/chec_local_interpreter/clima_engine.py`; it never touches the 5 LLM agent roles.
+- `/redaccion-es` (`.claude/skills/redaccion-es/SKILL.md`) reviews Spanish writing across code
+  comments, docstrings, notebook markdown, and UI copy (panels, figure titles, axis labels,
+  ticks, buttons). It runs a deterministic checker
+  (`.claude/skills/redaccion-es/assets/revisar.py`) before any judgement call, and never edits a
+  string that is compared, parsed, or asserted elsewhere. Editing-only: it touches no data,
+  models, or agent roles.
 
 ## Agent-native architecture
 

@@ -134,17 +134,35 @@ def test_las_fuentes_del_panel_izquierdo_bajan_dos_puntos():
     pagina = _pagina()
     hoja = pagina[pagina.index("<style>"):pagina.index("</style>")]
     esperado = {
-        ".portada h1": "font-size: 44px",       # 48 -> 46 -> 44
-        ".tarjeta": "font-size: 40px",          # 44 -> 42 -> 40
-        ".desc": "font-size: 31px",             # 35 -> 33 -> 31
-        ".aviso": "font-size: 7px",             # 11 -> 9 -> 7
-        ".tarjeta button": "font-size: 34px",   # 38 -> 36 -> 34
+        ".portada h1": "font-size: 42px",       # 48 -> 46 -> 44 -> 42
+        ".tarjeta": "font-size: 38px",          # 44 -> 42 -> 40 -> 38
+        ".desc": "font-size: 29px",             # 35 -> 33 -> 31 -> 29
+        ".tarjeta button": "font-size: 32px",   # 38 -> 36 -> 34 -> 32
     }
     for selector, declaracion in esperado.items():
         regla = re.search(re.escape(selector) + r"\s*\{([^}]*)\}", hoja)
         assert regla, f"no existe la regla `{selector}`"
         assert declaracion in regla.group(1), (
             f"`{selector}` no baja a `{declaracion}`: {regla.group(1).strip()}")
+
+
+def test_el_aviso_de_la_emergente_bloqueada_deja_de_encoger():
+    """Se queda en 7 px y sale de la escala del panel.
+
+    Bajo cuatro veces con el resto (12, 11, 9, 7) porque nadie lo miraba: es una linea que
+    solo aparece cuando el navegador bloquea una ventana emergente. Medido, a 7 px ya esta
+    5,7 veces por debajo del titulo de su propia tarjeta.
+
+    Y no es texto decorativo. Es lo UNICO que le dice al usuario por que un tablero que el
+    menu marca como "corriendo" no aparece en ninguna ventana -- el caso que costo una
+    sesion entera de diagnostico y que `menu.py` resume como "el menu es su unica
+    ventana". Un aviso que no se puede leer es lo mismo que no tenerlo.
+    """
+    pagina = _pagina()
+    regla = re.search(r"\.aviso\s*\{([^}]*)\}", pagina)
+    assert regla, "no existe la regla `.aviso`"
+    assert "font-size: 7px" in regla.group(1), (
+        f"el aviso volvio a la escala del panel: {regla.group(1).strip()}")
 
 
 def test_lo_que_no_esta_en_el_panel_izquierdo_no_se_encoge_con_el():

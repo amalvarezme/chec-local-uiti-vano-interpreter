@@ -340,7 +340,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     _ranking = df.groupby('CIRCUITO')['_dia'].nunique().sort_values(ascending=False)
     CIRCUITO = _ranking.index[0]
     print(f'Circuitos disponibles: {len(_ranking)} | circuito inicial del panel: {CIRCUITO} '
-          f'({int(_ranking.iloc[0])} dias con eventos) | ranking (top 10):')
+          f'({int(_ranking.iloc[0])} días con eventos) | ranking (top 10):')
     for _c, _n in _ranking.head(10).items():
         _marca = '  <-- circuito inicial' if _c == CIRCUITO else ''
         print(f'  {_c:<12s} {_n:>3d} dias{_marca}')
@@ -845,7 +845,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         mode='lines+markers', name='UITI diario', showlegend=False,
         line=dict(color=COLOR_SERIE_UITI, width=2),
         marker=dict(color=COLOR_SERIE_UITI, size=[SERIE_TAM] * len(_dias_x)),
-        hovertemplate='%{x}<br>UITI del dia: %{y:,.2f}<extra></extra>',
+        hovertemplate='%{x}<br>UITI del día: %{y:,.2f}<extra></extra>',
     ), row=1, col=3, secondary_y=False)
     fig.add_trace(go.Scatter(
         x=_dias_x, y=POR_CIRCUITO[CIRCUITO]['medianaPorDia'][VARIABLE_CLIMA],
@@ -854,7 +854,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         marker=dict(color=NUBE_CFG[VARIABLE_CLIMA]['hue'], size=[SERIE_TAM] * len(_dias_x)),
         hovertemplate='%{x}<br>Mediana: %{y:,.2f}<extra></extra>',
     ), row=1, col=3, secondary_y=True)
-    fig.update_yaxes(title_text='UITI del dia', title_font_size=FUENTE_EJE_TITULO,
+    fig.update_yaxes(title_text='UITI del día', title_font_size=FUENTE_EJE_TITULO,
                      color=COLOR_SERIE_UITI, row=1, col=3, secondary_y=False)
     fig.update_yaxes(title_text=f'{NOMBRES_VARS[VARIABLE_CLIMA]} ({UNIDADES[VARIABLE_CLIMA]})',
                      title_font_size=FUENTE_EJE_TITULO,
@@ -1949,7 +1949,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         if abrir:
             webbrowser.open(destino.resolve().as_uri())
             print('abriendo en el navegador por defecto -- '
-                  f'pesa {mb:,.0f} MB, asi que la primera carga puede tardar unos segundos')
+                  f'pesa {mb:,.0f} MB, así que la primera carga puede tardar unos segundos')
         else:
             print('ABRIR_EN_NAVEGADOR = False: no se abre nada, el archivo queda escrito')
         return destino
