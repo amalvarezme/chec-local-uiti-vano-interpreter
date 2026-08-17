@@ -473,3 +473,38 @@ def test_el_valor_que_sale_de_cada_control_llega_al_modelo_sin_deformarse():
                 assert float(convertido) == pytest.approx(float(valor)), (
                     f"{entrada.knob_id}: el control entrega {valor} y al modelo le "
                     f"llega {convertido}")
+
+
+def test_las_listas_cerradas_son_de_INVENTARIO_y_por_eso_son_mas_cortas_que_el_dato():
+    """Tres listas ofrecen menos de lo que hay en la red, y una ofrece algo que no hay.
+    Las cuatro cosas son deliberadas, decididas el 2026-08-17 mirando el cotejo.
+
+    Sin esta prueba el desajuste se vuelve a encontrar cada vez que alguien cruce el
+    archivo con el dataset, y se "arregla" -- que es justo lo que no hay que hacer.
+
+    ## Lo medido sobre las 159.470 filas
+
+    * `ALTURA` ofrece 12 | 16 | 18. La red tiene 20 alturas mas, entre 4 y 25 m, ademas
+      de un 99 que huele a centinela de dato faltante. La lista es el INVENTARIO DE
+      COMPRA: los apoyos que la empresa instala. Ofrecer un apoyo de 21 m porque exista
+      uno viejo seria proponer una obra que nadie va a contratar.
+    * `CONDUCTOR` deja fuera 13 tipos presentes -- `1/0-AL-DESNUDO`, `6-CU-DESNUDO`,
+      `556.5-AL-AISLADO`... -- que son legado y no se vuelven a montar.
+    * `TIPO` deja fuera `3IG` y `3RG`, por lo mismo.
+    * `LONG_CRUCETA` ofrece 4,5 | 5,2 | 7,6 | 8 m, que HOY no existen en ninguna vano de
+      la base. Son crucetas que se compran; simularlas es una pregunta de diseno legitima
+      y la extrapolacion se asume a sabiendas.
+
+    Lo que si es contrato duro y esta en
+    `test_ninguna_categoria_ofrecida_es_desconocida_para_el_modelo`: que el codificador
+    del modelo sepa convertir todo lo que se ofrece. Ofrecer de menos es una decision;
+    ofrecer algo que el modelo no sabe codificar es un fallo en mitad de una simulacion.
+    """
+    catalogo = catalogo_simulacion(RUTA_REAL)
+
+    assert catalogo["ALTURA"].opciones == ("12", "16", "18")
+    assert len(catalogo["CONDUCTOR"].opciones) == 17
+    assert len(catalogo["TIPO"].opciones) == 10
+    assert "3IG" not in catalogo["TIPO"].opciones
+    for fuera_de_la_base in ("4.5", "5.2", "7.6", "8"):
+        assert fuera_de_la_base in catalogo["LONG_CRUCETA"].opciones
