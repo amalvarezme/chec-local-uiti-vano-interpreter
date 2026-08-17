@@ -485,26 +485,24 @@ def diagnostico_de_circuito(
     if not plan:
         return []
 
-    from chec_local_interpreter.mil_simulador_015 import relevancia_hacia_uiti_minimo
-
-    clases = relevancia_hacia_uiti_minimo(
-        recursos.modelo, recursos.X_inst, seleccion=seleccion,
-        feature_names=recursos.features, knobs=recursos.knobs, top=1,
-        puntos=1, label_encoders=recursos.label_encoders,
-        max_values_imputed=recursos.max_values_imputed,
-        catalogo=catalogo_simulacion(),
-    )
-
+    # `clase_base` sale del PROPIO plan. Antes se pedia con una segunda llamada a
+    # `relevancia_hacia_uiti_minimo(top=1, puntos=1)`, que recorre todos los controles
+    # para devolver un numero que el plan ya calculo -- es la misma
+    # `asignar_clase(n_obs, u_base)` sobre la misma seleccion. Una pasada entera del
+    # modelo por ventana, para nada.
     criticos = []
     for fid, entrada in plan.items():
-        clase_base = int(clases.get(fid, {}).get("clase_base", 0))
         criticos.append({
             "fid": str(fid),
-            "clase_base": clase_base,
+            "clase_base": int(entrada["clase_base"]),
             "u_base": float(entrada["u_base"]),
             "u_final": float(entrada["u_final"]),
             "clase_final": int(entrada["clase_final"]),
             "alcanza": bool(entrada["alcanza"]),
+            # Bajar de Alto a Medio-Alto es una mejora real y hasta ahora se leia igual
+            # que no moverse. `alcanza` solo mira el grupo Bajo.
+            "baja_de_grupo": bool(entrada["baja_de_grupo"]),
+            "objetivo_clase": int(entrada["objetivo_clase"]),
             "pasos": list(entrada["pasos"]),
         })
 
