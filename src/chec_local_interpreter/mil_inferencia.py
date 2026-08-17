@@ -593,19 +593,6 @@ def _clases_observadas(
     return np.asarray(clases)
 
 
-def ventana_de_mapas(recursos: RecursosMIL, *, circuito: str) -> str | None:
-    """La ventana que describen los dos mapas: base y simulado.
-
-    Es la ULTIMA con eventos del circuito. `ventanas_de_circuito` ya lista solo las
-    ventanas en que el circuito tiene bolsas, asi que la ultima de esa lista es, por
-    construccion, la mas cercana a hoy con eventos: un circuito sin actividad en la
-    ventana mas reciente del calendario no necesita un caso aparte que busque hacia
-    atras -- esa ventana simplemente no esta en su lista.
-    """
-    disponibles = ventanas_de_circuito(recursos, circuito=circuito)
-    return disponibles[-1] if disponibles else None
-
-
 def seleccionar_ventanas_reporte(
     recursos: RecursosMIL, *, circuito: str, cuantas: int = VENTANAS_REPORTE
 ) -> list[str]:
@@ -810,18 +797,22 @@ def _nombre_feature(features: Sequence[str], indice: int) -> str:
         return f"feature_{indice}"
 
 
-def mapas_de_escenario(escenario: Mapping[str, Any]) -> dict[str, Any]:
-    """Los dos mapas de la ventana: como esta el circuito y como quedaria intervenido.
+def mapa_base_de_escenario(escenario: Mapping[str, Any]) -> dict[str, Any]:
+    """El mapa de la ventana: como esta el circuito, vano por vano.
 
     Cubre TODOS los vanos de la ventana, no solo los quince del diagnostico: el mapa es
     del circuito, y dejar el resto en blanco se lee como "sin datos" cuando lo que pasa
     es que no hacia falta intervenirlos.
 
-    Las dos clases salen de la MISMA fuente -- el u-hat del modelo sobre la geometria del
-    01.4 --, y el mapa base toma su clase de `clase_base`. Pintar el izquierdo con UITI
-    observado y el derecho con prediccion haria que los dos mapas difirieran por el
-    cambio de fuente ademas de por la obra, y no habria forma de saber cuanto de la
-    diferencia es la intervencion.
+    La clase sale del u-hat del modelo sobre la geometria del 01.4, via `clase_base`.
+    Pintarla con UITI observado la dejaria fuera de escala con el diagnostico y con la
+    tabla del plan, que si hablan del modelo.
+
+    Antes esto devolvia DOS capas, base y simulada, y el informe las ponia lado a lado.
+    El informe ahora dibuja el mapa base de las TRES ventanas que estudia: comparar el
+    circuito consigo mismo en tres momentos dice DONDE esta el problema y como llego
+    hasta ahi, mientras que el mapa simulado repetia en forma de mapa lo que la tabla
+    del plan ya da con numeros. La capa simulada no se calcula y se descarta: se fue.
 
     Funcion pura sobre el escenario que `escenarios_de_circuito` ya construyo: no vuelve
     a cargar el modelo ni a evaluar nada.
@@ -831,15 +822,6 @@ def mapas_de_escenario(escenario: Mapping[str, Any]) -> dict[str, Any]:
         str(fid): int(entrada.get("clase_base", 0))
         for fid, entrada in (relevancia.get("vanos", {}) or {}).items()
     }
-
-    simulado_idx = dict(base_idx)
-    intervenidos: list[str] = []
-    for fila in ((escenario or {}).get("simulacion", {}) or {}).get("vanos", []) or []:
-        fid = str(fila.get("fid"))
-        if fid not in base_idx:
-            continue
-        simulado_idx[fid] = int(fila.get("clase_simulada", base_idx[fid]))
-        intervenidos.append(fid)
 
     def _capa(indices: Mapping[str, int]) -> dict[str, Any]:
         return {
@@ -853,8 +835,6 @@ def mapas_de_escenario(escenario: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "ventana": str((escenario or {}).get("ventana", "")),
         "base": _capa(base_idx),
-        "simulado": _capa(simulado_idx),
-        "intervenidos": sorted(intervenidos),
         "n_vanos": len(base_idx),
     }
 

@@ -1087,7 +1087,10 @@ def render_llm_analysis(
     inference_analysis: dict | None = None,
     expert_alignment_analysis: dict | None = None,
     expert_alignment_matches: list[dict] | None = None,
-    mapas_ventana: dict | None = None,
+    # Una lista: un mapa por ventana estudiada. Un `dict` suelto es la forma anterior
+    # -- una sola ventana con su par base/simulado -- y se sigue aceptando para que una
+    # corrida ya guardada en disco se vuelva a renderizar sin perder la seccion.
+    mapas_ventana: list[dict] | dict | None = None,
 ):
     """
     Renders the structured JSON output from the LLM into a beautiful HTML format
@@ -1212,77 +1215,79 @@ def render_llm_analysis(
         return f"<div class='chart-panel'><h3>{_escape(title)}</h3>{html}</div>"
 
     def _mapas_ventana_html() -> str:
-        """Los dos mapas: como esta el circuito y como quedaria intervenido.
+        """Un mapa por cada ventana estudiada: en que estado esta cada vano del circuito.
 
-        Describen UNA ventana -- la ultima con eventos del circuito --, no el periodo
-        entero. Un mapa de seis meses superpone estados que se atienden distinto, y sobre
-        el no se puede decidir nada; el par base/simulado responde la pregunta operativa,
-        que es donde mandar la cuadrilla y que cambia si va.
+        Cada mapa describe UNA ventana. Un mapa del periodo entero superpone seis meses
+        de estados que se atienden distinto, y sobre el no se puede decidir nada.
 
-        Las dos capas salen del MISMO u-hat del modelo sobre la geometria del 01.4, asi
-        que la unica diferencia entre los dos mapas es la obra. Antes eran "eventos" y
-        "UITI acumulado": dos vistas descriptivas del mismo pasado, sin nada que
-        comparar.
+        Aqui se dibujaba el par base/simulado de una sola ventana: el estado actual y
+        el estado tras el plan. Ese par respondia "que cambia si va la cuadrilla", que
+        es exactamente lo que la tabla del plan ya da con numeros -- y con el delta de
+        grupo por vano --, asi que el mapa simulado repetia en forma de mapa una
+        respuesta que el informe ya tenia. Las tres ventanas dicen algo que ninguna
+        tabla dice de un vistazo: DONDE esta el problema en el trazado y como se movio
+        entre la ventana que trajo al circuito hasta aqui y la de hoy.
+
+        La clase de cada vano sale del u-hat del modelo sobre la geometria del 01.4,
+        para que el mapa este en la misma escala que el diagnostico y que la tabla.
         """
-        if primary_circuit == "TODOS" or not isinstance(mapas_ventana, dict):
+        if primary_circuit == "TODOS":
             return ""
-        base = (mapas_ventana.get("base") or {})
-        simulado = (mapas_ventana.get("simulado") or {})
-        if not base.get("valor"):
+        # Una sola ventana en forma de dict es la forma ANTERIOR del sidecar: una
+        # corrida vieja se sigue renderizando en vez de perder la seccion entera.
+        ventanas = ([mapas_ventana] if isinstance(mapas_ventana, dict)
+                    else list(mapas_ventana or []))
+        ventanas = [v for v in ventanas
+                    if isinstance(v, dict) and (v.get("base") or {}).get("valor")]
+        if not ventanas:
             return ""
 
-        ventana = _escape(mapas_ventana.get("ventana") or "")
-        periodo = _escape(mapas_ventana.get("periodo") or "")
-        intervenidos = list(mapas_ventana.get("intervenidos") or [])
+        paneles = []
+        fallos = []
+        for mapa in ventanas:
+            base = mapa.get("base") or {}
+            etiqueta = _escape(mapa.get("ventana") or "")
+            periodo = _escape(mapa.get("periodo") or "")
+            try:
+                dibujado = plot_circuit_map_folium(
+                    raw_df,
+                    primary_circuit,
+                    date_range=(start_date, end_date) if start_date or end_date else None,
+                    metric_by_vano=pd.Series(base.get("valor") or {}, dtype="float64"),
+                    metric_label="Grupo de criticidad observado",
+                    metric_column="grupo_base",
+                    metric_class_by_vano=pd.Series(base.get("clase") or {}, dtype="object"),
+                    metric_class_column="clase",
+                )
+            except Exception as exc:
+                # Una ventana que no se puede dibujar no puede llevarse las otras dos.
+                fallos.append(f"{etiqueta}: {_escape(exc)}")
+                continue
+            titulo = f"Ventana {etiqueta}" + (f" ({periodo})" if periodo else "")
+            paneles.append(_chart_panel(
+                titulo, _iframe_srcdoc(dibujado.get_root().render(), height=560)))
 
-        def _capa(capa, etiqueta, columna):
-            return plot_circuit_map_folium(
-                raw_df,
-                primary_circuit,
-                date_range=(start_date, end_date) if start_date or end_date else None,
-                metric_by_vano=pd.Series(capa.get("valor") or {}, dtype="float64"),
-                metric_label=etiqueta,
-                metric_column=columna,
-                metric_class_by_vano=pd.Series(capa.get("clase") or {}, dtype="object"),
-                metric_class_column="clase",
-            )
+        if not paneles:
+            return (f"<p class='muted'>No se pudieron renderizar los mapas por ventana: "
+                    f"{'; '.join(fallos)}</p>")
 
-        try:
-            mapa_base = _capa(base, "Grupo de criticidad observado", "grupo_base")
-            mapa_simulado = _capa(simulado, "Grupo tras la intervencion", "grupo_simulado")
-        except Exception as exc:
-            return (f"<p class='muted'>No se pudieron renderizar los mapas de la ventana "
-                    f"{ventana}: {_escape(exc)}</p>")
-
-        # Un mapa simulado identico al base se EXPLICA. Callarlo se lee como que la
-        # intervencion no sirve, cuando puede ser que no hubiera vanos que intervenir.
-        cambian = sum(1 for fid, clase in (simulado.get("clase") or {}).items()
-                      if (base.get("clase") or {}).get(fid) != clase)
+        aviso = (f"<p class='muted'>Sin mapa: {'; '.join(fallos)}</p>" if fallos else "")
         nota = (
             "<div class='summary-box'>"
-            "<h3 style='margin-top:0;'>Como leer el par de mapas</h3>"
+            "<h3 style='margin-top:0;'>Como leer los mapas</h3>"
             "<ul class='report-list'>"
-            f"<li>Los dos describen la ventana <b>{ventana}</b>"
-            f"{f' ({periodo})' if periodo else ''}, la mas reciente con eventos del "
-            "circuito.</li>"
-            "<li>El izquierdo pinta el grupo de criticidad de cada vano tal como esta; "
-            "el derecho, el grupo tras aplicar el plan de intervencion.</li>"
-            "<li>Las dos capas salen del mismo modelo sobre la misma geometria: la unica "
-            "diferencia entre los dos mapas es la obra.</li>"
-            "<li>Solo se mueven variables de <b>intervencion</b>. Una variable de "
-            "escenario -- lluvia, viento -- produce una caida que nadie puede comprar.</li>"
-            f"<li>Vanos con plan: <b>{len(intervenidos)}</b>. Vanos que cambian de grupo: "
-            f"<b>{cambian}</b>.</li>"
+            "<li>Cada mapa es una ventana del circuito, en orden de tiempo: la primera "
+            "es la que mas peso tuvo y la ultima es como esta hoy.</li>"
+            "<li>El color de cada vano es su grupo de criticidad en esa ventana, el "
+            "mismo que usa el diagnostico.</li>"
+            "<li>Se dibujan TODOS los vanos de la ventana, no solo los del diagnostico: "
+            "un vano sin marcar es un vano que no necesita obra, no un vano sin datos.</li>"
+            "<li>Comparando un mapa con el siguiente se ve si el problema se queda en el "
+            "mismo tramo o se mueve por el circuito.</li>"
             "</ul></div>"
         )
-        panels = (
-            _chart_panel(f"Grupo actual por vano - ventana {ventana}",
-                         _iframe_srcdoc(mapa_base.get_root().render(), height=560))
-            + _chart_panel(f"Grupo simulado con intervencion - ventana {ventana}",
-                           _iframe_srcdoc(mapa_simulado.get_root().render(), height=560))
-        )
-        return (f"<h3>Mapa de la ultima ventana: base contra intervenido</h3>"
-                f"<div class='chart-grid two-col'>{panels}</div>{nota}")
+        return (f"<h3>Estado del circuito en las ventanas estudiadas</h3>"
+                f"<div class='chart-grid'>{''.join(paneles)}</div>{aviso}{nota}")
 
     def _orden_ventana(etiqueta):
         resto = str(etiqueta).lstrip("Vv")

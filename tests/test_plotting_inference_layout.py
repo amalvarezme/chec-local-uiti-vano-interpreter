@@ -496,3 +496,106 @@ def test_header_default_stage_breakdown_matches_explicit_none_byte_identical(tmp
     html_explicit_none = _render_with_stage_breakdown(tmp_path, stage_breakdown=None)
 
     assert _extract_header_h1(html_default) == _extract_header_h1(html_explicit_none)
+
+
+# ---------------------------------------------------------------------------
+# Los mapas: el estado observado de las TRES ventanas, sin capa simulada.
+# ---------------------------------------------------------------------------
+
+
+class _MapaFalso:
+    """Lo minimo que `_mapas_ventana_html` le pide a un mapa de folium."""
+
+    def __init__(self, etiqueta):
+        self.etiqueta = etiqueta
+
+    def get_root(self):
+        return self
+
+    def render(self):
+        return f"<div>MAPA {self.etiqueta}</div>"
+
+
+def _mapas_de_tres_ventanas():
+    return [
+        {"ventana": "V9", "periodo": "2026-03-01 a 2026-03-31", "n_vanos": 103,
+         "base": {"valor": {"V1": 3, "V2": 1}, "clase": {"V1": "Alto", "V2": "Medio"}}},
+        {"ventana": "V10", "periodo": "2026-04-01 a 2026-04-14", "n_vanos": 102,
+         "base": {"valor": {"V1": 2, "V2": 1}, "clase": {"V1": "Medio-Alto", "V2": "Medio"}}},
+        {"ventana": "V11", "periodo": "2026-04-15 a 2026-04-30", "n_vanos": 116,
+         "base": {"valor": {"V1": 1, "V2": 0}, "clase": {"V1": "Medio", "V2": "Bajo"}}},
+    ]
+
+
+def _render_con_mapas(tmp_path, monkeypatch, mapas):
+    llamadas = []
+
+    def _falso(df, circuito, **kwargs):
+        llamadas.append(kwargs)
+        return _MapaFalso(len(llamadas))
+
+    monkeypatch.setattr("chec_local_interpreter.plotting.plot_circuit_map_folium", _falso)
+    html_path = render_llm_analysis(
+        validation_data={},
+        raw_df=_minimal_raw_df(),
+        selected_circuitos=["C1"],
+        inference_results=None,
+        inference_analysis={},
+        output_dir=tmp_path / "html",
+        mapas_ventana=mapas,
+    )
+    return html_path.read_text(encoding="utf-8"), llamadas
+
+
+def test_el_informe_dibuja_un_mapa_por_ventana_estudiada(tmp_path, monkeypatch):
+    """Tres mapas del mismo circuito en tres momentos, no dos de una sola ventana.
+
+    El par base/simulado respondia "que cambia si va la cuadrilla", que es lo que la
+    tabla del plan ya da con numeros y con el delta de grupo por vano. Las tres
+    ventanas dicen lo que ninguna tabla dice de un vistazo: DONDE esta el problema en
+    el trazado y como se movio.
+    """
+    html, llamadas = _render_con_mapas(tmp_path, monkeypatch, _mapas_de_tres_ventanas())
+
+    assert len(llamadas) == 3, f"se dibujaron {len(llamadas)} mapas, no tres"
+    for ventana in ("V9", "V10", "V11"):
+        assert ventana in html, f"falta el mapa de {ventana}"
+
+
+def test_no_queda_ni_un_mapa_simulado(tmp_path, monkeypatch):
+    """La capa simulada se retiro entera, no se dejo de dibujar."""
+    html, llamadas = _render_con_mapas(tmp_path, monkeypatch, _mapas_de_tres_ventanas())
+
+    assert "simulado" not in html.lower()
+    assert "tras la intervencion" not in html.lower()
+    for kwargs in llamadas:
+        assert kwargs.get("metric_column") != "grupo_simulado"
+
+
+def test_los_tres_mapas_pintan_la_clase_observada_de_su_propia_ventana(tmp_path, monkeypatch):
+    """Un mapa que repitiera la misma capa tres veces se veria bien y no diria nada."""
+    html, llamadas = _render_con_mapas(tmp_path, monkeypatch, _mapas_de_tres_ventanas())
+
+    clases = [dict(k["metric_class_by_vano"]) for k in llamadas]
+    assert clases[0]["V1"] == "Alto"
+    assert clases[1]["V1"] == "Medio-Alto"
+    assert clases[2]["V1"] == "Medio"
+    assert len({tuple(sorted(c.items())) for c in clases}) == 3, (
+        "los tres mapas llevan la misma capa")
+
+
+def test_una_ventana_sin_mapa_no_borra_las_otras(tmp_path, monkeypatch):
+    """Un circuito sin bolsas en una ventana es un dato, no un fallo del informe."""
+    mapas = _mapas_de_tres_ventanas()
+    mapas[1]["base"] = {"valor": {}, "clase": {}}
+
+    html, llamadas = _render_con_mapas(tmp_path, monkeypatch, mapas)
+
+    assert len(llamadas) == 2
+    assert "V9" in html and "V11" in html
+
+
+def test_sin_mapas_la_seccion_no_aparece(tmp_path, monkeypatch):
+    html, llamadas = _render_con_mapas(tmp_path, monkeypatch, [])
+
+    assert llamadas == []

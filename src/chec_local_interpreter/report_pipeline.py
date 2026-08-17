@@ -95,9 +95,8 @@ from chec_local_interpreter.mil_inferencia import (
     compactar_grafo_del_escenario,
     catalogo_de_controles,
     construir_contexto_inferencia_mil,
-    mapas_de_escenario,
+    mapa_base_de_escenario,
     seleccionar_ventanas_reporte,
-    ventana_de_mapas,
 )
 from chec_local_interpreter.mil_figuras import figuras_de_escenario
 from chec_local_interpreter.config import (
@@ -396,7 +395,7 @@ def prepare(
     # la misma forma de hueco que tenia el camino anterior, para que la falta de un `.pt`
     # no tumbe el diagnostico historico, que no lo necesita.
     render_assets: dict[str, Any] = {}
-    mapas: dict[str, Any] | None = None
+    mapas: list[dict[str, Any]] = []
     if recursos_mil is None:
         inference_context = _contexto_inferencia_vacio(circuito, start, end, fechas_interes)
     else:
@@ -454,17 +453,29 @@ def prepare(
             compactar_grafo_del_escenario(
                 _escenario, features=inference_context.get("features", []))
 
-        # Los dos mapas describen UNA ventana: la ultima con eventos del circuito. Ahi la
-        # pregunta es "como esta hoy y como quedaria intervenido", que es lo que sostiene
-        # una orden de trabajo; un mapa del periodo entero mezcla seis meses de estados.
-        _ventana_mapas = ventana_de_mapas(recursos_mil, circuito=circuito)
-        _escenario_mapas = next(
-            (e for e in inference_context["escenarios"] if e["ventana"] == _ventana_mapas),
-            None,
-        )
-        if _escenario_mapas is not None:
-            mapas = mapas_de_escenario(_escenario_mapas)
-            mapas["periodo"] = str(_periodos.get(_ventana_mapas, {}).get("periodo", ""))
+        # UN mapa por cada ventana ESTUDIADA, y solo el estado observado.
+        #
+        # Antes era un par base/simulado de una sola ventana. El par respondia "que
+        # cambia si va la cuadrilla", que es justo lo que la tabla del plan ya da con
+        # numeros -- y con el delta de grupo por vano --, asi que el mapa simulado
+        # repetia en forma de mapa una respuesta que el informe ya tenia. Las tres
+        # ventanas, en cambio, dicen algo que ninguna tabla dice de un vistazo: DONDE
+        # esta el problema en el trazado y como se movio entre la ventana que trajo al
+        # circuito hasta aqui y la de hoy.
+        #
+        # Un mapa del periodo entero seguiria sin servir: superpone seis meses de
+        # estados que se atienden distinto.
+        mapas = []
+        for _ventana in ventanas_estudio:
+            _escenario_mapa = next(
+                (e for e in inference_context["escenarios"] if e["ventana"] == _ventana),
+                None,
+            )
+            if _escenario_mapa is None:
+                continue
+            _mapa = mapa_base_de_escenario(_escenario_mapa)
+            _mapa["periodo"] = str(_periodos.get(_ventana, {}).get("periodo", ""))
+            mapas.append(_mapa)
 
     save_json_artifact(historical_context, run_dir / "historical.bc.json")
     save_json_artifact(inference_context, run_dir / "inference.bc.json")

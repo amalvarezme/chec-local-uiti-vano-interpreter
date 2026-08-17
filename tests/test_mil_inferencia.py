@@ -27,13 +27,12 @@ from chec_local_interpreter.mil_inferencia import (
     escenarios_de_circuito,
     influencia_por_ventana,
     knobs_desde_datos,
-    mapas_de_escenario,
+    mapa_base_de_escenario,
     relevancia_de_circuito,
     resumen_de_modelo,
     resumen_variables_por_grupo,
     seleccionar_ventanas_reporte,
     simulacion_de_circuito,
-    ventana_de_mapas,
     ventanas_de_circuito,
 )
 
@@ -187,15 +186,12 @@ def test_a_circuit_with_fewer_windows_than_asked_returns_what_it_has():
     assert seleccionar_ventanas_reporte(recursos, circuito="NO_EXISTE") == []
 
 
-def test_the_map_window_is_the_last_one_that_actually_has_events():
-    """Los dos mapas -- base y simulado -- describen UNA ventana, y tiene que ser la
-    mas cercana a hoy con eventos en el circuito. `ventanas_de_circuito` ya solo lista
-    ventanas con bolsas, asi que la ultima de esa lista ES esa ventana: no hay que
-    buscar hacia atras ni tratar el hueco como un caso aparte."""
-    recursos = _recursos_multiventana()
-
-    assert ventana_de_mapas(recursos, circuito="C1") == "V5"
-    assert ventana_de_mapas(recursos, circuito="NO_EXISTE") is None
+# `ventana_de_mapas` se borro con el mapa de UNA ventana. Elegia la ultima con eventos
+# del circuito, que era la que llevaba el par base/simulado; el informe dibuja ahora el
+# mapa base de las TRES ventanas que ya selecciona `seleccionar_ventanas_reporte`, asi
+# que no queda nada que elegir. Su unica afirmacion -- que la ultima de
+# `ventanas_de_circuito` es por construccion la mas reciente con bolsas -- la sigue
+# fijando `test_the_report_studies_at_most_three_windows_and_only_ones_with_bags`.
 
 
 def test_window_influence_counts_critical_bags_from_observed_data_not_the_model():
@@ -517,50 +513,60 @@ def _escenario_de_mapas():
     }
 
 
-def test_the_two_maps_cover_every_vano_of_the_window_not_only_the_intervened_ones():
+def test_el_mapa_cubre_todos_los_vanos_de_la_ventana_no_solo_los_intervenidos():
     """El mapa es del CIRCUITO, no de los quince vanos del diagnostico. Dibujar solo los
     intervenidos dejaria el resto del circuito en blanco, que se lee como 'sin datos'
     cuando lo que pasa es que no hacia falta intervenirlos."""
-    mapas = mapas_de_escenario(_escenario_de_mapas())
+    mapa = mapa_base_de_escenario(_escenario_de_mapas())
 
-    assert set(mapas["base"]["clase"]) == {"A", "B", "C"}
-    assert set(mapas["simulado"]["clase"]) == {"A", "B", "C"}
-    assert mapas["ventana"] == "V11"
-
-
-def test_both_maps_read_the_class_from_the_model_so_the_only_difference_is_the_work():
-    """Las dos clases salen de la MISMA fuente -- el u-hat del modelo sobre la geometria
-    del 01.4 --, y el mapa base usa `clase_base` de la propia simulacion. Si el izquierdo
-    pintara UITI observado y el derecho prediccion, los dos mapas diferirian por el
-    cambio de fuente y no por la intervencion, que es lo unico que se quiere ver."""
-    mapas = mapas_de_escenario(_escenario_de_mapas())
-
-    assert mapas["base"]["clase"]["A"] == "Alto"
-    assert mapas["simulado"]["clase"]["A"] == "Medio"
-    # Un vano sin intervencion se pinta igual en los dos: la diferencia es la obra.
-    assert mapas["base"]["clase"]["B"] == mapas["simulado"]["clase"]["B"] == "Medio-Alto"
-    assert mapas["base"]["valor"]["A"] == 3 and mapas["simulado"]["valor"]["A"] == 1
+    assert set(mapa["base"]["clase"]) == {"A", "B", "C"}
+    assert mapa["ventana"] == "V11"
+    assert mapa["n_vanos"] == 3
 
 
-def test_the_maps_declare_which_vanos_were_intervened():
-    """Sin la lista, un lector que ve dos mapas casi iguales no puede distinguir 'la
-    intervencion no movio nada' de 'no se intervino casi nada'."""
-    mapas = mapas_de_escenario(_escenario_de_mapas())
+def test_el_mapa_lee_la_clase_del_modelo_y_no_del_uiti_observado():
+    """La clase sale del u-hat del modelo sobre la geometria del 01.4, via `clase_base`.
 
-    assert mapas["intervenidos"] == ["A"]
+    Aqui habia dos pruebas mas sobre el mapa SIMULADO -- que su clase cambiara con la
+    obra y que declarara los vanos intervenidos --. El informe ya no lo dibuja: el par
+    base/simulado se cambio por el mapa base de las TRES ventanas estudiadas, porque
+    comparar el mismo circuito consigo mismo en tres momentos dice donde esta el
+    problema, y el simulado repetia en un mapa lo que la tabla del plan ya cuantifica.
+
+    Lo que sigue siendo contrato es de donde sale la clase: si el mapa pintara UITI
+    observado en vez de la prediccion, dejaria de ser comparable con el diagnostico y
+    con la tabla, que si hablan del modelo.
+    """
+    mapa = mapa_base_de_escenario(_escenario_de_mapas())
+
+    assert mapa["base"]["clase"]["A"] == "Alto"
+    assert mapa["base"]["clase"]["B"] == "Medio-Alto"
+    assert mapa["base"]["clase"]["C"] == "Bajo"
+    assert mapa["base"]["valor"]["A"] == 3
 
 
-def test_a_scenario_without_simulation_still_yields_a_base_map():
-    """Un circuito cuyo diagnostico no señalo ningun vano critico sigue teniendo un mapa
-    base que decir: el simulado sale identico al base y la lista de intervenidos vacia,
-    que es la lectura correcta -- no hay nada que intervenir."""
+def test_un_escenario_sin_simulacion_sigue_teniendo_mapa():
+    """Un circuito cuyo diagnostico no señalo ningun vano critico tiene mapa igual.
+
+    El mapa base no depende de la simulacion -- ya no --, asi que esta es ahora una
+    comprobacion de que nada del camino del mapa fue a mirarla.
+    """
     escenario = _escenario_de_mapas()
     escenario["simulacion"] = {"vanos": []}
 
-    mapas = mapas_de_escenario(escenario)
+    mapa = mapa_base_de_escenario(escenario)
 
-    assert mapas["intervenidos"] == []
-    assert mapas["base"]["clase"] == mapas["simulado"]["clase"]
+    assert set(mapa["base"]["clase"]) == {"A", "B", "C"}
+    assert mapa["base"]["clase"]["A"] == "Alto", (
+        "la clase base cambio al quitar la simulacion: el mapa la esta mirando")
+
+
+def test_el_mapa_no_lleva_capa_simulada():
+    """El informe dejo de dibujarla; producirla y descartarla la deja volver sola."""
+    mapa = mapa_base_de_escenario(_escenario_de_mapas())
+
+    assert "simulado" not in mapa
+    assert "intervenidos" not in mapa
 
 
 # --- La simulacion del informe: solo lo que una cuadrilla puede ejecutar ------------------
