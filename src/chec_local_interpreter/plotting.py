@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
@@ -489,8 +490,28 @@ def _norm_map_id(series: pd.Series) -> pd.Series:
     )
 
 
-def _load_geo_vanos_for_circuit(circuito_name: str):
-    geo_path = PROJECT_ROOT / "data" / "GEO" / "MVLINSEC.shp"
+@lru_cache(maxsize=8)
+def leer_geo_crudo(nombre_archivo: str):
+    """El shapefile ENTERO, leido una sola vez por corrida.
+
+    Medido en esta maquina: MVLINSEC 0,67 s y 37,1 MB, GDBCHEC_TRANSFOR 0,29 s y
+    18,5 MB, SWITCHES 0,12 s y 7,3 MB. Sumados, 1,08 s y 62,9 MB por CADA mapa.
+
+    Se leian enteros en cada llamada para despues quedarse con las filas de un solo
+    circuito. Con tres mapas por informe eran 4,3 s; el deslizador que recorre las
+    once ventanas del circuito los convertia en 13 s y doce veces esos 63 MB
+    reservados y tirados, por leer doce veces exactamente los mismos bytes.
+
+    Se cachea la lectura CRUDA y no el recorte por circuito. El recorte solo ayudaria
+    si el mismo circuito se pidiera dos veces -- que es el caso del deslizador, si,
+    pero por casualidad --, mientras que `/reporte-lote` recorre decenas de circuitos
+    distintos y con el volveria a leer el disco entero en cada uno.
+
+    Devuelve el marco COMPARTIDO. Los dos llamadores recortan con `.copy()` antes de
+    escribir una sola columna; ver `test_el_marco_cacheado_no_se_puede_ensuciar_desde_
+    un_llamador`.
+    """
+    geo_path = PROJECT_ROOT / "data" / "GEO" / nombre_archivo
     if not geo_path.exists():
         return None
 
@@ -499,7 +520,14 @@ def _load_geo_vanos_for_circuit(circuito_name: str):
     except ImportError:
         return None
 
-    lineas = gpd.read_file(geo_path)
+    return gpd.read_file(geo_path)
+
+
+def _load_geo_vanos_for_circuit(circuito_name: str):
+    lineas = leer_geo_crudo("MVLINSEC.shp")
+    if lineas is None:
+        return None
+
     required_cols = {"CIRCUITO", "G3E_FID", "geometry"}
     if not required_cols.issubset(lineas.columns):
         return None
@@ -513,16 +541,10 @@ def _load_geo_vanos_for_circuit(circuito_name: str):
 
 
 def _load_geo_points_for_circuit(circuito_name: str, filename: str, fid_column: str):
-    geo_path = PROJECT_ROOT / "data" / "GEO" / filename
-    if not geo_path.exists():
+    points = leer_geo_crudo(filename)
+    if points is None:
         return None
 
-    try:
-        import geopandas as gpd
-    except ImportError:
-        return None
-
-    points = gpd.read_file(geo_path)
     required_cols = {"CIRCUITO", "G3E_FID", "geometry"}
     if not required_cols.issubset(points.columns):
         return None

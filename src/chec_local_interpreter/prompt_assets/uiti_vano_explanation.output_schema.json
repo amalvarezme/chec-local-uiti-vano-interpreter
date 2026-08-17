@@ -232,6 +232,27 @@
       "type": "string"
      }
     },
+    "top_vanos_percentile": {
+     "type": [
+      "number",
+      "null"
+     ],
+     "description": "El percentil configurado en el contexto, copiado tal cual. Opcional: un contexto sin percentil configurado es un caso real y no un fallo."
+    },
+    "p97_vanos_uiti_vano": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "Los vanos del percentil superior por UITI_VANO, copiados del contexto. Los imprime la nota de boveda y viajan al contexto de alineacion experta."
+    },
+    "p97_vanos_eventos": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "Los vanos del percentil superior por numero de eventos, copiados del contexto. No son los mismos que los de UITI_VANO, y esa diferencia es informacion."
+    },
     "probable_justifications_rules": {
      "type": "array",
      "minItems": 1,

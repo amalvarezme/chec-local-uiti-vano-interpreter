@@ -24,7 +24,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from pathlib import Path
-import torch
 
 from chec_impacto.interpretability.borda import agregar_borda
 
@@ -170,7 +169,17 @@ def estimar_matriz_grafo_mgcecdl(
     device="cpu",
     batch_size=1024,
 ):
-    """Estimate a variable-variable matrix from the MGCECDL decoder reconstructions."""
+    """Estimate a variable-variable matrix from the MGCECDL decoder reconstructions.
+
+    `torch` se importa AQUI y no arriba: es la unica funcion de este modulo que lo
+    usa, y el resto -- `construir_prompt_inferencia` entre ellas, "pure
+    prompt-rendering only" -- lo pagaba igual. El CLI del rol `inference` solo
+    renderiza un prompt y valida un JSON, y por este import de arriba cargaba torch en
+    sus dos llamadas: 1,4 s cada una. Misma politica que
+    `criticality_assignment.distancias_cuadradas_torch`, que ya lo documenta.
+    """
+    import torch
+
     X = np.asarray(X, dtype=np.float32)
     if X.ndim != 2:
         raise ValueError("X debe ser una matriz 2D.")

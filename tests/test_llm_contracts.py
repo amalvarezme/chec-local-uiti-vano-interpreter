@@ -56,3 +56,43 @@ def test_prompt_snapshot_includes_optional_provenance_property():
         output_schema_json=json.dumps(schema),
     )
     assert '"provenance"' in prompt
+
+
+# --- Los tres campos del percentil que el esquema rechazaba -------------------
+
+
+def test_el_esquema_admite_los_tres_campos_del_percentil_que_el_informe_si_lee():
+    """`additionalProperties: false` los rechazaba, y tres consumidores los leen.
+
+    El Skill del rol `historical` pide copiarlos del contexto
+    (`top_vanos_percentile`, `p97_vanos_uiti_vano`, `p97_vanos_eventos`), pero
+    `circuit_characterization` declara `additionalProperties: false` y no los tenia
+    entre sus propiedades: un agente que siguiera el Skill al pie de la letra fallaba
+    la validacion y gastaba reintentos, y el que se salvaba era el que se saltaba esa
+    linea.
+
+    Lo que se pierde no es cosmetico. `expert_alignment` los pasa al contexto de
+    alineacion y `vault_note_contract._render_characterization` imprime con ellos
+    "Percentil 97 por UITI_VANO" y "Percentil 97 por eventos". Medido: CERO notas de
+    boveda del repositorio contienen esas dos lineas -- codigo muerto por un esquema
+    que bloqueaba su unica fuente.
+
+    Van OPCIONALES y no obligatorios: un contexto sin percentil configurado es un
+    caso real, y exigirlos convertiria eso en un fallo de validacion.
+    """
+    schema = load_output_schema()
+    caracterizacion = schema["properties"]["circuit_characterization"]
+
+    for campo in ("top_vanos_percentile", "p97_vanos_uiti_vano", "p97_vanos_eventos"):
+        assert campo in caracterizacion["properties"], (
+            f"{campo} sigue sin cabida: el Skill lo pide y el esquema lo rechaza"
+        )
+        assert campo not in caracterizacion["required"], (
+            f"{campo} no puede ser obligatorio: un contexto sin percentil es real"
+        )
+
+    assert caracterizacion["additionalProperties"] is False, (
+        "la puerta se abre para tres campos concretos, no para cualquiera"
+    )
+    assert caracterizacion["properties"]["p97_vanos_uiti_vano"]["type"] == "array"
+    assert caracterizacion["properties"]["p97_vanos_eventos"]["type"] == "array"

@@ -219,7 +219,13 @@ Connect circuit characterization with the temporal evolution of `events` and `UI
 
 - `text`: circuit-criticality synthesis.
 - `top_vanos_percentile`, `p97_vanos_uiti_vano`, `p97_vanos_eventos`: copy the configured
-  percentile and the top-percentile vanos from the context.
+  percentile and the top-percentile vanos from the context, verbatim — do not recompute or
+  re-rank them. They are OPTIONAL: omit them when the context does not carry them, never invent
+  a value. They are not decoration: the vault note prints "Percentil 97 por UITI_VANO" and
+  "Percentil 97 por eventos" from these exact fields, and they travel into the expert-alignment
+  context. Until 2026-08-17 the schema declared `additionalProperties: false` without listing
+  them, so every response carrying them failed validation and every response that passed left
+  those two vault lines unrendered — zero notes in the repository had them.
 - `probable_justifications_rules`: items describing variable relationships that may contribute to
   the most-affected windows and vanos.
 
