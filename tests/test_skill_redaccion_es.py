@@ -76,8 +76,12 @@ def test_atrapa_el_interrogativo_de_una_pregunta_indirecta():
     """`cuantos` lleva tilde aunque no haya ningun `?` en la frase.
 
     Es el caso que mas se escapa a ojo, porque sin signos no parece una pregunta.
+
+    Sale en `tilde-dudosa` y no en `tilde`: se atrapa igual -- que es lo que esta prueba
+    defiende -- pero no se aplica solo. La diferencia la puso un error real; el detalle
+    esta en `test_los_interrogativos_van_a_su_propia_clase_y_no_se_aplican_solos`.
     """
-    assert "tilde" in _clases("No se sabe cuantos vanos hay en la ventana.")
+    assert "tilde-dudosa" in _clases("No se sabe cuantos vanos hay en la ventana.")
 
 
 def test_atrapa_la_pregunta_sin_abrir():
@@ -140,3 +144,73 @@ def test_el_que_conjuncion_no_lleva_tilde():
     """`que` atono es la palabra mas comun del idioma: un falso positivo aqui inunda el
     informe y lo vuelve inservible."""
     assert "tilde" not in _clases("La ventana que se elige define el conjunto que se dibuja.")
+
+
+# --------------------------------------- lo que el verificador aprendio de un error real
+
+
+def test_los_interrogativos_van_a_su_propia_clase_y_no_se_aplican_solos():
+    """`que` atono es la palabra mas comun del idioma. Ninguna heuristica sin analisis
+    sintactico separa "no se QUE pasa" de "la pregunta QUE se repite".
+
+    Se separo en `tilde-dudosa` despues de que un corrector automatico, usando la clase
+    `tilde` a secas, acentuara SIETE `que` de un parrafo donde uno solo lo necesitaba.
+    """
+    revisar = _revisar()
+    assert "tilde-dudosa" not in revisar.AUTOMATICAS, (
+        "los interrogativos se aplicarian solos, y cambian lo que la frase dice")
+    assert revisar.AUTOMATICAS == {"tilde"}, (
+        "alguna clase que necesita leer la frase entro en las automaticas")
+
+
+def test_un_signo_lejano_no_arrastra_los_que_de_todo_el_bloque():
+    """El bug original: `"¿" in antes and "?" in despues` sobre el BLOQUE entero.
+
+    Un `¿...?` en el primer renglon marcaba todos los `que` de los veinte siguientes. El
+    alcance es la FRASE.
+    """
+    bloque = ("Aqui va una pregunta: ¿que pasa si el vano falla?\n\n"
+              "Y despues prosa normal que no pregunta nada, de modo que el modelo hace\n"
+              "que el contexto reescale lo estructural, que es lo que usa la base.\n")
+    dudosas = [h for h in _revisar().revisar_texto(bloque, "x", 1)
+               if h.clase == "tilde-dudosa"]
+    assert len(dudosas) <= 1, (
+        f"un signo lejano contagia a los `que` de otras frases: {len(dudosas)} marcados")
+
+
+def test_la_pregunta_como_sustantivo_no_dispara_la_indirecta():
+    """"la pregunta que mas se repite" fue el falso positivo concreto que rompio un
+    cuaderno: `pregunta` estaba en la lista de verbos y aqui es sustantivo."""
+    texto = "Donde entra el grafo fijo, que es la pregunta que mas se repite."
+    dudosas = [h for h in _revisar().revisar_texto(texto, "x", 1)
+               if h.clase == "tilde-dudosa"]
+    assert not dudosas, f"marca un `que` relativo como interrogativo: {dudosas}"
+
+
+def test_cada_hallazgo_sabe_donde_esta():
+    """Sin posicion, un corrector solo tiene la palabra -- y la parchea en todas partes.
+
+    Es la causa raiz del episodio anterior, no un detalle de comodidad.
+    """
+    texto = "El analisis de la aplicacion tambien mide el maximo."
+    for h in _revisar().revisar_texto(texto, "x", 1):
+        assert h.columna >= 0, f"hallazgo sin posicion: {h}"
+        assert texto[h.columna:h.columna + len(h.fragmento)].lower() == h.fragmento.lower(), (
+            f"la posicion de {h.fragmento!r} no apunta a la palabra")
+
+
+def test_una_palabra_en_mayusculas_sigue_en_mayusculas():
+    """`.capitalize()` sobre `GEOMETRIA` devolvia `Geometria`.
+
+    En este repositorio las mayusculas dentro de una frase son ENFASIS del autor, no un
+    descuido: normalizarlas al acentuar cambia lo que el texto subraya. Y las mayusculas
+    tambien llevan tilde, asi que la respuesta correcta es `GEOMETRÍA`.
+    """
+    revisar = _revisar()
+    casos = {"GEOMETRIA": "GEOMETRÍA", "Geometria": "Geometría", "geometria": "geometría"}
+    for entrada, salida in casos.items():
+        h = [x for x in revisar.revisar_texto(f"la {entrada} de los centroides", "x", 1)
+             if x.clase == "tilde"]
+        assert h and h[0].sugerencia == salida, (
+            f"{entrada!r} deberia acentuarse como {salida!r}, no como "
+            f"{h[0].sugerencia if h else 'nada'!r}")

@@ -79,7 +79,7 @@ _MD_ENTRENAMIENTO = '''\
 # Reentrenamiento desde cero
 
 Todo lo que sigue corre SOLO con `EJECUCION = "entrenamiento"`. Con el valor
-por defecto (`"visualizacion"`) cada celda de aqui en adelante no hace nada, y
+por defecto (`"visualizacion"`) cada celda de aquí en adelante no hace nada, y
 el cuaderno termina en segundos.
 
 Reentrenar con `mode = "full"` toma alrededor de 40 minutos y SOBREESCRIBE
@@ -93,7 +93,7 @@ _MD_ARQUITECTURA = '''\
 Cada **bolsa** es una celda `(CIRCUITO, FID_VANO, ventana)`; cada **instancia**
 es un evento de falla dentro de ella. El modelo predice un escalar por bolsa,
 `p_bag ~ log1p(uiti_acumulado)`, y la **clase de criticidad se deriva** con la
-regla de vecino mas cercano que 01.4 ya calculo -- nunca se reajusta aqui.
+regla de vecino mas cercano que 01.4 ya calculo -- nunca se reajusta aquí.
 
 ```mermaid
 flowchart TD
@@ -126,8 +126,8 @@ flowchart TD
 **Tres propiedades que no son detalles:**
 
 - **Invariancia de cardinalidad.** Duplicar todas las instancias de una bolsa
-  deja `p_bag` identico. Sin eso el modelo podria leer `num_eventos` por la
-  puerta de atras, y `num_eventos` es exactamente el target que se descarto.
+  deja `p_bag` identico. Sin eso el modelo podría leer `num_eventos` por la
+  puerta de atrás, y `num_eventos` es exactamente el target que se descarto.
 - **`n_obs` es OBSERVADO, nunca predicho.** De las dos coordenadas que deciden
   la clase, el modelo solo aporta `u`.
 - **El grafo es fijo y las columnas de grado 0 quedan intactas.** `index_add`
@@ -136,17 +136,17 @@ flowchart TD
 '''
 
 _MD_PERDIDA = '''\
-## Funcion de costo
+## Función de costo
 
 Se lee en cuatro pasos, y el orden importa: primero **como se produce
-$\\hat{p}_b$**, porque sin eso ninguna formula se sostiene; despues el **termino
-general**; despues **donde entra el grafo fijo**, que es la pregunta que mas se
+$\\hat{p}_b$**, porque sin eso ninguna fórmula se sostiene; después el **termino
+general**; después **donde entra el grafo fijo**, que es la pregunta que mas se
 malinterpreta; y al final **cada termino** con su motivo.
 
-### 1. De la bolsa a la prediccion
+### 1. De la bolsa a la predicción
 
-Se arma en dos pasadas sobre la MISMA base, con atencion por segmento (una
-distribucion por bolsa, no por lote):
+Se arma en dos pasadas sobre la MISMA base, con atención por segmento (una
+distribución por bolsa, no por lote):
 
 $$
 e_i = w^{\\top} \\tanh(V z_i), \\qquad
@@ -162,9 +162,9 @@ $$
 x'_i = x_i + \\alpha \\sum_{(r \\to c) \\in \\mathcal{E}} g_{b(i),\\,rc}\\; A_{rc}\\; x_{i,r}\\; \\mathbf{e}_c
 $$
 
-La segunda pasada re-codifica $x'$, re-agrupa con la MISMA atencion (pesos
+La segunda pasada re-codifica $x'$, re-agrupa con la MISMA atención (pesos
 compartidos) y produce $z_b^{(2)}$. Bajo `fusion="film"` -- la del artefacto
-guardado -- la modalidad climatica RE-ESCALA a la estructural en vez de
+guardado -- la modalidad climática RE-ESCALA a la estructural en vez de
 concatenarse con ella:
 
 $$
@@ -173,18 +173,18 @@ z^{\\mathrm{film}}_b = z^{\\mathrm{est}}_b \\odot (1 + \\gamma(z^{\\mathrm{clim}
 $$
 
 Por que FiLM y no concatenar: una cabeza lineal sobre el latente concatenado es
-EXACTAMENTE aditiva entre modalidades, asi que no puede representar un producto
-entre una feature estructural y una climatica. Medido, el unico camino cruzado del
+EXACTAMENTE aditiva entre modalidades, así que no puede representar un producto
+entre una feature estructural y una climática. Medido, el único camino cruzado del
 modelo eran las pocas aristas cruzadas del grafo, escaladas por $\\alpha$ y por la
-compuerta. FiLM hace que el contexto climatico reescale lo estructural, que es
-ademas la afirmacion de dominio: una rafaga pesa mas sobre un apoyo alto, viejo y
+compuerta. FiLM hace que el contexto climático reescale lo estructural, que es
+además la afirmacion de dominio: una rafaga pesa mas sobre un apoyo alto, viejo y
 degradado. Las dos capas de FiLM se inicializan en cero, de modo que en el paso 0
 la fusion es la IDENTIDAD y el entrenamiento arranca desde el camino puramente
-estructural -- que es justo lo que usa la linea base que hay que superar.
+estructural -- que es justo lo que usa la línea base que hay que superar.
 
 ### 2. Termino general
 
-Sobre un lote de $B$ bolsas, con $\\hat{p}_b$ la prediccion de la bolsa $b$ y
+Sobre un lote de $B$ bolsas, con $\\hat{p}_b$ la predicción de la bolsa $b$ y
 $t_b = \\log(1 + u_b)$ su objetivo:
 
 $$
@@ -204,8 +204,8 @@ $\\lambda_{g} = 0$, $\\lambda_{\\mathrm{mod}} = 0$ (inerte fuera de
 
 ### 3. Donde entra el grafo fijo predefinido
 
-El grafo experto $A$ es **fijo**: se registra como buffer, no como parametro, asi
-que ninguna arista se aprende. `alpha` tambien es un escalar fijo. Lo unico
+El grafo experto $A$ es **fijo**: se registra como buffer, no como parámetro, así
+que ninguna arista se aprende. `alpha` también es un escalar fijo. Lo único
 aprendible en todo el camino del grafo es la compuerta $g_b$, que ESCALA por
 bolsa las aristas que ya existen -- nunca crea ni borra ninguna.
 
@@ -213,15 +213,15 @@ Los seis terminos no lo usan igual, y la diferencia importa al leer resultados:
 
 | termino | usa el grafo fijo | como |
 |---|---|---|
-| supervisado | **indirecto** | no aparece en la formula; entra porque $\hat{p}_b$ se calcula sobre $x'$, y $x'$ es $x$ propagado por $A$ |
+| supervisado | **indirecto** | no aparece en la fórmula; entra porque $\hat{p}_b$ se calcula sobre $x'$, y $x'$ es $x$ propagado por $A$ |
 | reconstruccion | **no** | a proposito: el objetivo es el $x$ ORIGINAL, no $x'$ |
-| informacion mutua | **si, como REFERENCIA** | $K_g$ se construye una sola vez desde $[A \;\\lvert\; A^{\\top}]$ y es el patron contra el que se compara la representacion aprendida |
-| desviacion de compuertas | **si, como SOPORTE** | el vector $g_b$ tiene una entrada por arista de $A$; $g = 1$ significa "el grafo tal cual" |
+| información mutua | **si, como REFERENCIA** | $K_g$ se construye una sola vez desde $[A \;\\lvert\; A^{\\top}]$ y es el patron contra el que se compara la representación aprendida |
+| desviación de compuertas | **si, como SOPORTE** | el vector $g_b$ tiene una entrada por arista de $A$; $g = 1$ significa "el grafo tal cual" |
 | supervision por modalidad | **no** | opera sobre predicciones por modalidad |
-| clase | **no** | usa la GEOMETRIA KMeans de 04, otro artefacto fijo distinto del grafo |
+| clase | **no** | usa la GEOMETRÍA KMeans de 04, otro artefacto fijo distinto del grafo |
 
-La confusion facil es la ultima fila: en este cuaderno conviven dos objetos
-congelados -- el **grafo** experto de variables y la **geometria** de centroides
+La confusion facil es la última fila: en este cuaderno conviven dos objetos
+congelados -- el **grafo** experto de variables y la **geometría** de centroides
 de 04 -- y solo el primero es "el grafo".
 
 ### 4. Cada termino
@@ -236,16 +236,16 @@ w(t) = \\frac{1}{\\max(\\hat{f}_{\\mathrm{KDE}}(t),\\, \\varepsilon)},
 \\tilde{w} = \\frac{w}{\\bar{w}}
 $$
 
-*Grafo fijo: **indirecto**.* La formula no lo menciona, pero $\\hat{p}_b$ ya viene
+*Grafo fijo: **indirecto**.* La fórmula no lo menciona, pero $\\hat{p}_b$ ya viene
 de la segunda pasada, es decir de $x'$ -- y $x'$ es $x$ propagado por $A$. Si se
 apagara la propagacion ($\\alpha = 0$), este termino seguiria siendo calculable y
 el grafo desapareceria por completo del gradiente.
 
 $\\hat{f}_{\\mathrm{KDE}}$ es una gaussiana ajustada UNA vez sobre los $t$ del
 pliegue de ENTRENAMIENTO, evaluada en una grilla e interpolada por lote (no hay
-evaluacion kernel de $O(B \\times n_{\\mathrm{train}})$ por paso). La
+evaluación kernel de $O(B \\times n_{\\mathrm{train}})$ por paso). La
 renormalizacion $\\tilde{w} = w/\\bar{w}$ deja la media de pesos en 1 por lote,
-asi que la escala es comparable con un MSE plano.
+así que la escala es comparable con un MSE plano.
 
 **2. Reconstruccion** — sobre la entrada ESTANDARIZADA $z = (x - \\mu)/\\sigma$:
 
@@ -256,14 +256,14 @@ $$
 $$
 
 *Grafo fijo: **no lo usa**, y es deliberado.* El objetivo es el $x$ ORIGINAL,
-nunca $x'$: con $x'$ la compuerta -- lo unico aprendible del camino del grafo --
-controlaria su propio objetivo y podria bajar la perdida simplificandolo en vez
-de mejorar la representacion. Es el unico termino que se define EXPLICITAMENTE
+nunca $x'$: con $x'$ la compuerta -- lo único aprendible del camino del grafo --
+controlaria su propio objetivo y podría bajar la perdida simplificandolo en vez
+de mejorar la representación. Es el único termino que se define EXPLICITAMENTE
 por fuera del grafo. La forma $\\mathrm{raw}/(1+\\mathrm{raw})$ acota en $[0,1)$
 sin matar el gradiente, a diferencia de un recorte duro, que arriba de 1 tiene
 derivada exactamente cero.
 
-**3. Informacion mutua** — entropia cuadratica de Renyi entre dos kernels sobre
+**3. Información mutua** — entropia cuadratica de Renyi entre dos kernels sobre
 variables (no sobre muestras):
 
 $$
@@ -278,12 +278,12 @@ $$
 
 *Grafo fijo: **si, y aca es la REFERENCIA del termino**.* $K_r$ es un RBF sobre
 los perfiles de variable RECONSTRUIDOS (las COLUMNAS de $\\hat{X}$, con la
-distancia dividida por la dimension del perfil). $K_g$ es un RBF sobre los
+distancia dividida por la dimensión del perfil). $K_g$ es un RBF sobre los
 perfiles del grafo $[A \\;\\lvert\\; A^{\\top}]$ -- cada variable descrita por sus
 aristas de salida y de entrada -- con ancho igual a la mediana de las distancias
 entre perfiles; se calcula UNA sola vez al construir la perdida y queda como
 buffer constante. El gradiente NO llega a $A$: el termino empuja la
-representacion aprendida hacia la estructura experta, jamas al reves. Es el unico
+representación aprendida hacia la estructura experta, jamás al reves. Es el único
 termino que ata las dos cosas.
 
 **$K_g$ no se estima de los datos: son las relaciones conceptuales
@@ -292,11 +292,11 @@ ajustado. La matriz $A$ se reconstruye identica usando SOLO la lista de nombres
 de las features -- sin CSV, sin $y$, sin modelo -- y sus pesos
 ($0.60, 0.70, 0.75, 0.80, 0.85, 0.90$) son literales escritos a mano en
 `chec_impacto/data/graph.py`, del tipo `("ALTURA", "NR_T", 0.75)`: juicio
-experto, no correlaciones medidas. Ademas $K_g$ se calcula en el CONSTRUCTOR de
+experto, no correlaciones medidas. Además $K_g$ se calcula en el CONSTRUCTOR de
 la perdida, no en el `forward`, y se guarda como buffer -- es una constante de
 todo el entrenamiento, no se recalcula por lote y no recibe gradiente.
 
-Lo unico que los datos deciden es **cuales nodos existen**: si un codigo de causa
+Lo único que los datos deciden es **cuales nodos existen**: si un código de causa
 no alcanza el 1%, su columna no esta y las aristas que lo tocaban no se
 proyectan. Los datos eligen el conjunto de nodos; nunca las aristas ni sus pesos.
 
@@ -308,27 +308,27 @@ proyectan. Los datos eligen el conjunto de nodos; nunca las aristas ni sus pesos
 | recibe gradiente | no | si |
 
 Ese contraste es lo que le da sentido al termino: el lado experto es inmovil por
-construccion, asi que $1 - \\bar{I}_2(K_r, K_g)$ solo puede empujar la
-representacion aprendida hacia la estructura del grafo, nunca el grafo hacia los
+construcción, así que $1 - \\bar{I}_2(K_r, K_g)$ solo puede empujar la
+representación aprendida hacia la estructura del grafo, nunca el grafo hacia los
 datos.
 
-**4. Desviacion de compuertas** — ancla al grafo sin compuerta:
+**4. Desviación de compuertas** — ancla al grafo sin compuerta:
 
 $$
 \\mathcal{L}_{g} = \\frac{1}{B\\,E}\\sum_{b,e} \\lvert g_{be} - 1 \\rvert
 $$
 
 *Grafo fijo: **si, como soporte y como ancla**.* El vector $g_b$ tiene
-exactamente una entrada por arista de $A$ -- el grafo fija la dimension $E$ del
+exactamente una entrada por arista de $A$ -- el grafo fija la dimensión $E$ del
 decodificador de compuertas -- y el valor 1 al que este termino ancla ES el grafo
 predefinido sin modificar. Lo que penaliza es apartarse de $A$ tal cual fue
 declarado; no mira los pesos $A_{rc}$, solo su conjunto de aristas.
 
 Con $g = 2\\,\\sigma(\\cdot)$, la identidad $g = 1$ se alcanza en el cero del
-logit, que es la inicializacion. Apagado ($\\lambda_g = 0$).
+logit, que es la inicialización. Apagado ($\\lambda_g = 0$).
 
 **5. Supervision por modalidad** — el mismo MSE ponderado, aplicado a la
-prediccion propia de cada modalidad:
+predicción propia de cada modalidad:
 
 $$
 \\mathcal{L}_{\\mathrm{mod}} = \\frac{1}{M}\\sum_{m=1}^{M} \\mathcal{L}_{\\mathrm{sup}}(\\hat{p}^{(m)}, t)
@@ -355,15 +355,15 @@ $$
 \\mathcal{L}_{\\mathrm{cl}} = \\mathrm{CE}\\!\\left(-\\frac{d^2(n^{\\mathrm{obs}}_b,\\, \\hat{u}_b)}{T},\\; c^{*}_b\\right)
 $$
 
-*Grafo fijo: **no lo usa**.* Lo fijo que aparece aca es la GEOMETRIA de
+*Grafo fijo: **no lo usa**.* Lo fijo que aparece aca es la GEOMETRÍA de
 centroides de 04 (verificada por sha1), un artefacto distinto del grafo de
-variables. Ningun $A$ interviene.
+variables. Ningún $A$ interviene.
 
-La clase objetivo se DERIVA aca de lo observado con la misma geometria, nunca se
-recibe por parametro: asi es imposible pasar por accidente un objetivo
+La clase objetivo se DERIVA aca de lo observado con la misma geometría, nunca se
+recibe por parámetro: así es imposible pasar por accidente un objetivo
 inconsistente con `asignar_clase`. El piso sobre la rama predicha es `softplus`
-y no un `clamp`: en la inicializacion $\\hat{p}_b \\approx 0$, y un recorte duro
-ahi tiene gradiente exactamente cero -- el termino estaria muerto justo cuando
+y no un `clamp`: en la inicialización $\\hat{p}_b \\approx 0$, y un recorte duro
+ahí tiene gradiente exactamente cero -- el termino estaria muerto justo cuando
 mas importa.
 
 ### 5. Resumen operativo
@@ -379,20 +379,20 @@ total = 1.00 * supervisado
 | termino | que mide | por que esta |
 |---|---|---|
 | **supervisado** | `KernelDensityWeightedMSELoss(p_bag, log1p(u))` | MSE ponderado por densidad INVERSA. El KDE se ajusta SOLO sobre el pliegue de entrenamiento (higiene de pliegue) y los pesos se normalizan a media 1 por lote, para que la cola alta de UITI no se ahogue bajo la masa central |
-| **reconstruccion** | `raw/(1+raw)` con `raw = MSE(reconstruido, entrada estandarizada)` | Se calcula contra el `x_inst` ORIGINAL, nunca contra `x'`: si no, la compuerta podria bajar la perdida simplificando su propio objetivo en vez de mejorar la representacion. La forma `raw/(1+raw)` acota en [0,1) SIN matar el gradiente, a diferencia de un recorte |
-| **informacion mutua** | MI cuadratica de Renyi entre un kernel RBF sobre los perfiles de variables reconstruidas y el kernel del grafo fijo, normalizada por `log(p)`; la perdida es `1 - MI_norm` | Ata la representacion aprendida a la estructura del grafo experto |
-| **desviacion de compuertas** | `lambda * media(abs(g - 1))` | Ancla las compuertas a la identidad. Apagado (`lambda = 0`) |
-| **clase** | entropia cruzada sobre `softmax(-d^2 / T)` contra la clase observada, diferenciable a traves de `u_hat` | Sin el, nada en el costo sabe donde estan las fronteras entre centroides -- que es exactamente lo que mide la metrica |
+| **reconstruccion** | `raw/(1+raw)` con `raw = MSE(reconstruido, entrada estandarizada)` | Se calcula contra el `x_inst` ORIGINAL, nunca contra `x'`: si no, la compuerta podría bajar la perdida simplificando su propio objetivo en vez de mejorar la representación. La forma `raw/(1+raw)` acota en [0,1) SIN matar el gradiente, a diferencia de un recorte |
+| **información mutua** | MI cuadratica de Renyi entre un kernel RBF sobre los perfiles de variables reconstruidas y el kernel del grafo fijo, normalizada por `log(p)`; la perdida es `1 - MI_norm` | Ata la representación aprendida a la estructura del grafo experto |
+| **desviación de compuertas** | `lambda * media(abs(g - 1))` | Ancla las compuertas a la identidad. Apagado (`lambda = 0`) |
+| **clase** | entropia cruzada sobre `softmax(-d^2 / T)` contra la clase observada, diferenciable a traves de `u_hat` | Sin el, nada en el costo sabe donde están las fronteras entre centroides -- que es exactamente lo que mide la métrica |
 
 **Dos advertencias medidas, no teoricas:**
 
 - `TEMPERATURA_CLASE` **no** hereda el `1.0` de `distribucion_suave`. Con
   distancias de mediana 0.038, esa temperatura deja la softmax 99,9% uniforme
   (entropia 1.3850 contra `ln(4) = 1.3863`) y el termino queda en su piso desde
-  la primera epoca, aportando una constante y ningun gradiente. `T = 0.01` es
-  el valor medido sobre la geometria real.
-- Los terminos del grafo estan acotados en [0,1] y pesan 0.01 cada uno: entre
-  los dos pueden mover el total como maximo 0.02, contra un termino supervisado
+  la primera epoca, aportando una constante y ningún gradiente. `T = 0.01` es
+  el valor medido sobre la geometría real.
+- Los terminos del grafo están acotados en [0,1] y pesan 0.01 cada uno: entre
+  los dos pueden mover el total como máximo 0.02, contra un termino supervisado
   que se movio entre 0.35 y 6.8. Con estos lambda, el grafo casi no participa
   del gradiente.
 '''
@@ -404,15 +404,15 @@ La unidad de aprendizaje no es el evento: es la celda **(circuito, vano,
 ventana)**. Cada bolsa es el conjunto de eventos de UN vano dentro de UNA
 ventana, y el modelo predice el UITI acumulado de esa celda.
 
-- **Ventanas.** Las mismas 11 de 04, reconstruidas aqui con el mismo corte: cada
+- **Ventanas.** Las mismas 11 de 04, reconstruidas aquí con el mismo corte: cada
   mes calendario mas su cruce del 15 al 15 del mes siguiente, ordenados. No son
-  meses, asi que no se pueden sumar entre si.
+  meses, así que no se pueden sumar entre si.
 - **Solapamiento a proposito.** Las ventanas se pisan. Un evento que cae en dos
   ventanas del mismo vano genera DOS instancias, una en cada bolsa. Es la
   duplicacion ~1.81x del diseno: se documenta, no se filtra. Filtrarla cambiaria
   el soporte de las ventanas y romperia la comparabilidad con 04.
 - **Solo celdas con eventos.** Una celda sin eventos nunca se convierte en
-  bolsa. El numero de bolsas es exactamente el de celdas pobladas: no hay bolsas
+  bolsa. El número de bolsas es exactamente el de celdas pobladas: no hay bolsas
   vacias que el modelo tenga que aprender a ignorar.
 - **Instancia = fila de evento.** Cada instancia es una fila del CSV, con sus
   $p$ features de instancia; la bolsa no promedia nada antes de entrar.
@@ -420,13 +420,13 @@ ventana, y el modelo predice el UITI acumulado de esa celda.
   SUMA, no promedio. El objetivo optimizado es $t_b = \\log(1 + u_b)$.
 - **Disposicion CSR, no tensor rellenado.** Una matriz plana `(n_inst, p)` mas
   un indice de segmento `instance_bag` y sus `offsets`/`counts`. Un tensor
-  `(n_bags, max, p)` era la alternativa obvia y se descarto con numeros: 52,7%
-  de las bolsas son de un solo evento y el maximo es 46, asi que rellenar
+  `(n_bags, max, p)` era la alternativa obvia y se descarto con números: 52,7%
+  de las bolsas son de un solo evento y el máximo es 46, así que rellenar
   desperdiciaria mas de 40x en computo y memoria sobre mas de la mitad de los
   datos.
-- **Agrupacion para validacion cruzada.** Cada bolsa lleva `group =
+- **Agrupacion para validación cruzada.** Cada bolsa lleva `group =
   CIRCUITO|FID_VANO`. Los pliegues se arman por grupo, de modo que un mismo vano
-  jamas queda partido entre entrenamiento y prueba -- sin eso, la persistencia
+  jamás queda partido entre entrenamiento y prueba -- sin eso, la persistencia
   del vano se filtraria como si fuera capacidad predictiva.
 - **Lo que NO puede ser feature de instancia.** Dos exclusiones, ambas
   verificadas al construir la matriz y no por convencion: fuga algebraica
@@ -436,12 +436,12 @@ ventana, y el modelo predice el UITI acumulado de esa celda.
   justamente lo que la bolsa no debe poder mirar).
 
 Los tamanos medidos sobre el dataset actual se imprimen en la celda de
-construccion, y estan fijados con asserts para que un cambio silencioso de datos
+construcción, y están fijados con asserts para que un cambio silencioso de datos
 falle en vez de deslizarse.
 '''
 
 _MD_VISOR = '''\
-## Modelo entrenado: carga y verificacion
+## Modelo entrenado: carga y verificación
 
 Lee el artefacto guardado y las predicciones fuera de pliegue de la corrida
 base. El artefacto lleva sus propios nombres de features y el cargador RECHAZA
@@ -480,42 +480,42 @@ else:
 _MD_VARIABLES = '''\
 ## Variables de entrada
 
-Una fila por variable: su **modo** tematico, su **definicion**, su **origen**, su
+Una fila por variable: su **modo** tematico, su **definición**, su **origen**, su
 modalidad y su papel en el grafo experto fijo.
 
-- **Modo** es la clasificacion tematica experta (A-F) de `variables.json`, la
+- **Modo** es la clasificación tematica experta (A-F) de `variables.json`, la
   misma que colorea el grafo de variables. **Modalidad** es otra cosa: la
-  particion en dos ramas -- estructural y climatica -- que el modelo usa para
+  partición en dos ramas -- estructural y climática -- que el modelo usa para
   codificar por separado. Un modo no implica una modalidad.
 - **Origen** distingue las tres procedencias: `base` (columna del CSV
   seleccionada en `Variables_seleccion.xlsx`), `rezago climatico` (expansion
   horaria `_0.._11` de una familia) y `derivada de COD_CAUSA` (ver abajo).
-- `grado_entrada` es lo que la propagacion puede CAMBIAR de esa variable, asi que
+- `grado_entrada` es lo que la propagacion puede CAMBIAR de esa variable, así que
   grado de entrada 0 significa que pasa por el grafo intacta.
-  `aristas_cruzadas` cuenta las aristas que unen las dos modalidades -- el unico
+  `aristas_cruzadas` cuenta las aristas que unen las dos modalidades -- el único
   camino cruzado que el grafo aporta.
 
 ### Las derivadas de COD_CAUSA
 
-`COD_CAUSA` es un codigo categorico y entra por dos caminos a la vez, no por
+`COD_CAUSA` es un código categorico y entra por dos caminos a la vez, no por
 uno:
 
-1. **`COD_CAUSA` (frecuencia relativa).** El codigo crudo se reemplaza por su
+1. **`COD_CAUSA` (frecuencia relativa).** El código crudo se reemplaza por su
    frecuencia relativa en el dataset COMPLETO, calculada solo a partir de la
    propia columna: nunca mira el objetivo. Conserva EXACTAMENTE ese nombre
    porque es el nodo del grafo experto -- renombrarla borra sus aristas de
    entrada.
 2. **Indicadores con colapso de raras.** Un `COD_CAUSA_<codigo>` binario por
-   cada codigo con frecuencia $\\geq$ 1%, mas un `COD_CAUSA_OTRAS` que absorbe
+   cada código con frecuencia $\\geq$ 1%, mas un `COD_CAUSA_OTRAS` que absorbe
    toda la cola. Ninguno tiene aristas: pasan por el grafo intactos.
 
-La frecuencia sola perderia la identidad del codigo (dos causas distintas con la
+La frecuencia sola perderia la identidad del código (dos causas distintas con la
 misma frecuencia serian indistinguibles); los indicadores solos perderian el
 orden de magnitud. Por eso van los dos.
 
 ### Variables descartadas
 
-La segunda tabla lista lo que NO entra, con su razon. Son tres grupos: las que
+La segunda tabla lista lo que NO entra, con su razón. Son tres grupos: las que
 el experto no selecciono en `Variables_seleccion.xlsx`, las que se excluyen por
 **fuga algebraica** (el objetivo se reconstruye a partir de ellas) y las que se
 excluyen por **senal de cardinalidad** (cuentan las instancias de la bolsa).
@@ -673,12 +673,12 @@ _MD_GRAFO_INTERACTIVO = '''\
 ### El grafo experto fijo, interactivo
 
 El MISMO grafo con el que se entreno el artefacto: se lee del `.pt`, no se
-reconstruye, asi que lo que se ve es lo que el modelo uso. Es fijo -- el
+reconstruye, así que lo que se ve es lo que el modelo uso. Es fijo -- el
 entrenamiento no aprende aristas, solo la compuerta $g_b$ que las escala por
 bolsa.
 
 Como leerlo: el color es la modalidad, el tamano es el grado total, y el hover
-trae modo, definicion y grados. Los nodos aislados a un costado son las
+trae modo, definición y grados. Los nodos aislados a un costado son las
 variables de grado 0, las que la propagacion no toca. `COD_CAUSA` es el sumidero
 -- solo aristas de entrada -- y por eso concentra el flujo.
 '''
@@ -830,7 +830,7 @@ _MD_GUARDADO = '''\
 ## Guardado del modelo (solo al reentrenar)
 
 Persiste el modelo ajustado con sus nombres de features, su grafo y la
-geometria, para que 01.5 pueda cargarlo. Sin esto, el modelo final vivia solo
+geometría, para que 01.5 pueda cargarlo. Sin esto, el modelo final vivia solo
 en memoria y el simulador no tenia nada que levantar.
 '''
 
@@ -875,17 +875,17 @@ _MD_TITLE = '''\
 Cada **bolsa** es una celda `(CIRCUITO, FID_VANO, ventana)` de
 `01.4_uiti_vano_trayectorias_vano.ipynb`; cada **instancia** es un evento de
 falla dentro de esa celda. Las 11 ventanas de 01.3/01.4 se solapan (mes
-calendario mas la cruzada del 15 al 15), asi que un mismo evento puede caer
+calendario mas la cruzada del 15 al 15), así que un mismo evento puede caer
 en dos bolsas del mismo vano -- se duplica, nunca se filtra.
 
 El modelo codifica cada instancia con `MGCECDLRegressor._encode_modalities`
-(reutilizado sin cambios), agrupa las instancias de una bolsa con atencion
+(reutilizado sin cambios), agrupa las instancias de una bolsa con atención
 invariante a cardinalidad, decodifica UNA compuerta de arista por bolsa sobre
-el grafo experto fijo (`PerSampleEdgeGateDecoder`, tambien reutilizado),
+el grafo experto fijo (`PerSampleEdgeGateDecoder`, también reutilizado),
 propaga esa compuerta hacia las instancias, vuelve a codificar y a agrupar, y
 lee un escalar por bolsa `p_bag ~ log1p(uiti_acumulado)`. La clase de
 criticidad reportada es la regla de vecino-mas-cercano que 01.4 ya calculo
-con KMeans -- no se reajusta aqui.
+con KMeans -- no se reajusta aquí.
 
 Generado por `scripts/generate_notebook_10.py` (COMMITTED, reproducible).
 Ver `sdd/notebook-10-mil-vano-ventana/{spec,design}` para el contrato
@@ -893,7 +893,7 @@ completo.
 
 **Este cuaderno se genera SIN ejecutar el entrenamiento.** Ninguna corrida
 MIL se ha cronometrado nunca en esta maquina -- la celda 6 mide UNA corrida
-corta y proyecta el costo total antes de proponer lanzar la validacion
+corta y proyecta el costo total antes de proponer lanzar la validación
 cruzada completa; la decision de correrla queda en manos de quien ejecute
 este cuaderno.
 '''
@@ -949,7 +949,7 @@ TEMPERATURA_CLASE = 0.01
 _MD_BOOTSTRAP = '''\
 ## Bootstrap: raiz del repo, `sys.path` y guarda de precondiciones
 
-Falla rapido y con un mensaje accionable si los modulos de PR1-4 no son
+Falla rápido y con un mensaje accionable si los modulos de PR1-4 no son
 importables. Ninguno de ellos se re-exporta desde `chec_impacto.data`,
 `chec_impacto.models` o `chec_impacto.interpretability` -- se importan por
 ruta completa, igual que en sus propios tests.
@@ -1065,7 +1065,7 @@ _MD_CONFIG = '''\
 `N_SPLITS = 5` (D8, `StratifiedGroupKFold`) es fijo en ambos modos. Los demas
 hiperparametros del modelo (`HIDDEN_DIM`, `EMBED_DIM`, `ALPHA`, los `LAMBDA_*`)
 son valores fijos razonables -- este cuaderno no corre una busqueda de
-hiperparametros (a diferencia de la libreta 12, aqui no hay un objetivo de
+hiperparametros (a diferencia de la libreta 12, aquí no hay un objetivo de
 Optuna definido en el diseno).
 '''
 
@@ -1124,7 +1124,7 @@ _MD_DATA_LOAD = '''\
 
 `procesar_dataset_completo` + `codificar_cod_causa` (umbral 1,0%) ->
 `construir_matriz_instancias` agrega la frecuencia de `COD_CAUSA` y sus
-indicadores. `p` se deriva en tiempo de ejecucion, nunca se escribe a mano.
+indicadores. `p` se deriva en tiempo de ejecución, nunca se escribe a mano.
 '''
 
 _CODE_DATA_LOAD = '''\
@@ -1187,11 +1187,11 @@ print("Modalidad climatica:  ", len(modality_indices["climaticos"]), "features")
 '''
 
 _MD_GEOMETRIA = '''\
-### Geometria de 01.4
+### Geometría de 01.4
 
-Se reutiliza la geometria KMeans, congelada como artefacto versionado
+Se reutiliza la geometría KMeans, congelada como artefacto versionado
 (`data/geometria_kmeans_014_v1.json`) y verificada por sha1. La clase de
-criticidad NO se reajusta aqui.
+criticidad NO se reajusta aquí.
 '''
 
 _CODE_GEOMETRIA = '''\
@@ -1389,7 +1389,7 @@ def ajustar_y_evaluar_pliegue(train_idx, test_idx, *, epochs, seed):
 _MD_COST_FORECAST = '''\
 ### Pronostico de costo (compuerta obligatoria)
 
-Cronometra un pliegue de referencia y proyecta la validacion cruzada completa
+Cronometra un pliegue de referencia y proyecta la validación cruzada completa
 contra `COST_CEILING_SECONDS` antes de lanzarla.
 '''
 
@@ -1421,11 +1421,11 @@ else:
 '''
 
 _MD_CV_LOOP = '''\
-### Validacion cruzada agrupada + subconjunto intra-vano
+### Validación cruzada agrupada + subconjunto intra-vano
 
 `StratifiedGroupKFold(groups=bag_index.group)` evita que las bolsas de un mismo
 vano crucen pliegues. El subconjunto de variacion intra-vano se congela ANTES
-de la validacion.
+de la validación.
 '''
 
 _CODE_CV_LOOP = '''\
@@ -1497,9 +1497,9 @@ else:
 '''
 
 _MD_A1_BASELINES = '''\
-### Compuerta A1 contra la mejor linea base
+### Compuerta A1 contra la mejor línea base
 
-El modelo debe superar por >= 5,0 puntos de macro-F1 a la MEJOR linea base, no
+El modelo debe superar por >= 5,0 puntos de macro-F1 a la MEJOR línea base, no
 solo a persistencia. No cumplirla se reporta como resultado negativo explicito.
 '''
 
@@ -1530,17 +1530,17 @@ else:
 _MD_POR_CLASE = '''\
 ## 9.1 Desglose por clase (matriz de confusion, precision/recall/F1, accuracy)
 
-macro-F1 no distingue "mediocre parejo" de "abandono una clase", y aqui esa
+macro-F1 no distingue "mediocre parejo" de "abandono una clase", y aquí esa
 es la pregunta: `Alto` es el 10,21% del subconjunto de variacion intra-vano
 (6.342 de 62.114 bolsas) y es la clase que le importa a CHEC. Un brazo que
 acierte perfecto las otras tres y NUNCA prediga `Alto` saca 89,8% de
 accuracy y 0,75 de macro-F1 -- y el modelo observado saca 0,7704, lo bastante
 cerca de 3/4 como para que la pregunta no se pueda esquivar.
 
-`accuracy` se reporta al lado, nunca como titular: la linea base mayoritaria
+`accuracy` se reporta al lado, nunca como titular: la línea base mayoritaria
 ya saca 0,4384 de accuracy contra 0,1524 de macro-F1.
 
-Esta celda ademas PERSISTE las predicciones fuera de pliegue. Sin eso, de una
+Esta celda además PERSISTE las predicciones fuera de pliegue. Sin eso, de una
 corrida de 40 minutos solo sobrevive un escalar y texto impreso, y cualquier
 diagnostico posterior obliga a reentrenar.
 '''
@@ -1663,7 +1663,7 @@ _MD_A6 = '''\
 ### A6: split temporal (diagnostico secundario)
 
 Bloque de ventanas de entrenamiento -> bloque de prueba. Nunca reselecciona la
-metrica principal; se reporta al lado.
+métrica principal; se reporta al lado.
 '''
 
 _CODE_A6 = '''\
@@ -1748,7 +1748,7 @@ _MD_SIMULATOR = '''\
 
 `predict_fn` fija el contrato `{"fused_probs": (n, 4), "predicted_classes":
 (n,)}` que `chec_local_interpreter/simulator.py` espera -- el simulador en si
-NO se construye ni se corre aqui.
+NO se construye ni se corre aquí.
 '''
 
 _CODE_SIMULATOR = '''\
@@ -1764,10 +1764,10 @@ else:
 _MD_LIMITACION = '''\
 ## 16. Techo interpretativo honesto
 
-El techo teorico de este problema es la varianza intra-vano medida por 01.4:
+El techo teórico de este problema es la varianza intra-vano medida por 01.4:
 39.1% de la varianza de clase vive DENTRO del vano, el 60.9% restante lo
-explica la identidad del vano por si sola (obs #524) -- cualquier metrica
-global hereda gratis ese 60.9%, que es exactamente lo que la linea base de
+explica la identidad del vano por si sola (obs #524) -- cualquier métrica
+global hereda gratis ese 60.9%, que es exactamente lo que la línea base de
 persistencia captura con ventaja informacional. Este cuaderno NO reclama
 haber superado esa varianza intra-vano mas alla de lo que la barra A1
 efectivamente mida.
@@ -1776,10 +1776,10 @@ efectivamente mida.
 _MD_SUMMARY = '''\
 ## 17. Resumen final
 
-Cantidades DERIVADAS en tiempo de ejecucion (nunca literales, salvo las
+Cantidades DERIVADAS en tiempo de ejecución (nunca literales, salvo las
 poblacionales pineadas y verificadas en la celda 4): `p`, `E`, `K`
 (indicadores COD_CAUSA), tamano de poblacion, resultado A1, y el sha1 de la
-geometria de 01.4.
+geometría de 01.4.
 '''
 
 _CODE_SUMMARY = '''\
@@ -1824,9 +1824,9 @@ esta en el segundo a proposito.
 
 | grado | que significa | estado |
 |---|---|---|
-| 1. de datos | no necesita ningun archivo derivado por otro cuaderno | **si** en visualizacion; **no** al reentrenar |
-| 2. de ejecucion | corre de punta a punta en un checkout limpio, sin correr nada antes | **si** en visualizacion |
-| 3. de codigo | no importa nada del repositorio: todo vive en sus celdas | **no**, y no conviene |
+| 1. de datos | no necesita ningún archivo derivado por otro cuaderno | **si** en visualización; **no** al reentrenar |
+| 2. de ejecución | corre de punta a punta en un checkout limpio, sin correr nada antes | **si** en visualización |
+| 3. de código | no importa nada del repositorio: todo vive en sus celdas | **no**, y no conviene |
 
 **Lo medido, no lo supuesto.** Con `EJECUCION = "visualizacion"` este cuaderno
 corre completo sobre un checkout recien clonado -- sin `data/derived/`, sin
@@ -1835,37 +1835,37 @@ lo verifica archivo por archivo en vez de afirmarlo.
 
 Funciona por una decision concreta: **todo lo que el visor necesita viaja dentro
 de `data/models/mil_vano_ventana_v1.pt`**, que si esta versionado. El artefacto
-no guarda solo los pesos. Lleva los nombres de las features, la particion en
+no guarda solo los pesos. Lleva los nombres de las features, la partición en
 modalidades, la matriz del grafo experto, la lista de aristas con su camino, la
-geometria KMeans de 01.4 y el desglose de desempeno por clase. Las predicciones
+geometría KMeans de 01.4 y el desglose de desempeno por clase. Las predicciones
 fuera de pliegue (`.npz`) quedaron como extra OPCIONAL justamente para que el
 visor no dependa de `data/derived/`, que `.gitignore` excluye.
 
 ### Que rompe la autocontencion, y por que
 
 - **Reentrenar.** `EJECUCION = "entrenamiento"` necesita el CSV de eventos (que
-  viaja por git-lfs), la seleccion experta y la geometria KMeans de 01.4. Ese
-  camino depende de 01.4 POR DISENO: la clase de criticidad no se reajusta aqui,
-  se hereda. Ademas SOBREESCRIBE el artefacto que consume el simulador.
-- **La descripcion de la base.** Mostrar como se ven los datos crudos exige
+  viaja por git-lfs), la selección experta y la geometría KMeans de 01.4. Ese
+  camino depende de 01.4 POR DISENO: la clase de criticidad no se reajusta aquí,
+  se hereda. Además SOBREESCRIBE el artefacto que consume el simulador.
+- **La descripción de la base.** Mostrar como se ven los datos crudos exige
   abrir el CSV. No hay forma de describir una base sin mirarla; lo que si se
   puede es mirarla barata (ver la celda de vista preliminar).
-- **El codigo.** Los modulos de `src/chec_impacto/` y `src/chec_local_interpreter/`
-  se importan por ruta. Es la unica dependencia que NO conviene eliminar: son miles
-  de lineas con pruebas propias. Del paquete `scripts/` este cuaderno ya no importa
-  nada; solo lo nombra al citar quien produce la geometria.
+- **El código.** Los modulos de `src/chec_impacto/` y `src/chec_local_interpreter/`
+  se importan por ruta. Es la única dependencia que NO conviene eliminar: son miles
+  de líneas con pruebas propias. Del paquete `scripts/` este cuaderno ya no importa
+  nada; solo lo nombra al citar quien produce la geometría.
 
 ### Las alternativas, con lo que cuesta cada una
 
 | alternativa | que resolveria | que cuesta | veredicto |
 |---|---|---|---|
-| Copiar la libreria dentro de celdas | grado 3 completo | duplica miles de lineas ya probadas; las pruebas dejan de cubrir lo que corre; el cuaderno se desincroniza del paquete a la primera correccion | **descartada** |
-| Empaquetar `src/` como wheel e instalarlo con `%pip install` | quita el `sys.path` manual | agrega un paso de construccion y un pin de version; el cuaderno deja de leer el arbol de trabajo, asi que editar `src/` ya no llega | **solo para Databricks**, donde `/subir-notebooks-databricks` ya hace el equivalente |
+| Copiar la libreria dentro de celdas | grado 3 completo | duplica miles de líneas ya probadas; las pruebas dejan de cubrir lo que corre; el cuaderno se desincroniza del paquete a la primera correccion | **descartada** |
+| Empaquetar `src/` como wheel e instalarlo con `%pip install` | quita el `sys.path` manual | agrega un paso de construcción y un pin de versión; el cuaderno deja de leer el arbol de trabajo, así que editar `src/` ya no llega | **solo para Databricks**, donde `/subir-notebooks-databricks` ya hace el equivalente |
 | Versionar `data/derived/` | grado 1 en los dos modos | cientos de MB de `joblib` en git para archivos que cualquier corrida reproduce | **descartada** (`.gitignore` ya lo decidio) |
-| Leer la geometria KMeans del `.pt` en vez de un artefacto versionado | grado 1 para el visor | ninguno: la geometria ya viaja dentro del artefacto | **adoptada para visualizacion** -- las celdas de visualizacion la leen del `.pt`; el camino de entrenamiento lee `data/geometria_kmeans_014_v1.json` (versionado, productor `scripts/exportar_geometria.py`), sin extraer de ninguna notebook (`sdd/retire-base-apps-notebooks/design`, D3b) |
-| Congelar tambien una vista de la base dentro del `.pt` | quitaria el CSV de las celdas descriptivas | el artefacto dejaria de ser un modelo y pasaria a ser un cache de datos; habria que regenerarlo con cada base | **descartada**: la vista preliminar cuesta menos que el problema que crea |
+| Leer la geometría KMeans del `.pt` en vez de un artefacto versionado | grado 1 para el visor | ninguno: la geometría ya viaja dentro del artefacto | **adoptada para visualización** -- las celdas de visualización la leen del `.pt`; el camino de entrenamiento lee `data/geometria_kmeans_014_v1.json` (versionado, productor `scripts/exportar_geometria.py`), sin extraer de ninguna notebook (`sdd/retire-base-apps-notebooks/design`, D3b) |
+| Congelar también una vista de la base dentro del `.pt` | quitaria el CSV de las celdas descriptivas | el artefacto dejaria de ser un modelo y pasaria a ser un cache de datos; habria que regenerarlo con cada base | **descartada**: la vista preliminar cuesta menos que el problema que crea |
 
-**Regla que queda escrita.** Ninguna celda del camino de visualizacion escribe
+**Regla que queda escrita.** Ninguna celda del camino de visualización escribe
 en disco ni depende de `data/derived/`. Si una celda nueva necesita un derivado,
 va al camino de entrenamiento o se lee del artefacto.
 '''
@@ -1969,19 +1969,19 @@ _MD_BASE_CRUDA = '''\
 ## La base cruda: una vista preliminar de `Indicadores_vano_v3.csv`
 
 Antes de hablar de features conviene ver de que se parte. La base tiene **una
-fila por evento de falla** -- no por vano y no por dia --, y arrastra en esa
+fila por evento de falla** -- no por vano y no por día --, y arrastra en esa
 misma fila todo lo que se sabe del vano, del apoyo, del transformador, del
 equipo que lo protege y del clima de las 12 horas previas.
 
 La celda que sigue **no carga la base**. Abre el primer bloque con
-`pyarrow.csv.open_csv` y se detiene ahi: para una vista preliminar hacen falta el
+`pyarrow.csv.open_csv` y se detiene ahí: para una vista preliminar hacen falta el
 encabezado, los tipos y unas filas, no los cientos de MB. Leerla entera con
 `pandas.read_csv` cuesta decenas de segundos y un pico de memoria de varios
 cientos de MB, y no responderia nada mas de lo que responde el primer bloque.
 
 Los tipos que se reportan son los que **infiere pyarrow del texto del CSV**, no
 los que tendra la matriz del modelo: todo lo que entra al modelo termina en
-`float32`, y como llega ahi es justamente lo que explica la seccion siguiente.
+`float32`, y como llega ahí es justamente lo que explica la seccion siguiente.
 '''
 
 _CODE_VISTA_PREVIA = '''\
@@ -2058,65 +2058,65 @@ _MD_PREPROCESOS = '''\
 ## Los preprocesos, variable por variable, y que significa cada uno
 
 Entre el CSV y la matriz que ve el modelo hay una cadena fija. Ninguno de sus
-pasos ajusta nada contra el objetivo: la unica estadistica que se calcula sobre
+pasos ajusta nada contra el objetivo: la única estadística que se calcula sobre
 los datos es la frecuencia de `COD_CAUSA`, y depende solo de esa columna.
 
-**1. Seleccion experta.** Se conservan las columnas con `SELECCION = 1` en
+**1. Selección experta.** Se conservan las columnas con `SELECCION = 1` en
 `Variables_seleccion.xlsx`. El objetivo (`UITI_VANO`) se salta explicitamente: es
 lo que se predice, no una entrada.
 
-**2. Expansion climatica.** Una familia climatica no es una columna sino doce.
+**2. Expansion climática.** Una familia climática no es una columna sino doce.
 `prep` se convierte en `prep_0 .. prep_11`, donde `_0` es la hora del evento y
 `_11` doce horas antes. Por eso una sola fila de `Variables_seleccion.xlsx`
 puede aportar doce features, y por eso el simulador trata la familia entera como
 UN control y no como doce.
 
-**3. Fechas a numero.** Una columna con tipo de fecha pasa a segundos desde 1970 y
+**3. Fechas a número.** Una columna con tipo de fecha pasa a segundos desde 1970 y
 luego a `float32`. Con la base actual **ninguna feature toma ese camino**: la
-unica columna de fecha del CSV es `FECHA`, que no es una feature -- define la
+única columna de fecha del CSV es `FECHA`, que no es una feature -- define la
 ventana de la bolsa. Las dos columnas que suenan a fecha y si son features,
-`FECHA_OPERACION_VANO` y `FECHA_OPERACION_TRF`, vienen como el ANO en entero, asi
-que siguen la ruta numerica. El paso queda descrito igual porque una base futura
+`FECHA_OPERACION_VANO` y `FECHA_OPERACION_TRF`, vienen como el ANO en entero, así
+que siguen la ruta numérica. El paso queda descrito igual porque una base futura
 puede traer una fecha real y el resultado cambiaria sin aviso. La celda siguiente
 resuelve la ruta de cada variable contra el tipo REAL del CSV, no contra su
 nombre.
 
-**4. Imputacion numerica: un centinela, no una media.** Un faltante en una
-columna numerica se reemplaza por `-10 * max(columna)`. No es un valor plausible
+**4. Imputacion numérica: un centinela, no una media.** Un faltante en una
+columna numérica se reemplaza por `-10 * max(columna)`. No es un valor plausible
 y no pretende serlo: cae MUY fuera del rango observado, siempre del mismo lado, y
 a una distancia proporcional a la escala propia de la variable. La consecuencia
 practica es doble. A favor: "no se sabe" queda distinguible y el modelo puede
-aprenderlo como una condicion mas. En contra: **cualquier promedio de esa columna
-deja de ser interpretable**, porque los faltantes lo arrastran. Es la razon por la
+aprenderlo como una condición mas. En contra: **cualquier promedio de esa columna
+deja de ser interpretable**, porque los faltantes lo arrastran. Es la razón por la
 que el simulador guarda `max_values_imputed` -- sin ese diccionario no hay como
 volver del centinela al valor legible.
 
 **5. Categoricas a entero.** Cada columna de texto pasa por un `LabelEncoder`,
-con los faltantes convertidos antes en la categoria `"no aplica"`. El codigo
+con los faltantes convertidos antes en la categoría `"no aplica"`. El código
 resultante es ORDINAL sin que el orden signifique nada: `CONDUCTOR = 7` no esta
-"entre" 6 y 8 en ningun sentido fisico. Es una simplificacion deliberada y tiene
+"entre" 6 y 8 en ningún sentido físico. Es una simplificacion deliberada y tiene
 consecuencia directa en el simulador: mover un control categorico exige su
 `label_encoders`, y sin el la variable se salta EN SILENCIO.
 
 **6. `COD_CAUSA`, por dos caminos a la vez.** No esta seleccionada en el Excel;
-entra por su propio codificador. El codigo crudo se reemplaza por su frecuencia
+entra por su propio codificador. El código crudo se reemplaza por su frecuencia
 relativa en la base completa -- calculada solo desde esa columna, nunca desde el
-objetivo -- y ademas se abre en un indicador binario por cada codigo con
+objetivo -- y además se abre en un indicador binario por cada código con
 frecuencia mayor o igual al 1%, mas un `COD_CAUSA_OTRAS` que absorbe la cola. La
-frecuencia sola perderia la identidad del codigo; los indicadores solos perderian
+frecuencia sola perderia la identidad del código; los indicadores solos perderian
 el orden de magnitud. La columna de frecuencia conserva EXACTAMENTE el nombre
 `COD_CAUSA` porque es el nodo del grafo experto: renombrarla borra sus aristas.
 
 **7. Lo que NO se hace, y conviene saberlo.** No hay estandarizacion global de la
 entrada. El encoder ve `x` tal cual y se apoya en `LayerNorm` por instancia; la
-media y la desviacion por columna (`feature_mean`, `feature_std`) se calculan
+media y la desviación por columna (`feature_mean`, `feature_std`) se calculan
 sobre el pliegue de ENTRENAMIENTO y se usan SOLO dentro del termino de
 reconstruccion de la perdida. Tampoco hay imputacion por vecinos, ni recorte de
 atipicos, ni balanceo de clases: el desbalance se trata en la perdida, con pesos
 de densidad inversa, no tocando los datos.
 
 **8. Exclusiones verificadas, no convenidas.** Dos familias no pueden ser feature
-de instancia y la construccion de la matriz lo comprueba en vez de confiar en la
+de instancia y la construcción de la matriz lo comprueba en vez de confiar en la
 convencion: **fuga algebraica** (`DURACION`, `TOT_USUS`, `UITI`,
 `PORC_APORTE_VANO`, `UITI_VANO` -- el objetivo se reconstruye a partir de ellas) y
 **senal de cardinalidad** (`num_eventos`, `counts` -- cuentan cuantas instancias
@@ -2203,7 +2203,7 @@ display(tabla_preprocesos)
 '''
 
 _MD_COSTO_COMPUTO = '''\
-## Costo del modelo: parametros, buffers y pasadas
+## Costo del modelo: parámetros, buffers y pasadas
 
 La seccion anterior describe QUE calcula la perdida. Esta describe CUANTO cuesta
 calcularla, que es la otra mitad de la pregunta y la que decide si el
@@ -2211,21 +2211,21 @@ reentrenamiento cabe en la maquina que se tenga.
 
 **Tres cantidades que no se deben mezclar:**
 
-- **Parametros aprendibles.** Lo que el optimizador mueve. Casi todo vive en los
-  codificadores y decodificadores por modalidad; el resto -- atencion, decodificador
+- **Parámetros aprendibles.** Lo que el optimizador mueve. Casi todo vive en los
+  codificadores y decodificadores por modalidad; el resto -- atención, decodificador
   de compuertas, las dos capas de FiLM y la cabeza -- es una fraccion pequena.
 - **Buffers fijos.** La matriz de adyacencia y los indices de arista se registran
-  como buffers, no como parametros: **ocupan memoria y no reciben gradiente**. Es
-  la forma tecnica de la afirmacion "el grafo es fijo".
+  como buffers, no como parámetros: **ocupan memoria y no reciben gradiente**. Es
+  la forma técnica de la afirmacion "el grafo es fijo".
 - **Pasadas por lote.** El regresor hace **dos** pasadas de codificacion sobre el
   MISMO modulo base, no una: la primera produce la compuerta, la segunda produce la
-  prediccion. Un lote cuesta aproximadamente el doble que un codificador simple, y
+  predicción. Un lote cuesta aproximadamente el doble que un codificador simple, y
   esa duplicacion es estructural, no un desperdicio que se pueda optimizar.
 
 **Donde crece el costo.** Con la disposicion CSR el trabajo es proporcional al
-numero de INSTANCIAS, no al de bolsas ni al maximo de instancias por bolsa. Era
+número de INSTANCIAS, no al de bolsas ni al máximo de instancias por bolsa. Era
 exactamente el argumento contra el tensor rellenado: mas de la mitad de las bolsas
-tienen un solo evento y el maximo esta en decenas, asi que rellenar habria
+tienen un solo evento y el máximo esta en decenas, así que rellenar habria
 multiplicado el computo por mas de cuarenta sobre la mayor parte de los datos.
 
 **La propagacion sobre el grafo es barata y no escala con `p`.** Cuesta una
@@ -2233,11 +2233,11 @@ operacion por arista y por instancia, no `p x p`: `index_add` escribe unicamente
 en las columnas destino. Un grafo de decenas de aristas sobre decenas de features
 es despreciable frente a los codificadores.
 
-**El presupuesto del reentrenamiento es una compuerta, no una estimacion.** La
+**El presupuesto del reentrenamiento es una compuerta, no una estimación.** La
 celda de pronostico del camino de entrenamiento cronometra UN pliegue real y
-proyecta la validacion cruzada completa contra `COST_CEILING_SECONDS`. Si la
+proyecta la validación cruzada completa contra `COST_CEILING_SECONDS`. Si la
 proyeccion no cabe, el entrenamiento completo NO se lanza. Ninguna corrida MIL se
-cronometro nunca al escribir este cuaderno, y por eso el numero se mide en vez de
+cronometro nunca al escribir este cuaderno, y por eso el número se mide en vez de
 declararse.
 '''
 
@@ -2299,30 +2299,30 @@ cuales no**. Hay que separar tres afirmaciones que suenan parecidas.
 2. **Solo algunas son entrada de la PROPAGACION.** La propagacion lee las columnas
    que son ORIGEN de alguna arista y escribe unicamente en las que son DESTINO.
 3. **Una variable con grado de entrada 0 pasa intacta.** El `index_add` solo toca
-   las columnas destino, asi que los indicadores `COD_CAUSA_*`, por ejemplo,
+   las columnas destino, así que los indicadores `COD_CAUSA_*`, por ejemplo,
    atraviesan el grafo sin modificarse. Eso no las excluye del modelo: las excluye
    del grafo.
 
 **De donde salen las aristas.** No se estiman. Son una lista escrita a mano en
 `chec_impacto/data/graph.py`, con pesos que son juicio experto -- valores como
 `("ALTURA", "NR_T", 0.75)` --, no correlaciones medidas. Los datos deciden UNA
-sola cosa: **cuales nodos existen**. Si un codigo de causa no alcanza el umbral de
+sola cosa: **cuales nodos existen**. Si un código de causa no alcanza el umbral de
 frecuencia, su columna no esta y las aristas que lo tocaban no se proyectan.
 
 **Aristas directas y aristas virtuales.** El grafo experto describe la red
-completa, incluidas variables que la seleccion no conserva. Cuando una arista pasa
+completa, incluidas variables que la selección no conserva. Cuando una arista pasa
 por un nodo eliminado, la conectividad se PRESERVA: se crea una arista virtual
-entre los extremos que si sobreviven, con el peso minimo del camino, y el camino
+entre los extremos que si sobreviven, con el peso mínimo del camino, y el camino
 original queda registrado. Sin eso, quitar una variable intermedia cortaria en
-silencio una relacion que el experto si declaro.
+silencio una relación que el experto si declaro.
 
-**El unico camino cruzado entre modalidades.** La fusion `film` y las aristas que
-unen la rama estructural con la climatica son los dos unicos lugares donde las dos
+**El único camino cruzado entre modalidades.** La fusion `film` y las aristas que
+unen la rama estructural con la climática son los dos unicos lugares donde las dos
 modalidades se encuentran. Cuantas aristas cruzadas hay, y cuales, lo imprime la
-celda siguiente -- es un numero pequeno, y por eso la fusion `film` existe.
+celda siguiente -- es un número pequeno, y por eso la fusion `film` existe.
 
 **`COD_CAUSA` es el sumidero.** Recibe aristas y no emite ninguna. Es el nodo
-donde converge el flujo del grafo, y es tambien la razon de que su nombre no se
+donde converge el flujo del grafo, y es también la razón de que su nombre no se
 pueda cambiar.
 '''
 
@@ -2415,7 +2415,7 @@ veces, sobre unidades distintas:
 - **A nivel de vano.** Un punto es un vano, con las mismas dos coordenadas.
 
 Y `04_uiti_vano_trayectorias_vano` repite el procedimiento una tercera vez, sobre
-la celda `(circuito, vano, ventana)`. Esa tercera es la que importa aqui.
+la celda `(circuito, vano, ventana)`. Esa tercera es la que importa aquí.
 
 En los tres casos: K-Means a **4 grupos** sobre un espacio FIJO -- eje x lineal,
 eje y en `log10`, escalador `minmax` -- ajustado **una sola vez sobre la ventana
@@ -2430,7 +2430,7 @@ la MEDIANA del UITI acumulado**, de menor a mayor: `Bajo`, `Medio`, `Medio-Alto`
 `Alto`. Ese es todo el contenido del ranking, y es lo que hace que el indice del
 centroide SEA el id final de la clase, sin remapeos posteriores.
 
-Un aviso que el tablero 02 documenta y que aplica igual aqui: con centroides
+Un aviso que el tablero 02 documenta y que aplica igual aquí: con centroides
 fijos, el orden por mediana esta garantizado sobre la ventana completa, no sobre
 cualquier subrango. En un rango corto un grupo puede quedar con pocos puntos y
 cruzarse con su vecino.
@@ -2442,9 +2442,9 @@ aplican el mismo procedimiento sobre agregaciones distintas, y sus centroides NO
 son intercambiables**. El tablero 02 acumula por vano sobre todo el rango elegido;
 01.4 ajusta sobre la celda `(circuito, vano, ventana)`.
 
-Lo que este cuaderno hereda es la geometria de **01.4**, y su unidad es
+Lo que este cuaderno hereda es la geometría de **01.4**, y su unidad es
 exactamente la celda `(circuito, vano, ventana)` -- que es, letra por letra, la
-definicion de una bolsa. Por eso la herencia funciona: la regla de clase se aplica
+definición de una bolsa. Por eso la herencia funciona: la regla de clase se aplica
 sobre la misma unidad sobre la que se ajusto. Tomar en su lugar los centroides del
 nivel de vano de 02 asignaria clases con fronteras ajustadas a otra poblacion, y
 nada en el resultado lo delataria.
@@ -2454,8 +2454,8 @@ Con eso se aplica la regla de **centroide mas cercano** sobre el par `(n_obs
 OBSERVADO, u ESTIMADO)`.
 
 De las dos coordenadas que deciden la clase, **el modelo solo aporta una**. El
-numero de eventos es observado siempre, en la verdad y en la prediccion; lo unico
-que el modelo predice es el UITI acumulado. Es la razon por la que el contexto del
+número de eventos es observado siempre, en la verdad y en la predicción; lo único
+que el modelo predice es el UITI acumulado. Es la razón por la que el contexto del
 informe declara explicitamente que el conteo de eventos NO es una salida del
 modelo: un lector razonable supondria lo contrario.
 
@@ -2466,7 +2466,7 @@ grupos. El mismo aviso vale entre el nivel de vano y el de celda vano-ventana: u
 vano puede ser `Alto` en el acumulado del periodo y `Bajo` en una ventana
 tranquila.
 
-La celda siguiente dibuja esa particion con la geometria REAL del artefacto, y
+La celda siguiente dibuja esa partición con la geometría REAL del artefacto, y
 verifica el ranking en vez de repetirlo.
 '''
 
@@ -2565,44 +2565,44 @@ _MD_ENTRENAMIENTO_GUIA = '''\
 Antes de las celdas conviene el mapa, porque el orden no es arbitrario: cada
 etapa existe para que la siguiente sea legitima.
 
-**1. De la base a las instancias.** Se lee el CSV, se aplica la seleccion experta
-y la expansion climatica, se codifica `COD_CAUSA` y se arma la matriz de
-instancias. `p` se deriva en tiempo de ejecucion; escribirlo a mano seria la forma
+**1. De la base a las instancias.** Se lee el CSV, se aplica la selección experta
+y la expansion climática, se codifica `COD_CAUSA` y se arma la matriz de
+instancias. `p` se deriva en tiempo de ejecución; escribirlo a mano seria la forma
 mas facil de que una feature nueva pase inadvertida.
 
 **2. El grafo experto.** Se construye sobre las features que quedaron, con la
 preservacion de conectividad a traves de los nodos descartados. Se verifica que
-`COD_CAUSA` sea un sumidero puro y que el numero de aristas sea el que el diseno
+`COD_CAUSA` sea un sumidero puro y que el número de aristas sea el que el diseno
 deriva.
 
-**3. La geometria de 01.4.** Se reutiliza, nunca se reajusta, y se verifica por
+**3. La geometría de 01.4.** Se reutiliza, nunca se reajusta, y se verifica por
 sha1. Si los centroides se movieron, la corrida se detiene: las clases se correrian
-en silencio y ningun resultado lo diria.
+en silencio y ningún resultado lo diria.
 
 **4. Las bolsas.** Se reconstruyen las 11 ventanas con el mismo corte de 01.4 y se
 agrupan los eventos por celda `(circuito, vano, ventana)`. Los tamanos quedan
 fijados con asserts contra los valores poblacionales medidos.
 
 **5. La compuerta de costo.** Se cronometra UN pliegue real y se proyecta la
-validacion cruzada completa. Si la proyeccion excede el techo declarado, el
+validación cruzada completa. Si la proyeccion excede el techo declarado, el
 entrenamiento completo NO se lanza. Es una compuerta, no un aviso.
 
-**6. La validacion cruzada agrupada.** `StratifiedGroupKFold` con
+**6. La validación cruzada agrupada.** `StratifiedGroupKFold` con
 `groups = CIRCUITO|FID_VANO`: un mismo vano nunca queda partido entre entrenamiento
 y prueba. Sin eso, la persistencia del vano se colaria como si fuera capacidad
-predictiva -- y la linea base de persistencia existe justamente para medir cuanta
+predictiva -- y la línea base de persistencia existe justamente para medir cuanta
 de esa "capacidad" es solo memoria.
 
-**7. Las barras y las guardas.** El modelo se compara contra las tres lineas base y
-debe superar a la MEJOR, no solo a la mas debil. Ademas corren la guarda de proxy
+**7. Las barras y las guardas.** El modelo se compara contra las tres líneas base y
+debe superar a la MEJOR, no solo a la mas debil. Además corren la guarda de proxy
 univariante (A3), la deteccion de colapso de compuertas (A4) y el diagnostico de
-particion temporal (A6), que se reporta al lado y nunca reselecciona la metrica
+partición temporal (A6), que se reporta al lado y nunca reselecciona la métrica
 principal.
 
 **8. El modelo final y sus artefactos.** Un ajuste sobre TODAS las bolsas produce
 el modelo que se guarda -- distinto de los cinco modelos por pliegue, que solo
-existen para medir. De ahi salen las relevancias por Kernel SHAP agregadas en un
-ranking Borda, y la verificacion del contrato que el simulador espera.
+existen para medir. De ahí salen las relevancias por Kernel SHAP agregadas en un
+ranking Borda, y la verificación del contrato que el simulador espera.
 
 **Lo que este cuaderno NO hace.** No busca hiperparametros: los valores son fijos
 y razonables, y no hay un objetivo de Optuna definido para este modelo. Tampoco
@@ -2610,84 +2610,84 @@ construye ni corre el simulador; solo verifica el contrato que el simulador exig
 '''
 
 _MD_SIMULADOR = '''\
-## Que hace el simulador con lo que sale de aqui
+## Que hace el simulador con lo que sale de aquí
 
-El simulador (`chec_tableros.simulador`, servido como aplicacion local por
+El simulador (`chec_tableros.simulador`, servido como aplicación local por
 `aplicaciones/06_simulador`) carga el artefacto de este cuaderno y responde tres
-preguntas distintas. Ninguna de las tres se calcula aqui, pero las tres dependen
-de decisiones que si se toman aqui.
+preguntas distintas. Ninguna de las tres se calcula aquí, pero las tres dependen
+de decisiones que si se toman aquí.
 
-### 1. Prediccion de grupo
+### 1. Predicción de grupo
 
 Es la misma cadena que el visor: dos pasadas del modelo sobre las bolsas de la
-seleccion -- una con los valores observados y otra con los valores intervenidos --
+selección -- una con los valores observados y otra con los valores intervenidos --
 y sobre cada una la regla de centroide mas cercano con `(n_obs OBSERVADO, u
-estimado)`. Cuesta exactamente **dos** pasadas para toda la seleccion, nunca una
+estimado)`. Cuesta exactamente **dos** pasadas para toda la selección, nunca una
 por vano: los valores por vano se escriben en UNA matriz y se puntuan juntos.
 
 El indicador que compara escenarios es la **clase esperada**, es decir la
-distribucion suave de clases por su indice, promediada. La clase REPORTADA sigue
-siendo el argmin duro; la version suave existe solo para que la diferencia entre
-dos escenarios sea un numero continuo en vez de un escalon. Su `argmax` coincide
+distribución suave de clases por su indice, promediada. La clase REPORTADA sigue
+siendo el argmin duro; la versión suave existe solo para que la diferencia entre
+dos escenarios sea un número continuo en vez de un escalon. Su `argmax` coincide
 siempre con la clase dura, porque la softmax es monotona en la distancia negativa.
 
 ### 2. El grafo de inferencia
 
 No es el grafo experto tal cual, y tampoco es un grafo aprendido. Es **el grafo
-experto tal como ESTA seleccion de vanos lo usa**: para cada arista, el peso fijo
+experto tal como ESTA selección de vanos lo usa**: para cada arista, el peso fijo
 multiplicado por la compuerta media que el modelo decodifico para esas bolsas. Las
-compuertas salen de la misma pasada que ya se hizo para predecir, asi que no
+compuertas salen de la misma pasada que ya se hizo para predecir, así que no
 cuesta nada extra.
 
 Dos decisiones importan al leerlo:
 
 - **Se anula si las compuertas colapsan.** Una compuerta que no varia entre vanos
-  no lleva estructura propia de la seleccion, y dibujarla presentaria el grafo
-  experto fijo como si la seleccion lo hubiera producido. Con muy pocos vanos se
-  anula por construccion.
+  no lleva estructura propia de la selección, y dibujarla presentaria el grafo
+  experto fijo como si la selección lo hubiera producido. Con muy pocos vanos se
+  anula por construcción.
 - **El panel muestra la DIFERENCIA, no el grafo.** Como el grafo es casi todo peso
-  experto fijo, el antes y el despues se ven iguales lado a lado y el efecto de la
+  experto fijo, el antes y el después se ven iguales lado a lado y el efecto de la
   intervencion -- que es el punto del panel -- queda invisible. Se muestra
   `|base - simulado|` en valor absoluto: la pregunta es cuanto se movio cada
-  relacion, no en que direccion. Una matriz toda en cero es un RESULTADO, no un
-  panel vacio: dice que la intervencion no movio ninguna relacion.
+  relación, no en que dirección. Una matriz toda en cero es un RESULTADO, no un
+  panel vacio: dice que la intervencion no movio ninguna relación.
 
-### 3. Analisis de sensibilidad de variables relevantes
+### 3. Análisis de sensibilidad de variables relevantes
 
-Un barrido de minimo y maximo por control. Para cada control numerico se fija toda
-su familia en su valor minimo, luego en su maximo, y se mide cuanto se movio la
+Un barrido de mínimo y máximo por control. Para cada control numérico se fija toda
+su familia en su valor mínimo, luego en su máximo, y se mide cuanto se movio la
 clase esperada respecto de la base. La relevancia de un control es la magnitud
-mayor de las dos, y se reporta ademas hacia donde empuja cada extremo.
+mayor de las dos, y se reporta además hacia donde empuja cada extremo.
 
 - **Cuesta `1 + 2 x controles_numericos` pasadas**, no una tanda por vano: cada
-  pasada ya devuelve un valor por bolsa, asi que basta con no promediarlo para
+  pasada ya devuelve un valor por bolsa, así que basta con no promediarlo para
   obtener el ranking de CADA vano en el mismo barrido.
-- **Una familia climatica es UN control, no doce.** Sus doce rezagos se mueven
-  juntos. Es la razon de ser del catalogo de controles.
+- **Una familia climática es UN control, no doce.** Sus doce rezagos se mueven
+  juntos. Es la razón de ser del catalogo de controles.
 - **Los controles sin limites numericos se saltan.** Inventarles un rango
   puntuaria un escenario que nadie pidio.
 
 ### Lo que decide este cuaderno y el simulador solo obedece
 
 Que features existen y en que orden, que aristas tiene el grafo y cuanto pesan,
-cual es la geometria de clases, y el contrato de salida. Un cambio en cualquiera de
+cual es la geometría de clases, y el contrato de salida. Un cambio en cualquiera de
 esos cuatro obliga a reentrenar: el cargador RECHAZA un desajuste de nombres de
-features, y con razon -- puntuar columnas equivocadas no lanza error por si solo,
+features, y con razón -- puntuar columnas equivocadas no lanza error por si solo,
 solo devuelve un mapa creible y falso.
 '''
 
 _MD_ARTEFACTOS = '''\
-## Que archivos salen de aqui, y quien los consume
+## Que archivos salen de aquí, y quien los consume
 
-Este cuaderno escribe solo al reentrenar. En modo visualizacion no toca el disco.
+Este cuaderno escribe solo al reentrenar. En modo visualización no toca el disco.
 
 | archivo | cuando se escribe | versionado | quien lo consume |
 |---|---|---|---|
 | `data/models/mil_vano_ventana_v1.pt` | al reentrenar con `mode="full"` | **si** | el visor de este cuaderno, el simulador, el informe y las aplicaciones locales y de Databricks |
-| `data/derived/oof_mil_{mode}_{fusion}_clase{lambda}.npz` | tras la validacion cruzada | no | analisis posteriores; **opcional** para el visor, que lee el desglose desde el `.pt` |
-| `data/derived/bolsas_mil_{mode}.joblib` | al construir las bolsas | no | el simulador, para no rehacer la construccion en cada arranque |
+| `data/derived/oof_mil_{mode}_{fusion}_clase{lambda}.npz` | tras la validación cruzada | no | análisis posteriores; **opcional** para el visor, que lee el desglose desde el `.pt` |
+| `data/derived/bolsas_mil_{mode}.joblib` | al construir las bolsas | no | el simulador, para no rehacer la construcción en cada arranque |
 
-La geometria KMeans **ya no aparece en esa tabla**, y es un cambio que conviene
+La geometría KMeans **ya no aparece en esa tabla**, y es un cambio que conviene
 notar: antes se derivaba en caliente -- si faltaba el cache, se extraia del HTML
 guardado del cuaderno 04 --, y hoy es un artefacto VERSIONADO
 (`data/geometria_kmeans_014_v1.json`) que este cuaderno solo LEE. Lo produce
@@ -2695,7 +2695,7 @@ guardado del cuaderno 04 --, y hoy es un artefacto VERSIONADO
 el modelo, el simulador y los informes no debia regenerarse como efecto
 secundario de abrir un cuaderno.
 
-Hay ademas dos derivados que este cuaderno NO escribe pero que dependen del mismo
+Hay además dos derivados que este cuaderno NO escribe pero que dependen del mismo
 artefacto: el catalogo de controles del simulador y el cache de relevancias por
 circuito y ventana, ambos bajo `data/derived/`. Se invalidan por las huellas de sus
 archivos fuente, de modo que un artefacto nuevo no queda descrito por un cache
@@ -2707,10 +2707,10 @@ cualquier checkout limpio -- que es exactamente el escenario en el que alguien a
 el cuaderno por primera vez.
 
 **La advertencia que importa.** Reentrenar SOBREESCRIBE el artefacto que el
-simulador y el informe ya estan usando. La copia que sirve cada aplicacion se
-reconstruye por huella de sus insumos, asi que un artefacto nuevo dispara la
+simulador y el informe ya están usando. La copia que sirve cada aplicación se
+reconstruye por huella de sus insumos, así que un artefacto nuevo dispara la
 reconstruccion de los paquetes -- pero los reportes ya emitidos siguen citando
-numeros del modelo anterior.
+números del modelo anterior.
 '''
 
 _CODE_ARTEFACTOS = '''\

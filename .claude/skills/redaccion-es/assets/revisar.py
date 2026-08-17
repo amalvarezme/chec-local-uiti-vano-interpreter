@@ -28,16 +28,23 @@ from pathlib import Path
 # --------------------------------------------------------------------------- reglas
 
 # Interrogativos y exclamativos. Llevan tilde tambien en pregunta indirecta, asi que no
-# basta con mirar si hay un `?`: se busca la palabra atona en contextos donde solo cabe la
-# tonica. Se exige una marca de pregunta o un verbo de saber/decir delante para no marcar
-# el `que` conjuncion, que es el caso comun y NO lleva tilde.
+# basta con mirar si hay un `?`.
+#
+# TODO lo que sale de aqui es DUDOSO por construccion y va a su propia clase: el `que`
+# atono es la palabra mas comun del idioma y ninguna heuristica sin analisis sintactico
+# distingue "no se QUE pasa" de "la pregunta QUE se repite". La clase `tilde-dudosa` se
+# reporta para que la mire una persona; un corrector automatico NO la aplica.
 _TONICOS = {"que": "qué", "cual": "cuál", "cuales": "cuáles", "como": "cómo",
             "cuando": "cuándo", "donde": "dónde", "cuanto": "cuánto",
             "cuantos": "cuántos", "cuanta": "cuánta", "cuantas": "cuántas",
             "quien": "quién", "quienes": "quiénes"}
+# Verbos de saber/decir en forma conjugada o infinitiva. SIN `\w*` al final y sin
+# `pregunta`/`muestra`/`ver`: los tres son tambien sustantivos o comodines, y "la pregunta
+# que se repite" disparaba con ellos -- que es exactamente el falso positivo que hay que
+# evitar aqui, porque acentuar un `que` relativo cambia lo que la frase dice.
 _ANTES_INDIRECTA = re.compile(
-    r"\b(sabe|saber|dice|decir|explica|explicar|indica|indicar|muestra|mostrar|"
-    r"pregunta|preguntar|ver|mira|mirar|define|definir|depende)\w*\s+(?:de\s+)?$",
+    r"\b(?<!la\s)(?<!una\s)(sabe|sabemos|saber|sabia|dice|decir|explica|explicar|"
+    r"indica|indicar|averiguar|preguntar|preguntarse|define|definir|depende)\s+(?:de\s+)?$",
     re.I)
 
 # Palabras cuya forma sin tilde NO existe en espanol: aqui no hay ambiguidad posible.
@@ -65,6 +72,32 @@ _SIEMPRE_CON_TILDE = {
     "habra": "habrá", "podra": "podrá", "deberia": "debería", "podria": "podría",
     "fisica": "física", "fisico": "físico", "electrico": "eléctrico",
     "electrica": "eléctrica", "automatico": "automático", "automatica": "automática",
+    "funcion": "función", "funciones": "funciones", "formula": "fórmula",
+    "formulas": "fórmulas", "metrica": "métrica", "metricas": "métricas",
+    "construccion": "construcción", "representacion": "representación",
+    "inicializacion": "inicialización", "climatico": "climático", "climatica": "climática",
+    "geometria": "geometría", "distribucion": "distribución", "validacion": "validación",
+    "clasificacion": "clasificación", "correlacion": "correlación",
+    "desviacion": "desviación", "iteracion": "iteración", "iteraciones": "iteraciones",
+    "particion": "partición", "reduccion": "reducción", "relacion": "relación",
+    "relaciones": "relaciones", "resolucion": "resolución", "rotacion": "rotación",
+    "asignacion": "asignación", "combinacion": "combinación", "comparacion": "comparación",
+    "computacion": "computación", "definicion": "definición", "descripcion": "descripción",
+    "dimension": "dimensión", "ejecucion": "ejecución", "estimacion": "estimación",
+    "evaluacion": "evaluación", "generacion": "generación", "implementacion": "implementación",
+    "integracion": "integración", "interaccion": "interacción", "optimizacion": "optimización",
+    "penalizacion": "penalización", "regularizacion": "regularización",
+    "normalizacion": "normalización", "verificacion": "verificación",
+    "energetico": "energético", "estadistico": "estadístico", "estadisticos": "estadísticos",
+    "geografico": "geográfico", "grafica": "gráfica", "graficas": "gráficas",
+    "historico": "histórico", "historica": "histórica", "logico": "lógico",
+    "numerico": "numérico", "numerica": "numérica", "practico": "práctico",
+    "teorico": "teórico", "topologia": "topología", "trafico": "tráfico",
+    "energias": "energías", "tendria": "tendría", "seria": None,
+    "haria": "haría", "iria": "iría", "veria": "vería", "sabria": "sabría",
+    "estandar": "estándar", "ademas": "además", "despues": "después",
+    "ningun": "ningún", "algun": "algún", "quiza": "quizá", "jamas": "jamás",
+    "atras": "atrás", "detras": "detrás", "adonde": None, "tras": None,
 }
 
 _MULETILLAS = {
@@ -98,6 +131,16 @@ class Hallazgo:
     clase: str
     fragmento: str
     sugerencia: str
+    # Desplazamiento DENTRO del fragmento analizado, o -1 si el hallazgo no es de una
+    # posicion concreta. Sin esto, un corrector solo tiene la palabra, y `que` aparece
+    # siete veces en un parrafo donde solo UNA la necesita: parchearlas todas cambia lo
+    # que el texto dice. Es exactamente el fallo que costo revertir un cuaderno entero.
+    columna: int = -1
+
+
+#: Clases que un corrector automatico puede aplicar sin leer la frase. El resto se
+#: reporta y lo decide una persona.
+AUTOMATICAS = frozenset({"tilde"})
 
 
 def _sin_tildes(texto: str) -> str:
@@ -123,6 +166,21 @@ def _signos(texto: str, archivo: str, linea: int) -> list[Hallazgo]:
     return fuera
 
 
+def _con_la_caja_de(original: str, correcta: str) -> str:
+    """La palabra acentuada, en la MISMA caja que traia.
+
+    Tres casos y no dos. `.capitalize()` sobre una palabra en mayusculas la destruye --
+    `GEOMETRIA` acababa en `Geometria` --, y en este repositorio las mayusculas dentro de
+    una frase son enfasis deliberado del autor, no un descuido que haya que normalizar.
+    Y las mayusculas TAMBIEN se acentuan: `GEOMETRÍA`, no `GEOMETRIA`.
+    """
+    if original.isupper():
+        return correcta.upper()
+    if original[:1].isupper():
+        return correcta[:1].upper() + correcta[1:]
+    return correcta
+
+
 def _tildes(texto: str, archivo: str, linea: int) -> list[Hallazgo]:
     fuera = []
     for m in re.finditer(r"\b[a-záéíóúñü]+\b", texto, re.I):
@@ -134,13 +192,19 @@ def _tildes(texto: str, archivo: str, linea: int) -> list[Hallazgo]:
             if correcta is None:
                 continue  # las dos formas existen: no es decidible aqui
             fuera.append(Hallazgo(archivo, linea, "tilde", palabra,
-                                  correcta if palabra.islower() else correcta.capitalize()))
+                                  _con_la_caja_de(palabra, correcta), m.start()))
         elif baja in _TONICOS:
-            antes, despues = texto[:m.start()], texto[m.end():]
-            interroga = "¿" in antes and "?" in despues
-            indirecta = bool(_ANTES_INDIRECTA.search(antes))
+            # La frase, no el bloque. Con el bloque entero, un `¿...?` en el primer
+            # renglon marcaba todos los `que` de los veinte siguientes.
+            ini = max((texto.rfind(c, 0, m.start()) for c in ".;\n¿"), default=-1)
+            fin = min((p for p in (texto.find(c, m.end()) for c in ".;\n?") if p >= 0),
+                      default=len(texto))
+            frase_antes, frase_despues = texto[max(ini, 0):m.start()], texto[m.end():fin + 1]
+            interroga = "¿" in texto[max(ini, 0):m.start()] and "?" in frase_despues
+            indirecta = bool(_ANTES_INDIRECTA.search(frase_antes))
             if interroga or indirecta:
-                fuera.append(Hallazgo(archivo, linea, "tilde", palabra, _TONICOS[baja]))
+                fuera.append(Hallazgo(archivo, linea, "tilde-dudosa", palabra,
+                                      _TONICOS[baja], m.start()))
     return fuera
 
 
@@ -166,24 +230,28 @@ def _mayusculas(texto: str, archivo: str, linea: int) -> list[Hallazgo]:
     if not seguidas:
         return []
     return [Hallazgo(archivo, linea, "mayusculas", seguidas.group(0).strip(),
-                     "caso oracion: solo la primera palabra y los nombres propios")]
+                     "caso oracion: solo la primera palabra y los nombres propios",
+                     seguidas.start())]
 
 
 def _listas(texto: str, archivo: str, linea: int) -> list[Hallazgo]:
     fuera, plano = [], _sin_tildes(texto.lower())
     for frase, mejor in _MULETILLAS.items():
         if frase in plano:
-            fuera.append(Hallazgo(archivo, linea, "verboseo", frase, mejor or "(sobra)"))
+            fuera.append(Hallazgo(archivo, linea, "verboseo", frase, mejor or "(sobra)",
+                                  plano.index(frase)))
     for frase in _REDUNDANCIAS:
         if frase in plano:
-            fuera.append(Hallazgo(archivo, linea, "redundancia", frase, "(sobra la mitad)"))
+            fuera.append(Hallazgo(archivo, linea, "redundancia", frase, "(sobra la mitad)",
+                                  plano.index(frase)))
     for frase in _DIALECTO:
         if frase in plano:
-            fuera.append(Hallazgo(archivo, linea, "dialecto", frase, "termino neutro"))
+            fuera.append(Hallazgo(archivo, linea, "dialecto", frase, "termino neutro",
+                                  plano.index(frase)))
     for m in re.finditer(r"\b\w+\b", plano):
         if m.group(0) in _ANGLICISMOS:
             fuera.append(Hallazgo(archivo, linea, "dialecto", m.group(0),
-                                  _ANGLICISMOS[m.group(0)]))
+                                  _ANGLICISMOS[m.group(0)], m.start()))
     return fuera
 
 
