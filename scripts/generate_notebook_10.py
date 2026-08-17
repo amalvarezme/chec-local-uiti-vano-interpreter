@@ -1037,7 +1037,7 @@ except ImportError as exc:
         "Los modulos de PR1-4 (data/bags.py, models/criticality_assignment.py, "
         "models/mgcecdl_mil.py, interpretability/mil_vano_ventana.py) no son importables "
         f"desde {SRC_DIR}. Verifica que corres desde el checkout y que el entorno tiene "
-        "torch/scikit-learn/shap instalados (pip install -r requirements.txt)."
+        "torch/scikit-learn instalados (pip install -r requirements.txt)."
     ) from exc
 
 print("Guarda OK: modulos PR1-4 importables.")
@@ -1048,7 +1048,6 @@ import time
 
 import numpy as np
 import pandas as pd
-import shap
 import torch
 from sklearn.ensemble import RandomForestRegressor
 
@@ -1691,25 +1690,24 @@ else:
     print("A6 OMITIDO -- requiere la compuerta de costo GO de la celda 7.")
 '''
 
-_MD_SHAP = '''\
-### Kernel SHAP -> ranking Borda
+_MD_MODELO_FINAL = '''\
+### El modelo final
 
-Relevancias por bolsa agregadas por (circuito, vano, ventana), en formato largo
-con la nota de exposicion/severidad por variable.
+Un ajuste sobre TODAS las bolsas, distinto de los cinco modelos por pliegue, que
+solo existen para medir. Es el `predictor_final` que se guarda y el que las dos
+celdas siguientes verifican.
+
+Aqui colgaba un bloque de Kernel SHAP que agregaba relevancias por bolsa en un
+ranking Borda. Salio del proyecto entero: SHAP atribuye lo que el modelo YA
+predijo, y la pregunta de este trabajo es otra -- que se puede mover para que un
+vano baje de grupo. Esa la contestan `relevancia_hacia_uiti_minimo` y
+`plan_hacia_clase_minima`, que recorren el INTERIOR del rango de cada palanca de
+intervencion (no solo sus dos extremos) y componen escenarios. Viven en
+`chec_local_interpreter/mil_simulador_015.py` y las usan el simulador y
+`/report`, no este cuaderno de entrenamiento.
 '''
 
-_CODE_SHAP = '''\
-from chec_impacto.interpretability.circuit_analysis import KernelShapTopVarsExtractor
-from chec_impacto.interpretability.mil_vano_ventana import construir_ranking_borda
-
-# La cola SHAP -> Borda vive en la libreria, con tests
-# (tests/test_mil_ranking_borda.py). Estuvo aqui como codigo suelto de celda y
-# acumulo dos defectos que solo se ejecutaban con mode='full': tratar la lista
-# que devuelve `calcular_top_vars` como si fuera un dict, y colgar la nota de
-# exposicion/severidad de una columna `_var` que `agregar_borda` no emite.
-
-TOP_N_VANOS = 97
-
+_CODE_MODELO_FINAL = '''\
 if PROCEDER_CON_ENTRENAMIENTO_COMPLETO and mode == "full":
     modelo_final, _ = construir_modelo_y_perdida(
         *calcular_estadisticas_reconstruccion_mgcecdl(X_inst_bolsas),
@@ -1727,20 +1725,9 @@ if PROCEDER_CON_ENTRENAMIENTO_COMPLETO and mode == "full":
         verbose=True,
     )
     predictor_final = BagPredictor(resultado_final["model"], features_inst, geometria, device=str(DEVICE))
-
-    rng_shap = np.random.default_rng(RANDOM_STATE)
-    indices_muestra = rng_shap.choice(n_bags, size=min(TOP_N_VANOS, n_bags), replace=False)
-    extractor = KernelShapTopVarsExtractor(predictor_final, X_bag_completo, features_inst)
-    top_vars_por_bolsa = extractor.calcular_top_vars(indices_muestra)
-
-    ranking_borda = construir_ranking_borda(bag_index.keys, indices_muestra, top_vars_por_bolsa)
-    print(f"Ranking Borda: {len(ranking_borda)} filas (grupo x variable) "
-          f"sobre {len(indices_muestra)} bolsas muestreadas.")
-    print(ranking_borda.head(15))
-    n_anotadas = int((ranking_borda["nota_exposicion_severidad"] != "").sum())
-    print(f"Filas marcadas como exposicion/severidad por construccion: {n_anotadas}")
+    print(f"Modelo final ajustado sobre {n_bags} bolsas.")
 else:
-    print("SHAP OMITIDO -- solo corre con mode='full' y la compuerta de costo en GO.")
+    print("MODELO FINAL OMITIDO -- solo corre con mode='full' y la compuerta de costo en GO.")
 '''
 
 _MD_SIMULATOR = '''\
@@ -2601,8 +2588,10 @@ principal.
 
 **8. El modelo final y sus artefactos.** Un ajuste sobre TODAS las bolsas produce
 el modelo que se guarda -- distinto de los cinco modelos por pliegue, que solo
-existen para medir. De ahí salen las relevancias por Kernel SHAP agregadas en un
-ranking Borda, y la verificación del contrato que el simulador espera.
+existen para medir. De ahí salen el artefacto `.pt` y la verificación del
+contrato que el simulador espera. El análisis de sensibilidad NO se hace aquí:
+lo hacen `relevancia_hacia_uiti_minimo` y `plan_hacia_clase_minima` sobre este
+artefacto, moviendo solo variables de intervención.
 
 **Lo que este cuaderno NO hace.** No busca hiperparametros: los valores son fijos
 y razonables, y no hay un objetivo de Optuna definido para este modelo. Tampoco
@@ -2863,8 +2852,8 @@ def build_notebook() -> nbformat.NotebookNode:
         _cell("code", _solo_entrenamiento(_CODE_A4)),
         _cell("markdown", _MD_A6),
         _cell("code", _solo_entrenamiento(_CODE_A6)),
-        _cell("markdown", _MD_SHAP),
-        _cell("code", _solo_entrenamiento(_CODE_SHAP)),
+        _cell("markdown", _MD_MODELO_FINAL),
+        _cell("code", _solo_entrenamiento(_CODE_MODELO_FINAL)),
         _cell("markdown", _MD_GUARDADO),
         _cell("code", _CODE_GUARDADO),
         _cell("markdown", _MD_SIMULATOR),

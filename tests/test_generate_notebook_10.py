@@ -304,32 +304,31 @@ def test_generator_runs_temporal_block_diagnostic_a6_as_secondary(notebook):
 # ---------------------------------------------------------------------------
 
 
-def test_generator_delegates_exposure_severity_labelling_to_tested_library(notebook):
-    """The exposure/severity family lives in the library, not in cell text.
+def test_generator_no_emite_analisis_de_sensibilidad_en_el_cuaderno(notebook):
+    """El cuaderno entrena y guarda; no explica el modelo.
 
-    This test used to assert that the literal "CAPACIDAD_NOMINAL" appeared
-    somewhere in the notebook source. It stayed green while the annotation
-    never reached a single output row, because the cell hung the label off a
-    `_var` column `agregar_borda` does not emit. Presence of a string in a
-    cell is not evidence that the behaviour works; the behaviour is now
-    covered by tests/test_mil_ranking_borda.py against the real functions.
+    Aqui se afirmaba que el cuaderno delegara el pegamento SHAP -> Borda en
+    `construir_ranking_borda`. Esa celda ya no existe: SHAP salio del proyecto y
+    con el se fue el unico productor de relevancias que el cuaderno tenia.
+
+    Lo que queda vigilado es la frontera, que es lo que de verdad se decidio: el
+    analisis de sensibilidad NO vive en el cuaderno de entrenamiento sino en
+    `mil_simulador_015` (`relevancia_hacia_uiti_minimo`, `plan_hacia_clase_minima`),
+    donde lo consumen el simulador y `/report`. Sin esta prueba, la forma natural
+    de "arreglar" un cuaderno que ya no explica nada seria volver a meterle un
+    explicador dentro.
+
+    Las afirmaciones de biblioteca que esta prueba tenia -- la composicion exacta
+    de la familia exposicion/severidad -- se mudaron a
+    tests/test_mil_ranking_borda.py, junto a las funciones que las sostienen.
     """
-    from chec_impacto.interpretability.mil_vano_ventana import (
-        COLUMNAS_EXPOSICION_SEVERIDAD,
-        construir_ranking_borda,
-    )
-
     source = _all_code_source(notebook)
-    assert "construir_ranking_borda" in source, (
-        "the notebook must delegate the SHAP -> Borda glue to the tested library function"
+    assert "import shap" not in source
+    assert "KernelShapTopVarsExtractor" not in source
+    assert "construir_ranking_borda" not in source, (
+        "el cuaderno volvio a calcular un ranking de relevancias: el analisis de "
+        "sensibilidad vive en mil_simulador_015, no aqui"
     )
-    assert "nota_exposicion_severidad" in source, (
-        "the notebook must surface the exposure/severity annotation in its output"
-    )
-    # CNT_VN is exempt from the family (D6): it answers to COD_EQ_PROTEGE.
-    assert "CNT_VN" not in COLUMNAS_EXPOSICION_SEVERIDAD
-    assert {"CAPACIDAD_NOMINAL", "PROMEDIO_KWH_TRF"} == set(COLUMNAS_EXPOSICION_SEVERIDAD)
-    assert callable(construir_ranking_borda)
 
 
 def test_generator_states_observed_n_predicted_u_boundary(notebook):
