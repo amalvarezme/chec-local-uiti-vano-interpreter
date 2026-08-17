@@ -224,3 +224,37 @@ def test_las_familias_de_clima_tambien():
         for palabra in plegado.split():
             if palabra.lower().endswith(("cion", "sion")) and palabra.lower() not in {"vision"}:
                 assert nombre != plegado, f"{clave}: {nombre!r} se imprime sin tilde"
+
+
+def test_el_contexto_de_dominio_lleva_los_nombres_de_grupo_con_tilde():
+    """"Proteccion" y "Topologia" salían tal cual en el informe: son las CLAVES de
+    `VARIABLE_GROUPS`, que el agente cita literalmente.
+
+    Las claves no se tocan: `/informe-gerencial` y los propios agentes las emiten como
+    identificadores en `variable_groups_used`, así que acentuarlas rompería ese
+    contrato. Se añade la forma legible al lado, como se hizo con las variables.
+    """
+    from chec_local_interpreter.domain_context import domain_context_payload
+
+    grupos = domain_context_payload()["variable_groups"]
+    assert grupos["Proteccion"]["nombre_legible"] == "Protección"
+    assert grupos["Topologia"]["nombre_legible"] == "Topología"
+    assert grupos["Fisicas/Electricas"]["nombre_legible"] == "Físicas / Eléctricas"
+    # la clave sigue siendo la clave
+    assert "Proteccion" in grupos and "Protección" not in grupos
+
+
+def test_las_reglas_del_dominio_estan_escritas_con_tilde():
+    """Estas SÍ son prosa: no las usa nadie como clave, y se imprimen."""
+    import unicodedata
+
+    from chec_local_interpreter.domain_context import domain_context_payload
+
+    for regla in domain_context_payload()["relationship_rules"]:
+        for campo in ("nombre", "description"):
+            texto = regla[campo]
+            plegado = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode()
+            for palabra in plegado.split():
+                limpia = palabra.strip(".,;:").lower()
+                if limpia.endswith(("cion", "sion")) and limpia not in {"vision"}:
+                    assert texto != plegado, f"{campo} sin tilde: {texto!r}"

@@ -20,11 +20,11 @@ from chec_local_interpreter.glosario_variables import nombre_con_codigo
 
 VARIABLE_GROUPS: dict[str, dict[str, object]] = {
     "Evento/Impacto": {
-        "description": "Fecha, duracion, usuarios, transformadores, causas e indicadores de impacto.",
+        "description": "Fecha, duración, usuarios, transformadores, causas e indicadores de impacto.",
         "variables": ["FECHA", "DURACION", "TOT_USUS", "CNT_TRF", "UITI", "UITI_VANO", "COD_CAUSA", "DESC_CAUSA"],
     },
     "Proteccion": {
-        "description": "Equipos que detectan, despejan y aislan fallas.",
+        "description": "Equipos que detectan, despejan y aíslan fallas.",
         "variables": ["FID_SW", "COD_EQ_PROTEGE", "TIPO", "CNT_VN_SW", "T_USUS_EQ_PROT"],
     },
     "Topologia": {
@@ -32,7 +32,7 @@ VARIABLE_GROUPS: dict[str, dict[str, object]] = {
         "variables": ["CIRCUITO", "FID_VANO", "X1", "Y1", "X2", "Y2", "LVSW", "CNT_VN", "PORC_APORTE_VANO"],
     },
     "Fisicas/Electricas": {
-        "description": "Caracteristicas tecnico-constructivas que describen susceptibilidad.",
+        "description": "Características técnico-constructivas que describen susceptibilidad.",
         "variables": [
             "FECHA_OPERACION_VANO",
             "LONGITUD",
@@ -66,39 +66,39 @@ VARIABLE_GROUPS: dict[str, dict[str, object]] = {
         ],
     },
     "Entorno/Riesgo": {
-        "description": "Riesgo vegetal, descargas y series climaticas como estresores ambientales.",
+        "description": "Riesgo vegetal, descargas y series climáticas como estresores ambientales.",
         "variables": ["NR_T", "DDT", "PREP_i", "CLOUDS_i", "VIS_i", "WIND_SPD_i", "WIND_GUST_SPD_i", "TEMP_i"],
     },
 }
 
 RELATIONSHIP_RULES: list[dict[str, object]] = [
     {
-        "nombre": "Clima que acumula estres sobre la red",
-        "description": "Las series climaticas contribuyen a estres ambiental acumulado.",
+        "nombre": "Clima que acumula estrés sobre la red",
+        "description": "Las series climáticas contribuyen a estrés ambiental acumulado.",
         "source": "Entorno/Riesgo",
         "target": "Eventos/Impacto",
     },
     {
-        "nombre": "Entorno que respalda hipotesis de causa",
-        "description": "NR_T, DDT, precipitacion, viento y rafagas pueden apoyar hipotesis cuando coinciden con etiquetas de evento.",
+        "nombre": "Entorno que respalda hipótesis de causa",
+        "description": "NR_T, DDT, precipitación, viento y ráfagas pueden apoyar hipótesis cuando coinciden con etiquetas de evento.",
         "source": "Entorno/Riesgo",
         "target": "Evento/Impacto",
     },
     {
-        "nombre": "Construccion del vano que lo hace mas susceptible",
-        "description": "Conductor, longitud, fases, neutro, guarda y taxonomia describen susceptibilidad, no causas absolutas.",
+        "nombre": "Construcción del vano que lo hace más susceptible",
+        "description": "Conductor, longitud, fases, neutro, guarda y taxonomía describen susceptibilidad, no causas absolutas.",
         "source": "Fisicas/Electricas",
         "target": "Evento/Impacto",
     },
     {
-        "nombre": "Trazado del circuito y alcance de la proteccion",
-        "description": "LVSW, CNT_VN, FID_VANO y CIRCUITO describen propagacion y contexto de proteccion.",
+        "nombre": "Trazado del circuito y alcance de la protección",
+        "description": "LVSW, CNT_VN, FID_VANO y CIRCUITO describen propagación y contexto de protección.",
         "source": "Topologia",
         "target": "Proteccion",
     },
     {
         "nombre": "Estado de los apoyos frente al entorno",
-        "description": "Variables de activos describen vulnerabilidad estructural y exposicion aguas abajo.",
+        "description": "Variables de activos describen vulnerabilidad estructural y exposición aguas abajo.",
         "source": "Activos",
         "target": "Entorno/Riesgo",
     },
@@ -109,36 +109,52 @@ RELATIONSHIP_RULES: list[dict[str, object]] = [
         "target": "Evento/Impacto",
     },
     {
-        "nombre": "Proteccion que fija el alcance y la reposicion",
-        "description": "Equipos y usuarios protegidos ayudan a explicar alcance de impacto y contexto de reposicion.",
+        "nombre": "Protección que fija el alcance y la reposición",
+        "description": "Equipos y usuarios protegidos ayudan a explicar alcance de impacto y contexto de reposición.",
         "source": "Proteccion",
         "target": "Evento/Impacto",
     },
     {
-        "nombre": "Duracion y usuarios que componen el UITI",
-        "description": "Duracion y usuarios afectados explican el impacto de interrupcion a nivel de evento.",
+        "nombre": "Duración y usuarios que componen el UITI",
+        "description": "Duración y usuarios afectados explican el impacto de interrupción a nivel de evento.",
         "source": "Evento/Impacto",
         "target": "UITI_VANO",
     },
     {
         "nombre": "Coordenadas para ubicar el tramo",
-        "description": "Las coordenadas apoyan trazabilidad espacial y contexto topologico.",
+        "description": "Las coordenadas apoyan trazabilidad espacial y contexto topológico.",
         "source": "Topologia",
         "target": "Topologia",
     },
 ]
 
 
-def domain_context_payload() -> dict[str, object]:
-    """El contexto de dominio, con cada variable tambien en castellano.
+#: Nombre de grupo -> como se ESCRIBE en el informe. La clave no se acentua a proposito:
+#: es un identificador. `/informe-gerencial` la usa para agrupar y los propios agentes la
+#: emiten en `variable_groups_used`, asi que acentuarla romperia ese contrato. Pero el
+#: agente la citaba tal cual dentro de su prosa, y de ahi salian "Proteccion" y
+#: "Topologia" impresos en un informe para operacion.
+NOMBRE_LEGIBLE_GRUPO: dict[str, str] = {
+    "Evento/Impacto": "Evento / Impacto",
+    "Proteccion": "Protección",
+    "Topologia": "Topología",
+    "Fisicas/Electricas": "Físicas / Eléctricas",
+    "Activos": "Activos",
+    "Entorno/Riesgo": "Entorno / Riesgo",
+}
 
-    `variables_nombradas` se calcula aqui y no se escribe a mano en cada grupo: dos
-    listas paralelas mantenidas por separado se separan en cuanto alguien agregue una
-    columna, y la que se quedaria corta es justo la legible.
+
+def domain_context_payload() -> dict[str, object]:
+    """El contexto de dominio, con cada variable y cada grupo tambien en castellano.
+
+    `variables_nombradas` y `nombre_legible` se calculan aqui y no se escriben a mano
+    en cada grupo: dos listas paralelas mantenidas por separado se separan en cuanto
+    alguien agregue una columna, y la que se quedaria corta es justo la legible.
     """
     grupos = {
         nombre: {
             **datos,
+            "nombre_legible": NOMBRE_LEGIBLE_GRUPO.get(nombre, nombre),
             "variables_nombradas": [
                 nombre_con_codigo(str(v)) for v in datos.get("variables", [])
             ],

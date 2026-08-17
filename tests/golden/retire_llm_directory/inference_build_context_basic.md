@@ -1126,6 +1126,13 @@ Reglas que ademas se olvidan:
 Antes de entregar, relee tu texto buscando terminaciones en `-cion`, `-sion`, `-ia`,
 `-ico` y `-ica` sin tilde: ahi esta la mayoria de los errores.
 
+### Los nombres de grupo tambien se escriben en castellano
+
+Si nombras un grupo de variables en la prosa, escribelo acentuado: `Protección`,
+`Topología`, `Físicas / Eléctricas`, `Entorno / Riesgo`. Las claves sin tilde
+(`Proteccion`, `Topologia`) son identificadores y solo van en campos estructurados que
+consume otro programa, nunca dentro de una frase.
+
 ---
 
 # Skill: 05_llm_output_validator.md

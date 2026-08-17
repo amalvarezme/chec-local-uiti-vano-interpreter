@@ -114,3 +114,13 @@ Reglas que ademas se olvidan:
 
 Antes de entregar, relee tu texto buscando terminaciones en `-cion`, `-sion`, `-ia`,
 `-ico` y `-ica` sin tilde: ahi esta la mayoria de los errores.
+
+### Los nombres de grupo tambien se escriben en castellano
+
+Cada grupo de `domain.variable_groups` trae `nombre_legible`. Escribe ESE en la prosa:
+`Protección`, `Topología`, `Físicas / Eléctricas`, `Entorno / Riesgo`. La clave del grupo
+(`Proteccion`, `Topologia`) es un identificador y va sin tilde a proposito; citarla tal
+cual mete "Proteccion" y "Topologia" dentro de un informe para operacion.
+
+La unica excepcion es el campo estructurado `variable_groups_used`, que sí lleva la CLAVE
+exacta: ahi el valor lo consume otro programa, no una persona.
