@@ -262,3 +262,29 @@ def test_el_panel_llena_su_columna_y_centra_su_contenido(nombre):
         f"corta: {cuerpo}")
     assert "justify-content: center" in cuerpo, (
         f"{nombre}: el contenido del panel no se centra contra el panel de figuras: {cuerpo}")
+
+
+@pytest.mark.parametrize("nombre", CUADERNOS)
+def test_los_hijos_del_panel_no_reparten_el_alto_entre_ellos(nombre):
+    """`flex-basis: 100%` se escribio para una FILA, y ahi significa otra cosa.
+
+    En una fila, `flex-basis: 100%` quiere decir "ocupa el ancho entero", que es como se
+    fuerza un salto de linea en una barra de controles. Al girar el panel a COLUMNA ese
+    100% pasa a leerse contra el ALTO.
+
+    Mientras el panel media lo que media su contenido, daba igual. Al estirarlo al alto de
+    la columna -- para que el fondo verde llegue abajo -- cada hijo empezo a reclamar su
+    parte de esos 1.083 px: medido, un rotulo de 40 px ocupaba 222, y el panel del tablero
+    04 abria un hueco de 430 px en la mitad.
+
+    `flex: 0 0 auto` devuelve a cada hijo el alto de su contenido. No toca el ancho, que
+    es lo que la regla original queria.
+    """
+    css = _css(nombre)
+    regla = re.search(
+        r'\.cuerpo-2col > \.col-controles > \[class\^="panel-"\] > \*\s*\{([^}]*)\}', css)
+    assert regla, (
+        f"{nombre}: nada devuelve a los hijos del panel su alto de contenido; con el panel "
+        "estirado se reparten el alto entre ellos")
+    assert "flex: 0 0 auto !important" in regla.group(1), (
+        f"{nombre}: los hijos del panel siguen repartiendose el alto: {regla.group(1)}")

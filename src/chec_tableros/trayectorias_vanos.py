@@ -2418,6 +2418,18 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
   .cuerpo-2col > .col-controles button { max-width: 100%; min-width: 0; }
   /* Las filas del panel se parten cuando no caben, en vez de salirse por la derecha. */
   .cuerpo-2col > .col-controles > [class^="panel-"] > div { flex-wrap: wrap; }
+  /* Y cada hijo recupera el alto de SU contenido.
+     `flex-basis: 100%` se escribio para una FILA, donde significa "ocupa el ancho entero"
+     -- asi se fuerza un salto de linea en una barra de controles --. Girado el panel a
+     columna, ese 100% se lee contra el ALTO. Mientras el panel media lo que media su
+     contenido daba igual; al estirarlo al alto de la columna, cada hijo empezo a reclamar
+     su parte: medido, un rotulo de 40 px ocupaba 222 y el panel del 04 abria un hueco de
+     430 px en mitad de la columna. */
+  /* `!important` porque esos hijos traen `flex-basis:100%` EN LINEA -- un atributo
+     `style` gana a la hoja --, y es el mismo motivo por el que mas abajo se vencen sus
+     `min-width` en linea. Sin el, el basis inline seguia mandando y con `flex-shrink: 0`
+     cada hijo pasaba de 222 px a 1.057: peor que antes. */
+  .cuerpo-2col > .col-controles > [class^="panel-"] > * { flex: 0 0 auto !important; }
   /* Medido en 01_clima: sus filas de barra deslizante traen `min-width` y
      `white-space: nowrap` EN LINEA -- un rotulo de 520 px y un hueco de 300 px reservado
      para que el numero no haga saltar la barra --, dimensionados para el ancho entero. En
