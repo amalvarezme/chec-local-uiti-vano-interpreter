@@ -1715,8 +1715,11 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     MAPA_IZQ = float(fig.layout.map.domain.x[0])
     BARRA_ENCUADRE = f"""
 <style>
+  /* `border-box` y `width: 100%`: sin ellos ese `calc` -- que en el 04 llega a 514 px --
+     se SUMA al ancho en vez de caber dentro, y el tablero se sale de la pantalla. Aqui
+     no desbordaba por como cae su contexto de caja, no porque estuviera bien. */
   .barra-encuadre {{ padding: 0 0 0 calc({MARGEN_IZQ}px + (100% - {MARGEN_IZQ + MARGEN_DER}px) * {MAPA_IZQ:.5f});
-                     margin: 0 0 6px 0; }}
+                     margin: 0 0 6px 0; box-sizing: border-box; width: 100%; }}
   /* El estilo es el del boton del 01, que a su vez copia el del simulador: el gris por
      defecto de un `widgets.Button` de Jupyter. Aqui hay que escribirlo porque este
      tablero es HTML estatico y no trae la hoja de estilos de los widgets. */

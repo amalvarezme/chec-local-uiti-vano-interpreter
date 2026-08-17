@@ -2439,8 +2439,11 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     MAPA_IZQ = float(fig.layout.map.domain.x[0])
     BARRA_ENCUADRE = f"""
 <style>
+  /* `border-box` y `width: 100%`: sin ellos ese `calc` -- 514 px medidos a 1.440 -- se
+     SUMA al ancho, y el tablero desbordaba 666, 490 y 432 px a 1.920, 1.440 y 1.280.
+     Era el peor de los cuatro. El relleno sigue empujando el boton exactamente igual. */
   .barra-encuadre {{ padding: 0 0 0 calc({MARGEN_IZQ}px + (100% - {MARGEN_IZQ + MARGEN_DER}px) * {MAPA_IZQ:.5f});
-                     margin: 0 0 6px 0; }}
+                     margin: 0 0 6px 0; box-sizing: border-box; width: 100%; }}
   /* El estilo es el del boton del 01 y el 03, que copian el del simulador: el gris por
      defecto de un `widgets.Button` de Jupyter. Aqui hay que escribirlo porque este
      tablero es HTML estatico y no trae la hoja de estilos de los widgets. */

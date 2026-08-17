@@ -1150,7 +1150,11 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
   /* Los 12 px de abajo no son estetica: con 2 el pie del boton caia 7 px dentro del
      titulo de la figura -- medido a 1.280 y 1.512 px, donde el titulo centrado llega
      hasta debajo del boton; a 1.900 ya no se cruzan. */
-  .barra-encuadre {{ padding: 0 0 0 {MARGEN_IZQ_FIGURA}px; margin: 0 0 12px 0; }}
+  /* `border-box` y `width: 100%`: sin ellos el relleno de arriba se SUMA al ancho --
+     medido, 96 px de desborde horizontal en los tres tamanios de ventana probados --
+     y aparece una barra de scroll lateral. El relleno sigue empujando el boton igual. */
+  .barra-encuadre {{ padding: 0 0 0 {MARGEN_IZQ_FIGURA}px; margin: 0 0 12px 0;
+                     box-sizing: border-box; width: 100%; }}
   /* Y el estilo es el del boton del simulador, medido en el navegador sobre la
      aplicacion servida: es un `widgets.Button` sin `button_style`, o sea el gris por
      defecto de Jupyter. Aqui hay que escribirlo porque este tablero es HTML estatico y
