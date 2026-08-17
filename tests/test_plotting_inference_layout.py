@@ -154,7 +154,7 @@ def test_inference_layout_renders_one_section_per_window(tmp_path):
         output_dir=tmp_path,
     ).read_text(encoding="utf-8")
 
-    assert "Diagnostico y simulacion por ventana" in html
+    assert "Diagnóstico y simulación por ventana" in html
     assert "Ventana V2" in html and "Ventana V11" in html
     assert "Lectura de la ventana V2." in html
     # Orden cronologico: V2 antes que V11, no el alfabetico de las etiquetas.
@@ -173,9 +173,9 @@ def test_the_two_variable_groups_render_as_separate_tables(tmp_path):
         output_dir=tmp_path,
     ).read_text(encoding="utf-8")
 
-    assert "Variables de intervencion" in html
+    assert "Variables de intervención" in html
     assert "Variables de escenario" in html
-    assert html.index("Variables de intervencion") < html.index("Variables de escenario")
+    assert html.index("Variables de intervención") < html.index("Variables de escenario")
     # El valor viaja con la variable: la fila se lee como una instruccion.
     assert "18" in html and "Altura" in html
     assert "3 / 10" in html, "cuantos vanos alcanzan Bajo con esa sola variable"
@@ -195,7 +195,7 @@ def test_the_reduction_scenario_shows_measured_against_simulated_with_its_group(
 
     assert "Escenario de disminución" in html
     assert "Alto" in html and "Medio" in html
-    assert "Palancas movidas (solo intervencion): ALTURA" in html
+    assert "Palancas movidas (solo intervención): ALTURA" in html
 
 
 def test_an_empty_inference_results_leaves_the_section_out_without_crashing(tmp_path):
@@ -790,3 +790,48 @@ def test_un_solo_mapa_no_necesita_deslizador(tmp_path, monkeypatch):
 
     assert "type='range'" not in html
     assert html.count("class='mapa-ventana activa'") == 1
+
+
+def test_ninguna_cadena_del_informe_se_imprime_sin_tilde(tmp_path, monkeypatch):
+    """Guarda contra la reincidencia: el informe salió con 22 "vegetacion" y 23
+    "proteccion" porque las cadenas del renderizador seguían la convención de escribir
+    el CÓDIGO sin tildes. Estas se imprimen.
+
+    Mira sólo el texto VISIBLE — fuera etiquetas, script, style y los `data:` URI — y
+    exime a los códigos de columna, que no se acentúan nunca, y a los plurales que de
+    verdad van sin tilde.
+    """
+    import re
+
+    # CON escenarios: sin ellos no se rinde media pagina -- ni el encabezado
+    # "Diagnostico y simulacion por ventana", que fue justo el ultimo que se escapo.
+    llamadas = []
+    monkeypatch.setattr("chec_local_interpreter.plotting.plot_circuit_map_folium",
+                        lambda df, c, **k: (llamadas.append(k), _MapaFalso(1))[1])
+    html = render_llm_analysis(
+        validation_data={},
+        raw_df=_minimal_raw_df(),
+        selected_circuitos=["C1"],
+        inference_results={"V11": _resultado_de_ventana("V11", "C1 -- ventana V11")},
+        inference_analysis={},
+        output_dir=tmp_path / "html",
+        mapas_ventana=_mapas_de_tres_ventanas(),
+    ).read_text(encoding="utf-8")
+    cuerpo = re.sub(r"<script.*?</script>|<style.*?</style>", " ", html, flags=re.S)
+    cuerpo = re.sub(r"data:image/[^\"']+", " ", cuerpo)
+    cuerpo = re.sub(r"<[^>]+>", " ", cuerpo)
+
+    correctas = {"protecciones", "condiciones", "intervenciones", "ubicaciones",
+                 "relaciones", "opciones", "secciones", "direcciones", "funciones"}
+    sospechosas = []
+    for palabra in re.findall(r"\b[a-záéíóúñA-ZÁÉÍÓÚÑ]{5,}\b", cuerpo):
+        base = palabra.lower()
+        if base in correctas or palabra.isupper():  # MAYUSCULAS = codigo de columna
+            continue
+        if base.endswith(("cion", "sion")) or base in {
+                "periodo", "analisis", "critico", "criticos", "tecnico", "metrica",
+                "minimo", "maximo", "numero", "electrica", "fisica", "climatica",
+                "diagnostico", "hipotesis", "energia", "topologia"}:
+            sospechosas.append(palabra)
+
+    assert not sospechosas, f"el renderizador imprime sin tilde: {sorted(set(sospechosas))}"

@@ -992,7 +992,7 @@ def render_expert_alignment_tab(expert_alignment_validation_data):
         summary_bits.append(f"<li><strong>Circuito:</strong> {_escape(contexto.get('circuito'))}</li>")
     if periodo.get("inicio") or periodo.get("fin"):
         summary_bits.append(
-            f"<li><strong>Periodo:</strong> {_escape(periodo.get('inicio'))} a {_escape(periodo.get('fin'))}</li>"
+            f"<li><strong>Período:</strong> {_escape(periodo.get('inicio'))} a {_escape(periodo.get('fin'))}</li>"
         )
     if "n_filas_expertas_comparadas" in contexto:
         summary_bits.append(
@@ -1344,7 +1344,7 @@ def render_llm_analysis(
         """El ranking de un grupo de variables, como tabla legible.
 
         Manda `n_vanos_alcanza`: en cuantos vanos ESA SOLA variable basta para caer al
-        grupo mas bajo. Ordenar por caida de UITI responde a "que baja mas el numero",
+        grupo mas bajo. Ordenar por caida de UITI responde a "que baja más el número",
         que no es la pregunta -- una variable que baja mucho sin cruzar ninguna frontera
         de grupo no cambia ninguna decision.
         """
@@ -1411,9 +1411,9 @@ def render_llm_analysis(
                 "</tr>"
             )
         knobs = ", ".join(str(k) for k in (simulacion or {}).get("knobs_usados") or [])
-        pie = (f"<p class='muted'>Palancas movidas (solo intervencion): {_escape(knobs)}.</p>"
+        pie = (f"<p class='muted'>Palancas movidas (solo intervención): {_escape(knobs)}.</p>"
                if knobs else
-               "<p class='muted'>Ninguna palanca de intervencion disponible en esta "
+               "<p class='muted'>Ninguna palanca de intervención disponible en esta "
                "ventana: las variables de escenario entran con su valor observado y no "
                "se mueven.</p>")
         return (
@@ -1478,7 +1478,7 @@ def render_llm_analysis(
             paneles = [
                 _chart_panel(f"Serie por ventana - {titulo}",
                              _figure_html(resultado.get("fig_serie"), titulo)),
-                _chart_panel(f"Relevancia hacia UITI minimo - {titulo}",
+                _chart_panel(f"Relevancia hacia UITI mínimo - {titulo}",
                              _figure_html(resultado.get("fig_barras"), titulo)),
                 _chart_panel(f"UITI medido vs estimado - {titulo}",
                              _figure_html(resultado.get("fig_uiti"), titulo)),
@@ -1490,14 +1490,14 @@ def render_llm_analysis(
             por_grupo = contexto.get("variables_por_grupo") or {}
             partes.append(_tabla_variables(
                 por_grupo.get("Intervencion"),
-                "Variables de intervencion",
+                "Variables de intervención",
                 "Obra que una cuadrilla puede ejecutar. Es lo que sostiene una orden de "
                 "trabajo.",
             ))
             partes.append(_tabla_variables(
                 por_grupo.get("Escenario"),
                 "Variables de escenario",
-                "Describen la condicion en que ocurre el problema. No se ejecutan: "
+                "Describen la condición en que ocurre el problema. No se ejecutan: "
                 "entran al modelo con el valor observado de cada vano.",
             ))
             partes.append(_tabla_simulacion(contexto.get("simulacion")))
@@ -1515,7 +1515,7 @@ def render_llm_analysis(
                 + _list_to_items(hallazgos, max_items=5) + "</div>")
 
         return "\n".join(cabecera), (
-            "<h2>Diagnostico y simulacion por ventana</h2>" + "\n".join(secciones))
+            "<h2>Diagnóstico y simulación por ventana</h2>" + "\n".join(secciones))
 
 
     period_str = f"{start_date or 'Inicio'} a {end_date or 'Fin'}"
@@ -1725,7 +1725,7 @@ def render_llm_analysis(
         synthesis = validation_data.get('period_synthesis', '')
         if synthesis:
             llm_sections_html += f"""
-            <h2>⏱️ Síntesis del Periodo</h2>
+            <h2>⏱️ Síntesis del Período</h2>
             <div class="content-box">
                 {_text_to_items(synthesis)}
             </div>
