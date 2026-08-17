@@ -133,6 +133,12 @@ def test_el_diagrama_explica_el_simulador_con_su_vocabulario_real():
     Lo que SI sigue siendo contrato es el vocabulario de la INTERFAZ: `Diagnostico`,
     `Intervencion`, `Escenario` y `Simular` son botones que existen, no invenciones de la
     portada. Un diagrama que renombre lo que el usuario va a ver es peor que no tenerlo.
+
+    "¿Qué pasa si…?" es la excepcion de esa lista: no es un boton -- en el tablero solo
+    existe como comentario --, es el titulo que el propio diagrama le pone al paso final.
+    Se queda aqui porque es el remate del camino que el diagrama dibuja, pero no lo cubre
+    `test_los_botones_que_el_diagrama_nombra_existen_de_verdad`, que si compara contra la
+    interfaz de verdad.
     """
     pagina = _pagina()
     svg = pagina[pagina.index("<svg"):pagina.index("</svg>")]
