@@ -2048,12 +2048,17 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     var sx = [], sy = [], st = [], nombres = [], enLeyenda = [];
     for (i = 0; i < CTX.maxResaltados; i++) {
       sx.push([]); sy.push([]); st.push([]);
-      // El circuito va en la entrada de leyenda aunque hoy sea el mismo para todos: la
-      // leyenda se lee sola, y un vano exportado o citado fuera del panel sin circuito no
-      // se puede ubicar -- los codigos de vano no dicen de que circuito son.
+      // El nombre se conserva -- es lo que sale en la etiqueta del mouse, y ahi el
+      // circuito hace falta: los codigos de vano no dicen de que circuito son --, pero
+      // el vano NO entra en la leyenda de arriba.
+      //
+      // Con quince marcados eran quince entradas que empujaban la leyenda a tres
+      // renglones, y la figura tenia que reajustar su margen superior en el navegador
+      // para no pisarse el titulo. Lo que la leyenda explica es el COLOR, y el color lo
+      // fija el grupo de criticidad, no el vano.
       nombres.push(i < cu.cupos.length
                    ? 'Vano ' + cu.cupos[i] + ' (' + circuito + ')' : '');
-      enLeyenda.push(i < cu.cupos.length);
+      enLeyenda.push(false);
     }
     var ox = [], oy = [], ot = [], oc = [];
     var ciSel = (circuito !== CTX.sinSeleccion) ? CTX.circuitos.indexOf(circuito) : -1;
@@ -2369,8 +2374,13 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
   /* Los controles a la izquierda y las figuras a la derecha, en vez de una barra
      horizontal encima de una figura de 960 a 1.700 px de alto: asi elegir un circuito y
      ver que le hace al mapa dejan de estar en extremos opuestos del scroll. */
+  /* `align-items` se deja en su valor por defecto -- `stretch` -- a proposito. Con
+     `flex-start` cada columna media lo que media SU contenido, y al lado de una figura
+     de 1.700 px el panel de control ocupaba su trozo de arriba: el fondo verde se
+     cortaba a un tercio de la pantalla y la union de las dos columnas se leia como un
+     recorte. */
   .cuerpo-2col {
-    display: flex; align-items: flex-start; gap: 14px;
+    display: flex; gap: 14px;
     width: 100%; box-sizing: border-box;
   }
   /* `min-width: 0` apaga el `min-width: auto` que trae todo hijo de flex. Sin el, el
@@ -2394,8 +2404,13 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
      no por su nombre -- son cuatro distintos: panel-clima, panel-agrup, panel-tray,
      panel-v -- para que este mismo bloque sirva para cualquiera de ellos. Hoy lo usan el
      01 y el 04; el 02 y el 03 volvieron a apilar panel y figura. */
+  /* Que la COLUMNA mida el alto entero no basta: el panel es quien lleva el fondo, y
+     sin `height: 100%` sigue midiendo su contenido dentro de una columna alta. Con el
+     alto entero, el contenido pegado arriba deja un vacio largo debajo, asi que
+     `justify-content: center` lo alinea verticalmente con el panel de figuras. */
   .cuerpo-2col > .col-controles > [class^="panel-"] {
     flex-direction: column; flex-wrap: nowrap; align-items: stretch; max-width: 100%;
+    height: 100%; justify-content: center;
   }
   /* Y sus controles dejan de exigir un ancho que la columna ya no tiene. */
   .cuerpo-2col > .col-controles select,
@@ -2437,12 +2452,18 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     # columnas y del espaciado --, nunca se escribe a mano: un literal no fallaria el dia
     # que alguien toque la rejilla, se desalinearia en silencio.
     MAPA_IZQ = float(fig.layout.map.domain.x[0])
+    MAPA_DER = float(fig.layout.map.domain.x[1])
     BARRA_ENCUADRE = f"""
 <style>
-  /* `border-box` y `width: 100%`: sin ellos ese `calc` -- 514 px medidos a 1.440 -- se
-     SUMA al ancho, y el tablero desbordaba 666, 490 y 432 px a 1.920, 1.440 y 1.280.
-     Era el peor de los cuatro. El relleno sigue empujando el boton exactamente igual. */
-  .barra-encuadre {{ padding: 0 0 0 calc({MARGEN_IZQ}px + (100% - {MARGEN_IZQ + MARGEN_DER}px) * {MAPA_IZQ:.5f});
+  /* El boton se alinea con el borde DERECHO del mapa, y esa cuenta no la hace
+     `text-align: right`: el mapa no llega al borde de la figura -- entre los dos estan el
+     margen derecho del `layout`, en pixeles, y el resto del area de dibujo hasta donde
+     acaba su dominio --, asi que alinear contra la ventana desfasa, y el desfase crece
+     con el ancho de la pantalla.
+     `border-box` y `width: 100%`: sin ellos ese `calc` se SUMA al ancho en vez de caber
+     dentro. Es lo que dejo al tablero 04 saliendose 666 px de la pantalla. */
+  .barra-encuadre {{ display: flex; justify-content: flex-end;
+                     padding: 0 calc({MARGEN_DER}px + (100% - {MARGEN_IZQ + MARGEN_DER}px) * {1 - MAPA_DER:.5f}) 0 0;
                      margin: 0 0 6px 0; box-sizing: border-box; width: 100%; }}
   /* El estilo es el del boton del 01 y el 03, que copian el del simulador: el gris por
      defecto de un `widgets.Button` de Jupyter. Aqui hay que escribirlo porque este

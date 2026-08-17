@@ -3747,9 +3747,12 @@ def construir(
         '<span style="font-family:system-ui,-apple-system,\'Segoe UI\',sans-serif;'
         'font-size:19px;color:#2b2b2b;white-space:nowrap;">'
         '<b>Simulador Criticidad</b></span>')
+    # El cierre ABRE la fila y el titulo va detras. `flex-start` y no `space-between`:
+    # repartir a los extremos era lo que ponia al boton a pelear el ancho con el titulo,
+    # y quien cedia era el boton.
     ENCABEZADO = widgets.HBox(
-        [ENCABEZADO_TITULO, *encabezado],
-        layout=widgets.Layout(width='100%', justify_content='space-between',
+        [*encabezado, ENCABEZADO_TITULO],
+        layout=widgets.Layout(width='100%', justify_content='flex-start',
                               align_items='center', padding='4px 12px'))
 
     APP = widgets.VBox([ENCABEZADO, ESTILO, CUERPO],

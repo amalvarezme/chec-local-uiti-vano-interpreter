@@ -565,9 +565,14 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         # 94 / 718 = 0.1309.
         # El horizontal no se toca: el ancho no ha cambiado.
         vertical_spacing=0.1309, horizontal_spacing=0.012,
+        # El mapa va de la columna 8 a la 15 -- `colspan: 8` --, que es EXACTAMENTE lo que
+        # ocupan juntos los tres paneles de la fila de abajo (barras en 8-9, violines en
+        # 11-12 y 14-15). Iba de la 9 a la 15, una columna mas corto, asi que su borde
+        # derecho no coincidia con el de ningun panel de abajo y las dos filas no
+        # compartian ninguna linea vertical. Desaparece de paso la columna 8 vacia que
+        # separaba la nube del mapa: los separa el `horizontal_spacing`, como a los demas.
         specs=[[{'colspan': 7}, None, None, None, None, None, None,
-                None,
-                {'type': 'map', 'colspan': 7}, None, None, None, None, None, None],
+                {'type': 'map', 'colspan': 8}, None, None, None, None, None, None, None],
                [{'secondary_y': True, 'colspan': 6}, None, None, None, None, None,
                 None,
                 {'colspan': 2}, None,
@@ -691,20 +696,20 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         lat=[], lon=[], mode='lines', name='Estructura del circuito', showlegend=False,
         line=dict(width=ANCHO_SIN_EVENTOS, color=COLOR_SIN_EVENTO),
         hovertext=[], hoverinfo='text',
-    ), row=1, col=9)
+    ), row=1, col=8)
     for _c, (_clase, _color) in enumerate(zip(CLASES_MAPA, COLORES_MAPA)):
         fig.add_trace(go.Scattermap(
             lat=[], lon=[], mode='lines', name=_clase, showlegend=False,
             line=dict(width=ANCHO_MAPA, color=_color),
             hovertext=[], hoverinfo='text',
-        ), row=1, col=9)
+        ), row=1, col=8)
     for _nombre, _color, _tam in [('Transformadores', COLOR_TRAFO, TAM_TRAFO),
                                   ('Interruptores / switches', COLOR_SWITCH, TAM_SWITCH)]:
         fig.add_trace(go.Scattermap(
             lat=[], lon=[], mode='markers', name=_nombre, showlegend=False,
             marker=dict(size=_tam, color=_color),
             hovertext=[], hoverinfo='text',
-        ), row=1, col=9)
+        ), row=1, col=8)
     fig.update_layout(
         map=dict(style='carto-positron', center=dict(lat=5.07, lon=-75.52), zoom=10),
         title=dict(
@@ -1713,12 +1718,18 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     # rejilla -- se desalinearia en silencio. Es la misma fuente que lee el JS del tablero
     # (`fl.map.domain`).
     MAPA_IZQ = float(fig.layout.map.domain.x[0])
+    MAPA_DER = float(fig.layout.map.domain.x[1])
     BARRA_ENCUADRE = f"""
 <style>
-  /* `border-box` y `width: 100%`: sin ellos ese `calc` -- que en el 04 llega a 514 px --
-     se SUMA al ancho en vez de caber dentro, y el tablero se sale de la pantalla. Aqui
-     no desbordaba por como cae su contexto de caja, no porque estuviera bien. */
-  .barra-encuadre {{ padding: 0 0 0 calc({MARGEN_IZQ}px + (100% - {MARGEN_IZQ + MARGEN_DER}px) * {MAPA_IZQ:.5f});
+  /* El boton se alinea con el borde DERECHO del mapa, y esa cuenta no la hace
+     `text-align: right`: el mapa no llega al borde de la figura -- entre los dos estan el
+     margen derecho del `layout`, en pixeles, y el resto del area de dibujo hasta donde
+     acaba su dominio --, asi que alinear contra la ventana desfasa, y el desfase crece
+     con el ancho de la pantalla.
+     `border-box` y `width: 100%`: sin ellos ese `calc` se SUMA al ancho en vez de caber
+     dentro. Es lo que dejo al tablero 04 saliendose 666 px de la pantalla. */
+  .barra-encuadre {{ display: flex; justify-content: flex-end;
+                     padding: 0 calc({MARGEN_DER}px + (100% - {MARGEN_IZQ + MARGEN_DER}px) * {1 - MAPA_DER:.5f}) 0 0;
                      margin: 0 0 6px 0; box-sizing: border-box; width: 100%; }}
   /* El estilo es el del boton del 01, que a su vez copia el del simulador: el gris por
      defecto de un `widgets.Button` de Jupyter. Aqui hay que escribirlo porque este

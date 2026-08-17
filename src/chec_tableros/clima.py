@@ -1840,8 +1840,13 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
   /* Los controles a la izquierda y las figuras a la derecha, en vez de una barra
      horizontal encima de una figura de 960 a 1.700 px de alto: asi elegir un circuito y
      ver que le hace al mapa dejan de estar en extremos opuestos del scroll. */
+  /* `align-items` se deja en su valor por defecto -- `stretch` -- a proposito. Con
+     `flex-start` cada columna media lo que media SU contenido, y al lado de una figura
+     de 1.700 px el panel de control ocupaba su trozo de arriba: el fondo verde se
+     cortaba a un tercio de la pantalla y la union de las dos columnas se leia como un
+     recorte. */
   .cuerpo-2col {
-    display: flex; align-items: flex-start; gap: 14px;
+    display: flex; gap: 14px;
     width: 100%; box-sizing: border-box;
   }
   /* `min-width: 0` apaga el `min-width: auto` que trae todo hijo de flex. Sin el, el
@@ -1865,8 +1870,13 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
      no por su nombre -- son cuatro distintos: panel-clima, panel-agrup, panel-tray,
      panel-v -- para que este mismo bloque sirva para cualquiera de ellos. Hoy lo usan el
      01 y el 04; el 02 y el 03 volvieron a apilar panel y figura. */
+  /* Que la COLUMNA mida el alto entero no basta: el panel es quien lleva el fondo, y
+     sin `height: 100%` sigue midiendo su contenido dentro de una columna alta. Con el
+     alto entero, el contenido pegado arriba deja un vacio largo debajo, asi que
+     `justify-content: center` lo alinea verticalmente con el panel de figuras. */
   .cuerpo-2col > .col-controles > [class^="panel-"] {
     flex-direction: column; flex-wrap: nowrap; align-items: stretch; max-width: 100%;
+    height: 100%; justify-content: center;
   }
   /* Y sus controles dejan de exigir un ancho que la columna ya no tiene. */
   .cuerpo-2col > .col-controles select,

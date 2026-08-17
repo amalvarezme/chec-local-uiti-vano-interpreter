@@ -1039,15 +1039,19 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
                  '<br><sup>K-Means (k=4) sobre 27.390 vanos; grupos nombrados por el ranking de la '
                  'mediana del UITI acumulado</sup>',
             x=0.5, xanchor='center', yref='container', y=0.97, yanchor='top',
-            # Al doble del defecto de Plotly (17), por la misma razon que los subtitulos.
-            font=dict(size=34),
+            # A la MITAD: 17, que es ademas el defecto de Plotly. Estuvo en 34 -- el doble
+            # del defecto -- para que pesara como el titulo de un informe, y a ese tamanio
+            # se comia tres renglones antes del primer panel diciendo lo que el nombre de
+            # la aplicacion en el menu ya dice.
+            font=dict(size=17),
         ),
         legend=dict(title_text='', orientation='h', x=0.5, xanchor='center', y=1.02, yanchor='bottom'),
-        # t=175 y no 120: con 120 la leyenda horizontal (anclada a y=1.02 del area de dibujo)
-        # subia hasta pisar el subtitulo del titulo. Medido: el titulo terminaba en y=205 y la
-        # leyenda empezaba en 198, o sea 7 px de solapamiento. Subir el margen empuja el area
-        # de dibujo -- y con ella la leyenda -- hacia abajo, que es justo lo que hacia falta.
-        margin=dict(t=175, r=30, b=60, l=90),
+        # El margen baja CON el titulo. Estos 175 se eligieron contra un titulo de 34 px:
+        # con 120 la leyenda horizontal -- anclada a y=1.02 del area de dibujo -- subia
+        # hasta pisar el subtitulo, medidos 7 px de solapamiento. Con el titulo en 17 esa
+        # banda sobra, y `margin.t` esta en PIXELES: no encoge solo. Los 140 se comprueban
+        # contra el navegador en `test_rotulos_sin_traslape`.
+        margin=dict(t=140, r=30, b=60, l=90),
         # SIN `width`, misma razon que el primer tablero (ver la celda de su layout).
         # `barmode='stack'` es lo que apila las 4 clases de las barras horizontales. No afecta
         # a la barra de conteo por grupo: esa es UNA sola traza, y apilar una traza sola no

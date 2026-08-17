@@ -147,14 +147,24 @@ def barra(*, js: str | None = None) -> widgets.HBox:
     aviso = widgets.HTML("")
     # `Output` y no un `HTML`: el JavaScript de un `HTML` no se ejecuta -- ipywidgets
     # lo mete por `innerHTML`, y el navegador no corre los `<script>` que llegan asi.
-    salida = widgets.Output()
+    # Ancho CERO, y no es cosmetica. Un `Output` de ipywidgets nace con `width: 1e+06px`
+    # -- medido en el navegador --, y este solo lleva `display(Javascript(...))`, que no
+    # dibuja nada. Ese vecino de un millon de pixeles es el que aplastaba al boton dentro
+    # de la fila: con la barra alineada a la derecha, el reparto de flexbox le quitaba
+    # ancho al unico hijo que podia ceder y el boton salia en pantalla como una `C`.
+    # El JavaScript se ejecuta igual: depende de estar en el DOM, no de medir algo.
+    salida = widgets.Output(layout=widgets.Layout(width="0", overflow="hidden"))
     boton = widgets.Button(
         # Sin `button_style`: "danger" es el ROJO de Jupyter, que no es un color de este
         # proyecto. El verde se pone abajo por CSS, que ademas permite fijar el color del
         # texto -- `ButtonStyle` no siempre lo expone.
         description="Cerrar",
         tooltip="Apaga el simulador y cierra esta pestania",
-        layout=widgets.Layout(width="130px"))
+        # `flex: 0 0 auto` y no solo el ancho. `flex-shrink` vale 1 por defecto, asi que
+        # un hijo de una caja flexible cede ancho AUNQUE lo tenga declarado: en la fila
+        # del encabezado el boton pedia 130 px y salia en pantalla como una `C`. Un boton
+        # que dice `C` no dice que hace.
+        layout=widgets.Layout(width="130px", flex="0 0 auto"))
 
     def cerrar(_boton) -> None:
         ruta = os.environ.get(VARIABLE_PID)
@@ -200,7 +210,9 @@ def barra(*, js: str | None = None) -> widgets.HBox:
             "cerrar": js or JS_CERRAR,
         }))
 
+    # Ancho AUTO, no 100%: dentro de la fila del encabezado la barra al 100% empujaba al
+    # titulo, y el reparto que salia de ahi era el que se comia el boton.
     return widgets.HBox(
         [ESTILO, boton, aviso, salida],
-        layout=widgets.Layout(width="100%", justify_content="flex-end",
-                              padding="4px 12px"))
+        layout=widgets.Layout(width="auto", flex="0 0 auto",
+                              justify_content="flex-start", padding="4px 12px"))

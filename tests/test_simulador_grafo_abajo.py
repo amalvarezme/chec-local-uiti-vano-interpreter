@@ -111,16 +111,22 @@ def test_el_boton_de_cerrar_usa_la_paleta_y_no_una_copia():
             f"el boton de cerrar no usa {token} = {paleta.TOKENS[token]} de la paleta")
 
 
-def test_el_boton_de_cerrar_va_arriba_a_la_derecha():
-    """En la fila del encabezado, que reparte a los extremos."""
+def test_el_boton_de_cerrar_va_en_la_fila_del_encabezado():
+    """Lo que este guardian defiende es que el cierre esta ARRIBA, en la cabecera.
+
+    Fijaba tambien `space-between` -- titulo a un extremo y cierre al otro --, y ese
+    reparto se cayo: era lo que ponia al boton a pelear el ancho contra el titulo, y en
+    pantalla el boton acababa siendo una `C`. Ahora el cierre abre la fila.
+
+    El sitio exacto vive en `test_simulador_encabezado.py`; aqui solo importa que la
+    barra siga en la cabecera y no vuelva al cuerpo del tablero.
+    """
     fuente = _tablero()
     # Se lee el bloque entero de la fila y se comprueba dentro. Un patron que intente
     # cruzar la llamada de una sola pasada tropieza con los parentesis anidados de
     # `widgets.Layout(...)`, y falla por el patron y no por el codigo.
     i = fuente.index("ENCABEZADO = widgets.HBox(")
     bloque = fuente[i:fuente.index("APP = widgets.VBox(", i)]
-    assert "justify_content='space-between'" in bloque, (
-        "el encabezado ya no reparte titulo y cierre a los extremos")
     assert "*encabezado" in bloque, (
         "la barra de cerrar ya no entra en la fila del encabezado")
 

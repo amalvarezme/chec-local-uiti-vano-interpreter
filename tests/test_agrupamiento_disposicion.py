@@ -250,3 +250,23 @@ def test_los_titulos_siguen_el_orden_de_lectura_de_la_rejilla():
         f"el cuarto es el de (2,1), los violines: {textos}")
     assert textos[4].startswith("Grupos Circuitos"), (
         f"el quinto titulo es el del ranking, en (2,2): {textos}")
+
+
+def test_el_titulo_del_panel_de_figuras_va_a_la_mitad():
+    """34 -> 17, que es ademas el tamanio por defecto de Plotly.
+
+    El 34 venia de doblar el defecto para que el titulo pesara como el de un informe. A
+    ese tamanio se come tres renglones de la figura antes de que empiece el primer panel,
+    y lo que dice ya esta en el nombre de la aplicacion del menu.
+
+    El MARGEN superior baja con el: `margin.t` esta en pixeles y no encoge solo, asi que
+    un titulo mas chico bajo un margen de 175 px deja un hueco que nadie pidio.
+    """
+    fuente = fuente_de_tablero("02_uiti_vano_kmeans", solo_codigo=True)
+    bloque = fuente[fuente.index("fig_vano.update_layout("):]
+    bloque = bloque[:bloque.index("\n    )")]
+    assert "font=dict(size=17)" in bloque, (
+        f"el titulo del panel de figuras no baja a la mitad: {bloque[:400]}")
+    margen = re.search(r"margin=dict\(t=(\d+)", bloque)
+    assert margen and int(margen.group(1)) < 175, (
+        f"el margen superior no acompania al titulo: t={margen.group(1) if margen else '?'}")

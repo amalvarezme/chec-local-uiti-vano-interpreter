@@ -226,3 +226,39 @@ def test_ya_nadie_pega_el_panel_encima_de_la_figura(nombre: str, panel: str, fig
     fuente = _fuente(nombre)
     assert f"{panel} + {figura}" not in fuente, (
         f"{nombre} sigue pegando {panel} encima de {figura}: esa es la disposicion vieja")
+
+
+# ------------------------- la columna de controles, verde y del alto entero del tablero
+
+
+@pytest.mark.parametrize("nombre", CUADERNOS)
+def test_las_dos_columnas_tienen_el_mismo_alto(nombre):
+    """`align-items: flex-start` dejaba a cada columna con el alto de SU contenido.
+
+    Con una figura de 1.700 px al lado, el panel de control ocupaba su trozo de arriba y
+    el resto de la columna quedaba en blanco: el fondo verde se cortaba a un tercio de
+    la pantalla y la union de las dos columnas se leia como un recorte.
+
+    `stretch` es el valor por defecto de `align-items`; lo unico que hace falta es dejar
+    de pisarlo.
+    """
+    cuerpo = _regla(_css(nombre), ".cuerpo-2col")
+    assert "flex-start" not in cuerpo, (
+        f"{nombre}: la columna de controles sigue midiendo lo que mide su contenido, "
+        f"asi que su fondo no llega abajo: {cuerpo}")
+
+
+@pytest.mark.parametrize("nombre", CUADERNOS)
+def test_el_panel_llena_su_columna_y_centra_su_contenido(nombre):
+    """Que la COLUMNA mida el alto entero no basta: el panel es quien lleva el fondo.
+
+    Sin `height: 100%` el panel sigue midiendo su contenido dentro de una columna alta, y
+    el verde no llega. Y con el alto entero, el contenido pegado arriba deja un vacio
+    largo debajo: `justify-content: center` es lo que lo alinea con el panel de figuras.
+    """
+    cuerpo = _regla(_css(nombre), '.cuerpo-2col > .col-controles > [class^="panel-"]')
+    assert "height: 100%" in cuerpo, (
+        f"{nombre}: el panel no llena el alto de su columna, asi que el fondo verde se "
+        f"corta: {cuerpo}")
+    assert "justify-content: center" in cuerpo, (
+        f"{nombre}: el contenido del panel no se centra contra el panel de figuras: {cuerpo}")
