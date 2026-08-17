@@ -101,6 +101,7 @@ Produce el análisis final en español como JSON estructurado.
 - Agrupa los hallazgos por mecanismos dominantes cuando sea posible: evento/impacto, protección, topología, características físicas/eléctricas, activos y entorno/riesgo/clima.
 - Incluye las ventanas estudiadas con sus periodos y valores.
 - En la propiedad `cause_hypothesis_note`, estima la posible causa raíz basándote en las justificaciones técnicas (`ContextoProyectoSimuladorCHEC.md`), las variables analizadas, la cantidad de eventos y el impacto en `UITI_VANO`. Ajusta tus análisis para que las justificaciones sean más detalladas, resaltando explícitamente cuáles columnas o variables específicas guardan mayor relación con las causas propuestas.
+- La causa raíz se escribe en el lenguaje de quien opera el circuito: qué está pasando en la red y por qué. Nombra el fenómeno físico o eléctrico —vegetación que invade la servidumbre, descargas atmosféricas sobre un tramo, un conductor o un calibre que no da para la carga, una puesta a tierra ausente—, no el procedimiento que lo detectó. Un identificador de regla, un nombre de función o un nombre de proceso interno en este campo no aportan nada y hacen ilegible lo único que el lector se va a llevar. Al citar las variables que sostienen la hipótesis, escríbelas con su nombre en castellano y su código entre paréntesis, como indica `04_domain_grounding_guardrails`.
 - **Análisis de Vegetación y DDT (OBLIGATORIO):** Es MANDATORIO analizar e incluir siempre la influencia de `NR_T` (nivel de riesgo de vegetación cercana al vano) y `DDT` (Densidad de Descargas a Tierra). Ambas variables SIEMPRE están presentes en los datos del estudio. Debes:
   1. Evaluar el nivel de `NR_T` en las ventanas estudiadas y discutir explícitamente si la vegetación pudo contribuir a los eventos o al deterioro de `UITI_VANO`.
   2. Correlacionar `DDT` con las demás variables climáticas disponibles (precipitación, viento, nubosidad, etc.) y evaluar explícitamente su impacto en la frecuencia de eventos y en la severidad de `UITI_VANO`.
@@ -151,6 +152,56 @@ para el dataset estructurado. Trátalo como guía interpretativa, no como prueba
 - "la evidencia tabular muestra"
 - "dentro de las variables disponibles"
 - "no se puede confirmar con esta versión local"
+
+## Como se nombran las cosas en el informe
+
+Lo escrito aqui lo lee alguien que opera la red, no quien programo el flujo.
+
+### Variables: nombre en castellano, y el codigo entre parentesis
+
+Escribe `Riesgo por vegetacion cercana al vano (NR_T)`, no `NR_T` a secas. El contexto te
+entrega los dos: cada grupo de `domain.variable_groups` trae `variables` (los codigos) y
+`variables_nombradas` (los mismos codigos ya con su nombre delante). Usa el nombre la
+primera vez que aparece una variable en cada seccion; despues basta el codigo.
+
+El codigo NO se omite: es lo que hay que buscar en el dataset y en el tablero, y un
+informe que solo diera el nombre obligaria a traducir de vuelta a mano.
+
+Las series de clima conservan su rezago: `Temperatura del aire (temp_3)` es la
+temperatura tres horas antes del evento, y `temp_3` y `temp_9` no son lo mismo.
+
+### Nunca nombres de codigo
+
+No escribas identificadores de maquina, nombres de funcion, de modulo, de archivo ni de
+proceso interno. Nada de `topology_protection`, `weather_environmental_stress`,
+`relevancia_hacia_uiti_minimo`, `_compute_inference_scenarios`, `KMeans`, `plegar_rezagos`
+ni rutas de archivo. Las reglas de dominio del contexto vienen con un `nombre` en
+castellano: usa ese nombre, o describe la relacion con tus palabras.
+
+Un identificador en snake_case ingles dentro de un informe para operacion no aclara nada:
+hace parecer que el texto lo escribio el programa, y quien lo lee no puede comprobarlo
+contra nada que tenga delante.
+
+Describe el METODO por lo que hace, no por como se llama. "Se probaron valores a lo largo
+del rango observado de cada variable de intervencion" dice mas que el nombre de la funcion
+que lo hace.
+
+### Dos escalas de criticidad, y no se mezclan
+
+Son cosas distintas y comparten palabras, que es exactamente por lo que se confunden:
+
+- **La banda del CIRCUITO** es `selected_context.characterization[].criticidad`, y sale del
+  mismo calculo que pinta la barra del ranking que el lector tiene delante. Sus valores son
+  `Riesgo Bajo`, `Riesgo Medio`, `Riesgo Medio-Alto` y `Riesgo Alto`. Cita el valor que te
+  llega, textual. **No inventes ninguna otra etiqueta**: "Riesgo Muy Alto" y "Riesgo
+  Medio-Bajo" NO existen en esta escala, y escribirlas contradice la figura.
+  Acompanala del puesto: `posicion` de `circuitos_en_la_flota`.
+- **La clase de un VANO en una ventana** es `Bajo`, `Medio`, `Medio-Alto` o `Alto`, sin la
+  palabra "Riesgo" delante. Es la clase de una bolsa (vano, ventana), no del circuito.
+
+Al escribir cualquiera de las dos, di de que es: "el circuito esta en Riesgo Medio-Alto" o
+"nueve vanos estan en Medio-Alto". Sin ese sujeto, un lector que ve las dos frases seguidas
+cree que el informe se contradice.
 
 ---
 

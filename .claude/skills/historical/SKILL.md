@@ -1,6 +1,6 @@
 ---
 name: historical
-description: "Produce the historical/base descriptive diagnosis of UITI_VANO behavior for CHEC's selected circuit(s) and period, citing only already-selected structured context, with optional per-finding provenance. Trigger: historical analysis, base descriptive diagnosis, UITI_VANO behavior explanation, critical-point interpretation, circuit characterization."
+description: "Produce the historical/base descriptive diagnosis of UITI_VANO behavior for CHEC's selected circuit(s) and period, citing only already-selected structured context, with optional per-finding provenance. Trigger: historical analysis, base descriptive diagnosis, UITI_VANO behavior explanation, window interpretation, circuit characterization."
 license: Apache-2.0
 metadata:
   author: chec-local-uiti-vano-interpreter
@@ -9,7 +9,7 @@ metadata:
   rules: .claude/agents/rules/invariants.md
   ported_from:
     - .claude/skills/historical/prompt/01_structured_context_builder.md
-    - .claude/skills/historical/prompt/02_critical_point_interpreter.md
+    - .claude/skills/historical/prompt/02_window_interpreter.md
     - .claude/skills/historical/prompt/03_uiti_vano_behavior_explainer.md
     - .claude/skills/historical/prompt/04_domain_grounding_guardrails.md
     - .claude/skills/historical/prompt/05_llm_output_validator.md
@@ -38,13 +38,13 @@ content, not the invariants themselves.
 
 Load this Skill when authoring the historical/base diagnosis for one or more circuits: describing
 `UITI_VANO` behavior over the selected period using only the already-built structured context
-(critical points, daily series, domain groups) — never new selection or detection.
+(the studied windows, the per-window series, domain groups) — never new selection or detection.
 
 ## Structured context construction (ported from `01_structured_context_builder.md`)
 
 The deterministic Python layer builds the structured context **before** any call to this agent:
-selecting circuits, the period, the daily `UITI_VANO` series, the critical points, and the
-attribution summaries for each critical point, domain variable groups, and relationship rules. The
+selecting circuits, the period, the per-window `UITI_VANO` series, the three studied windows,
+the domain variable groups, and the relationship rules. The
 output is a compact, JSON-serializable context package.
 
 Rules this agent must honor about the context it receives:
@@ -53,26 +53,33 @@ Rules this agent must honor about the context it receives:
 - Unavailable optional variables are explicitly listed in the context metadata.
 - IDs stay as text strings.
 - Large windows are summarized rather than sent as a full raw dataset.
-- Enough event rows around each critical point are included to allow interpretation.
-- The daily series is already in compact form.
+- Enough per-window aggregate is included to allow interpretation.
+- The per-window series is already in compact form.
 - Domain/protection relationship rules are already included in the context package.
 - No external evidence, documents, vector stores, models, masks, simulations, or final-report
   material is ever added to the context — if it is not in the envelope, it does not exist for this
   agent.
 
-## Critical-point interpretation (ported from `02_critical_point_interpreter.md`)
+## Window interpretation (ported from `02_window_interpreter.md`)
 
-This agent interprets the critical points already selected by the deterministic code layer. It
-never selects, adds, removes, or reorders them.
+This agent interprets the WINDOWS already selected by the deterministic code layer. It never
+selects, adds, removes, or reorders them.
 
-- Do not add, remove, or reorder critical points.
-- Use `criticality_types`/`types`, `selection_reason`, `criticality_score`/`score`, daily
-  aggregates, and attribution summaries already present on each critical point.
-- Describe why each critical point is relevant to `UITI_VANO` behavior at the period level.
-- Relate the critical point's interpretation to domain variable groups when available.
+This section used to describe *critical points* — days picked by a detector that was retired with
+the MGCECDL path. It named a playbook file that no longer exists on disk (the `02_` playbook is
+`02_window_interpreter.md`), declared that file's old name as an allowed `provenance.rule` — which
+the enforced allow-list in `src/chec_local_interpreter/llm_validation.py` REJECTS, so following
+this Skill literally failed validation — and told the agent to cite `critical_point_id`, a field
+the envelope stopped carrying. The unit of the whole report is the WINDOW (`V1`..`V11`): the same
+grid notebook 02's ranking, notebook 05's bag cache and notebook 06's simulator all speak.
+
+- Do not add, remove, or reorder windows. `ventanas_estudio` in the context names the three the
+  report studies; copy it verbatim.
+- Use the per-window aggregates already present in `ventanas` (`uv`, `n`, endpoints).
+- Describe why each studied window matters to `UITI_VANO` behaviour at the period level.
+- Relate a window's reading to the domain variable groups when available.
 - Distinguish between "observed in the data" and "plausible contributing factor."
-- Cite evidence by date and `critical_point_id` whenever a finding depends on a specific critical
-  point.
+- Cite evidence by date and `ventana` whenever a finding depends on a specific window.
 - Never invent missing variables, event labels, or unavailable columns.
 
 ## `UITI_VANO` behavior explanation (ported from `03_uiti_vano_behavior_explainer.md`)
@@ -93,7 +100,7 @@ Produce the final analysis in Spanish as structured JSON, with these required ou
 - **Vegetation and DDT analysis (mandatory):** always analyze and include the influence of `NR_T`
   (vegetation risk level near the vano) and `DDT` (ground discharge density). Both variables are
   always present in the study data. This agent must:
-  1. Evaluate `NR_T` at the critical points and explicitly discuss whether vegetation could have
+  1. Evaluate `NR_T` in the studied windows and explicitly discuss whether vegetation could have
      contributed to events or `UITI_VANO` deterioration.
   2. Correlate `DDT` with the other available climate variables (precipitation, wind, cloud cover,
      etc.) and explicitly evaluate its impact on event frequency and `UITI_VANO` severity.
@@ -104,7 +111,7 @@ Produce the final analysis in Spanish as structured JSON, with these required ou
 - Avoid unsupported claims.
 - Never mention external document review, operational logs, regulatory review, predictive-model
   inference, relevance masks, simulation, or final-report generation.
-- Use every provided critical point as evidence, but synthesize one consolidated period-level
+- Use every studied window as evidence, but synthesize one consolidated period-level
   diagnosis.
 
 ## Domain-grounding guardrails (ported from `04_domain_grounding_guardrails.md`)
@@ -144,7 +151,7 @@ Every response is validated before being presented as an analysis. A valid respo
 
 - Is valid JSON.
 - Complies with `uiti_vano_explanation.output_schema.json`.
-- Only references dates present in `critical_points` or the daily series.
+- Only references dates present in the windows' endpoints or the period metadata.
 - Never references an unavailable column as if it were present.
 - Never claims to use external document review, operational logs, regulatory review,
   predictive-model inference, relevance masks, simulations, or final-report generation.
@@ -163,7 +170,7 @@ Repair mode is used only when a previous response failed validation.
 - Return only valid JSON — no markdown, no `<think>` tags, no comments or text before/after the
   JSON object.
 - Use only the repair context provided.
-- Use only dates and `critical_point_id`s present in `critical_points` or the context's
+- Use only dates and `ventana` labels present in `ventanas` or the context's
   start/end window.
 - Never mention external document review, operational logs, regulatory review, what-if analysis,
   simulation, relevance masks, or final-report generation.
@@ -184,11 +191,11 @@ producing a descriptive diagnosis for the selected circuit(s) and period.
 
 Scope:
 
-- Work only on flow steps 1–3: circuit/vano selection, deterministic critical-point
+- Work only on flow steps 1–3: circuit/vano selection, deterministic window
   identification, and preliminary semantic diagnosis.
 - Use only the structured JSON context package, variable descriptions, variable groups, and
   relationship rules included in the context.
-- Never detect new critical points or change the points provided by the deterministic layer.
+- Never select new windows or change the ones provided by the deterministic layer.
 - Never use or mention external document review, operational logs, regulatory review, vector
   stores, predictive models, relevance masks, simulations, what-if scenarios, or final reports.
 
@@ -199,13 +206,13 @@ Output:
 - The response must be compact, with every array and the root object fully closed. Verify the JSON
   parses without repair before finalizing.
 - The object must comply with the schema delivered in the prompt.
-- Use only `critical_point_id`s present in the context; use `null` when not applicable.
+- Use only `ventana` labels present in the context; use `null` when not applicable.
 - Before answering, verify every schema-required field exists in the exact requested shape. Never
   replace lists of objects with dictionaries, or vice versa, even when the content seems
   equivalent.
 
 Required diagnosis: analyze `UITI_VANO` behavior for the selected circuits and period, using the
-provided critical points as evidence, and produce one consolidated period-level diagnosis.
+provided windows as evidence, and produce one consolidated period-level diagnosis.
 Connect circuit characterization with the temporal evolution of `events` and `UITI_VANO`.
 
 `circuit_characterization` must include:
@@ -214,18 +221,18 @@ Connect circuit characterization with the temporal evolution of `events` and `UI
 - `top_vanos_percentile`, `p97_vanos_uiti_vano`, `p97_vanos_eventos`: copy the configured
   percentile and the top-percentile vanos from the context.
 - `probable_justifications_rules`: items describing variable relationships that may contribute to
-  the most-affected critical points and vanos.
+  the most-affected windows and vanos.
 
 Each `probable_justifications_rules` item must include `modo`, `variables_asociadas`,
 `justificacion_fisico_logica` (strictly based on the context's own rules), and `analisis_causas`
-(how those connections are compatible with the observed critical-point values).
+(how those connections are compatible with the values observed in the studied windows).
 
-Use `top_rows` values on critical days, correlating climate, infrastructure, and
+Use `top_rows` values in the studied windows, correlating climate, infrastructure, and
 physical/electrical modes. Report `FID_VANO` when present in the context.
 
 **Vegetation and DDT:** one `probable_justifications_rules` item must correspond to the
 "Entorno y Riesgo" mode with variables `NR_T` and `DDT`, whenever they are available in the
-context. Evaluate whether `NR_T` at the critical points suggests vegetation contributed to events
+context. Evaluate whether `NR_T` in the studied windows suggests vegetation contributed to events
 or `UITI_VANO` deterioration, and whether `DDT` is compatible with a higher event frequency or
 elevated `UITI_VANO` values. If `NR_T` or `DDT` are absent from the delivered context, report it as
 a data gap — never invent an observation.
@@ -238,7 +245,7 @@ Style:
 - Develop the analysis with enough detail to avoid losing relevant findings.
 - Keep the writing clear and organized so the HTML report retains its executive style.
 - Every list block has a maximum of 5 items; when more findings exist, prioritize the
-  best-supported ones (dates, critical points, variables, and context rules).
+  best-supported ones (dates, windows, variables, and context rules).
 - Narrative string fields (`period_synthesis`, `cause_hypothesis_note`, `text`,
   `analisis_causas`) must be closed paragraphs — use item arrays to distribute findings instead of
   an open-ended narrative field.
@@ -257,18 +264,18 @@ source, per `.claude/agents/rules/invariants.md` Rule 6:
 ```
 
 - `data_ref` entries resolve against the citable universe advertised in the envelope's `allowed`
-  block: an ISO date, a `cp-YYYY-MM-DD` critical-point id, or a domain variable name — anything
+  block: an ISO date, a `V1`..`V11` window label, or a domain variable name — anything
   else, or a reference outside that universe, fails validation.
 - **Never invent a date-range id** (e.g. `"period-2026-01-04-2026-01-06"`) to cite a period-level
   finding — that format does not exist in the citable universe and always fails validation. When a
   `key_finding` spans several dates, cite the single most representative date (or `cp-YYYY-MM-DD`
-  id) from `allowed.dates`/`allowed.critical_point_ids` instead — for example, prefer
+  id) from `allowed.dates`/`allowed.ventanas` instead — for example, prefer
   `"data_ref": ["2026-01-04"]` over a synthesized range covering `2026-01-04` through `2026-01-06`.
 - `agent` must always be the literal string `"historical"`.
 - `rule` must be one of the seven playbook ids ported into this Skill (`ported_from` above,
   stripped of their `NN_` prefix and `.md` suffix, in the same order
   `assemble_skill_bundle(profile="base")` loads them):
-  `01_structured_context_builder`, `02_critical_point_interpreter`,
+  `01_structured_context_builder`, `02_window_interpreter`,
   `03_uiti_vano_behavior_explainer`, `04_domain_grounding_guardrails`,
   `05_llm_output_validator`, `06_base_repair`, `07_base_output_contract`.
 - Omitting `provenance` on a `key_finding` never fails validation — it is optional per item, not
@@ -294,7 +301,7 @@ validator and `.claude/agents/rules/invariants.md` Rule 7 enforce):
 - Ported-from playbooks (the machine-fed source, loaded by
   `assemble_skill_bundle(profile="base")`):
   `.claude/skills/historical/prompt/01_structured_context_builder.md`,
-  `.claude/skills/historical/prompt/02_critical_point_interpreter.md`,
+  `.claude/skills/historical/prompt/02_window_interpreter.md`,
   `.claude/skills/historical/prompt/03_uiti_vano_behavior_explainer.md`,
   `.claude/skills/historical/prompt/04_domain_grounding_guardrails.md`,
   `.claude/skills/historical/prompt/05_llm_output_validator.md`,

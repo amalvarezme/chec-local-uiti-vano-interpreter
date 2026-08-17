@@ -538,7 +538,7 @@ def prepare_expert_alignment(
     is out of scope for this change. This function only READS that
     already-built table and matches it against the circuit, exactly like the
     original (now-superseded) notebook flow
-    (`the retired interactive notebook`, cell ~55):
+    (the retired interactive interpretability notebook, cell ~55):
     `cargar_discussiones_pdf_excel` -> `extraer_fechas_informe` ->
     `filtrar_discussiones_por_circuito` -> `seleccionar_top_coincidencias_temporales`.
 

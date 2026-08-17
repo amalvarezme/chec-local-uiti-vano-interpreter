@@ -27,7 +27,7 @@ from one stage to the next. Read this Skill top to bottom as a checklist, not as
 guidance — the actual domain reasoning for each stage lives in that stage's own Skill
 (`historical`, `inference`, `expert-alignment`).
 
-Supersedes the interactive notebook `the retired interactive notebook` in full. That notebook
+Supersedes the retired interactive interpretability notebook in full. That notebook
 was deleted once this Skill's coverage was proven equivalent (see git history).
 
 **The model changed, and with it the unit.** The predictive layer used to be MGCECDL scoring one
@@ -73,7 +73,7 @@ excluding the agent turns:
 |---|---|---|
 | `prepare` (model + catalogue + 3 windows + figures + maps) | 30,2 s | 1.467 MB |
 | `prepare_expert_alignment` | 0,1 s | — |
-| `render` (ranking + per-window sections + 2 GEO maps) | 4,8 s | 1.475 MB |
+| `render` (ranking + per-window sections + one GEO map per studied window) | 4,8 s | 1.475 MB |
 | **Total** | **35,0 s** | **1.475 MB** |
 
 The resulting HTML is 2,6 MB. This came down from 50,0 s / 5.701 MB, in four measured
@@ -177,6 +177,29 @@ boundary.
 ## Run sequence
 
 **Environment bootstrap.** Run report-contract and role CLI commands from the repository root with `PYTHONPATH=src .venv/bin/python`. Do not treat a bare `python`/`python3` import failure as an unavailable project environment before trying this supported local command.
+
+**The role verbs read STDIN. They take no flags at all.** `build-context` and `validate` on
+`agent_tools.historical` / `.inference` / `.expert_alignment` each accept `-h` and nothing else —
+verified against `--help`. There is no `--run-dir`, no `--circuito`, no `--out`. Pipe the envelope
+in:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.agent_tools.historical build-context \
+  < <run_dir>/historical.bc.json
+```
+
+`validate` takes `{"response_text": "<the response as a JSON string>", "context": <envelope["context"]>}`
+on stdin and signals the verdict through its **exit code** (`0` = valid).
+
+State this in the dispatch prompt for every role. Left implicit, each of the three agents
+independently guesses `--run-dir`, hits a `SystemExit(2)`, and spends turns rediscovering the same
+contract — measured on a real run: all three did exactly that, and all three reported it back as a
+finding.
+
+**`prepare-alignment` needs the circuit and dates positionally**, even though the run_dir already
+records them: `... prepare-alignment <circuito> <fecha_inicio> <fecha_fin> --run-dir <run_dir>`.
+Passing only `--run-dir` exits 2. (Step 5 below describes the underlying Python function, whose
+signature is run_dir-only — the CLI wrapper is not the same shape.)
 
 Given `circuito (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
 
@@ -427,15 +450,23 @@ already completed — dispatch it alone, immediately once both are done, without
    produced the report). If `prepare` persisted `run_dir/inference_render_assets.json` (the
    healthy-run case above), `render` reads back BOTH of its halves:
 
-   - `figuras`: one entry per STUDIED window, whose four figure paths resolve against `run_dir`
-     and become the `inference_results` mapping. `_render_inference_layout` iterates that mapping
-     **by window**. It used to look up four fixed MGCECDL-era keys (`top_uiti_periodo` and
-     company) that `prepare` stopped writing when the model moved to the MIL: none matched, and
-     the model's whole figure section rendered EMPTY in every report without a single message.
-   - `mapas`: the base and simulated per-vano classes of the last window with events, which
-     become the two GEO maps. Both layers come from the same u-hat, so the only difference
-     between the two maps is the intervention. They used to show "events" and "accumulated UITI"
-     — two descriptive views of the same past, with nothing to compare.
+   - `figuras`: one entry per STUDIED window, whose four figure paths resolve against
+     `run_dir/inference_figures` — the same directory `prepare` handed to the figure writer,
+     shared as `SUBDIR_FIGURAS_INFERENCIA` so the two halves cannot drift. They become the
+     `inference_results` mapping, which `_render_inference_layout` iterates **by window**. Two
+     bugs have already been paid for here, both silent: it once looked up four fixed MGCECDL-era
+     keys that `prepare` had stopped writing, and it later resolved the figure names against
+     `run_dir` while the files sat one directory below. Both times the model's whole figure
+     section rendered EMPTY in every report without a single message.
+   - `mapas`: a LIST, one entry per studied window, each carrying that window's observed per-vano
+     classes. Each becomes one GEO map. There used to be a base/simulated PAIR for a single
+     window; the simulated half answered "what changes if the crew goes", which the intervention
+     table already answers with numbers and a per-vano group delta, so it repeated an answer the
+     report already had. Three windows instead say what no table says at a glance: WHERE the
+     problem sits along the circuit and whether it stays in the same stretch or moves. (Before
+     the pair, the two maps showed "events" and "accumulated UITI" — two descriptive views of the
+     same past, with nothing to compare.) A single `dict` is still accepted, so a run_dir written
+     by the previous version still renders.
 
    A missing sidecar leaves both `None`: the figure section is empty and the maps are omitted.
    Never a crash, never a `ReportPipelineError`.
@@ -467,6 +498,30 @@ already completed — dispatch it alone, immediately once both are done, without
    step is additive only — it does not change step 8's own report or `report_pipeline.py`'s
    `prepare`/`render` behavior in any way.
 
+   **Before chaining `/graphify`, check the deletion count — it can PRUNE the graph.** Run the
+   incremental detection yourself first and abort the chain if it reports deletions that are not
+   real:
+
+   ```bash
+   $(cat graphify-out/.graphify_python) -c "
+   import json; from pathlib import Path
+   from graphify.detect import detect_incremental
+   r = detect_incremental(Path('reports/vault'))
+   borrados = list(r.get('deleted_files', []))
+   print('nuevos:', r.get('new_total', 0), '| borrados:', len(borrados),
+         '| de esos, existen:', sum(1 for f in borrados if Path(f).exists()))
+   "
+   ```
+
+   Measured on a real `/report` run: `nuevos: 1 | borrados: 426 | de esos, existen: 0`. The 426 are
+   the whole-project manifest's keys (`astro.config.mjs`, `data/models/…`, stored relative to `.`)
+   re-anchored against the narrower `reports/vault` scan root, so they resolve to paths that never
+   existed. Letting the flow continue prunes those 426 files out of a 6.479-node graph — data loss,
+   not wasted tokens. **If any reported deletion does not exist on disk, skip the graphify chain
+   entirely**, delete `graphify-out/.graphify_incremental.json` so no later run picks it up and
+   prunes from it, and report it under this step's alert-and-continue rule: the HTML from step 8
+   stands, and the vault note itself was already written by (1).
+
 ## Error handling summary
 
 | Failure | Where | User-facing outcome |
@@ -492,7 +547,7 @@ always continues, the report always generates:
 | Case | Where | Resulting shape |
 |---|---|---|
 | No trained model file on disk | `prepare` (`cargar_recursos_mil`) | `escenarios: []`, `sin_artefacto_de_modelo: true`; `render` gets `inference_results=None` |
-| One scenario (of four) has too few events for valid SHAP | `prepare` (`_compute_inference_scenarios`) | That scenario is silently omitted from `escenarios`; the other surviving scenarios are unaffected |
+| One studied window has too few bags to build a scenario | `prepare` (`_compute_inference_scenarios`) | That window is silently omitted from `escenarios`; the other surviving scenarios are unaffected |
 | Circuit has no bags in any window | `prepare` (`escenarios_de_circuito`) | `escenarios: []` but the model summary is real — distinguishes this from the "no trained model" row above |
 | Graph-output directory can't be created (`graph_dir.mkdir`), or one scenario's interactive graph HTML can't be written (`mostrar_grafo_interactivo_muestras`/`construir_grafo_interactivo_muestras`) | `prepare` (`_compute_inference_scenarios`) | `OSError`/`PermissionError` caught, never propagates out of `prepare`. A failed `graph_dir.mkdir` degrades the WHOLE call (`escenarios: []`, `features` still populated) since no scenario can persist a graph without a writable directory; a failed per-scenario HTML write degrades only THAT scenario (omitted from `escenarios`, others unaffected) — both cases warn clearly, the run always completes |
 | `inference_render_assets.json` sidecar write fails (`save_json_artifact` raises `OSError`/`PermissionError`, e.g. disk-full) | `prepare` (top-level, after `_run_inference_simulator` returns) | `OSError` caught, never propagates out of `prepare`; `historical.bc.json`/`inference.bc.json`/`l1_state.json` are still written and `inference.bc.json`'s `escenarios`/`features` stay populated (already computed before this write) — only the sidecar is missing, so `render` degrades exactly like the "sidecar absent" row below |
@@ -517,7 +572,7 @@ always continues, the report always generates:
   [`src/chec_local_interpreter/vault_note_contract.py`](../../../src/chec_local_interpreter/vault_note_contract.py)
 - Binding invariants (shared with every agent role above): `.claude/agents/rules/invariants.md`
 - Architecture and envelope contract: `docs/agents-guide.md`
-- `the retired interactive notebook` — deleted; this Skill supersedes it
+- The retired interactive interpretability notebook — deleted; this Skill supersedes it
   in full (see git history for its prior content).
 - Tests: `tests/test_report_pipeline.py` (argument-pair contract, simulator wiring/degrade paths, the
   real-simulator integration tests using the committed model/Optuna/Variables artifacts, and the

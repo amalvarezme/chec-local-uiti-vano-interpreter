@@ -75,7 +75,7 @@ def _modelo_mas_reciente(model_dir: str | Path, base_name: str) -> Path:
     """Return "the" model file among several dated candidates under `model_dir`.
 
     Ported from the notebook precedent (`04_mgcecdl_performance.ipynb`
-    and `the retired interactive notebook`, deprecated in
+    and the retired interactive interpretability notebook, deprecated in
     place): glob `{stem}*{suffix}` from `base_name` and deterministically pick
     the lexicographically last candidate (`sorted(candidates)[-1]`).
 

@@ -407,3 +407,53 @@ Usar estas formulas:
 - "La variable está en `features`, pero no se encontró camino documentado hacia
   `UITI_VANO`."
 - "La interpretación debe tratarse como hipótesis hasta validación operativa."
+
+## Como se nombran las cosas en el informe
+
+Lo escrito aqui lo lee alguien que opera la red, no quien programo el flujo.
+
+### Variables: nombre en castellano, y el codigo entre parentesis
+
+Escribe `Riesgo por vegetacion cercana al vano (NR_T)`, no `NR_T` a secas. El contexto te
+entrega los dos: cada grupo de `domain.variable_groups` trae `variables` (los codigos) y
+`variables_nombradas` (los mismos codigos ya con su nombre delante). Usa el nombre la
+primera vez que aparece una variable en cada seccion; despues basta el codigo.
+
+El codigo NO se omite: es lo que hay que buscar en el dataset y en el tablero, y un
+informe que solo diera el nombre obligaria a traducir de vuelta a mano.
+
+Las series de clima conservan su rezago: `Temperatura del aire (temp_3)` es la
+temperatura tres horas antes del evento, y `temp_3` y `temp_9` no son lo mismo.
+
+### Nunca nombres de codigo
+
+No escribas identificadores de maquina, nombres de funcion, de modulo, de archivo ni de
+proceso interno. Nada de `topology_protection`, `weather_environmental_stress`,
+`relevancia_hacia_uiti_minimo`, `_compute_inference_scenarios`, `KMeans`, `plegar_rezagos`
+ni rutas de archivo. Las reglas de dominio del contexto vienen con un `nombre` en
+castellano: usa ese nombre, o describe la relacion con tus palabras.
+
+Un identificador en snake_case ingles dentro de un informe para operacion no aclara nada:
+hace parecer que el texto lo escribio el programa, y quien lo lee no puede comprobarlo
+contra nada que tenga delante.
+
+Describe el METODO por lo que hace, no por como se llama. "Se probaron valores a lo largo
+del rango observado de cada variable de intervencion" dice mas que el nombre de la funcion
+que lo hace.
+
+### Dos escalas de criticidad, y no se mezclan
+
+Son cosas distintas y comparten palabras, que es exactamente por lo que se confunden:
+
+- **La banda del CIRCUITO** es `selected_context.characterization[].criticidad`, y sale del
+  mismo calculo que pinta la barra del ranking que el lector tiene delante. Sus valores son
+  `Riesgo Bajo`, `Riesgo Medio`, `Riesgo Medio-Alto` y `Riesgo Alto`. Cita el valor que te
+  llega, textual. **No inventes ninguna otra etiqueta**: "Riesgo Muy Alto" y "Riesgo
+  Medio-Bajo" NO existen en esta escala, y escribirlas contradice la figura.
+  Acompanala del puesto: `posicion` de `circuitos_en_la_flota`.
+- **La clase de un VANO en una ventana** es `Bajo`, `Medio`, `Medio-Alto` o `Alto`, sin la
+  palabra "Riesgo" delante. Es la clase de una bolsa (vano, ventana), no del circuito.
+
+Al escribir cualquiera de las dos, di de que es: "el circuito esta en Riesgo Medio-Alto" o
+"nueve vanos estan en Medio-Alto". Sin ese sujeto, un lector que ve las dos frases seguidas
+cree que el informe se contradice.
