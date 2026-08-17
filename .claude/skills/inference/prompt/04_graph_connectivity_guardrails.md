@@ -12,7 +12,7 @@ El agente puede recibir:
 - Una matriz de adyacencia entre variables, si ya fue construida.
 - Aristas preservadas, si el flujo las entrega.
 - Top variables de inferencia por evento, vano, circuito o escenario.
-- Top variables de MGCECDL por SHAP/permutacion o soportes por modalidad.
+- Top variables por relevancia hacia el UITI minimo, permutacion o soportes por modalidad.
 - Modos CHEC y scores por modo.
 
 Si recibe una matriz, debe interpretarla asi:

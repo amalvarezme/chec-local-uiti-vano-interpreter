@@ -61,7 +61,7 @@ or workflow step naming one of them.)
 
 Predictive or forecasting language about circuit behavior is prohibited in every role's output
 governed by this file, except inside the already-validated inference-agent flow (Agent 2 —
-inference/SHAP — out of scope for this slice). This binds both current roles:
+inference/relevancia — out of scope for this slice). This binds both current roles:
 
 - **expert-alignment** compares existing descriptive and predictive-model signals against expert
   discussion; it does not itself predict or forecast anything.

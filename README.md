@@ -308,7 +308,7 @@ flowchart TD
         ADJ --> P3
         P3 --> MODEL[(mgcecdl_classifier_best.zip)]
         MODEL --> P4[Evaluación de desempeño]
-        MODEL --> P5[Análisis SHAP por circuito]
+        MODEL --> P5[Relevancia hacia el UITI mínimo por circuito]
         MODEL --> P6[Replicación documental]
     end
 

@@ -74,7 +74,7 @@ Usar placeholders solo como nombres de campos; los valores deben venir del conte
     "n_aristas_preservadas": "<valor_o_null>",
       "features_usadas": ["<feature_1>", "<feature_2>"],
       "modelo": "<modelo_recibido>",
-      "metodo_explicacion": "Kernel SHAP + Borda ponderado"
+      "metodo_explicacion": "relevancia hacia el UITI minimo + Borda ponderado"
   },
   "entregables": {
     "grafos_html": [
@@ -182,7 +182,7 @@ Antes de entregar, verificar:
   ausencia de relacion documentada.
 - Los scores normalizados estan entre `0` y `1`.
 - Las rutas del grafo respetan direccion `source -> target`.
-- Las afirmaciones sobre SHAP dicen que explican la salida del modelo.
+- Las afirmaciones sobre la relevancia dicen que explican la salida del modelo.
 - La salida no interpreta nodos originales ausentes como predictores usados.
 
 ## Validaciones de escenarios
@@ -284,20 +284,22 @@ Para cada variable mencionada en coherencia grafo-modelo:
 ### inferencia
 
 - No decir que inferencia uso directamente la matriz del grafo para predecir.
-- Las mascaras/atenciones o SHAP de inferencia deben contrastarse con el grafo como validacion
-  semantica externa.
+- Las mascaras/atenciones o relevancias de inferencia deben contrastarse con el grafo como
+  validacion semantica externa.
 
 ## Limitaciones minimas
 
 Toda salida interpretativa debe incluir limitaciones equivalentes a:
 
-- Kernel SHAP explica comportamiento del modelo.
+- La relevancia hacia el UITI minimo recorre el INTERIOR del rango de cada palanca de
+  intervencion y reporta cuanto baja el u-hat; describe lo que el modelo HARIA ante un
+  cambio, no como pesa lo que ya predijo.
 - La normalizacion min-max facilita comparacion dentro de cada escenario.
 - inferencia no usa directamente la matriz de adyacencia del grafo experto.
 - MGCECDL puede incorporar el grafo en entrenamiento, pero sus importancias siguen siendo
   explicaciones del modelo y requieren validacion operativa.
 - Los grafos HTML del cuaderno 05 muestran asociaciones estimadas para un escenario; no
-  sustituyen la lectura de SHAP+Borda y modos.
+  sustituyen la lectura de relevancia/Borda y modos.
 - Las fechas de interes solo explican eventos presentes en el periodo filtrado.
 - Los resultados dependen del circuito, periodo, filtro y variables recibidos.
 - Las relaciones no documentadas deben marcarse como ausentes o hipoteticas.

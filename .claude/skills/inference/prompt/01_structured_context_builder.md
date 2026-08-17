@@ -41,7 +41,7 @@ El agente puede recibir todo o parte de estos elementos:
 - `features`: nombres de columnas de `X`, en el mismo orden.
 - `base`: dataframe original filtrado, alineado posicionalmente con `X`.
 - `modos`: agrupación de variables en modos CHEC.
-- `shap_extractor`: explicador Kernel SHAP configurado sobre el mismo `X`.
+- `relevancia`: la relevancia hacia el UITI minimo, calculada sobre el mismo `X`.
 - `tabla_periodo`: agregacion por vano para el periodo filtrado.
 - `graph_adjacency_matrix`: matriz dirigida de relaciones entre variables retenidas.
 - `graph_preserved_edges`: lista de conexiones directas o virtuales preservadas entre
@@ -72,7 +72,7 @@ La estructura mínima que hace válido el análisis es:
 4. `X` y `base` con el mismo número de filas.
 5. `features` con el mismo número de columnas que `X`.
 6. Un modelo compatible con esas features.
-7. Un explicador SHAP inicializado sobre ese mismo subconjunto.
+7. La relevancia hacia el UITI minimo calculada sobre ese mismo subconjunto.
 8. Modos CHEC construidos a partir de las variables disponibles.
 9. Si hay grafo, matriz y aristas alineadas exactamente con `features`.
 
@@ -88,7 +88,7 @@ El cuaderno sigue este patron, aunque los valores concretos cambien por usuario:
 3. Crear `X` filtrado y `base` filtrada con indices reiniciados.
 4. Crear una columna de dia (`_FECHA_DIA`) para comparar con fechas de interes.
 5. Cargar el modelo entrenado de clasificacion.
-6. Crear el explicador Kernel SHAP para ese circuito-periodo.
+6. Calcular la relevancia hacia el UITI minimo para ese circuito-periodo.
 7. Agregar eventos por `FID_VANO`.
 8. Construir modos CHEC usando las features disponibles.
 9. Ejecutar escenarios de severidad, frecuencia, fechas de interes por severidad y fechas
@@ -103,8 +103,8 @@ El cuaderno sigue este patron, aunque los valores concretos cambien por usuario:
 ## Invariantes que no se deben romper
 
 - `X` y `base` deben estar alineados fila a fila.
-- `base` debe usar indice posicional continuo despues del filtro, porque el cache SHAP usa
-  indices enteros de `X`.
+- `base` debe usar indice posicional continuo despues del filtro, porque la relevancia se
+  indexa con enteros de `X`.
 - `features` define el orden de columnas de `X`.
 - Si `UITI_VANO` aparece en el archivo de seleccion, debe quedar excluido de `features`.
   Su presencia en tablas agregadas (`UITI_VANO`, `UITI_VANO_PROM`) no implica que haya sido
@@ -171,7 +171,7 @@ El agente puede representar el contexto con valores reales del paquete recibido:
     "html_estimados": ["<ruta_html_si_existe>"],
     "fuente_html": "reconstruccion_mgcecdl_rbf_o_null"
   },
-  "explicador": "Kernel SHAP + Borda ponderado",
+  "explicador": "relevancia hacia el UITI minimo + Borda ponderado",
   "normalizacion_graficos": "min-max 0-1 dentro de cada escenario"
 }
 ```

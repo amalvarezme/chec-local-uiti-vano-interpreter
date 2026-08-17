@@ -25,8 +25,8 @@ El agente puede recibir:
 - Valores de `UITI_VANO` por evento.
 - `UITI_VANO_PROM` agregado por vano.
 - Rankings de vanos por severidad o recurrencia.
-- Variables Top-K explicadas por SHAP/inferencia.
-- Variables Top-K explicadas por SHAP, atención, soporte modal o importancia por
+- Variables Top-K por relevancia hacia el UITI minimo.
+- Variables Top-K por relevancia, atención, soporte modal o importancia por
   permutación.
 - Modos CHEC con scores normalizados.
 - Fechas de interes o subconjuntos de eventos.
@@ -109,7 +109,7 @@ Los resultados de clasificacion deben narrarse como clase, probabilidad o nivel 
 No hablar de prediccion puntual continua de `UITI_VANO` salvo que el contexto entregue
 explicitamente un valor agregado observado, como `UITI_VANO_PROM`.
 
-Si el agente recibe probabilidades o atribuciones SHAP, debe aclarar:
+Si el agente recibe probabilidades o relevancias del modelo, debe aclarar:
 
 - La explicacion corresponde a la salida del modelo usada por el explicador.
 - No necesariamente resume todas las clases ordinales.
@@ -125,7 +125,7 @@ El cuaderno 05 puede generar grafos interactivos HTML por escenario en
 - Muestran pesos normalizados por la conexion maxima del grafo (`0-1`) en notacion
   cientifica.
 - Eliminan doble direccion y flechas.
-- Complementan barras SHAP+Borda y radar por modos; no los reemplazan.
+- Complementan barras de relevancia/Borda y radar por modos; no los reemplazan.
 
 Al narrarlos, usar frases como "el grafo estimado muestra asociacion relativa entre..." y
 evitar "el grafo demuestra que...".

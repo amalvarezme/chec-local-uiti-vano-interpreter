@@ -1,6 +1,6 @@
 ---
 name: inference
-description: "Interpret the MGCECDL/SHAP predictive-model signals for CHEC's selected circuit(s) and period — scenario variable/mode importance, estimated graph-model coherence, and cautious predictive hypotheses — citing only already-selected structured context, with optional per-item provenance. Trigger: inference analysis, MGCECDL interpretation, SHAP scenario interpretation, graph connectivity coherence, predictive hypothesis synthesis."
+description: "Interpret the MIL bag-model predictive signals for CHEC's selected circuit(s) and period — per-window scenario relevance towards minimum UITI, estimated graph-model coherence, and cautious predictive hypotheses — citing only already-selected structured context, with optional per-item provenance. Trigger: inference analysis, MIL bag-model interpretation, window scenario interpretation, graph connectivity coherence, predictive hypothesis synthesis."
 license: Apache-2.0
 metadata:
   author: chec-local-uiti-vano-interpreter
@@ -164,7 +164,7 @@ presented as the final analysis.
 
 ## Inference output contract (ported from `06_inference_output_contract.md`)
 
-Role: interpreter of the MGCECDL predictive model's scenarios, variables, modes, SHAP/Borda scores,
+Role: interpreter of the predictive model's scenarios, variables, modes, relevance/Borda scores,
 and referenced graph HTML deliverables, for electrical distribution networks.
 
 Return exactly the nine required keys: `contexto`, `entregables`, `escenarios`, `discusion_grafos`,

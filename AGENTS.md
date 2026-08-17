@@ -12,7 +12,7 @@ itself, never a Python call to Gemini/OpenAI.
 ## Scope
 
 - Circuit/vano selection, deterministic critical-point detection, and semantic diagnosis
-  (`historical`), MGCECDL/SHAP predictive interpretation (`inference`), expert-PDF alignment
+  (`historical`), MIL bag-model predictive interpretation (`inference`), expert-PDF alignment
   (`expert-alignment`), automatic min/max sensitivity discussion (`auto-simulator`), and
   PDF-discussion-table extraction (`pdf-discussion-extraction`) are all in scope and
   implemented — see `docs/agents-guide.md` for the full architecture.

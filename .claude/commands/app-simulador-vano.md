@@ -303,7 +303,6 @@ numpy
 scipy
 scikit-learn
 torch
-shap
 optuna
 matplotlib
 joblib
@@ -313,10 +312,11 @@ cloudpickle
 databricks-sdk
 ```
 `anywidget` is not optional — `plotly>=6`'s `go.FigureWidget` raises `ImportError` without it,
-and the entire dashboard is a `FigureWidget`. `shap`, `optuna`, `matplotlib` and `numba` (pulled
-by `shap`) are there because `chec_impacto.models.mil_persistencia` imports them transitively —
-confirmed by listing `sys.modules` after the minimal import set. **`geopandas` is deliberately
-absent.** Trimming further than this is what caused a `ModuleNotFoundError` on `optuna` in a
+and the entire dashboard is a `FigureWidget`. `optuna` and `matplotlib` are there because
+`chec_impacto.models.mil_persistencia` imports them transitively — confirmed by listing
+`sys.modules` after the minimal import set. `shap` and `numba` (which `shap` pulled) used to be
+on this list for the same reason and are now gone: SHAP left the project, so the same audit
+reports both as absent. **`geopandas` is deliberately absent.** Trimming further than this is what caused a `ModuleNotFoundError` on `optuna` in a
 sibling command; re-run the import audit before removing anything.
 
 **`arranque.py`** — downloads the bundle to the container's local disk, then execs Voila:
@@ -466,8 +466,7 @@ databricks apps deploy <app-name> --source-code-path /Workspace/Users/<userName>
 Use `command sleep` — a bare foreground `sleep` is blocked in this harness.
 
 Expect this deploy to be **slower than every other app in this family**: `pip install torch`
-alone dominates, and `shap`/`numba` build behind it. Budget ten minutes before treating it as
-stuck. On anything other than `SUCCEEDED`, read `databricks apps logs <app-name> -p <profile>`
+alone dominates. Budget ten minutes before treating it as stuck. On anything other than `SUCCEEDED`, read `databricks apps logs <app-name> -p <profile>`
 before touching anything.
 
 ## 8. Verify — and do not assume the WebSocket works

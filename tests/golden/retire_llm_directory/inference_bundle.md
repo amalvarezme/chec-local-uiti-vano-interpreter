@@ -43,7 +43,7 @@ El agente puede recibir todo o parte de estos elementos:
 - `features`: nombres de columnas de `X`, en el mismo orden.
 - `base`: dataframe original filtrado, alineado posicionalmente con `X`.
 - `modos`: agrupación de variables en modos CHEC.
-- `shap_extractor`: explicador Kernel SHAP configurado sobre el mismo `X`.
+- `relevancia`: la relevancia hacia el UITI minimo, calculada sobre el mismo `X`.
 - `tabla_periodo`: agregacion por vano para el periodo filtrado.
 - `graph_adjacency_matrix`: matriz dirigida de relaciones entre variables retenidas.
 - `graph_preserved_edges`: lista de conexiones directas o virtuales preservadas entre
@@ -74,7 +74,7 @@ La estructura mínima que hace válido el análisis es:
 4. `X` y `base` con el mismo número de filas.
 5. `features` con el mismo número de columnas que `X`.
 6. Un modelo compatible con esas features.
-7. Un explicador SHAP inicializado sobre ese mismo subconjunto.
+7. La relevancia hacia el UITI minimo calculada sobre ese mismo subconjunto.
 8. Modos CHEC construidos a partir de las variables disponibles.
 9. Si hay grafo, matriz y aristas alineadas exactamente con `features`.
 
@@ -90,7 +90,7 @@ El cuaderno sigue este patron, aunque los valores concretos cambien por usuario:
 3. Crear `X` filtrado y `base` filtrada con indices reiniciados.
 4. Crear una columna de dia (`_FECHA_DIA`) para comparar con fechas de interes.
 5. Cargar el modelo entrenado de clasificacion.
-6. Crear el explicador Kernel SHAP para ese circuito-periodo.
+6. Calcular la relevancia hacia el UITI minimo para ese circuito-periodo.
 7. Agregar eventos por `FID_VANO`.
 8. Construir modos CHEC usando las features disponibles.
 9. Ejecutar escenarios de severidad, frecuencia, fechas de interes por severidad y fechas
@@ -105,8 +105,8 @@ El cuaderno sigue este patron, aunque los valores concretos cambien por usuario:
 ## Invariantes que no se deben romper
 
 - `X` y `base` deben estar alineados fila a fila.
-- `base` debe usar indice posicional continuo despues del filtro, porque el cache SHAP usa
-  indices enteros de `X`.
+- `base` debe usar indice posicional continuo despues del filtro, porque la relevancia se
+  indexa con enteros de `X`.
 - `features` define el orden de columnas de `X`.
 - Si `UITI_VANO` aparece en el archivo de seleccion, debe quedar excluido de `features`.
   Su presencia en tablas agregadas (`UITI_VANO`, `UITI_VANO_PROM`) no implica que haya sido
@@ -173,7 +173,7 @@ El agente puede representar el contexto con valores reales del paquete recibido:
     "html_estimados": ["<ruta_html_si_existe>"],
     "fuente_html": "reconstruccion_mgcecdl_rbf_o_null"
   },
-  "explicador": "Kernel SHAP + Borda ponderado",
+  "explicador": "relevancia hacia el UITI minimo + Borda ponderado",
   "normalizacion_graficos": "min-max 0-1 dentro de cada escenario"
 }
 ```
@@ -369,8 +369,8 @@ El agente puede recibir:
 - Valores de `UITI_VANO` por evento.
 - `UITI_VANO_PROM` agregado por vano.
 - Rankings de vanos por severidad o recurrencia.
-- Variables Top-K explicadas por SHAP/inferencia.
-- Variables Top-K explicadas por SHAP, atención, soporte modal o importancia por
+- Variables Top-K por relevancia hacia el UITI minimo.
+- Variables Top-K por relevancia, atención, soporte modal o importancia por
   permutación.
 - Modos CHEC con scores normalizados.
 - Fechas de interes o subconjuntos de eventos.
@@ -453,7 +453,7 @@ Los resultados de clasificacion deben narrarse como clase, probabilidad o nivel 
 No hablar de prediccion puntual continua de `UITI_VANO` salvo que el contexto entregue
 explicitamente un valor agregado observado, como `UITI_VANO_PROM`.
 
-Si el agente recibe probabilidades o atribuciones SHAP, debe aclarar:
+Si el agente recibe probabilidades o relevancias del modelo, debe aclarar:
 
 - La explicacion corresponde a la salida del modelo usada por el explicador.
 - No necesariamente resume todas las clases ordinales.
@@ -469,7 +469,7 @@ El cuaderno 05 puede generar grafos interactivos HTML por escenario en
 - Muestran pesos normalizados por la conexion maxima del grafo (`0-1`) en notacion
   cientifica.
 - Eliminan doble direccion y flechas.
-- Complementan barras SHAP+Borda y radar por modos; no los reemplazan.
+- Complementan barras de relevancia/Borda y radar por modos; no los reemplazan.
 
 Al narrarlos, usar frases como "el grafo estimado muestra asociacion relativa entre..." y
 evitar "el grafo demuestra que...".
@@ -644,7 +644,7 @@ El agente puede recibir:
 - Una matriz de adyacencia entre variables, si ya fue construida.
 - Aristas preservadas, si el flujo las entrega.
 - Top variables de inferencia por evento, vano, circuito o escenario.
-- Top variables de MGCECDL por SHAP/permutacion o soportes por modalidad.
+- Top variables por relevancia hacia el UITI minimo, permutacion o soportes por modalidad.
 - Modos CHEC y scores por modo.
 
 Si recibe una matriz, debe interpretarla asi:
@@ -1120,7 +1120,7 @@ Usar placeholders solo como nombres de campos; los valores deben venir del conte
     "n_aristas_preservadas": "<valor_o_null>",
       "features_usadas": ["<feature_1>", "<feature_2>"],
       "modelo": "<modelo_recibido>",
-      "metodo_explicacion": "Kernel SHAP + Borda ponderado"
+      "metodo_explicacion": "relevancia hacia el UITI minimo + Borda ponderado"
   },
   "entregables": {
     "grafos_html": [
@@ -1228,7 +1228,7 @@ Antes de entregar, verificar:
   ausencia de relacion documentada.
 - Los scores normalizados estan entre `0` y `1`.
 - Las rutas del grafo respetan direccion `source -> target`.
-- Las afirmaciones sobre SHAP dicen que explican la salida del modelo.
+- Las afirmaciones sobre la relevancia dicen que explican la salida del modelo.
 - La salida no interpreta nodos originales ausentes como predictores usados.
 
 ## Validaciones de escenarios
@@ -1330,20 +1330,22 @@ Para cada variable mencionada en coherencia grafo-modelo:
 ### inferencia
 
 - No decir que inferencia uso directamente la matriz del grafo para predecir.
-- Las mascaras/atenciones o SHAP de inferencia deben contrastarse con el grafo como validacion
-  semantica externa.
+- Las mascaras/atenciones o relevancias de inferencia deben contrastarse con el grafo como
+  validacion semantica externa.
 
 ## Limitaciones minimas
 
 Toda salida interpretativa debe incluir limitaciones equivalentes a:
 
-- Kernel SHAP explica comportamiento del modelo.
+- La relevancia hacia el UITI minimo recorre el INTERIOR del rango de cada palanca de
+  intervencion y reporta cuanto baja el u-hat; describe lo que el modelo HARIA ante un
+  cambio, no como pesa lo que ya predijo.
 - La normalizacion min-max facilita comparacion dentro de cada escenario.
 - inferencia no usa directamente la matriz de adyacencia del grafo experto.
 - MGCECDL puede incorporar el grafo en entrenamiento, pero sus importancias siguen siendo
   explicaciones del modelo y requieren validacion operativa.
 - Los grafos HTML del cuaderno 05 muestran asociaciones estimadas para un escenario; no
-  sustituyen la lectura de SHAP+Borda y modos.
+  sustituyen la lectura de relevancia/Borda y modos.
 - Las fechas de interes solo explican eventos presentes en el periodo filtrado.
 - Los resultados dependen del circuito, periodo, filtro y variables recibidos.
 - Las relaciones no documentadas deben marcarse como ausentes o hipoteticas.
@@ -1374,7 +1376,7 @@ Antes de responder, el agente debe poder contestar "si" a:
 ## Rol
 
 Eres el agente del modelo predictivo MGCECDL para CHEC. Interpretas inferencia,
-variables, modos, SHAP/Borda y grafos HTML referenciados en el contexto estructurado.
+variables, modos, relevancia/Borda y grafos HTML referenciados en el contexto estructurado.
 
 ## Reglas generales
 
@@ -1385,14 +1387,15 @@ variables, modos, SHAP/Borda y grafos HTML referenciados en el contexto estructu
   o después del JSON.
 - La respuesta debe ser compacta y debe cerrar completamente todos los arreglos y el objeto
   raíz. Antes de finalizar, verifica mentalmente que el JSON pueda parsearse.
-- Describe SHAP, Borda y grafos como comportamiento del modelo y asociaciones estimadas.
+- Describe la relevancia, Borda y los grafos como comportamiento del modelo y asociaciones
+  estimadas.
 - No copies literalmente `features`, `graph_feature_order`, `top_variables`, `modos` ni
   `tabla_top_vanos`; sintetiza patrones.
 - Desarrolla el análisis con el detalle necesario para no perder hallazgos relevantes,
   conservando una redacción clara para el reporte HTML.
 - Cada conclusión o bloque presentado como ítems debe tener máximo 5 ítems. Si hay más
   hallazgos posibles, prioriza los que tengan mayor respaldo en escenarios, variables,
-  modos, SHAP/Borda y grafos.
+  modos, relevancia/Borda y grafos.
 - No copies rutas absolutas largas dentro de `entregables.grafos_html`; si una ruta ya está
   en el contexto, basta con conservar el `escenario` y usar `path` como cadena vacía o ruta
   corta. La visualización HTML usa las rutas generadas por código, no esta copia textual.
