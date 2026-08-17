@@ -199,7 +199,7 @@ def build_context_package(
     end_date: str | None,
     ventanas: Sequence[Mapping[str, Any]] | None = None,
     ventanas_estudio: Sequence[str] = (),
-    raw_df: pd.DataFrame | None = None,
+    fleet_df: pd.DataFrame | None = None,
     top_vanos_percentile: float = 97,
 ) -> dict[str, Any]:
     """El contexto determinista del historiador, en la rejilla de ventanas del flujo.
@@ -235,8 +235,14 @@ def build_context_package(
         "selected_context": {
             "circuitos": selected_circuitos,
             "indicator": "UITI_VANO",
+            # `fleet_df` y no `events_df`: la caracterizacion es COMPARATIVA -- banda,
+            # puesto y promedios de la red -- y `events_df` viene filtrado al circuito
+            # estudiado. Se llamaba `raw_df` y caia a `events_df` cuando faltaba, asi
+            # que el unico llamador le pasaba el marco filtrado sin que nada chirriara:
+            # el agrupamiento corria sobre un punto y TODOS los informes salian con la
+            # banda mas alta y con el circuito comparado consigo mismo.
             "characterization": _compute_circuit_characterization(
-                raw_df if raw_df is not None else events_df,
+                fleet_df if fleet_df is not None else events_df,
                 selected_circuitos,
                 top_vanos_percentile=top_vanos_percentile,
             ),
@@ -284,52 +290,82 @@ def save_json_artifact(payload: dict[str, Any], path: str | Path) -> Path:
     return target
 
 
+#: Lo que se emite cuando el marco trae UN solo circuito. Una banda es COMPARATIVA por
+#: definicion -- dice como esta este circuito frente a los demas --, asi que sin flota no
+#: hay banda que dar. Decirlo es lo unico honesto: mientras esto no existio, `/report`
+#: recibia el marco ya filtrado a un circuito, el agrupamiento corria sobre UN punto y lo
+#: metia siempre en el grupo mas alto. TODOS los informes decian "Riesgo Muy Alto",
+#: incluido un circuito de banda real "Riesgo Bajo" con un unico evento.
+BANDA_SIN_FLOTA = "No comparable"
+
+
 def _compute_circuit_characterization(
     df: pd.DataFrame,
     selected_circuitos: list[str],
     *,
     top_vanos_percentile: float = 97,
 ) -> list[dict[str, Any]]:
+    """Como esta el circuito frente a la FLOTA, en el vocabulario de la barra.
+
+    `df` tiene que traer la flota ENTERA ya recortada a la ventana, no el circuito
+    solo: cada numero de aqui es comparativo y con un circuito no se puede comparar
+    nada.
+
+    La banda sale de `ranking_circuitos` -- exactamente el mismo calculo que pinta la
+    barra que el lector tiene delante --. Antes salia de `compute_circuit_criticality_
+    groups`, que es otro metodo (KMeans sobre frecuencia y UITI del circuito) y ademas
+    otro VOCABULARIO: cinco bandas con "Riesgo Muy Alto" y "Riesgo Medio-Bajo", que la
+    barra no tiene. El informe citaba etiquetas que su propia figura no podia mostrar.
+    Ese helper sigue vivo para el grafico de dispersion de `/informe-gerencial`; lo que
+    no puede es narrar una figura que no es la suya.
+    """
     if df.empty or not selected_circuitos:
         return []
-        
+
     df_copy = df.copy()
     if 'UITI_VANO' not in df_copy.columns or 'CIRCUITO' not in df_copy.columns:
         return []
-        
+
     df_copy['UITI_VANO'] = pd.to_numeric(df_copy['UITI_VANO'], errors='coerce').fillna(0.0)
-    
+
     counts = count_unique_event_dates(df_copy, 'CIRCUITO')
     sums = df_copy.groupby('CIRCUITO')['UITI_VANO'].sum()
-    
-    try:
-        from chec_local_interpreter.plotting import compute_circuit_criticality_groups
-        # No dates passed: df_copy is already the caller-selected/pre-filtered
-        # window, so re-filtering here would be a no-op (mirrors the previous
-        # inline behavior, which never filtered by date either).
-        df_coords = compute_circuit_criticality_groups(df_copy)
-    except ImportError:
-        df_coords = pd.DataFrame({
-            'event_count': counts,
-            'uiti_vano_sum': sums
-        }).dropna()
-        df_coords['cluster'] = 0
-        df_coords['criticidad'] = "Desconocido"
 
+    circuitos_en_la_flota = int(df_copy['CIRCUITO'].nunique())
+
+    df_coords = pd.DataFrame({'event_count': counts, 'uiti_vano_sum': sums}).dropna()
     if df_coords.empty:
         return []
 
+    # La banda y el puesto, de la MISMA fuente que la barra del informe.
+    bandas: dict[str, str] = {}
+    posiciones: dict[str, int] = {}
+    if circuitos_en_la_flota > 1:
+        try:
+            from chec_local_interpreter.ranking_circuitos import ranking_circuitos
+
+            tabla = ranking_circuitos(df_copy).tabla
+            if not tabla.empty:
+                indexada = tabla.set_index("circuito")
+                bandas = {str(c): str(v) for c, v in indexada["rango"].items()}
+                posiciones = {str(c): int(v) for c, v in indexada["posicion"].items()}
+        except Exception:
+            # El ranking necesita `FID_VANO` y al menos cuatro vanos con eventos. Un
+            # marco que no llegue no puede tumbar el contexto entero: se queda sin
+            # banda, que es exactamente lo que hay que decir.
+            bandas, posiciones = {}, {}
+
     global_avg_events = counts.mean()
     global_avg_uiti = sums.mean()
-    
+
     df_coords_sorted = df_coords.sort_values(by='uiti_vano_sum', ascending=False)
     circuits_to_process = [c for c in df_coords_sorted.index if c in selected_circuitos][:5]
-    
+
     results = []
     for circuito in circuits_to_process:
         if circuito in df_coords.index:
             row = df_coords.loc[circuito]
-            label = row['criticidad']
+            label = bandas.get(str(circuito), BANDA_SIN_FLOTA)
 
             percentile = min(max(float(top_vanos_percentile), 0.0), 100.0)
             quantile_value = percentile / 100.0
@@ -361,6 +397,8 @@ def _compute_circuit_characterization(
             results.append({
                 "circuito": circuito,
                 "criticidad": label,
+                "posicion": posiciones.get(str(circuito)),
+                "circuitos_en_la_flota": circuitos_en_la_flota,
                 "eventos": int(row['event_count']),
                 "uiti_vano_total": round(float(row['uiti_vano_sum']), 0),
                 "avg_eventos_red": round(float(global_avg_events), 0),

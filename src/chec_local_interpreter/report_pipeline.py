@@ -385,7 +385,11 @@ def prepare(
         end_date=end,
         ventanas=rejilla,
         ventanas_estudio=ventanas_estudio,
-        raw_df=events_df,
+        # La flota ENTERA, recortada a la misma ventana. `events_df` ya viene filtrado
+        # al circuito estudiado, y la banda del circuito no significa nada contra una
+        # flota de uno: es la misma razon por la que `render` le pasa `all_circuits_df`
+        # a la figura del ranking en vez de `raw_df`.
+        fleet_df=filter_events(frame, start_date=start, end_date=end),
     )
 
     # Sin artefacto del modelo el informe sigue saliendo, con la parte predictiva vacia:

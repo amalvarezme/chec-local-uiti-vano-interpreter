@@ -86,60 +86,44 @@ def _rows_for_circuit(circuit: str, n_events: int, total_uiti: float, start: str
     )
 
 
-def test_compute_circuit_characterization_uses_four_criticality_tiers():
-    # 8 circuits across 4 clearly separated magnitude tiers, 2 per tier. Values
-    # verified empirically against the deterministic K-Means (random_state=42)
-    # used by both plotting.py and context_builder.py to produce exactly 4
-    # singleton-pair clusters ranked in the expected order (same fixture as
-    # `tests/test_plotting.py::_four_tier_raw_df`).
+def test_un_marco_sin_vanos_se_queda_sin_banda_en_vez_de_inventarla():
+    """Sin `FID_VANO` no hay ranking, y sin ranking no hay banda que citar.
+
+    Aqui vivian dos pruebas que fijaban el contrato ANTERIOR: que `criticidad` saliera
+    de `compute_circuit_criticality_groups` y usara sus cinco etiquetas. Ese contrato
+    era el defecto -- ese helper narra el grafico de dispersion de `/informe-gerencial`,
+    no la barra que el lector de `/report` tiene delante, y su vocabulario incluye
+    "Riesgo Muy Alto" y "Riesgo Medio-Bajo", que la barra NO tiene --. Lo que fijaban de
+    util (los extremos caen en los extremos, y las dos mitades salen del MISMO calculo)
+    lo cubren ahora `test_la_banda_del_circuito_es_la_del_ranking_de_barras` y sus
+    vecinas, contra la fuente correcta.
+
+    Lo que aquellas dos ejercitaban SIN saberlo, y se habria perdido con ellas, es este
+    marco: ocho circuitos y ni una columna `FID_VANO`. El ranking la necesita. Que ese
+    camino degrade a "sin banda" y no reviente ni se invente una etiqueta es un
+    contrato por derecho propio.
+    """
     frames = [
         _rows_for_circuit("MUYALTO_1", n_events=40, total_uiti=50000.0),
-        _rows_for_circuit("MUYALTO_2", n_events=40, total_uiti=55000.0),
         _rows_for_circuit("ALTO_1", n_events=10, total_uiti=5000.0),
-        _rows_for_circuit("ALTO_2", n_events=10, total_uiti=5500.0),
         _rows_for_circuit("MEDIO_1", n_events=10, total_uiti=500.0),
-        _rows_for_circuit("MEDIO_2", n_events=10, total_uiti=550.0),
         _rows_for_circuit("BAJO_1", n_events=4, total_uiti=40.0),
-        _rows_for_circuit("BAJO_2", n_events=4, total_uiti=45.0),
     ]
     df = pd.concat(frames, ignore_index=True)
+    assert "FID_VANO" not in df.columns, "el fixture pierde su gracia si le sale un FID_VANO"
 
-    # Select 4 circuits (cap in _compute_circuit_characterization), keeping both extremes.
-    selected_circuitos = ["BAJO_1", "MEDIO_1", "ALTO_1", "MUYALTO_1"]
-    results = _compute_circuit_characterization(df, selected_circuitos=selected_circuitos)
+    results = _compute_circuit_characterization(
+        df, selected_circuitos=["BAJO_1", "MEDIO_1", "ALTO_1", "MUYALTO_1"])
 
-    assert results
+    assert results, "un marco sin vanos tiene que seguir describiendo el circuito"
     for row in results:
-        assert row["criticidad"] in CRITICALITY_GROUP_LABELS
-
-    by_circuito = {row["circuito"]: row for row in results}
-    assert by_circuito["MUYALTO_1"]["criticidad"] == "Riesgo Muy Alto"
-    if "BAJO_1" in by_circuito:
-        assert by_circuito["BAJO_1"]["criticidad"] == "Riesgo Bajo"
-
-
-def test_compute_circuit_characterization_matches_shared_clustering_helper():
-    """Both call sites must derive `criticidad` from the same shared helper."""
-    from chec_local_interpreter.plotting import compute_circuit_criticality_groups
-
-    frames = [
-        _rows_for_circuit("MUYALTO_1", n_events=40, total_uiti=50000.0),
-        _rows_for_circuit("MUYALTO_2", n_events=40, total_uiti=55000.0),
-        _rows_for_circuit("ALTO_1", n_events=10, total_uiti=5000.0),
-        _rows_for_circuit("ALTO_2", n_events=10, total_uiti=5500.0),
-        _rows_for_circuit("MEDIO_1", n_events=10, total_uiti=500.0),
-        _rows_for_circuit("MEDIO_2", n_events=10, total_uiti=550.0),
-        _rows_for_circuit("BAJO_1", n_events=4, total_uiti=40.0),
-        _rows_for_circuit("BAJO_2", n_events=4, total_uiti=45.0),
-    ]
-    df = pd.concat(frames, ignore_index=True)
-    selected_circuitos = ["BAJO_1", "MEDIO_1", "ALTO_1", "MUYALTO_1"]
-
-    results = _compute_circuit_characterization(df, selected_circuitos=selected_circuitos)
-    expected = compute_circuit_criticality_groups(df)
-
-    for row in results:
-        assert row["criticidad"] == expected.loc[row["circuito"], "criticidad"]
+        assert row["criticidad"] == "No comparable"
+        assert row["posicion"] is None
+        # lo que NO depende del ranking sigue estando
+        assert row["eventos"] > 0
+        assert row["uiti_vano_total"] > 0
+    # y ninguna etiqueta del vocabulario que la barra no puede mostrar
+    assert all(r["criticidad"] not in CRITICALITY_GROUP_LABELS for r in results)
 
 
 # --- La serie del historiador va por VENTANAS, no por dias -------------------------------
@@ -341,3 +325,145 @@ def test_saving_an_artifact_still_fails_on_something_genuinely_unrepresentable()
 
     with pytest.raises(TypeError):
         save_json_artifact({"x": Opaco()}, tmp_ruta())
+
+
+# ---------------------------------------------------------------------------
+# La banda del circuito: la del RANKING DE BARRAS, y calculada contra la flota.
+# ---------------------------------------------------------------------------
+
+
+def _flota_con_vanos(especificacion, start="2026-01-01"):
+    """Una flota con vanos de verdad: el ranking necesita `FID_VANO`.
+
+    `especificacion` es {circuito: (n_vanos, eventos_por_vano, uiti_por_evento)}.
+    """
+    filas = []
+    for circuito, (n_vanos, eventos, uiti) in especificacion.items():
+        for v in range(n_vanos):
+            fechas = pd.date_range(start, periods=eventos, freq="D").strftime("%Y-%m-%d")
+            filas.append(pd.DataFrame({
+                "CIRCUITO": [circuito] * eventos,
+                "FID_VANO": [f"{circuito}_V{v}"] * eventos,
+                "FECHA": list(fechas),
+                "UITI_VANO": [uiti] * eventos,
+            }))
+    return pd.concat(filas, ignore_index=True)
+
+
+def test_la_banda_del_circuito_es_la_del_ranking_de_barras():
+    """La prosa tiene que citar la MISMA banda que el lector ve en la barra.
+
+    Eran dos calculos distintos: la barra la asigna `ranking_circuitos` (vanos en
+    Medio-Alto mas Alto, cortes por percentil) y el texto la sacaba de
+    `compute_circuit_criticality_groups` (KMeans sobre frecuencia y UITI). Para
+    DON23L14 daban `Riesgo Medio-Alto` y `Riesgo Medio-Bajo`.
+
+    Y no es solo que difieran los valores: son VOCABULARIOS distintos. La barra tiene
+    cuatro bandas y ninguna se llama "Riesgo Muy Alto"; el informe la nombraba igual.
+    """
+    from chec_local_interpreter.ranking_circuitos import NOMBRES_RANGO, ranking_circuitos
+
+    df = _flota_con_vanos({
+        "TRANQUILO": (6, 1, 1.0),
+        "MEDIANO": (6, 4, 60.0),
+        "RUIDOSO": (6, 12, 400.0),
+        "GRAVE": (6, 30, 3000.0),
+    })
+
+    for circuito in ("TRANQUILO", "GRAVE"):
+        resultado = _compute_circuit_characterization(df, selected_circuitos=[circuito])
+        assert resultado, f"{circuito} no produjo caracterizacion"
+        fila = resultado[0]
+        esperada = ranking_circuitos(df).tabla.set_index("circuito").loc[circuito, "rango"]
+        assert fila["criticidad"] == esperada, (
+            f"{circuito}: el texto dice {fila['criticidad']!r} y la barra {esperada!r}")
+        assert fila["criticidad"] in NOMBRES_RANGO
+
+
+def test_un_marco_de_un_solo_circuito_no_inventa_una_banda():
+    """El defecto que hacia que TODOS los informes dijeran "Riesgo Muy Alto".
+
+    `/report` filtraba el marco a un circuito ANTES de construir el contexto, asi que
+    el agrupamiento corria sobre UN punto y lo metia siempre en el grupo mas alto.
+    Medido sobre la base real: un circuito de banda `Riesgo Bajo` con 1 evento tambien
+    salia "Riesgo Muy Alto".
+
+    Una banda es COMPARATIVA por definicion: con un solo circuito en el marco no hay
+    banda que dar, y decirlo es lo unico honesto.
+    """
+    df = _flota_con_vanos({"SOLO": (6, 3, 50.0)})
+
+    resultado = _compute_circuit_characterization(df, selected_circuitos=["SOLO"])
+
+    assert resultado, "un solo circuito tiene que producir caracterizacion, no lista vacia"
+    assert resultado[0]["criticidad"] == "No comparable", (
+        f"con un circuito en el marco invento la banda {resultado[0]['criticidad']!r}")
+    assert resultado[0]["circuitos_en_la_flota"] == 1
+
+
+def test_los_promedios_de_la_red_son_de_la_FLOTA_y_no_del_propio_circuito():
+    """`avg_eventos_red` valia exactamente lo mismo que `eventos` en cada informe.
+
+    Con un marco de un circuito, la media de la red es la media de un elemento: el
+    circuito comparado consigo mismo. En el informe de DON23L14 se leia
+    `eventos: 65` y `avg_eventos_red: 65.0`.
+    """
+    df = _flota_con_vanos({
+        "TRANQUILO": (6, 1, 1.0),
+        "GRAVE": (6, 30, 3000.0),
+    })
+
+    fila = _compute_circuit_characterization(df, selected_circuitos=["GRAVE"])[0]
+
+    assert fila["avg_eventos_red"] != fila["eventos"], (
+        "el promedio de la red es el del propio circuito otra vez")
+    assert fila["avg_eventos_red"] < fila["eventos"], (
+        "GRAVE esta muy por encima de la flota; su promedio no puede ser mayor")
+
+
+def test_la_caracterizacion_situa_al_circuito_en_la_flota():
+    """Una banda sin puesto no dice si el circuito es de los peores o de los del monton."""
+    df = _flota_con_vanos({
+        "A": (6, 1, 1.0), "B": (6, 4, 60.0), "C": (6, 12, 400.0), "D": (6, 30, 3000.0),
+    })
+
+    fila = _compute_circuit_characterization(df, selected_circuitos=["D"])[0]
+
+    assert fila["posicion"] == 1, "D es el peor de la flota; tiene que ser el puesto 1"
+    assert fila["circuitos_en_la_flota"] == 4
+
+
+def test_el_paquete_del_historiador_situa_al_circuito_contra_la_flota():
+    """El defecto vivia AQUI, en quien llama, no en el calculo.
+
+    `build_context_package` recibia como `raw_df` el mismo marco ya filtrado a un
+    circuito que recibe como `events_df`. El parametro existe SOLO para la
+    caracterizacion, que es comparativa: con un circuito dentro, el agrupamiento corria
+    sobre un punto y el promedio de la red era el promedio de un elemento. En el
+    informe de DON23L14 se leia `eventos: 65` junto a `avg_eventos_red: 65.0`, y la
+    banda "Riesgo Muy Alto" que salia igual para cualquier circuito de la base.
+
+    Por eso el parametro se llama `fleet_df`: `raw_df` no decia que TENIA que ser otro
+    marco distinto de `events_df`, y el `else events_df` de dentro tapaba el error.
+    """
+    flota = _flota_con_vanos({
+        "ESTUDIADO": (6, 30, 3000.0),
+        "OTRO_1": (6, 1, 1.0),
+        "OTRO_2": (6, 2, 5.0),
+        "OTRO_3": (6, 4, 20.0),
+    })
+    del_circuito = flota[flota["CIRCUITO"] == "ESTUDIADO"]
+
+    contexto = build_context_package(
+        events_df=del_circuito,
+        selected_circuitos=["ESTUDIADO"],
+        start_date="2026-01-01",
+        end_date="2026-12-31",
+        fleet_df=flota,
+    )
+
+    fila = contexto["selected_context"]["characterization"][0]
+    assert fila["circuitos_en_la_flota"] == 4, (
+        "la caracterizacion volvio a mirar solo el circuito estudiado")
+    assert fila["avg_eventos_red"] != fila["eventos"]
+    assert fila["criticidad"] != "No comparable"
