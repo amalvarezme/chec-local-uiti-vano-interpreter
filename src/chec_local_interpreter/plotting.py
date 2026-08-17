@@ -137,7 +137,7 @@ def compute_circuit_criticality_groups(raw_df, start_date=None, end_date=None, g
     # GLOBAL RNG (`np.random.seed`), a process-wide side effect. Save/restore
     # the global state around the call so this function never silently
     # resets or correlates unrelated randomness for other code sharing the
-    # process afterward (e.g. the SHAP simulator in report_pipeline.py).
+    # process afterward (e.g. the simulator in report_pipeline.py).
     n_clusters = min(len(group_labels), len(df_coords))
     rng_state = np.random.get_state()
     try:

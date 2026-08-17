@@ -955,7 +955,7 @@ def _allowed_variables(context: dict[str, Any]) -> set[str]:
         "pdf": context.get("pdf_expert_matches", []),
     }, ensure_ascii=False)
     variables = set(re.findall(r"\b[A-ZÁÉÍÓÚÑ][A-Z0-9ÁÉÍÓÚÑ_]{2,}\b", text.upper()))
-    variables.update({"UITI_VANO", "SHAP", "MGCECDL"})
+    variables.update({"UITI_VANO", "MGCECDL"})
     return variables
 
 

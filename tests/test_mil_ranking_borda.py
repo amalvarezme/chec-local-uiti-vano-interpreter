@@ -1,16 +1,22 @@
-"""Contract tests for the Kernel SHAP -> Borda ranking glue used by notebook 10.
+"""Contract tests for the Borda ranking of per-bag variable relevances.
 
-Both defects these tests pin were live in notebook 10's `mode == "full"`
-branch and survived a green suite, because the glue lived inside a notebook
-cell that only executes under `mode == "full"`:
+Los dos defectos que estas pruebas fijan estuvieron vivos en la rama
+`mode == "full"` del cuaderno 05 y sobrevivieron a una suite en verde, porque el
+pegamento vivia dentro de una celda que solo se ejecuta con `mode == "full"`:
 
-  1. `KernelShapTopVarsExtractor.calcular_top_vars` returns a LIST aligned
-     with the indices it was given, not a dict keyed by index. The cell
-     called `.get(int(i), {})` on it and raised `AttributeError`.
-  2. `agregar_borda` returns `group_cols + ["RELEVANCIA_VARS"]` -- there is
-     no `_var` column -- so the cell's `.get("_var", pd.Series(dtype=object))`
-     silently produced an empty Series and the exposure/severity note was
-     never written.
+  1. el productor de relevancias devuelve una LISTA alineada por posicion con
+     los indices que recibio, no un dict indexado por bolsa. La celda le hacia
+     `.get(int(i), {})` y reventaba con `AttributeError`.
+  2. `agregar_borda` devuelve `group_cols + ["RELEVANCIA_VARS"]` -- no hay
+     columna `_var` --, asi que el `.get("_var", pd.Series(dtype=object))` de la
+     celda producia una Serie vacia en silencio y la nota de
+     exposicion/severidad no se escribia nunca.
+
+Quien PRODUCE esas relevancias cambio: era un extractor Kernel SHAP, retirado
+del proyecto entero. La agregacion que se prueba aqui es independiente de su
+origen -- recibe dicts `{variable: puntaje}` ordenados de mayor a menor y los
+consensua por PUESTOS --, asi que sigue siendo el contrato correcto para el
+metodo que reemplazo a SHAP: la relevancia hacia el UITI minimo.
 """
 
 from __future__ import annotations
@@ -19,7 +25,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from chec_impacto.interpretability.circuit_analysis import agregar_borda
+from chec_impacto.interpretability.borda import agregar_borda
 from chec_impacto.interpretability.mil_vano_ventana import (
     COLUMNAS_EXPOSICION_SEVERIDAD,
     NOTA_EXPOSICION_SEVERIDAD,
@@ -39,7 +45,7 @@ def _keys() -> pd.DataFrame:
 
 
 def test_agregar_borda_no_expone_columna_var():
-    """Pins defect 2 at its source: the aggregated frame carries no `_var`."""
+    """Fija el defecto 2 en su origen: el marco agregado no lleva `_var`."""
     frame = pd.DataFrame(
         {
             "CIRCUITO": ["A"],
@@ -53,6 +59,17 @@ def test_agregar_borda_no_expone_columna_var():
     assert "RELEVANCIA_VARS" in salida.columns
 
 
+def test_la_familia_exposicion_severidad_son_esas_dos_y_no_mas():
+    """La composicion exacta, no solo su comportamiento.
+
+    Venia de tests/test_generate_notebook_10.py, donde viajaba de polizon en una
+    prueba sobre el TEXTO del cuaderno. Al retirarse SHAP esa prueba perdio su
+    objeto, y esta afirmacion -- que no tenia nada que ver con el cuaderno -- se
+    habria ido con ella.
+    """
+    assert {"CAPACIDAD_NOMINAL", "PROMEDIO_KWH_TRF"} == set(COLUMNAS_EXPOSICION_SEVERIDAD)
+
+
 def test_nota_marca_solo_la_familia_exposicion_severidad():
     for nombre in COLUMNAS_EXPOSICION_SEVERIDAD:
         assert nota_exposicion_severidad(nombre) == NOTA_EXPOSICION_SEVERIDAD
@@ -62,8 +79,8 @@ def test_nota_marca_solo_la_familia_exposicion_severidad():
         assert nota_exposicion_severidad(nombre) == ""
 
 
-def test_ranking_borda_acepta_la_lista_que_devuelve_el_extractor():
-    """Pins defect 1: top_vars llega como LISTA alineada con los indices."""
+def test_ranking_borda_acepta_la_lista_que_devuelve_el_productor():
+    """Fija el defecto 1: top_vars llega como LISTA alineada con los indices."""
     keys = _keys()
     indices = np.array([0, 2, 3])
     top_vars_por_bolsa = [
@@ -81,7 +98,7 @@ def test_ranking_borda_acepta_la_lista_que_devuelve_el_extractor():
 
 
 def test_ranking_borda_escribe_la_nota_de_exposicion_severidad():
-    """Pins defect 2: la nota debe LLEGAR a las filas, no quedar vacia."""
+    """Fija el defecto 2: la nota debe LLEGAR a las filas, no quedar vacia."""
     keys = _keys()
     indices = np.array([0, 3])
     top_vars_por_bolsa = [
@@ -102,7 +119,7 @@ def test_ranking_borda_escribe_la_nota_de_exposicion_severidad():
 def test_ranking_borda_ordena_por_puntaje_dentro_del_grupo():
     keys = _keys()
     indices = np.array([0])
-    # dict ordenado por relevancia descendente, como lo entrega el extractor
+    # dict ordenado por relevancia descendente, como lo entrega el productor
     top_vars_por_bolsa = [{"CAPACIDAD_NOMINAL": 0.9, "temp_9": 0.4, "CNT_TRF": 0.1}]
 
     ranking = construir_ranking_borda(keys, indices, top_vars_por_bolsa)

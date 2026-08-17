@@ -131,7 +131,7 @@ def allowed_ventanas(context: dict[str, Any]) -> set[str]:
 # es un EJE del espacio KMeans que fija la clase, no una salida suya.
 _TERMINOS_MODELO = (
     "modelo", "mil", "predice", "predicho", "prediccion", "predicción",
-    "estima", "estimado", "simulador", "shap", "relevancia",
+    "estima", "estimado", "simulador", "relevancia",
 )
 _TERMINOS_FRECUENCIA = (
     "frecuencia de eventos", "cantidad de eventos", "numero de eventos",

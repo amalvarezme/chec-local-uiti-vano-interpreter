@@ -10,7 +10,6 @@ joblib
 
 # === Deep learning / inference ===
 torch
-shap
 
 # === Hyperparameter search ===
 optuna

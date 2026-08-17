@@ -24,11 +24,12 @@ here that iterates loss terms to chase the bar.
 
 `BagPredictor` adapts a fitted `MILBagRegressor` to bag-level u-hat/class/
 proba, and to the two contracts read at source in design D7:
-  - `KernelShapTopVarsExtractor` hardcodes `predict_proba_positiva`, which
-    returns column 1 whenever `predict_proba` has more than one column
-    (`interpretability/circuit_analysis.py:96-99`) -- so `predict_proba`
-    here returns exactly 2 columns, `[1 - P(Alto), P(Alto)]`, never the
-    full 4-class matrix.
+  - `predict_proba` returns exactly 2 columns, `[1 - P(Alto), P(Alto)]`,
+    never the full 4-class matrix. La razon original era el extractor Kernel
+    SHAP, que leia a ciegas la columna 1 y habria explicado el nivel Medio
+    creyendo explicar Alto. Ese extractor ya no existe -- SHAP salio del
+    proyecto --, asi que hoy las dos columnas son solo la forma declarada de
+    este predictor, sostenida por su prueba y no por un consumidor.
   - the simulator's `predict_fn(model, X, *, device, batch_size) ->
     {"fused_probs": (n, 4), "predicted_classes": (n,)}`
     (`chec_local_interpreter/simulator.py:182-193`). `predict_fn` below
@@ -52,7 +53,7 @@ from sklearn.metrics import confusion_matrix, f1_score, precision_recall_fscore_
 from scipy.stats import spearmanr
 from sklearn.model_selection import StratifiedGroupKFold
 
-from chec_impacto.interpretability.circuit_analysis import agregar_borda
+from chec_impacto.interpretability.borda import agregar_borda
 from chec_impacto.interpretability.mgcecdl_graph import (
     estadistico_colapso,
     grafo_reconstruido_por_grupo,
@@ -564,9 +565,9 @@ class BagPredictor:
     and to the simulator's per-row `predict_fn` contract (design D7).
 
     `feature_names` carries the full `p = 71 + K` instance feature list,
-    including `COD_CAUSA` and its indicator block (design D4) -- kept for
-    interface symmetry with `KernelShapTopVarsExtractor`, which is
-    constructed with the same `features` list downstream.
+    including `COD_CAUSA` and its indicator block (design D4) -- la lista
+    completa, sin recortar, para que el indice de una columna signifique lo
+    mismo aqui que en el resto del paquete.
     """
 
     def __init__(
@@ -588,7 +589,7 @@ class BagPredictor:
     def predict(self, X_inst: np.ndarray, instance_bag: np.ndarray | None = None) -> np.ndarray:
         """u-hat per bag. When `instance_bag` is None, every row is its own
         singleton bag (`n_obs = 1`) -- the convention `predict_fn` uses for
-        the simulator/SHAP per-row contract."""
+        the simulator's per-row contract."""
         X_inst = np.asarray(X_inst, dtype=np.float32)
         n_rows = X_inst.shape[0]
 
@@ -623,11 +624,12 @@ class BagPredictor:
     def predict_proba(
         self, X_inst: np.ndarray, instance_bag: np.ndarray | None = None
     ) -> np.ndarray:
-        """`(n_bags, 2)`: `[1 - P(Alto), P(Alto)]`. `KernelShapTopVarsExtractor`
-        hardcodes `predict_proba_positiva`, which reads column 1 whenever the
-        output has more than one column (`circuit_analysis.py:96-99`) -- a
-        4-class matrix would silently explain the Medio tier, so this always
-        returns exactly 2 columns (D7)."""
+        """`(n_bags, 2)`: `[1 - P(Alto), P(Alto)]`, nunca la matriz de 4 clases.
+
+        La forma la fijo un consumidor que ya no existe (el extractor Kernel
+        SHAP leia la columna 1 a ciegas, y con 4 clases habria explicado Medio
+        creyendo explicar Alto). Se conserva porque es la salida declarada de
+        este predictor y la fija su prueba (D7)."""
         u = self.predict(X_inst, instance_bag=instance_bag)
         if instance_bag is None:
             n_obs = np.ones(u.shape[0], dtype=np.float64)
@@ -665,7 +667,7 @@ def predict_fn(
 
 
 # ---------------------------------------------------------------------------
-# Kernel SHAP -> Borda ranking (D7)
+# Borda ranking sobre relevancias por bolsa (D7)
 # ---------------------------------------------------------------------------
 
 # Variables that are exposure/severity BY CONSTRUCTION: a high relevance on
@@ -693,9 +695,8 @@ def construir_ranking_borda(
 ) -> pd.DataFrame:
     """Borda ranking in LONG format, one row per (group, variable).
 
-    `top_vars_por_bolsa` is what `KernelShapTopVarsExtractor.calcular_top_vars`
-    returns: a SEQUENCE aligned positionally with `indices_muestra`, never a
-    mapping keyed by bag index. The length guard below turns that confusion
+    `top_vars_por_bolsa` es una SECUENCIA alineada por POSICION con
+    `indices_muestra`, nunca un mapa indexado por el id de la bolsa. The length guard below turns that confusion
     into an immediate error instead of an `AttributeError` deep in a
     comprehension.
 

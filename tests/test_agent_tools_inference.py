@@ -107,7 +107,7 @@ def _valid_output(context: dict) -> dict:
             "NR_T es coherente con una hipotesis operativa de riesgo por vegetacion."
         ],
         "hallazgos": ["NR_T aparece como variable relevante en el periodo."],
-        "limitaciones": ["Kernel SHAP explica comportamiento del modelo."],
+        "limitaciones": ["La relevancia hacia el UITI minimo explica comportamiento del modelo."],
         "inferencias_predictivas": [
             {
                 "horizonte": "periodo analizado",

@@ -635,7 +635,7 @@ def _build_inference_results(run_dir: Path) -> dict[str, Any] | None:
         inference_results[scenario_key] = {
             # Los cuatro paneles del MIL. `fig_barras` conserva su nombre porque el
             # renderizador ya lo pinta: es la relevancia, que es lo que ocupaba el
-            # sitio de las barras SHAP.
+            # sitio que ocupaban las barras de atribucion.
             "fig_barras": _resolve(asset.get("relevancia_png")),
             "fig_serie": _resolve(asset.get("serie_png")),
             "fig_uiti": _resolve(asset.get("uiti_png")),

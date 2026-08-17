@@ -8,7 +8,6 @@ from chec_local_interpreter.config import (
     DEFAULT_OPTUNA_STUDY_PATH,
     DEFAULT_VARIABLES_SELECCION_PATH,
     PROJECT_ROOT,
-    SHAP_RANDOM_STATE,
     _modelo_mas_reciente,
 )
 
@@ -39,8 +38,8 @@ def test_default_variables_seleccion_path_resolves_under_project_root():
     assert DEFAULT_VARIABLES_SELECCION_PATH.is_absolute()
 
 
-def test_shap_random_state_is_42():
-    assert SHAP_RANDOM_STATE == 42
+# `SHAP_RANDOM_STATE` se retiro con SHAP: su unico lector era esta prueba, que
+# afirmaba que una constante valia lo que decia su propia linea de asignacion.
 
 
 # ---------------------------------------------------------------------------

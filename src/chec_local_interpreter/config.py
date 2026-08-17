@@ -7,7 +7,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DATA_PATH = PROJECT_ROOT / "data" / "Indicadores_vano_v3.csv"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "reports" / "reportescircuitos" / "artifacts"
 
-# MGCECDL/SHAP simulator artifacts (read-only: never trained/searched by this
+# MGCECDL simulator artifacts (read-only: never trained/searched by this
 # project's runtime code, only loaded from what already exists on disk).
 DEFAULT_MODEL_DIR = PROJECT_ROOT / "data" / "models"
 DEFAULT_MODEL_BASENAME = "mgcecdl_classifier_best.zip"
@@ -15,12 +15,6 @@ DEFAULT_OPTUNA_STUDY_PATH = (
     PROJECT_ROOT / "data" / "optuna" / "mgcecdl_classification_feature_attention_params.journal"
 )
 DEFAULT_VARIABLES_SELECCION_PATH = PROJECT_ROOT / "data" / "Variables_seleccion.xlsx"
-
-# Mirrors the notebook's own `SHAP_RANDOM_STATE` (deprecated
-# `the retired interactive notebook`), threaded
-# explicitly into every `KernelShapTopVarsExtractor(...)` call for
-# reproducible SHAP background sampling and ranking.
-SHAP_RANDOM_STATE = 42
 
 PROMPT_VERSION = "uiti-vano-explanation-v1"
 SCHEMA_VERSION = "uiti-vano-output-schema-v1"

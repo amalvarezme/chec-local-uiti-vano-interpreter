@@ -1,8 +1,22 @@
+"""Interpretabilidad de la era MGCECDL: modos, grafos, radares y prompts.
+
+Aqui vivia la atribucion por Kernel SHAP -- `KernelShapTopVarsExtractor` y los
+radares comparativos --, retirada del proyecto entero. La pregunta que se hace
+hoy no es "que peso tuvo cada variable en lo que el modelo ya predijo" sino "que
+muevo para que este vano baje de grupo", y esa la contestan
+`relevancia_hacia_uiti_minimo` y `plan_hacia_clase_minima`
+(`chec_local_interpreter/mil_simulador_015.py`) recorriendo el interior del rango
+de cada palanca de INTERVENCION y componiendo escenarios.
+
+`agregar_borda` se fue con ellos, pero por otro motivo: es pandas puro y el
+predictor MIL la importaba desde aqui, de modo que cargar el modelo arrastraba
+SHAP entero. Vive ahora en `interpretability/borda.py` y se reexporta abajo para
+no romper a quien la pedia por este nombre.
+"""
+
 from __future__ import annotations
 
-from contextlib import redirect_stdout
 import html
-import io
 import json
 import matplotlib.patches as mpatches
 import matplotlib.path as mpath
@@ -10,9 +24,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from pathlib import Path
-import shap
 import torch
-import warnings
+
+from chec_impacto.interpretability.borda import agregar_borda
+
 
 def construir_modos_interpretabilidad(features=None, ventana_climatica_horas=12):
     clima_horas = range(ventana_climatica_horas)
@@ -79,146 +94,6 @@ def construir_modos_interpretabilidad(features=None, ventana_climatica_horas=12)
         )
         if variables
     }
-
-
-def predict_proba_positiva(model, x_np):
-    """Return positive-class probabilities, guarding single-row prediction quirks."""
-    x_np = np.asarray(x_np, dtype=np.float64)
-    x_np = np.atleast_2d(x_np)
-
-    singleton = len(x_np) == 1
-    x_pred = np.repeat(x_np, 2, axis=0) if singleton else x_np
-
-    proba = np.asarray(model.predict_proba(x_pred), dtype=np.float64)
-    if proba.ndim == 1:
-        out = proba
-    elif proba.shape[1] == 1:
-        out = proba[:, 0]
-    else:
-        out = proba[:, 1]
-
-    return out[:1] if singleton else out
-
-
-def _normalizar_shap_values(shap_values):
-    vals = shap_values
-    if isinstance(vals, list):
-        vals = vals[1] if len(vals) > 1 else vals[0]
-    vals = np.asarray(vals, dtype=np.float64)
-    if vals.ndim == 3:
-        vals = vals[:, :, 1] if vals.shape[2] > 1 else vals[:, :, 0]
-    return np.nan_to_num(vals, nan=0.0, posinf=0.0, neginf=0.0)
-
-
-class KernelShapTopVarsExtractor:
-    """Compute and cache per-row top variables from Kernel SHAP values."""
-
-    def __init__(
-        self,
-        model,
-        X,
-        features,
-        top_k=20,
-        background_size=40,
-        nsamples=80,
-        batch_size=64,
-        random_state=42,
-    ):
-        self.model = model
-        self.X = np.asarray(X, dtype=np.float64)
-        self.features = list(features)
-        self.top_k = min(int(top_k), self.X.shape[1])
-        self.nsamples = int(nsamples)
-        self.batch_size = int(batch_size)
-        self.cache = {}
-
-        rng = np.random.default_rng(random_state)
-        self.n_background = min(int(background_size), len(self.X))
-        background_idx = rng.choice(len(self.X), size=self.n_background, replace=False)
-        background = self.X[background_idx]
-
-        def predict_fn(x_np):
-            return predict_proba_positiva(self.model, x_np)
-
-        with warnings.catch_warnings(), redirect_stdout(io.StringIO()):
-            warnings.simplefilter("ignore")
-            self.explainer = shap.KernelExplainer(predict_fn, background)
-
-    def calcular_top_vars(self, indices):
-        indices = [int(i) for i in indices]
-        faltantes = [i for i in indices if i not in self.cache]
-
-        for start in range(0, len(faltantes), self.batch_size):
-            batch_idx = faltantes[start:start + self.batch_size]
-            if not batch_idx:
-                continue
-
-            x_batch = self.X[batch_idx]
-            with warnings.catch_warnings(), redirect_stdout(io.StringIO()):
-                warnings.simplefilter("ignore")
-                shap_values = self.explainer.shap_values(
-                    x_batch,
-                    nsamples=self.nsamples,
-                    silent=True,
-                )
-
-            vals = np.abs(_normalizar_shap_values(shap_values))
-            if vals.shape != x_batch.shape:
-                raise ValueError(f"Forma SHAP inesperada: {vals.shape} vs {x_batch.shape}")
-
-            indices_top = np.argsort(-vals, axis=1, kind="stable")[:, :self.top_k]
-            for row_pos, row_idx in enumerate(batch_idx):
-                self.cache[row_idx] = {
-                    self.features[col_idx]: float(vals[row_pos, col_idx])
-                    for col_idx in indices_top[row_pos]
-                }
-
-        return [self.cache[i] for i in indices]
-
-    def agregar_top_vars(self, df_eventos):
-        out = df_eventos.copy()
-        out["_TOP_VARS"] = self.calcular_top_vars(out.index.to_numpy())
-        return out
-
-
-def agregar_borda(df, group_cols, top_col="_TOP_VARS", top_k=20):
-    """Suma de puntos Borda por variable dentro de cada grupo."""
-    records = []
-    row_id = 0
-    for _, row in df.iterrows():
-        d = row[top_col]
-        if not isinstance(d, dict):
-            row_id += 1
-            continue
-        g = {c: row[c] for c in group_cols}
-        for pos, var in enumerate(list(d.keys())[:top_k], start=1):
-            records.append({**g, "_var": var, "_borda": float(top_k + 1 - pos), "_row": row_id})
-        row_id += 1
-
-    if not records:
-        return pd.DataFrame(columns=group_cols + ["RELEVANCIA_VARS"])
-
-    exp = pd.DataFrame(records)
-    borda = (
-        exp.groupby(group_cols + ["_var"], dropna=False, sort=False)["_borda"]
-        .sum()
-        .reset_index()
-    )
-    borda = borda.sort_values(
-        group_cols + ["_borda"],
-        ascending=[True] * len(group_cols) + [False],
-        kind="stable",
-    )
-    borda["_rank"] = borda.groupby(group_cols, sort=False).cumcount()
-    borda = borda[borda["_rank"] < top_k].copy()
-    borda["_item"] = list(zip(borda["_var"], borda["_borda"]))
-
-    return (
-        borda.groupby(group_cols, dropna=False, sort=False)["_item"]
-        .agg(lambda items: {v: float(s) for v, s in items})
-        .rename("RELEVANCIA_VARS")
-        .reset_index()
-    )
 
 
 def agrupar_por_vano(df, extra_group_cols=None, top_col="_TOP_VARS", top_k=20):
@@ -660,134 +535,6 @@ def mostrar_grafo_interactivo_muestras(*args, **kwargs):
     return output_path
 
 
-def graficar_barras_y_radar(
-    df_eventos,
-    titulo,
-    circuito,
-    features,
-    modos,
-    shap_extractor,
-    top_k=20,
-    graph_adjacency_matrix=None,
-    graph_preserved_edges=None,
-    graph_output_dir=None,
-    graph_output_name=None,
-    graph_source="expert",
-    estimated_graph_model=None,
-    X_model=None,
-    estimated_graph_rbf_sigma=1.0,
-    estimated_graph_device="cpu",
-    estimated_graph_batch_size=1024,
-):
-    """Plot feature bars, mode radar, and optionally an interactive graph."""
-    if df_eventos.empty:
-        raise ValueError(f"Sin eventos para: {titulo}")
-
-    df_eventos = shap_extractor.agregar_top_vars(df_eventos)
-    borda = puntaje_borda_ponderado_eventos(df_eventos, features, top_k=top_k)
-    print(f"{titulo} | eventos: {len(df_eventos):,} | vanos: {df_eventos['FID_VANO'].nunique()}")
-
-    top_vars_bar = normalizar_minmax(borda).sort_values(ascending=False).head(top_k)
-    colores = ["#1f4e79" if i < 5 else "#5b9bd5" for i in range(len(top_vars_bar))]
-
-    fig_barras, ax = plt.subplots(figsize=(14, 5))
-    top_vars_bar.plot(kind="bar", ax=ax, color=colores, edgecolor="white", linewidth=0.4)
-    for val, patch in zip(top_vars_bar.values[:5], ax.patches[:5]):
-        ax.text(
-            patch.get_x() + patch.get_width() / 2,
-            patch.get_height() * 1.015,
-            f"{val:.3f}",
-            ha="center", va="bottom", fontsize=7.5, color="#1f4e79", fontweight="bold",
-        )
-    ax.set_title(
-        f"Kernel SHAP + Borda ponderado min-max — {circuito}\n{titulo}",
-        fontsize=13, fontweight="bold", pad=12,
-    )
-    ax.set_xlabel("Variable", fontsize=10)
-    ax.set_ylabel("Borda ponderado normalizado min-max", fontsize=10)
-    ax.set_ylim(0, 1.05)
-    ax.tick_params(axis="x", rotation=50, labelsize=8)
-    ax.grid(axis="y", alpha=0.3)
-    fig_barras.tight_layout()
-    plt.show()
-
-    puntajes = pd.Series(
-        {nombre: float(borda.reindex(cols, fill_value=0.0).sum()) for nombre, cols in modos.items()}
-    )
-    puntajes = normalizar_minmax(puntajes)
-    n_m = len(puntajes)
-    ang = np.linspace(0, 2 * np.pi, n_m, endpoint=False)
-    ang_c = np.r_[ang, ang[0]]
-    val_c = np.r_[puntajes.values, puntajes.values[0]]
-
-    fig_radar, ax = plt.subplots(figsize=(10, 8), subplot_kw={"polar": True})
-    ax.plot(ang_c, val_c, color="#1f4e79", linewidth=2.4)
-    ax.fill(ang_c, val_c, color="#5b9bd5", alpha=0.35)
-    ax.scatter(ang, puntajes.values, color="#17365d", s=60, zorder=3)
-    ax.set_xticks(ang)
-    ax.set_xticklabels(list(puntajes.index), fontsize=9, fontweight="bold")
-    ax.tick_params(axis="x", pad=28)
-    ax.set_ylim(0, 1.0)
-    ax.grid(alpha=0.35)
-    ax.set_title(
-        f"Kernel SHAP + Borda ponderado min-max por modo — {circuito}\n{titulo}",
-        fontsize=13, fontweight="bold", pad=46,
-    )
-    fig_radar.subplots_adjust(top=0.80, bottom=0.10, left=0.10, right=0.90)
-    plt.show()
-
-    graph_path = None
-    if graph_adjacency_matrix is not None or estimated_graph_model is not None:
-        if graph_source == "estimated":
-            if estimated_graph_model is None or X_model is None:
-                raise ValueError(
-                    "graph_source='estimated' requiere estimated_graph_model y X_model."
-                )
-            scenario_indices = df_eventos.index.to_numpy(dtype=int)
-            scenario_X = np.asarray(X_model, dtype=np.float32)[scenario_indices]
-            graph_matrix = estimar_matriz_grafo_mgcecdl(
-                model=estimated_graph_model,
-                X=scenario_X,
-                features=features,
-                rbf_sigma=estimated_graph_rbf_sigma,
-                device=estimated_graph_device,
-                batch_size=estimated_graph_batch_size,
-            )
-            preserved_edges = None
-            source_label = "matriz estimada por reconstruccion"
-        else:
-            graph_matrix = graph_adjacency_matrix
-            preserved_edges = graph_preserved_edges
-            source_label = "grafo experto preservado"
-
-        output_dir = Path(graph_output_dir or ".")
-        output_name = graph_output_name or _normalizar_nombre_archivo(
-            f"{circuito}_{titulo}_grafo_mgcecdl.html"
-        )
-        if not str(output_name).lower().endswith(".html"):
-            output_name = f"{output_name}.html"
-        graph_path = mostrar_grafo_interactivo_muestras(
-            feature_scores=borda,
-            features=features,
-            graph_adjacency_matrix=graph_matrix,
-            graph_preserved_edges=preserved_edges,
-            output_path=output_dir / output_name,
-            title=f"Grafo interactivo MGCECDL ({source_label}) — {circuito} | {titulo}",
-            top_k=top_k,
-            modos=modos,  # pasado para enriquecer tooltips con nombre del modo
-        )
-
-    return {
-        "eventos": df_eventos,
-        "borda": borda,
-        "variables_normalizadas": top_vars_bar,
-        "modos_normalizados": puntajes,
-        "grafo_interactivo": graph_path,
-        "fig_barras": fig_barras,
-        "fig_radar": fig_radar,
-    }
-
-
 def construir_contexto_inferencia(
     circuito_interes,
     fecha_inicio,
@@ -1135,180 +882,3 @@ def radar_atribucion_degradado_modelos(
 
     return resultados
 
-
-def _extraer_shap_matrix(shap_values, class_idx=1):
-    if isinstance(shap_values, list):
-        if len(shap_values) > class_idx:
-            shap_matrix = shap_values[class_idx]
-        else:
-            shap_matrix = shap_values[-1]
-    else:
-        shap_values = np.asarray(shap_values)
-        if shap_values.ndim == 2:
-            shap_matrix = shap_values
-        elif shap_values.ndim == 3:
-            if shap_values.shape[2] > class_idx:
-                shap_matrix = shap_values[:, :, class_idx]
-            else:
-                shap_matrix = shap_values[:, :, -1]
-        else:
-            raise ValueError(
-                f"Formato de shap_values no soportado. Shape recibido: {shap_values.shape}"
-            )
-
-    shap_matrix = np.asarray(shap_matrix)
-    if shap_matrix.ndim != 2:
-        raise ValueError(
-            f"shap_matrix debe ser 2D, pero tiene shape: {shap_matrix.shape}"
-        )
-    return shap_matrix
-
-
-def _calcular_kernel_shap_modelo(
-    model,
-    X,
-    df,
-    modos,
-    background_size=50,
-    sample_size_explain=100,
-    nsamples=100,
-    class_indices=(0, 1, 2, 3),
-    use_abs=True,
-):
-    X = np.asarray(X)
-    if X.shape[1] != len(df.columns):
-        raise ValueError(
-            f"X tiene {X.shape[1]} columnas pero df tiene {len(df.columns)} columnas."
-        )
-
-    if sample_size_explain is not None and sample_size_explain < len(X):
-        idx_eval = np.random.choice(len(X), size=sample_size_explain, replace=False)
-        X_eval = X[idx_eval]
-    else:
-        X_eval = X
-
-    bg_size = min(background_size, len(X))
-    idx_bg = np.random.choice(len(X), size=bg_size, replace=False)
-    X_bg = X[idx_bg]
-
-    predict_fn = model.predict_proba if hasattr(model, "predict_proba") else model.predict
-
-    def predict_kernel(X_input):
-        X_input = np.asarray(X_input)
-        pred = predict_fn(X_input)
-        return np.asarray(pred)
-
-    explainer = shap.KernelExplainer(predict_kernel, X_bg)
-    shap_values = explainer.shap_values(X_eval, nsamples=nsamples)
-
-    outputs = class_indices
-    resultados = {}
-
-    for output_idx in outputs:
-        class_idx = output_idx if isinstance(output_idx, int) else 0
-        shap_matrix = _extraer_shap_matrix(shap_values, class_idx=class_idx)
-
-        if use_abs:
-            shap_matrix = np.abs(shap_matrix)
-
-        df_atrib = pd.DataFrame(shap_matrix, columns=df.columns)
-        mode_scores = {}
-
-        for modo, variables in modos.items():
-            vars_presentes = [v for v in variables if v in df_atrib.columns]
-            if len(vars_presentes) == 0:
-                mode_scores[modo] = 0.0
-            else:
-                mode_scores[modo] = float(df_atrib[vars_presentes].sum(axis=1).mean())
-
-        resultados[output_idx] = {
-            "mode_scores": pd.Series(mode_scores),
-            "df_atrib": df_atrib,
-        }
-
-    return resultados, shap_values
-
-
-def comparar_radar_kernel_shap_modelos(
-    modelos,
-    X,
-    df,
-    modos,
-    background_size=50,
-    sample_size_explain=100,
-    nsamples=100,
-    class_indices=(0, 1, 2, 3),
-    use_abs=True,
-    cmap_name="RdYlGn_r",
-    figsize=(22, 10),
-    title="Comparación de atribuciones por modos usando Kernel SHAP",
-):
-    orden = [m for m in ["clasificacion"] if m in modelos]
-    if not orden:
-        raise ValueError("No hay modelos disponibles para Kernel SHAP.")
-
-    resultados = {}
-    shap_values_por_modelo = {}
-    max_global = 0.0
-
-    for modo_modelo in orden:
-        resultados_modo, shap_values = _calcular_kernel_shap_modelo(
-            modelos[modo_modelo],
-            X,
-            df,
-            modos,
-            background_size=background_size,
-            sample_size_explain=sample_size_explain,
-            nsamples=nsamples,
-            class_indices=class_indices,
-            use_abs=use_abs,
-        )
-        resultados[modo_modelo] = resultados_modo
-        shap_values_por_modelo[modo_modelo] = shap_values
-
-        for item in resultados_modo.values():
-            max_global = max(max_global, item["mode_scores"].max())
-
-    max_global = max_global * 1.2 if max_global > 0 else 1.0
-    n_cols = len(class_indices)
-
-    fig, axes = plt.subplots(
-        n_cols,
-        figsize=figsize,
-        subplot_kw=dict(polar=True),
-    )
-    axes = np.atleast_1d(axes)
-
-    for col_idx in range(n_cols):
-        ax = axes[col_idx]
-        output_key = class_indices[col_idx]
-        if output_key not in resultados["clasificacion"]:
-            ax.set_visible(False)
-            continue
-        titulo_ax = f"Clasificación - Clase {output_key}"
-
-        _dibujar_radar(
-            ax,
-            resultados["clasificacion"][output_key]["mode_scores"],
-            max_global,
-            titulo_ax,
-            cmap_name=cmap_name,
-        )
-
-    plt.suptitle(title, fontsize=16, fontweight="bold", y=1.03)
-    plt.tight_layout()
-    plt.show()
-
-    tablas = {}
-    if "clasificacion" in resultados:
-        tablas["clasificacion"] = pd.DataFrame({
-            f"Clase_{class_idx}": resultados["clasificacion"][class_idx]["mode_scores"]
-            for class_idx in class_indices
-            if class_idx in resultados["clasificacion"]
-        })
-
-    return resultados, tablas, shap_values_por_modelo
-
-
-def comparar_radar_kernel_shap_4_clases(clf, *args, **kwargs):
-    return comparar_radar_kernel_shap_modelos({"clasificacion": clf}, *args, **kwargs)
