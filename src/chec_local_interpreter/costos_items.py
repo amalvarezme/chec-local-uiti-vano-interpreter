@@ -91,6 +91,55 @@ class ItemCosto:
     descripcion: str = SIN_DESCRIPCION
 
 
+SIN_DESCRIPCION_HTML = "<i>Sin descripción en el libro de actividades.</i>"
+
+
+def detalle_html_de_item(item: "ItemCosto") -> str:
+    """Lo que el boton "i" del panel escribe para una actividad.
+
+    Vive aqui y no en el tablero porque es una propiedad del CATALOGO -- que campos
+    tiene una actividad y como se leen -- y porque asi se puede probar sin levantar un
+    widget.
+
+    Dos cosas que el panel hacia mal y no se veian como fallo:
+
+    **Los parrafos se aplastaban.** 42 de las 142 descripciones traen saltos de linea,
+    hasta siete, y la mas larga mide 1.166 caracteres. En HTML un `\\n` colapsa a un
+    espacio, asi que el detalle salia como un muro de texto corrido -- que es lo mismo
+    que no presentarlo, porque el boton existe para que se lea.
+
+    **Nada se escapaba.** El libro lo edita una persona: un `<` en una descripcion
+    rompe el panel entero y un `&` deja una entidad a medias. Hoy ninguna de las 142
+    trae uno -- comprobado --, y por eso mismo el dia que aparezca nadie lo va a estar
+    esperando. Se escapa el texto del libro y se ponen las etiquetas DESPUES, que es el
+    unico orden que no se puede confundir.
+
+    Un campo ausente se NOMBRA en vez de dejar el hueco: un panel que se abre con el
+    encabezado y nada debajo se lee como que el boton fallo a la mitad.
+    """
+    from html import escape
+
+    def _campo(valor: object, ausente: str) -> str:
+        texto = "" if valor is None else str(valor).strip()
+        return escape(texto) if texto else ausente
+
+    descripcion = "" if item.descripcion is None else str(item.descripcion).strip()
+    if not descripcion or descripcion == SIN_DESCRIPCION:
+        cuerpo = SIN_DESCRIPCION_HTML
+    else:
+        # `\r\n` antes que `\n`, o el retorno de carro sobrevive y mete un `<br>` de mas.
+        cuerpo = escape(descripcion).replace("\r\n", "\n").replace("\r", "\n")
+        cuerpo = cuerpo.replace("\n", "<br>")
+
+    return (
+        f"<b>{_campo(item.nombre, '<i>sin nombre</i>')}</b><br>"
+        f"Tipo: {_campo(item.tipo, 'sin tipo')} &nbsp;|&nbsp; "
+        f"Unidad: {_campo(item.unidad, 'sin unidad')} &nbsp;|&nbsp; "
+        f"Código máximo: {_campo(item.codigo_maximo, 'sin código')}<br>"
+        f'<span style="color:#4b5563;">{cuerpo}</span>'
+    )
+
+
 @dataclass(frozen=True)
 class CatalogoCostos:
     """Lo que se puede costear, y lo que no.

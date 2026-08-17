@@ -426,3 +426,107 @@ def test_an_activity_without_description_says_so_instead_of_showing_blank(tmp_pa
     sin_desc = catalogo.items[1]
     assert sin_desc.descripcion, "no puede quedar vacia"
     assert "sin descripcion" in sin_desc.descripcion.lower()
+
+
+# --- El detalle que muestra el boton "i" -----------------------------------------
+
+
+def test_el_detalle_respeta_los_parrafos_de_la_descripcion():
+    """42 de las 142 actividades traen saltos de linea, hasta siete.
+
+    En HTML un `\\n` colapsa a un espacio, asi que esos parrafos salian pegados en un
+    solo bloque. La descripcion mas larga mide 1.166 caracteres: sin cortes es un muro
+    que nadie lee, y el boton "i" existe justo para que se lea.
+    """
+    from chec_local_interpreter.costos_items import ItemCosto, detalle_html_de_item
+
+    item = ItemCosto(nombre="Poda", costo=1000.0, tipo="FORESTAL", unidad="Km",
+                     codigo_maximo="290027",
+                     descripcion="Primer parrafo.\nSegundo parrafo.\nTercero.")
+
+    html = detalle_html_de_item(item)
+
+    assert html.count("<br>") >= 4, "los dos saltos de la descripcion no llegaron"
+    assert "\n" not in html.split("</b>", 1)[1], "quedo un salto literal, que colapsa"
+    assert "Primer parrafo.<br>Segundo parrafo.<br>Tercero." in html
+
+
+def test_el_detalle_escapa_lo_que_venga_del_libro():
+    """El libro lo edita una persona. Un `<` en una descripcion rompe el panel entero,
+    y un `&` deja una entidad a medias."""
+    from chec_local_interpreter.costos_items import ItemCosto, detalle_html_de_item
+
+    item = ItemCosto(nombre="Poda <A> & B", costo=1.0, tipo="T", unidad="U",
+                     codigo_maximo="1", descripcion="Retiro de ramas < 3 m & similares")
+
+    html = detalle_html_de_item(item)
+
+    assert "&lt;A&gt;" in html and "&amp;" in html
+    assert "<A>" not in html
+    # y las etiquetas que pone el propio panel siguen vivas
+    assert html.startswith("<b>")
+
+
+def test_una_actividad_sin_descripcion_lo_dice_en_vez_de_dejar_el_hueco():
+    """Un panel que se abre con el encabezado y nada debajo se lee como que el boton
+    fallo a la mitad."""
+    from chec_local_interpreter.costos_items import ItemCosto, detalle_html_de_item
+
+    item = ItemCosto(nombre="Poda", costo=1.0, tipo="T", unidad="U",
+                     codigo_maximo="1", descripcion="   ")
+
+    html = detalle_html_de_item(item)
+
+    assert "sin descripción" in html.lower()
+
+
+def test_los_campos_ausentes_se_nombran_y_no_salen_vacios():
+    from chec_local_interpreter.costos_items import ItemCosto, detalle_html_de_item
+
+    item = ItemCosto(nombre="Poda", costo=1.0, tipo="", unidad=None,
+                     codigo_maximo="", descripcion="Algo")
+
+    html = detalle_html_de_item(item)
+
+    assert "sin tipo" in html and "sin unidad" in html and "sin código" in html
+
+
+def test_el_libro_real_reparte_sus_142_detalles_como_esta_medido():
+    """Contra las 142 de verdad, no contra un doble.
+
+    **90 traen descripcion y 52 no.** Las 52 tienen que DECIRLO -- un panel que se abre
+    con el encabezado y nada debajo se lee como que el boton fallo a la mitad --, y de
+    las 90 hay **42 con saltos de linea**, que son las que se aplastaban en un bloque.
+
+    La descripcion mas larga mide 1.166 caracteres y la mediana 357: aqui el corte de
+    parrafo no es un detalle de estilo, es la diferencia entre un texto y un muro.
+    """
+    from pathlib import Path
+
+    from chec_local_interpreter.costos_items import (
+        detalle_html_de_item,
+        leer_catalogo_costos,
+    )
+
+    libro = Path(__file__).resolve().parents[1] / "data" / \
+        "Actividades_mantenimiento_costos_2026.xlsx"
+    if not libro.exists():
+        import pytest as _pytest
+        _pytest.skip("el libro de costos no esta en esta copia")
+
+    catalogo = leer_catalogo_costos(libro)
+    assert len(catalogo.items) == 142
+
+    detalles = {i.nombre: detalle_html_de_item(i) for i in catalogo.items}
+    sin_descripcion = [n for n, h in detalles.items() if "sin descripción" in h.lower()]
+    # Solo los `<br>` de DENTRO de la descripcion: el encabezado ya trae dos suyos.
+    con_parrafos = [n for n, h in detalles.items()
+                    if h.rsplit('color:#4b5563;">', 1)[1].count("<br>") > 0]
+
+    assert len(sin_descripcion) == 52
+    assert len(con_parrafos) == 42, (
+        "cambio cuantas descripciones tienen parrafos; si el libro se edito, actualiza "
+        "el numero, y si no, algo dejo de convertir los saltos de linea")
+    for html in detalles.values():
+        # Ni un salto literal sobreviviente: en HTML colapsa y pega los parrafos.
+        assert "\n" not in html

@@ -54,6 +54,7 @@ except ImportError as exc:  # pragma: no cover -- entorno sin interfaz
 from chec_local_interpreter.costos_items import (
     MAX_REPETICIONES,
     costos_de_intervencion,
+    detalle_html_de_item,
     leer_catalogo_costos,
 )
 from chec_local_interpreter.mil_simulador_015 import (
@@ -559,7 +560,14 @@ def construir(
     CATALOGO_COSTOS = leer_catalogo_costos(costos)
     # El detalle de cada actividad, para el boton "i" del panel. Sale del MISMO libro
     # que el precio: dos lecturas del mismo archivo se separan en cuanto alguien cambia
-    # una. 52 de las 142 no traen descripcion, y esas lo DICEN en vez de salir en blanco.
+    # una. Medido sobre las 142: 90 traen descripcion y 52 no, y esas 52 lo DICEN en
+    # vez de dejar el panel abierto con el encabezado y nada debajo.
+    #
+    # El HTML lo arma `detalle_html_de_item` y no un f-string de aqui, por dos motivos
+    # que se ven poco y pesan: 42 de las 90 descripciones traen saltos de linea -- hasta
+    # siete, y la mas larga mide 1.166 caracteres --, y un `\n` en HTML colapsa a un
+    # espacio, asi que salian como un muro corrido; y el libro lo edita una persona, de
+    # modo que un `<` suelto rompia el panel entero. Escapado y con sus parrafos.
     TEXTO_ITEMS = {
         _it.nombre: (f'{_it.nombre}\n'
                      f'Tipo: {_it.tipo or "sin tipo"}  |  '
@@ -568,14 +576,8 @@ def construir(
                      f'{_it.descripcion}')
         for _it in CATALOGO_COSTOS.items
     }
-    INFO_ITEMS = {
-        _it.nombre: (f'<b>{_it.nombre}</b><br>'
-                     f'Tipo: {_it.tipo or "sin tipo"} &nbsp;|&nbsp; '
-                     f'Unidad: {_it.unidad or "sin unidad"} &nbsp;|&nbsp; '
-                     f'Código máximo: {_it.codigo_maximo or "sin código"}<br>'
-                     f'<span style="color:#4b5563;">{_it.descripcion}</span>')
-        for _it in CATALOGO_COSTOS.items
-    }
+    INFO_ITEMS = {_it.nombre: detalle_html_de_item(_it)
+                  for _it in CATALOGO_COSTOS.items}
     COSTO_POR_ITEM = CATALOGO_COSTOS.por_nombre
 
     # --- Inventario de trazas -------------------------------------------------------------
