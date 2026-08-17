@@ -118,30 +118,53 @@ def test_los_paneles_por_vano_del_simulador_declaran_su_eje_categorico():
 def test_el_top_por_vano_decide_su_rotulo_mirando_el_grosor_de_la_barra():
     """El rotulo va girado -90: la barra lo limita por sus DOS lados.
 
-    `rotulo_en_barra` solo miraba el LARGO -- si el texto cabe escrito --. El GROSOR es
-    lo que decide si cabe SIN montarse sobre la barra de al lado, y con ocho vanos por
-    diez posiciones cada barra mide 3,6 px contra los 11 que mide el renglon del texto.
+    La cascada solo miraba el LARGO -- si el texto cabe escrito --. El GROSOR es lo que
+    decide si cabe SIN montarse sobre la barra de al lado, y con ocho vanos por diez
+    posiciones cada barra mide 3,6 px contra los 11 que mide el renglon del texto.
     Resultado medido: **81 traslapes**, ochenta rotulos verticales unos sobre otros.
+
+    La llamada paso de `rotulo_en_barra` a `rotulo_y_posicion` cuando el rotulo que no
+    cabe dentro dejo de perderse y se fue ENCIMA de la barra. El grosor no cambia con esa
+    mudanza y por eso este guardian sigue: girado -90, el renglon se apoya contra el ancho
+    de la barra tanto dentro como fuera. Se comprueba sobre el nombre nuevo.
     """
     fuente = _fuente(SIMULADOR)
-    llamada = re.search(r"rotulo_en_barra\((?:[^()]|\([^()]*\))*?\)", fuente, re.S)
-    assert llamada, "el simulador ya no llama a `rotulo_en_barra`"
+    llamada = re.search(r"rotulo_y_posicion\((?:[^()]|\([^()]*\))*?\)", fuente, re.S)
+    assert llamada, "el simulador ya no elige el rotulo del top con la cascada medida"
     assert "grosor_px=" in llamada.group(0), (
         "el top por vano decide su rotulo sin mirar el grosor de la barra; con ocho "
         "vanos marcados eso escribe ochenta rotulos encimados")
+    assert "hueco_px=" in llamada.group(0), (
+        "no se le pasa el hueco hasta el techo del eje, asi que el rotulo que no cabe "
+        "dentro se pierde en vez de irse encima de la barra")
 
 
-def test_el_ancho_supuesto_del_panel_es_el_del_caso_mas_estrecho():
+def test_el_ancho_supuesto_del_panel_es_el_medido_en_la_pantalla_mas_estrecha():
     """El ancho del panel NO se conoce en Python: la figura es responsive.
 
     Asi que se supone, y la suposicion tiene que ser la del caso mas ESTRECHO que el
     tablero soporta -- ventana de 1.280 px --, no la del comodo. Suponer de mas escribe
-    rotulos que en una pantalla chica se montan, que es justo lo que esto evita.
+    rotulos que en una pantalla chica se montan.
+
+    ## Pero suponer de MENOS tampoco es gratis, y es lo que pasaba
+
+    El valor era 380, de cuando el top ocupaba una fraccion del ancho de la figura. Al
+    mover el grafico a las CUATRO columnas, el panel paso a ocuparla casi entera y la
+    suposicion se quedo a menos de la mitad. Con ella, la compuerta de grosor calla desde
+    tres vanos, y el diagnostico completa a ocho: el panel llevaba semanas sin escribir un
+    solo rotulo -- medido, 80 barras y 80 textos vacios --, que es el fallo contrario al
+    que la constante existe para evitar y se ve igual de poco.
+
+    Medido de nuevo en el navegador a 1.280 px de ventana: figura de 875, **panel del top
+    de 719**. Se toma ese, no el de una pantalla ancha.
     """
     fuente = _sin_comentarios(_fuente(SIMULADOR))
     valor = re.search(r"ANCHO_PANEL_TOP_PX_MINIMO\s*=\s*([\d.]+)", fuente)
     assert valor, "el simulador no declara el ancho supuesto del panel del top"
-    # 848 px de figura a 1.280 de ventana, y este panel al 42,5% de ella.
-    assert float(valor.group(1)) <= 380.0, (
-        f"ANCHO_PANEL_TOP_PX_MINIMO = {valor.group(1)} supone una pantalla mas ancha "
-        "que la mas estrecha que el tablero soporta")
+    ancho = float(valor.group(1))
+    assert ancho <= 719.0, (
+        f"ANCHO_PANEL_TOP_PX_MINIMO = {ancho} supone una pantalla mas ancha que la mas "
+        "estrecha que el tablero soporta (719 px medidos a 1.280 de ventana)")
+    assert ancho >= 640.0, (
+        f"ANCHO_PANEL_TOP_PX_MINIMO = {ancho} se queda MUY corto de los 719 px medidos, y "
+        "una suposicion baja apaga los rotulos que si caben")

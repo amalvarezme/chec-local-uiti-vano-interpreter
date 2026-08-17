@@ -38,6 +38,7 @@ from chec_local_interpreter.simulador_variables import (
     knobs_bloqueados,
     knobs_simulables,
     rotulo_en_barra,
+    rotulo_y_posicion,
     SIN_EVALUAR,
     tabla_variables_simulables,
 )
@@ -591,3 +592,49 @@ def test_without_a_dictionary_the_definition_still_works(tmp_path):
     texto = definicion_de_knob(_knob("NR_T", bounds=(0.0, 3.0)), nombres={})
 
     assert texto.strip() and JUICIO_SIMULACION["NR_T"][0] in texto
+
+
+# --------------------------------------- la barra corta: el rotulo se va ENCIMA, no se pierde
+
+
+def test_a_bar_too_short_for_its_label_puts_it_above_instead_of_dropping_it():
+    """Ese era el ultimo escalon de la cascada, y perdia informacion sin necesidad.
+
+    Dentro de una barra el sitio lo da la barra, que es corta. Pero ENCIMA de ella el
+    sitio lo da el hueco hasta el techo del eje, y en una barra corta ese hueco es casi
+    todo el panel. Dejarlo vacio era tratar los dos espacios como si fueran el mismo.
+
+    El grosor sigue mandando por el otro lado -- ver la prueba de abajo --: encima o
+    dentro, el renglon girado ocupa el mismo ancho.
+    """
+    texto, donde = rotulo_y_posicion("PROMEDIO_KWH_TRF", 4.0, hueco_px=200.0)
+    assert (texto, donde) == ("kWh trafo", "outside")
+
+
+def test_a_bar_with_room_inside_keeps_its_label_inside():
+    """Dentro es lo preferible: el rotulo pegado al dato no obliga a cruzar la vista, y
+    encima de la barra compite con la barra siguiente del grupo."""
+    assert rotulo_y_posicion("PROMEDIO_KWH_TRF", 200.0, hueco_px=200.0) == (
+        "kWh trafo", "inside")
+
+
+def test_above_the_bar_the_cascade_is_the_same_one():
+    """Resumen si cabe, iniciales si no. No hay razon para que arriba se decida distinto
+    que abajo: lo unico que cambia es cuanto sitio hay."""
+    assert rotulo_y_posicion("PROMEDIO_KWH_TRF", 4.0, hueco_px=24.0) == ("KT", "outside")
+
+
+def test_a_thin_bar_gets_no_label_anywhere():
+    """El grosor no lo arregla mudar el rotulo.
+
+    Girado -90, el renglon se apoya contra el ANCHO de la barra tanto dentro como fuera:
+    con 3,6 px de barra -- ocho vanos por diez posiciones, medido a 1.280 -- ochenta
+    rotulos verticales se montan unos sobre otros esten dentro o encima.
+    """
+    assert rotulo_y_posicion("PROMEDIO_KWH_TRF", 4.0, hueco_px=400.0,
+                             grosor_px=3.6) == ("", "inside")
+
+
+def test_neither_inside_nor_above_leaves_it_empty():
+    """Si tampoco hay hueco arriba, se sigue prefiriendo ninguno a uno cortado."""
+    assert rotulo_y_posicion("PROMEDIO_KWH_TRF", 4.0, hueco_px=5.0) == ("", "inside")

@@ -467,6 +467,50 @@ def rotulo_en_barra(
     return ""
 
 
+def rotulo_y_posicion(
+    label: str,
+    largo_px: float,
+    *,
+    hueco_px: float,
+    holgura_px: float = HOLGURA_PX,
+    grosor_px: float | None = None,
+) -> tuple[str, str]:
+    """El rotulo y DONDE va: `('kWh trafo', 'inside')`, `('KT', 'outside')` o `('', ...)`.
+
+    `rotulo_en_barra` resuelve el dentro y acababa en vacio cuando ni las iniciales
+    cabian. Ese ultimo escalon perdia informacion sin necesidad: dentro de una barra el
+    sitio lo da la BARRA, que en ese caso es corta, pero encima de ella lo da el HUECO
+    hasta el techo del eje -- y en una barra corta ese hueco es casi todo el panel. Los
+    dos espacios no son el mismo y no tienen por que decidirse juntos.
+
+    `hueco_px` es esa distancia entre la punta de la barra y el techo del eje. Se pide y
+    no se calcula aqui porque depende del rango del eje y del alto de la figura, que este
+    modulo no conoce.
+
+    Dentro se prefiere a encima: el rotulo pegado al dato no obliga a cruzar la vista, y
+    encima compite con la barra siguiente del grupo.
+
+    El GROSOR manda por encima de todo y no lo arregla mudar el rotulo. Girado -90 el
+    renglon se apoya contra el ancho de la barra tanto dentro como fuera, asi que con
+    barras de 3,6 px -- ocho vanos por diez posiciones, medido a 1.280 -- los ochenta
+    rotulos se montan unos sobre otros esten donde esten.
+
+    La posicion que acompania a un rotulo vacio es `'inside'` y da igual cual sea: Plotly
+    no dibuja nada. Se devuelve una fija para que el llamador no tenga que ramificar.
+    """
+    if grosor_px is not None and grosor_px < ALTO_RENGLON_PX:
+        return "", "inside"
+    dentro = rotulo_en_barra(label, largo_px, holgura_px=holgura_px, grosor_px=grosor_px)
+    if dentro:
+        return dentro, "inside"
+    # La misma cascada, contra el otro espacio. No hay razon para decidir distinto arriba
+    # que abajo: lo unico que cambia es cuanto sitio hay.
+    for texto in (abreviatura(label), iniciales(label)):
+        if texto and hueco_px >= ancho_px(texto) + holgura_px:
+            return texto, "outside"
+    return "", "inside"
+
+
 RUTA_DICCIONARIO = "data/Variables_seleccion.xlsx"
 HOJA_DICCIONARIO = "Variables_análisis"
 

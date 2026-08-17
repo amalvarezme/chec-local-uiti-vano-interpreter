@@ -81,7 +81,7 @@ from chec_local_interpreter.simulador_variables import (
     knobs_bloqueados,
     knobs_simulables,
     rotacion_radial,
-    rotulo_en_barra,
+    rotulo_y_posicion,
 )
 from chec_local_interpreter.vano_app_015 import (
     DEBOUNCE_SEGUNDOS,
@@ -950,9 +950,18 @@ def construir(
     IDX['top_vano'] = [
         _agregar(go.Bar(
             x=[], y=[], name=f'{_p + 1}o', showlegend=False,
-            text=[], textposition='inside', insidetextanchor='middle',
+            # `textposition` va por PUNTO y no por traza: dentro de la misma posicion del
+            # ranking conviven barras largas -- que llevan su rotulo dentro -- y barras
+            # cortas, que lo llevan encima. El repintado escribe la lista.
+            text=[], textposition=[], insidetextanchor='middle',
             textangle=-90, constraintext='none',
             insidetextfont=dict(size=TAM_FUENTE_BARRA, color='white'),
+            # El de FUERA no puede ser blanco: encima de la barra el fondo es el del panel.
+            # Es la unica diferencia entre los dos rotulos, y no es de estilo -- con el
+            # blanco heredado el texto existe y no se ve. `#2b2b2b` es el gris de texto de
+            # la paleta, escrito como en el resto de este archivo: el tablero corre dentro
+            # del kernel de Voila y `aplicaciones/_comun` no esta en su `sys.path`.
+            outsidetextfont=dict(size=TAM_FUENTE_BARRA, color='#2b2b2b'),
             marker=dict(color=[], line=dict(width=0.4, color='rgba(60,10,10,0.6)')),
             hovertext=[], hoverinfo='text',
         ), 4, 1) for _p in range(TOP_VARIABLES_POR_VANO)
@@ -1279,12 +1288,17 @@ def construir(
 
     # Y su ANCHO, que es el otro lado que limita al rotulo: va girado -90, asi que su
     # renglon se apoya contra el GROSOR de la barra. Este numero no se puede leer de la
-    # figura como el alto -- no lleva `width`, la fija el contenedor --, asi que se toma el
-    # del caso mas ESTRECHO que el tablero soporta: ventana de 1.280 px, figura de 848 y
-    # este panel al 42,5% de ella, medido en el navegador. Decidir con el ancho mas
-    # favorable escribiria en pantalla chica ochenta rotulos verticales unos sobre otros,
-    # que es exactamente el fallo que la cascada de `rotulo_en_barra` existe para evitar.
-    ANCHO_PANEL_TOP_PX_MINIMO = 360.0
+    # figura como el alto -- no lleva `width`, la fija el contenedor --, asi que se MIDE en
+    # el navegador sobre el caso mas ESTRECHO que el tablero soporta: ventana de 1.280 px,
+    # figura de 875 y este panel en 719. Decidir con el ancho de una pantalla ancha
+    # escribiria en una chica ochenta rotulos verticales unos sobre otros.
+    #
+    # Valia 360, de cuando este panel ocupaba una fraccion del ancho. Al mover el grafico a
+    # las CUATRO columnas paso a ocuparlo casi entero y la suposicion se quedo a la mitad:
+    # con 360 la compuerta de grosor calla desde TRES vanos y el diagnostico completa a
+    # ocho, asi que el panel llevaba semanas con las 80 barras sin un solo rotulo. Suponer
+    # de menos no es el lado seguro: apaga los rotulos que si caben.
+    ANCHO_PANEL_TOP_PX_MINIMO = 719.0
     # `bargap=0.25` y `bargroupgap=0.05` salen del `update_layout` de arriba: a las barras
     # de un grupo les queda el 75% de su casilla, y de eso cada una pierde otro 5% en el
     # hueco con su vecina.
@@ -2375,6 +2389,7 @@ def construir(
             for _posicion in range(TOP_VARIABLES_POR_VANO):
                 _traza = fig.data[IDX['top_vano'][_posicion]]
                 _x, _y, _texto, _hover, _colores = [], [], [], [], []
+                _donde = []
                 for _fid in vanos:
                     _datos = por_vano[_fid]
                     _filas = _datos['filas']
@@ -2383,10 +2398,17 @@ def construir(
                     _fila = _filas[_posicion]
                     _x.append(_fid)
                     _y.append(_fila['caida_log'])
-                    _texto.append(rotulo_en_barra(
-                        _fila['label'],
-                        _fila['caida_log'] * _px_por_unidad,
-                        grosor_px=_grosor_barra_px))
+                    # Los DOS espacios de la barra, en pixeles: lo que mide ella y lo que
+                    # queda entre su punta y el techo del eje. En una barra corta el
+                    # segundo es casi todo el panel, y es lo que permite que el rotulo se
+                    # vaya ENCIMA en vez de perderse.
+                    _largo_px = _fila['caida_log'] * _px_por_unidad
+                    _rotulo, _posicion_texto = rotulo_y_posicion(
+                        _fila['label'], _largo_px,
+                        hueco_px=ALTO_PANEL_TOP_PX - _largo_px,
+                        grosor_px=_grosor_barra_px)
+                    _texto.append(_rotulo)
+                    _donde.append(_posicion_texto)
                     # VERDE si esa sola variable basta para caer en el grupo Bajo. Es el
                     # mismo verde del recuadro del mapa simulado y significa lo mismo --
                     # baja de grupo de criticidad -- asi que el color no pide aprender un
@@ -2414,6 +2436,9 @@ def construir(
                     )
                 _traza.x, _traza.y = _x, _y
                 _traza.text, _traza.hovertext = _texto, _hover
+                # Por PUNTO. Dentro de una misma posicion del ranking conviven barras
+                # largas, que llevan el rotulo dentro, y cortas, que lo llevan encima.
+                _traza.textposition = _donde
                 _traza.marker.color = _colores
 
     def _pintar_barras_uiti(tabla_simulada, ventana_i=None, circuito=None):
