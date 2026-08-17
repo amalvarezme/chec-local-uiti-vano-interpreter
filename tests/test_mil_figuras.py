@@ -102,3 +102,112 @@ def test_a_scenario_with_no_simulated_vanos_still_draws_what_it_has(tmp_path):
     assert activos["relevancia_png"] is not None
     assert activos["serie_png"] is not None
     assert activos.get("uiti_png") is None
+
+
+# ---------------------------------------------------------------------------
+# El grafo del informe es RADIAL, como el del simulador.
+# ---------------------------------------------------------------------------
+
+
+def _grafo_con_familias_de_rezagos():
+    """Cuatro variables, dos de ellas familias de rezagos climaticos."""
+    import numpy as np
+
+    nombres = ["CONDUCTOR", "NR_T", "temp_0", "temp_1", "temp_2", "PREP_0", "PREP_1"]
+    n = len(nombres)
+    m = np.zeros((n, n))
+    m[0, 2] = 0.9   # CONDUCTOR - temp_0
+    m[1, 3] = 0.7   # NR_T      - temp_1
+    m[0, 5] = 0.4   # CONDUCTOR - PREP_0
+    m[2, 3] = 0.5   # temp_0    - temp_1  (DENTRO de la familia: se descarta al plegar)
+    return {"voided": False, "matriz": m.tolist()}, nombres
+
+
+def test_el_grafo_del_informe_pliega_las_familias_de_rezagos():
+    """Sin plegar, los doce rezagos de cada variable de clima son 48 de los 66 nodos.
+
+    Es la misma medida que gobierna el panel del simulador: con 64 aristas ese anillo
+    es casi todo decoracion, 13,6 px de arco por nombre para una fuente de 10.
+    """
+    from chec_local_interpreter.mil_figuras import datos_grafo_radial
+
+    grafo, nombres = _grafo_con_familias_de_rezagos()
+    datos, motivo = datos_grafo_radial(grafo, nombres)
+
+    assert motivo == ""
+    etiquetas = datos["nodos"]["texto"]
+    assert "temp" in etiquetas and "PREP" in etiquetas
+    assert "temp_0" not in etiquetas and "temp_1" not in etiquetas
+    assert etiquetas.count("temp") == 1, "la familia se dibujo mas de una vez"
+
+
+def test_los_nodos_del_grafo_caen_sobre_una_circunferencia():
+    """Radial, no barras. Un nodo fuera del anillo delata otra disposicion."""
+    import math
+
+    from chec_local_interpreter.mil_figuras import datos_grafo_radial
+
+    grafo, nombres = _grafo_con_familias_de_rezagos()
+    datos, _ = datos_grafo_radial(grafo, nombres)
+
+    radios = [math.hypot(x, y)
+              for x, y in zip(datos["nodos"]["x"], datos["nodos"]["y"])]
+    assert radios, "el grafo salio sin nodos"
+    assert all(abs(r - 1.0) < 1e-6 for r in radios), f"radios fuera del anillo: {radios}"
+
+
+def test_el_grafo_rotula_variables_y_no_pares_de_variables():
+    """Las barras de diferencia rotulaban PARES -- "CONDUCTOR - temp_0" --, una fila por
+    arista. Un anillo rotula VARIABLES: cada nombre aparece una vez y las relaciones se
+    leen en las lineas."""
+    from chec_local_interpreter.mil_figuras import datos_grafo_radial
+
+    grafo, nombres = _grafo_con_familias_de_rezagos()
+    datos, _ = datos_grafo_radial(grafo, nombres)
+
+    for etiqueta in datos["nodos"]["texto"]:
+        assert " - " not in etiqueta and "—" not in etiqueta
+    assert len(set(datos["nodos"]["texto"])) == len(datos["nodos"]["texto"])
+
+
+def test_una_relacion_dentro_de_la_misma_familia_no_se_dibuja():
+    """Plegada, seria un lazo de un nodo a si mismo: en un anillo, un punto."""
+    from chec_local_interpreter.mil_figuras import datos_grafo_radial
+
+    grafo, nombres = _grafo_con_familias_de_rezagos()
+    datos, _ = datos_grafo_radial(grafo, nombres)
+
+    # temp_0 - temp_1 era la unica arista interna; quedan las otras tres.
+    assert len(datos["pesos"]["peso"]) == 3
+
+
+def test_el_grafo_anulado_dice_por_que_en_vez_de_dibujar_un_anillo_vacio():
+    from chec_local_interpreter.mil_figuras import datos_grafo_radial
+
+    datos, motivo = datos_grafo_radial({"voided": True, "matriz": None}, ["A", "B"])
+    assert datos is None and "tres vanos" in motivo
+
+    datos, motivo = datos_grafo_radial(None, ["A", "B"])
+    assert datos is None and motivo
+
+    import numpy as np
+    datos, motivo = datos_grafo_radial(
+        {"voided": False, "matriz": np.zeros((3, 3)).tolist()}, ["A", "B", "C"])
+    assert datos is None and "no movio" in motivo
+
+
+def test_una_matriz_mas_grande_que_la_lista_de_nombres_no_tumba_el_anillo():
+    """Tolerancia heredada del dibujo anterior, que inventaba `f0`, `f1`...
+
+    Se conserva a proposito: un anillo con dos nodos sin nombre sigue diciendo que
+    esta conectado con que, y perderlo entero por una lista corta seria cambiar la
+    estructura por nada. `test_the_four_panels_are_written_as_png_files` depende de
+    esto sin declararlo -- no le pasa `features` --, asi que aqui queda dicho.
+    """
+    from chec_local_interpreter.mil_figuras import datos_grafo_radial
+
+    datos, motivo = datos_grafo_radial(
+        {"voided": False, "matriz": [[0.0, 0.5], [0.5, 0.0]]}, [])
+
+    assert motivo == ""
+    assert sorted(datos["nodos"]["texto"]) == ["f0", "f1"]

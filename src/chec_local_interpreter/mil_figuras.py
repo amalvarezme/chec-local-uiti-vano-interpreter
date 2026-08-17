@@ -9,9 +9,14 @@ MIL si puede mostrar es otra cosa. Cada panel contesta algo que los demas no:
 - las BARRAS DE RELEVANCIA: que palanca mueve a ese vano, y cuanto;
 - el UITI medido contra el estimado, con el GRUPO de criticidad de cada uno: una caida
   de UITI que no cambia el grupo no es una orden de trabajo;
-- el GRAFO DIFERENCIA: que movio la intervencion en el grafo reconstruido. El grafo en
-  si es casi todo pesos fijos del experto, asi que el antes y el despues se ven iguales
-  lado a lado; solo la diferencia aisla el efecto.
+- el GRAFO del escenario, como ANILLO: que variables se mueven juntas. Lo que dibuja
+  sigue siendo la diferencia entre el grafo base y el simulado -- el grafo en si es casi
+  todo pesos fijos del experto, y el antes y el despues se ven iguales lado a lado --,
+  pero presentada como estructura y no como una lista de pares. Un grafo contesta "que
+  esta conectado con que" y "que variable es el centro", y eso no cabe en barras. Es
+  ademas el MISMO anillo del panel del cuaderno 06, con sus mismas dos piezas
+  (`plegar_rezagos` y `trazas_grafo`): quien lea el informe y el tablero ve un solo
+  dibujo, no dos que hay que reconciliar.
 
 Se guardan como PNG bajo `run_dir` y se citan con ruta RELATIVA, igual que hacia el
 camino anterior: el sidecar deja de ser portable si la carpeta se copia con rutas
@@ -34,7 +39,11 @@ NOMBRES_GRUPOS = ("Bajo", "Medio", "Medio-Alto", "Alto")
 COLOR_MEDIDO = "#94a3b8"
 COLOR_SIMULADO = "#0072b2"
 TOP_VARIABLES_PANEL = 10
-TOP_ARISTAS_GRAFO = 15
+# `TOP_ARISTAS_GRAFO` se fue con las barras de diferencia: recortaba a las quince
+# relaciones mas movidas porque quince filas es lo que cabe en una lista legible. El
+# anillo no tiene ese limite -- lo que lo satura es el numero de NODOS, y de eso se
+# encarga el plegado de rezagos --, y un recorte de aristas ademas mentiria sobre la
+# estructura, que es justo lo que el anillo existe para mostrar.
 
 
 def _lienzo(alto: float = 3.2, ancho: float = 8.0):
@@ -129,38 +138,118 @@ def _panel_uiti(simulacion: Mapping[str, Any], destino: Path,
     return _guardar(plt, fig, destino, f"{clave}_uiti.png")
 
 
-def _panel_grafo(grafo: Mapping[str, Any] | None, features: Sequence[str],
-                 destino: Path, clave: str) -> tuple[str | None, str]:
-    """El grafo diferencia, o el motivo por el que no hay panel.
+def datos_grafo_radial(
+    grafo: Mapping[str, Any] | None, features: Sequence[str]
+) -> tuple[dict[str, Any] | None, str]:
+    """La disposicion del anillo, o el motivo por el que no hay grafo que dibujar.
 
-    Devolver un panel vacio se leeria como "la intervencion no movio nada", que es lo
-    contrario de "no hay suficientes vanos para reconstruir el grafo".
+    Parte PURA, separada del dibujo: es lo unico de un PNG que se puede comprobar.
+
+    Se apoya en las MISMAS dos piezas que el panel del cuaderno 06 --
+    `plegar_rezagos` y `trazas_grafo` --, no en una copia. El informe y el tablero
+    dibujan el mismo grafo del mismo modelo, y dos disposiciones distintas obligarian
+    a quien lee las dos a reconciliar de cabeza dos dibujos que son lo mismo.
+
+    El plegado no es cosmetico: sin el, los doce rezagos de cada variable de clima son
+    48 de los 66 nodos, y con esas aristas el anillo queda en 13,6 px de arco por
+    nombre para una fuente de 10 -- nombres encimados. Plegado quedan 22 nodos y 62,7
+    px de arco.
     """
     if not grafo:
         return None, "La simulacion no produjo grafo para esta ventana."
     if grafo.get("voided") or grafo.get("matriz") is None:
         return None, ("El grafo se reconstruye con al menos tres vanos; esta seleccion "
                       "no llega, asi que no se dibuja en vez de mostrarse vacio.")
+
     import numpy as np
 
-    matriz = np.asarray(grafo["matriz"], dtype=float)
-    n = matriz.shape[0]
-    triangulo = [(i, j, abs(matriz[i, j])) for i in range(n) for j in range(i + 1, n)]
-    triangulo = [t for t in triangulo if t[2] > 0]
-    if not triangulo:
+    from chec_local_interpreter.mil_simulador_015 import plegar_rezagos, trazas_grafo
+
+    matriz = np.abs(np.asarray(grafo["matriz"], dtype=float))
+    if not float(matriz.max(initial=0.0)):
         return None, "La intervencion no movio ninguna relacion del grafo."
-    triangulo.sort(key=lambda t: t[2], reverse=True)
-    triangulo = triangulo[:TOP_ARISTAS_GRAFO]
 
-    def _nombre(k: int) -> str:
-        return str(features[k]) if k < len(features) else f"f{k}"
+    # La matriz manda: una lista de nombres mas corta se rellena con `f<k>` en vez de
+    # tumbar el panel. Es la tolerancia que tenia el dibujo anterior, y sigue siendo
+    # preferible un anillo con dos nodos sin nombre que ningun anillo.
+    nombres_entrada = [str(f) for f in features][:matriz.shape[0]]
+    nombres_entrada += [f"f{k}" for k in range(len(nombres_entrada), matriz.shape[0])]
 
-    plt, fig, ax = _lienzo(alto=max(2.4, 0.32 * len(triangulo)))
-    etiquetas = [f"{_nombre(i)} — {_nombre(j)}" for i, j, _ in reversed(triangulo)]
-    ax.barh(etiquetas, [t[2] for t in reversed(triangulo)], color="#be185d")
-    ax.set_xlabel("|grafo base - grafo simulado|")
-    ax.set_title("Grafo diferencia: que movio la intervencion")
-    ax.grid(axis="x", alpha=0.25)
+    plegada, nombres = plegar_rezagos(matriz, nombres_entrada)
+    if not float(np.abs(plegada).max(initial=0.0)):
+        # Todo lo que se movio estaba DENTRO de una familia de rezagos, y eso plegado
+        # es un lazo de un nodo a si mismo: en un anillo, un punto.
+        return None, ("Lo unico que movio la intervencion fueron relaciones dentro de "
+                      "una misma familia de rezagos, que plegadas no son una arista.")
+
+    trazas = trazas_grafo(plegada, nombres)
+    if not trazas["nodos"]["texto"]:
+        return None, "La intervencion no movio ninguna relacion del grafo."
+    return trazas, ""
+
+
+def _panel_grafo(grafo: Mapping[str, Any] | None, features: Sequence[str],
+                 destino: Path, clave: str) -> tuple[str | None, str]:
+    """El grafo del escenario como ANILLO, igual que el panel del cuaderno 06.
+
+    Eran barras horizontales, una por par de variables, ordenadas por cuanto se movio
+    la relacion. Contestaban "cuanto", que es lo que una barra sabe hacer, pero un
+    grafo es una ESTRUCTURA: que esta conectado con que, y que variables son el centro
+    de esa estructura. Eso no cabe en una lista de pares, y era ademas otro dibujo del
+    mismo grafo que el tablero ya presenta como anillo.
+
+    Devolver un panel vacio se leeria como "la intervencion no movio nada", que es lo
+    contrario de "no hay suficientes vanos para reconstruir el grafo": por eso el
+    motivo viaja como texto.
+    """
+    trazas, motivo = datos_grafo_radial(grafo, features)
+    if trazas is None:
+        return None, motivo
+
+    import numpy as np
+
+    plt, fig, ax = _lienzo(alto=5.4, ancho=5.4)
+
+    aristas_x = trazas["aristas"]["x"]
+    aristas_y = trazas["aristas"]["y"]
+    pesos = trazas["pesos"]["peso"]
+    maximo = max(pesos, default=0.0) or 1.0
+
+    # Una linea por arista, con el grosor y la opacidad ligados a su peso RELATIVO:
+    # los pesos absolutos cambian dos ordenes de magnitud entre ventanas, asi que un
+    # grosor fijo por valor deja el anillo plano o saturado segun cual se mire.
+    for k in range(0, len(aristas_x), 3):
+        peso = pesos[k // 3] if k // 3 < len(pesos) else 0.0
+        proporcion = peso / maximo
+        ax.plot(aristas_x[k:k + 2], aristas_y[k:k + 2],
+                color="#be185d", linewidth=0.6 + 2.6 * proporcion,
+                alpha=0.25 + 0.6 * proporcion, zorder=1, solid_capstyle="round")
+
+    ax.scatter(trazas["nodos"]["x"], trazas["nodos"]["y"],
+               s=46, color="#0072b2", zorder=3, edgecolors="white", linewidths=0.8)
+
+    # El rotulo corre A LO LARGO de su propio radio. Horizontales se enciman entre
+    # vecinos, y el apretujon es peor arriba y abajo, donde el circulo es mas plano.
+    for x, y, texto in zip(trazas["nodos"]["x"], trazas["nodos"]["y"],
+                           trazas["nodos"]["texto"]):
+        grados = float(np.degrees(np.arctan2(y, x)))
+        izquierda = 90.0 < grados <= 270.0 or grados < -90.0
+        ax.annotate(
+            str(texto),
+            (x * 1.06, y * 1.06),
+            rotation=grados + 180.0 if izquierda else grados,
+            rotation_mode="anchor",
+            ha="right" if izquierda else "left",
+            va="center",
+            fontsize=7,
+            color="#334155",
+        )
+
+    ax.set_xlim(-1.55, 1.55)
+    ax.set_ylim(-1.55, 1.55)
+    ax.set_aspect("equal")
+    ax.axis("off")
+    ax.set_title("Grafo del escenario: que variables se mueven juntas", fontsize=10)
     return _guardar(plt, fig, destino, f"{clave}_grafo.png"), ""
 
 
