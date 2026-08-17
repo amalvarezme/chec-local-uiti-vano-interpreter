@@ -1692,3 +1692,64 @@ def test_the_inference_context_is_built_on_the_mil_model_not_on_mgcecdl():
 
     assert not llamadas, f"el pipeline volvio a cargar MGCECDL: {llamadas}"
     assert "construir_contexto_inferencia_mil" in fuente
+
+
+# ---------------------------------------------------------------------------
+# Las figuras del MIL tienen que RESOLVER contra el disco, no solo existir.
+# ---------------------------------------------------------------------------
+
+
+def test_las_figuras_del_sidecar_resuelven_a_archivos_que_existen(tmp_path):
+    """El sidecar guarda nombres relativos; `render` los resuelve contra `run_dir`.
+
+    Las dos mitades vivian en modulos distintos y se desincronizaron sin que nada se
+    pusiera rojo: `mil_figuras._guardar` ESCRIBE en el `destino` que le pasan --
+    `run_dir/inference_figures` -- pero devuelve el nombre PELADO, y
+    `_build_inference_results` lo resolvia contra `run_dir`. Buscaba
+    `run_dir/V9_serie.png` mientras el archivo estaba en
+    `run_dir/inference_figures/V9_serie.png`.
+
+    Nunca coincidian. Las doce figuras de una corrida real (0,7 MB de PNG) se
+    dibujaban, se guardaban y no llegaban al informe: la seccion del modelo salia
+    VACIA, sin un aviso, en todas las corridas.
+
+    `tests/test_mil_figuras.py` no podia atraparlo porque le pasa `destino=tmp_path` y
+    resuelve con `tmp_path / nombre`: ahi la carpeta destino ES la raiz de resolucion.
+    La asimetria que rompe -- destino y raiz son carpetas DISTINTAS -- solo aparece al
+    juntar los dos modulos, que es lo que esta prueba hace.
+
+    Por eso la asercion mira el DISCO (`Path(...).exists()`) y no la forma de la cadena:
+    una prueba sobre el texto de la ruta habria pasado con el defecto vivo.
+    """
+    run_dir = tmp_path / "20260101T000000"
+    figuras_dir = run_dir / report_pipeline_module.SUBDIR_FIGURAS_INFERENCIA
+    figuras_dir.mkdir(parents=True)
+    for nombre in ("V9_serie.png", "V9_relevancia.png", "V9_uiti.png", "V9_grafo.png"):
+        (figuras_dir / nombre).write_bytes(b"\x89PNG stub")
+
+    (run_dir / "inference_render_assets.json").write_text(json.dumps({
+        "figuras": {
+            "V9": {
+                "nombre": "C1 -- ventana V9",
+                "serie_png": "V9_serie.png",
+                "relevancia_png": "V9_relevancia.png",
+                "uiti_png": "V9_uiti.png",
+                "grafo_png": "V9_grafo.png",
+                "grafo_motivo": "",
+            }
+        },
+        "mapas": {},
+    }), encoding="utf-8")
+    (run_dir / "inference.bc.json").write_text(json.dumps({
+        "escenarios": [{"nombre": "C1 -- ventana V9", "ventana": "V9"}]
+    }), encoding="utf-8")
+
+    resultados = report_pipeline_module._build_inference_results(run_dir)
+
+    assert resultados is not None
+    panel = resultados["V9"]
+    for clave in ("fig_serie", "fig_barras", "fig_uiti", "fig_grafo"):
+        assert Path(panel[clave]).exists(), (
+            f"{clave} apunta a {panel[clave]!r}, que no existe: la figura no llega al "
+            f"informe y la seccion del modelo sale vacia sin avisar"
+        )

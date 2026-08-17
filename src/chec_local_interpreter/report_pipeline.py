@@ -206,6 +206,16 @@ class ReportPreflight:
 NOMBRE_MODELO_MIL = "mil_vano_ventana_v1.pt"
 """El artefacto que produce `05_mil_vano_ventana.ipynb`."""
 
+SUBDIR_FIGURAS_INFERENCIA = "inference_figures"
+"""La carpeta de los cuatro paneles del MIL, DENTRO del `run_dir`.
+
+Una sola constante para las dos mitades a proposito. `prepare` se la pasa a
+`figuras_de_escenario` como destino de escritura y `_build_inference_results` la usa
+como raiz al resolver los nombres que el sidecar guardo. Escritas por separado se
+desincronizaron -- una escribia en la subcarpeta, la otra leia en la raiz -- y las doce
+figuras de cada corrida no llegaban al informe sin que nada avisara.
+"""
+
 
 def _contexto_inferencia_vacio(
     circuito: str, fecha_inicio: str, fecha_fin: str, fechas_interes: list[str]
@@ -422,7 +432,7 @@ def prepare(
                 render_assets[_escenario["ventana"]] = figuras_de_escenario(
                     _escenario,
                     series=[_series_por_fid[f] for f in _fids if f in _series_por_fid],
-                    destino=run_dir / "inference_figures",
+                    destino=run_dir / SUBDIR_FIGURAS_INFERENCIA,
                     features=inference_context.get("features", []),
                 )
             except OSError as exc:
@@ -624,8 +634,12 @@ def _build_inference_results(run_dir: Path) -> dict[str, Any] | None:
         if isinstance(escenario, dict)
     }
 
+    # La raiz es la MISMA carpeta que `prepare` le dio a `figuras_de_escenario` como
+    # destino: `_guardar` devuelve el nombre pelado, no la ruta relativa al `run_dir`.
+    raiz_figuras = run_dir / SUBDIR_FIGURAS_INFERENCIA
+
     def _resolve(value: str | None) -> str | None:
-        return str(run_dir / value) if value is not None else None
+        return str(raiz_figuras / value) if value is not None else None
 
     inference_results: dict[str, Any] = {}
     for scenario_key, asset in render_assets.items():
