@@ -130,14 +130,17 @@ def test_las_fuentes_del_panel_izquierdo_bajan_dos_puntos():
     Se comprueban los valores de LLEGADA y no una resta: el tamanio anterior ya no esta
     en ninguna parte, asi que una prueba que restara tendria que llevar escrita la tabla
     vieja y se quedaria desfasada al siguiente ajuste.
+
+    Las TARJETAS se salen de esa escala de -2 y bajan a la MITAD: el titulo de la portada
+    sigue su propio camino. Ver `test_las_tarjetas_bajan_a_la_mitad`.
     """
     pagina = _pagina()
     hoja = pagina[pagina.index("<style>"):pagina.index("</style>")]
     esperado = {
         ".portada h1": "font-size: 42px",       # 48 -> 46 -> 44 -> 42
-        ".tarjeta": "font-size: 38px",          # 44 -> 42 -> 40 -> 38
-        ".desc": "font-size: 29px",             # 35 -> 33 -> 31 -> 29
-        ".tarjeta button": "font-size: 32px",   # 38 -> 36 -> 34 -> 32
+        ".tarjeta": "font-size: 19px",          # 38 / 2
+        ".desc": "font-size: 14.5px",           # 29 / 2
+        ".tarjeta button": "font-size: 16px",   # 32 / 2
     }
     for selector, declaracion in esperado.items():
         regla = re.search(re.escape(selector) + r"\s*\{([^}]*)\}", hoja)
@@ -266,13 +269,41 @@ def test_el_lienzo_se_encoge_con_lo_que_se_quito():
 # ------------------------------------------------------- la columna, el boton y el titulo
 
 
-def test_la_columna_izquierda_crece_un_cuarto():
-    """760 -> 950 px."""
+def test_la_columna_izquierda_mide_un_30_por_ciento_menos():
+    """760 -> 950 -> 665: un 30% menos, ahora que las tarjetas van a la mitad.
+
+    Los dos numeros van juntos. La columna crecio a 950 porque su texto iba al TRIPLE y
+    una columna que no crece con el parte cada tarjeta en tres renglones; con el texto a
+    la mitad, esos 950 px se vuelven aire.
+    """
     pagina = _pagina()
     regla = re.search(r"\.portada\s*\{([^}]*)\}", pagina)
     assert regla, "la portada no declara su rejilla"
-    assert "950px" in regla.group(1), (
-        f"la columna de botones no crece un 25%: {regla.group(1).strip()}")
+    assert "665px" in regla.group(1), (
+        f"la columna de botones no baja un 30%: {regla.group(1).strip()}")
+
+
+def test_las_tarjetas_bajan_a_la_mitad():
+    """Texto, boton y la GEOMETRIA que existe solo para acompaniarlos.
+
+    El relleno, el hueco, el punto y el filo izquierdo se subieron A LA VEZ que el texto
+    -- la hoja lo dice: "el relleno y los huecos con el, o el contenido se sale de una
+    caja que no crecio" --. Bajar solo la letra deja tarjetas casi igual de altas con una
+    linea de texto perdida en el medio, y un punto de 27 px al lado de una letra de 19.
+    Se baja lo mismo que se subio.
+    """
+    pagina = _pagina()
+    tarjeta = re.search(r"\.tarjeta \{([^}]*)\}", pagina).group(1)
+    for prop, valor in (("gap", "24px"), ("border-left", "6px"), ("padding", "13px 16px"),
+                        ("font-size", "19px")):
+        assert f"{prop}: {valor}" in tarjeta, (
+            f"`.tarjeta` no baja su `{prop}` a {valor}: {tarjeta.strip()}")
+    punto = re.search(r"\.punto \{([^}]*)\}", pagina).group(1)
+    assert "width: 14px" in punto and "height: 14px" in punto, (
+        f"el punto de estado no acompania a la letra: {punto.strip()}")
+    boton = re.search(r"\.tarjeta button \{([^}]*)\}", pagina).group(1)
+    assert "padding: 9px 18px" in boton, (
+        f"la caja del boton `Abrir` no baja con su texto: {boton.strip()}")
 
 
 def test_el_punto_de_apilado_sube_con_la_columna():

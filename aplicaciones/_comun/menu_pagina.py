@@ -73,18 +73,18 @@ body { margin: 0; padding: 12px; font: 14px/1.55 $FUENTE;
    y el diagrama, que es lo que hay que leer de un vistazo, se queda con una franja.
    `minmax(0, 1fr)` en la derecha y no `1fr` a secas: una celda de rejilla no baja de su
    contenido minimo, y el SVG tiene uno propio. */
-.portada { display: grid; grid-template-columns: 950px minmax(0, 1fr); gap: 34px;
+.portada { display: grid; grid-template-columns: 665px minmax(0, 1fr); gap: 34px;
            align-items: start; }
-/* 950 px: el texto y los botones de esta columna van al TRIPLE, y una columna que no
-   crece con ellos parte cada tarjeta en tres renglones. */
+/* 665 px: un 30% menos. Los 950 existian porque el texto de esta columna iba al TRIPLE
+   y una columna que no crece con el parte cada tarjeta en tres renglones; con las
+   tarjetas a la mitad, esos 950 se vuelven aire. Los dos numeros van juntos. */
 /* Y en pantalla estrecha se apilan, con los botones primero: son lo unico accionable.
-   El umbral sube CON la columna, y no a ojo: 1.544 es el ancho exacto al que el SVG sale
-   a escala 1:1 -- 24 de `body` + 16 de `.envoltura` + 950 de columna + 34 de hueco + los
-   520 de su `viewBox` --. Por debajo de eso el diagrama se dibuja MAS PEQUENIO de lo
-   disenado, asi que su letra de 9 baja de 9. Dejar el umbral en 1.240, como estaba
-   cuando la columna medida 760, abria una franja entera de anchos en dos columnas con la
-   derecha ilegible. */
-@media (max-width: 1544px) { .portada { grid-template-columns: 1fr; } }
+   El umbral se MUEVE con la columna, y no a ojo: 1.259 es el ancho exacto al que el SVG
+   sale a escala 1:1 -- 24 de `body` + 16 de `.envoltura` + 665 de columna + 34 de hueco +
+   los 520 de su `viewBox` --. Por debajo de eso el diagrama se dibuja MAS PEQUENIO de lo
+   disenado, asi que su letra de 9 baja de 9. Y por encima, un umbral que no baje con la
+   columna apila la portada en anchos donde las dos columnas ya caben. */
+@media (max-width: 1259px) { .portada { grid-template-columns: 1fr; } }
 
 /* Los logos, al pie de su columna y CENTRADOS. Viajan tal cual los aprobo la marca: aqui
    no se recolorean. Son DOS bloques y en columnas distintas: la marca del producto cierra
@@ -120,15 +120,16 @@ h1 { font-size: 24px; margin: 0; letter-spacing: -.01em; }
 /* El filo izquierdo rojo es el gesto que repiten los cinco tableros en sus paneles de
    control. Cada aplicacion del menu es una tarjeta con ese mismo filo, asi que la
    pagina se lee como parte de la familia y no como una portada de otro sitio. */
-/* Al TRIPLE: 45px de texto donde habia 15, y el relleno y los huecos con el, o el
-   contenido se sale de una caja que no crecio. El filo izquierdo sube de 4 a 12 px por lo
-   mismo -- a 4 px se pierde contra una tarjeta tres veces mas alta. */
-.tarjeta { display: flex; align-items: center; gap: 48px; background: $PANEL;
-           border: 1px solid $BORDE; border-left: 12px solid $ACENTO; border-radius: 10px;
-           padding: 26px 32px; margin-bottom: 18px; font-size: 38px; line-height: 1.25; }
+/* A la MITAD, y no solo la letra: el relleno, el hueco y el filo izquierdo se subieron
+   A LA VEZ que el texto -- "el contenido se sale de una caja que no crecio" --, asi que
+   bajan juntos. Bajar solo la letra deja tarjetas casi igual de altas con un renglon
+   perdido en el medio. */
+.tarjeta { display: flex; align-items: center; gap: 24px; background: $PANEL;
+           border: 1px solid $BORDE; border-left: 6px solid $ACENTO; border-radius: 5px;
+           padding: 13px 16px; margin-bottom: 9px; font-size: 19px; line-height: 1.25; }
 .texto { flex: 1; min-width: 0; }
 .titulo { font-weight: 600; margin-bottom: 2px; }
-.desc { color: $TENUE; font-size: 29px; }
+.desc { color: $TENUE; font-size: 14.5px; }
 /* El aviso de la emergente bloqueada. En el acento y no en el gris de `.desc`: es lo
    unico que explica por que un tablero que dice "corriendo" no se ve en ninguna parte.
    SE QUEDA EN 7 px y sale de la escala del panel. Bajo cuatro veces con el resto (12,
@@ -136,7 +137,8 @@ h1 { font-size: 24px; margin: 0; letter-spacing: -.01em; }
    A 7 px ya esta 5,7 veces por debajo del titulo de su propia tarjeta, medido, y un aviso
    que no se puede leer es lo mismo que no tenerlo. */
 .aviso { color: $ACENTO_OSCURO; font-size: 7px; margin-top: 4px; }
-.punto { width: 27px; height: 27px; border-radius: 50%; flex: none;
+/* Con la letra en 19 px, un punto de 27 seria mas alto que el texto al que acompania. */
+.punto { width: 14px; height: 14px; border-radius: 50%; flex: none;
          background: $BORDE_FUERTE; }
 .punto.corriendo { background: $ACENTO; }
 .punto.preparando { background: $BORDE_FUERTE; box-shadow: 0 0 0 3px $BORDE; }
@@ -145,9 +147,10 @@ h1 { font-size: 24px; margin: 0; letter-spacing: -.01em; }
 button { font: inherit; font-size: 12px; font-weight: 600; padding: 6px 12px;
          border-radius: 4px; border: 1px solid $BORDE_FUERTE; background: $FONDO;
          color: $TEXTO; cursor: pointer; white-space: nowrap; }
-/* Los de las TARJETAS al triple. */
-.tarjeta button { font-size: 32px; padding: 18px 36px; border-radius: 10px;
-                  border-width: 3px; }
+/* Y el de cada tarjeta a la mitad, CAJA INCLUIDA: el relleno esta en pixeles y no en
+   `em`, asi que achicar solo la letra deja el mismo boton con el texto flotando dentro. */
+.tarjeta button { font-size: 16px; padding: 9px 18px; border-radius: 5px;
+                  border-width: 1.5px; }
 /* `Cerrar todo` al DOBLE del boton base. La caja dobla con el texto: ampliar solo la
    letra la desborda, porque el relleno esta en pixeles y no en `em`. El radio y el filo
    suben con ella o se pierden contra un boton dos veces mas grande. */
