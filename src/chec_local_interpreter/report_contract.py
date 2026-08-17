@@ -187,7 +187,11 @@ def prepare_report(request: ReportRequest, *, data_path: str | Path | None = Non
         status="ready_for_roles",
         request=request,
         run_dir=str(run_dir),
-        next_actions=["run_historical_inference_and_auto_simulator_roles"],
+        # `auto-simulator` se jubilo con el barrido min-max: los roles son DOS,
+        # `historical` e `inference`. El nombre viejo mandaba a quien orquesta a
+        # buscar un rol que no existe, que es justo lo contrario de lo que un
+        # `next_actions` esta para hacer.
+        next_actions=["run_historical_and_inference_roles"],
     )
 
 

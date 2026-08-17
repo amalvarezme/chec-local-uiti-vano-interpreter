@@ -139,7 +139,10 @@ def test_prepare_report_delegates_to_canonical_pipeline(monkeypatch, tmp_path):
     assert calls == [("C1", "2026-01-01", "2026-01-02", "data.csv", "runs")]
     assert outcome.status == "ready_for_roles"
     assert outcome.run_dir == str(run_dir)
-    assert outcome.next_actions == ["run_historical_inference_and_auto_simulator_roles"]
+    # Los roles son DOS. `auto-simulator` se jubilo con el barrido min-max, y este
+    # `next_actions` seguia nombrandolo: mandaba a quien orquesta a buscar un rol
+    # inexistente.
+    assert outcome.next_actions == ["run_historical_and_inference_roles"]
 
 
 def test_preflight_report_returns_execution_error_without_run_dir_on_pipeline_failure(monkeypatch):

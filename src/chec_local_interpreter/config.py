@@ -19,18 +19,17 @@ DEFAULT_VARIABLES_SELECCION_PATH = PROJECT_ROOT / "data" / "Variables_seleccion.
 PROMPT_VERSION = "uiti-vano-explanation-v1"
 SCHEMA_VERSION = "uiti-vano-output-schema-v1"
 
-HIGH_ROBUST_Z = 3.0
-DELTA_ROBUST_Z = 3.0
-HIGH_PERCENTILE = 0.97
-TOP_CONTRIBUTOR_PCT = 0.10
-SUSTAINED_PERCENTILE = 0.80
-SUSTAINED_MIN_DAYS = 3
-MAX_CRITICAL_POINTS = 5  # Floor for the month-scaled critical-point budget
-# (scaled_max_critical_points). Also the default of
-# CriticalityThresholds.max_points, kept for the frozen dataclass / public
-# export; the real code path derives the count from the window.
-MAX_CRITICAL_POINTS_CEILING = 12  # Upper bound: caps long-window budgets to
-# protect LLM token + simulator cost.
+# Aqui vivian los ocho umbrales de la deteccion de PUNTOS CRITICOS -- `HIGH_ROBUST_Z`,
+# `DELTA_ROBUST_Z`, `HIGH_PERCENTILE`, `TOP_CONTRIBUTOR_PCT`, `SUSTAINED_PERCENTILE`,
+# `SUSTAINED_MIN_DAYS`, `MAX_CRITICAL_POINTS`, `MAX_CRITICAL_POINTS_CEILING` -- y la
+# clase `CriticalityThresholds` que los agrupaba.
+#
+# Esa deteccion se retiro con el camino MGCECDL: el informe se apoya en el ranking del
+# cuaderno 02 y en el diagnostico del 06, y la unidad de los dos es la VENTANA. Los
+# umbrales quedaron sin un solo lector. El bucle estaba cerrado sobre si mismo: el unico
+# uso de tres de ellos era el reexport de `__init__.py`, que nadie importaba, y el de los
+# otros cinco era la dataclass, que tampoco usaba nadie. Un `MAX_CRITICAL_POINTS_CEILING`
+# no tenia ni eso.
 
 REQUIRED_COLUMNS = ("CIRCUITO", "FECHA", "UITI_VANO")
 
@@ -48,15 +47,8 @@ ID_COLUMNS = {
 }
 
 
-@dataclass(frozen=True)
-class CriticalityThresholds:
-    high_robust_z: float = HIGH_ROBUST_Z
-    delta_robust_z: float = DELTA_ROBUST_Z
-    high_percentile: float = HIGH_PERCENTILE
-    top_contributor_pct: float = TOP_CONTRIBUTOR_PCT
-    sustained_percentile: float = SUSTAINED_PERCENTILE
-    sustained_min_days: int = SUSTAINED_MIN_DAYS
-    max_points: int = MAX_CRITICAL_POINTS
+
+
 
 
 def project_root() -> Path:

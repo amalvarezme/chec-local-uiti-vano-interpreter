@@ -379,16 +379,6 @@ def validar_provenance_base(data: dict[str, Any], context: dict[str, Any]) -> di
     )
 
 
-# --- Auto-simulator response validator ---------------------------------
-#
-# Ported verbatim from `_validate_auto_simulator_response`, defined inline in
-# the deprecated `the retired interactive notebook`
-# ("10.2 Simulador automático mínimo/máximo" section). Reuses `parse_llm_json`
-# (already defined above in this module) rather than reimplementing JSON
-# extraction — the notebook cell already imported and called the same
-# function.
-
-
 # --- PDF-discussion-extraction row validator ----------------------------
 #
 # `_MESES`/`_parse_fecha`/`_iso_fecha`/`_overlaps` and `COLUMNAS_FINALES` are
@@ -493,7 +483,7 @@ def validate_pdf_discussion_row(
     move of the `Circuito`-forcing step into this function otherwise dropped.
 
     Otherwise, parses `response_text` as JSON (reusing `parse_llm_json`, same
-    as `validate_auto_simulator_response` above). A parsed object whose
+    as the other validators in this module). A parsed object whose
     `include` key is not `True` is a normal "exclude this fragment" outcome
     (`ok: False`, `data: None`, the model's own `reason` as the single
     error), not a malformed response. Otherwise, `Circuito` is force-set to
@@ -511,7 +501,7 @@ def validate_pdf_discussion_row(
 
     try:
         parsed = parse_llm_json(response_text or "")
-    except Exception as exc:  # noqa: BLE001 - mirrors validate_auto_simulator_response's broad catch
+    except Exception as exc:  # noqa: BLE001 - any parse failure is a malformed response
         return {"ok": False, "data": None, "errors": [f"JSON inválido: {exc}"]}
     if not isinstance(parsed, dict):
         return {"ok": False, "data": None, "errors": ["La respuesta debe ser un objeto JSON."]}

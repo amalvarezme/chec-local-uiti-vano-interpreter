@@ -33,7 +33,7 @@ def _historical_data(**overrides: Any) -> dict[str, Any]:
                 "evidence": [
                     {
                         "date": "2026-01-01",
-                        "critical_point_id": "cp-1",
+                        "ventana": "V9",
                         "variable": "UITI_VANO",
                         "summary": "Resumen evidencia 1",
                     }
@@ -383,3 +383,45 @@ def test_outcome_json_text_has_sorted_keys():
     text = outcome.to_json_text()
     parsed = json.loads(text)
     assert list(parsed.keys()) == sorted(parsed.keys())
+
+
+def _narrativas(**overrides):
+    return RunNarratives(
+        status="success",
+        historical=_historical_data(**overrides),
+        inference=_inference_data(),
+        expert_alignment=_expert_alignment_data(),
+    )
+
+
+def test_la_evidencia_nombra_su_ventana_y_su_variable_y_no_un_hueco():
+    """Cada hallazgo de la nota salia como `2026-03-01 (): resumen`.
+
+    El renderizador leia `critical_point_id`, que se fue con la deteccion de puntos
+    criticos. La evidencia real trae `ventana` y `variable` -- la ventana es la unidad
+    de todo el informe --, asi que el parentesis salia vacio en TODAS las notas, y esas
+    notas son ademas lo que indexa el grafo de la boveda.
+
+    El fixture de este archivo seguia escribiendo `critical_point_id: "cp-1"`, que es
+    lo que mantenia la rama muerta en verde: la prueba solo miraba el resumen.
+    """
+    markdown = render_vault_markdown("TEST01", "run1", _narrativas())
+
+    assert "(): " not in markdown, "sigue el parentesis vacio"
+    assert "V9" in markdown
+    assert "UITI atribuido al vano (UITI_VANO)" in markdown, (
+        "la variable de la evidencia tiene que ir en castellano, como en el informe")
+
+
+def test_una_evidencia_sin_ventana_ni_variable_no_deja_separadores_sueltos():
+    """Un ` · ` colgando se lee como que falta algo que en realidad nunca hubo."""
+    narrativas = _narrativas(key_findings=[{
+        "title": "H", "text": "t", "confidence": "alta",
+        "evidence": [{"date": "2026-01-01", "summary": "solo fecha"}],
+    }])
+
+    markdown = render_vault_markdown("TEST01", "run1", narrativas)
+
+    assert "solo fecha" in markdown
+    assert "·  ·" not in markdown and "· :" not in markdown
+    assert "()" not in markdown

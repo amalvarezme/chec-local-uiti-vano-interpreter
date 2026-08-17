@@ -27,6 +27,7 @@ from typing import Any, Literal, Sequence
 
 from chec_local_interpreter.agent_tools._atomic_io import atomic_write_text
 from chec_local_interpreter.circuit_identity import canonical_circuit_identity
+from chec_local_interpreter.glosario_variables import nombre_con_codigo
 from chec_local_interpreter.config import PROJECT_ROOT
 
 SCHEMA_VERSION = "vault-note-contract/v1"
@@ -142,12 +143,28 @@ def load_run_narratives(run_dir: Path) -> RunNarratives:
 
 
 def _format_evidence_bullets(evidence: list[dict[str, Any]]) -> list[str]:
+    """Fecha, ventana y variable delante del resumen, separados por `·`.
+
+    Aqui se leia `critical_point_id`, que se fue con la deteccion de puntos criticos:
+    el parentesis salia VACIO en todas las notas -- `2026-03-01 (): resumen` --, y estas
+    notas son ademas lo que indexa el grafo de la boveda. La evidencia real trae
+    `ventana`, que es la unidad de todo el informe, y `variable`.
+
+    Los separadores se arman solo con las piezas que existen: un ` · ` colgando se lee
+    como que falta algo que en realidad nunca hubo.
+    """
     lines = []
     for item in evidence:
-        date = item.get("date", "")
-        critical_point_id = item.get("critical_point_id", "")
-        summary = item.get("summary", "")
-        lines.append(f"  - {date} ({critical_point_id}): {summary}")
+        cabeza = [str(item.get("date") or "").strip()]
+        ventana = str(item.get("ventana") or "").strip()
+        if ventana:
+            cabeza.append(ventana)
+        variable = str(item.get("variable") or "").strip()
+        if variable:
+            cabeza.append(nombre_con_codigo(variable))
+        prefijo = " · ".join(p for p in cabeza if p)
+        resumen = str(item.get("summary") or "").strip()
+        lines.append(f"  - {prefijo}: {resumen}" if prefijo else f"  - {resumen}")
     return lines
 
 
