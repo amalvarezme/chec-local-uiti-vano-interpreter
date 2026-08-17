@@ -134,11 +134,11 @@ def test_las_fuentes_del_panel_izquierdo_bajan_dos_puntos():
     pagina = _pagina()
     hoja = pagina[pagina.index("<style>"):pagina.index("</style>")]
     esperado = {
-        ".portada h1": "font-size: 46px",       # era 48
-        ".tarjeta": "font-size: 42px",          # era 44
-        ".desc": "font-size: 33px",             # era 35
-        ".aviso": "font-size: 9px",             # era 11
-        ".tarjeta button": "font-size: 36px",   # era 38
+        ".portada h1": "font-size: 44px",       # 48 -> 46 -> 44
+        ".tarjeta": "font-size: 40px",          # 44 -> 42 -> 40
+        ".desc": "font-size: 31px",             # 35 -> 33 -> 31
+        ".aviso": "font-size: 7px",             # 11 -> 9 -> 7
+        ".tarjeta button": "font-size: 34px",   # 38 -> 36 -> 34
     }
     for selector, declaracion in esperado.items():
         regla = re.search(re.escape(selector) + r"\s*\{([^}]*)\}", hoja)

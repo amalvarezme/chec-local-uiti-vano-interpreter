@@ -115,7 +115,7 @@ h1 { font-size: 24px; margin: 0; letter-spacing: -.01em; }
    el mayor se leeria como titulo de la pagina y el otro como subtitulo suyo.
    Va aqui y no en `h1` a secas porque `.cerrado h1` -- la pantalla de despedida, que
    escribe el JavaScript -- es otra cosa y no tiene por que crecer con estos. */
-.portada h1 { font-size: 46px; text-align: center; margin-bottom: 22px; }
+.portada h1 { font-size: 44px; text-align: center; margin-bottom: 22px; }
 
 /* El filo izquierdo rojo es el gesto que repiten los cinco tableros en sus paneles de
    control. Cada aplicacion del menu es una tarjeta con ese mismo filo, asi que la
@@ -125,13 +125,17 @@ h1 { font-size: 24px; margin: 0; letter-spacing: -.01em; }
    mismo -- a 4 px se pierde contra una tarjeta tres veces mas alta. */
 .tarjeta { display: flex; align-items: center; gap: 48px; background: $PANEL;
            border: 1px solid $BORDE; border-left: 12px solid $ACENTO; border-radius: 10px;
-           padding: 26px 32px; margin-bottom: 18px; font-size: 42px; line-height: 1.25; }
+           padding: 26px 32px; margin-bottom: 18px; font-size: 40px; line-height: 1.25; }
 .texto { flex: 1; min-width: 0; }
 .titulo { font-weight: 600; margin-bottom: 2px; }
-.desc { color: $TENUE; font-size: 33px; }
+.desc { color: $TENUE; font-size: 31px; }
 /* El aviso de la emergente bloqueada. En el acento y no en el gris de `.desc`: es lo
-   unico que explica por que un tablero que dice "corriendo" no se ve en ninguna parte. */
-.aviso { color: $ACENTO_OSCURO; font-size: 9px; margin-top: 4px; }
+   unico que explica por que un tablero que dice "corriendo" no se ve en ninguna parte.
+   Va en 7 px porque bajo con el resto del panel, ronda tras ronda (12, 11, 9, 7), pero
+   ES EL MAS PEQUENIO DE LA PAGINA y el unico que carga un mensaje entero: 5,7 veces mas
+   chico que el titulo de su propia tarjeta, medido. Si algun dia hay que fijar un
+   tamanio en esta hoja, este es el candidato. */
+.aviso { color: $ACENTO_OSCURO; font-size: 7px; margin-top: 4px; }
 .punto { width: 27px; height: 27px; border-radius: 50%; flex: none;
          background: $BORDE_FUERTE; }
 .punto.corriendo { background: $ACENTO; }
@@ -142,7 +146,7 @@ button { font: inherit; font-size: 12px; font-weight: 600; padding: 6px 12px;
          border-radius: 4px; border: 1px solid $BORDE_FUERTE; background: $FONDO;
          color: $TEXTO; cursor: pointer; white-space: nowrap; }
 /* Los de las TARJETAS al triple. */
-.tarjeta button { font-size: 36px; padding: 18px 36px; border-radius: 10px;
+.tarjeta button { font-size: 34px; padding: 18px 36px; border-radius: 10px;
                   border-width: 3px; }
 /* `Cerrar todo` al DOBLE del boton base. La caja dobla con el texto: ampliar solo la
    letra la desborda, porque el relleno esta en pixeles y no en `em`. El radio y el filo
