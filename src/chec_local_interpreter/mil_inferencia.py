@@ -24,6 +24,7 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 
 from chec_local_interpreter.config import PROJECT_ROOT
+from chec_local_interpreter.glosario_variables import nombre_con_codigo
 
 RUTA_MODELO_MIL = PROJECT_ROOT / "data" / "models" / "mil_vano_ventana_v1.pt"
 RUTA_BOLSAS_MIL = PROJECT_ROOT / "data" / "derived" / "bolsas_mil_full.joblib"
@@ -716,6 +717,12 @@ def construir_contexto_inferencia_mil(
         "n_instancias": resumen["n_instancias"],
         "n_features": resumen["n_features"],
         "features": list(recursos.features),
+        # Las mismas ochenta, en castellano y con su codigo entre parentesis. El sobre de
+        # inferencia NO lleva `domain`, asi que `variables_nombradas` -- que si viaja en
+        # el del historiador -- no le llegaba: este agente recibia ochenta codigos pelados
+        # y sacaba los nombres de su propio playbook, que es como dos juegos de nombres
+        # para las mismas columnas empiezan a separarse.
+        "features_nombradas": [nombre_con_codigo(str(f)) for f in recursos.features],
         "n_controles": len(recursos.knobs),
         "ventanas": ventanas_de_circuito(recursos, circuito=circuito)
                     if ventanas is None else

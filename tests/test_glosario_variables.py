@@ -147,3 +147,43 @@ def test_el_comodin_de_rezago_de_la_documentacion_tambien_se_traduce():
     assert nombre_con_codigo("WIND_GUST_SPD_i") == "Rafagas de viento (WIND_GUST_SPD_i)"
     # y la guarda sigue en pie
     assert nombre_natural("TIPO_TAX") == "Taxonomia constructiva del vano"
+
+
+def test_el_contexto_de_inferencia_tambien_recibe_los_nombres():
+    """El glosario llegaba SOLO al historiador.
+
+    Detectado por el propio agente de inferencia en una corrida real: su sobre no trae
+    `domain`, asi que no trae `variables_nombradas`. Solo `features`, ochenta codigos
+    pelados. Tuvo que sacar los nombres de su propio playbook, que es como dos juegos
+    de nombres para las mismas columnas empiezan a separarse -- justo lo que el glosario
+    existe para cerrar.
+    """
+    import numpy as np
+
+    from chec_local_interpreter.mil_inferencia import RecursosMIL, construir_contexto_inferencia_mil
+
+    class _BagIndex:
+        keys = None
+        offsets = np.array([0], dtype=np.int64)
+        counts = np.array([], dtype=np.int64)
+        y = np.array([])
+
+    import pandas as pd
+    bag = _BagIndex()
+    bag.keys = pd.DataFrame({"CIRCUITO": [], "FID_VANO": [], "VENTANA": []})
+
+    recursos = RecursosMIL(
+        modelo=object(), X_inst=np.zeros((0, 3), dtype=np.float32),
+        features=["NR_T", "DDT", "temp_0"], bag_index=bag, knobs=[],
+    )
+
+    contexto = construir_contexto_inferencia_mil(
+        recursos, circuito="C1", fecha_inicio="2026-01-01", fecha_fin="2026-01-31")
+
+    assert contexto["features_nombradas"] == [
+        "Riesgo por vegetacion cercana al vano (NR_T)",
+        "Densidad de descargas a tierra (DDT)",
+        "Temperatura del aire (temp_0)",
+    ]
+    # los codigos siguen: son la clave contra el modelo y contra el dataset
+    assert contexto["features"] == ["NR_T", "DDT", "temp_0"]

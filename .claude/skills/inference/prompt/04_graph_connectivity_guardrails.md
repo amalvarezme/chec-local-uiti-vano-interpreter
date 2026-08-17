@@ -415,9 +415,13 @@ Lo escrito aqui lo lee alguien que opera la red, no quien programo el flujo.
 ### Variables: nombre en castellano, y el codigo entre parentesis
 
 Escribe `Riesgo por vegetacion cercana al vano (NR_T)`, no `NR_T` a secas. El contexto te
-entrega los dos: cada grupo de `domain.variable_groups` trae `variables` (los codigos) y
-`variables_nombradas` (los mismos codigos ya con su nombre delante). Usa el nombre la
-primera vez que aparece una variable en cada seccion; despues basta el codigo.
+entrega los dos: `features` son los codigos y `features_nombradas` son esos mismos
+codigos, en el mismo orden, ya con su nombre delante. Usa el nombre la primera vez que
+aparece una variable en cada seccion; despues basta el codigo.
+
+No inventes ni traigas nombres de otra fuente: si una variable no esta en
+`features_nombradas`, escribe su codigo tal cual. Dos juegos de nombres para las mismas
+columnas se separan en cuanto alguien edite uno solo.
 
 El codigo NO se omite: es lo que hay que buscar en el dataset y en el tablero, y un
 informe que solo diera el nombre obligaria a traducir de vuelta a mano.
