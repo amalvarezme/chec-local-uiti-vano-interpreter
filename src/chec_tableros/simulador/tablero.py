@@ -328,13 +328,22 @@ NOMBRE_DE_FAMILIA = {
 SERIE_TAM_UITI = 9
 SERIE_TAM_EVENTOS = 8
 FACTOR_PUNTO_ACTIVO = 3
-# Las dos barras de la fila 4. NO son la misma cantidad medida dos veces: la gris es lo
-# que dice la base de datos y la azul es lo que predice el modelo. Ver `_pintar_barras_uiti`
-# -- el color separa medicion de prediccion, y por eso no comparten paleta con los grupos.
-# Colores fuera de la escala de criticidad a proposito -- aqui el color distingue dos
-# CORRIDAS, no dos niveles, y reusar la paleta de grupos invitaria a leerlos como clases.
-COLOR_BARRA_MEDIDA = '#94a3b8'
-COLOR_BARRA_SIMULADA = '#0072b2'
+# Las dos barras de la fila 4. NO son la misma cantidad medida dos veces: la izquierda es
+# lo que dice la base de datos y la derecha lo que predice el modelo. Esa distincion la
+# lleva la TRAMA -- la simulada va rayada --, no el color.
+#
+# El color iba gris y azul, fuera del semaforo, con el argumento de que separaba las dos
+# CORRIDAS. Contra el uso no se sostiene: el grupo es la unidad en la que se decide una
+# obra, y con el color neutro habia que leer barra por barra para ver donde estaba lo
+# rojo. Ahora cada barra toma el color del GRUPO de su vano, la misma paleta que ya usan
+# el mapa de la fila 1 y el tablero de agrupamiento, asi que las tres se leen juntas.
+COLORES_BARRA_UITI = list(COLORES_GRUPOS)
+# El ultimo grupo es el circuito entero, y una suma no tiene clase: el KMeans clasifica
+# vanos. Gris neutro, deliberadamente fuera del semaforo, para que no se lea como grupo.
+COLOR_BARRA_SIN_GRUPO = '#94a3b8'
+# La trama de la barra simulada. Una trama es visible en blanco y negro y no compite con
+# el semaforo, que es justo lo que un segundo color si haria.
+TRAMA_BARRA_SIMULADA = '/'
 # A que distancia del centro se planta el rotulo de cada nodo del grafo. Los nodos viven
 # sobre el circulo de radio 1; 1,05 despega el texto de su propio marcador sin alejarlo
 # tanto como para que deje de leerse como suyo.
@@ -350,7 +359,8 @@ COLOR_BARRA_TOTAL = '#5b4a48'
 # la barra ya dice la posicion. Una rampa encima seria el mismo dato dos veces. Se
 # elige el rojo de acento del tablero -- el del borde del panel y el del deslizador --
 # porque el perfil es historia MEDIDA, del mismo lado que el mapa de la izquierda, y
-# no una prediccion: el azul de `COLOR_BARRA_SIMULADA` lo leeria como simulado.
+# no una prediccion. Tampoco toma la paleta de grupos: aqui el largo de la barra mide
+# UITI acumulado, no criticidad, y un rojo del semaforo se leeria como grupo Alto.
 COLOR_BARRA_PERFIL = 'rgb(203,24,29)'
 # Cuantos vanos entran al perfil del circuito. Quince es el mismo numero que
 # `TOP_VANOS_CIRCUITO`, y a proposito NO es la misma constante: aquel es el tope de
@@ -1095,14 +1105,22 @@ def construir(
     # 0,950 con el UITI observado pero su nivel corre +34%. Por eso la barra simulada lleva
     # barra de error con el desfase del modelo en la base de ESE vano, y el titulo publica la
     # reduccion con su +-: sin eso, el sesgo del modelo se leeria como ahorro.
+    # El color de cada barra lo pone el GRUPO de su vano y se escribe al simular: aqui
+    # `marker.color` nace como arreglo VACIO, no como un color plano. Un color plano de
+    # arranque sobrevive a la primera simulacion si el repintado se olvidara de tocarlo,
+    # y se leeria como un grupo. Los nombres de la leyenda dicen la trama porque el color
+    # ya no distingue medido de simulado: con cuatro colores posibles, la muestra de la
+    # leyenda tendria que elegir uno y mentiria sobre los otros tres.
     IDX['barra_observada'] = _agregar(go.Bar(
-        x=[], y=[], name='UITI medido', marker=dict(color=COLOR_BARRA_MEDIDA,
-                                                    line=dict(width=0.4, color='#5b4a48')),
+        x=[], y=[], name='UITI medido (sólido)',
+        marker=dict(color=[], line=dict(width=0.4, color='#5b4a48')),
         hovertext=[], hoverinfo='text', legendgroup='uiti',
     ), 5, 1)
     IDX['barra_simulada'] = _agregar(go.Bar(
-        x=[], y=[], name='UITI simulado', marker=dict(color=COLOR_BARRA_SIMULADA,
-                                                      line=dict(width=0.4, color='#5b4a48')),
+        x=[], y=[], name='UITI simulado (rayado)',
+        marker=dict(color=[], line=dict(width=0.4, color='#5b4a48'),
+                    pattern=dict(shape=TRAMA_BARRA_SIMULADA, solidity=0.35,
+                                 fgcolor='#5b4a48')),
         # `visible=True` con `array` vacio no dibuja nada; se llena al simular.
         error_y=dict(type='data', array=[], visible=True, color='#5b4a48', thickness=1.2,
                      width=4),
@@ -1113,14 +1131,19 @@ def construir(
     # a la escala del circuito entero: compartir eje con los vanos aplastaba a estos contra
     # la base. `showlegend=False` porque la leyenda ya la ponen las barras por vano y es la
     # misma pareja de series; repetirla duplicaria dos entradas identicas.
+    # El total va en gris neutro y NO en la paleta de grupos: es la suma del circuito, y
+    # el KMeans clasifica vanos, no circuitos. Conserva la trama para que se siga leyendo
+    # cual de las dos es la simulada.
     IDX['barra_total_observada'] = _agregar(go.Bar(
         x=[], y=[], name='UITI medido', showlegend=False,
-        marker=dict(color=COLOR_BARRA_MEDIDA, line=dict(width=0.4, color='#5b4a48')),
+        marker=dict(color=COLOR_BARRA_SIN_GRUPO, line=dict(width=0.4, color='#5b4a48')),
         hovertext=[], hoverinfo='text', legendgroup='uiti',
     ), 5, 4)
     IDX['barra_total_simulada'] = _agregar(go.Bar(
         x=[], y=[], name='UITI simulado', showlegend=False,
-        marker=dict(color=COLOR_BARRA_SIMULADA, line=dict(width=0.4, color='#5b4a48')),
+        marker=dict(color=COLOR_BARRA_SIN_GRUPO, line=dict(width=0.4, color='#5b4a48'),
+                    pattern=dict(shape=TRAMA_BARRA_SIMULADA, solidity=0.35,
+                                 fgcolor='#5b4a48')),
         error_y=dict(type='data', array=[], visible=True, color='#5b4a48', thickness=1.2,
                      width=4),
         hovertext=[], hoverinfo='text', legendgroup='uiti',
@@ -2480,13 +2503,23 @@ def construir(
         # del circuito -- aplastaba contra la base a los diez grupos donde se decide la obra.
         _n = len(barras['x'])
         _corte = max(_n - 1, 0)
+        # El color de cada barra, por su grupo. Se recalcula en cada repintado porque la
+        # clase cambia con la ventana y con la simulacion: dejarlo fijo pintaria la
+        # corrida de hoy con los grupos de la anterior.
+        _color = lambda _k: (COLORES_BARRA_UITI[_k]                       # noqa: E731
+                             if isinstance(_k, int) and 0 <= _k < len(COLORES_BARRA_UITI)
+                             else COLOR_BARRA_SIN_GRUPO)
+        _col_obs = [_color(_k) for _k in barras['clase_observado']]
+        _col_sim = [_color(_k) for _k in barras['clase_simulado']]
         with fig.batch_update():
             _obs = fig.data[IDX['barra_observada']]
             _sim = fig.data[IDX['barra_simulada']]
             _obs.x, _obs.y = barras['x'][:_corte], barras['observado'][:_corte]
             _obs.hovertext = barras['hover'][:_corte]
+            _obs.marker.color = _col_obs[:_corte]
             _sim.x, _sim.y = barras['x'][:_corte], barras['simulado'][:_corte]
             _sim.hovertext = barras['hover'][:_corte]
+            _sim.marker.color = _col_sim[:_corte]
             _sim.error_y.array = barras['error'][:_corte]
             _obs_t = fig.data[IDX['barra_total_observada']]
             _sim_t = fig.data[IDX['barra_total_simulada']]

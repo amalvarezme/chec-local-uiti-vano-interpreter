@@ -820,6 +820,7 @@ def barras_uiti_por_vano(
     """
     vacio = {
         "x": [], "observado": [], "simulado": [], "error": [], "hover": [],
+        "clase_observado": [], "clase_simulado": [],
         "etiqueta_total": etiqueta_total, "reduccion": None, "desviacion": None,
     }
     if tabla_simulada is None or len(tabla_simulada) == 0:
@@ -830,9 +831,17 @@ def barras_uiti_por_vano(
     simulado: list[float] = []
     error: list[float] = []
     hover: list[str] = []
-    for fid, u_base, u_sim in zip(tabla_simulada["FID_VANO"],
-                                  tabla_simulada["u_base"],
-                                  tabla_simulada["u_simulado"]):
+    # La clase de cada barra viaja al lado del valor para que el tablero la pinte con
+    # el color de su grupo -- el mismo semaforo del mapa y del agrupamiento. Viaja la
+    # CLASE y no el color porque esta funcion es pura sobre datos y cada tablero
+    # declara su propia paleta.
+    clase_observado: list[int | None] = []
+    clase_simulado: list[int | None] = []
+    for fid, u_base, u_sim, k_base, k_sim in zip(tabla_simulada["FID_VANO"],
+                                                 tabla_simulada["u_base"],
+                                                 tabla_simulada["u_simulado"],
+                                                 tabla_simulada["base_clase_idx"],
+                                                 tabla_simulada["simulado_clase_idx"]):
         fid = str(fid)
         if fid not in observados:
             continue
@@ -842,6 +851,8 @@ def barras_uiti_por_vano(
         observado.append(medido)
         simulado.append(float(u_sim))
         error.append(desfase)
+        clase_observado.append(_clase_o_nada(k_base))
+        clase_simulado.append(_clase_o_nada(k_sim))
         hover.append(
             f"<b>Vano {fid}</b>"
             f"<br>UITI medido en la ventana: {medido:,.2f}"
@@ -862,6 +873,10 @@ def barras_uiti_por_vano(
     observado.append(total_circuito)
     simulado.append(total_simulado)
     error.append(error_total)
+    # El circuito entero NO tiene clase: el KMeans clasifica vanos. Darle la de alguno
+    # -- o la mas alta de todos -- afirmaria una criticidad que nadie le asigno.
+    clase_observado.append(None)
+    clase_simulado.append(None)
     hover.append(
         f"<b>{etiqueta_total}</b>"
         f"<br>UITI medido del circuito en la ventana: {total_circuito:,.2f}"
@@ -873,9 +888,23 @@ def barras_uiti_por_vano(
     return {
         "x": x, "observado": observado, "simulado": simulado, "error": error,
         "hover": hover, "etiqueta_total": etiqueta_total,
+        "clase_observado": clase_observado, "clase_simulado": clase_simulado,
         "reduccion": float(sum(observado[:-1]) - sum(simulado[:-1])),
         "desviacion": error_total,
     }
+
+
+def _clase_o_nada(valor: Any) -> int | None:
+    """La clase como entero, o `None` si la celda no trae una.
+
+    Una tabla simulada puede traer `NaN` donde el artefacto no expone su geometria, y
+    `int(nan)` levanta `ValueError`. Caer a la clase 0 ahi pintaria de verde -- el
+    grupo mas bajo -- un vano que simplemente no se pudo clasificar.
+    """
+    try:
+        return int(valor)
+    except (TypeError, ValueError):
+        return None
 
 
 def rotacion_radial(x: float, y: float) -> tuple[float, str]:

@@ -439,6 +439,49 @@ def simular_bolsas(
     return tabla, metadata
 
 
+def clase_base_de_bolsas(
+    predictor: Any,
+    X_inst: np.ndarray,
+    *,
+    seleccion: Mapping[str, Any],
+) -> pd.DataFrame:
+    """El estado BASE de una seleccion: `FID_VANO`, `u_base` y `base_clase_idx`.
+
+    UNA pasada del modelo, no dos. `simular_bolsas` sin overrides devuelve exactamente
+    esto y es lo que se usaba, pero de paso copia la matriz de la seleccion y la puntua
+    otra vez para obtener el mismo numero. Con un solo mapa daba igual; el informe
+    recorre TODAS las ventanas del circuito con su deslizador, y ahi el desperdicio se
+    multiplica por once.
+
+    Las columnas se llaman igual que en `simular_bolsas` a proposito: quien lee la tabla
+    base no tiene que aprender un segundo vocabulario para las mismas dos cifras.
+
+    Una seleccion vacia devuelve una tabla vacia SIN pasar por el modelo: puntuar cero
+    bolsas produce una tabla de clases inventadas sobre ningun vano.
+    """
+    if int(seleccion.get("n_bolsas", 0)) == 0:
+        return pd.DataFrame(columns=["FID_VANO", "n_obs", "u_base", "base_clase_idx"])
+
+    filas = np.asarray(seleccion["filas"], dtype=np.int64)
+    instance_bag = np.asarray(seleccion["instance_bag"], dtype=np.int64)
+    n_obs = np.asarray(seleccion["n_obs"], dtype=np.float64)
+    # Se INDEXA y despues se promueve, por la misma razon que en `simular_bolsas`:
+    # promover `X_inst` entera reserva y tira cientos de MB en cada pasada.
+    X_sel = np.asarray(X_inst[filas], dtype=np.float64)
+
+    u_base = np.asarray(predictor.predict(X_sel, instance_bag=instance_bag), dtype=float)
+    clase_base, _ = asignar_clase(n_obs, u_base, predictor.geometria)
+
+    return pd.DataFrame(
+        {
+            "FID_VANO": [str(f) for f in seleccion["fid"]],
+            "n_obs": n_obs.astype(int),
+            "u_base": u_base,
+            "base_clase_idx": np.asarray(clase_base, dtype=int),
+        }
+    )
+
+
 def _riesgo_ordinal(n_obs: np.ndarray, u: np.ndarray, geometria: Any) -> float:
     """Mean expected class index over the bags -- the SAME quantity
     `simulator._risk_score` measures for the MGCECDL panel (`probs @ [0..3]`,

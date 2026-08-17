@@ -33,11 +33,14 @@ from typing import Any, Mapping, Sequence
 # tablero, que es la unica razon por la que se puede leer uno despues del otro.
 COLORES_GRUPOS = ("#1a9641", "#f2c200", "#ef6c00", "#c62828")
 NOMBRES_GRUPOS = ("Bajo", "Medio", "Medio-Alto", "Alto")
-# Medido contra predicho. Colores fuera de la escala de criticidad a proposito: aqui
-# distinguen dos CORRIDAS, no dos niveles, y reusar la paleta invitaria a leerlos como
-# clases.
-COLOR_MEDIDO = "#94a3b8"
-COLOR_SIMULADO = "#0072b2"
+# Una clase que la paleta de cuatro no cubre. Gris neutro, deliberadamente FUERA del
+# semaforo: un vano sin grupo legible pintado del color de un grupo afirma una clase
+# que nadie asigno. Es la salida degradada, no un quinto nivel.
+COLOR_SIN_GRUPO = "#94a3b8"
+# El azul de las barras de relevancia. Alli el color no codifica nada -- todas las
+# barras miden lo mismo y el largo ya las ordena --, asi que no toca la paleta de
+# criticidad.
+COLOR_RELEVANCIA = "#0072b2"
 TOP_VARIABLES_PANEL = 10
 # `TOP_ARISTAS_GRAFO` se fue con las barras de diferencia: recortaba a las quince
 # relaciones mas movidas porque quince filas es lo que cabe en una lista legible. El
@@ -97,11 +100,45 @@ def _panel_relevancia(relevancia: Mapping[str, Any], destino: Path,
     filas = filas[:TOP_VARIABLES_PANEL]
     plt, fig, ax = _lienzo(alto=max(2.4, 0.32 * len(filas)))
     etiquetas = [f[0] for f in reversed(filas)]
-    ax.barh(etiquetas, [f[1] for f in reversed(filas)], color=COLOR_SIMULADO)
+    ax.barh(etiquetas, [f[1] for f in reversed(filas)], color=COLOR_RELEVANCIA)
     ax.set_xlabel("Caída alcanzable de UITI (log10)")
     ax.set_title("Relevancia: qué baja el UITI de cada vano")
     ax.grid(axis="x", alpha=0.25)
     return _guardar(plt, fig, destino, f"{clave}_relevancia.png")
+
+
+def _color_de_grupo(clase: Any) -> str:
+    try:
+        return COLORES_GRUPOS[int(clase)]
+    except (TypeError, ValueError, IndexError):
+        return COLOR_SIN_GRUPO
+
+
+def colores_de_barras_uiti(
+    vanos: Sequence[Mapping[str, Any]]
+) -> tuple[list[str], list[str]]:
+    """El color de cada barra medida y de cada barra estimada: el de SU grupo.
+
+    Las dos barras iban en gris y azul, colores fuera del semaforo, con el argumento
+    de que distinguen dos CORRIDAS y no dos niveles. El argumento no se sostiene
+    contra el uso: el grupo es la unidad en la que se decide una obra, y tenerlo solo
+    como texto encima de la barra obliga a leerlas una por una para ver donde esta lo
+    rojo. Con el color del grupo, la fila entera se lee de un vistazo y ademas dice lo
+    mismo que el mapa y que el tablero de agrupamiento, que ya usan esa paleta.
+
+    Lo que el color deja de distinguir -- medido contra estimado -- lo toma la trama:
+    la barra estimada va rayada. Ver `_panel_uiti`.
+    """
+    return (
+        [_color_de_grupo(v.get("clase_base")) for v in vanos],
+        [_color_de_grupo(v.get("clase_simulada")) for v in vanos],
+    )
+
+
+# La barra estimada va rayada. Es lo que separa las dos corridas ahora que el color
+# lo tomo el grupo: una trama es visible en blanco y negro y no compite con el
+# semaforo, que es justo lo que un segundo color si haria.
+TRAMA_ESTIMADO = "///"
 
 
 def _panel_uiti(simulacion: Mapping[str, Any], destino: Path,
@@ -110,16 +147,20 @@ def _panel_uiti(simulacion: Mapping[str, Any], destino: Path,
     if not vanos:
         return None
     import numpy as np
+    from matplotlib.patches import Patch
 
     plt, fig, ax = _lienzo(alto=3.6)
     x = np.arange(len(vanos))
     ancho = 0.38
+    color_medido, color_estimado = colores_de_barras_uiti(vanos)
     ax.bar(x - ancho / 2, [v["u_base"] for v in vanos], ancho,
-           label="Medido", color=COLOR_MEDIDO)
+           color=color_medido, edgecolor="#5b4a48", linewidth=0.4)
     ax.bar(x + ancho / 2, [v["u_simulado"] for v in vanos], ancho,
-           label="Estimado tras intervenir", color=COLOR_SIMULADO)
-    # El GRUPO de cada barra, encima. Sin el, una caida de UITI no dice si el vano
-    # cambio de grupo -- y el grupo es la unidad en la que se decide la obra.
+           color=color_estimado, edgecolor="#5b4a48", linewidth=0.4,
+           hatch=TRAMA_ESTIMADO)
+    # El GRUPO de cada barra, encima. El color ya lo dice, pero el nombre lo dice sin
+    # que haya que recordar la paleta -- y una caida de UITI que no cambia el grupo no
+    # es una orden de trabajo, asi que las dos etiquetas juntas son la lectura.
     for i, v in enumerate(vanos):
         for desplazamiento, campo in ((-ancho / 2, "clase_base"),
                                       (ancho / 2, "clase_simulada")):
@@ -133,7 +174,17 @@ def _panel_uiti(simulacion: Mapping[str, Any], destino: Path,
     ax.set_ylabel("UITI acumulado")
     ax.set_title("UITI medido contra estimado, con su grupo de criticidad "
                  "(solo palancas de intervención)")
-    ax.legend(fontsize=8)
+    # La leyenda explica la TRAMA, no el color: con el color puesto por el grupo, una
+    # muestra de color aqui tendria que elegir uno de los cuatro y mentiria sobre los
+    # otros tres. El grupo lo rotula cada barra encima, con su nombre y su color.
+    ax.legend(
+        handles=[
+            Patch(facecolor="white", edgecolor="#5b4a48", label="Medido"),
+            Patch(facecolor="white", edgecolor="#5b4a48", hatch=TRAMA_ESTIMADO,
+                  label="Estimado tras intervenir"),
+        ],
+        fontsize=8,
+    )
     ax.grid(axis="y", alpha=0.25)
     return _guardar(plt, fig, destino, f"{clave}_uiti.png")
 
@@ -249,7 +300,8 @@ def _panel_grafo(grafo: Mapping[str, Any] | None, features: Sequence[str],
     ax.set_ylim(-1.55, 1.55)
     ax.set_aspect("equal")
     ax.axis("off")
-    ax.set_title("Grafo del escenario: qué variables se mueven juntas", fontsize=10)
+    # SIN titulo dentro del PNG: la seccion del informe ya rotula la figura, y dos
+    # rotulos para un solo dibujo obligan al lector a decidir cual manda.
     return _guardar(plt, fig, destino, f"{clave}_grafo.png"), ""
 
 

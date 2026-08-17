@@ -114,6 +114,45 @@ def test_no_simulation_yields_empty_bars_and_no_headline():
 
     assert barras["x"] == []
     assert barras["reduccion"] is None
+    assert barras["clase_observado"] == []
+    assert barras["clase_simulado"] == []
+
+
+# --- Cada barra viaja con la CLASE de su vano -----------------------------------------
+
+
+def test_cada_barra_viaja_con_la_clase_de_su_vano():
+    """El tablero pinta la barra con el color de esa clase: el mismo semaforo del
+    agrupamiento y del mapa de la fila 1.
+
+    Las barras iban en gris y azul, colores fuera del semaforo, para separar la
+    MEDICION de la PREDICCION. Esa separacion sigue haciendo falta, pero la toma la
+    trama: el color pasa a decir en que grupo cayo el vano, que es la unidad en la que
+    se decide una obra y lo que el mapa de al lado ya dice con esos mismos colores.
+
+    Aqui viaja la CLASE y no el color: `barras_uiti_por_vano` es una funcion pura de
+    datos, y cada tablero declara su propia paleta.
+    """
+    barras = barras_uiti_por_vano(_tabla(), observados={"VA": 10.0, "VB": 28.0},
+                                  total_circuito=100.0)
+
+    # `_tabla`: VA cae de la clase 3 a la 2, VB se queda en la 2.
+    assert barras["clase_observado"][:2] == [3, 2]
+    assert barras["clase_simulado"][:2] == [2, 2]
+
+
+def test_el_grupo_del_circuito_entero_se_queda_sin_clase():
+    """El ultimo grupo es la suma del circuito, y una suma no tiene clase.
+
+    Darle la de algun vano, o la mas alta de todos, afirmaria una criticidad que el
+    KMeans nunca le asigno: el modelo clasifica VANOS, no circuitos. `None` es lo que
+    deja al tablero pintarla con un color que no pertenece al semaforo.
+    """
+    barras = barras_uiti_por_vano(_tabla(), observados={"VA": 10.0, "VB": 28.0},
+                                  total_circuito=100.0)
+
+    assert barras["clase_observado"][-1] is None
+    assert barras["clase_simulado"][-1] is None
 
 
 # --- Rotacion de los rotulos del grafo circular ---------------------------------------

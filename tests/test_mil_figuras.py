@@ -211,3 +211,66 @@ def test_una_matriz_mas_grande_que_la_lista_de_nombres_no_tumba_el_anillo():
 
     assert motivo == ""
     assert sorted(datos["nodos"]["texto"]) == ["f0", "f1"]
+
+
+def test_el_anillo_no_lleva_titulo_propio():
+    """El informe ya rotula la figura en su propio encabezado HTML.
+
+    Un `set_title` dentro del PNG repetia ahi lo que la seccion ya dice, y ademas
+    con otras palabras: dos rotulos para un solo dibujo obligan al lector a decidir
+    cual manda.
+    """
+    import inspect
+
+    from chec_local_interpreter import mil_figuras
+
+    fuente = inspect.getsource(mil_figuras._panel_grafo)
+
+    assert "set_title" not in fuente
+
+
+# ---------------------------------------------------------------------------
+# Las barras de UITI llevan el color del GRUPO de cada vano.
+# ---------------------------------------------------------------------------
+
+
+def test_cada_barra_toma_el_color_del_grupo_de_su_vano():
+    """El color de la barra es el mismo semaforo del agrupamiento.
+
+    Antes las dos barras iban en gris y azul, que distinguian las dos CORRIDAS. Pero
+    el grupo es la unidad en la que se decide una obra, y tenerlo solo como texto
+    encima obligaba a leer barra por barra para ver donde esta lo rojo.
+    """
+    from chec_local_interpreter.mil_figuras import COLORES_GRUPOS, colores_de_barras_uiti
+
+    vanos = [
+        {"fid": "A", "clase_base": 3, "clase_simulada": 1},
+        {"fid": "B", "clase_base": 2, "clase_simulada": 0},
+    ]
+
+    medido, estimado = colores_de_barras_uiti(vanos)
+
+    assert medido == [COLORES_GRUPOS[3], COLORES_GRUPOS[2]]
+    assert estimado == [COLORES_GRUPOS[1], COLORES_GRUPOS[0]]
+
+
+def test_una_clase_fuera_de_rango_no_tumba_el_panel():
+    """Un artefacto viejo puede traer una clase que la paleta de cuatro no cubre.
+
+    Perder el panel entero por una celda deja al informe sin las barras de todos los
+    demas vanos, que si son legibles. Se pinta en gris neutro, que NO es un grupo del
+    semaforo y por eso no se puede confundir con uno.
+    """
+    from chec_local_interpreter.mil_figuras import (
+        COLOR_SIN_GRUPO,
+        COLORES_GRUPOS,
+        colores_de_barras_uiti,
+    )
+
+    medido, estimado = colores_de_barras_uiti(
+        [{"fid": "A", "clase_base": 9, "clase_simulada": None}]
+    )
+
+    assert medido == [COLOR_SIN_GRUPO]
+    assert estimado == [COLOR_SIN_GRUPO]
+    assert COLOR_SIN_GRUPO not in COLORES_GRUPOS

@@ -1230,7 +1230,7 @@ def render_llm_analysis(
         return f"<div class='chart-panel'><h3>{_escape(title)}</h3>{html}</div>"
 
     def _mapas_ventana_html() -> str:
-        """Un mapa por cada ventana estudiada: en que estado esta cada vano del circuito.
+        """Un mapa por cada ventana del circuito: en que estado esta cada vano.
 
         Cada mapa describe UNA ventana. Un mapa del periodo entero superpone seis meses
         de estados que se atienden distinto, y sobre el no se puede decidir nada.
@@ -1239,9 +1239,14 @@ def render_llm_analysis(
         el estado tras el plan. Ese par respondia "que cambia si va la cuadrilla", que
         es exactamente lo que la tabla del plan ya da con numeros -- y con el delta de
         grupo por vano --, asi que el mapa simulado repetia en forma de mapa una
-        respuesta que el informe ya tenia. Las tres ventanas dicen algo que ninguna
-        tabla dice de un vistazo: DONDE esta el problema en el trazado y como se movio
-        entre la ventana que trajo al circuito hasta aqui y la de hoy.
+        respuesta que el informe ya tenia. La secuencia de ventanas dice algo que
+        ninguna tabla dice de un vistazo: DONDE esta el problema en el trazado y como
+        se movio de una ventana a la siguiente.
+
+        Son TODAS las ventanas y no solo las tres estudiadas. Estudiar tres recorta la
+        parte cara -- relevancia, diagnostico y simulacion --, y el mapa no es esa
+        parte. Las tres estudiadas se marcan: son las unicas con escenario detras, y sin
+        la marca las once posiciones se leen como equivalentes.
 
         La clase de cada vano sale del u-hat del modelo sobre la geometria del 01.4,
         para que el mapa este en la misma escala que el diagnostico y que la tabla.
@@ -1281,13 +1286,22 @@ def render_llm_analysis(
                 # Una ventana que no se puede dibujar no puede llevarse las otras dos.
                 fallos.append(f"{etiqueta}: {_escape(exc)}")
                 continue
-            etiquetas.append(etiqueta)
+            # Solo tres de las once ventanas tienen escenario, diagnostico y plan
+            # detras. Sin decirlo, las once posiciones del deslizador se leen como
+            # equivalentes y quien busque en el informe el escenario de la ventana que
+            # esta viendo no lo encuentra en ocho de los once casos.
+            estudiada = bool(mapa.get("estudiada"))
+            etiquetas.append((etiqueta, estudiada))
             activa = " activa" if not capas else ""
+            nota_estudiada = (
+                " &middot; <b>con diagnóstico y plan en este informe</b>"
+                if estudiada else "")
             capas.append(
                 f"<div class='mapa-ventana{activa}' data-indice='{len(capas)}'>"
                 f"<p class='muted' style='margin:0 0 6px 0;'>Ventana <b>{etiqueta}</b>"
                 f"{f' &mdash; {periodo}' if periodo else ''} &middot; "
-                f"{len(destacados)} vanos de mayor UITI acumulado resaltados</p>"
+                f"{len(destacados)} vanos de mayor UITI acumulado resaltados"
+                f"{nota_estudiada}</p>"
                 f"{_iframe_srcdoc(dibujado.get_root().render(), height=560)}</div>"
             )
 
@@ -1304,7 +1318,10 @@ def render_llm_analysis(
         control = ""
         if len(capas) > 1:
             marcas = "".join(
-                f"<span style='flex:1;text-align:center;'>{e}</span>" for e in etiquetas)
+                f"<span class='marca-estudiada' style='flex:1;text-align:center;'>{e}</span>"
+                if estudiada else
+                f"<span style='flex:1;text-align:center;'>{e}</span>"
+                for e, estudiada in etiquetas)
             control = (
                 "<div class='mapa-control'>"
                 f"<input type='range' min='0' max='{len(capas) - 1}' value='0' step='1' "
@@ -1318,9 +1335,11 @@ def render_llm_analysis(
             "<div class='summary-box'>"
             "<h3 style='margin-top:0;'>Cómo leer el mapa</h3>"
             "<ul class='report-list'>"
-            "<li>Es un solo mapa: el deslizador cambia la ventana que se muestra, en "
-            "orden de tiempo. La primera es la que más peso tuvo y la última es cómo "
-            "está el circuito hoy.</li>"
+            "<li>Es un solo mapa: el deslizador recorre <b>todas</b> las ventanas del "
+            "circuito en orden de tiempo, y la última es cómo está hoy.</li>"
+            "<li>Las ventanas <b>en azul y negrita</b> son las tres que este informe "
+            "estudia a fondo: son las únicas con diagnóstico, plan y escenario. Las "
+            "demás muestran el estado del circuito, sin análisis detrás.</li>"
             "<li>El color de cada vano es su grupo de criticidad en esa ventana, el "
             "mismo que usa el diagnóstico.</li>"
             "<li>Los trazos <b>gruesos</b> son los quince vanos de mayor UITI acumulado "
@@ -1610,18 +1629,28 @@ def render_llm_analysis(
     else:
         subtitle_info = f"Período de análisis: {period_str} | (Solo visualización, sin análisis LLM)"
 
-    # El escudo viaja DENTRO del HTML como `data:` URI. El informe se abre desde
+    # Los dos logos viajan DENTRO del HTML como `data:` URI. El informe se abre desde
     # cualquier carpeta del disco y se manda por correo: un `<img src="site/...">`
     # daria un icono roto en cuanto el archivo cambie de sitio. Si el PNG falta, no se
     # dibuja nada -- un informe no se pierde por un adorno.
-    escudo_html = ""
-    _ruta_escudo = PROJECT_ROOT / "site" / "assets" / "site" / "logos" / "checlogo.png"
-    if _ruta_escudo.is_file():
+    _dir_logos = PROJECT_ROOT / "site" / "assets" / "site" / "logos"
+
+    def _logo_html(nombre_archivo, clase, alt):
+        ruta = _dir_logos / nombre_archivo
+        if not ruta.is_file():
+            return ""
         import base64 as _b64
 
-        _dato = _b64.b64encode(_ruta_escudo.read_bytes()).decode("ascii")
-        escudo_html = (f"<img class='escudo-chec' alt='CHEC Grupo EPM' "
-                       f"src='data:image/png;base64,{_dato}'>")
+        dato = _b64.b64encode(ruta.read_bytes()).decode("ascii")
+        return (f"<img class='{clase}' alt='{_escape(alt)}' "
+                f"src='data:image/png;base64,{dato}'>")
+
+    # Arriba a la derecha, el escudo de quien OPERA la red: es el destinatario.
+    escudo_html = _logo_html("checlogo.png", "escudo-chec", "CHEC Grupo EPM")
+    # Abajo a la derecha, junto al texto, el logo de quien PRODUJO el informe. Separado
+    # del escudo a proposito: juntos arriba se leerian como dos marcas del mismo emisor.
+    logo_labia_html = _logo_html("logo_labIA.png", "logo-labia",
+                                 "Laboratorio de Inteligencia Artificial")
 
     title_html = f"Reporte Criticidad - Circuito: {primary_circuit}<br><span style='font-size: 0.6em; color: #64748b;'>{subtitle_info}</span>"
 
@@ -1779,9 +1808,13 @@ def render_llm_analysis(
             /* El escudo, fijo arriba a la derecha de cada pagina del informe. */
             .escudo-chec {{ position: absolute; top: 18px; right: 22px; height: 54px;
                             width: auto; }}
-            .pie-agentes {{ text-align: right; color: #64748b; font-size: 12px;
+            /* El pie alinea el texto y el logo del laboratorio a la DERECHA, sobre la
+               misma linea de base: el logo firma la frase, no la encabeza. */
+            .pie-agentes {{ display: flex; align-items: center; justify-content: flex-end;
+                            gap: 12px; color: #64748b; font-size: 12px;
                             padding: 14px 22px 8px 0; border-top: 1px solid #e2e8f0;
                             margin-top: 26px; }}
+            .logo-labia {{ height: 34px; width: auto; }}
             /* UN visor de mapa: las capas se apilan en el mismo sitio y el deslizador
                elige cual se ve. Tres mapas seguidos obligan a bajar y subir, y a esa
                distancia la comparacion se hace de memoria. */
@@ -1793,6 +1826,9 @@ def render_llm_analysis(
             .mapa-deslizador {{ width: 100%; accent-color: #2563eb; }}
             .mapa-marcas {{ display: flex; color: #64748b; font-size: 12px;
                             margin-top: 2px; }}
+            /* Las tres ventanas que el informe estudia, entre las once del deslizador:
+               son las unicas con escenario, diagnostico y plan detras. */
+            .marca-estudiada {{ color: #1e3a8a; font-weight: 700; }}
             .graph-panel iframe {{ width: 100%; height: 620px; border: 0; background: #ffffff; }}
             .graph-actions {{ padding: 10px 14px; border-bottom: 1px solid #e2e8f0; background: #ffffff; }}
             .graph-actions a {{ color: #1d4ed8; font-weight: 600; text-decoration: none; }}
@@ -1827,7 +1863,7 @@ def render_llm_analysis(
                     {html_expert_alignment}
                 </section>
             </div>
-            <div class="pie-agentes">Reporte construido por agentes de IA</div>
+            <div class="pie-agentes"><span>Reporte construido por agentes de IA</span>{logo_labia_html}</div>
         </div>
         <script>
             document.querySelectorAll('.tab-button').forEach(function(button) {{

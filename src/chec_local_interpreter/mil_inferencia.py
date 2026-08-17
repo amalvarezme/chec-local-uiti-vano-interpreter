@@ -858,6 +858,61 @@ def mapa_base_de_escenario(escenario: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def mapas_de_ventanas(
+    recursos: RecursosMIL,
+    *,
+    circuito: str,
+    escenarios: Sequence[Mapping[str, Any]] = (),
+) -> list[dict[str, Any]]:
+    """El mapa base de TODAS las ventanas con bolsas del circuito, en orden.
+
+    El informe ESTUDIA tres ventanas, y eso no cambia: el barrido de relevancia, el
+    diagnostico y la simulacion cuestan `1 + puntos * K` evaluaciones por ventana, y
+    once escenarios enteros no los lee nadie. El mapa no es esa parte. Sacar la clase
+    base de una ventana cuesta UNA pasada de bolsas -- medido: 15 ms por ventana, 0,17 s
+    las once de DON23L14 --, y quedarse en tres deja al lector reconstruyendo de memoria
+    como se movio el problema por el trazado entre una ventana y la siguiente, que es
+    justo lo que un deslizador contesta de un vistazo.
+
+    Una ventana que ya tiene escenario NO se vuelve a evaluar: su relevancia ya trae
+    `clase_base` y `u_base` por vano. Recalcularla pagaria dos veces por el mismo numero
+    y dejaria abierta la puerta a que el mapa y las tablas de ese escenario discrepen.
+
+    Que las dos rutas coinciden esta MEDIDO, no supuesto: sobre los 116 vanos de
+    DON23L14 en V11, `simular_bolsas` sin overrides y `relevancia_de_circuito` devuelven
+    la misma clase y el mismo `u_base` en los 116, sin una sola discrepancia. Las dos
+    terminan en `asignar_clase(n_obs observado, u-hat, geometria)`.
+    """
+    from chec_local_interpreter.mil_simulador_015 import clase_base_de_bolsas
+
+    por_ventana = {str(e.get("ventana")): e for e in escenarios or ()}
+    mapas: list[dict[str, Any]] = []
+    for ventana in ventanas_de_circuito(recursos, circuito=circuito):
+        escenario = por_ventana.get(ventana)
+        if escenario is None:
+            seleccion = _seleccion(recursos, circuito=circuito, ventana=ventana)
+            if not int(seleccion.get("n_bolsas", 0)):
+                continue
+            # UNA pasada del modelo por ventana. `simular_bolsas` sin overrides da lo
+            # mismo -- probado en `test_clase_base_de_bolsas_da_lo_mismo_que_simular_
+            # sin_overrides` -- pero paga dos, y aqui eso se multiplica por las once.
+            tabla = clase_base_de_bolsas(recursos.modelo, recursos.X_inst,
+                                         seleccion=seleccion)
+            # Se arma la MISMA forma de escenario que `mapa_base_de_escenario` consume,
+            # en vez de un segundo constructor de mapas: dos caminos que producen la
+            # misma estructura se separan en cuanto uno de los dos cambie.
+            escenario = {
+                "ventana": ventana,
+                "relevancia": {"vanos": {
+                    str(fid): {"clase_base": k, "u_base": float(u)}
+                    for fid, k, u in zip(tabla["FID_VANO"], tabla["base_clase_idx"],
+                                         tabla["u_base"])
+                }},
+            }
+        mapas.append(mapa_base_de_escenario(escenario))
+    return mapas
+
+
 def _nombre_clase(indice: Any) -> str:
     from chec_impacto.models.criticality_assignment import GRUPOS
 

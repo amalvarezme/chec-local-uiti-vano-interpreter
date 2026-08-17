@@ -95,7 +95,7 @@ from chec_local_interpreter.mil_inferencia import (
     compactar_grafo_del_escenario,
     catalogo_de_controles,
     construir_contexto_inferencia_mil,
-    mapa_base_de_escenario,
+    mapas_de_ventanas,
     seleccionar_ventanas_reporte,
 )
 from chec_local_interpreter.mil_figuras import figuras_de_escenario
@@ -453,29 +453,35 @@ def prepare(
             compactar_grafo_del_escenario(
                 _escenario, features=inference_context.get("features", []))
 
-        # UN mapa por cada ventana ESTUDIADA, y solo el estado observado.
+        # UN mapa por cada ventana CON BOLSAS -- todas, no solo las tres estudiadas --,
+        # y solo el estado observado.
         #
         # Antes era un par base/simulado de una sola ventana. El par respondia "que
         # cambia si va la cuadrilla", que es justo lo que la tabla del plan ya da con
         # numeros -- y con el delta de grupo por vano --, asi que el mapa simulado
-        # repetia en forma de mapa una respuesta que el informe ya tenia. Las tres
-        # ventanas, en cambio, dicen algo que ninguna tabla dice de un vistazo: DONDE
-        # esta el problema en el trazado y como se movio entre la ventana que trajo al
-        # circuito hasta aqui y la de hoy.
+        # repetia en forma de mapa una respuesta que el informe ya tenia. Las ventanas,
+        # en cambio, dicen algo que ninguna tabla dice de un vistazo: DONDE esta el
+        # problema en el trazado y como se movio de una a la siguiente.
+        #
+        # Estudiar tres ventanas sigue siendo el recorte de la parte CARA -- barrido de
+        # relevancia, diagnostico y simulacion --, y el mapa no es esa parte: cuesta una
+        # pasada base por ventana, 0,17 s las once de DON23L14, medido. Recortarlo a
+        # tres dejaba ocho saltos del deslizador sin dibujar, y el lector reconstruyendo
+        # de memoria como se movio el problema entre marzo y abril.
         #
         # Un mapa del periodo entero seguiria sin servir: superpone seis meses de
         # estados que se atienden distinto.
-        mapas = []
-        for _ventana in ventanas_estudio:
-            _escenario_mapa = next(
-                (e for e in inference_context["escenarios"] if e["ventana"] == _ventana),
-                None,
-            )
-            if _escenario_mapa is None:
-                continue
-            _mapa = mapa_base_de_escenario(_escenario_mapa)
-            _mapa["periodo"] = str(_periodos.get(_ventana, {}).get("periodo", ""))
-            mapas.append(_mapa)
+        mapas = mapas_de_ventanas(
+            recursos_mil, circuito=circuito,
+            escenarios=inference_context["escenarios"],
+        )
+        for _mapa in mapas:
+            _mapa["periodo"] = str(
+                _periodos.get(_mapa["ventana"], {}).get("periodo", ""))
+            # La ventana estudiada se marca para que el informe pueda decirlo: sus tres
+            # deslizamientos son los unicos que tienen escenario, diagnostico y plan
+            # detras, y las demas posiciones son solo el estado del circuito.
+            _mapa["estudiada"] = _mapa["ventana"] in ventanas_estudio
 
     save_json_artifact(historical_context, run_dir / "historical.bc.json")
     save_json_artifact(inference_context, run_dir / "inference.bc.json")

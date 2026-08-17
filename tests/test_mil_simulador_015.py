@@ -221,6 +221,74 @@ def test_simular_bolsas_returns_base_and_simulated_class_per_vano():
     assert meta["variables_aplicadas"] == ["u_driver"]
 
 
+def test_clase_base_de_bolsas_cuesta_UNA_pasada_y_no_dos():
+    """El estado base de una ventana no necesita la mitad simulada.
+
+    `simular_bolsas` sin overrides devuelve la respuesta correcta, pero paga dos
+    pasadas del modelo por el mismo numero y copia la matriz de la seleccion para
+    puntuarla identica. El mapa del informe recorre TODAS las ventanas del circuito,
+    asi que ese desperdicio se multiplica por once.
+    """
+    from chec_local_interpreter.mil_simulador_015 import clase_base_de_bolsas
+
+    predictor = _PredictorFalso(_geometria())
+    X = np.array([[0.0, 0.0], [0.0, 0.0], [3.0, 0.0], [3.0, 0.0], [3.0, 0.0]])
+    seleccion = {
+        "fid": ["VA", "VB"],
+        "filas": np.array([0, 1, 2, 3, 4]),
+        "instance_bag": np.array([0, 0, 1, 1, 1]),
+        "n_obs": np.array([2, 3]),
+        "n_bolsas": 2,
+    }
+
+    tabla = clase_base_de_bolsas(predictor, X, seleccion=seleccion)
+
+    assert list(tabla["FID_VANO"]) == ["VA", "VB"]
+    assert tabla["u_base"].tolist() == [0.0, 3.0]
+    assert predictor.llamadas == 1
+
+
+def test_clase_base_de_bolsas_da_lo_mismo_que_simular_sin_overrides():
+    """La ruta barata no puede discrepar de la cara: si lo hiciera, el mapa de una
+    ventana estudiada y sus propias tablas contarian cosas distintas."""
+    from chec_local_interpreter.mil_simulador_015 import clase_base_de_bolsas
+
+    X = np.array([[0.0, 0.0], [0.0, 0.0], [3.0, 0.0], [3.0, 0.0], [3.0, 0.0]])
+    seleccion = {
+        "fid": ["VA", "VB"],
+        "filas": np.array([0, 1, 2, 3, 4]),
+        "instance_bag": np.array([0, 0, 1, 1, 1]),
+        "n_obs": np.array([2, 3]),
+        "n_bolsas": 2,
+    }
+
+    barata = clase_base_de_bolsas(_PredictorFalso(_geometria()), X, seleccion=seleccion)
+    cara, _ = simular_bolsas(_PredictorFalso(_geometria()), X, seleccion=seleccion,
+                             feature_names=["u_driver", "otra"])
+
+    assert barata["u_base"].tolist() == cara["u_base"].tolist()
+    assert (barata["base_clase_idx"].tolist()
+            == cara["base_clase_idx"].tolist())
+
+
+def test_clase_base_de_una_seleccion_vacia_no_pasa_por_el_modelo():
+    """Una ventana sin bolsas es un resultado real. Puntuar cero bolsas produciria
+    una tabla de clases inventadas sobre ningun vano."""
+    from chec_local_interpreter.mil_simulador_015 import clase_base_de_bolsas
+
+    predictor = _PredictorFalso(_geometria())
+
+    tabla = clase_base_de_bolsas(
+        predictor, np.zeros((1, 2)),
+        seleccion={"fid": [], "filas": np.array([], dtype=int),
+                   "instance_bag": np.array([], dtype=int),
+                   "n_obs": np.array([]), "n_bolsas": 0},
+    )
+
+    assert len(tabla) == 0
+    assert predictor.llamadas == 0
+
+
 def test_simular_bolsas_uses_the_observed_n_obs_never_a_predicted_one():
     """`n_obs` es un EJE del espacio KMeans que define la clase. Si la simulacion
     lo tocara, el vano se moveria por un eje que el modelo no predice."""

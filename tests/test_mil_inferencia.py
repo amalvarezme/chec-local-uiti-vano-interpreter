@@ -569,6 +569,63 @@ def test_el_mapa_no_lleva_capa_simulada():
     assert "intervenidos" not in mapa
 
 
+# --- El mapa recorre TODAS las ventanas, no solo las tres estudiadas ---------------------
+
+
+def test_el_deslizador_cubre_todas_las_ventanas_con_bolsas():
+    """El informe ESTUDIA tres ventanas, pero el mapa las recorre todas.
+
+    Estudiar tres es un recorte de la parte cara -- barrido de relevancia, diagnostico
+    y simulacion por ventana --, y esta bien: nadie lee once escenarios enteros. El mapa
+    no es esa parte: recorrer sus once ventanas cuesta una pasada base por ventana, y
+    saltarse ocho deja al lector reconstruyendo de memoria como se movio el problema por
+    el trazado entre marzo y abril.
+    """
+    from chec_local_interpreter.mil_inferencia import mapas_de_ventanas
+
+    recursos = _recursos_multiventana()
+
+    mapas = mapas_de_ventanas(recursos, circuito="C1", escenarios=[])
+
+    assert [m["ventana"] for m in mapas] == ["V1", "V2", "V3", "V4", "V5"]
+    for mapa in mapas:
+        assert set(mapa["base"]["clase"]) == {"V1", "V2"}
+
+
+def test_una_ventana_ya_estudiada_no_se_vuelve_a_evaluar():
+    """El escenario ya trae su relevancia, con `clase_base` y `u_base` por vano.
+
+    Volver a pasar el modelo por esa ventana paga dos veces por el mismo numero y, peor,
+    abre la puerta a que el mapa y las tablas del escenario discrepen si alguna de las
+    dos rutas cambia. Se reusa lo que el escenario ya calculo.
+    """
+    from chec_local_interpreter.mil_inferencia import mapas_de_ventanas
+
+    recursos = _recursos_multiventana()
+    escenario = {
+        "ventana": "V3",
+        "relevancia": {"vanos": {"V1": {"clase_base": 3, "u_base": 9.0},
+                                 "V2": {"clase_base": 0, "u_base": 0.1}}},
+    }
+    llamadas_antes = recursos.modelo.llamadas
+
+    mapas = mapas_de_ventanas(recursos, circuito="C1", escenarios=[escenario])
+
+    v3 = next(m for m in mapas if m["ventana"] == "V3")
+    assert v3["base"]["clase"]["V1"] == "Alto"
+    # Cinco ventanas, una ya resuelta: cuatro pasadas y no cinco.
+    assert recursos.modelo.llamadas - llamadas_antes == 4
+
+
+def test_un_circuito_sin_bolsas_no_produce_ni_un_mapa():
+    """Un circuito tranquilo es un resultado real. Devolver mapas vacios los dibujaria
+    como circuitos en blanco, que se lee como un fallo del tablero."""
+    from chec_local_interpreter.mil_inferencia import mapas_de_ventanas
+
+    assert mapas_de_ventanas(_recursos_multiventana(), circuito="NO_EXISTE",
+                             escenarios=[]) == []
+
+
 # --- La simulacion del informe: solo lo que una cuadrilla puede ejecutar ------------------
 
 

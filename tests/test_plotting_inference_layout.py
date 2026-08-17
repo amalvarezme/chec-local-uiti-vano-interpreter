@@ -746,6 +746,26 @@ def test_el_pie_declara_que_lo_construyeron_agentes(tmp_path):
     assert "Reporte construido por agentes de IA" in html
 
 
+def test_el_pie_lleva_el_logo_del_laboratorio(tmp_path):
+    """El texto dice QUE lo construyeron agentes; el logo dice QUIEN los opera.
+
+    Va junto al texto y no arriba con el escudo de CHEC: el escudo identifica a quien
+    OPERA la red -- el destinatario del informe -- y el laboratorio a quien lo produjo.
+    Ponerlos juntos arriba los leeria como dos marcas del mismo emisor.
+    """
+    html = render_llm_analysis(
+        validation_data={}, raw_df=_minimal_raw_df(), selected_circuitos=["C1"],
+        inference_results=None, inference_analysis={}, output_dir=tmp_path,
+    ).read_text(encoding="utf-8")
+
+    assert "class='logo-labia'" in html or 'class="logo-labia"' in html
+    pie = html[html.index("pie-agentes"):]
+    assert "logo-labia" in pie[:900], "el logo va DENTRO del pie, no suelto en la página"
+    assert html.count("data:image/png;base64") >= 2, (
+        "el logo tiene que viajar DENTRO del HTML, como el escudo"
+    )
+
+
 # ---------------------------------------------------------------------------
 # UN mapa con deslizador, no tres apilados.
 # ---------------------------------------------------------------------------
@@ -790,6 +810,53 @@ def test_un_solo_mapa_no_necesita_deslizador(tmp_path, monkeypatch):
 
     assert "type='range'" not in html
     assert html.count("class='mapa-ventana activa'") == 1
+
+
+def _mapas_de_todas_las_ventanas():
+    """Once ventanas, de las que solo tres tienen escenario detrás."""
+    mapas = []
+    for i in range(1, 12):
+        mapas.append({
+            "ventana": f"V{i}",
+            "periodo": f"2025-{i:02d}",
+            "n_vanos": 100 + i,
+            "top_uiti": ["V1"],
+            "estudiada": i in (9, 10, 11),
+            "base": {"valor": {"V1": 3, "V2": 1},
+                     "clase": {"V1": "Alto", "V2": "Medio"}},
+        })
+    return mapas
+
+
+def test_el_deslizador_recorre_las_once_ventanas(tmp_path, monkeypatch):
+    """El informe ESTUDIA tres ventanas; el mapa las recorre todas.
+
+    Estudiar tres recorta la parte cara -- relevancia, diagnóstico y simulación por
+    ventana --, y el mapa no es esa parte. Con solo tres posiciones, ocho saltos del
+    circuito quedaban sin dibujar y el lector tenía que reconstruir de memoria cómo se
+    movió el problema por el trazado.
+    """
+    html, llamadas = _render_con_mapas(tmp_path, monkeypatch,
+                                       _mapas_de_todas_las_ventanas())
+
+    assert len(llamadas) == 11
+    assert html.count("class='mapa-ventana") == 11
+    assert "max='10'" in html
+    assert html.count("class='mapa-ventana activa'") == 1
+
+
+def test_las_ventanas_estudiadas_se_distinguen_en_el_deslizador(tmp_path, monkeypatch):
+    """Solo tres de las once tienen diagnóstico y plan detrás.
+
+    Sin marca, las once posiciones se leen como equivalentes, y quien busque en el
+    informe el escenario de la ventana que está viendo no lo va a encontrar en ocho de
+    los once casos.
+    """
+    html, _ = _render_con_mapas(tmp_path, monkeypatch, _mapas_de_todas_las_ventanas())
+
+    assert html.count("class='marca-estudiada'") == 3
+    # y la capa lo dice con palabras, no solo con un estilo
+    assert html.count("con diagnóstico y plan en este informe") == 3
 
 
 def test_ninguna_cadena_del_informe_se_imprime_sin_tilde(tmp_path, monkeypatch):
