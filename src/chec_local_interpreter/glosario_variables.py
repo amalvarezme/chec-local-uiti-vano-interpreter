@@ -103,7 +103,11 @@ FAMILIAS_CLIMA: dict[str, str] = {
 # por el ultimo `_` los volveria `X` y `TIPO` -- y `TIPO` existe como variable aparte.
 # Es la misma regla que usa `plegar_rezagos` para plegar el grafo, y tiene que serlo:
 # dos criterios distintos de "que es un rezago" separarian el anillo de su leyenda.
-_REZAGO = re.compile(r"^(?P<familia>.+?)_(?P<indice>\d+)$")
+#
+# La `i` literal se acepta ademas porque es como la DOCUMENTACION nombra a la familia
+# entera: `domain.variable_groups` lista `PREP_i` y `TEMP_i`, no los doce rezagos. Sin
+# esta rama se colaban sin traducir justo en la lista que el agente recibe.
+_REZAGO = re.compile(r"^(?P<familia>.+?)_(?P<indice>\d+|[iI])$")
 
 
 def nombre_natural(codigo: str) -> str:

@@ -132,3 +132,18 @@ def test_los_grupos_de_variables_traen_el_nombre_natural_de_cada_una():
     assert "Riesgo por vegetacion cercana al vano (NR_T)" in entorno["variables_nombradas"]
     # el listado de codigos sigue estando: es lo que hay que cruzar contra el dataset
     assert "NR_T" in entorno["variables"]
+
+
+def test_el_comodin_de_rezago_de_la_documentacion_tambien_se_traduce():
+    """`VARIABLE_GROUPS` escribe `PREP_i` y `TEMP_i`, con la `i` literal: es como la
+    documentacion nombra a la familia entera, no un rezago concreto.
+
+    La regla de rezago exige que el sufijo sean TODO digitos -- y tiene que exigirlo,
+    porque si no `TIPO_TAX` se fundiria con `TIPO` --, asi que estas se colaban sin
+    traducir justo en la lista que el agente recibe.
+    """
+    assert nombre_natural("PREP_i") == "Precipitacion"
+    assert nombre_con_codigo("TEMP_i") == "Temperatura del aire (TEMP_i)"
+    assert nombre_con_codigo("WIND_GUST_SPD_i") == "Rafagas de viento (WIND_GUST_SPD_i)"
+    # y la guarda sigue en pie
+    assert nombre_natural("TIPO_TAX") == "Taxonomia constructiva del vano"
