@@ -599,3 +599,69 @@ def test_sin_mapas_la_seccion_no_aparece(tmp_path, monkeypatch):
     html, llamadas = _render_con_mapas(tmp_path, monkeypatch, [])
 
     assert llamadas == []
+
+
+# ---------------------------------------------------------------------------
+# Las variables se nombran en castellano, con su codigo entre parentesis.
+# ---------------------------------------------------------------------------
+
+
+def _html_con_justificaciones(tmp_path, justificaciones):
+    ruta = render_llm_analysis(
+        validation_data={
+            "circuit_characterization": {
+                "text": "sintesis",
+                "probable_justifications_rules": justificaciones,
+            }
+        },
+        raw_df=_minimal_raw_df(),
+        selected_circuitos=["TODOS"],
+        inference_results=None,
+        inference_analysis={},
+        output_dir=tmp_path / "html",
+    )
+    return ruta.read_text(encoding="utf-8")
+
+
+def test_las_variables_asociadas_se_escriben_en_castellano_con_su_codigo(tmp_path):
+    """En el informe de DON23L14 se leia `Modo Entorno/Riesgo (NR_T, DDT):`.
+
+    Quien lo lee sabe de redes de distribucion, no de nombres de columna de este CSV.
+    El codigo se conserva entre parentesis porque es lo que hay que buscar en el
+    dataset y en el tablero.
+    """
+    html = _html_con_justificaciones(tmp_path, [{
+        "modo": "Entorno/Riesgo",
+        "variables_asociadas": ["NR_T", "DDT"],
+        "justificacion_fisico_logica": "j",
+        "analisis_causas": "a",
+    }])
+
+    assert "Riesgo por vegetacion cercana al vano (NR_T)" in html
+    assert "Densidad de descargas a tierra (DDT)" in html
+
+
+def test_una_variable_climatica_conserva_su_rezago_al_traducirse(tmp_path):
+    """`temp_3` es la temperatura tres horas antes; perder el `_3` borra justo lo que
+    distingue un rezago de otro."""
+    html = _html_con_justificaciones(tmp_path, [{
+        "modo": "Entorno/Riesgo",
+        "variables_asociadas": ["temp_3"],
+        "justificacion_fisico_logica": "j",
+        "analisis_causas": "a",
+    }])
+
+    assert "Temperatura del aire (temp_3)" in html
+
+
+def test_una_variable_fuera_del_glosario_se_muestra_tal_cual(tmp_path):
+    """Sin repetirse: `X (X)` se lee como un fallo del informe."""
+    html = _html_con_justificaciones(tmp_path, [{
+        "modo": "Otro",
+        "variables_asociadas": ["COLUMNA_RARA"],
+        "justificacion_fisico_logica": "j",
+        "analisis_causas": "a",
+    }])
+
+    assert "COLUMNA_RARA" in html
+    assert "COLUMNA_RARA (COLUMNA_RARA)" not in html

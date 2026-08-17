@@ -8,6 +8,7 @@ import pandas as pd
 
 from chec_local_interpreter.config import PROJECT_ROOT
 from chec_local_interpreter.event_counts import count_unique_event_dates
+from chec_local_interpreter.glosario_variables import nombre_con_codigo
 
 
 import numpy as np
@@ -1313,7 +1314,11 @@ def render_llm_analysis(
                 f"{valor:g}" if isinstance(valor, (int, float)) else str(valor))
             celdas.append(
                 "<tr>"
-                f"<td style='text-align:left;'>{_escape(fila.get('label') or fila.get('knob_id'))}</td>"
+                # El codigo del knob ES el nombre de la columna del dataset, asi que el
+                # glosario lo resuelve. `label` solo se usa cuando no hay codigo: viene
+                # del catalogo de controles y suele ser el codigo otra vez.
+                f"<td style='text-align:left;'>"
+                f"{_escape(nombre_con_codigo(str(fila.get('knob_id'))) if fila.get('knob_id') else (fila.get('label') or ''))}</td>"
                 f"<td>{_escape(valor_txt)}</td>"
                 f"<td>{int(fila.get('n_vanos_alcanza') or 0)} / {int(fila.get('n_vanos') or 0)}</td>"
                 f"<td>{avance_txt}</td>"
@@ -1421,7 +1426,7 @@ def render_llm_analysis(
                              _figure_html(resultado.get("fig_barras"), titulo)),
                 _chart_panel(f"UITI medido vs estimado - {titulo}",
                              _figure_html(resultado.get("fig_uiti"), titulo)),
-                _chart_panel(f"Grafo diferencia - {titulo}", html_grafo),
+                _chart_panel(f"Que variables se mueven juntas - {titulo}", html_grafo),
             ]
             partes.append(
                 f"<div class='chart-grid two-col'>{''.join(p for p in paneles if p)}</div>")
@@ -1587,7 +1592,12 @@ def render_llm_analysis(
                 for j in justifications:
                     if isinstance(j, dict):
                         modo = j.get('modo', '')
-                        vars_assoc = ", ".join(j.get('variables_asociadas', [])) if isinstance(j.get('variables_asociadas', []), list) else str(j.get('variables_asociadas', ''))
+                        # En castellano y con el codigo entre parentesis. Se hace AQUI
+                        # y no pidiendoselo al agente: asi no depende de que se acuerde,
+                        # y la traduccion es la misma en todo el informe.
+                        _crudas = j.get('variables_asociadas', [])
+                        vars_assoc = (", ".join(nombre_con_codigo(str(v)) for v in _crudas)
+                                      if isinstance(_crudas, list) else str(_crudas))
                         just_fis = j.get('justificacion_fisico_logica', '')
                         ana = j.get('analisis_causas', '')
                         char_html += f"<li style='margin-bottom: 8px;'><strong>Modo {modo} ({vars_assoc}):</strong> {just_fis}<br><span style='font-size: 0.95em; color: #475569;'><em>Análisis:</em> {ana}</span></li>"
