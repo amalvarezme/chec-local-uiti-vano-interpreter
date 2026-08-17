@@ -86,18 +86,22 @@ body { margin: 0; padding: 12px; font: 14px/1.55 $FUENTE;
    derecha ilegible. */
 @media (max-width: 1544px) { .portada { grid-template-columns: 1fr; } }
 
-/* Los logos, debajo de los botones y CENTRADOS. Viajan tal cual los aprobo la marca: aqui
-   no se recolorean. */
+/* Los logos, al pie de su columna y CENTRADOS. Viajan tal cual los aprobo la marca: aqui
+   no se recolorean. Son DOS bloques y en columnas distintas: la marca del producto cierra
+   la columna de lo que se abre, y la firma de quien lo hizo cierra la que explica como
+   funciona. */
 .logos { margin: 34px 4px 0; padding-top: 26px; border-top: 1px solid $BORDE;
          text-align: center; }
 /* El de CHEC al TRIPLE -- 132 px donde habia 44 -- y solo en su renglon. */
 .logos .marca img { height: 132px; width: auto; }
-/* El del LabIA va DEBAJO y con su rotulo. Mas pequenio a proposito: no es la marca del
-   producto sino la firma de quien lo hizo, y al mismo tamanio se leerian como iguales. */
-.logos .firma { margin-top: 30px; display: flex; align-items: center;
-                justify-content: center; gap: 16px; }
+.logos .firma { display: flex; align-items: center; justify-content: center; gap: 16px; }
+/* La separacion se ata al hermano que la justifica. Suelta en `.logos .firma` se aplicaba
+   tambien debajo del diagrama, donde la firma no tiene nada encima dentro de su caja, y
+   se sumaba al `padding-top` del bloque abriendo un hueco que nadie pidio. */
+.marca + .firma { margin-top: 30px; }
+/* El rotulo no crece con el logo: es una firma, no un titulo. */
 .logos .firma span { font-size: 25px; color: $TENUE; }
-.logos .firma img { height: 78px; width: auto; }
+.logos .firma img { height: 156px; width: auto; }
 
 .col-der svg { width: 100%; height: auto; }
 /* La cabecera se quedo con un solo hijo -- el boton -- desde que el titulo bajo a la
@@ -106,10 +110,12 @@ body { margin: 0; padding: 12px; font: 14px/1.55 $FUENTE;
 header { display: flex; align-items: flex-start; justify-content: flex-end;
          gap: 20px; margin-bottom: 22px; }
 h1 { font-size: 24px; margin: 0; letter-spacing: -.01em; }
-/* El titulo del panel, al doble del `h1` base y centrado en su columna. Va aqui y no en
-   `h1` a secas porque `.cerrado h1` -- la pantalla de despedida, que escribe el
-   JavaScript -- es otra cosa y no tiene por que crecer con este. */
-.col-izq h1 { font-size: 48px; text-align: center; margin-bottom: 22px; }
+/* Los DOS titulos de la portada, uno por columna, centrados y del mismo tamanio. Una sola
+   regla: escritos aparte se separan al primer ajuste de uno solo, y con tamanios distintos
+   el mayor se leeria como titulo de la pagina y el otro como subtitulo suyo.
+   Va aqui y no en `h1` a secas porque `.cerrado h1` -- la pantalla de despedida, que
+   escribe el JavaScript -- es otra cosa y no tiene por que crecer con estos. */
+.portada h1 { font-size: 46px; text-align: center; margin-bottom: 22px; }
 
 /* El filo izquierdo rojo es el gesto que repiten los cinco tableros en sus paneles de
    control. Cada aplicacion del menu es una tarjeta con ese mismo filo, asi que la
@@ -119,13 +125,13 @@ h1 { font-size: 24px; margin: 0; letter-spacing: -.01em; }
    mismo -- a 4 px se pierde contra una tarjeta tres veces mas alta. */
 .tarjeta { display: flex; align-items: center; gap: 48px; background: $PANEL;
            border: 1px solid $BORDE; border-left: 12px solid $ACENTO; border-radius: 10px;
-           padding: 26px 32px; margin-bottom: 18px; font-size: 44px; line-height: 1.25; }
+           padding: 26px 32px; margin-bottom: 18px; font-size: 42px; line-height: 1.25; }
 .texto { flex: 1; min-width: 0; }
 .titulo { font-weight: 600; margin-bottom: 2px; }
-.desc { color: $TENUE; font-size: 35px; }
+.desc { color: $TENUE; font-size: 33px; }
 /* El aviso de la emergente bloqueada. En el acento y no en el gris de `.desc`: es lo
    unico que explica por que un tablero que dice "corriendo" no se ve en ninguna parte. */
-.aviso { color: $ACENTO_OSCURO; font-size: 11px; margin-top: 4px; }
+.aviso { color: $ACENTO_OSCURO; font-size: 9px; margin-top: 4px; }
 .punto { width: 27px; height: 27px; border-radius: 50%; flex: none;
          background: $BORDE_FUERTE; }
 .punto.corriendo { background: $ACENTO; }
@@ -136,7 +142,7 @@ button { font: inherit; font-size: 12px; font-weight: 600; padding: 6px 12px;
          border-radius: 4px; border: 1px solid $BORDE_FUERTE; background: $FONDO;
          color: $TEXTO; cursor: pointer; white-space: nowrap; }
 /* Los de las TARJETAS al triple. */
-.tarjeta button { font-size: 38px; padding: 18px 36px; border-radius: 10px;
+.tarjeta button { font-size: 36px; padding: 18px 36px; border-radius: 10px;
                   border-width: 3px; }
 /* `Cerrar todo` al DOBLE del boton base. La caja dobla con el texto: ampliar solo la
    letra la desborda, porque el relleno esta en pixeles y no en `em`. El radio y el filo
@@ -436,9 +442,9 @@ def _diagrama(titulos: list[str]) -> str:
             orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="$BORDE_FUERTE"/></marker>
   </defs>
   <style>
-    .dt { font: 600 11.5px $FUENTE; fill: $TEXTO; }
-    .dn { font: 9px $FUENTE; fill: $TENUE; }
-    .dh { font: 600 9.5px $FUENTE; fill: $TENUE; letter-spacing: .06em; }
+    .dt { font: 600 12.5px $FUENTE; fill: $TEXTO; }
+    .dn { font: 10px $FUENTE; fill: $TENUE; }
+    .dh { font: 600 10.5px $FUENTE; fill: $TENUE; letter-spacing: .06em; }
     .fl { stroke: $BORDE_FUERTE; stroke-width: 1.4; fill: none; marker-end: url(#pf); }
   </style>
 
@@ -532,10 +538,15 @@ terminal que abrieron. Despues cierra este menu.">Cerrar todo</button>
       <div id="lista"></div>
       <div class="logos">
         <div class="marca">{_marca_chec}</div>
+      </div>
+    </div>
+    <div class="col-der">
+      <h1>¿Cómo funciona el simulador?</h1>
+      {_diagrama_html}
+      <div class="logos">
         <div class="firma"><span>Elaborado por</span>{_marca_labia}</div>
       </div>
     </div>
-    <div class="col-der">{_diagrama_html}</div>
   </div>
 </div>
 <script>{_GUION}</script>

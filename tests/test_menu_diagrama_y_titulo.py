@@ -124,8 +124,8 @@ def test_no_quedan_clases_declaradas_que_nadie_use():
 # ------------------------------------------------------------ las fuentes, un punto menos
 
 
-def test_las_fuentes_del_menu_bajan_un_punto():
-    """Cada tamanio declarado en la hoja del menu, uno menos que antes.
+def test_las_fuentes_del_panel_izquierdo_bajan_dos_puntos():
+    """Solo las del panel IZQUIERDO. Las tres que no bajan tienen su motivo cada una.
 
     Se comprueban los valores de LLEGADA y no una resta: el tamanio anterior ya no esta
     en ninguna parte, asi que una prueba que restara tendria que llevar escrita la tabla
@@ -134,14 +134,11 @@ def test_las_fuentes_del_menu_bajan_un_punto():
     pagina = _pagina()
     hoja = pagina[pagina.index("<style>"):pagina.index("</style>")]
     esperado = {
-        "body": "font: 14px/1.55",          # era 15
-        "h1": "font-size: 24px",            # era 25
-        ".tarjeta": "font-size: 44px",      # era 45
-        ".desc": "font-size: 35px",         # era 36
-        ".aviso": "font-size: 11px",        # era 12
-        "button": "font-size: 12px",        # era 13
-        ".tarjeta button": "font-size: 38px",   # era 39
-        ".logos .firma span": "font-size: 25px",  # era 26
+        ".portada h1": "font-size: 46px",       # era 48
+        ".tarjeta": "font-size: 42px",          # era 44
+        ".desc": "font-size: 33px",             # era 35
+        ".aviso": "font-size: 9px",             # era 11
+        ".tarjeta button": "font-size: 36px",   # era 38
     }
     for selector, declaracion in esperado.items():
         regla = re.search(re.escape(selector) + r"\s*\{([^}]*)\}", hoja)
@@ -150,19 +147,42 @@ def test_las_fuentes_del_menu_bajan_un_punto():
             f"`{selector}` no baja a `{declaracion}`: {regla.group(1).strip()}")
 
 
-def test_las_fuentes_del_diagrama_bajan_un_punto():
-    """Las del SVG cuentan igual: viven en la misma pagina.
+def test_lo_que_no_esta_en_el_panel_izquierdo_no_se_encoge_con_el():
+    """Tres tamanios se quedan donde estaban, y ninguno por descuido.
 
-    Y aqui el punto de menos SI se va a ver, porque hasta ahora la hoja estaba inerte y
-    todo salia al 15px del `body`.
+      * `body` y `button` son la base de la PAGINA, no del panel. Moverlas arrastraria
+        cosas que nadie pidio, empezando por el boton de la cabecera.
+      * `h1` a secas es la pantalla de despedida, que ni siquiera esta en la portada.
+      * "Elaborado por" SALE del panel izquierdo en este mismo cambio: se va debajo del
+        diagrama. No le toca el -2 del panel que abandona ni el +1 del que la recibe,
+        que es solo para el SVG.
+    """
+    pagina = _pagina()
+    hoja = pagina[pagina.index("<style>"):pagina.index("</style>")]
+    for selector, declaracion in (("body", "font: 14px/1.55"),
+                                  (r"\bh1", "font-size: 24px"),
+                                  (r"\bbutton", "font-size: 12px"),
+                                  (r"\.logos \.firma span", "font-size: 25px")):
+        regla = re.search(selector + r"\s*\{([^}]*)\}", hoja)
+        assert regla, f"no existe la regla `{selector}`"
+        assert declaracion in regla.group(1), (
+            f"`{selector}` se movio y no tenia por que: {regla.group(1).strip()}")
+
+
+def test_las_fuentes_del_diagrama_suben_un_punto():
+    """El SVG va al reves que el panel izquierdo: +1 donde el otro lleva -2.
+
+    No es una incoherencia. Son dos columnas con trabajos distintos: la izquierda es una
+    lista de cinco cosas que se pulsan y ya venia sobredimensionada al triple; la derecha
+    es un texto que hay que leer entero, y ademas se escala a lo ancho de su columna.
     """
     svg = _svg()
     hoja = svg[svg.index("<style>"):svg.index("</style>")]
-    for clase, tamanio in ((".dt", "11.5px"), (".dn", "9px"), (".dh", "9.5px")):
+    for clase, tamanio in ((".dt", "12.5px"), (".dn", "10px"), (".dh", "10.5px")):
         regla = re.search(re.escape(clase) + r"\s*\{([^}]*)\}", hoja)
         assert regla, f"no existe la regla `{clase}` del diagrama"
         assert tamanio in regla.group(1), (
-            f"`{clase}` no baja a {tamanio}: {regla.group(1).strip()}")
+            f"`{clase}` no sube a {tamanio}: {regla.group(1).strip()}")
 
 
 # --------------------------------------------------------------- los textos del diagrama
@@ -269,32 +289,85 @@ def test_cerrar_todo_dobla_su_tamanio():
         f"la caja de `Cerrar todo` no dobla con su texto: {regla.group(1).strip()}")
 
 
-def test_el_titulo_vive_en_la_columna_izquierda_y_centrado():
-    """Estaba en la cabecera, arriba del todo y a la izquierda de la pagina entera."""
+def test_cada_columna_lleva_su_titulo_centrado():
+    """Dos titulos, uno por columna, y del MISMO tamanio.
+
+    Del mismo tamanio no por simetria: son los dos encabezados de la portada y estan uno
+    al lado del otro. Con tamanios distintos, el mas grande se lee como titulo de la
+    pagina y el otro como subtitulo suyo, que es justo lo que no son.
+    """
     pagina = _pagina()
     assert "<h1>IA + Criticidad CHEC</h1>" in pagina, (
-        "el titulo no dice `IA + Criticidad CHEC`")
-    izq = pagina.index('class="col-izq"')
+        "el titulo de la izquierda no dice `IA + Criticidad CHEC`")
+    assert "<h1>¿Cómo funciona el simulador?</h1>" in pagina, (
+        "la columna del diagrama no tiene titulo")
+    izq, der = pagina.index('class="col-izq"'), pagina.index('class="col-der"')
     assert izq < pagina.index("<h1>") < pagina.index('id="lista"'), (
-        "el titulo no esta dentro de la columna izquierda y encima de la lista")
-    regla = re.search(r"\.col-izq h1\s*\{([^}]*)\}", pagina)
-    assert regla, "el titulo de la columna no tiene regla propia"
+        "el titulo de la izquierda no encabeza su columna")
+    assert der < pagina.index("¿Cómo funciona") < pagina.index("<svg"), (
+        "el titulo de la derecha no va dentro de su columna y encima del diagrama")
+    # UNA regla para los dos. Escritos aparte se separan al primer ajuste de uno solo.
+    regla = re.search(r"\.portada h1\s*\{([^}]*)\}", pagina)
+    assert regla, "los dos titulos de la portada no comparten regla"
     assert "text-align: center" in regla.group(1), (
-        f"el titulo no se centra en su columna: {regla.group(1).strip()}")
-    assert "font-size: 48px" in regla.group(1), (
-        f"el titulo no dobla los 24px del `h1` base: {regla.group(1).strip()}")
+        f"los titulos no se centran en su columna: {regla.group(1).strip()}")
 
 
-def test_la_despedida_no_hereda_el_titulo_doblado():
+def test_la_firma_del_labia_se_va_debajo_del_diagrama():
+    """El logo de CHEC se queda a la izquierda; la firma cruza a la derecha.
+
+    Son dos cosas distintas y ahora se ve: la marca del producto encabeza la columna de
+    lo que se abre, y quien lo hizo firma al pie de lo que explica como funciona.
+    """
+    pagina = _pagina()
+    der = pagina.index('class="col-der"')
+    assert pagina.index('class="marca"') < der, (
+        "el logo de CHEC se fue de la columna izquierda")
+    assert pagina.index('class="firma"') > pagina.index("</svg>"), (
+        "la firma del LabIA no esta debajo del diagrama")
+    assert "Elaborado por" in pagina[pagina.index("</svg>"):], (
+        "el rotulo `Elaborado por` no viajo con su logo")
+
+
+def test_el_logo_del_labia_dobla():
+    """78 -> 156 px, y solo el logo: el rotulo se queda de rotulo."""
+    pagina = _pagina()
+    regla = re.search(r"\.logos \.firma img\s*\{([^}]*)\}", pagina)
+    assert regla, "el logo de la firma no tiene regla propia"
+    assert "height: 156px" in regla.group(1), (
+        f"el logo del LabIA no dobla: {regla.group(1).strip()}")
+
+
+def test_la_firma_no_arrastra_la_separacion_que_ya_no_necesita():
+    """`margin-top: 30px` existia para despegarla del logo de CHEC, que tenia encima.
+
+    Debajo del diagrama no tiene nada encima dentro de su caja, asi que ese margen se
+    suma al `padding-top` del bloque y abre un hueco que nadie pidio. Se ata al hermano
+    que lo justificaba en vez de dejarlo suelto.
+    """
+    pagina = _pagina()
+    # Lo que sobra es el MARGEN, no el selector: `.logos .firma` sigue haciendo falta para
+    # la caja flexible que alinea el rotulo con el logo, y eso vale en las dos columnas.
+    suelta = re.search(r"^\.logos \.firma \{([^}]*)\}", pagina, re.M)
+    assert suelta, "la firma perdio la caja que alinea su rotulo con su logo"
+    assert "margin-top" not in suelta.group(1), (
+        f"la separacion sigue suelta y se aplica donde no hay logo encima: "
+        f"{suelta.group(1).strip()}")
+    assert re.search(r"\.marca \+ \.firma\s*\{[^}]*margin-top", pagina), (
+        "nadie separa la firma del logo de CHEC cuando si van juntos")
+
+
+def test_la_despedida_no_hereda_los_titulos_de_la_portada():
     """`.cerrado h1` es otra pantalla: la de "CriticidadCHEC cerrado".
 
-    Doblar el `h1` a secas se la habria llevado por delante sin que nadie lo pidiera --
-    y sin que ninguna prueba lo notara, porque esa pantalla la escribe el JavaScript.
+    Tocar el `h1` a secas se la habria llevado por delante sin que nadie lo pidiera -- y
+    sin que ninguna prueba lo notara, porque esa pantalla la escribe el JavaScript. Por
+    eso los de la portada van bajo `.portada h1` y no sobre `h1`.
     """
     pagina = _pagina()
     regla = re.search(r"\bh1\s*\{([^}]*)\}", pagina)
     assert regla and "font-size: 24px" in regla.group(1), (
-        "el `h1` base ya no vale 24px; la despedida hereda el tamanio del panel")
+        "el `h1` base ya no vale 24px; la despedida hereda el tamanio de la portada")
 
 
 def test_la_cabecera_solo_lleva_el_boton():
