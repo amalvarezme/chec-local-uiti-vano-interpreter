@@ -2171,7 +2171,7 @@ def construir(
             MIL, X_INST, seleccion=seleccion, feature_names=FEATURES_MIL, knobs=KNOBS_PANEL,
             top=TOP_VARIABLES_POR_VANO, puntos=PUNTOS_REJILLA_RELEVANCIA,
             grupos=GRUPO_POR_KNOB, label_encoders=label_encoders,
-            max_values_imputed=max_values_imputed,
+            max_values_imputed=max_values_imputed, catalogo=CATALOGO_SIM,
         )
 
     def _diagnostico_del_circuito():
@@ -2225,7 +2225,7 @@ def construir(
             MIL, X_INST, seleccion=seleccion, feature_names=FEATURES_MIL, knobs=KNOBS_PANEL,
             top=len(KNOBS_PANEL), puntos=PUNTOS_REJILLA_RELEVANCIA,
             grupos=GRUPO_POR_KNOB, label_encoders=label_encoders,
-            max_values_imputed=max_values_imputed,
+            max_values_imputed=max_values_imputed, catalogo=CATALOGO_SIM,
         )
         acumulado = {}
         for datos_vano in ranking.values():

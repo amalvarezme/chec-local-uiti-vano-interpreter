@@ -986,13 +986,32 @@ def umbral_u_para_clase_minima(
     return float(rejilla[clases == 0].max())
 
 
-def candidatos_de_knob(knob: Any, *, puntos: int = 9) -> list[Any] | None:
+def candidatos_de_knob(
+    knob: Any, *, puntos: int = 9, catalogo: Mapping[str, Any] | None = None
+) -> list[Any] | None:
     """Los valores que se le prueban a un control, o None si no tiene ninguno.
 
-    Un control numerico aporta una rejilla sobre su rango observado; uno categorico,
-    sus categorias. Los constantes quedan fuera: un unico valor observado no mueve nada,
+    Con `catalogo` -- el de `Variables_simular.xlsx` -- manda lo que el PANEL ofrece, que
+    es lo unico que se puede ejecutar. Sin el se cae a lo OBSERVADO en la base: un
+    control numerico aporta una rejilla sobre su rango y uno categorico sus categorias.
+
+    Ese respaldo no es el caso normal: es lo que mantiene vivo a quien llame sin
+    catalogo -- pruebas con knobs a mano, y las familias climaticas, que no tienen
+    entrada propia. Cuando los dos coincidian daba igual cual se usara; con el archivo
+    ajustado dejaron de coincidir, y el diagnostico llego a proponer "2,37 fases".
+    Ver `simulador_variables.candidatos_del_panel`.
+
+    Los constantes quedan fuera en los dos casos: un unico valor observado no mueve nada,
     y probarlo solo gasta una pasada del modelo.
     """
+    if catalogo is not None:
+        from chec_local_interpreter.simulador_variables import candidatos_del_panel
+
+        if knob.kind == "constant":
+            return None
+        valores = candidatos_del_panel(knob, catalogo.get(knob.id), puntos=puntos)
+        return valores or None
+
     if knob.kind == "numeric" and knob.bounds:
         minimo, maximo = (float(v) for v in knob.bounds)
         return [float(v) for v in np.linspace(minimo, maximo, int(puntos))]
@@ -1053,6 +1072,7 @@ def relevancia_hacia_uiti_minimo(
     grupos: Mapping[str, str] | None = None,
     label_encoders: Mapping[str, Any] | None = None,
     max_values_imputed: Mapping[str, Any] | None = None,
+    catalogo: Mapping[str, Any] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Que variables pueden llevar a CADA vano a su UITI minimo, y cuanto lo bajan.
 
@@ -1112,7 +1132,7 @@ def relevancia_hacia_uiti_minimo(
     # Por knob: el mejor u alcanzable de cada bolsa y con que valor se consigue.
     columnas: list[tuple[Any, np.ndarray, np.ndarray]] = []
     for knob in knobs:
-        valores = candidatos_de_knob(knob, puntos=puntos)
+        valores = candidatos_de_knob(knob, puntos=puntos, catalogo=catalogo)
         if valores is None:
             continue
         us = []
@@ -1231,6 +1251,7 @@ def plan_hacia_clase_minima(
     max_pasos: int = 4,
     label_encoders: Mapping[str, Any] | None = None,
     max_values_imputed: Mapping[str, Any] | None = None,
+    catalogo: Mapping[str, Any] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """La COMBINACION de cambios que lleva a cada vano al grupo mas bajo, o lo mas cerca
     que se pueda.
@@ -1277,7 +1298,8 @@ def plan_hacia_clase_minima(
     n_bolsas = len(fids)
 
     candidatos = [(knob, valores) for knob in knobs
-                  if (valores := candidatos_de_knob(knob, puntos=puntos)) is not None]
+                  if (valores := candidatos_de_knob(
+                      knob, puntos=puntos, catalogo=catalogo)) is not None]
     objetivos = [umbral_u_para_clase_minima(float(n), predictor.geometria) for n in n_obs]
 
     # La expansion de un control a las columnas que toca NO depende del vano ni de la

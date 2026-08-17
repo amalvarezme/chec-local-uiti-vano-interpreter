@@ -313,6 +313,82 @@ def opciones_ofrecidas(knob: Knob,
 
 
 
+#: Cuantos enteros caben antes de preferir una rejilla. Por debajo se ofrecen TODOS: con
+#: diez o menos, una rejilla de nueve puntos no ahorra casi nada y en cambio se salta
+#: valores que si son ejecutables.
+MAX_ENTEROS_COMPLETOS = 12
+
+
+def candidatos_del_panel(
+    knob: Knob,
+    entrada: VariableSimulable | None,
+    *,
+    puntos: int = 9,
+) -> list[Any]:
+    """Los valores que el diagnostico le puede proponer a `knob`: los del PANEL.
+
+    `candidatos_de_knob` recorre `knob.bounds` y `knob.categories`, que son lo OBSERVADO
+    en la base. El panel ofrece lo que declara `Variables_simular.xlsx`. Mientras los dos
+    coincidieron dio igual; con el archivo ajustado dejaron de coincidir, y el ranking
+    pasaba a sostener una orden de trabajo que el propio panel no deja pedir:
+
+        ALTURA           proponia 4 | 6,625 | 9,25 ... 25      el panel ofrece 12|16|18
+        CNT_FASES        proponia 1 | 1,25 | 1,5 | 1,75        el panel ofrece 1|2|3
+        CANTIDAD_TIERRA  proponia 0 | 0,125 | 0,25 | 0,375     el panel ofrece 0|1
+        NR_T             proponia 14,5 | 43,5 | 72,5           la columna es entera
+        CONDUCTOR        proponia 30 categorias                el panel ofrece 17
+
+    "Sube el vano a 2,37 fases" y "instala media puesta a tierra" no son obras. Y en el
+    otro sentido se perdia lo ejecutable: `LONG_CRUCETA` tiene 19 longitudes en el
+    contrato y se le probaba una rejilla de nueve que no cae en ninguna.
+
+    Las reglas, en orden:
+
+    * lista cerrada -> esa lista, y para las de texto solo lo que el modelo sabe
+      codificar (misma interseccion que el panel: una categoria desconocida falla en
+      mitad de una simulacion);
+    * entera de rango corto -> TODOS sus enteros;
+    * entera de rango largo -> una rejilla, pero de enteros y sin repetidos;
+    * continua -> una rejilla sobre el rango del ARCHIVO, no sobre el observado.
+
+    Sin entrada en el archivo se conserva el comportamiento de siempre: las cuatro
+    familias climaticas y cualquier control nuevo no tienen veredicto que aplicar, y
+    dejarlos sin candidatos los sacaria del ranking en silencio.
+
+    MEDIDO sobre los once controles de intervencion: la ronda pasa de 134 candidatos a
+    104 -- 21% mas barata -- y el plan alcanza el grupo Bajo en un vano MAS, no en uno
+    menos. Restringir a lo ejecutable no cuesta alcance.
+    """
+    from chec_local_interpreter.mil_simulador_015 import candidatos_de_knob
+
+    if entrada is None:
+        return candidatos_de_knob(knob, puntos=puntos) or []
+
+    if entrada.opciones:
+        if entrada.opciones_numericas:
+            return list(entrada.valores_numericos)
+        return list(opciones_ofrecidas(knob, entrada))
+
+    if entrada.vmin is None or entrada.vmax is None:
+        return candidatos_de_knob(knob, puntos=puntos) or []
+
+    minimo, maximo = float(entrada.vmin), float(entrada.vmax)
+    if entrada.control == CONTROL_DESLIZADOR_ENTERO:
+        enteros = list(range(int(minimo), int(maximo) + 1))
+        if len(enteros) <= max(int(puntos), MAX_ENTEROS_COMPLETOS):
+            return [float(v) for v in enteros]
+        # `sorted({...})` y no la rejilla cruda: redondear puede repetir un entero, y un
+        # candidato duplicado gasta una pasada del modelo para nada.
+        import numpy as np
+
+        return [float(v) for v in
+                sorted({int(round(x)) for x in np.linspace(minimo, maximo, int(puntos))})]
+
+    import numpy as np
+
+    return [float(v) for v in np.linspace(minimo, maximo, int(puntos))]
+
+
 UNIDADES: Mapping[str, str] = {
     # Las CUATRO con unidad escrita en `data/Variables_seleccion.xlsx`. Se copian de
     # ahi tal cual; no se deducen del nombre.

@@ -508,3 +508,78 @@ def test_las_listas_cerradas_son_de_INVENTARIO_y_por_eso_son_mas_cortas_que_el_d
     assert "3IG" not in catalogo["TIPO"].opciones
     for fuera_de_la_base in ("4.5", "5.2", "7.6", "8"):
         assert fuera_de_la_base in catalogo["LONG_CRUCETA"].opciones
+
+
+# --------------------------------------------------------------------------------
+# El DIAGNOSTICO tiene que proponer lo mismo que el panel deja ejecutar
+# --------------------------------------------------------------------------------
+def test_los_candidatos_del_diagnostico_salen_del_panel_y_no_del_dato_crudo():
+    """El ajuste del archivo no llegaba al diagnostico, y ese es el defecto de fondo.
+
+    `candidatos_de_knob` recorre `knob.bounds` y `knob.categories`, que son lo OBSERVADO
+    en la base. El panel, en cambio, ofrece lo que declara `Variables_simular.xlsx`. Con
+    el archivo ajustado los dos dejaron de coincidir, y el ranking pasaba a recomendar
+    obra que el propio panel no deja pedir. Medido sobre los once controles de
+    intervencion:
+
+        ALTURA           proponia 4 | 6,625 | 9,25 ... 25      el panel ofrece 12 | 16 | 18
+        CNT_FASES        proponia 1 | 1,25 | 1,5 | 1,75 ...    el panel ofrece 1 | 2 | 3
+        CANTIDAD_TIERRA  proponia 0 | 0,125 | 0,25 ...         el panel ofrece 0 | 1
+        NG_RED           proponia 0 | 0,125 | 0,25 ...         el panel ofrece 0 | 1
+        NR_T             proponia 14,5 | 43,5 | 72,5           la columna es entera
+        VAL_CRIT_APOYO   proponia 2,125 | 4,375 | 6,625        la columna es entera
+        CONDUCTOR        proponia 30 categorias                el panel ofrece 17
+        TIPO             proponia 12                           el panel ofrece 10
+        LONG_CRUCETA     proponia una rejilla de 9             el panel ofrece 19 reales
+
+    O sea: recomendaba "2,37 fases" y "media puesta a tierra" -- justo lo que el control
+    entero existe para impedir -- y a la vez se perdia las 19 longitudes de cruceta que
+    si estan en el contrato.
+    """
+    from chec_local_interpreter.simulador_variables import candidatos_del_panel
+
+    catalogo = catalogo_simulacion(RUTA_REAL)
+
+    # Lista cerrada de numeros: los tres del inventario, no una rejilla.
+    altura = candidatos_del_panel(_knob("ALTURA", "numeric", bounds=(4.0, 25.0)),
+                                  catalogo["ALTURA"])
+    assert altura == [12.0, 16.0, 18.0]
+
+    # Entera de rango corto: TODOS sus enteros, no nueve puntos con decimales.
+    val = candidatos_del_panel(_knob("VAL_CRIT_APOYO", "numeric", bounds=(1.0, 10.0)),
+                               catalogo["VAL_CRIT_APOYO"])
+    assert val == [float(v) for v in range(1, 11)]
+
+    # Entera de rango largo: una rejilla, pero de ENTEROS.
+    nr_t = candidatos_del_panel(_knob("NR_T", "numeric", bounds=(0.0, 116.0)),
+                               catalogo["NR_T"])
+    assert nr_t, "NR_T se quedo sin candidatos"
+    assert all(float(v).is_integer() for v in nr_t), nr_t
+    assert min(nr_t) == 0.0 and max(nr_t) == 116.0
+
+    # Continua de verdad: rejilla sobre el rango del ARCHIVO.
+    cap = candidatos_del_panel(_knob("CAPACIDAD_NOMINAL", "numeric", bounds=(0.0, 999.0)),
+                              catalogo["CAPACIDAD_NOMINAL"])
+    assert max(cap) == pytest.approx(400.0), "uso el rango observado y no el declarado"
+
+
+def test_una_categorica_se_limita_a_lo_que_el_modelo_sabe_codificar():
+    """La interseccion, igual que en el panel: una categoria que el codificador no
+    conoce falla en mitad de una simulacion."""
+    from chec_local_interpreter.simulador_variables import candidatos_del_panel
+
+    catalogo = catalogo_simulacion(RUTA_REAL)
+    knob = _knob("TIPO", "categorical", categories=("1CC", "1CFR", "3IG"))
+
+    assert candidatos_del_panel(knob, catalogo["TIPO"]) == ["1CC", "1CFR"]
+
+
+def test_un_knob_sin_entrada_en_el_archivo_conserva_sus_candidatos_de_siempre():
+    """Las cuatro familias climaticas y cualquier control nuevo: sin veredicto no hay
+    restriccion que aplicar, y quedarse sin candidatos lo sacaria del ranking."""
+    from chec_local_interpreter.mil_simulador_015 import candidatos_de_knob
+    from chec_local_interpreter.simulador_variables import candidatos_del_panel
+
+    knob = _knob("INVENTADO", "numeric", bounds=(0.0, 8.0))
+
+    assert candidatos_del_panel(knob, None) == candidatos_de_knob(knob, puntos=9)

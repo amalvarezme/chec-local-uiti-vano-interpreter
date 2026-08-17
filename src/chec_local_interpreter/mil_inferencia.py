@@ -25,6 +25,11 @@ import numpy as np
 
 from chec_local_interpreter.config import PROJECT_ROOT
 from chec_local_interpreter.glosario_variables import nombre_con_codigo
+# El catalogo del panel, que es lo que acota los valores que el diagnostico puede
+# PROPONER. Sin el, el informe recomienda obra que el tablero no deja pedir -- "2,37
+# fases", una altura de 6,625 m -- y a la vez se pierde lo que si es ejecutable. Se lee
+# con cache por fecha de modificacion, asi que llamarlo por corrida no cuesta.
+from chec_local_interpreter.simulador_variables import catalogo_simulacion
 
 RUTA_MODELO_MIL = PROJECT_ROOT / "data" / "models" / "mil_vano_ventana_v1.pt"
 RUTA_BOLSAS_MIL = PROJECT_ROOT / "data" / "derived" / "bolsas_mil_full.joblib"
@@ -317,6 +322,7 @@ def relevancia_de_circuito(
         grupos=dict(recursos.grupos_por_knob) or None,
         label_encoders=recursos.label_encoders,
         max_values_imputed=recursos.max_values_imputed,
+        catalogo=catalogo_simulacion(),
     )
 
     vanos: dict[str, Any] = {}
@@ -474,6 +480,7 @@ def diagnostico_de_circuito(
         max_pasos=MAX_PASOS_PLAN,
         label_encoders=recursos.label_encoders,
         max_values_imputed=recursos.max_values_imputed,
+        catalogo=catalogo_simulacion(),
     )
     if not plan:
         return []
@@ -485,6 +492,7 @@ def diagnostico_de_circuito(
         feature_names=recursos.features, knobs=recursos.knobs, top=1,
         puntos=1, label_encoders=recursos.label_encoders,
         max_values_imputed=recursos.max_values_imputed,
+        catalogo=catalogo_simulacion(),
     )
 
     criticos = []
@@ -980,6 +988,7 @@ def simulacion_de_circuito(
         feature_names=recursos.features, knobs=knobs, puntos=PUNTOS_REJILLA,
         max_pasos=int(max_pasos), label_encoders=recursos.label_encoders,
         max_values_imputed=recursos.max_values_imputed,
+        catalogo=catalogo_simulacion(),
     )
     overrides = {
         fid: [{"variable": paso["knob_id"], "valor": paso["valor"]}
