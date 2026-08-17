@@ -87,9 +87,10 @@ body { margin: 0; padding: 12px; font: 14px/1.55 $FUENTE;
 @media (max-width: 1259px) { .portada { grid-template-columns: 1fr; } }
 
 /* Los logos, al pie de su columna y CENTRADOS. Viajan tal cual los aprobo la marca: aqui
-   no se recolorean. Son DOS bloques y en columnas distintas: la marca del producto cierra
-   la columna de lo que se abre, y la firma de quien lo hizo cierra la que explica como
-   funciona. */
+   no se recolorean. Los DOS van juntos al pie de la columna izquierda: primero de quien es
+   el producto y debajo quien lo construyo. Estuvieron separados -- la firma bajo el
+   diagrama, en la otra columna -- y asi se leian como dos marcas de dos sitios distintos
+   en vez de como una atribucion. */
 .logos { margin: 34px 4px 0; padding-top: 26px; border-top: 1px solid $BORDE;
          text-align: center; }
 /* El de CHEC al TRIPLE -- 132 px donde habia 44 -- y solo en su renglon. */
@@ -545,14 +546,12 @@ terminal que abrieron. Despues cierra este menu.">Cerrar todo</button>
       <div id="lista"></div>
       <div class="logos">
         <div class="marca">{_marca_chec}</div>
+        <div class="firma"><span>Elaborado por</span>{_marca_labia}</div>
       </div>
     </div>
     <div class="col-der">
       <h1>¿Cómo funciona el simulador?</h1>
       {_diagrama_html}
-      <div class="logos">
-        <div class="firma"><span>Elaborado por</span>{_marca_labia}</div>
-      </div>
     </div>
   </div>
 </div>

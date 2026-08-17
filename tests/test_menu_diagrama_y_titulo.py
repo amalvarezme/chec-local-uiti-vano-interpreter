@@ -362,20 +362,28 @@ def test_cada_columna_lleva_su_titulo_centrado():
         f"los titulos no se centran en su columna: {regla.group(1).strip()}")
 
 
-def test_la_firma_del_labia_se_va_debajo_del_diagrama():
-    """El logo de CHEC se queda a la izquierda; la firma cruza a la derecha.
+def test_la_firma_del_labia_va_debajo_del_logo_de_chec():
+    """Los dos logos juntos, al pie de la columna izquierda y en ese orden.
 
-    Son dos cosas distintas y ahora se ve: la marca del producto encabeza la columna de
-    lo que se abre, y quien lo hizo firma al pie de lo que explica como funciona.
+    La firma estuvo un tiempo bajo el DIAGRAMA, en la columna derecha, con la idea de
+    que la marca del producto cerrara la columna de lo que se abre y quien lo hizo
+    cerrara la que explica como funciona. Se deshace: separados, los dos logos se leian
+    como dos marcas de dos sitios distintos en vez de como una atribucion.
+
+    El orden importa y es el que la hoja ya suponia -- `.marca + .firma` existe para
+    separarlos justo cuando van pegados --: primero de quien es el producto, despues
+    quien lo construyo.
     """
     pagina = _pagina()
     der = pagina.index('class="col-der"')
-    assert pagina.index('class="marca"') < der, (
-        "el logo de CHEC se fue de la columna izquierda")
-    assert pagina.index('class="firma"') > pagina.index("</svg>"), (
-        "la firma del LabIA no esta debajo del diagrama")
-    assert "Elaborado por" in pagina[pagina.index("</svg>"):], (
+    marca, firma = pagina.index('class="marca"'), pagina.index('class="firma"')
+    assert marca < der and firma < der, (
+        "algun logo se quedo en la columna del diagrama")
+    assert marca < firma, "la firma del LabIA va DEBAJO del logo de CHEC, no encima"
+    assert "Elaborado por" in pagina[marca:der], (
         "el rotulo `Elaborado por` no viajo con su logo")
+    assert pagina.count('class="logos"') == 1, (
+        "quedan dos bloques de logos; los dos van en el mismo")
 
 
 def test_el_logo_del_labia_dobla():
