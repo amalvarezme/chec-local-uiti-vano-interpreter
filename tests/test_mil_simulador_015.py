@@ -880,3 +880,100 @@ def test_el_troceo_no_cambia_el_plan_solo_el_pico_de_memoria():
                 for fid, e in plan.items()}
 
     assert _huella(planes[0]) == _huella(planes[1]) == _huella(planes[2])
+
+
+# --- Si Bajo no se alcanza, al menos BAJAR DE GRUPO -------------------------------
+
+
+def _plan_de_una_bolsa(u_inicial, n_obs, *, valores, max_pasos=4):
+    """Una bolsa con dos controles, para mirar la escalera de objetivos de cerca."""
+    from chec_local_interpreter.vano_controls import Knob
+
+    predictor = _PredictorFalso(_geometria())
+    seleccion = {
+        "fid": ["VA"], "filas": np.arange(2), "instance_bag": np.array([0, 0]),
+        "n_bolsas": 1, "n_obs": np.array([n_obs]),
+    }
+    X = np.full((2, 2), float(u_inicial))
+    knobs = [Knob(id="u_driver", label="u_driver", kind="numeric",
+                  feature_names=("u_driver",), bounds=(min(valores), max(valores)),
+                  categories=None, default=None, step=None)]
+    return plan_hacia_clase_minima(
+        predictor, X, seleccion=seleccion, feature_names=["u_driver", "otro"],
+        knobs=knobs, puntos=len(valores), max_pasos=max_pasos,
+    )["VA"]
+
+
+def test_el_plan_declara_de_que_grupo_partio():
+    """`alcanza` no distingue "ya estaba en Bajo" de "lo llevamos a Bajo".
+
+    Medido sobre DON23L14 V11: de los 103 vanos que el panel contaba como alcanzados,
+    **95 ya estaban en Bajo** antes de tocar nada. El plan solo movia 16. Sin la clase
+    de partida, quien lea el resultado no puede separar las dos cosas.
+    """
+    entrada = _plan_de_una_bolsa(3.0, n_obs=3, valores=[0.0, 3.0])
+
+    assert "clase_base" in entrada
+    assert entrada["clase_base"] == 3
+
+
+def test_bajar_de_grupo_se_reporta_aunque_no_se_llegue_a_bajo():
+    """La pregunta operativa no es solo "llega a Bajo": bajar de Alto a Medio-Alto es
+    una mejora que hay que poder leer.
+
+    Medido sobre DON23L14: en V9, 91 de 93 vanos en Alto reciben un plan de cuatro pasos
+    que baja el UITI y NO cambia el grupo. Sin este campo, esos 91 y los 2 que si bajan
+    se leen igual.
+    """
+    entrada = _plan_de_una_bolsa(3.0, n_obs=3, valores=[0.0, 1.0, 2.0, 3.0])
+
+    assert "baja_de_grupo" in entrada
+    assert entrada["baja_de_grupo"] is (entrada["clase_final"] < entrada["clase_base"])
+
+
+def test_un_plan_que_no_cambia_el_grupo_lo_dice_y_conserva_sus_pasos():
+    """No se recorta: esos pasos SI bajan el UITI, y borrarlos diria "no hay nada que
+    hacer aqui", que es distinto de "esto no te cambia de grupo"."""
+    from chec_local_interpreter.vano_controls import Knob
+
+    predictor = _PredictorFalso(_geometria())
+    seleccion = {"fid": ["VA"], "filas": np.arange(2), "instance_bag": np.array([0, 0]),
+                 "n_bolsas": 1, "n_obs": np.array([3])}
+    X = np.full((2, 2), 3.0)
+    # Un control que solo puede bajar un pelin: no cruza ninguna frontera de grupo.
+    knobs = [Knob(id="u_driver", label="u_driver", kind="numeric",
+                  feature_names=("u_driver",), bounds=(2.8, 3.0), categories=None,
+                  default=None, step=None)]
+
+    entrada = plan_hacia_clase_minima(
+        predictor, X, seleccion=seleccion, feature_names=["u_driver", "otro"],
+        knobs=knobs, puntos=3, max_pasos=4)["VA"]
+
+    assert entrada["baja_de_grupo"] is False
+    assert entrada["clase_final"] == entrada["clase_base"]
+    assert entrada["pasos"], "se quedo sin pasos: se perdio la caida de UITI que si logra"
+    assert entrada["u_final"] < entrada["u_base"]
+
+
+def test_no_se_agrega_obra_despues_de_que_el_vano_ya_bajo_de_grupo():
+    """Cada paso de mas es dinero que no compra ningun cambio de grupo.
+
+    Medido sobre DON23L14 V11: 8 vanos bajaban de grupo y seguian acumulando pasos
+    persiguiendo un Bajo que no alcanzaban -- **18 pasos** de obra que no cambiaban
+    nada. El plan se recorta al primer paso que consigue su grupo final.
+    """
+    from chec_impacto.models.criticality_assignment import asignar_clase
+
+    entrada = _plan_de_una_bolsa(3.0, n_obs=3, valores=[0.0, 1.0, 2.0, 3.0])
+
+    if entrada["baja_de_grupo"]:
+        clases, _ = asignar_clase(
+            np.full(len(entrada["pasos"]), 3.0),
+            np.array([p["u_despues"] for p in entrada["pasos"]]),
+            _geometria(),
+        )
+        # Solo el ULTIMO paso puede tener la clase final: si un paso anterior ya la
+        # tuviera, los de despues son obra que no compro ningun cambio de grupo.
+        assert int(np.asarray(clases)[-1]) == entrada["clase_final"]
+        assert all(int(c) > entrada["clase_final"]
+                   for c in np.asarray(clases)[:-1]), entrada["pasos"]

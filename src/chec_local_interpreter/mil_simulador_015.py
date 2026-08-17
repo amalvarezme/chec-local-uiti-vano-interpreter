@@ -975,15 +975,33 @@ def umbral_u_para_clase_minima(
     None y no un numero inventado: una meta que el simulador no puede cumplir se
     presentaria en el panel como alcanzable.
     """
+    return umbral_u_para_clase(n_obs, geometria, 0, puntos=puntos)
+
+
+def umbral_u_para_clase(
+    n_obs: float, geometria: Any, clase: int, *, puntos: int = REJILLA_UMBRAL_U
+) -> float | None:
+    """El `u` mas alto con el que una bolsa de `n_obs` eventos cae en `clase`, o None.
+
+    Generaliza `umbral_u_para_clase_minima`, que solo sabia preguntar por el grupo mas
+    bajo. Hace falta porque el objetivo del plan es una ESCALERA: se apunta a Bajo, y
+    cuando Bajo no existe para esa cantidad de eventos, se apunta al grupo de abajo del
+    suyo. Sin esta version, un vano al que Bajo le queda fuera por construccion se
+    quedaba sin meta y gastaba las cuatro rondas persiguiendo algo imposible.
+
+    Rejilla y no biseccion, por la misma razon de siempre: la clase sale del centroide
+    MAS CERCANO en un plano y nada garantiza que al subir `u` con `n_obs` fijo se
+    recorran los grupos en orden.
+    """
     rejilla = np.concatenate([[0.0], np.logspace(-6, 4, int(puntos))])
     clases, _ = asignar_clase(
         np.full(len(rejilla), float(n_obs)), rejilla, geometria
     )
     clases = np.asarray(clases)
-    minima = int(clases.min()) if clases.size else 0
-    if minima != 0 or not (clases == 0).any():
+    objetivo = int(clase)
+    if not (clases == objetivo).any():
         return None
-    return float(rejilla[clases == 0].max())
+    return float(rejilla[clases == objetivo].max())
 
 
 def candidatos_de_knob(
@@ -1207,6 +1225,29 @@ def relevancia_hacia_uiti_minimo(
     return resultado
 
 
+# --- Al reentrenar el MIL, o al cambiar las variables a simular ------------------------
+#
+# Todo lo que hay debajo esta calibrado contra ESTE artefacto y ESTE
+# `data/Variables_simular.xlsx`. Los numeros que sostienen sus decisiones -- cuantos
+# pasos, cuantos puntos de rejilla, si vale la pena buscar mejor -- se midieron, y no
+# sobreviven a un reentrenamiento ni a un ajuste de rangos. Hay que rehacerlos, y el
+# procedimiento esta en `docs/mil-vano-ventana-estado-y-mejoras.md`.
+#
+# Lo que se rompe EN SILENCIO, sin lanzar ningun error:
+#
+# 1. Los candidatos salen del `.xlsx` via `candidatos_del_panel`. Una variable nueva, un
+#    `Tipo` distinto o un rango movido cambian el diagnostico con ellos. Si el archivo
+#    ofrece una categoria que el codificador no conoce, la simulacion falla a mitad;
+#    `incoherencias_del_catalogo` lo reporta.
+# 2. El vocabulario de `Tipo` es un contrato: `categorical | numeric | int`, mas el
+#    nombre anterior `numeric-entero`. Un tipo nuevo cae al deslizador continuo sin
+#    avisar, que es como se colo el defecto al renombrarse la columna.
+# 3. La meta la fija `n_obs`, que NUNCA se simula. El umbral del grupo Bajo se desploma
+#    con los eventos -- 4,41 con uno, 0,0029 con cuarenta y seis --, asi que otra
+#    geometria mueve todas las metas a la vez. Eso decide cuantos vanos son alcanzables
+#    mucho mas que la calidad del buscador: medido sobre DON23L14 V9, bajar al grupo
+#    Bajo exige 1,37 decadas y las palancas de intervencion dan 0,06.
+#
 MAX_FILAS_POR_PASADA = 50_000
 """Cuantas filas como mucho arma `plan_hacia_clase_minima` en una sola pasada al modelo.
 
@@ -1394,7 +1435,28 @@ def plan_hacia_clase_minima(
     u_actual = _u_con(estado)
     u_base = u_actual.copy()
     clase, _ = asignar_clase(n_obs, u_actual, predictor.geometria)
-    pendientes = [b for b in range(n_bolsas) if int(np.asarray(clase)[b]) != 0]
+    clase_base = np.asarray(clase, dtype=int)
+
+    # La ESCALERA de objetivos. Se apunta a Bajo; cuando Bajo no existe para esa
+    # cantidad de eventos -- y con eventos suficientes deja de existir: el umbral cae de
+    # 4,41 con un evento a 0,0029 con cuarenta y seis -- se apunta al grupo de abajo del
+    # suyo. Antes, un vano en ese caso se quedaba sin meta y gastaba las cuatro rondas
+    # persiguiendo algo imposible; ahora para en cuanto consigue bajar un grupo, que es
+    # una mejora real y es donde termina la orden de trabajo.
+    objetivo_clase: list[int] = []
+    objetivo_efectivo: list[float | None] = []
+    for b in range(n_bolsas):
+        if objetivos[b] is not None:
+            objetivo_clase.append(0)
+            objetivo_efectivo.append(objetivos[b])
+            continue
+        siguiente = max(int(clase_base[b]) - 1, 0)
+        objetivo_clase.append(siguiente)
+        objetivo_efectivo.append(
+            umbral_u_para_clase(float(n_obs[b]), predictor.geometria, siguiente)
+        )
+
+    pendientes = [b for b in range(n_bolsas) if int(clase_base[b]) != objetivo_clase[b]]
     pasos: list[list[dict[str, Any]]] = [[] for _ in range(n_bolsas)]
 
     for _ronda in range(int(max_pasos)):
@@ -1424,7 +1486,7 @@ def plan_hacia_clase_minima(
             pasos[b].append({"knob_id": knob.id, "label": knob.label, "valor": valor,
                              "u_despues": u_mejor})
             u_actual[b] = u_mejor
-            objetivo = objetivos[b]
+            objetivo = objetivo_efectivo[b]
             if objetivo is None or u_mejor > objetivo:
                 siguen.append(b)
         pendientes = siguen
@@ -1435,12 +1497,41 @@ def plan_hacia_clase_minima(
     for b, fid in enumerate(fids):
         if fid in resultado:
             continue
+        baja = bool(clase_final[b] < clase_base[b])
+        propios = pasos[b]
+        if baja and propios:
+            # Se recorta al PRIMER paso que ya consigue el grupo final. Lo que viene
+            # despues es obra que no compro ningun cambio de grupo, y una orden de
+            # trabajo no se cotiza por lo que no cambia nada. Medido sobre DON23L14 V11:
+            # 8 vanos bajaban de grupo y seguian acumulando pasos detras de un Bajo que
+            # no alcanzaban -- 18 pasos de mas.
+            #
+            # Solo cuando BAJA. Un plan que no cambia el grupo conserva sus pasos
+            # enteros: esos si bajan el UITI, y recortarlos diria "no hay nada que hacer
+            # aqui", que es otra cosa.
+            clases_paso, _ = asignar_clase(
+                np.full(len(propios), float(n_obs[b])),
+                np.array([float(p["u_despues"]) for p in propios]),
+                predictor.geometria,
+            )
+            clases_paso = np.asarray(clases_paso, dtype=int)
+            llegan = np.flatnonzero(clases_paso <= int(clase_final[b]))
+            if llegan.size:
+                propios = propios[: int(llegan[0]) + 1]
         resultado[fid] = {
             "u_base": float(u_base[b]),
             "u_final": float(u_actual[b]),
+            "clase_base": int(clase_base[b]),
             "clase_final": int(clase_final[b]),
             "objetivo_u": objetivos[b],
+            # A que grupo se apunto de verdad: 0 cuando Bajo existe para esos eventos,
+            # y el de abajo del suyo cuando no. Sin esto, `alcanza: False` no distingue
+            # "no llegamos" de "Bajo no era alcanzable ni en teoria".
+            "objetivo_clase": int(objetivo_clase[b]),
             "alcanza": bool(clase_final[b] == 0),
-            "pasos": pasos[b],
+            # La pregunta operativa no es solo si llega a Bajo: bajar de Alto a
+            # Medio-Alto es una mejora, y sin este campo se lee igual que no moverse.
+            "baja_de_grupo": baja,
+            "pasos": propios,
         }
     return resultado

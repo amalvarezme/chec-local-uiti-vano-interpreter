@@ -71,6 +71,38 @@ coordenadas. Al simular sobre eventos individuales eso es correcto; si alguna
 vez se simula una ventana completa hay que pasar el `n_obs` real, o la clase
 saldrá sistemáticamente baja.
 
+### Si se reentrena el MIL, o si cambian las variables a simular: hay que rehacer estas medidas
+
+El diagnóstico —el ranking de relevancia y el plan hacia el grupo Bajo— está calibrado
+contra **este** artefacto y contra **este** `data/Variables_simular.xlsx`. Sus dos
+decisiones de fondo se tomaron con números medidos, y esos números no sobreviven a un
+reentrenamiento ni a un ajuste de rangos. Al cambiar cualquiera de los dos, repetir:
+
+| Qué se midió | Valor de hoy (DON23L14) | Con qué se rehace |
+|---|---|---|
+| Cuántos pasos aporta el descenso goloso | 4, 6, 8 y 11 dan lo **mismo** → `MAX_PASOS_PLAN = 4` | correr el plan con varios `max_pasos` y comparar vanos que bajan de grupo |
+| Si buscar mejor sirve | 3.000 combinaciones al azar por vano **empatan** con el goloso | búsqueda aleatoria conjunta sobre los knobs de intervención, y comparar el techo de caída |
+| Cuánto hay que bajar para cambiar de grupo | mediana **1,37** décadas en V9 contra **0,06** logradas | `umbral_u_para_clase` contra el `u` base y el `u` final |
+| Nueve puntos de rejilla | 10 de 15 controles numéricos tienen su óptimo en el interior | barrido por control y ver dónde cae el mínimo |
+
+Y tres acoples que se rompen **en silencio**, sin lanzar ningún error:
+
+1. **Los candidatos salen del `.xlsx`, no del dato.** `candidatos_del_panel` lee tipo,
+   rango y lista cerrada del archivo. Si se agrega una variable simulable, o se cambia
+   `Tipo`, `vmin`/`vmax` u `Opciones`, el diagnóstico cambia con ella —y si el archivo
+   ofrece un valor que el codificador del modelo no conoce, la simulación falla a mitad.
+   `incoherencias_del_catalogo` lo reporta; conviene mirarlo tras cada ajuste.
+2. **El vocabulario de `Tipo` es un contrato.** Hoy `categorical | numeric | int`, y
+   `int` se entiende junto al nombre anterior `numeric-entero`. Un tipo nuevo cae al
+   deslizador continuo sin avisar, que fue exactamente lo que pasó al renombrarse.
+3. **La meta la fija `n_obs`, que nunca se simula.** El umbral de Bajo se desploma con
+   los eventos —4,41 con uno, 0,0029 con cuarenta y seis—, así que un modelo con otra
+   geometría mueve todas las metas a la vez. Es lo que decide cuántos vanos son
+   alcanzables, mucho más que la calidad del buscador.
+
+Las pruebas que fijan estos contratos: `tests/test_variables_simular.py`,
+`tests/test_mil_simulador_015.py` y `tests/test_simulador_variables.py`.
+
 ## 3. Mejoras pendientes, por prioridad
 
 ### P0 — Determinismo. Bloquea todo lo demás
