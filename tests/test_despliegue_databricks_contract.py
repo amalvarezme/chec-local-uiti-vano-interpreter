@@ -1,13 +1,13 @@
-"""Static contract tests for the Databricks deployment command family.
+"""Static contract tests for the Databricks deployment command.
 
-These pin the three properties that were actually broken before, and that
-prose alone will silently lose again on the next edit:
+These pin the properties that were actually broken before, and that prose alone
+will silently lose again on the next edit:
 
-1. every command reads the shared contract and states the never-abort rule,
-2. no command still tells the assistant to abort at the first privilege wall,
-3. the shared contract still documents the restrictions met in the field.
-
-Style follows `tests/test_experimento_kaggle_contract.py`.
+1. the command reads the shared contract and states the never-abort rule,
+2. it does not tell the assistant to abort at the first privilege wall,
+3. the shared contract still documents the restrictions met in the field,
+4. each of the three stages checks Databricks BEFORE uploading anything,
+5. the run log covers the three stages, one row each, whatever happened.
 """
 
 from __future__ import annotations
@@ -22,38 +22,37 @@ CMD_DIR = PROJECT_ROOT / ".claude" / "commands"
 CONTRATO = CMD_DIR / "_contrato-despliegue-databricks.md"
 BITACORA = PROJECT_ROOT / "scripts" / "bitacora_despliegue.py"
 
-# La familia entera. Eran ocho hasta agosto de 2026; cinco se retiraron a la vez
-# (`sdd/retire-base-apps-notebooks`, fase 5) y no por limpieza:
+# La familia entera es UN comando desde 2026-08-17. Eran ocho a mediados de agosto y
+# se fueron retirando por dos motivos distintos, que conviene no confundir:
 #
 #   * `/app-vano-clima`, `/app-agrupamiento-vanos-circuitos`,
 #     `/app-trayectorias-circuitos` y `/app-trayectorias-vanos` publicaban un tablero
 #     cada uno parcheando su `.ipynb` por contenido. Ese codigo se fue a
 #     `src/chec_tableros/` y los cuadernos se borraron: los cuatro apuntaban a archivos
-#     que ya no existen. `/app-criticidad-chec` los reemplaza con UNA app de cuatro
-#     rutas, que ademas gasta un cupo en vez de cuatro contra un tope de tres.
-#   * `/subir-notebooks-databricks` subia seis cuadernos y quedo uno. Su procedimiento
-#     -- que sigue siendo correcto -- se absorbio en el paso 4 de `/subir-a-databricks`.
-FAMILIA = (
-    "app-criticidad-chec.md",
-    "app-simulador-vano.md",
-    "subir-a-databricks.md",
-    "subir-datos-databricks.md",
-)
+#     que ya no existen.
+#   * `/subir-notebooks-databricks`, `/subir-datos-databricks`, `/app-criticidad-chec` y
+#     `/app-simulador-vano` seguian siendo CORRECTOS. Se retiraron porque un despliegue
+#     partido en cuatro invocaciones deja cuatro reportes parciales y obliga al usuario a
+#     acordarse del orden. Su procedimiento no se perdio: vive en los pasos 3, 4 y 5 de
+#     `/subir-a-databricks`, que es hoy el unico que habla con Databricks.
+FAMILIA = ("subir-a-databricks.md",)
 
 RETIRADOS = (
     "app-agrupamiento-vanos-circuitos.md",
+    "app-criticidad-chec.md",
+    "app-simulador-vano.md",
     "app-trayectorias-circuitos.md",
     "app-trayectorias-vanos.md",
     "app-vano-clima.md",
+    "subir-datos-databricks.md",
     "subir-notebooks-databricks.md",
 )
 
 
 @pytest.mark.parametrize("nombre", RETIRADOS)
 def test_los_comandos_retirados_no_volvieron(nombre: str):
-    """Un comando que publica parcheando un cuaderno inexistente no falla: publica un
-    tablero vacio. Se borran en vez de dejarlos con un aviso, porque un aviso en la
-    cabecera no impide que alguien invoque el comando."""
+    """Se borran en vez de dejarlos con un aviso, porque un aviso en la cabecera no
+    impide que alguien invoque el comando."""
     assert not (CMD_DIR / nombre).exists()
 
 
@@ -62,7 +61,7 @@ def _leer(p: Path) -> str:
 
 
 def test_el_contrato_compartido_existe():
-    assert CONTRATO.exists(), "el contrato compartido es la referencia de toda la familia"
+    assert CONTRATO.exists(), "el contrato compartido es la referencia del comando"
 
 
 def test_la_herramienta_de_bitacora_existe():
@@ -84,7 +83,7 @@ def test_cada_comando_apunta_al_contrato(nombre: str):
 
 @pytest.mark.parametrize("nombre", FAMILIA)
 def test_cada_comando_nombra_el_rango_completo_de_restricciones(nombre: str):
-    """Los cuatro decian "D1–D9" mucho despues de que el contrato llegara a D10.
+    """Decia "D1–D9" mucho despues de que el contrato llegara a D10.
 
     No es cosmetico: la cabecera es lo unico que dice cuantas restricciones ya
     diagnosticadas hay, y un comando que anuncia nueve invita a re-diagnosticar la
@@ -202,38 +201,59 @@ def test_el_contrato_conserva_las_tres_unicas_causas_de_parada():
 
 
 def test_el_contrato_exige_una_sola_bitacora_al_delegar():
-    """Una corrida que abre cinco apps no puede dejar seis reportes parciales."""
+    """Una corrida que abre dos apps no puede dejar tres reportes parciales."""
     texto = _leer(CONTRATO)
     assert "A1." in texto
     assert "Only the outermost command calls" in texto
 
 
 # --------------------------------------------------------------------------
-# El orquestador /subir-a-databricks
+# El comando unico /subir-a-databricks
 # --------------------------------------------------------------------------
 
 ORQUESTADOR = CMD_DIR / "subir-a-databricks.md"
 
-LAS_DOS_APPS = [
-    ("/app-criticidad-chec", "criticidad-chec"),
-    ("/app-simulador-vano", "simulador-vano"),
-]
+LAS_DOS_APPS = ("criticidad-chec", "simulador-vano")
 
-# Los tres artefactos que suben, y nada mas. Es el contrato entero de este comando
-# desde agosto de 2026, y sustituye a "seis cuadernos y cinco apps".
+# Los tres artefactos que suben, y nada mas. Es el contrato entero de este comando.
 ARTEFACTOS = ("data/", "notebooks/05_mil_vano_ventana.ipynb", "dos aplicaciones")
 
+# Las tres etapas, en el orden en que el comando las recorre, con el encabezado que
+# cada una tiene que llevar. El encabezado NO es decoracion: enuncia la compuerta.
+ETAPAS = (
+    ("3", "Are the data in the Volume? Upload only if not"),
+    ("4", "Are the apps deployed and serving? Deploy only if not"),
+    ("5", "Is the notebook in the Workspace? Import only if not"),
+)
 
-def test_el_orquestador_verifica_los_datos_antes_de_subirlos():
+
+@pytest.mark.parametrize("numero,titulo", ETAPAS, ids=[t[0] for t in ETAPAS])
+def test_cada_etapa_verifica_databricks_antes_de_subir(numero: str, titulo: str):
+    """La compuerta esta en el TITULO del paso y no enterrada en su prosa.
+
+    Sin ella el comando vuelve a subir 566 MB para descubrir que ya estaban, y a
+    redesplegar una app sana -- que en el simulador son diez minutos de `pip install
+    torch` a cambio de nada.
+    """
     texto = _leer(ORQUESTADOR)
-    assert "Are the data in the Volume? Upload only if not" in texto
-    assert "/subir-datos-databricks" in texto
+    assert f"## {numero}. {titulo}" in texto, (
+        f"el paso {numero} perdio su compuerta de verificacion en el titulo")
 
 
-def test_el_orquestador_sube_el_05_como_cuaderno_y_no_como_app():
+@pytest.mark.parametrize("numero,titulo", ETAPAS, ids=[t[0] for t in ETAPAS])
+def test_cada_etapa_dice_que_hacer_en_los_dos_casos(numero: str, titulo: str):
+    """Una compuerta que solo dice que hacer cuando falta algo se lee como una orden
+    de subir siempre."""
     texto = _leer(ORQUESTADOR)
-    assert "as a notebook, not an app" in texto
-    assert "05_mil_vano_ventana" in texto
+    inicio = texto.index(f"## {numero}. {titulo}")
+    fin = texto.index("\n## ", inicio + 1)
+    etapa = texto[inicio:fin]
+    assert "**Read-only check first" in etapa, (
+        f"el paso {numero} no empieza por la comprobacion de solo lectura")
+    assert "**If everything is present**" in etapa, (
+        f"el paso {numero} no dice que hacer cuando ya esta todo en Databricks")
+    assert "**If anything is missing**" in etapa, (
+        f"el paso {numero} no dice que hacer cuando falta algo")
 
 
 @pytest.mark.parametrize("artefacto", ARTEFACTOS)
@@ -252,24 +272,50 @@ def test_el_orquestador_absorbio_la_subida_del_cuaderno():
     solos, y que la copia que se sube es una COPIA.
     """
     texto = _leer(ORQUESTADOR)
-    paso4 = texto.split("## 4.")[1].split("## 5.")[0]
-
-    # Se busca la DELEGACION, no la mencion. El paso explica que antes delegaba y por
-    # que dejo de hacerlo, y esa explicacion es justo lo que hay que conservar: prohibir
-    # el nombre empujaria a borrarla. Es el mismo criterio que ya gobierna las pruebas
-    # sobre el codigo migrado.
-    assert "Delegate to `/subir-notebooks-databricks`" not in paso4, (
-        "el paso 4 sigue delegando en un comando retirado")
     for saber in ("10 MB", "mkdirs", "COPY in the scratch directory"):
-        assert saber in texto, f"el paso 4 perdio lo que sabia sobre {saber!r}"
+        assert saber in texto, f"el paso del cuaderno perdio lo que sabia sobre {saber!r}"
 
 
-@pytest.mark.parametrize("comando,defecto", LAS_DOS_APPS)
-def test_cada_app_esta_en_la_tabla(comando: str, defecto: str):
+def test_el_orquestador_absorbio_la_subida_de_los_datos():
+    """`/subir-datos-databricks` se retiro el 2026-08-17. Lo que sabia y que un
+    `fs cp -r data` a secas pierde: que el CLI no tiene filtro de exclusion y arrastra
+    `.DS_Store`, que `site/data/variables.json` es la unica excepcion fuera de `data/`,
+    y que un CSV de 130 bytes es un puntero de Git LFS sin traer."""
     texto = _leer(ORQUESTADOR)
-    inicio = texto.index("| # | Comando |")
+    for saber in (
+        "databricks fs cp -r data",
+        ".DS_Store",
+        "site/data/variables.json",
+        "git lfs pull",
+    ):
+        assert saber in texto, f"el paso de los datos perdio lo que sabia sobre {saber!r}"
+
+
+def test_el_orquestador_absorbio_el_despliegue_de_las_dos_apps():
+    """`/app-criticidad-chec` y `/app-simulador-vano` se retiraron el 2026-08-17.
+
+    Lo que sabian y que no se puede re-derivar leyendo el codigo: que los paneles y el
+    paquete se construyen AQUI con el mismo constructor que corre la aplicacion de
+    escritorio -- nunca ejecutando celdas ni parcheando un cuaderno --, que el cuaderno
+    servido va sin boton de cerrar, y que el permiso del Volume se declara como recurso
+    de la app en vez de otorgarse a mano.
+    """
+    texto = _leer(ORQUESTADOR)
+    for saber in (
+        "scripts/empacar_app_databricks.py paneles",
+        "scripts/empacar_app_databricks.py fuente",
+        "aplicaciones/06_simulador/construir.py",
+        "con_cierre=False",
+        "uc_securable",
+    ):
+        assert saber in texto, f"el despliegue perdio lo que sabia sobre {saber!r}"
+
+
+@pytest.mark.parametrize("defecto", LAS_DOS_APPS)
+def test_cada_app_esta_en_la_tabla(defecto: str):
+    texto = _leer(ORQUESTADOR)
+    inicio = texto.index("| # | App |")
     tabla = texto[inicio : texto.index("\n\n", inicio)]
-    assert comando in tabla, f"falta {comando} en la tabla de apps"
     assert defecto in tabla, f"falta el nombre por defecto {defecto}"
 
 
@@ -334,31 +380,83 @@ def test_el_push_intenta_primero_el_plano_y_conoce_el_bloqueo_de_lfs():
     assert "locksverify" in contrato
 
 
-def test_el_orquestador_no_reabre_la_bitacora_de_los_delegados():
+# --------------------------------------------------------------------------
+# La bitacora: una fila por etapa, pasara lo que pasara
+# --------------------------------------------------------------------------
+
+
+def test_la_bitacora_es_lo_primero_que_se_abre():
+    """Antes de la primera pregunta: una corrida que muere en el paso 0 tambien deja
+    documento."""
     texto = _leer(ORQUESTADOR)
-    assert "A1" in texto
+    assert "bitacora_despliegue.py init" in texto
     assert "$RUTA_BITACORA" in texto
 
 
-RETIRADOS = [
+@pytest.mark.parametrize("numero,titulo", ETAPAS, ids=[t[0] for t in ETAPAS])
+def test_cada_etapa_deja_su_paso_en_la_bitacora(numero: str, titulo: str):
+    """El pedido entero de este comando es un reporte que diga, etapa por etapa, si
+    pudo o que lo bloqueo. Una etapa que no escribe su paso desaparece del documento y
+    se lee como si no hubiera hecho falta."""
+    texto = _leer(ORQUESTADOR)
+    inicio = texto.index(f"## {numero}. {titulo}")
+    fin = texto.index("\n## ", inicio + 1)
+    etapa = texto[inicio:fin]
+    assert "bitacora_despliegue.py paso" in etapa, (
+        f"el paso {numero} no registra su resultado en la bitacora")
+
+
+def test_el_reporte_lleva_una_fila_por_etapa():
+    texto = _leer(ORQUESTADOR)
+    assert "one row per stage" in texto, (
+        "el reporte final tiene que resumir las tres etapas, cada una con su estado")
+
+
+def test_la_bitacora_registra_las_restricciones_con_quien_desbloquea():
+    """Un muro de permisos anotado sin decir quien lo levanta obliga al usuario a
+    volver a diagnosticarlo."""
+    texto = _leer(ORQUESTADOR)
+    assert "bitacora_despliegue.py restriccion" in texto
+    assert "--quien-desbloquea" in texto
+
+
+def test_una_etapa_bloqueada_no_detiene_las_otras():
+    """Es la regla B aplicada a la forma concreta de este comando: el valor de la
+    corrida esta en salir con la lista COMPLETA de muros, no con el primero."""
+    texto = _leer(ORQUESTADOR)
+    assert "The never-abort rule matters more here than anywhere else" in texto
+
+
+RETIRADOS_STACK = [
     CMD_DIR / "deploy-databricks-dashboard.md",
     PROJECT_ROOT / "notebooks" / "databricks",
 ]
 
 
-@pytest.mark.parametrize("ruta", RETIRADOS, ids=lambda r: r.name)
+@pytest.mark.parametrize("ruta", RETIRADOS_STACK, ids=lambda r: r.name)
 def test_el_stack_lakeview_quedo_borrado(ruta: Path):
     """El dashboard Lakeview y el job de tablas se retiraron por completo."""
     assert not ruta.exists(), f"{ruta} debio borrarse con el stack de Lakeview"
 
 
-@pytest.mark.parametrize("nombre", FAMILIA)
-def test_ningun_comando_referencia_el_comando_borrado(nombre: str):
-    """Media familia delegaba en sus secciones 1 y 2; ahora viven en el contrato."""
-    texto = _leer(CMD_DIR / nombre)
-    assert "deploy-databricks-dashboard.md" not in texto, (
-        f"{nombre} apunta a un comando que ya no existe"
-    )
+DELEGACIONES_MUERTAS = (
+    "Delegate to `/subir-datos-databricks`",
+    "Delegate to `/subir-notebooks-databricks`",
+    "delegate to `/subir-datos-databricks`",
+    "deploy-databricks-dashboard.md",
+)
+
+
+@pytest.mark.parametrize("delegacion", DELEGACIONES_MUERTAS)
+def test_el_comando_no_delega_en_nada_que_ya_no_existe(delegacion: str):
+    """Se busca la DELEGACION, no la mencion.
+
+    La prosa explica que estos comandos existieron y por que se absorbieron, y esa
+    explicacion es justo lo que hay que conservar: prohibir el nombre empujaria a
+    borrarla. Es el mismo criterio que gobierna las pruebas sobre el codigo migrado.
+    """
+    assert delegacion not in _leer(ORQUESTADOR), (
+        f"el comando sigue delegando en algo retirado: {delegacion!r}")
 
 
 def test_el_perfil_y_el_warehouse_sobrevivieron_en_el_contrato():

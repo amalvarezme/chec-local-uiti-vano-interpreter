@@ -1,92 +1,124 @@
 ---
-description: Orquesta la subida completa a Databricks — tres artefactos y nada mas: los datos en el Volume, el cuaderno 05 en el Workspace, y las dos aplicaciones (criticidad-chec con los cuatro tableros, y el simulador). Cierra con commit y push de la bitacora. Sigue hasta el final aunque tope con permisos, para que el reporte liste todas las restricciones. Pregunta solo la URL del workspace destino.
+description: Unico comando de despliegue a Databricks. Recorre tres etapas y cada una VERIFICA antes de subir: los datos en el Volume, las dos aplicaciones en compute, y el cuaderno mil_vano en el Workspace. Lo que ya esta, no se vuelve a subir. Deja una bitacora en Markdown con lo que logro cada etapa, los permisos que le faltaron y los errores exactos. Sigue hasta el final aunque tope con un muro. Pregunta solo la URL del workspace destino.
 ---
 
 > **Read `.claude/commands/_contrato-despliegue-databricks.md` before anything else.** It is mandatory and it overrides what follows:
 > - **A. Run log** — open the bitacora *before* asking the user anything, record every numbered step as you finish it, and always close it. Its path and final state are part of the report back to the user.
-> - **A1. One log per run** — this command delegates. It owns the log; every delegated command reuses `$RUTA_BITACORA` instead of calling `init`. One report, not four.
+> - **A1. One log per run** — this command no longer delegates to anything, so there is exactly one log and it belongs to this run. Never call `init` twice.
 > - **B. Never abort** — a restriction gets recorded and worked around; the command runs to the end regardless. Wherever this file says "stop and report", rule B applies instead.
 > - **C. Destination** — the **workspace URL is asked on every run**, never inferred from a profile that happens to have a live session; the profile is derived from it (E1). And `workspace.default.chec-simulador` below is a default, not a requirement: resolve it at runtime and substitute the resolved value into every path here.
 > - **D. Known restrictions** — D1–D10. If one shows up, do not re-diagnose it.
 
-Follow this exact sequence when `/subir-a-databricks` is invoked. It is the **top-level orchestrator** of the family: it owns the order of operations and the single run log, and it delegates every individual piece of work to the command that already owns it. Read those command files when this one says so, rather than re-deriving their logic — that cross-reference is what keeps the family in sync instead of drifting.
+Follow this exact sequence when `/subir-a-databricks` is invoked. It is the **only**
+command in this repository that talks to Databricks: it owns the order of operations, the
+single run log, and the whole procedure for each of the three artifacts.
 
 ## Tres artefactos, y nada mas
 
 Lo que sube a Databricks es exactamente esto:
 
-| # | Artefacto | Como llega |
-|---|---|---|
-| 1 | `data/` | archivos en el Volume, via `/subir-datos-databricks` |
-| 2 | `notebooks/05_mil_vano_ventana.ipynb` | cuaderno en el Workspace, **paso 4 de aqui** |
-| 3 | dos aplicaciones | `/app-criticidad-chec` y `/app-simulador-vano` |
+| # | Artefacto | Donde queda | Etapa |
+|---|---|---|---|
+| 1 | `data/` | archivos en el Volume de Unity Catalog | **3** |
+| 2 | dos aplicaciones | Databricks Apps, cada una en su compute | **4** |
+| 3 | `notebooks/05_mil_vano_ventana.ipynb` | cuaderno en el Workspace | **5** |
 
-Eran **seis cuadernos y cinco apps** hasta agosto de 2026, con una tabla de prioridad
-porque el workspace topa en tres apps y la cuarta no cabia nunca. Los cuatro tableros
-estaticos dejaron de ser cuadernos -- su codigo es `src/chec_tableros/` -- y se
-publican juntos como una sola app con cuatro rutas. Con dos apps, el cupo de tres deja
-de ser una decision.
+Eran **seis cuadernos y cinco apps** hasta agosto de 2026, repartidos en ocho comandos.
+Hoy es un comando y tres etapas, y las dos reducciones tienen motivos distintos:
 
-Y el paso 4 ya no delega: `/subir-notebooks-databricks` existia para subir seis
-cuadernos y queda uno. Su procedimiento -- que sigue siendo correcto -- se absorbio
-aqui dentro.
+- Los cuatro tableros estaticos dejaron de ser cuadernos — su codigo es
+  `src/chec_tableros/` — y se publican juntos como **una** app de cuatro rutas. Con dos
+  apps, el cupo de tres del workspace deja de ser una decision.
+- Los otros cuatro comandos (`/subir-datos-databricks`, `/subir-notebooks-databricks`,
+  `/app-criticidad-chec`, `/app-simulador-vano`) seguian siendo **correctos**. Se
+  retiraron el 2026-08-17 porque un despliegue partido en cuatro invocaciones deja cuatro
+  reportes parciales y obliga al usuario a acordarse del orden. Su procedimiento —
+  ganado a golpes contra el workspace real — vive completo en los pasos 3, 4 y 5.
 
 El pipeline entero:
 
 ```
 0. entradas  →  1. perfil/identidad  →  2. destino UC
                             ↓
-3. ¿estan los datos en el Volume?  →  no: /subir-datos-databricks
+3. ¿estan los datos en el Volume?      →  no: subirlos
                             ↓
-4. cuaderno 05 al Workspace (cuaderno, NO app)
+4. ¿estan las dos apps en compute?     →  no: desplegarlas
                             ↓
-5. las dos apps: /app-criticidad-chec  y  /app-simulador-vano
+5. ¿esta el cuaderno en el Workspace?  →  no: importarlo
                             ↓
 6. commit y push de la bitacora  →  7. reporte
 ```
 
-**The never-abort rule matters more here than anywhere else.** A permissions wall in step 3 does not excuse skipping steps 4–6: the point of this command is to come out the other end with the *complete* list of what blocks a full deployment, so the user can take one list to whoever owns the catalog instead of discovering the walls one session at a time.
+**Las tres etapas son compuertas, no ordenes de subir.** Cada una empieza preguntandole a
+Databricks que hay ya, y solo actua sobre lo que falta. Sin eso, una corrida de rutina
+vuelve a mover 566 MB de CSV que ya estaban y vuelve a redesplegar una app sana — que en
+el simulador son diez minutos de `pip install torch` a cambio de nada.
+
+**The never-abort rule matters more here than anywhere else.** A permissions wall in
+stage 3 does not excuse skipping stages 4, 5 and 6: the point of this command is to come
+out the other end with the *complete* list of what blocks a full deployment, so the user
+can take one list to whoever owns the catalog instead of discovering the walls one
+session at a time.
 
 ## Scope
 
-**Deploys apps.** This is a deliberate reversal of the previous version of this command, which forbade it. Apps are now the main output.
+**Deploys apps.** This is a deliberate reversal of an older version of this command, which
+forbade it. Apps are now a main output.
 
-Still forbidden: MUST NOT modify any file under `notebooks/` or `src/` (what gets uploaded is always a staged copy), and MUST NOT create any `site`-named path inside the Volume — the project's `site/` tree is only ever regenerated by a local run.
+Still forbidden: MUST NOT modify any file under `notebooks/` or `src/` (what gets uploaded
+is always a staged copy), and MUST NOT create any `site`-named path inside the Volume —
+the project's `site/` tree is only ever regenerated by a local run.
 
-**Retired, not deferred**: the Delta tables job and the Lakeview dashboard are gone. `/deploy-databricks-dashboard` and `notebooks/databricks/` were deleted along with them. This family no longer creates a single Delta table, view or dashboard — the only data that travels to Databricks is what the dashboards, the model notebook and the `/report` command actually read, and it travels as files in the Volume.
-
-**Tambien retirados, en agosto de 2026**: `/app-vano-clima`, `/app-agrupamiento-vanos-circuitos`, `/app-trayectorias-circuitos`, `/app-trayectorias-vanos` y `/subir-notebooks-databricks`. Los cuatro primeros publicaban un tablero cada uno parcheando su `.ipynb`; ese codigo se fue a `src/chec_tableros/` y los cuadernos se borraron, asi que los cuatro apuntaban a archivos inexistentes. `/app-criticidad-chec` los reemplaza con una sola app. El quinto subia seis cuadernos y queda uno: su procedimiento esta absorbido en el paso 4.
+**Retired, not deferred**: the Delta tables job and the Lakeview dashboard are gone.
+`/deploy-databricks-dashboard` and `notebooks/databricks/` were deleted along with them.
+This command no longer creates a single Delta table, view or dashboard — the only data
+that travels to Databricks is what the dashboards, the model notebook and the `/report`
+command actually read, and it travels as files in the Volume.
 
 ## 0. Ask the user for the one required input
 
-Ask, and wait:
+Open the bitacora **first**, per contract section A — a run that dies at step 0 still
+leaves a readable document:
+```
+RUTA_BITACORA=$(python3 scripts/bitacora_despliegue.py init --comando /subir-a-databricks)
+```
+
+Then ask, and wait:
 1. **The Databricks workspace URL** (e.g. `https://adb-xxxxxxxxxxxx.0.azuredatabricks.net`).
    Ask it **every run** (contract C0). Never take it from whichever profile happens to
    have a live session, and never from the bitacora of the last run: that is evidence of
    where it went before, not a default for where it goes now.
 
-Do **not** ask for app names. This command uses the default name of each app command (see the table in step 5). Ask only if a default collides with an existing app that is not ours.
+Do **not** ask for app names — the defaults in the table of step 4 are used. Ask only if a
+default collides with an app in the workspace that is not ours. Do **not** ask which
+compute size the simulator needs: step 4c decides it from the measured footprint and
+reports the choice.
 
-Open the bitacora before this question, per contract section A:
-```
-RUTA_BITACORA=$(python3 scripts/bitacora_despliegue.py init --comando /subir-a-databricks)
-```
+If a step below finds a missing prerequisite, **do not ask whether to create it** —
+creating it is this command's job. Only pause for the three things in contract section B.
 
 ## 1. Resolve profile and identity
 
-Follow `.claude/commands/_contrato-despliegue-databricks.md` **section E1** verbatim with the URL from step 0, then confirm with a real call:
+Follow `.claude/commands/_contrato-despliegue-databricks.md` **section E1** verbatim with
+the URL from step 0, then confirm with a real call:
 ```
 databricks current-user me -p <profile> -o json 2>/dev/null
 ```
-Never pipe `2>&1` into a JSON parser (contract D7). Take `userName` for every Workspace path below.
+Never pipe `2>&1` into a JSON parser (contract D7): the CLI intermittently writes a notice
+to stderr and merging it into stdout makes `json.load` die with `Expecting value: line 1
+column 1` on a perfectly healthy call. Take `userName` for every Workspace path below.
 
-An invalid refresh token is one of the three genuine stops (contract B): ask the user to run `databricks auth login --profile <profile>` with the `!` prefix, record it, and stop.
+An invalid refresh token is one of the three genuine stops (contract B): ask the user to
+run `databricks auth login --profile <profile>` with the `!` prefix, record it, and stop.
 
-Confirm the Apps surface exists, since step 5 depends on it:
+Confirm the Apps surface exists and supports sizing, since stage 4 depends on both:
 ```
 databricks apps list -p <profile>
+databricks apps create --help 2>&1 | grep -- --compute-size
 ```
-If the subcommand does not exist, the CLI is too old. Record it `bloqueante`, mark step 5 `omitido`, and **still run steps 3, 4 and 6** — the data and the notebook do not need the Apps API.
+If the subcommand does not exist, the CLI is too old. Record it `bloqueante`, mark stage 4
+`omitido`, and **still run stages 3, 5 and 6** — the data and the notebook do not need the
+Apps API.
 
 ## 2. Resolve the Unity Catalog target
 
@@ -95,170 +127,477 @@ Contract section C, once, here. Every path below uses the result. Record it:
 python3 scripts/bitacora_despliegue.py paso --archivo "$RUTA_BITACORA" \
   --id 2 --titulo "Destino UC resuelto" --estado ok --detalle "<catalogo>.<esquema>.chec-simulador"
 ```
-If it had to deviate from `workspace.default`, that is an `informativa` restriction (D1) — record it so the next run does not rediscover it.
+If it had to deviate from `workspace.default`, that is an `informativa` restriction (D1) —
+record it so the next run does not rediscover it.
+
+Create the Volume if it does not exist:
+```
+databricks api post /api/2.1/unity-catalog/volumes -p <profile> --json '{
+  "catalog_name": "<catalogo>", "schema_name": "<esquema>", "name": "chec-simulador",
+  "volume_type": "MANAGED", "comment": "Datos y artefactos del proyecto CHEC UITI_VANO"
+}'
+```
+If this fails on privileges, **do not stop** (rule B). Only when no catalog anywhere grants
+`CREATE VOLUME` does this become a `bloqueante` restriction — and even then the run
+continues, so the report ends up listing every other wall too, not just the first one.
 
 ## 3. Are the data in the Volume? Upload only if not
 
-Read-only check first. Do not upload 566 MB to find out it was already there:
+**Read-only check first.** Do not upload 566 MB to find out it was already there:
 
 | # | Check | Command |
 |---|---|---|
 | 1 | Volume exists | `databricks fs ls dbfs:/Volumes/<catalogo>/<esquema>/chec-simulador -p <profile>` |
 | 2 | CSV present **and non-trivial** | `databricks fs ls dbfs:/Volumes/.../data -p <profile>` |
 | 3 | GEO shapefiles **with sidecars** | `databricks fs ls dbfs:/Volumes/.../data/GEO -p <profile>` |
+| 4 | Model artifacts | `databricks fs ls dbfs:/Volumes/.../data/models -p <profile>` |
 
-Check 2 must look at the **size**, not just the name: a `Indicadores_vano_v3.csv` of a few hundred bytes is an interrupted upload or a Git-LFS pointer that got mirrored, and it will fail deep inside a job with a parser error instead of a missing-file error. Expect ~566 MB.
+Check 2 must look at the **size**, not just the name: a `Indicadores_vano_v3.csv` of a few
+hundred bytes is an interrupted upload or a Git-LFS pointer that got mirrored, and it will
+fail deep inside a job with a parser error instead of a missing-file error. Expect ~566 MB.
 
-Check 3 must confirm the **set**, not the folder (contract D6): at minimum `MVLINSEC.{shp,shx,dbf,prj}`, `GDBCHEC_TRANSFOR.{shp,shx,dbf,prj}`, `SWITCHES.{shp,shx,dbf,prj}`.
+Check 3 must confirm the **set**, not the folder (contract D6): at minimum
+`MVLINSEC.{shp,shx,dbf,prj}`, `GDBCHEC_TRANSFOR.{shp,shx,dbf,prj}`,
+`SWITCHES.{shp,shx,dbf,prj}`. A shapefile without its sidecars opens as an empty layer, not
+as an error.
 
-**If everything is present**: record the step `ok` with what was found, and go to step 4 without uploading anything.
+**If everything is present**: record the step `ok` naming what was found and its sizes, and
+go to stage 4 without uploading anything.
 
-**If anything is missing**: delegate to `/subir-datos-databricks` against the same workspace URL, reusing the `<profile>` from step 1 and `$RUTA_BITACORA` (contract A1 — it does not open its own log, and it numbers its steps `3.1`, `3.2`…). Do not hand-roll `fs cp`: that command owns the mirror plus the `.DS_Store` / `.gitkeep` / `.openmeteo_cache.sqlite` cleanup, and the shapefile sidecar set is easy to get wrong.
-
-Before it starts, warn the user that the CSV is **566 MB** and dominates a cold run, and confirm the local file is a real LFS payload, not a ~130-byte pointer:
+**If anything is missing**: mirror the local tree. Before starting, warn the user that the
+CSV is **566 MB** and dominates a cold run, and confirm the local file is a real LFS
+payload, not a ~130-byte pointer:
 ```
 ls -l data/Indicadores_vano_v3.csv
 ```
-If it is tiny, run `git lfs pull` first. A pointer uploaded as data is worse than no upload, because everything downstream then fails in a way that does not point back here.
+If it is tiny, run `git lfs pull` first. A pointer uploaded as data is worse than no
+upload, because everything downstream then fails in a way that does not point back here.
 
-If the upload is refused on privileges, record it `bloqueante` and **continue to steps 4, 5 and 6 anyway**. The apps will fail to render data, and that is exactly the finding worth reporting — a failed app deploy on top of missing data tells the user both walls in one run.
+```
+databricks fs cp -r data dbfs:/Volumes/<catalogo>/<esquema>/chec-simulador/data --overwrite -p <profile>
+```
 
-## 4. Import notebook 05 into the Workspace — as a notebook, not an app
+`databricks fs cp -r` has **no exclude/filter flag** (confirmed empirically), so
+`.DS_Store`, `.gitkeep` and `.openmeteo_cache.sqlite` (a regenerable HTTP cache, not source
+data) travel along with everything else. Clean them up right after — do not leave them in
+the Volume:
+```
+databricks fs rm dbfs:/Volumes/.../data/.DS_Store -p <profile>
+databricks fs rm dbfs:/Volumes/.../data/.gitkeep -p <profile>
+databricks fs rm dbfs:/Volumes/.../data/.openmeteo_cache.sqlite -p <profile>
+databricks fs rm dbfs:/Volumes/.../data/models/.DS_Store -p <profile>
+```
+List the real set first — macOS creates one `.DS_Store` per folder opened in Finder, so the
+list above is a starting point, not an inventory:
+```
+find data -name ".DS_Store" -o -name ".gitkeep" -o -name ".openmeteo_cache.sqlite"
+```
 
-`05_mil_vano_ventana.ipynb` is the **only** notebook the project still has, and it gets
-no app, deliberately: it is not a board to browse, it is the MIL model's readable record
-— its default `EJECUCION = "visualizacion"` loads `mil_vano_ventana_v1.pt` and reports
-the metrics, with all ~20 training cells behind `if ENTRENAR:`. Someone wanting to
-retrain opens it and flips the parameter; nobody wants that behind a web URL.
+Nothing is converted to Delta: `uiti_vano_tables.py` went with the retired Lakeview stack,
+so `indicadores_vano` / `circuit_clustering` / `circuit_geo` no longer exist and nothing
+here creates them. The CSV, the shapefile sidecars, `graphs/*.npy`, `models/*.zip`,
+`optuna/*.journal` and the two `.xlsx` all go up as-is.
 
-This step used to delegate to `/subir-notebooks-databricks`, restricted to `05`. That
-command existed to upload six notebooks and there is one left, so it was retired and its
-procedure — which is correct and hard-won — lives here now.
+**One file from outside `data/`, and only one**: `site/data/variables.json`. Notebook 05
+reads it for the expert A–F thematic classification that labels its feature tables, through
+`_primero_que_exista(site/data/variables.json, data/variables.json)` — which returns `None`
+when neither exists and degrades to unlabelled features instead of failing. Its absence
+costs a column, not a run, which is exactly why nobody noticed it had a consumer:
+```
+databricks fs cp site/data/variables.json dbfs:/Volumes/.../data/variables.json --overwrite -p <profile>
+```
+This is a plain data-file upload, not a `site/` mirror. Nothing else under `site/` is ever
+touched, and nothing is ever written into the Volume under a `site`-named path.
 
-It is also generated output: `scripts/generate_notebook_10.py` writes it. Regenerate
-before uploading if the generator is newer, so what lands is what the generator says.
+Record the outcome, whichever it was:
+```
+python3 scripts/bitacora_despliegue.py paso --archivo "$RUTA_BITACORA" \
+  --id 3 --titulo "Datos en el Volume" --estado <ok|degradado|restriccion|fallo|omitido> \
+  --detalle "<que estaba ya, que se subio, que falto>"
+```
 
-Non-negotiable for the staged copy:
+If the upload is refused on privileges, record it `bloqueante` with
+`bitacora_despliegue.py restriccion --quien-desbloquea "<dueño del catalogo>"` and
+**continue to stages 4, 5 and 6 anyway**. The apps will fail to render data, and that is
+exactly the finding worth reporting — a failed app deploy on top of missing data tells the
+user both walls in one run.
 
-- **It is a COPY in the scratch directory.** Assert before and after:
+## 4. Are the apps deployed and serving? Deploy only if not
+
+| # | App | Nombre por defecto | Que publica | Compute |
+|---|---|---|---|---|
+| 1 | Criticidad CHEC | `criticidad-chec` | los cuatro tableros estaticos, en cuatro rutas | serverless, arranca en segundos |
+| 2 | Simulador | `simulador-vano` | el simulador, con kernel vivo | clasico (D8), arranque de minutos |
+
+**No hay tabla de prioridad y no hace falta.** Eran cinco apps contra un cupo de tres, y
+cual entraba era una decision que este comando tomaba en cada corrida. Son dos: caben
+siempre.
+
+Las dos son distintas en lo unico que importa aqui: la primera **sirve archivos** — sus
+paneles se construyen antes de subir —, y la segunda **necesita un interprete de Python
+vivo** para correr el modelo MIL. Si solo una puede desplegarse, esa asimetria decide cual.
+
+**Read-only check first.** Redesplegar una app sana no es gratis: el simulador tarda diez
+minutos en `pip install torch` y durante ese rato la version anterior deja de servir.
+
+```
+databricks apps list -o json -p <profile> 2>/dev/null
+databricks apps get <app-name> -o json -p <profile> 2>/dev/null
+```
+
+Una app cuenta como desplegada y sana solo con las tres a la vez: `compute_status: ACTIVE`,
+`app_status: RUNNING` y `active_deployment.status: SUCCEEDED`. Dos de tres no alcanzan —
+una app `RUNNING` con el ultimo deploy en `FAILED` esta sirviendo codigo viejo.
+
+Y una app sana puede estar sirviendo contenido **desactualizado**, que es distinto de estar
+caida. Compara antes de decidir:
+
+| Que comparar | Como |
+|---|---|
+| paneles de `criticidad-chec` | `manifiesto.json` de cada panel en el Volume contra el que produce una construccion local |
+| paquete del simulador | `construido_en` de `manifiesto.json` en el Volume contra la fecha del CSV y del `.pt` locales |
+
+**If everything is present**: las dos apps sanas y sirviendo contenido al dia. Anota el paso
+`ok` con el nombre, la URL y el estado de cada una, y pasa a la etapa 5 sin desplegar nada.
+
+**If anything is missing**: despliega **solo** lo que falta — la app que no existe, la que
+esta caida, o la que sirve contenido viejo. Una app sana y al dia no se toca aunque la otra
+haya que rehacerla entera.
+
+### 4a. Inventario y cupo, antes de crear nada
+
+Del listado de arriba, anota tres conteos, porque no son el mismo numero:
+- apps que ya existen **y son nuestras** (un nombre de la tabla) — estas se **redespliegan**
+  si hace falta, no consumen un cupo nuevo,
+- apps que existen y **no** son nuestras — ocupan cupo y este comando no las toca,
+- apps en `DELETING` — **siguen contando contra el tope** (D5) y desaparecen del listado a
+  los ~45 s.
+
+Reporta los tres conteos al usuario en un mensaje antes de crear nada.
+
+**Las cuatro apps viejas.** Si el workspace todavia tiene `vano-clima`,
+`agrupamiento-circuitos`, `trayectorias-circuitos` o `trayectorias-vanos`, esas son las que
+`criticidad-chec` reemplaza. Estan ocupando cupo y sirviendo paneles que ya nadie
+reconstruye. **Preguntar antes de borrar cada una**, de a una, y anotar la respuesta:
+borrar una app es destructivo y publicar la nueva no autoriza retirar las viejas.
+
+On a `has reached the maximum limit of N apps`:
+1. Parse `N` from the message — **there is no quota API**, the limit announces itself in the
+   error text of a `create` that exceeds it.
+2. Record it as a restriction, once, naming which app got in and which did not.
+3. **Stop creating new apps, but do not stop the command.** Mark the remaining row
+   `omitido` with the quota as the reason, and go on to stage 5.
+
+**Deleting an existing app to make room is destructive — ask the user first** (contract B),
+naming exactly which app would go. If they decline, that is a complete answer: record it and
+continue. After a delete, poll `apps list` until the name is *gone* (~45 s).
+
+### 4b. Criticidad CHEC — cuatro tableros, una app, cero clusters
+
+Los cuatro paneles se construyen **aqui**, con el entorno del repositorio, antes de subir
+nada: no hay job, no hay cluster, no hay cuaderno. Medido en esta maquina: menos de **30 s**
+y **14,7 MB** ya comprimidos.
+
+```
+python3 scripts/empacar_app_databricks.py paneles --destino <scratch>/paneles
+```
+
+Imprime una entrada JSON por tablero con `estado` y su tamano o el motivo del fallo. Tres
+propiedades que ya garantiza, y que no hay que reimplementar: construye con
+`chec_tableros.<modulo>.construir()` — el mismo codigo que corre la aplicacion de escritorio,
+de modo que no hay un segundo tablero que mantener igual —; un tablero que falla **no
+detiene a los otros** (anotalo como paso `degradado` nombrandolo); y un tablero que falla no
+deja carpeta, nunca una mezcla de piezas viejas y nuevas, que es un panel que carga y miente.
+
+Anota un sub-paso por tablero (`4.1`–`4.4`) con su tamano.
+
+> Una diferencia honesta: esto construye con el entorno del **repositorio** y las apps de
+> escritorio con el suyo. Hoy eso significa plotly 3.6.0 publicado contra 3.7.0 local. Cada
+> panel es autoconsistente — empaqueta la version con la que se construyo —, asi que no es
+> un defecto; es un motivo para no perseguir una diferencia fantasma al comparar.
+
+Sube cada tablero que salio bien:
+```
+databricks fs mkdir dbfs:/Volumes/<catalogo>/<esquema>/chec-simulador/paneles/<clave> -p <profile>
+databricks fs cp <scratch>/paneles/<clave> \
+  dbfs:/Volumes/<catalogo>/<esquema>/chec-simulador/paneles/<clave> -r --overwrite -p <profile>
+```
+Listalo de vuelta y comparalo contra el `manifiesto.json` de cada carpeta. `fs cp -r`
+arrastra `.DS_Store` en macOS (D6) — borralo del Volume si aparece. **Sube tambien los
+`.gz`**: no son un residuo de construccion, la app los sirve tal cual a cualquier navegador
+que acepte gzip, y comprimir al vuelo serian 29 MB recomprimidos por peticion.
+
+Prepara la fuente de la app y subela:
+```
+python3 scripts/empacar_app_databricks.py fuente \
+  --destino <scratch>/fuente \
+  --raiz-paneles /Volumes/<catalogo>/<esquema>/chec-simulador/paneles
+```
+
+La app vive en `aplicaciones/databricks/criticidad_chec/` **como codigo real y probado** —
+no como un bloque de Python pegado desde este archivo, que es lo que hacian sus cuatro
+predecesores. El script copia sus cinco archivos propios mas `tableros.py` y `paleta.py` de
+`aplicaciones/_comun/` (asi la app muestra los mismos titulos y colores que el menu de
+escritorio sin escribirlos dos veces) y sustituye la ruta resuelta del Volume en `app.yaml`.
+
+```
+databricks workspace mkdirs <base> -p <profile>
+for f in app.py catalogo.py pagina.py tableros.py paleta.py; do
+  databricks workspace import <base>/$f --file <scratch>/fuente/$f \
+    --format RAW --language PYTHON --overwrite -p <profile>
+done
+for f in app.yaml requirements.txt; do
+  databricks workspace import <base>/$f --file <scratch>/fuente/$f \
+    --format RAW --overwrite -p <profile>
+done
+```
+con `<base> = /Workspace/Users/<userName>/databricks-integration/apps/<app-name>`. Siempre
+`--format RAW`: `import-dir` no tiene mecanismo de exclusion y reinterpreta los `.py` como
+cuadernos.
+
+### 4c. Simulador — el unico que necesita un kernel vivo
+
+No puede ser un archivo estatico y no es un descuido. Su boton *Simular* corre el modelo MIL
+de PyTorch sobre las bolsas que el usuario elija, con los valores que teclee: no hay
+respuesta precalculable sobre 26 variables simulables y hasta 15 vanos. El panel es
+`ipywidgets` de punta a punta (`go.FigureWidget`, `.observe`, `on_click`, un rebote con
+`asyncio`), asi que necesita un **kernel de Python vivo**.
+
+Se sirve con **Voila** sobre `src/chec_tableros/simulador/`, que sigue siendo la unica
+fuente de verdad. Una reescritura en Dash o Streamlit significaria reimplementar ~3.200
+lineas de logica de panel contra otro modelo de callbacks y mantener dos paneles que tienen
+que coincidir para siempre: rechazala salvo que el usuario la pida explicitamente. Voila no
+esta en la lista de frameworks oficialmente soportados, pero `command` en `app.yaml` acepta
+cualquier proceso, y el proxy de Apps pasa WebSockets porque Streamlit y Dash — los dos
+soportados — los usan. **Eso es una inferencia, no una garantia documentada**: la
+verificacion de 4d la comprueba contra la app corriendo.
+
+**El paquete se precalcula aqui.** Medido sobre la base actual: el cuaderno tal cual lee
+**909 MB** al arrancar (CSV 540 + `bolsas_mil_full.joblib` 190 + shapefiles 180) y deja
+**2.867 MB** residentes; con el paquete son **94,5 MB** leidos y **579 MB** residentes. Como
+Voila le da un kernel propio a cada sesion, eso es lo que fija el techo: sin paquete, una
+app MEDIUM (2 vCPU / 6 GB) aguanta **una** sesion; con paquete, seis o siete.
+
+No lo construyas con un job de Databricks. Un job necesitaria primero los 909 MB
+espejados en el Volume y despues gastaria computo del cluster para producir 94,5 MB.
+
+```
+.venv/bin/python -m pytest tests/test_mil_simulador_015.py -q
+.venv/bin/python aplicaciones/06_simulador/construir.py
+```
+
+Las dos guardas primero, porque el ahorro de memoria descansa en ellas: los cinco puntos de
+entrada del tablero promovian la matriz **entera** a `float64` antes de tomar unas pocas
+filas — 176,7 MB reservados y tirados en cada pasada, contra 0,6 MB de la forma correcta.
+Si esas pruebas fallan, los numeros de arriba ya no valen.
+
+`construir.py` es **el mismo codigo que corre la aplicacion de escritorio**: deriva con
+`chec_tableros.simulador.derivacion.derivar()`, congela con `congelar()`, y escribe con
+`preparar.escribir_cuaderno()` un cuaderno de **una sola celda** que importa
+`chec_tableros.simulador.tablero`. Nunca ejecutes celdas por indice ni parchees un `.ipynb`
+por su texto: asi se rompio la version anterior de este paso, y su fallo era peor por ser
+parcial — las celdas seguian corriendo, o sea que producia un paquete que **parecia** bueno.
+
+Tres guardas corren dentro y abortan la construccion en vez de congelar algo incoherente: la
+geometria KMeans tiene que coincidir con la versionada, la del modelo MIL con esa, y el
+cache de bolsas con el CSV. Esa ultima es la sutil — actualizar el CSV sin volver a correr
+el cuaderno 05 da un tablero cuyas dos mitades describen periodos distintos, y nada falla.
+Comprueba el resultado en vez de fiarte del codigo de salida: **8 archivos y ~95 MB**,
+dominados por `X_inst.npy` con 88 MB.
+
+**La unica diferencia con el paquete local**: el cuaderno servido va sin boton de cerrar.
+Ese boton manda `SIGTERM` al pid que `app.py` escribe al lanzar Voila localmente; dentro del
+contenedor no hay tal `app.py` ni tal pid, y el ciclo de vida es de la plataforma.
+```
+.venv/bin/python -c "import sys; sys.path.insert(0, 'aplicaciones/06_simulador'); \
+  import preparar; print(preparar.escribir_cuaderno(con_cierre=False))"
+```
+Corre esto **despues** de `construir.py`, que deja el cuaderno con boton.
+
+Sube el paquete y compara los tamanos contra `manifiesto.json`:
+```
+databricks fs mkdir dbfs:/Volumes/<catalogo>/<esquema>/chec-simulador/paquete_06 -p <profile>
+databricks fs cp <scratch>/paquete -r \
+  dbfs:/Volumes/<catalogo>/<esquema>/chec-simulador/paquete_06 --overwrite -p <profile>
+```
+
+La fuente de la app son cuatro archivos planos mas los dos paquetes del repositorio.
+`arranque.py` baja el paquete del Volume al disco local del contenedor y hace `execvp` a
+Voila — al disco local y no leyendo `/Volumes` directamente, porque el montaje FUSE dentro
+del contenedor no esta garantizado y porque el mapeo en memoria de `X_inst.npy` necesita un
+archivo local de verdad para que el cache de paginas lo comparta entre kernels.  `execvp` y
+no `subprocess.run` para que Voila quede como hijo directo y las senales de la plataforma le
+lleguen. Su `requirements.txt` sale de listar `site-packages` tras importar el conjunto real
+de modulos, no de adivinar: `anywidget` no es opcional (`plotly>=6` levanta `ImportError` en
+`go.FigureWidget` sin el, y el tablero entero es un `FigureWidget`), y `optuna` y
+`matplotlib` entran porque `chec_impacto.models.mil_persistencia` los importa
+transitivamente. Recortar mas alla de eso ya produjo un `ModuleNotFoundError` en produccion.
+**No pases `--base_url`**: Databricks Apps hace proxy en la raiz y ahi un `base_url` deja
+todos los assets en 404.
+
+```
+databricks sync src/chec_local_interpreter <base>/src/chec_local_interpreter --exclude '**/__pycache__/**' --full -p <profile>
+databricks sync src/chec_impacto           <base>/src/chec_impacto           --exclude '**/__pycache__/**' --full -p <profile>
+databricks workspace import <base>/arranque.py        --file <scratch>/arranque.py        --format RAW --language PYTHON --overwrite -p <profile>
+databricks workspace import <base>/app.yaml           --file <scratch>/app.yaml           --format RAW --overwrite -p <profile>
+databricks workspace import <base>/requirements.txt   --file <scratch>/requirements.txt   --format RAW --overwrite -p <profile>
+databricks workspace import <base>/06_simulador.ipynb --file <scratch>/06_simulador.ipynb --format JUPYTER --overwrite -p <profile>
+```
+`databricks sync` y no `workspace import-dir` para los dos paquetes: es el unico que tiene
+exclusion, asi que `__pycache__` nunca llega al workspace. El nivel `src/` es funcional, no
+cosmetico — es lo que hace que el `ROOT` del cuaderno resuelva sin ningun parche.
+
+Tamano de compute: **MEDIUM** (2 vCPU / 6 GB, 0,5 DBU/h) por defecto, que con ~648 MB por
+sesion deja seis o siete usuarios simultaneos. **LARGE** solo si el usuario dijo que seran
+mas de seis a la vez; los vCPU extra ademas parten a la mitad el reloj de un *Simular*
+grande, porque el modelo corre en CPU a proposito.
+
+### 4d. Crear, desplegar y verificar cada app
+
+Crea cada app declarando el Volume como **recurso**, para que Databricks aplique el permiso
+al service principal por su cuenta en vez de otorgarlo a mano:
+```
+databricks apps create --compute-size MEDIUM --json '{
+  "name": "<app-name>",
+  "description": "<descripcion>",
+  "resources": [{
+    "name": "volumen-chec-simulador",
+    "description": "Volume con los paneles y el paquete precalculado",
+    "uc_securable": {
+      "securable_type": "VOLUME",
+      "securable_full_name": "<catalogo>.<esquema>.chec-simulador",
+      "permission": "READ_VOLUME"
+    }
+  }]
+}' -p <profile>
+```
+Comillas **simples** alrededor del JSON: escapar identificadores con acento grave dentro de
+comillas dobles se rompe en zsh. Si la app ya existe, adjunta el mismo recurso con
+`databricks apps update <app-name> --json '<mismo cuerpo sin name>'`. El service principal
+es nuevo en cada re-creacion, asi que un permiso que dejo una app anterior del mismo nombre
+no sirve: verifica que el recurso quedo, no lo supongas.
+
+Si `uc_securable` falla por falta de `USE CATALOG`, eso es **D3**: crea la app **sin** el
+bloque `resources`, anota la restriccion como `bloqueante` nombrando quien la levanta, y
+sigue (rule B). La app respondera 502 en cada ruta de tablero hasta que exista el permiso —
+por eso `/salud` deliberadamente no toca el Volume, y por eso una pieza que falta responde
+404 y un muro de permisos responde 502.
+
+Espera a que el compute llegue a `ACTIVE` antes de desplegar; desplegar contra una app que
+todavia se aprovisiona falla con `Cannot deploy app <name> as it is not in RUNNING state`:
+```
+for i in $(seq 1 30); do
+  ST=$(databricks apps get <app-name> -p <profile> -o json | python3 -c "import json,sys; print((json.load(sys.stdin).get('compute_status') or {}).get('state'))")
+  echo "[$i] compute=$ST"; [ "$ST" = "ACTIVE" ] && break; command sleep 20
+done
+databricks apps deploy <app-name> --source-code-path <base> -p <profile>
+```
+`command sleep` — un `sleep` plano en primer plano esta bloqueado en este arnes. El deploy
+del simulador es mucho mas lento que el otro: `pip install torch` lo domina, y hay que
+darle diez minutos antes de tratarlo como colgado.
+
+Cosas que parecen fallos y no lo son (todas D5): `create`/`deploy` salen distinto de cero con
+**stdout vacio** habiendo funcionado — siempre `apps get` antes de reintentar; una app recien
+creada que cae en `compute_status: ERROR` con `Unexpectedly failed to start compute` **si**
+se arregla con `apps stop` → esperar `STOPPED` → `apps start`; y un `deploy` puede fallar
+contra una app sana que sigue sirviendo su version anterior.
+
+Verifica cada app que quedo. Las tres condiciones (`compute_status: ACTIVE`,
+`app_status: RUNNING`, `active_deployment.status: SUCCEEDED`) y la `url` capturada literal
+del CLI, nunca inventada. Despues comprueba que **sirve**, que no es lo mismo:
+```
+databricks apps logs <app-name> -p <profile>
+```
+Una peticion real se ve como `"GET / HTTP/1.1" 200 OK`. Un `curl` sin autenticar devuelve
+`302` al login de OAuth — eso prueba que la puerta contesta, no que llegue el contenido, asi
+que no reportes un `302` como exito.
+
+- Para `criticidad-chec`, pide `/tableros`: devuelve las rutas realmente registradas y la
+  raiz del Volume de la que leen, que es la forma mas barata de separar "la app esta arriba
+  pero faltan los paneles" de "la app esta caida". Despues pide las cuatro rutas. Un 500 o
+  502 en una ruta de tablero con `/salud` en 200 es la firma de **D3**.
+- Para `simulador-vano`, lee los logs y confirma, en orden: `paquete listo en N s (94.5 MB)`
+  — si falta, el permiso del Volume no llego; la linea de arranque de Voila y **ningun**
+  `ModuleNotFoundError`; y ningun `KeyError`/`NameError` con `context_df` o `Xdf`.
+  **Lo que de verdad importa no se puede comprobar desde aqui**: pidele al usuario que abra
+  la URL y confirme que el panel y los dos mapas dibujan (el kernel arranco y el paquete
+  cargo), que **hacer clic en un vano del mapa marca su casilla** (el viaje de ida y vuelta
+  por WebSocket funciona) y que *Simular* responde en unos segundos. El del WebSocket es el
+  que fallaria si el proxy no los pasara, y falla **en silencio**: la pagina se ve perfecta y
+  simplemente no reacciona. Si falla, reportalo y para — no empieces una reescritura en Dash
+  sin preguntar.
+
+Anota el resultado de la etapa completa:
+```
+python3 scripts/bitacora_despliegue.py paso --archivo "$RUTA_BITACORA" \
+  --id 4 --titulo "Aplicaciones en compute" --estado <ok|degradado|restriccion|fallo|omitido> \
+  --detalle "<una linea por app: nombre, URL, estado, y si se desplegó o ya estaba>"
+```
+
+## 5. Is the notebook in the Workspace? Import only if not
+
+`05_mil_vano_ventana.ipynb` es el **unico** cuaderno que le queda al proyecto, y no tiene
+app a proposito: no es un tablero que se navega, es el registro legible del modelo MIL — su
+`EJECUCION = "visualizacion"` por defecto carga `mil_vano_ventana_v1.pt` y reporta las
+metricas, con las ~20 celdas de entrenamiento detras de `if ENTRENAR:`. Quien quiera
+reentrenar lo abre y cambia el parametro; nadie quiere eso detras de una URL web.
+
+**Read-only check first.**
+```
+databricks workspace list /Workspace/Users/<userName>/databricks-integration/project_flow -p <profile>
+```
+
+**If everything is present**: el cuaderno esta ahi. Compara su fecha contra la del archivo
+local y la de `scripts/generate_notebook_10.py`, que es quien lo escribe. Si el del Workspace
+es igual o mas nuevo que el generador, anota el paso `ok` con la ruta y pasa a la etapa 6 sin
+importar nada.
+
+**If anything is missing** — no esta, o el generador es mas nuevo que lo publicado —
+regeneralo primero, para que lo que aterrice sea lo que el generador dice, y despues
+importalo:
+
+- **Es una COPY in the scratch directory**, nunca el archivo del repositorio. Comprueba
+  antes y despues:
   ```
   test -z "$(git status --porcelain notebooks/05_mil_vano_ventana.ipynb)" && echo LIMPIO || echo MODIFICADO
   ```
-  Never `git status --porcelain <path> && echo ok` — git exits 0 on a dirty tree.
-- **Strip `outputs` and `execution_count`** before importing. `--format JUPYTER` caps at
-  **10 MB** (contract D6), and an executed copy re-embeds megabytes of images and widget
-  state.
-- **`mkdirs` before importing** — parents are not auto-created (D6):
+  Nunca `git status --porcelain <ruta> && echo ok` — git sale 0 con el arbol sucio.
+- **Quitale `outputs` y `execution_count`** antes de importar. `--format JUPYTER` topa en
+  **10 MB** (contract D6), y una copia ejecutada reincrusta megabytes de imagenes y estado
+  de widgets.
+- **`mkdirs` antes de importar** — los directorios padre no se crean solos (D6):
   ```
   databricks workspace mkdirs /Workspace/Users/<userName>/databricks-integration/project_flow -p <profile>
   databricks workspace import /Workspace/Users/<userName>/databricks-integration/project_flow/05_mil_vano_ventana \
     --file <staged_copy> --format JUPYTER --overwrite -p <profile>
   ```
-- **Never `import-dir`**: it has no exclude mechanism and reinterprets `.py` as notebooks.
+- **Nunca `import-dir`**: no tiene mecanismo de exclusion y reinterpreta los `.py` como
+  cuadernos.
 
-`05` needs `data/models/mil_vano_ventana_v1.pt` and `data/derived/bolsas_mil_full.joblib`
-(199 MB) — both live under `data/`, so step 3 already carried them. If step 3 was
-blocked, note in the log that `05` will fail on open and mark this step `degradado`, not
-`ok`: the notebook lands, but it will not run.
+Verifica que aterrizo listando de vuelta, en vez de fiarte del codigo de salida.
 
-Verify it landed rather than trusting the exit code:
-```
-databricks workspace list /Workspace/Users/<userName>/databricks-integration/project_flow -p <profile>
-```
-
-## 5. The two apps
-
-| # | Comando | Nombre por defecto | Que publica |
-|---|---|---|---|
-| 1 | `/app-criticidad-chec` | `criticidad-chec` | los cuatro tableros estaticos, en cuatro rutas |
-| 2 | `/app-simulador-vano` | `simulador-vano` | el simulador, con kernel vivo |
-
-**No hay tabla de prioridad y no hace falta.** Eran cinco apps contra un cupo de tres, y
-la eleccion de cuales entraban era una decision que este comando tomaba en cada corrida.
-Son dos: caben siempre.
-
-Las dos son distintas en lo unico que importa aqui: la primera **sirve archivos** — sus
-paneles se construyen antes de subir, arranca en segundos y corre en serverless —, y la
-segunda **necesita un interprete de Python vivo** para correr el modelo MIL, lo que la
-ata a un cluster clasico (D8) y a un arranque de minutos. Si solo una puede desplegarse,
-esa asimetria decide cual.
-
-### 5a. Take stock before creating anything
+`05` necesita `data/models/mil_vano_ventana_v1.pt` y `data/derived/bolsas_mil_full.joblib`
+(199 MB) — los dos viven bajo `data/`, asi que la etapa 3 ya los llevo. Si la etapa 3 quedo
+bloqueada, anota que `05` fallara al abrirse y marca este paso `degradado`, no `ok`: el
+cuaderno aterriza, pero no va a correr.
 
 ```
-databricks apps list -o json -p <profile> 2>/dev/null
+python3 scripts/bitacora_despliegue.py paso --archivo "$RUTA_BITACORA" \
+  --id 5 --titulo "Cuaderno mil_vano en el Workspace" --estado <ok|degradado|restriccion|fallo|omitido> \
+  --detalle "<ruta en el Workspace, y si ya estaba o se importo>"
 ```
-Record three counts, because they are not the same number:
-- apps that already exist **and are ours** (a name from the table) — these get
-  **redeployed**, they do not consume a new slot,
-- apps that exist and are **not** ours — they consume slots and this command must not
-  touch them,
-- apps in `DELETING` — **these still count against the cap** (D5) and disappear from the
-  listing after ~45 s.
-
-Report the three counts to the user in one message before creating anything.
-
-**Las cuatro apps viejas.** Si el workspace todavia tiene `vano-clima`,
-`agrupamiento-circuitos`, `trayectorias-circuitos` o `trayectorias-vanos`, esas son las
-que `criticidad-chec` reemplaza. Estan ocupando cupo y sirviendo paneles que ya nadie
-reconstruye. **Preguntar antes de borrar cada una**, de a una, y anotar la respuesta:
-borrar una app es destructivo y publicar la nueva no autoriza retirar las viejas.
-
-### 5b. Deploy
-
-Delegate to each command with the workspace URL from step 0 and the default app name,
-reusing `<profile>`, `<userName>` and `$RUTA_BITACORA` (contract A1; step ids `5.1.x`
-for the first app and `5.2.x` for the second). **Do not re-ask the user for the app name
-or the URL** — that is the whole reason the defaults exist.
-
-On a `has reached the maximum limit of N apps`:
-1. Parse `N` from the message — there is no quota API, the limit announces itself in the
-   error text of a `create` that exceeds it.
-2. Record it as a restriction, once, naming which app got in and which did not.
-3. **Stop creating new apps, but do not stop the command.** Mark the remaining row
-   `omitido` with the quota as the reason, and go on to step 6.
-
-**Deleting an existing app to make room is destructive — ask the user first** (contract
-B), naming exactly which app would go. If they decline, that is a complete answer:
-record it and continue.
-
-Other things that look like failures and are not (all D5): `create`/`deploy` exit
-non-zero with **empty stdout** while having succeeded — always check `apps get` before
-retrying; a fresh app landing in `compute_status: ERROR` with `Unexpectedly failed to
-start compute` **is** fixed by `apps stop` → wait `STOPPED` → `apps start`; and a
-`deploy` can fail against a healthy app that keeps serving its previous version.
-
-### 5c. Verify each app that landed
-
-Per app: `compute_status: ACTIVE`, `app_status: RUNNING`,
-`active_deployment.status: SUCCEEDED`, and the `url` captured verbatim from the CLI —
-never fabricated.
-
-Then check it actually serves, which is not the same thing:
-```
-databricks apps logs <app-name> -p <profile>
-```
-Real requests show as `"GET / HTTP/1.1" 200 OK`. An unauthenticated `curl` returns `302`
-to the OAuth login — that proves the door answers, not that the content arrives, so do
-not report a `302` as success.
-
-For `criticidad-chec` specifically, fetch `/tableros`: it lists the routes actually
-registered and the Volume root they read from, which separates "the app is up but the
-panels are missing" from "the app is down". Then fetch each of its four routes.
-
-A 500 or 502 on a board route while `/salud` returns 200 is the D3 signature: the app is
-fine and the Volume grant is missing. Record it `bloqueante` with the catalog owner as
-who unblocks it, and carry on — this is precisely the restriction the run exists to
-enumerate.
 
 ## 6. Commit and push the bitacora
 
 Close the log first — the commit must contain the finished document, not a half-written one:
 ```
 python3 scripts/bitacora_despliegue.py cerrar --archivo "$RUTA_BITACORA"
+python3 scripts/bitacora_despliegue.py resumen --archivo "$RUTA_BITACORA"
 ```
 
-Only `reports/despliegues/*.md` is tracked (the `.json` renderer state is ignored by design). **Commit only the bitacora**: if anything else is dirty, that is not this command's to commit — report it and leave it alone.
+Only `reports/despliegues/*.md` is tracked (the `.json` renderer state is ignored by design).
+**Commit only the bitacora**: if anything else is dirty, that is not this command's to
+commit — report it and leave it alone.
 
 Never commit to `main` directly. Branch, commit, push, and let the user decide about merging:
 ```
@@ -269,19 +608,42 @@ git push -u origin HEAD
 ```
 Conventional commit, and **no AI attribution or `Co-Authored-By` line**.
 
-Try the plain `git push` first. Only if it fails on the LFS locking API, apply contract D10 — hand the `-c` override to the user to run with `!`, do not retry it yourself, and record it `limitante`. A bitacora-only push touches no LFS-tracked path, so this should not trigger.
+Try the plain `git push` first. Only if it fails on the LFS locking API, apply contract D10 —
+hand the `-c` override to the user to run with `!`, do not retry it yourself, and record it
+`limitante`. A bitacora-only push touches no LFS-tracked path, so this should not trigger.
 
-If the push fails for any other reason, the commit still exists locally: record it, say so plainly, and finish the report. A lost push is not a lost run.
+If the push fails for any other reason, the commit still exists locally: record it, say so
+plainly, and finish the report. A lost push is not a lost run.
 
 ## 7. Report back
 
 Tell the user, in their language:
-- **The bitacora**: its path under `reports/despliegues/`, the final state `cerrar` printed (`COMPLETO`, `COMPLETO CON RESTRICCIONES` or `INCOMPLETO`), and the count of restrictions it holds. Do not soften that state in prose.
-- **Every restriction recorded, with who unblocks each one** — reproduce the `resumen` output. A run that ended INCOMPLETO reports what is still blocking, not just what worked.
-- The profile, workspace and resolved UC target.
-- Step 3: whether the data were already there or uploaded, and what was missing.
-- Step 4: that `05` is a Workspace **notebook**, its path, and that it deliberately has no app.
-- Step 5: the discovered cap, the three counts from 5a, and **one line per app** — notebook, name, URL, state. Name the ones that did not fit and why.
-- Step 6: the branch, the commit and whether the push landed. Say plainly that nothing was merged into `main`.
-- That `git status --porcelain notebooks/` was empty — no repo notebook was modified.
-- That no Delta table, view or Lakeview dashboard exists to create: that stack was retired.
+
+- **The bitacora**: its path under `reports/despliegues/`, the final state `cerrar` printed
+  (`COMPLETO`, `COMPLETO CON RESTRICCIONES` or `INCOMPLETO`), and the count of restrictions
+  it holds. Do not soften that state in prose.
+- **Las tres etapas, en una tabla y con una fila por etapa** — `one row per stage`, siempre
+  las tres, incluso las que no hicieron falta o quedaron bloqueadas. Sin esto, una etapa
+  omitida desaparece del reporte y se lee como si hubiera salido bien:
+
+  | Etapa | Ya estaba | Se subio | Estado | Que lo bloqueo |
+  |---|---|---|---|---|
+  | 3. Datos en el Volume | | | | |
+  | 4. Aplicaciones en compute | | | | |
+  | 5. Cuaderno en el Workspace | | | | |
+
+- **Every restriction recorded, with who unblocks each one** — reproduce the `resumen`
+  output. A run that ended INCOMPLETO reports what is still blocking, not just what worked.
+- El perfil, el workspace y el destino UC resuelto.
+- Etapa 4: el cupo descubierto, los tres conteos de 4a, y **una linea por app** — nombre,
+  URL, estado y si se desplegó o ya estaba sana. Nombra las que no cupieron y por que.
+- Etapa 5: que `05` es un **cuaderno** del Workspace, su ruta, y que deliberadamente no
+  tiene app.
+- Como refrescar despues de cambiar los datos: volver a correr el cuaderno 05, reconstruir el
+  paquete y los paneles, resubirlos y reiniciar la app. No hace falta redesplegar salvo que
+  cambie el codigo — las apps no llevan datos propios.
+- Etapa 6: la rama, el commit y si el push llego. Di explicitamente que no se mergeo nada a
+  `main`.
+- Que `git status --porcelain notebooks/` quedo vacio — ningun cuaderno del repositorio se
+  modifico.
+- Que no hay tabla Delta, vista ni tablero Lakeview que crear: ese stack se retiro.

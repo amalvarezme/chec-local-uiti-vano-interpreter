@@ -1,4 +1,4 @@
-"""Prepara lo que `/app-criticidad-chec` sube: los cuatro paneles y la fuente de la app.
+"""Prepara lo que `/subir-a-databricks` sube: los cuatro paneles y la fuente de la app.
 
 ## Por que es un script y no una lista de pasos dentro del comando
 

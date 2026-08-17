@@ -9,7 +9,6 @@ metadata:
   canonical_contract: src/chec_local_interpreter/batch_report_contract.py
   invokes_skills:
     - .claude/skills/report/SKILL.md
-    - .claude/skills/agrupamiento-circuitos/SKILL.md
 ---
 
 ## Overview
@@ -19,7 +18,7 @@ circuit in the dataset, for `todos`). It does not reimplement any part of the si
 pipeline. It owns exactly one thing `/report` does not: resolving a group slug to a concrete circuit
 list plus a shared dataset-wide date window, behind a single up-front confirmation. Once that
 checkpoint clears, this Skill **always** renders the circuit-clustering chart for the confirmed
-window first (step 1.5, reusing `agrupamiento-circuitos`'s own shared contract by reference — never a
+window first (step 1.5, reusing the shared circuit-clustering contract by reference — never a
 second confirmation for the same window), then loops over the resolved circuits and, for each one,
 runs [`report/SKILL.md`](../report/SKILL.md)'s existing Run-sequence steps 2-9 exactly as documented
 there — by reference, never by copying or restating their prose. The one deliberate, explicitly
@@ -126,10 +125,10 @@ Given `grupo` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
       it, and do not add any other confirmation prompt later in the run, including per circuit.
    5. **Render the circuit-clustering chart for the confirmed window (always, no exceptions).**
       Immediately once 1.4's confirmation clears — before starting the circuit loop in step 2 — run
-      the same shared contract `agrupamiento-circuitos` uses, directly by its render verb:
+      the shared circuit-clustering contract directly by its render verb:
       `PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.circuit_clustering_contract render <fecha_inicio> <fecha_fin> --runtime claude`.
       Reuse the batch's own already-resolved/confirmed `fecha_inicio`/`fecha_fin` from 1.2-1.4 —
-      never re-run `agrupamiento-circuitos`'s own preflight or its own confirmation prompt, since that
+      never re-run that contract's own preflight or add a second confirmation prompt, since that
       would ask the user to confirm the identical window a second time in the same checkpoint. This is
       unconditional: run it for every `/reporte-lote` invocation regardless of `grupo`, including
       `todos`. A failure here is alert-and-**continue** (see the Error handling summary below) — it
@@ -222,10 +221,10 @@ alert-and-continue recorded as `SUCCESS` with a degradation note.
   [`src/chec_local_interpreter/vault_note_contract.py`](../../../src/chec_local_interpreter/vault_note_contract.py)
 - Shared criticality-group computation used by the batch contract:
   `plotting.compute_circuit_criticality_groups`
-- Structurally closest existing preflight-then-checkpoint Skill (frontmatter shape, Execution Steps
-  numbering, Output Contract section), and the Skill whose shared render verb step 1.5 invokes
-  directly for the mandatory pre-batch clustering chart:
-  [`.claude/skills/agrupamiento-circuitos/SKILL.md`](../agrupamiento-circuitos/SKILL.md) /
+- Shared render verb that step 1.5 invokes directly for the mandatory pre-batch clustering chart
+  (it had its own `/agrupamiento-circuitos` Skill until 2026-08-17; the command was retired and
+  the contract module it exposed stayed, because this Skill and `/informe-gerencial` call it
+  directly and never went through the Skill):
   [`src/chec_local_interpreter/circuit_clustering_contract.py`](../../../src/chec_local_interpreter/circuit_clustering_contract.py)
 - Binding invariants (shared with every agent role/orchestrator above):
   `.claude/agents/rules/invariants.md`

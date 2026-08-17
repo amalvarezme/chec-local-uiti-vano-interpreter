@@ -1,10 +1,14 @@
 ---
-description: Shared contract for every Databricks deployment command in this repo (`/app-*`, `/subir-*-databricks`) — the run log, the never-abort rule, Unity Catalog target resolution, and the catalogue of restrictions already met in the field. Not invocable on its own.
+description: Shared contract for `/subir-a-databricks`, the only command in this repo that talks to Databricks — the run log, the never-abort rule, Unity Catalog target resolution, and the catalogue of restrictions already met in the field. Not invocable on its own.
 ---
 
-This file is an appendix, not a command. Every command in the family reads it
-**first** and follows it for the four concerns below. It exists because those
-concerns were previously copy-pasted into every command file and drifted.
+This file is an appendix, not a command. `/subir-a-databricks` reads it **first**
+and follows it for the concerns below. It exists because those concerns were
+copy-pasted into eight command files and drifted; seven of those commands are
+gone — four because they patched notebooks that no longer exist, three because
+they were absorbed into `/subir-a-databricks`'s stages 3, 4 and 5 on 2026-08-17 —
+and this appendix outlived them because what it holds is not per-command
+procedure but what the workspace itself has already taught us.
 
 Sections:
 - **A. The run log (bitacora)** — every run writes one Markdown report.
@@ -27,8 +31,7 @@ abandoned run must still leave evidence of how far it got.
 
 ```
 RUTA_BITACORA=$(python3 scripts/bitacora_despliegue.py init \
-  --comando /app-vano-clima \
-  --cuaderno notebooks/base_apps/01_uiti_vano_clima.ipynb)
+  --comando /subir-a-databricks)
 ```
 
 Then, **after every numbered step**, record it. Not at the end from memory — at
@@ -90,12 +93,12 @@ script redacts tokens it recognises (`dapi…`, JWTs, `Bearer …`,
 
 ### A1. One log per run, even when commands delegate
 
-When a command delegates to another (`/subir-a-databricks` calling
-`/app-vano-clima`, or any command calling `/subir-datos-databricks`), the
-**caller owns the log and the callee reuses it**. Pass `$RUTA_BITACORA` down;
-the delegated command skips `init` and writes its steps into the same file,
-prefixing its step ids so they stay distinguishable — `5.1`, `5.2` for the first
-delegated command, `6.1`… for the next.
+Only the outermost command calls `init`. Today there is one command and it does
+not delegate, so this reduces to: **call `init` exactly once per run**, at the
+top, and number every sub-step into that same file — `4.1`, `4.2` for the first
+app, `4.3`… for the next. The rule is kept as written because it is the one that
+was actually violated: when the family was eight commands, each one opened its
+own log and a single deployment left four partial reports.
 
 A run that fans out to five app deployments must leave **one** report the user
 can read end to end, not six partial ones. Only the outermost command calls
@@ -350,8 +353,8 @@ an auth failure when the token is fine. Use `2>/dev/null` when parsing, and
 
 Databricks requires a running classic cluster for `ipywidgets`; Serverless is
 excluded, and the failure is silent (the cell executes, the widget never
-renders). This affects the notebook-06 simulator path, which is why
-`/app-simulador-vano` serves it through Voila on a live kernel rather than as a
+renders). This affects the notebook-06 simulator path, which is why stage 4c of
+`/subir-a-databricks` serves it through Voila on a live kernel rather than as a
 static HTML job. Notebooks 01–04 use no `ipywidgets` and are fine on Serverless.
 
 ### D9 — Workspace state is not durable between sessions

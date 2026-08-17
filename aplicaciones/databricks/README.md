@@ -17,7 +17,7 @@ propia y le exigió un `Iniciar.app` que nunca va a tener.
 
 Los cuatro tableros estáticos —clima, agrupamiento, trayectorias de circuitos y
 trayectorias de vanos— servidos como **una sola app con cuatro rutas**. Lo publica
-`/app-criticidad-chec`.
+`/subir-a-databricks`.
 
 Reemplaza a cuatro apps y cuatro comandos. El motivo no es la elegancia: el workspace
 **topa en tres apps**, así que el cuarto tablero no cabía nunca y el orquestador lo dejaba

@@ -167,7 +167,6 @@
     <h3>Cómo se corre</h3>
     <p>El cuaderno arranca por defecto como <strong>visor</strong> (<code>EJECUCION="visualizacion"</code>): carga el modelo ya entrenado y dibuja, en segundos. Reentrenar es explícito — <code>EJECUCION="entrenamiento"</code>, unos 40 minutos. Nadie reentrena por accidente al abrir el cuaderno.</p>
     <p>El grafo experto de variables <strong>no se lee de disco</strong>: <code>construir_matriz_adyacencia_mgcecdl</code> lo construye en código y el <code>.pt</code> lo guarda dentro, junto con las aristas preservadas. El modelo y su grafo viajan juntos, que es lo que impide reconstruir uno con el otro desfasado.</p>
-    <p>Para experimentos con GPU sin tocar la máquina local está <code>/experimento-kaggle</code>: propone diagrama de bloques y cuaderno, <strong>exige aprobación explícita</strong> y recién ahí ejecuta remoto vía la CLI de Kaggle.</p>
   </section>
 
   <section>
@@ -204,7 +203,6 @@
           <tr><td><code>/report</code></td><td><code>/report CIRCUITO [fecha_inicio fecha_fin]</code></td><td>El HTML de un circuito, 9 pasos</td></tr>
           <tr><td><code>/reporte-lote</code></td><td><code>/reporte-lote grupo=alta</code></td><td>Un reporte por circuito del grupo + el scatter de agrupamiento</td></tr>
           <tr><td><code>/informe-gerencial</code></td><td><code>/informe-gerencial grupo=media</code></td><td>Un HTML gerencial cross-circuito sobre los representativos del grupo</td></tr>
-          <tr><td><code>/agrupamiento-circuitos</code></td><td><code>/agrupamiento-circuitos</code></td><td>Solo el scatter de agrupamiento, sin reporte</td></tr>
           <tr><td><code>/clima</code></td><td><code>/clima</code></td><td>Enriquece los datos con clima de Open-Meteo (3 compuertas interactivas)</td></tr>
           <tr><td><code>/limpiar-corridas</code></td><td><code>/limpiar-corridas</code></td><td>Borra artefactos desechables (dry-run primero, confirmación explícita)</td></tr>
         </tbody>
@@ -250,7 +248,7 @@
       </table>
     </div>
     <p>Cada carpeta trae los mismos cuatro lanzadores: <code>instalar</code> (una vez, crea el entorno) e <code>iniciar</code> (cada vez). En macOS hay además un <code>Iniciar.app</code> para el doble clic — un bundle de verdad y no un <code>.command</code>, porque si el usuario tiene otra terminal instalada, LaunchServices se queda el <code>.command</code> y no lo ejecuta.</p>
-    <p>Sus comandos: <code>/app-local-criticidadCHEC</code>, <code>/app-local-clima</code>, <code>/app-local-agrupamiento-circuitos</code>, <code>/app-local-trayectorias-circuitos</code>, <code>/app-local-trayectorias-vanos</code>, <code>/app-local-simulador</code>. El contrato compartido —puerto fijo, comprobación de "ya está corriendo", preflight, arranque en segundo plano— vive en <a href="../.claude/commands/_contrato-apps-locales.md"><code>_contrato-apps-locales.md</code></a>.</p>
+    <p>Su comando es uno solo: <a href="../.claude/commands/app-local-criticidadCHEC.md"><code>/app-local-criticidadCHEC</code></a>, que abre el menú en el puerto 8800. <strong>Los cinco tableros se abren desde su página</strong>, no con comandos propios: cada uno arranca como proceso hijo, en el puerto fijo que le da la tabla de ese archivo, y el menú los vigila y los cierra. Hasta el 2026-08-17 cada tablero tenía además su propio comando (<code>/app-local-clima</code> y los otros cuatro); seis comandos para una sola aplicación significaban seis copias del mismo preflight separándose entre sí, y un usuario que tenía que saber cuál de los seis quería antes de ver nada. El contrato que compartían —puerto fijo, comprobación de "ya está corriendo", preflight, arranque en segundo plano— quedó absorbido en ese mismo archivo.</p>
 
     <h3>Por qué <code>01</code>-<code>04</code> son livianas y <code>06</code> no</h3>
     <p>No es estilo: es lo que cada tablero necesita.</p>
@@ -265,23 +263,20 @@
 
   <section>
     <h2><span class="num">§6</span> La subida a Databricks</h2>
-    <p>Tres comandos de sincronización y cinco de publicación, todos en <code>.claude/commands/</code>, todos reutilizando por referencia cruzada el mismo contrato compartido (<a href="../.claude/commands/_contrato-despliegue-databricks.md"><code>_contrato-despliegue-databricks.md</code></a>): bitácora obligatoria, regla de no-abortar y resolución del catálogo en runtime.</p>
+    <p>Un solo comando, <code>/subir-a-databricks</code>, en <code>.claude/commands/</code>, apoyado en el contrato compartido (<a href="../.claude/commands/_contrato-despliegue-databricks.md"><code>_contrato-despliegue-databricks.md</code></a>): bitácora obligatoria, regla de no-abortar y resolución del catálogo en runtime.</p>
+    <p>Son <strong>tres etapas</strong>, y cada una le pregunta primero a Databricks qué hay ya y solo sube lo que falta — sin eso, una corrida de rutina vuelve a mover 566 MB de CSV que ya estaban y redespliega una app sana, que en el simulador son diez minutos de <code>pip install torch</code> a cambio de nada.</p>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Comando</th><th>Qué migra</th></tr></thead>
+        <thead><tr><th>Etapa</th><th>Qué verifica</th><th>Qué sube si falta</th></tr></thead>
         <tbody>
-          <tr><td><code>/subir-datos-databricks</code></td><td><code>data/</code> completo (más <code>site/data/variables.json</code>, única excepción) al Volume</td></tr>
-          <tr><td><code>/subir-notebooks-databricks</code></td><td>Los tres paquetes fuente y los 6 cuadernos que corren allá, como copias adaptadas</td></tr>
-          <tr><td><code>/subir-a-databricks</code></td><td>Orquesta a los dos anteriores, importa el cuaderno <code>05</code> y despliega las apps que quepan</td></tr>
-          <tr><td><code>/app-vano-clima</code></td><td>Publica el cuaderno <code>01</code> como Databricks App</td></tr>
-          <tr><td><code>/app-agrupamiento-vanos-circuitos</code></td><td>Publica el <code>02</code></td></tr>
-          <tr><td><code>/app-trayectorias-circuitos</code></td><td>Publica el <code>03</code></td></tr>
-          <tr><td><code>/app-trayectorias-vanos</code></td><td>Publica el <code>04</code></td></tr>
-          <tr><td><code>/app-simulador-vano</code></td><td>Publica el <code>06</code> (Voila, kernel vivo)</td></tr>
+          <tr><td>3</td><td>El Volume, el CSV con su tamaño real (~566 MB, no un puntero de LFS) y el juego completo de shapefiles con sus sidecars</td><td><code>data/</code> entero, más <code>site/data/variables.json</code> (única excepción fuera de <code>data/</code>)</td></tr>
+          <tr><td>4</td><td>Que las dos apps existan, estén <code>ACTIVE</code>/<code>RUNNING</code>/<code>SUCCEEDED</code> y sirvan contenido al día</td><td><code>criticidad-chec</code> (los cuatro tableros en cuatro rutas) y <code>simulador-vano</code> (Voila, kernel vivo)</td></tr>
+          <tr><td>5</td><td>Que el cuaderno esté en el Workspace y no sea más viejo que su generador</td><td><code>notebooks/05_mil_vano_ventana.ipynb</code>, como cuaderno y deliberadamente sin app</td></tr>
         </tbody>
       </table>
     </div>
-    <p>Los cinco comandos de app <strong>se autorreparan</strong>: si faltan datos en el Volume encadenan <code>/subir-datos-databricks</code>, y configuran el permiso de lectura de la app sin intervención manual. Preguntan solo el nombre de la app y la URL del workspace — el destino se pregunta <strong>cada corrida</strong>, nunca se deduce del perfil con sesión vigente.</p>
+    <p>Eran ocho comandos. Cuatro (<code>/app-vano-clima</code>, <code>/app-agrupamiento-vanos-circuitos</code>, <code>/app-trayectorias-circuitos</code>, <code>/app-trayectorias-vanos</code>) publicaban un tablero cada uno parcheando un <code>.ipynb</code> que ya no existe: ese código vive en <code>src/chec_tableros/</code>. Los otros cuatro (<code>/subir-datos-databricks</code>, <code>/subir-notebooks-databricks</code>, <code>/app-criticidad-chec</code>, <code>/app-simulador-vano</code>) seguían siendo correctos y se absorbieron el 2026-08-17, porque repartidos en cuatro invocaciones dejaban cuatro reportes parciales y obligaban a recordar el orden.</p>
+    <p>El comando <strong>se autorrepara</strong>: crea el Volume si falta, configura el permiso de lectura de la app declarando el Volume como recurso, y no aborta ante un muro de permisos —lo anota y sigue, para que el reporte salga con la lista completa de lo que bloquea el despliegue. Pregunta solo la URL del workspace, y la pregunta <strong>cada corrida</strong>: nunca la deduce del perfil con sesión vigente.</p>
 
     <h3>Dos reglas del contrato</h3>
     <ul>
@@ -331,24 +326,10 @@
           <tr><td><code>/report</code></td><td>Reportes</td><td><code>/report CIRCUITO [fecha_inicio fecha_fin]</code></td></tr>
           <tr><td><code>/reporte-lote</code></td><td>Reportes</td><td><code>/reporte-lote grupo=alta</code></td></tr>
           <tr><td><code>/informe-gerencial</code></td><td>Reportes</td><td><code>/informe-gerencial grupo=media</code></td></tr>
-          <tr><td><code>/agrupamiento-circuitos</code></td><td>Reportes</td><td><code>/agrupamiento-circuitos</code></td></tr>
           <tr><td><code>/clima</code></td><td>Datos</td><td>enriquecimiento Open-Meteo</td></tr>
           <tr><td><code>/limpiar-corridas</code></td><td>Mantenimiento</td><td>dry-run y confirmación explícita</td></tr>
-          <tr><td><code>/experimento-kaggle</code></td><td>Modelo</td><td>experimento remoto con compuerta de aprobación</td></tr>
-          <tr><td><code>/app-local-criticidadCHEC</code></td><td>Aplicaciones</td><td>el menú, puerto 8800</td></tr>
-          <tr><td><code>/app-local-clima</code></td><td>Aplicaciones</td><td>tablero <code>01</code>, puerto 8801</td></tr>
-          <tr><td><code>/app-local-agrupamiento-circuitos</code></td><td>Aplicaciones</td><td>tablero <code>02</code>, puerto 8802</td></tr>
-          <tr><td><code>/app-local-trayectorias-circuitos</code></td><td>Aplicaciones</td><td>tablero <code>03</code>, puerto 8803</td></tr>
-          <tr><td><code>/app-local-trayectorias-vanos</code></td><td>Aplicaciones</td><td>tablero <code>04</code>, puerto 8804</td></tr>
-          <tr><td><code>/app-local-simulador</code></td><td>Aplicaciones</td><td>simulador <code>06</code> con Voila, puerto 8866</td></tr>
-          <tr><td><code>/subir-datos-databricks</code></td><td>Databricks</td><td>pide la URL del workspace</td></tr>
-          <tr><td><code>/subir-notebooks-databricks</code></td><td>Databricks</td><td>pide la URL del workspace</td></tr>
-          <tr><td><code>/subir-a-databricks</code></td><td>Databricks</td><td>orquesta datos → cuaderno <code>05</code> → apps → bitácora</td></tr>
-          <tr><td><code>/app-vano-clima</code></td><td>Databricks</td><td>publica el <code>01</code></td></tr>
-          <tr><td><code>/app-agrupamiento-vanos-circuitos</code></td><td>Databricks</td><td>publica el <code>02</code></td></tr>
-          <tr><td><code>/app-trayectorias-circuitos</code></td><td>Databricks</td><td>publica el <code>03</code></td></tr>
-          <tr><td><code>/app-trayectorias-vanos</code></td><td>Databricks</td><td>publica el <code>04</code></td></tr>
-          <tr><td><code>/app-simulador-vano</code></td><td>Databricks</td><td>publica el <code>06</code></td></tr>
+          <tr><td><code>/app-local-criticidadCHEC</code></td><td>Aplicaciones</td><td>el menú en el puerto 8800; los cinco tableros se abren desde su página</td></tr>
+          <tr><td><code>/subir-a-databricks</code></td><td>Databricks</td><td>datos → apps → cuaderno, verificando antes de subir cada uno; deja bitácora</td></tr>
         </tbody>
       </table>
     </div>

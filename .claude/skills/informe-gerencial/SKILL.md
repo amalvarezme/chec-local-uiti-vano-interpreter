@@ -9,7 +9,6 @@ metadata:
   canonical_contract: src/chec_local_interpreter/informe_gerencial_contract.py
   invokes_skills:
     - .claude/skills/report/SKILL.md
-    - .claude/skills/agrupamiento-circuitos/SKILL.md
     - .claude/skills/graphify/SKILL.md
 ---
 
@@ -24,7 +23,7 @@ to their assigned cluster centroid), detecting which of those 12 are missing a p
 gating on a single explicit confirmation before auto-triggering `/report` for the missing ones (by
 reference to [`report/SKILL.md`](../report/SKILL.md), never by copying its prose), **always**
 rendering the standalone circuit-clustering chart for the confirmed window right after that same
-checkpoint (step 1.5, reusing `agrupamiento-circuitos`'s own shared contract by reference, never a
+checkpoint (step 1.5, reusing the shared circuit-clustering contract by reference, never a
 second confirmation), loading each sampled circuit's narrative content, and assembling the
 cross-circuit synthesis (common patterns, notable outliers, aggregate/fleet-level risk, recommended
 actions) plus one embedded full-fleet clustering scatter and one radial causes/intervention-strategies
@@ -190,11 +189,11 @@ Given `grupo` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
       missing-run sub-list to show, but the checkpoint still applies before touching content/synthesis).
    5. **Render the circuit-clustering chart for the confirmed window (always, no exceptions).**
       Immediately once 1.4's confirmation clears — before step 2's missing-circuit auto-trigger (or,
-      when nothing is missing, before step 3) — run the same shared contract `agrupamiento-circuitos`
-      uses, directly by its render verb:
+      when nothing is missing, before step 3) — run the shared circuit-clustering
+      contract directly by its render verb:
       `PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.circuit_clustering_contract render <fecha_inicio> <fecha_fin> --runtime claude`.
       Reuse this Skill's own already-resolved/confirmed `fecha_inicio`/`fecha_fin` from 1.2-1.4 — never
-      re-run `agrupamiento-circuitos`'s own preflight or its own confirmation prompt, since that would
+      re-run that contract's own preflight or add a second confirmation prompt, since that would
       ask the user to confirm the identical window a second time in the same checkpoint. Unconditional:
       run it for every `/informe-gerencial` invocation regardless of `grupo`, including `todos`, and
       independent of whether `missing_runs.count` is 0. A failure here is alert-and-**continue** (see
@@ -508,8 +507,9 @@ the single checkpoint is step 1.4 only.
 - Shared full-fleet clustering scatter, reused AS-IS with `highlighted_circuits`:
   `plotting.plot_interactive_circuit_clustering`
 - Standalone pre-batch clustering chart, invoked directly by its render verb in step 1.5 (distinct
-  from the full-fleet scatter embedded in the final HTML above):
-  [`.claude/skills/agrupamiento-circuitos/SKILL.md`](../agrupamiento-circuitos/SKILL.md) /
+  from the full-fleet scatter embedded in the final HTML above; it had its own
+  `/agrupamiento-circuitos` Skill until 2026-08-17, and the contract module outlived it because
+  this Skill always called the module, never the Skill):
   [`src/chec_local_interpreter/circuit_clustering_contract.py`](../../../src/chec_local_interpreter/circuit_clustering_contract.py)
 - Cross-circuit graph query, invoked ONLY in step 2.5 (the sole LLM-assisted step in this Skill's run
   sequence): [`.claude/skills/graphify/SKILL.md`](../graphify/SKILL.md)

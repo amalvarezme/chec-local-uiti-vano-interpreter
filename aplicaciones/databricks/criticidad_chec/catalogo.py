@@ -7,7 +7,7 @@ necesita y los demas no -- la ruta publica.
 ## Por que se copia el modulo y no se importa
 
 Esta carpeta se sube entera al Workspace de Databricks y corre ahi, donde
-`aplicaciones/_comun/` no existe. `/app-criticidad-chec` copia `tableros.py` al lado de
+`aplicaciones/_comun/` no existe. `/subir-a-databricks` copia `tableros.py` al lado de
 estos archivos antes de subirlos, asi que el import de abajo resuelve en los dos sitios:
 en el repositorio, porque el comando deja la copia; y en la app, porque viajo con ella.
 

@@ -53,7 +53,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 import catalogo as _catalogo
 import pagina as _pagina
 
-# La carpeta del Volume donde `/app-criticidad-chec` dejo los paneles. Entra por
+# La carpeta del Volume donde `/subir-a-databricks` dejo los paneles. Entra por
 # entorno porque el catalogo y el esquema se RESUELVEN en cada despliegue (contrato C):
 # `workspace.default` no existe en todos los workspaces, y el de CHEC es uno de los que
 # no lo tiene (D1).

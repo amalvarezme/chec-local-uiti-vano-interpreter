@@ -54,9 +54,9 @@ El repositorio cubre el flujo completo de interpretabilidad local para el análi
 
 **Excepción sancionada — despliegue a Databricks:** el proyecto sí incluye una migración manual,
 bajo demanda, de los activos locales hacia un workspace Databricks, vía 3 comandos de Claude Code
-(`/subir-a-databricks`, que orquesta, más `/subir-datos-databricks` y
-`/subir-notebooks-databricks`) y los 5 comandos `/app-*` que publican los cuadernos como
-Databricks Apps. Todos comparten
+(`/subir-a-databricks`, el único que habla con Databricks desde el 2026-08-17: las tres
+etapas —datos, aplicaciones y cuaderno— viven dentro de él, cada una verificando antes de
+subir). Se apoya en
 [`_contrato-despliegue-databricks.md`](.claude/commands/_contrato-despliegue-databricks.md).
 Es un árbol de comandos aislado, sin equivalente en Pi, que nunca modifica `report_pipeline.py`
 ni los roles LLM. Solo viajan los datos que consumen los cuadernos `01`-`06` y el comando
@@ -134,7 +134,6 @@ Ejemplos:
 | Capacidad | Claude Code | Pi / el Gentleman |
 |---|---|---|
 | Reporte completo | `/report <circuito> [fecha_inicio fecha_fin]` | `/skill:report <circuito> [fecha_inicio fecha_fin]` |
-| Solo agrupamiento de circuitos | `/agrupamiento-circuitos [fecha_inicio fecha_fin]` | `/skill:agrupamiento-circuitos [fecha_inicio fecha_fin]` |
 | Análisis histórico | flujo canónico `historical` de Claude | `/skill:historical` + `.pi/agents/historical.md` |
 | Análisis de inferencia | flujo canónico `inference` de Claude | `/skill:inference` + `.pi/agents/inference.md` |
 | Alineación experta | flujo canónico `expert-alignment` de Claude | `/skill:expert-alignment` + `.pi/agents/expert-alignment.md` |
@@ -145,12 +144,21 @@ Ejemplos:
 
 ### Comandos de despliegue a Databricks (solo Claude Code, sin equivalente en Pi)
 
-| Comando | Qué migra/reconstruye |
-|---|---|
-| `/subir-a-databricks` | **Orquestador**: datos → cuaderno `05` al Workspace → apps por prioridad (`01`, `02`, `06`; luego `03` y `04` si hay cupo) → commit y push de la bitácora |
-| `/subir-datos-databricks` | `data/` completo + `site/data/variables.json` al Volume |
-| `/subir-notebooks-databricks` | Los tres paquetes fuente + los cuadernos de `notebooks/` (copias adaptadas) |
-| `/app-vano-clima`, `/app-agrupamiento-vanos-circuitos`, `/app-simulador-vano`, `/app-trayectorias-circuitos`, `/app-trayectorias-vanos` | Publican los cuadernos `01`, `02`, `06`, `03` y `04` como Databricks Apps |
+Es **un solo comando**, `/subir-a-databricks`, con tres etapas. Cada etapa le pregunta primero
+a Databricks qué hay ya, y solo sube lo que falta:
+
+| Etapa | Qué verifica | Qué sube si falta |
+|---|---|---|
+| 3 | El Volume, el CSV con su tamaño real y el juego completo de shapefiles | `data/` entero + `site/data/variables.json` |
+| 4 | Que las dos apps existan, estén `ACTIVE`/`RUNNING`/`SUCCEEDED` y sirvan contenido al día | `criticidad-chec` (4 tableros en 4 rutas) y `simulador-vano` (Voila, kernel vivo) |
+| 5 | Que el cuaderno esté en el Workspace y no sea más viejo que su generador | `notebooks/05_mil_vano_ventana.ipynb`, como cuaderno y sin app |
+
+Eran ocho comandos hasta agosto de 2026. Cuatro (`/app-vano-clima`,
+`/app-agrupamiento-vanos-circuitos`, `/app-trayectorias-circuitos`, `/app-trayectorias-vanos`)
+publicaban un tablero cada uno parcheando un `.ipynb` que ya no existe. Los otros cuatro
+(`/subir-datos-databricks`, `/subir-notebooks-databricks`, `/app-criticidad-chec`,
+`/app-simulador-vano`) seguían siendo correctos y se absorbieron el 2026-08-17: repartidos en
+cuatro invocaciones dejaban cuatro reportes parciales y obligaban a recordar el orden.
 
 Cada corrida deja una bitácora en `reports/despliegues/` con los pasos, los errores y las
 restricciones encontradas; una restricción de permisos no aborta la corrida, se registra y
@@ -365,19 +373,19 @@ que vive bajo `site/` por historia, no porque el sitio lo produzca.
 
 ### Diagrama de la familia de comandos de reporte
 
-Los cinco comandos que operan sobre el pipeline de reportes — `/report`, `/reporte-lote`,
-`/informe-gerencial`, `/agrupamiento-circuitos` y `/limpiar-corridas` — se reparten el trabajo así:
+Los cuatro comandos que operan sobre el pipeline de reportes — `/report`, `/reporte-lote`,
+`/informe-gerencial` y `/limpiar-corridas` — se reparten el trabajo así:
 `report` es el único orquestador de un circuito; `reporte-lote` e `informe-gerencial` lo invocan
-**por referencia** (nunca copian su lógica) y además reutilizan el mismo contrato de clustering que
-`agrupamiento-circuitos` expone como comando standalone; `limpiar-corridas` es el único que no invoca
-ningún agente ni skill — solo hace mantenimiento sobre los artefactos que los otros cuatro producen.
+**por referencia** (nunca copian su lógica) y además llaman directamente al contrato de clustering,
+que tuvo su propio comando `/agrupamiento-circuitos` hasta el 2026-08-17 y sobrevivió a su retiro
+porque estos dos siempre invocaron el módulo, nunca el skill; `limpiar-corridas` es el único que no
+invoca ningún agente ni skill — solo hace mantenimiento sobre los artefactos que los otros producen.
 
 | Comando | Tipo | Invoca | Contrato L1 |
 |---|---|---|---|
 | `/report` | Skill orquestador | Agentes `historical`, `inference`, `expert-alignment`; skill `vault-circuito` (paso 9) → `graphify` incremental | `report_pipeline.py` |
-| `/reporte-lote` | Skill de lote | `report` (pasos 2-9 completos, por circuito); `agrupamiento-circuitos` (paso 1.5) | `batch_report_contract.py` |
-| `/informe-gerencial` | Skill de síntesis | `report` (solo pasos 2-8, circuitos faltantes); `agrupamiento-circuitos`; `graphify` (rebuild completo aislado, paso 2.5) | `informe_gerencial_contract.py`, `graph_view_builder.py` |
-| `/agrupamiento-circuitos` | Skill standalone | Ninguno — expone el contrato que los dos anteriores reutilizan | `circuit_clustering_contract.py` |
+| `/reporte-lote` | Skill de lote | `report` (pasos 2-9 completos, por circuito); `circuit_clustering_contract` (paso 1.5) | `batch_report_contract.py` |
+| `/informe-gerencial` | Skill de síntesis | `report` (solo pasos 2-8, circuitos faltantes); `circuit_clustering_contract`; `graphify` (rebuild completo aislado, paso 2.5) | `informe_gerencial_contract.py`, `graph_view_builder.py` |
 | `/limpiar-corridas` | Command de mantenimiento | Ninguno — dry-run + confirmación explícita antes de borrar | `cleanup_runs.py` |
 
 ```mermaid
@@ -387,11 +395,9 @@ flowchart TB
     CMD_REPORT(["/report circuito [fechas]"])
     CMD_LOTE(["/reporte-lote grupo [fechas]"])
     CMD_GER(["/informe-gerencial grupo [fechas]"])
-    CMD_AGR(["/agrupamiento-circuitos [fechas]"])
     CMD_LIMPIAR(["/limpiar-corridas"])
 
     CCC["circuit_clustering_contract.py<br/>plot_interactive_circuit_clustering"]
-    CMD_AGR --> CCC
 
     subgraph REPORT["Skill report — orquestador de UN circuito"]
         direction TB

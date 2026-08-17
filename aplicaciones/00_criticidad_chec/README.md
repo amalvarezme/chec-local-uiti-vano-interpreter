@@ -38,7 +38,7 @@ entorno y su propio puerto.
 | Trayectorias de vanos | 8804 |
 | Simulador de riesgo por vano | 8866 |
 
-Son los mismos puertos que fija `.claude/commands/_contrato-apps-locales.md`, y no por
+Son los mismos puertos que fija `.claude/commands/app-local-criticidadCHEC.md`, y no por
 estética: si el menú abriera clima en otro puerto, una instancia lanzada a mano y otra
 lanzada desde el menú convivirían sin verse, cada una construyendo y sirviendo por su
 lado. Con el puerto compartido, el menú **reconoce** una aplicación que ya estaba

@@ -377,24 +377,24 @@ whole-run totals line (`tokens_total` + `elapsed_seconds`) — the whole-run lin
 unchanged, not replaced. Both sidecars are optional and backward-compatible: their absence in older
 `run_dir`s renders identically to before this accounting existed.
 
-### Standalone circuit-clustering chart (multi-runtime adapters)
+### Standalone circuit-clustering chart (no longer a command)
 
-The standalone circuit-clustering chart is also runtime-native and local-only:
+The circuit-clustering chart had its own `/agrupamiento-circuitos` entry point (plus a
+`/skill:agrupamiento-circuitos` adapter for Pi) until 2026-08-17. Both were retired: the chart is
+never asked for on its own in practice, it is always a step inside a batch or a managerial report.
 
-| Runtime | Invocation |
-|---|---|
-| Claude Code | `/agrupamiento-circuitos [fecha_inicio fecha_fin]` |
-| Pi / el Gentleman | `/skill:agrupamiento-circuitos [fecha_inicio fecha_fin]` |
+**The contract module stayed, and it is not optional.** `/reporte-lote` (step 1.5) and
+`/informe-gerencial` (step 1.5) always called it directly by its render verb, never through the
+Skill:
 
-This entry point renders only the circuit-clustering HTML, not the full report. It is a thin adapter
-over a shared contract that resolves the date window, asks the user to confirm it, then reuses
-`plot_interactive_circuit_clustering` to write a standalone local HTML artifact.
+```
+PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.circuit_clustering_contract render <fecha_inicio> <fecha_fin> --runtime claude
+```
 
 - Shared contract: `src/chec_local_interpreter/circuit_clustering_contract.py`.
-- Claude Code skill: `.claude/skills/agrupamiento-circuitos/SKILL.md`.
-- Pi skill: `.pi/skills/agrupamiento-circuitos/SKILL.md`.
 - Date behavior: dates are optional as a pair; omitting both resolves the full dataset range, which
-  must be confirmed with the user before render.
+  the caller confirms with the user before render. Inside a batch that confirmation already
+  happened, so the callers pass their own resolved window and never ask twice.
 - Output: local standalone HTML only; no publishing and no site-asset mutation.
 - Plot source of truth: `src/chec_local_interpreter/plotting.py::plot_interactive_circuit_clustering`.
 

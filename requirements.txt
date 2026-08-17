@@ -40,7 +40,7 @@ jsonschema
 ipython
 jupyter
 ipykernel
-papermill  # parametrized notebook execution -- used by /experimento-kaggle's smoke/full harness
+papermill  # parametrized notebook execution -- notebook 05 carries a tagged `parameters` cell
 ipywidgets  # 01.5's live-kernel controls (D3); requires anywidget for plotly's go.FigureWidget
 anywidget  # backs plotly>=6's go.FigureWidget -- without it FigureWidget() raises ImportError
 
@@ -57,8 +57,6 @@ pytest
 fastapi   # la app consolidada de Databricks
 httpx     # lo necesita `fastapi.testclient.TestClient`
 
-# === Kaggle experiment CLI ===
-kaggle  # used by /experimento-kaggle's auth/config + push/status/output commands
 
 # === Graph Visualization ===
 networkx

@@ -331,7 +331,7 @@ COMMAND_DIR = Path(__file__).resolve().parents[1] / ".claude" / "commands"
 # vacia. El comando corre entero y publica un tablero sin contenido.
 #
 # Los dos comandos se retiraron el 2026-08-16 y los cuadernos que parcheaban ya no
-# existen. `/app-criticidad-chec` no parchea nada: construye los cuatro paneles llamando a
+# existen. `/subir-a-databricks` no parchea nada: construye los cuatro paneles llamando a
 # `chec_tableros.<modulo>.construir()` y sube el resultado. No hay marca que se pueda
 # perder, que es la unica forma de que este modo de fallo desaparezca en vez de mudarse.
 #
@@ -372,7 +372,7 @@ def test_a_migrated_board_leaves_no_deploy_command_promising_the_old_path(board)
 
 
 def test_el_despliegue_del_simulador_construye_con_el_modulo_y_no_con_celdas():
-    """`/app-simulador-vano` se rompio de OTRA forma que los cuatro estaticos.
+    """El despliegue del simulador se rompio de OTRA forma que los cuatro estaticos.
 
     Aquellos parcheaban el `.ipynb` buscando una linea por su texto. Este no parcheaba:
     **ejecutaba las celdas 1-9 del cuaderno por su INDICE** y despues reescribia a mano
@@ -381,15 +381,16 @@ def test_el_despliegue_del_simulador_construye_con_el_modulo_y_no_con_celdas():
     parcial: las celdas todavia corrian, o sea que construia un paquete que PARECIA
     bueno y lo publicaba con el nombre viejo de la geometria.
 
-    Se reescribio el 2026-08-16 y ahora su paso 3 es una linea:
+    Vivia en `/app-simulador-vano`, absorbido en el paso 4c de `/subir-a-databricks` el
+    2026-08-17. Se reescribio el 2026-08-16 y ahora es una linea:
     `aplicaciones/06_simulador/construir.py`, el mismo camino que la aplicacion de
     escritorio. Esta prueba fija que no vuelva a ejecutar celdas por indice.
     """
-    texto = (COMMAND_DIR / "app-simulador-vano.md").read_text(encoding="utf-8")
+    texto = (COMMAND_DIR / "subir-a-databricks.md").read_text(encoding="utf-8")
 
     for marca in ("nb['cells'][i]", "exec(compile(''.join(c['source'])"):
         assert marca not in texto, (
-            f"/app-simulador-vano volvio a ejecutar celdas por indice ({marca!r}); "
+            f"el despliegue del simulador volvio a ejecutar celdas por indice ({marca!r}); "
             "el paquete se construye con `aplicaciones/06_simulador/construir.py`")
 
     assert "aplicaciones/06_simulador/construir.py" in texto, (

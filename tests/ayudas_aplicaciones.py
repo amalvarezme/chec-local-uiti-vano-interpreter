@@ -11,7 +11,7 @@ contenedor de una app. Los cuatro ficheros la reclamaron como propia a la vez y 
 exigieron un `Iniciar.app` que nunca va a tener.
 
 El criterio bueno ya existia y estaba sin escribir: **una aplicacion local empieza por
-un numero**. No es decoracion. `_contrato-apps-locales.md` reparte un puerto fijo por
+un numero**. No es decoracion. `app-local-criticidadCHEC.md` reparte un puerto fijo por
 numero y `menu.py` las gobierna en ese orden.
 
 Vive aqui, una sola vez, por lo mismo que `ayudas_tableros.py`: cuatro copias de un

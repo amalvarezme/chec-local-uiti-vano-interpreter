@@ -23,7 +23,7 @@ import servidor  # noqa: E402
 PANEL = AQUI / "panel"
 
 
-# El puerto que le da `.claude/commands/_contrato-apps-locales.md`. Solo se usa
+# El puerto que le da `.claude/commands/app-local-criticidadCHEC.md`. Solo se usa
 # cuando nadie pasa `--puerto`, o sea en el doble clic: los comandos y
 # CriticidadCHEC lo pasan siempre. Que cada tablero pida EL SUYO es lo que evita
 # que dos abiertos a la vez se peleen por un 8765 comun y el segundo acabe en un

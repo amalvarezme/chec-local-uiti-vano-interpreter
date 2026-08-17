@@ -83,7 +83,7 @@ def _hace_falta_construir() -> str | None:
     return huellas.motivo_de_reconstruccion(guardadas, preparar.huellas_actuales())
 
 
-# El puerto que le da `.claude/commands/_contrato-apps-locales.md`. Solo se usa
+# El puerto que le da `.claude/commands/app-local-criticidadCHEC.md`. Solo se usa
 # cuando nadie pasa `--puerto`, o sea en el doble clic: los comandos y
 # CriticidadCHEC lo pasan siempre. Que cada tablero pida EL SUYO es lo que evita
 # que dos abiertos a la vez se peleen por un 8765 comun y el segundo acabe en un
@@ -181,7 +181,7 @@ def main() -> int:
         # Lo que si queda es el kernel de reserva que nadie llego a usar: 763 MB
         # permanentes en la portatil de UNA persona a cambio de nada medible.
         #
-        # En el despliegue de servidor (`.claude/commands/app-simulador-vano.md`) el
+        # En el despliegue de servidor (`.claude/commands/subir-a-databricks.md`) el
         # trato es el contrario y por eso alli sigue encendido: un kernel caliente lo
         # aprovechan muchas visitas, y la memoria es del cluster y no del portatil.
         #

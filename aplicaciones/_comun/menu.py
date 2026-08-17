@@ -179,7 +179,7 @@ class Aplicacion:
 
 # El puerto de cada tablero. Vive AQUI y no en `tableros.py` porque es del menu local
 # y de nadie mas: la app consolidada de Databricks sirve los mismos tableros bajo rutas
-# de un solo puerto. Son los que fija `.claude/commands/_contrato-apps-locales.md`, para
+# de un solo puerto. Son los que fija `.claude/commands/app-local-criticidadCHEC.md`, para
 # que una aplicacion abierta desde el menu y otra abierta a mano se reconozcan entre si
 # en vez de duplicarse en dos puertos distintos.
 PUERTOS = {

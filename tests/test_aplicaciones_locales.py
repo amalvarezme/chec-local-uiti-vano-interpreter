@@ -274,7 +274,7 @@ def test_los_puertos_del_menu_son_los_que_fija_el_contrato():
     """Los mismos puertos que `/app-local-*`, y no por estetica: si el menu abriera
     clima en otro puerto, una instancia lanzada a mano y otra lanzada desde el menu
     convivirian sin verse, cada una construyendo y sirviendo por su lado."""
-    contrato = (RAIZ / ".claude" / "commands" / "_contrato-apps-locales.md").read_text(
+    contrato = (RAIZ / ".claude" / "commands" / "app-local-criticidadCHEC.md").read_text(
         encoding="utf-8")
     declarados = dict(re.findall(r"\|\s*`([\w_]+)`\s*\|\s*\*\*(\d{4})\*\*\s*\|", contrato))
     assert declarados, "no se pudieron leer los puertos del contrato"
@@ -641,7 +641,7 @@ def test_cada_visor_prefiere_el_puerto_que_le_da_el_contrato(app: Path):
     reconocia CriticidadCHEC -- que lo busca en el puerto del contrato --, con lo que el
     menu levantaba una segunda copia de la misma aplicacion.
     """
-    contrato = (RAIZ / ".claude" / "commands" / "_contrato-apps-locales.md").read_text(
+    contrato = (RAIZ / ".claude" / "commands" / "app-local-criticidadCHEC.md").read_text(
         encoding="utf-8")
     declarados = dict(re.findall(r"\|\s*`([\w_]+)`\s*\|\s*\*\*(\d{4})\*\*\s*\|", contrato))
     esperado = declarados[app.name]
@@ -832,7 +832,7 @@ def test_el_simulador_local_no_deja_un_kernel_caliente_en_reposo():
     levanta uno nuevo igual. Lo unico que quedaba era el kernel de reserva que nadie usa:
     763 MB permanentes en la portatil de una persona a cambio de nada medible.
 
-    En el despliegue de servidor (`.claude/commands/app-simulador-vano.md`) el trato es
+    En el despliegue de servidor (`.claude/commands/subir-a-databricks.md`) el trato es
     el contrario y por eso ahi sigue encendido: alli el kernel caliente lo aprovechan
     muchas visitas, la memoria es del cluster, y nadie abre la pagina en el mismo
     segundo en que arranca el servicio.

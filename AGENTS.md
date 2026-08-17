@@ -23,11 +23,6 @@ itself, never a Python call to Gemini/OpenAI.
   effect.
 - Use structured tabular data, variable descriptions, variable modes, and relationship rules.
 - Keep the workflow local and lightweight.
-- `/experimento-kaggle <descripción>` (`.claude/skills/experimento-kaggle/SKILL.md`) is a
-  standalone code/model-experiment workflow: propose a Mermaid block diagram, build a
-  `smoke`/`full` notebook, gate on explicit user approval, then push/poll/pull it on Kaggle via
-  the official `kaggle` CLI. It never runs unattended and never touches the 5 LLM agent roles or
-  `report_pipeline.py`.
 - `/clima` (`.claude/skills/clima/SKILL.md`) is the interactive weather-enrichment runbook that
   replaces both climate notebooks. It first asks the mode: **A** update `data/Indicadores_vano_v3.csv`
   by event (25 lags, transactional, pass-through when nothing is new), or **B** query a

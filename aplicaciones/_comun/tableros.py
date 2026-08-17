@@ -16,7 +16,7 @@ donde entre.
 
 Lo que NO vive aqui, a proposito:
 
-  * los puertos, que son del menu local y de nadie mas (`_contrato-apps-locales.md`);
+  * los puertos, que son del menu local y de nadie mas (`app-local-criticidadCHEC.md`);
   * las rutas de Databricks, que son de la app consolidada;
   * si el tablero necesita un kernel vivo, que aqui se dice como un dato (`vivo`) y
     cada consumidor interpreta a su manera -- el menu lo arranca con Voila, y la app

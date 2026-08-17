@@ -57,10 +57,6 @@ El grafo experto de variables **no se lee de disco**: `construir_matriz_adyacenc
 construye en código y el `.pt` lo guarda dentro, junto con las aristas preservadas. El modelo y su
 grafo viajan juntos, que es lo que impide reconstruir uno con el otro desfasado.
 
-Para experimentos con GPU sin tocar la máquina local está `/experimento-kaggle`: propone diagrama
-de bloques y cuaderno, **exige aprobación explícita** y recién ahí ejecuta remoto vía la CLI de
-Kaggle.
-
 ## 3. Los agentes
 
 Cuatro roles, cada uno con su skill, su esquema JSON y su contrato de citación. Ninguno inventa
@@ -95,7 +91,6 @@ La arquitectura de cuatro capas (Skills vs. roles vs. playbooks de prompt) está
 | `/report` | `/report CIRCUITO [fecha_inicio fecha_fin]` | El HTML de un circuito, 9 pasos |
 | `/reporte-lote` | `/reporte-lote grupo=alta` | Un reporte por circuito del grupo + el scatter de agrupamiento |
 | `/informe-gerencial` | `/informe-gerencial grupo=media` | Un HTML gerencial cross-circuito sobre los representativos del grupo |
-| `/agrupamiento-circuitos` | `/agrupamiento-circuitos` | Solo el scatter de agrupamiento, sin reporte |
 | `/clima` | `/clima` | Enriquece los datos con clima de Open-Meteo (3 compuertas interactivas) |
 | `/limpiar-corridas` | `/limpiar-corridas` | Borra artefactos desechables de corridas previas (dry-run primero, confirmación explícita) |
 
@@ -161,11 +156,14 @@ Cada carpeta trae los mismos cuatro lanzadores: `instalar` (una vez, crea el ent
 `.command`, porque si el usuario tiene otra terminal instalada, LaunchServices se queda el
 `.command` y no lo ejecuta.
 
-Sus comandos: `/app-local-criticidadCHEC`, `/app-local-clima`,
-`/app-local-agrupamiento-circuitos`, `/app-local-trayectorias-circuitos`,
-`/app-local-trayectorias-vanos`, `/app-local-simulador`. El contrato compartido —puerto fijo,
-comprobación de "ya está corriendo", preflight, arranque en segundo plano— vive en
-[`_contrato-apps-locales.md`](../.claude/commands/_contrato-apps-locales.md).
+Su comando es uno solo: [`/app-local-criticidadCHEC`](../.claude/commands/app-local-criticidadCHEC.md),
+que abre el menú en el puerto 8800. **Los cinco tableros se abren desde su página**, no con comandos
+propios: cada uno arranca como proceso hijo, en el puerto fijo que le da la tabla de ese archivo, y
+el menú los vigila y los cierra. Hasta el 2026-08-17 cada tablero tenía además su propio comando
+(`/app-local-clima` y los otros cuatro); seis comandos para una sola aplicación significaban seis
+copias del mismo preflight separándose entre sí, y un usuario que tenía que saber cuál de los seis
+quería antes de ver nada. El contrato que compartían —puerto fijo, comprobación de "ya está
+corriendo", preflight, arranque en segundo plano— quedó absorbido en ese mismo archivo.
 
 ### 5.1 Por qué `01`-`04` son livianas y `06` no
 
@@ -196,21 +194,28 @@ reutilizando por referencia cruzada el mismo contrato compartido
 ([`_contrato-despliegue-databricks.md`](../.claude/commands/_contrato-despliegue-databricks.md)):
 bitácora obligatoria, regla de no-abortar y resolución del catálogo en runtime.
 
-| Comando | Qué migra |
-|---|---|
-| `/subir-datos-databricks` | `data/` completo (más `site/data/variables.json`, única excepción) al Volume |
-| `/subir-notebooks-databricks` | Los tres paquetes fuente (`chec_local_interpreter`, `chec_impacto`, `scripts`) y los 6 cuadernos que corren allá, como copias adaptadas |
-| `/subir-a-databricks` | Orquesta a los dos anteriores, importa el cuaderno `05` y despliega las apps que quepan |
-| `/app-vano-clima` | Publica el cuaderno `01` como Databricks App |
-| `/app-agrupamiento-vanos-circuitos` | Publica el `02` |
-| `/app-trayectorias-circuitos` | Publica el `03` |
-| `/app-trayectorias-vanos` | Publica el `04` |
-| `/app-simulador-vano` | Publica el `06` (Voila, kernel vivo) |
+Es **un solo comando**, `/subir-a-databricks`, con tres etapas. Cada una le pregunta primero a
+Databricks qué hay ya y solo sube lo que falta — sin eso, una corrida de rutina vuelve a mover
+566 MB de CSV que ya estaban y redespliega una app sana, que en el simulador son diez minutos de
+`pip install torch` a cambio de nada.
 
-Los cinco comandos de app **se autorreparan**: si faltan datos en el Volume encadenan
-`/subir-datos-databricks`, y configuran el permiso de lectura de la app sin intervención manual.
-Preguntan solo el nombre de la app y la URL del workspace — el destino se pregunta **cada
-corrida**, nunca se deduce del perfil con sesión vigente.
+| Etapa | Qué verifica | Qué sube si falta |
+|---|---|---|
+| 3 | El Volume, el CSV con su tamaño real (~566 MB, no un puntero de LFS) y el juego completo de shapefiles con sus sidecars | `data/` entero, más `site/data/variables.json` (única excepción fuera de `data/`) |
+| 4 | Que las dos apps existan, estén `ACTIVE`/`RUNNING`/`SUCCEEDED` y sirvan contenido al día | `criticidad-chec` (los cuatro tableros en cuatro rutas) y `simulador-vano` (Voila, kernel vivo) |
+| 5 | Que el cuaderno esté en el Workspace y no sea más viejo que su generador | `notebooks/05_mil_vano_ventana.ipynb`, como cuaderno y deliberadamente sin app |
+
+Eran ocho comandos. Cuatro (`/app-vano-clima`, `/app-agrupamiento-vanos-circuitos`,
+`/app-trayectorias-circuitos`, `/app-trayectorias-vanos`) publicaban un tablero cada uno parcheando
+un `.ipynb` que ya no existe: ese código vive en `src/chec_tableros/`. Los otros cuatro
+(`/subir-datos-databricks`, `/subir-notebooks-databricks`, `/app-criticidad-chec`,
+`/app-simulador-vano`) seguían siendo correctos y se absorbieron el 2026-08-17, porque repartidos
+en cuatro invocaciones dejaban cuatro reportes parciales y obligaban a recordar el orden.
+
+El comando **se autorrepara**: crea el Volume si falta, configura el permiso de lectura de la app
+declarando el Volume como recurso, y no aborta ante un muro de permisos —lo anota y sigue, para que
+el reporte salga con la lista completa de lo que bloquea el despliegue. Pregunta solo la URL del
+workspace, y la pregunta **cada corrida**: nunca la deduce del perfil con sesión vigente.
 
 ### 6.1 Dos reglas del contrato
 
@@ -294,24 +299,10 @@ con su archivo completo.
 | `/report` | Reportes | `/report CIRCUITO [fecha_inicio fecha_fin]` |
 | `/reporte-lote` | Reportes | `/reporte-lote grupo=alta` |
 | `/informe-gerencial` | Reportes | `/informe-gerencial grupo=media` |
-| `/agrupamiento-circuitos` | Reportes | `/agrupamiento-circuitos` |
 | `/clima` | Datos | enriquecimiento Open-Meteo |
 | `/limpiar-corridas` | Mantenimiento | dry-run y confirmación explícita |
-| `/experimento-kaggle` | Modelo | experimento remoto con compuerta de aprobación |
-| `/app-local-criticidadCHEC` | Aplicaciones | el menú, puerto 8800 |
-| `/app-local-clima` | Aplicaciones | tablero `01`, puerto 8801 |
-| `/app-local-agrupamiento-circuitos` | Aplicaciones | tablero `02`, puerto 8802 |
-| `/app-local-trayectorias-circuitos` | Aplicaciones | tablero `03`, puerto 8803 |
-| `/app-local-trayectorias-vanos` | Aplicaciones | tablero `04`, puerto 8804 |
-| `/app-local-simulador` | Aplicaciones | simulador `06` con Voila, puerto 8866 |
-| `/subir-datos-databricks` | Databricks | pide la URL del workspace |
-| `/subir-notebooks-databricks` | Databricks | pide la URL del workspace |
-| `/subir-a-databricks` | Databricks | orquesta datos → cuaderno `05` → apps → bitácora |
-| `/app-vano-clima` | Databricks | publica el `01` |
-| `/app-agrupamiento-vanos-circuitos` | Databricks | publica el `02` |
-| `/app-trayectorias-circuitos` | Databricks | publica el `03` |
-| `/app-trayectorias-vanos` | Databricks | publica el `04` |
-| `/app-simulador-vano` | Databricks | publica el `06` |
+| `/app-local-criticidadCHEC` | Aplicaciones | el menú en el puerto 8800; los cinco tableros se abren desde su página |
+| `/subir-a-databricks` | Databricks | datos → apps → cuaderno, verificando antes de subir cada uno; deja bitácora |
 
 ## 9. Más detalle
 
