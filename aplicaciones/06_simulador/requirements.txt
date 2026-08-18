@@ -5,10 +5,14 @@
 # hay respuesta que precomputar.
 #
 # La lista no se adivino: sale de importar el conjunto real de modulos de la
-# aplicacion y mirar que quedo en site-packages. `shap`, `optuna` y `matplotlib`
-# estan porque `chec_impacto.models.mil_persistencia` los arrastra al importarse, no
-# porque el tablero los use. Quitar de aqui sin repetir esa auditoria es como se
-# llega a un ModuleNotFoundError con la aplicacion ya arrancando.
+# aplicacion y mirar que quedo en site-packages. Quitar de aqui sin repetir esa
+# auditoria es como se llega a un ModuleNotFoundError con la aplicacion ya arrancando.
+#
+# Auditado de nuevo el 2026-08-17, y esta vez ejercitando el tablero y no solo los
+# imports: `derivacion.cargar(paquete)` mas `tablero.construir(...)` en el entorno de
+# esta aplicacion, mirando `sys.modules` al terminar. `matplotlib`, `openpyxl`,
+# `anywidget` y `cloudpickle` SI aparecen, asi que se quedan aunque ninguna celda los
+# nombre. `shap` y `optuna` NO aparecen, y por eso salieron (ver abajo).
 voila>=0.5
 jupyter-server>=2.14
 # ipykernel NO es opcional aunque no se importe en ninguna celda: es lo que provee el
@@ -25,13 +29,33 @@ numpy>=2.4
 scipy>=1.17
 scikit-learn>=1.9
 torch>=2.6
-shap>=0.51
-optuna>=4.9
+# macOS y Windows instalan RUEDAS DISTINTAS de este mismo renglon, y para este tablero
+# da igual: el simulador puntua en CPU a proposito, y ninguna de las dos ruedas cambia
+# eso. En Windows la de PyPI (`win_amd64`, 116 MB) es CPU y no trae CUDA; en macOS trae
+# MPS, que este tablero tampoco usa. La distincion solo importa al REENTRENAR, que
+# ocurre en el cuaderno 05 y con el entorno raiz -- ver `docs/REQUISITOS-MINIMOS.md`.
 matplotlib>=3.10
 joblib>=1.5
 pyarrow>=24.0
 openpyxl>=3.1
 cloudpickle>=3.0
+
+# --- Retirados el 2026-08-17, con la medicion que lo respalda --------------------
+# `shap` y `optuna` estaban aqui por una justificacion que dejo de ser cierta: que
+# `chec_impacto.models.mil_persistencia` los arrastraba al importarse. Medido hoy
+# construyendo el tablero de verdad, ninguno de los dos entra en `sys.modules`.
+#
+# Lo que costaban: shap arrastra `numba` (30 MB) y `llvmlite` (125 MB), y optuna
+# arrastra `sqlalchemy` (19 MB) y `alembic` (2,6 MB). Son **186 MB** de un entorno de
+# 1,6 GB, instalados para nada.
+#
+# SHAP ademas salio del proyecto entero -- lo sustituyeron `relevancia_hacia_uiti_minimo`
+# y `plan_hacia_clase_minima` -- y `tests/test_sin_shap.py` lo vigila. Esa prueba miraba
+# SOLO el `requirements.txt` de la raiz, que es como este archivo pudo seguir
+# declarandolo; hoy recorre todos.
+#
+# Ojo: quitarlos de esta lista NO los desinstala del entorno que ya existe. El ahorro
+# se ve en la proxima instalacion limpia, o corriendo `instalar` con `--recrear`.
 
 # --- Solo para CONSTRUIR el paquete, nunca en ejecucion --------------------------
 # El constructor corre las celdas de arranque del cuaderno, que si leen los

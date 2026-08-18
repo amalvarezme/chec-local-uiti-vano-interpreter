@@ -101,14 +101,35 @@ def test_ninguna_fuente_genera_codigo_que_importe_shap():
     )
 
 
-def test_requirements_no_declara_shap():
-    requisitos = (RAIZ / "requirements.txt").read_text(encoding="utf-8")
-    declaradas = [
-        linea.strip() for linea in requisitos.splitlines()
+def _paquetes_declarados(requisitos: Path) -> list[str]:
+    """Los nombres de paquete de un `requirements.txt`, sin version ni comentarios."""
+    return [
+        linea.strip().split("=")[0].split(">")[0].split("<")[0].strip()
+        for linea in requisitos.read_text(encoding="utf-8").splitlines()
         if linea.strip() and not linea.strip().startswith("#")
     ]
-    assert not [d for d in declaradas if d.split("=")[0].split(">")[0].split("<")[0].strip() == "shap"], (
-        "`shap` sigue declarado en requirements.txt"
+
+
+# TODOS los `requirements.txt` del repositorio, no solo el de la raiz. Vigilar uno
+# solo era el punto ciego por el que `aplicaciones/06_simulador/requirements.txt`
+# siguio declarando `shap` despues de que SHAP saliera del proyecto: 159 MB entre
+# shap, numba y llvmlite instalados en un entorno que -- medido importando sus
+# modulos reales y construyendo el tablero -- nunca lo carga.
+TODOS_LOS_REQUIREMENTS = sorted(RAIZ.glob("requirements.txt")) + sorted(
+    RAIZ.glob("aplicaciones/*/requirements.txt")
+) + sorted(RAIZ.glob("aplicaciones/*/*/requirements.txt"))
+
+
+def test_hay_requirements_que_vigilar():
+    """Sin esto, un `glob` que dejara de encontrar archivos volveria vacuas las
+    pruebas de abajo y se leerian igual que si pasaran."""
+    assert len(TODOS_LOS_REQUIREMENTS) >= 7, TODOS_LOS_REQUIREMENTS
+
+
+@pytest.mark.parametrize("requisitos", TODOS_LOS_REQUIREMENTS, ids=lambda r: str(r.relative_to(RAIZ)))
+def test_ningun_requirements_declara_shap(requisitos: Path):
+    assert "shap" not in _paquetes_declarados(requisitos), (
+        f"`shap` sigue declarado en {requisitos.relative_to(RAIZ)}"
     )
 
 
