@@ -684,6 +684,162 @@ def _script_safe_json(payload: Any) -> str:
     return raw.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
 
 
+_ETIQUETA_ANILLO = {"circuito": "Circuitos", "causa": "Causas",
+                    "estrategia": "Estrategias"}
+#: Cuantos nodos de un anillo llevan rotulo escrito. El resto se dibuja igual -- el
+#: anillo es una ESTRUCTURA y quitar nodos mentiria sobre ella -- pero su nombre se lee
+#: en el hover. Con mas de esto alrededor de un circulo no se lee ninguno.
+MAX_ROTULOS_ANILLO = 45
+
+
+def _hover_de_nodo(node: dict[str, Any]) -> str:
+    """Lo que el panel lateral del iframe mostraba al hacer clic.
+
+    Sin iframe el sitio natural es el hover, y ahi va lo mismo: el concepto, en cuantos
+    circuitos aparece, y las frases que los agentes escribieron -- VERBATIM, que es todo
+    el punto de este grafo: no se parafrasean ni se mezclan.
+    """
+    lineas = [f"<b>{html_lib.escape(str(node['label']))}</b>"]
+    soporte = node.get("soporte")
+    total = node.get("total_circuitos")
+    if soporte is not None:
+        lineas.append(f"Presente en {soporte} de {total} circuitos"
+                      if total else f"Presente en {soporte} circuitos")
+    prioridad = node.get("prioridad")
+    if prioridad:
+        lineas.append(f"Prioridad: {html_lib.escape(str(prioridad))}")
+    detalle = list(node.get("detalle") or [])
+    for linea in detalle[:6]:
+        lineas.append(html_lib.escape(str(linea)))
+    if len(detalle) > 6:
+        lineas.append(f"… y {len(detalle) - 6} más")
+    return "<br>".join(lineas)
+
+
+def figura_plotly(nodes: Sequence[dict[str, Any]], edges: Sequence[dict[str, Any]]):
+    """El grafo radial de conceptos, en Plotly.
+
+    Se dibujaba con `vis-network` desde un CDN y viajaba al informe dentro de un iframe.
+    Eso costaba tres cosas: una segunda biblioteca de grafo para un anillo que se lee
+    igual que el del informe por circuito y el del tablero; un iframe que no hereda la
+    hoja de estilos de la pagina ni su `plotly.js` y no crece con su ancho; y una
+    dependencia mas por CDN con su `integrity` clavado a una version.
+
+    El MODELO no cambia. `build_graph_elements` sigue siendo la misma funcion pura, con
+    sus tres anillos y sus posiciones fijas, y aqui NO se recalcula ninguna: hacerlo
+    abriria la puerta a que el dibujo y el resumen JSON del mismo grafo se separen.
+
+    Una traza de marcadores por anillo, para que la leyenda pueda apagarlos por
+    separado -- que es justo lo que el iframe no dejaba hacer desde el informe.
+    """
+    if not nodes:
+        return None
+
+    import plotly.graph_objects as go
+
+    from chec_local_interpreter.simulador_variables import rotacion_radial
+
+    posicion = {n["id"]: (float(n["x"]), float(n["y"])) for n in nodes}
+    fig = go.Figure()
+
+    # Las aristas primero, para que queden DEBAJO de los nodos. Una traza por arista y
+    # no una sola con `None` entre segmentos: el grosor va ligado al peso -- en cuantos
+    # circuitos coinciden causa y estrategia -- y en una traza unica el ancho de linea
+    # es una propiedad de la traza entera.
+    pesos = [int(e.get("weight") or 1) for e in edges] or [1]
+    maximo = max(pesos) or 1
+    for arista in edges:
+        origen = posicion.get(arista["source"])
+        destino = posicion.get(arista["target"])
+        if origen is None or destino is None:
+            continue
+        proporcion = int(arista.get("weight") or 1) / maximo
+        fig.add_trace(go.Scatter(
+            x=[origen[0], destino[0]], y=[origen[1], destino[1]], mode="lines",
+            line=dict(color=_EDGE_COLORS.get(arista["kind"], "#cbd5e1"),
+                      width=0.8 + 3.2 * proporcion),
+            opacity=0.35 + 0.5 * proporcion,
+            hoverinfo="skip", showlegend=False,
+        ))
+
+    for kind in ("circuito", "causa", "estrategia"):
+        del_anillo = [n for n in nodes if n["kind"] == kind]
+        if not del_anillo:
+            continue
+        fig.add_trace(go.Scatter(
+            x=[float(n["x"]) for n in del_anillo],
+            y=[float(n["y"]) for n in del_anillo],
+            mode="markers", name=_ETIQUETA_ANILLO[kind],
+            marker=dict(
+                size=[_scaled_size(kind, n.get("soporte"),
+                                   n.get("total_circuitos", 0)) * 0.75
+                      for n in del_anillo],
+                color=_NODE_COLORS[kind],
+                line=dict(width=1.0, color="#ffffff")),
+            hovertext=[_hover_de_nodo(n) for n in del_anillo], hoverinfo="text",
+        ))
+
+    # Los rotulos van como ANOTACIONES: un `Scatter` no sabe girar su texto, y
+    # horizontales se enciman entre vecinos del mismo anillo.
+    for node in list(nodes)[:MAX_ROTULOS_ANILLO]:
+        x, y = float(node["x"]), float(node["y"])
+        angulo, anclaje = rotacion_radial(x, y)
+        radio = math.hypot(x, y) or 1.0
+        fig.add_annotation(
+            x=x * (1.0 + 26.0 / radio), y=y * (1.0 + 26.0 / radio),
+            text=html_lib.escape(str(node["label"]))[:38],
+            showarrow=False, textangle=angulo, xanchor=anclaje, yanchor="middle",
+            font=dict(size=10, color="#334155"),
+        )
+
+    limite = max((math.hypot(float(n["x"]), float(n["y"])) for n in nodes), default=1.0)
+    limite *= 1.35
+    fig.update_layout(
+        height=620, margin=dict(l=10, r=10, t=28, b=10),
+        paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
+        legend=dict(orientation="h", yanchor="bottom", y=1.0, x=0),
+        hoverlabel=dict(align="left", font_size=11),
+    )
+    fig.update_xaxes(visible=False, range=[-limite, limite])
+    # `scaleanchor` para que los tres anillos sean CIRCULOS: sin el, el ancho del
+    # contenedor decide la forma y dejan de leerse como anillos.
+    fig.update_yaxes(visible=False, range=[-limite, limite],
+                     scaleanchor="x", scaleratio=1)
+    return fig
+
+
+def render_html_plotly(
+    nodes: Sequence[dict[str, Any]],
+    edges: Sequence[dict[str, Any]],
+    *,
+    output_name: str,
+) -> str:
+    """La pagina del grafo, con Plotly y sin `vis-network`.
+
+    Se sigue escribiendo un HTML completo a disco -- el informe gerencial lo embebe y
+    tambien se abre suelto --, pero ahora carga `plotly.js`, el mismo motor que el
+    informe por circuito.
+    """
+    figura = figura_plotly(nodes, edges)
+    # `div_id` FIJO. Sin el, `to_html` genera un UUID nuevo en cada llamada y el archivo
+    # deja de ser byte-identico para las mismas entradas -- que es un contrato de este
+    # modulo, no un detalle: es lo que permite ver si el grafo cambio de verdad
+    # comparando dos corridas. Se deriva del nombre del destino y no del contenido,
+    # porque el mismo grafo escrito en dos sitios distintos ya se distingue por su
+    # titulo.
+    cuerpo = ("<p>El modelo de conceptos quedó vacío.</p>" if figura is None
+              else figura.to_html(full_html=False, include_plotlyjs="cdn",
+                                  div_id="grafo-conceptos"))
+    titulo = html_lib.escape(output_name)
+    return (
+        "<!DOCTYPE html>\n<html lang=\"es\">\n<head>\n<meta charset=\"UTF-8\">\n"
+        f"<title>grafo radial de causas y estrategias - {titulo}</title>\n"
+        "<style>html,body{margin:0;font-family:'Segoe UI',Arial,sans-serif;"
+        "background:#ffffff;color:#2b2b2b;}</style>\n</head>\n<body>\n"
+        f"{cuerpo}\n</body>\n</html>\n"
+    )
+
+
 def _render_html(
     nodes: list[dict[str, Any]], edges: list[dict[str, Any]], *, output_name: str
 ) -> str:
@@ -917,7 +1073,10 @@ def build_intervention_graph(
                 circuitos_sin_corrida=sin_corrida,
                 errors=["el modelo de conceptos quedo vacio tras el armado del grafo"],
             )
-        html = _render_html(nodes, edges, output_name=Path(output_path).name)
+        # Plotly y no `vis-network`: el informe por circuito, el tablero y este
+        # grafo dibujan anillos que se leen igual, y tenerlos en dos motores
+        # obliga a reconciliar dos comportamientos de zoom, hover y arrastre.
+        html = render_html_plotly(nodes, edges, output_name=Path(output_path).name)
         atomic_write_text(Path(output_path), html)
         atomic_write_text(summary_path(output_path), _summary_json_text(model, nodes))
     except Exception as exc:  # noqa: BLE001 -- rendering/writing must never propagate

@@ -1413,7 +1413,7 @@ def test_la_seccion_de_intervencion_nombra_las_causas_y_las_estrategias():
     assert "clima/atmosférico" in html
     assert "Inspección en campo · CNT_TRF" in html
     assert "prioridad alta" in html
-    assert "srcdoc=" in html
+    assert 'class="grafo-conceptos"' in html
 
 
 def test_la_seccion_de_intervencion_se_omite_si_no_hay_figura():
@@ -1427,7 +1427,7 @@ def test_la_seccion_de_intervencion_se_omite_con_un_solo_circuito():
 def test_la_figura_se_dibuja_aunque_no_haya_resumen_legible():
     html = informe_contract._intervention_graph_html(_RADIAL_HTML, None, n_sampled=2)
 
-    assert "srcdoc=" in html
+    assert 'class="grafo-conceptos"' in html
     assert "Causas compartidas" not in html
 
 
@@ -1551,7 +1551,12 @@ def test_e2e_el_constructor_real_alimenta_el_informe(monkeypatch, tmp_path):
 
     assert outcome.status == "success"
     written = Path(outcome.output_html).read_text(encoding="utf-8")
-    assert html_lib.escape(figura.read_text(encoding="utf-8")) in written
+    # El grafo va INLINE, así que ya no se compara el documento ESCAPADO contra el
+    # informe: lo que viaja es su cuerpo, sin `<!DOCTYPE>` ni cabeza. Meter un documento
+    # completo dentro de otro es HTML inválido, y el navegador lo repara como quiera.
+    assert 'class="grafo-conceptos"' in written
+    assert "<!DOCTYPE html>" not in written.split('class="grafo-conceptos"', 1)[1]
+    assert "plotly" in written.lower()
     # El resumen escrito por el constructor real es el que nombra la sección.
     assert "Inspección en campo · CNT_TRF" in written
 

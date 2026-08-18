@@ -1158,6 +1158,29 @@ def load_intervention_summary(path: str | Path | None) -> dict[str, Any] | None:
     return payload
 
 
+def _cuerpo_html(documento: str | None) -> str:
+    """El contenido de `<body>`, o el texto tal cual si ya es un fragmento.
+
+    El constructor del grafo escribe una PAGINA completa -- tambien se abre suelta --,
+    y meter un `<!DOCTYPE html>` dentro de otro documento es HTML invalido: el navegador
+    lo repara como puede y el resultado depende de cual sea. Se recorta al cuerpo.
+
+    Lo que se pierde por el camino es el `<script>` de `plotly.js` que esa pagina trae en
+    su cabeza; por eso el informe lo carga por su cuenta y no colgando de una figura.
+    """
+    if not documento:
+        return ""
+    texto = str(documento)
+    inicio = texto.lower().find("<body")
+    if inicio < 0:
+        return texto
+    inicio = texto.find(">", inicio)
+    fin = texto.lower().rfind("</body>")
+    if inicio < 0 or fin < 0:
+        return texto
+    return texto[inicio + 1:fin]
+
+
 def _intervention_graph_html(
     graph_intervencion_html: str | None,
     summary: dict[str, Any] | None,
@@ -1202,7 +1225,12 @@ def _intervention_graph_html(
                 for item in estrategias
             )
             bloques.append(f"<h3>Estrategias de intervención propuestas</h3><ul>{filas}</ul>")
-    bloques.append(_iframe_srcdoc(graph_intervencion_html, height=680))
+    # INLINE y ya no dentro de un iframe. El iframe hacia falta cuando el grafo era una
+    # pagina de `vis-network` con su propio panel lateral y su buscador; en Plotly es un
+    # `<div>` que se basta solo. Y el iframe cobraba: su contenido no hereda la hoja de
+    # estilos del informe ni el `plotly.js` que la pagina ya carga para el
+    # dispersograma, y no crece con el ancho de la pagina.
+    bloques.append(f'<div class="grafo-conceptos">{_cuerpo_html(graph_intervencion_html)}</div>')
 
     cuerpo = "\n".join(bloques)
     return f"""
@@ -1352,7 +1380,10 @@ def render_managerial_report(
         resolved_window.get("fecha_fin"),
         highlighted_circuits=list(sampled),
     )
-    scatter_html = fig.to_html(full_html=False, include_plotlyjs="cdn") if fig else ""
+    # `plotly.js` UNA vez y en la cabeza, no colgando del dispersograma: el grafo de
+    # conceptos va INLINE y se quedaria sin motor si esta figura faltara. Es el mismo
+    # fallo que ya se corrigio en el informe por circuito.
+    scatter_html = fig.to_html(full_html=False, include_plotlyjs=False) if fig else ""
 
     label = group.get("label") or group.get("slug") or "grupo"
     circuit_count = group.get("circuit_count", len(sampled))
@@ -1369,6 +1400,7 @@ def render_managerial_report(
 <meta charset="utf-8">
 <title>Informe Gerencial: Circuitos con Criticidad {_escape(label)}</title>
 <style>{_REPORT_CSS}</style>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
 </head>
 <body>
 <h1>Informe Gerencial: Circuitos con Criticidad {_escape(label)}</h1>

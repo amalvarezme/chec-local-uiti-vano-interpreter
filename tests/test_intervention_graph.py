@@ -459,7 +459,13 @@ class TestBuildInterventionGraph:
         assert outcome.output_path == str(destino)
         assert outcome.causa_count >= 1 and outcome.estrategia_count >= 1
         html = destino.read_text(encoding="utf-8")
-        assert "physics" in html and "false" in html
+        # Plotly y ya no `vis-network`: el informe por circuito, el tablero y este grafo
+        # dibujan anillos que se leen igual, y en dos motores distintos obligaban a
+        # reconciliar dos comportamientos de zoom, de hover y de arrastre. Se comprueba
+        # por lo que NO trae: mientras quede el `<script>` de vis-network, el informe
+        # sigue cargando dos motores de grafo.
+        assert "vis-network" not in html
+        assert "plotly" in html.lower()
         assert "Causa" in html and "Estrategia" in html and "Circuito" in html
 
     def test_el_html_es_byte_identico_entre_corridas(
