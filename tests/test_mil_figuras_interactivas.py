@@ -225,3 +225,117 @@ def test_un_escenario_sin_simulacion_conserva_los_paneles_que_si_tiene(tmp_path)
 
     assert activos["top_json"]
     assert activos["uiti_json"] is None
+
+
+# --- La serie por ventana ------------------------------------------------------
+
+
+def _series():
+    return [
+        {"fid": "V1", "w": ["V8", "V9", "V10"], "uv": [0.0, 9.0, 3.0], "n": [0, 4, 2],
+         "clase": [0, 3, 1]},
+        {"fid": "V2", "w": ["V8", "V9", "V10"], "uv": [1.0, 4.0, 0.0], "n": [1, 2, 0]},
+    ]
+
+
+def test_la_serie_dibuja_una_linea_por_vano_con_su_color():
+    """El color identifica AL VANO y no a su grupo, igual que en el tablero: la misma
+    paleta y en el mismo orden, para que un vano azul alli siga siendo azul aqui."""
+    from chec_local_interpreter.mil_figuras_interactivas import (
+        COLORES_VANOS,
+        figura_series_por_ventana,
+    )
+
+    fig = figura_series_por_ventana(_series(), ventana_activa="V9")
+
+    lineas = [t for t in fig.data if t.mode == "lines+markers" and t.yaxis != "y2"]
+    assert len(lineas) == 2
+    assert lineas[0].line.color == COLORES_VANOS[0]
+    assert lineas[1].line.color == COLORES_VANOS[1]
+
+
+def test_el_punto_de_la_ventana_del_escenario_va_al_triple():
+    """Como el punto de la ventana vigente del tablero. Cada panel del informe habla de
+    UNA ventana, y sin la marca el lector tiene que buscar en el eje cual es."""
+    from chec_local_interpreter.mil_figuras_interactivas import (
+        FACTOR_PUNTO_ACTIVO,
+        SERIE_TAM_UITI,
+        figura_series_por_ventana,
+    )
+
+    fig = figura_series_por_ventana(_series(), ventana_activa="V9")
+
+    tamanos = list(next(t for t in fig.data if t.mode == "lines+markers").marker.size)
+    assert tamanos == [SERIE_TAM_UITI, SERIE_TAM_UITI * FACTOR_PUNTO_ACTIVO,
+                       SERIE_TAM_UITI]
+
+
+def test_los_eventos_van_en_su_propio_eje_y_punteados():
+    """UITI y numero de eventos no comparten unidad: en un solo eje, el que tenga la
+    escala grande aplasta al otro. Punteado y con marcador cuadrado, como el tablero."""
+    from chec_local_interpreter.mil_figuras_interactivas import figura_series_por_ventana
+
+    fig = figura_series_por_ventana(_series(), ventana_activa="V9")
+
+    eventos = [t for t in fig.data if t.yaxis == "y2"]
+    assert len(eventos) == 2
+    assert eventos[0].line.dash == "dot"
+    assert eventos[0].marker.symbol == "square"
+
+
+def test_el_marcador_toma_el_color_del_grupo_de_esa_celda():
+    """La linea dice de que vano es; el relleno del punto, en que grupo cayo ESA ventana.
+    Sin clase declarada va en gris neutro, no en el grupo mas bajo."""
+    from chec_local_interpreter.mil_figuras_interactivas import (
+        COLOR_SIN_GRUPO,
+        COLORES_GRUPOS,
+        figura_series_por_ventana,
+    )
+
+    fig = figura_series_por_ventana(_series(), ventana_activa="V9")
+
+    lineas = [t for t in fig.data if t.mode == "lines+markers" and t.yaxis != "y2"]
+    assert list(lineas[0].marker.color) == [COLORES_GRUPOS[0], COLORES_GRUPOS[3],
+                                            COLORES_GRUPOS[1]]
+    assert list(lineas[1].marker.color) == [COLOR_SIN_GRUPO] * 3
+
+
+def test_la_segunda_vuelta_de_la_paleta_se_separa_por_el_trazo():
+    """Mismo recurso que el tablero: con mas vanos que colores, el patron de la linea es
+    el canal que queda libre. Inventar tonos nuevos daria pares indistinguibles."""
+    from chec_local_interpreter.mil_figuras_interactivas import (
+        COLORES_VANOS,
+        figura_series_por_ventana,
+    )
+
+    muchas = [{"fid": f"V{i}", "w": ["V9"], "uv": [1.0], "n": [1]}
+              for i in range(len(COLORES_VANOS) + 2)]
+
+    # `max_vanos` explicito: por defecto son diez -- el mismo tope que tenia el panel en
+    # matplotlib -- y con diez no se llega a dar la segunda vuelta a la paleta.
+    fig = figura_series_por_ventana(muchas, ventana_activa="V9",
+                                    max_vanos=len(muchas))
+
+    lineas = [t for t in fig.data if t.mode == "lines+markers" and t.yaxis != "y2"]
+    assert lineas[0].line.dash == "solid"
+    assert lineas[len(COLORES_VANOS)].line.dash == "dash"
+    assert lineas[len(COLORES_VANOS)].line.color == COLORES_VANOS[0]
+
+
+def test_sin_series_no_hay_figura():
+    from chec_local_interpreter.mil_figuras_interactivas import figura_series_por_ventana
+
+    assert figura_series_por_ventana([], ventana_activa="V9") is None
+
+
+def test_la_serie_tambien_se_guarda_como_json(tmp_path):
+    from chec_local_interpreter.mil_figuras_interactivas import (
+        figuras_interactivas_de_escenario,
+    )
+
+    activos = figuras_interactivas_de_escenario(
+        {"ventana": "V9", "relevancia": _relevancia(), "simulacion": _simulacion()},
+        destino=tmp_path, features=["A", "B"], series=_series())
+
+    assert activos["serie_json"], "la serie sigue saliendo solo como PNG"
+    assert (tmp_path / activos["serie_json"]).suffix == ".json"

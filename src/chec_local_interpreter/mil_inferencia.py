@@ -928,6 +928,43 @@ def _nombre_clase(indice: Any) -> str:
         return "Sin clase"
 
 
+def con_clase_observada(
+    recursos: RecursosMIL, series: Sequence[Mapping[str, Any]]
+) -> list[dict[str, Any]]:
+    """Las mismas series, con la clase OBSERVADA de cada ventana.
+
+    Es lo que rellena cada punto del panel de series: la linea dice de que vano es y el
+    relleno, en que grupo cayo esa ventana. La clase sale del par (eventos observados,
+    UITI observado) sobre la geometria del 01.4 -- la misma regla del mapa historico del
+    tablero -- y NO de una pasada del modelo: la serie es historia MEDIDA, y pintarla
+    con la prediccion mezclaria dos cosas en el mismo dibujo.
+
+    Sin geometria las series salen SIN el campo, y el panel las pinta en gris neutro.
+    Caer a la clase 0 pintaria todos los puntos del grupo mas bajo, que es una
+    afirmacion, no una ausencia.
+
+    No muta la entrada: `prepare` las manda tambien al contexto del agente, y una lista
+    que cambia por debajo segun quien la mire es la forma segura de que el informe y el
+    agente hablen de cosas distintas.
+    """
+    geometria = getattr(recursos.modelo, "geometria", None)
+    if geometria is None:
+        return [dict(s) for s in series or ()]
+
+    from chec_impacto.models.criticality_assignment import asignar_clase
+
+    salida: list[dict[str, Any]] = []
+    for serie in series or ():
+        copia = dict(serie)
+        eventos = np.asarray(serie.get("n") or [], dtype=float)
+        uiti = np.asarray(serie.get("uv") or [], dtype=float)
+        if len(eventos) and len(eventos) == len(uiti):
+            clases, _ = asignar_clase(eventos, uiti, geometria)
+            copia["clase"] = [int(c) for c in np.asarray(clases)]
+        salida.append(copia)
+    return salida
+
+
 def knobs_de_intervencion(recursos: RecursosMIL) -> list[Any]:
     """Solo las palancas que una cuadrilla puede ejecutar.
 

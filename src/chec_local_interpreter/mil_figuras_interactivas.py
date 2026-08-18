@@ -292,6 +292,109 @@ def figura_grafo_relaciones(grafo: Mapping[str, Any] | None,
     return fig, ""
 
 
+#: La paleta de VANOS del tablero, copiada en el mismo orden. El color identifica al
+#: VANO y no a su grupo, y los seis primeros son los del 01.4: un vano que era azul en
+#: un cuaderno tiene que seguir siendo azul aqui.
+COLORES_VANOS = ["#0072b2", "#009e73", "#cc79a7", "#56b4e9", "#e69f00", "#8c564b",
+                 "#d55e00", "#6a3d9a", "#17becf", "#666666",
+                 "#b2df8a", "#bcbd22", "#004949", "#920000", "#b39ddb"]
+SERIE_TAM_UITI = 9
+SERIE_TAM_EVENTOS = 8
+#: El punto de la ventana de la que habla el panel, al triple. Igual que el punto de la
+#: ventana vigente del tablero.
+FACTOR_PUNTO_ACTIVO = 3
+
+
+def _estilo_de_cupo(indice: int) -> tuple[str, str]:
+    """Color y patron de linea del vano numero `indice`.
+
+    La paleta se recorre en circulo y la SEGUNDA vuelta va discontinua: dos series del
+    mismo color se separan igual por el patron de la linea, que es un canal que aqui
+    estaba libre. Es preferible a inventar quince tonos mas que se confundirian de a
+    pares -- eso serian dos series indistinguibles de verdad. Mismo recurso que el
+    tablero.
+    """
+    color = COLORES_VANOS[indice % len(COLORES_VANOS)]
+    return color, ("solid" if indice < len(COLORES_VANOS) else "dash")
+
+
+def figura_series_por_ventana(
+    series: Sequence[Mapping[str, Any]],
+    *,
+    ventana_activa: str | None = None,
+    max_vanos: int = 10,
+):
+    """La serie de cada vano identificado a lo largo de TODAS las ventanas.
+
+    Dice si el problema es cronico o aparecio el mes pasado, que se atiende distinto: un
+    vano visto solo en la ventana en que salio critico no permite esa lectura.
+
+    Tres decisiones copiadas del tablero, y cada una responde a algo:
+
+    * **el color es del VANO**, no de su grupo -- aqui la pregunta es "cual de estos
+      vanos", y el grupo lo lleva el relleno de cada punto;
+    * **los eventos van en su PROPIO eje**, punteados y con marcador cuadrado. UITI y
+      numero de eventos no comparten unidad, y en un solo eje el de escala grande
+      aplasta al otro hasta dejarlo plano;
+    * **el punto de `ventana_activa` va al triple**. Cada panel del informe habla de UNA
+      ventana, y sin la marca hay que ir a buscarla en el eje.
+
+    Las ventanas sin eventos van en CERO y no ausentes: una ventana tranquila de un vano
+    critico es informacion, no un hueco.
+    """
+    series = [s for s in (series or []) if s.get("w")][: int(max_vanos)]
+    if not series:
+        return None
+
+    from plotly.subplots import make_subplots
+
+    import plotly.graph_objects as go
+
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    for indice, serie in enumerate(series):
+        color, trazo = _estilo_de_cupo(indice)
+        ventanas = [str(w) for w in serie["w"]]
+        uiti = [float(v) for v in serie.get("uv", [])]
+        eventos = [float(v) for v in serie.get("n", [])]
+        clases = list(serie.get("clase") or [])
+        tamanos = [SERIE_TAM_UITI * (FACTOR_PUNTO_ACTIVO if w == ventana_activa else 1)
+                   for w in ventanas]
+        rellenos = [_color_de_grupo(clases[i]) if i < len(clases) else COLOR_SIN_GRUPO
+                    for i in range(len(ventanas))]
+        hover = [
+            f"<b>Vano {serie['fid']}</b><br>Ventana {w}"
+            f"<br>UITI acumulado: {u:,.2f}"
+            f"<br>Eventos: {int(n) if i < len(eventos) else 0}"
+            + (f"<br>Grupo: {_nombre_de_grupo(clases[i])}" if i < len(clases) else "")
+            for i, (w, u, n) in enumerate(
+                zip(ventanas, uiti, eventos + [0.0] * len(ventanas)))
+        ]
+        fig.add_trace(go.Scatter(
+            x=ventanas, y=uiti, mode="lines+markers", name=f"vano {serie['fid']}",
+            line=dict(color=color, width=2, dash=trazo),
+            marker=dict(size=tamanos, color=rellenos,
+                        line=dict(width=1.2, color=color)),
+            hovertext=hover, hoverinfo="text", connectgaps=False,
+        ), secondary_y=False)
+        fig.add_trace(go.Scatter(
+            x=ventanas, y=eventos, mode="lines+markers", name=f"eventos {serie['fid']}",
+            line=dict(color=color, width=1.1, dash="dot"),
+            marker=dict(size=[t * SERIE_TAM_EVENTOS / SERIE_TAM_UITI for t in tamanos],
+                        symbol="square", color=rellenos,
+                        line=dict(width=1.1, color=color)),
+            hoverinfo="skip", showlegend=False, opacity=0.55,
+        ), secondary_y=True)
+
+    _disposicion(fig, alto=340)
+    fig.update_xaxes(title_text="Ventana", type="category",
+                     tickfont=dict(size=TAM_FUENTE))
+    fig.update_yaxes(title_text="UITI acumulado", rangemode="tozero",
+                     gridcolor="#e2e8f0", secondary_y=False)
+    fig.update_yaxes(title_text="Eventos", rangemode="tozero", showgrid=False,
+                     secondary_y=True)
+    return fig
+
+
 def _guardar(fig, destino: Path, nombre: str) -> str:
     destino.mkdir(parents=True, exist_ok=True)
     (destino / nombre).write_text(fig.to_json(), encoding="utf-8")
@@ -303,6 +406,7 @@ def figuras_interactivas_de_escenario(
     *,
     destino: str | Path,
     features: Sequence[str] = (),
+    series: Sequence[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     """Los tres paneles de un escenario, en JSON de Plotly y con ruta RELATIVA.
 
@@ -321,11 +425,15 @@ def figuras_interactivas_de_escenario(
     uiti = figura_uiti_medido_vs_simulado(escenario.get("simulacion") or {})
     grafo, motivo = figura_grafo_relaciones(
         (escenario.get("simulacion") or {}).get("grafo_diferencia"), features)
+    serie = figura_series_por_ventana(
+        series, ventana_activa=str(escenario.get("ventana") or "") or None)
 
     return {
         "top_json": _guardar(top, destino, f"{clave}_top.json") if top else None,
         "uiti_json": _guardar(uiti, destino, f"{clave}_uiti.json") if uiti else None,
         "grafo_json": (_guardar(grafo, destino, f"{clave}_grafo.json")
                        if grafo else None),
+        "serie_json": (_guardar(serie, destino, f"{clave}_serie.json")
+                       if serie else None),
         "grafo_motivo": motivo,
     }

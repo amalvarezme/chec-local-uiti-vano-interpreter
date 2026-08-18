@@ -840,3 +840,38 @@ def test_sin_uiti_observado_la_simulacion_lo_declara_en_vez_de_inventarlo():
 
     assert simulacion["vanos"], "sin vanos la comprobacion pasaria sin mirar nada"
     assert all(v["u_observado"] is None for v in simulacion["vanos"])
+
+
+def test_las_series_reciben_la_clase_OBSERVADA_de_cada_ventana():
+    """El relleno de cada punto de la serie dice en que grupo cayo ESA ventana.
+
+    La clase sale del par (eventos observados, UITI observado) sobre la geometria del
+    01.4 -- la misma regla del mapa historico del tablero --, NO de una pasada del
+    modelo: la serie es historia medida, y pintarla con la prediccion mezclaria dos
+    cosas en el mismo dibujo.
+    """
+    from chec_local_interpreter.mil_inferencia import con_clase_observada
+
+    recursos = _recursos()
+    series = [{"fid": "V1", "w": ["W1", "W2"], "uv": [0.0, 3.0], "n": [1, 3]}]
+
+    con_clase = con_clase_observada(recursos, series)
+
+    # `_geometria` tiene sus centroides en la diagonal: (1, 0) cae en la clase 0 y
+    # (3, 3) en la 3.
+    assert con_clase[0]["clase"] == [0, 3]
+    assert series[0].get("clase") is None, "no puede mutar la entrada"
+
+
+def test_sin_geometria_las_series_salen_sin_clase_en_vez_de_con_una_inventada():
+    """Un artefacto que no exponga su geometria deja los puntos en gris neutro. Caer a
+    la clase 0 los pintaria a todos del grupo mas bajo."""
+    from chec_local_interpreter.mil_inferencia import con_clase_observada
+
+    recursos = _recursos()
+    recursos.modelo.geometria = None
+
+    con_clase = con_clase_observada(
+        recursos, [{"fid": "V1", "w": ["W1"], "uv": [3.0], "n": [3]}])
+
+    assert "clase" not in con_clase[0]

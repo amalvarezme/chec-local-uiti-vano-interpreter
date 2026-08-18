@@ -94,6 +94,7 @@ from chec_local_interpreter.mil_inferencia import (
     cargar_recursos_mil,
     compactar_grafo_del_escenario,
     catalogo_de_controles,
+    con_clase_observada,
     construir_contexto_inferencia_mil,
     mapas_de_ventanas,
     seleccionar_ventanas_reporte,
@@ -454,6 +455,13 @@ def prepare(
                         _escenario,
                         destino=run_dir / SUBDIR_FIGURAS_INFERENCIA,
                         features=inference_context.get("features", []),
+                        # Con la clase OBSERVADA de cada ventana, que es lo que
+                        # rellena cada punto: la linea dice de que vano es y el
+                        # relleno, en que grupo cayo esa ventana.
+                        series=con_clase_observada(
+                            recursos_mil,
+                            [_series_por_fid[f] for f in _fids
+                             if f in _series_por_fid]),
                     ),
                 }
             except OSError as exc:
@@ -695,7 +703,8 @@ def _build_inference_results(run_dir: Path) -> dict[str, Any] | None:
             # en vez de perder el panel.
             "fig_barras": _resolve(asset.get("top_json")
                                    or asset.get("relevancia_png")),
-            "fig_serie": _resolve(asset.get("serie_png")),
+            "fig_serie": _resolve(asset.get("serie_json")
+                                 or asset.get("serie_png")),
             "fig_uiti": _resolve(asset.get("uiti_json")
                                  or asset.get("uiti_png")),
             "fig_grafo": _resolve(asset.get("grafo_json")
