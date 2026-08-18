@@ -143,6 +143,24 @@ def _write_failure_artifact(circuito: str, response_text: str, errors: list[str]
     return artifact_path
 
 
+def _errores_de_ortografia(data):
+    """La guarda de tildes, como TERCERA etapa del validador.
+
+    Va aqui y no en el prompt porque en el prompt no funciono: un agente lo dejo dicho por
+    escrito en una corrida real -- *"el validador no revisa ortografia ni acentos: la
+    primera version paso con 'Diagnostico historico'"* -- y el informe gerencial salio con
+    43 apariciones de prosa sin tilde. Una revision que no puede tumbar nada se lee como
+    hecha; la que devuelve un codigo de salida distinto de 0, no.
+
+    Corre la ULTIMA, solo si el esquema y la procedencia ya pasaron: sobre datos invalidos
+    sus mensajes serian ruido encima de un fallo mas grave. Se importa dentro de la funcion
+    para que las pruebas puedan sustituirla por su nombre de modulo.
+    """
+    from chec_local_interpreter.ortografia import errores_de_tilde
+
+    return errores_de_tilde(data)
+
+
 def validate(payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
     """Run the `validate` verb: gate a candidate response through the two-stage L1 validators.
 
@@ -170,6 +188,12 @@ def validate(payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
         provenance_result = validar_provenance_base(result.data, context)
         errors.extend(provenance_result["errors"])
         ok = provenance_result["ok"]
+
+    if ok:
+        faltas = _errores_de_ortografia(result.data)
+        if faltas:
+            errors.extend(faltas)
+            ok = False
 
     if ok:
         return {"ok": True, "data": result.data}, 0

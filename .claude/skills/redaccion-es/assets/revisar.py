@@ -16,6 +16,7 @@ sola linea; de los `.ipynb`, las celdas markdown y el codigo de las de codigo.
 from __future__ import annotations
 
 import ast
+import html
 import io
 import json
 import re
@@ -34,10 +35,6 @@ from pathlib import Path
 # atono es la palabra mas comun del idioma y ninguna heuristica sin analisis sintactico
 # distingue "no se QUE pasa" de "la pregunta QUE se repite". La clase `tilde-dudosa` se
 # reporta para que la mire una persona; un corrector automatico NO la aplica.
-_TONICOS = {"que": "qué", "cual": "cuál", "cuales": "cuáles", "como": "cómo",
-            "cuando": "cuándo", "donde": "dónde", "cuanto": "cuánto",
-            "cuantos": "cuántos", "cuanta": "cuánta", "cuantas": "cuántas",
-            "quien": "quién", "quienes": "quiénes"}
 # Verbos de saber/decir en forma conjugada o infinitiva. SIN `\w*` al final y sin
 # `pregunta`/`muestra`/`ver`: los tres son tambien sustantivos o comodines, y "la pregunta
 # que se repite" disparaba con ellos -- que es exactamente el falso positivo que hay que
@@ -47,58 +44,18 @@ _ANTES_INDIRECTA = re.compile(
     r"indica|indicar|averiguar|preguntar|preguntarse|define|definir|depende)\s+(?:de\s+)?$",
     re.I)
 
-# Palabras cuya forma sin tilde NO existe en espanol: aqui no hay ambiguidad posible.
-_SIEMPRE_CON_TILDE = {
-    "ademas": "además", "asi": "así", "aqui": "aquí", "alli": "allí", "ahi": "ahí",
-    "aun": None,  # `aun` y `aún` existen las dos: se reporta, no se corrige
-    "analisis": "análisis", "aplicacion": "aplicación", "atencion": "atención",
-    "caida": "caída", "calculo": None,  # `calculo` (yo calculo) y `cálculo` existen
-    "categoria": "categoría", "codigo": "código", "condicion": "condición",
-    "criterio": None, "dia": "día", "dias": "días", "diagnostico": None,
-    "direccion": "dirección", "energia": "energía", "esta": None,
-    "estadistica": "estadística", "geografia": "geografía", "grafico": "gráfico",
-    "graficos": "gráficos", "informacion": "información", "interpretacion": "interpretación",
-    "linea": "línea", "lineas": "líneas", "maximo": "máximo", "maxima": "máxima",
-    "maximos": "máximos", "maximas": "máximas", "metodo": "método", "minimo": "mínimo",
-    "minima": "mínima", "minimos": "mínimos", "minimas": "mínimas", "medicion": "medición",
-    "numero": "número", "numeros": "números", "opcion": "opción", "parametro": "parámetro",
-    "parametros": "parámetros", "periodo": None,  # `periodo` y `período` valen las dos
-    "prediccion": "predicción", "proximo": "próximo", "rapido": "rápido",
-    "razon": "razón", "region": "región", "seleccion": "selección", "simulacion": "simulación",
-    "tambien": "también", "tecnico": "técnico", "tecnica": "técnica", "ultimo": "último",
-    "ultima": "última", "ultimos": "últimos", "ultimas": "últimas", "unico": "único",
-    "unica": "única", "version": "versión", "visualizacion": "visualización",
-    "estan": "están", "estara": "estará", "sera": "será", "seran": "serán",
-    "habra": "habrá", "podra": "podrá", "deberia": "debería", "podria": "podría",
-    "fisica": "física", "fisico": "físico", "electrico": "eléctrico",
-    "electrica": "eléctrica", "automatico": "automático", "automatica": "automática",
-    "funcion": "función", "funciones": "funciones", "formula": "fórmula",
-    "formulas": "fórmulas", "metrica": "métrica", "metricas": "métricas",
-    "construccion": "construcción", "representacion": "representación",
-    "inicializacion": "inicialización", "climatico": "climático", "climatica": "climática",
-    "geometria": "geometría", "distribucion": "distribución", "validacion": "validación",
-    "clasificacion": "clasificación", "correlacion": "correlación",
-    "desviacion": "desviación", "iteracion": "iteración", "iteraciones": "iteraciones",
-    "particion": "partición", "reduccion": "reducción", "relacion": "relación",
-    "relaciones": "relaciones", "resolucion": "resolución", "rotacion": "rotación",
-    "asignacion": "asignación", "combinacion": "combinación", "comparacion": "comparación",
-    "computacion": "computación", "definicion": "definición", "descripcion": "descripción",
-    "dimension": "dimensión", "ejecucion": "ejecución", "estimacion": "estimación",
-    "evaluacion": "evaluación", "generacion": "generación", "implementacion": "implementación",
-    "integracion": "integración", "interaccion": "interacción", "optimizacion": "optimización",
-    "penalizacion": "penalización", "regularizacion": "regularización",
-    "normalizacion": "normalización", "verificacion": "verificación",
-    "energetico": "energético", "estadistico": "estadístico", "estadisticos": "estadísticos",
-    "geografico": "geográfico", "grafica": "gráfica", "graficas": "gráficas",
-    "historico": "histórico", "historica": "histórica", "logico": "lógico",
-    "numerico": "numérico", "numerica": "numérica", "practico": "práctico",
-    "teorico": "teórico", "topologia": "topología", "trafico": "tráfico",
-    "energias": "energías", "tendria": "tendría", "seria": None,
-    "haria": "haría", "iria": "iría", "veria": "vería", "sabria": "sabría",
-    "estandar": "estándar", "ademas": "además", "despues": "después",
-    "ningun": "ningún", "algun": "algún", "quiza": "quizá", "jamas": "jamás",
-    "atras": "atrás", "detras": "detrás", "adonde": None, "tras": None,
-}
+# El diccionario vive en `src/chec_local_interpreter/ortografia.py`, no aqui. Se importa en
+# vez de copiarse porque la copia FUE el fallo: esta lista tenia 153 palabras y ninguna de
+# las seis del dominio que de verdad salieron mal en un informe del grupo Riesgo Alto --
+# `vegetacion`, `hipotesis`, `proteccion`, `atribucion`, `asociacion`, `topologico` --, asi
+# que el verificador no podia verlas por mucho que se corriera. Ahora la guarda de los
+# validadores de los tres agentes y este verificador miran exactamente la misma lista.
+_RAIZ = Path(__file__).resolve().parents[4]
+if str(_RAIZ / "src") not in sys.path:
+    sys.path.insert(0, str(_RAIZ / "src"))
+from chec_local_interpreter.ortografia import SIEMPRE_CON_TILDE as _SIEMPRE_CON_TILDE
+from chec_local_interpreter.ortografia import TONICOS as _TONICOS
+from chec_local_interpreter.ortografia import es_codigo as _es_codigo
 
 _MULETILLAS = {
     "de manera que": "para", "con el fin de": "para", "con el objetivo de": "para",
@@ -185,6 +142,13 @@ def _tildes(texto: str, archivo: str, linea: int) -> list[Hallazgo]:
     fuera = []
     for m in re.finditer(r"\b[a-záéíóúñü]+\b", texto, re.I):
         palabra, baja = m.group(0), m.group(0).lower()
+        # Un CODIGO de columna no lleva tilde y no se toca: `DURACION`, `TOT_USUS`,
+        # `PROMEDIO_KWH_TRF`. El verificador proponia `DURACIÓN`, y aplicarlo rompe el
+        # codigo que lee esa columna. La regla es mecanica -- mayusculas sostenidas, o un
+        # `_`/digito pegado -- para no tener que mantener una lista de excepciones.
+        entorno = texto[max(0, m.start() - 1):min(len(texto), m.end() + 1)]
+        if _es_codigo(palabra, entorno):
+            continue
         if palabra != _sin_tildes(palabra):
             continue  # ya lleva tilde
         if baja in _SIEMPRE_CON_TILDE:
@@ -261,9 +225,13 @@ def _es_espaniol(texto: str) -> bool:
     Se pide una palabra funcional espaniola, que es lo que distingue una frase de una
     lista de nombres tecnicos.
     """
+    # `en` faltaba, y es de las preposiciones mas comunes del castellano: una frase cuya
+    # unica palabra funcion fuera esa -- "Requiere validacion en campo" -- se saltaba
+    # ENTERA, sin revisar. Con ella entran las demas del mismo grupo, por la misma razon.
     return bool(re.search(
         r"\b(el|la|los|las|un|una|de|del|que|con|por|para|sin|sobre|como|es|son|"
-        r"se|su|sus|no|y|o|al|lo|le|este|esta|cada|mas|pero|si)\b",
+        r"se|su|sus|no|y|o|al|lo|le|este|esta|cada|mas|pero|si|"
+        r"en|entre|desde|hasta|ante|tras|durante|contra|hacia)\b",
         texto, re.I))
 
 
@@ -313,6 +281,42 @@ def _fragmentos_ipynb(fuente: str, archivo: str):
                 yield renglon, n * 1000 + i
 
 
+def _fragmentos_json(fuente: str):
+    """Las cadenas que son VALOR dentro de un `*.out.json` de agente.
+
+    Las CLAVES se saltan: una clave es una interfaz, y ponerle una tilde rompe a quien la
+    lee. Un JSON ilegible no es un defecto de redaccion: se devuelve vacio, no se revienta.
+    """
+    try:
+        datos = json.loads(fuente)
+    except (json.JSONDecodeError, ValueError):
+        return
+    pila = [datos]
+    while pila:
+        actual = pila.pop()
+        if isinstance(actual, str):
+            yield actual, 1
+        elif isinstance(actual, dict):
+            pila.extend(actual.values())
+        elif isinstance(actual, list):
+            pila.extend(actual)
+
+
+#: `<script>` y `<style>` son CODIGO dentro del HTML: una variable llamada `proteccion` ahi
+#: no es un defecto de redaccion. Se recortan enteros antes de mirar nada.
+_CODIGO_EN_HTML = re.compile(r"<(script|style)\b.*?</\1>", re.S | re.I)
+_ETIQUETA = re.compile(r"<[^>]+>")
+
+
+def _fragmentos_html(fuente: str):
+    """El texto VISIBLE de un informe renderizado, renglon a renglon."""
+    cuerpo = _CODIGO_EN_HTML.sub(" ", fuente)
+    for i, renglon in enumerate(_ETIQUETA.sub(" ", cuerpo).splitlines(), 1):
+        texto = html.unescape(renglon).strip()
+        if texto:
+            yield texto, i
+
+
 def revisar_archivo(ruta: Path) -> list[Hallazgo]:
     try:
         fuente = ruta.read_text(encoding="utf-8")
@@ -324,6 +328,10 @@ def revisar_archivo(ruta: Path) -> list[Hallazgo]:
         pares = _fragmentos_py(fuente, str(ruta))
     elif ruta.suffix in (".md", ".txt"):
         pares = ((r, i) for i, r in enumerate(fuente.splitlines(), 1) if r.strip())
+    elif ruta.suffix == ".json":
+        pares = _fragmentos_json(fuente)
+    elif ruta.suffix in (".html", ".htm"):
+        pares = _fragmentos_html(fuente)
     else:
         return []
     fuera = []
@@ -336,7 +344,7 @@ def _recorrer(rutas: list[str]):
     for bruta in rutas:
         p = Path(bruta)
         if p.is_dir():
-            for suf in ("*.py", "*.md", "*.ipynb"):
+            for suf in ("*.py", "*.md", "*.ipynb", "*.json", "*.html"):
                 for hijo in sorted(p.rglob(suf)):
                     if any(x in hijo.parts for x in (".venv", "node_modules", ".git",
                                                      "__pycache__", "graphify-out")):

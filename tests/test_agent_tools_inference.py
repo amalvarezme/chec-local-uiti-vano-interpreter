@@ -98,25 +98,25 @@ def _valid_output(context: dict) -> dict:
             ]
         },
         "escenarios": [
-            {"nombre": _ESCENARIO_NOMBRE, "interpretacion": "El escenario muestra concentracion en NR_T."}
+            {"nombre": _ESCENARIO_NOMBRE, "interpretacion": "El escenario muestra concentración en NR_T."}
         ],
         "discusion_grafos": [
             {"seccion": "V7", "lectura": "NR_T se asocia con COD_CAUSA en el grafo diferencia."}
         ],
         "coherencia_grafo_modelo": [
-            "NR_T es coherente con una hipotesis operativa de riesgo por vegetacion."
+            "NR_T es coherente con una hipótesis operativa de riesgo por vegetación."
         ],
         "hallazgos": ["NR_T aparece como variable relevante en el periodo."],
-        "limitaciones": ["La relevancia hacia el UITI minimo explica comportamiento del modelo."],
+        "limitaciones": ["La relevancia hacia el UITI mínimo explica comportamiento del modelo."],
         "inferencias_predictivas": [
             {
                 "horizonte": "periodo analizado",
                 "riesgo": "moderado",
-                "justificacion_modelo": "El modelo sugiere asociacion con NR_T.",
+                "justificacion_modelo": "El modelo sugiere asociación con NR_T.",
             }
         ],
         "hipotesis_modelo_predictivo": {
-            "ventanas_estudiadas": ["El modelo es consistente con riesgo por vegetacion."],
+            "ventanas_estudiadas": ["El modelo es consistente con riesgo por vegetación."],
             "plan_de_intervencion": [],
         },
     }

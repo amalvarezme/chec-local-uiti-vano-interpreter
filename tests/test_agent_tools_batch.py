@@ -849,7 +849,7 @@ def _valid_historical_response(circuito: str = "DON23L13") -> dict:
     return {
         "source": "llm",
         "prompt_version": PROMPT_VERSION,
-        "headline": "Concentracion de UITI_VANO",
+        "headline": "Concentración de UITI_VANO",
         "section_title": "Hallazgos del periodo",
         "executive_summary": ["La evidencia tabular muestra un punto dominante."],
         "key_findings": [
@@ -877,7 +877,7 @@ def _valid_historical_response(circuito: str = "DON23L13") -> dict:
         },
         "period_synthesis": "El comportamiento del periodo se concentra en la ventana estudiada.",
         "data_gaps": [],
-        "limitations": ["Solo se usa la informacion estructurada disponible."],
+        "limitations": ["Solo se usa la información estructurada disponible."],
         "recommended_actions": ["Revisar los eventos fuente de la ventana estudiada."],
     }
 
