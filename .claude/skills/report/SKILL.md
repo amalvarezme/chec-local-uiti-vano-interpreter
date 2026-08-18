@@ -566,6 +566,49 @@ always continues, the report always generates:
 | `inference_render_assets.json` sidecar present at render time | `render` | Figures/graphs resolved against `run_dir` and embedded (PNGs as base64 `<img>`, HTML graphs as an iframe) |
 | Sidecar absent at render time | `render` | `inference_results=None`, inference-figures section stays empty, no crash |
 
+## Naming rule: `Nombre natural (CODIGO)` in prose and tables, bare code in figures
+
+Every dataset column that reaches a READER is written `Nombre natural (CODIGO)` — e.g.
+`Densidad de descargas a tierra (DDT)`. The code is never dropped: it is what has to be
+looked up in the dataset, in the simulator and in the variable-selection file. The name is
+never dropped either: `DDT` means nothing to anyone outside the team, and one measured
+report printed `NR_T` twenty-four times without once saying it is vegetation risk.
+
+**Figures are the deliberate exception.** In a bar, a violin or a graph node the full name
+does not fit and the axis already says what is being shown, so the bare code stays.
+
+Three layers enforce it, and they are not interchangeable:
+
+| Layer | What it does |
+|---|---|
+| `glosario_variables.nombre_con_codigo(codigo)` | one code -> `Nombre natural (CODIGO)`; returns the code unchanged when it is not in the glossary, so an unknown column never renders as `X (X)` |
+| `glosario_variables.nombrar_en_prosa(texto)` | names each code the FIRST time it appears in a free-text string, leaves later mentions bare |
+| `glosario_variables.nombrar_prosa_en_datos(data)` | the pass applied to a whole agent response at RENDER time |
+
+Four properties of the prose pass that exist because each one was a real defect:
+
+- **One pass over the ORIGINAL text.** Replacing code by code, each over the previous
+  result, made the pass find the names it had just inserted: `UITI_VANO` expanded to
+  `UITI atribuido al vano (UITI_VANO)` and the next round expanded that `UITI` again.
+- **Case-sensitive.** `TIPO` and `CONDUCTOR` are codes; `tipo` and `conductor` are ordinary
+  Spanish. A case-insensitive rule fills the report with noise.
+- **Whole token only.** `DDT_EXTRA` is not `DDT`. Alternation runs longest-first so
+  `CNT_VN_SW` wins over `CNT_VN`.
+- **Identity keys are excluded** (`glosario_variables.CLAVES_DE_IDENTIDAD`): `variable`,
+  `data_ref`, `concepto`, `variable_groups_used` and the run paths. `variable` is the key
+  `intervention_graph` groups strategies on and the one that travels to the
+  `.resumen.json`; expanding it breaks the grouping AND duplicates the name, because the
+  table already passes it through the glossary when painting it.
+
+**It runs at RENDER, never at save.** The `.out.json` is the artifact the agent's own
+`validate` accepted; rewriting it would separate the file from its validation. A report can
+therefore be re-rendered from existing runs to pick this up — no agent re-run needed.
+
+**Group names are a separate map.** `Proteccion` and `Topologia` are schema enum
+identifiers and stay unaccented in `variable_groups_used`; when DISPLAYED they go through
+`domain_context.NOMBRE_LEGIBLE_GRUPO` (`Protección`, `Topología`). The report printed
+`Modo Topologia` until that map was wired in.
+
 ## Related artifacts
 
 - Orchestrator (L1, pure Python, no LLM call anywhere in this module):

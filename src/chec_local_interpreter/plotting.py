@@ -9,7 +9,11 @@ import pandas as pd
 
 from chec_local_interpreter.config import PROJECT_ROOT
 from chec_local_interpreter.event_counts import count_unique_event_dates
-from chec_local_interpreter.glosario_variables import nombre_con_codigo
+from chec_local_interpreter.domain_context import NOMBRE_LEGIBLE_GRUPO
+from chec_local_interpreter.glosario_variables import (
+    nombrar_prosa_en_datos,
+    nombre_con_codigo,
+)
 # La identidad visual que este informe COMPARTE con el gerencial. Se inyecta como
 # valor en la f-string de abajo, asi que sus llaves van SIMPLES y no se vuelven a
 # escanear; las reglas propias de esta plantilla siguen escribiendose dobles.
@@ -986,7 +990,11 @@ def render_expert_alignment_tab(expert_alignment_validation_data):
                     continue
                 rows.append(
                     "<tr>"
-                    f"<td>{_escape(item.get('variable'))}</td>"
+                    # `Nombre natural (CODIGO)`: el codigo solo no dice nada a quien lee
+                    # el informe, y el nombre solo no se puede buscar en la tabla ni en
+                    # el simulador. Esta columna es la que se lee para decidir donde
+                    # intervenir, asi que necesita las dos mitades.
+                    f"<td>{_escape(nombre_con_codigo(str(item.get('variable') or '')))}</td>"
                     f"<td>{_escape(item.get('prioridad'))}</td>"
                     f"<td>{_value(item.get('fuentes_que_la_respaldan'))}</td>"
                     f"<td>{_escape(item.get('justificacion'))}</td>"
@@ -1165,6 +1173,18 @@ def render_llm_analysis(
     import os
 
     validation_data = validation_data or {}
+
+    # La PROSA de los tres agentes, con cada codigo nombrado la primera vez que aparece.
+    # Se hace aqui, al pintar, y no al guardar: el `.out.json` es el artefacto que el
+    # propio `validate` del agente acepto, y reescribirlo lo separaria de su validacion.
+    # Las claves de identidad (`variable`, `data_ref`, ...) quedan intactas -- ver
+    # `glosario_variables.CLAVES_DE_IDENTIDAD`.
+    validation_data = nombrar_prosa_en_datos(validation_data)
+    inference_analysis = nombrar_prosa_en_datos(inference_analysis) if inference_analysis else inference_analysis
+    expert_alignment_analysis = (
+        nombrar_prosa_en_datos(expert_alignment_analysis) if expert_alignment_analysis
+        else expert_alignment_analysis
+    )
 
     # El ranking del cuaderno 02 compara este circuito contra la flota entera, asi que
     # necesita el dataframe multi-circuito (`all_circuits_df`), no `raw_df`, que el que
@@ -1622,7 +1642,7 @@ def render_llm_analysis(
         cabecera = []
         if hallazgos:
             cabecera.append(
-                "<div class='summary-box'><h3 style='margin-top:0;'>Sintesis del modelo "
+                "<div class='summary-box'><h3 style='margin-top:0;'>Síntesis del modelo "
                 "sobre las ventanas estudiadas</h3>"
                 + _list_to_items(hallazgos, max_items=5) + "</div>")
 
@@ -1774,7 +1794,7 @@ def render_llm_analysis(
                                       if isinstance(_crudas, list) else str(_crudas))
                         just_fis = j.get('justificacion_fisico_logica', '')
                         ana = j.get('analisis_causas', '')
-                        char_html += f"<li style='margin-bottom: 8px;'><strong>Modo {modo} ({vars_assoc}):</strong> {just_fis}<br><span style='font-size: 0.95em; color: #475569;'><em>Análisis:</em> {ana}</span></li>"
+                        char_html += f"<li style='margin-bottom: 8px;'><strong>Modo {NOMBRE_LEGIBLE_GRUPO.get(modo, modo)} ({vars_assoc}):</strong> {just_fis}<br><span style='font-size: 0.95em; color: #475569;'><em>Análisis:</em> {ana}</span></li>"
                     else:
                         char_html += f"<li>{j}</li>"
                 char_html += "</ul>"

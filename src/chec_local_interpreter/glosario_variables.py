@@ -148,3 +148,104 @@ def nombre_con_codigo(codigo: str) -> str:
     clave = str(codigo).strip()
     nombre = nombre_natural(clave)
     return clave if nombre == clave else f"{nombre} ({clave})"
+
+
+#: Los codigos ordenados de mas largo a mas corto: asi `CNT_VN_SW` se reconoce antes que
+#: `CNT_VN`, y no queda un sufijo suelto detras de un nombre ya expandido.
+_CODIGOS_POR_LONGITUD = sorted(NOMBRE_NATURAL, key=len, reverse=True)
+
+
+def nombrar_en_prosa(texto: str | None) -> str:
+    """La PRIMERA aparicion de cada codigo, nombrada; las siguientes, tal cual.
+
+    Los agentes escriben `NR_T` y `DDT` pelados en su prosa, y el lector del informe no
+    tiene de donde sacar que significan -- en un informe medido, `NR_T` aparecia
+    veinticuatro veces sin decirse ni una vez que es el riesgo por vegetacion. Nombrarlo
+    en CADA mencion es el extremo opuesto: convierte el parrafo en una lista de
+    definiciones. Se presenta una vez, como en cualquier texto tecnico.
+
+    **Una sola pasada sobre el texto ORIGINAL.** Reemplazar codigo por codigo, cada uno
+    sobre el resultado del anterior, hace que la pasada se encuentre los nombres que ella
+    misma acaba de insertar: `UITI_VANO` se expandia a "UITI atribuido al vano
+    (UITI_VANO)" y la vuelta siguiente encontraba ese `UITI` y lo expandia otra vez, con
+    el resultado ilegible "Usuarios interrumpidos por tiempo de interrupcion (UITI)
+    atribuido al vano (UITI_VANO)". Buscando todo de una vez, lo insertado nunca se
+    reexamina.
+
+    Tres guardas que no son opcionales:
+
+    - **Sensible a la caja.** `TIPO` y `CONDUCTOR` son codigos; `tipo` y `conductor` son
+      castellano corriente. Una regla que ignore la caja llena el informe de ruido, y es
+      el mismo error que ya se pago con `DURACION` en la guarda de tildes.
+    - **Solo el token entero.** `DDT_EXTRA` no es `DDT`. La alternancia va de mas largo a
+      mas corto para que `CNT_VN_SW` gane sobre `CNT_VN`.
+    - **Lo que el agente ya escribio bien se respeta.** Si el texto ya trae `(CODIGO)`,
+      ese codigo no se toca en ninguna de sus apariciones.
+    """
+    if not texto:
+        return ""
+    original = str(texto)
+    nombrables = [c for c in _CODIGOS_POR_LONGITUD
+                  if nombre_natural(c) != c and f"({c})" not in original]
+    if not nombrables:
+        return original
+    patron = re.compile(
+        r"(?<![A-Za-z0-9_])(" + "|".join(re.escape(c) for c in nombrables) + r")(?![A-Za-z0-9_])"
+    )
+    vistos: set[str] = set()
+
+    def _sustituir(m: re.Match) -> str:
+        codigo = m.group(1)
+        if codigo in vistos:
+            return codigo
+        vistos.add(codigo)
+        return f"{nombre_natural(codigo)} ({codigo})"
+
+    return patron.sub(_sustituir, original)
+
+
+
+#: Claves cuyo VALOR es un identificador y no prosa: el codigo viaja ahi para que otro
+#: paso lo consuma, no para que alguien lo lea. `variable` es la clave con la que
+#: `intervention_graph` agrupa estrategias entre circuitos y la que llega al
+#: `.resumen.json`; `data_ref` es la trazabilidad que el validador comprueba contra
+#: `allowed.variables`. Expandir cualquiera de las dos rompe a su consumidor, y ademas
+#: duplicaria el nombre, porque la tabla ya las pasa por el glosario al pintarlas.
+CLAVES_DE_IDENTIDAD: frozenset[str] = frozenset({
+    "variable",
+    "variables",
+    "data_ref",
+    "knob_id",
+    "concepto",
+    "variable_groups_used",
+    "variables_modelo_predictivo",
+    "features",
+    "features_nombradas",
+    # Rutas e identificadores de la corrida: no son prosa y una expansion dentro de
+    # una ruta la deja apuntando a un archivo que no existe.
+    "circuito",
+    "source",
+    "run_dir",
+    "report_html",
+    "output_html",
+})
+
+
+def nombrar_prosa_en_datos(valor, _clave: str | None = None):
+    """La respuesta de un agente con su PROSA nombrada y su identidad intacta.
+
+    Devuelve una copia: el mismo dict lo leen despues el grafo radial y el
+    `.resumen.json`, y mutarlo aqui les cambiaria el suelo por debajo.
+
+    Se aplica al RENDER y no al guardar, a proposito: el `.out.json` es el artefacto que
+    el agente valido, y reescribirlo lo separaria de lo que su propio `validate` acepto.
+    """
+    if isinstance(valor, dict):
+        return {k: nombrar_prosa_en_datos(v, k) for k, v in valor.items()}
+    if isinstance(valor, (list, tuple)):
+        return [nombrar_prosa_en_datos(v, _clave) for v in valor]
+    if isinstance(valor, str):
+        if _clave in CLAVES_DE_IDENTIDAD:
+            return valor
+        return nombrar_en_prosa(valor)
+    return valor

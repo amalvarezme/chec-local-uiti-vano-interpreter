@@ -53,7 +53,10 @@ from chec_local_interpreter.batch_report_contract import (
 from chec_local_interpreter.batch_report_contract import normalize_request as _batch_normalize_request
 from chec_local_interpreter.circuit_clustering_contract import RuntimeMetadata, _dataset_date_range
 from chec_local_interpreter.circuit_identity import canonical_circuit_identity
-from chec_local_interpreter.glosario_variables import nombre_con_codigo
+from chec_local_interpreter.glosario_variables import (
+    nombrar_prosa_en_datos,
+    nombre_con_codigo,
+)
 from chec_local_interpreter.informe_estilo import (
     CSS_IDENTIDAD,
     escudo_chec_html,
@@ -856,27 +859,29 @@ def load_circuit_content(
                 "headline": None,
                 "key_finding_titles": [],
             }
-        return {
+        # La prosa que viene del agente, con cada codigo nombrado la primera vez. Va al
+        # LEER y no al guardar: el `.out.json` es lo que su propio `validate` acepto.
+        return nombrar_prosa_en_datos({
             "circuito": circuito,
             "source": "vault_note",
             "content": note_text,
             "report_html": report_html,
             **structured,
-        }
+        })
 
     if run_dir is None:
         return None
     data = load_validated_agent_output(run_dir, "expert-alignment")
     structured = _structured_fields(run_dir)
 
-    return {
+    return nombrar_prosa_en_datos({
         "circuito": circuito,
         "source": "raw_json",
         "run_dir": str(run_dir),
         "content": data.get("sintesis_final", ""),
         "report_html": report_html,
         **structured,
-    }
+    })
 
 
 GRAPH_PATTERNS_MIN_SUPPORT = 2
