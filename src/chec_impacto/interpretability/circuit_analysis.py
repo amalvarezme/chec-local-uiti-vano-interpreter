@@ -123,20 +123,6 @@ def normalizar_minmax(serie):
     return (vals - min_val) / (max_val - min_val)
 
 
-def puntaje_borda_ponderado_eventos(df_eventos, features, top_col="_TOP_VARS", top_k=20):
-    puntajes = pd.Series(0.0, index=list(features))
-
-    for d in df_eventos[top_col]:
-        if not isinstance(d, dict):
-            continue
-        for pos, (var, atribucion) in enumerate(list(d.items())[:top_k], start=1):
-            if var in puntajes.index:
-                borda = float(top_k + 1 - pos)
-                puntajes.loc[var] += borda * float(atribucion)
-
-    return puntajes.sort_values(ascending=False)
-
-
 def _normalizar_nombre_archivo(value):
     text = str(value).strip().lower()
     replacements = {
@@ -159,61 +145,6 @@ def _normalizar_nombre_archivo(value):
     while "__" in slug:
         slug = slug.replace("__", "_")
     return slug or "grafo"
-
-
-def estimar_matriz_grafo_mgcecdl(
-    model,
-    X,
-    features,
-    rbf_sigma=1.0,
-    device="cpu",
-    batch_size=1024,
-):
-    """Estimate a variable-variable matrix from the MGCECDL decoder reconstructions.
-
-    `torch` se importa AQUI y no arriba: es la unica funcion de este modulo que lo
-    usa, y el resto -- `construir_prompt_inferencia` entre ellas, "pure
-    prompt-rendering only" -- lo pagaba igual. El CLI del rol `inference` solo
-    renderiza un prompt y valida un JSON, y por este import de arriba cargaba torch en
-    sus dos llamadas: 1,4 s cada una. Misma politica que
-    `criticality_assignment.distancias_cuadradas_torch`, que ya lo documenta.
-    """
-    import torch
-
-    X = np.asarray(X, dtype=np.float32)
-    if X.ndim != 2:
-        raise ValueError("X debe ser una matriz 2D.")
-    feature_list = list(features)
-    if X.shape[1] != len(feature_list):
-        raise ValueError("X y features no tienen el mismo numero de columnas.")
-
-    resolved_device = torch.device(device)
-    model = model.to(resolved_device)
-    model.eval()
-    reconstructed_batches = []
-    with torch.no_grad():
-        for start in range(0, len(X), int(batch_size)):
-            x_batch = torch.as_tensor(
-                X[start:start + int(batch_size)],
-                dtype=torch.float32,
-                device=resolved_device,
-            )
-            outputs = model(x_batch)
-            reconstructed_batches.append(outputs["reconstructed_features"].detach().cpu().numpy())
-
-    reconstructed_features = np.vstack(reconstructed_batches)
-    variable_profiles = reconstructed_features.T
-    squared_norms = np.sum(variable_profiles**2, axis=1, keepdims=True)
-    squared_distances = np.maximum(
-        squared_norms + squared_norms.T - 2.0 * variable_profiles @ variable_profiles.T,
-        0.0,
-    )
-    profile_dim = max(variable_profiles.shape[1], 1)
-    squared_distances = squared_distances / profile_dim
-    sigma = max(float(rbf_sigma), 1e-8)
-    estimated_matrix = np.exp(-squared_distances / (2.0 * sigma**2)).astype(np.float32)
-    np.fill_diagonal(estimated_matrix, 0.0)
-    return estimated_matrix
 
 
 _MODO_PALETTE = [

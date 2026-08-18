@@ -141,3 +141,30 @@ def test_las_exportaciones_de_interpretabilidad_siguen_ahi():
 
     assert salida == (
         "grafo_reconstruido_por_grupo agregar_borda construir_modos_interpretabilidad")
+
+
+def test_circuit_analysis_ya_no_nombra_torch():
+    """El aplazamiento de `torch` dentro de una funcion era un rodeo, no un destino.
+
+    `estimar_matriz_grafo_mgcecdl` era la UNICA funcion de `circuit_analysis` que
+    tocaba torch, y por eso su docstring explicaba que lo importaba en el cuerpo:
+    el resto del modulo -- renderizar un prompt, validar un JSON, dibujar un radar --
+    lo pagaba sin usarlo. Esa funcion reconstruia una matriz variable-variable desde
+    el decodificador de MGCECDL, el clasificador retirado en `2cf942b`, y no la
+    llamaba nadie en todo el arbol.
+
+    Al irse, el rodeo sobra: el archivo entero queda sin una sola mencion a torch.
+    Esta prueba lo congela, porque un import perezoso solo se nota cuando alguien
+    vuelve a poner uno normal arriba -- y entonces ya lo estan pagando las dos
+    llamadas del rol `inference`.
+    """
+    fuente = (
+        Path("src/chec_impacto/interpretability/circuit_analysis.py")
+        .read_text(encoding="utf-8")
+    )
+
+    assert "torch" not in fuente, (
+        "circuit_analysis volvio a nombrar torch. Si de verdad hace falta, importalo "
+        "DENTRO de la funcion que lo use y documenta por que, como hace "
+        "`criticality_assignment.distancias_cuadradas_torch`."
+    )

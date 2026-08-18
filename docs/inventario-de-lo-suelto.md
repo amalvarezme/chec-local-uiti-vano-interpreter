@@ -3,8 +3,9 @@
 > Medido el 2026-08-18 sobre `main` en `b9fe934`, con el grafo de `graphify-out/` recién
 > reconstruido (9.289 nodos, 15.132 aristas, 1.002 comunidades).
 >
-> Audiencia: quien decida qué se borra. Este documento **no borra nada**: nombra, mide y separa
-> lo que de verdad está suelto de lo que solo lo parece.
+> Audiencia: quien decida qué se borra. El documento nombra, mide y separa lo que de verdad está
+> suelto de lo que solo lo parece. La **sección B ya se ejecutó** el mismo día; todo lo demás sigue
+> siendo una propuesta y no se ha tocado.
 
 ## Qué se midió, y por qué así
 
@@ -43,19 +44,25 @@ Tres. Los tres tienen pruebas, y **las 38 pruebas pasan**: están verdes y no la
   página web es un canal de divulgación, no una pieza del análisis, y `flujo-detallado.md` ya lo
   deja fuera explícitamente. Borrarlo cortaría el único puente que existe hacia `site/`.
 
-## B. Funciones sin una sola referencia en todo el árbol
+## B. Funciones sin una sola referencia en todo el árbol — ✅ BORRADAS
 
-Dos, las dos en `src/chec_impacto/interpretability/circuit_analysis.py` (893 líneas en total):
+Eran dos, las dos en `src/chec_impacto/interpretability/circuit_analysis.py`. **Se borraron el
+2026-08-18**; el módulo pasó de 893 a 824 líneas.
 
 | Función | Línea | Por qué quedó suelta |
 |---|---:|---|
 | `puntaje_borda_ponderado_eventos` | 126 | Variante superada de `agregar_borda`, que sí se usa unas líneas más arriba en el mismo archivo |
-| `estimar_matriz_grafo_mgcecdl` | 164 | Reconstruye una matriz variable-variable desde **el decodificador de MGCECDL**, el clasificador retirado en `2cf942b` |
+| `estimar_matriz_grafo_mgcecdl` | 164 | Reconstruía una matriz variable-variable desde **el decodificador de MGCECDL**, el clasificador retirado en `2cf942b` |
 
-`estimar_matriz_grafo_mgcecdl` importa `torch` dentro de su propio cuerpo — el archivo documenta
-que lo hace porque es *"la única función de este módulo que lo usa"*. Borrarla deja a
-`circuit_analysis.py` sin ninguna dependencia de `torch`, que es exactamente el motivo por el que
-`interpretability/__init__.py` resuelve sus exportaciones tarde.
+Ninguna de las dos estaba en el mapa de exportación perezosa `_ORIGEN` de
+`interpretability/__init__.py`, así que la API del paquete no cambió.
+
+`estimar_matriz_grafo_mgcecdl` importaba `torch` dentro de su propio cuerpo — el archivo
+documentaba que lo hacía porque era *"la única función de este módulo que lo usa"*. Al irse, el
+rodeo sobra: **el archivo entero quedó sin una sola mención a `torch`**, y eso está congelado por
+`tests/test_costo_de_arranque.py::test_circuit_analysis_ya_no_nombra_torch`. Un import perezoso
+solo se nota cuando alguien vuelve a poner uno normal arriba, y para entonces ya lo están pagando
+las dos llamadas del rol `inference`.
 
 Las otras 48 funciones y clases que la primera pasada marcó **no están muertas**: son públicas de
 nombre pero internas de hecho, usadas dentro de su propio módulo entre 1 y 11 veces
@@ -111,21 +118,38 @@ Encontrado de paso, verificado contra el código:
   Es, además, la única razón por la que el analizador no marcó `graph_view_builder.py` como
   huérfano en la primera pasada: la prosa obsoleta lo mantuvo vivo.
 
+### El analizador se escuda a sí mismo
+
+Al volver a correrlo después de borrar las dos funciones, la lista de módulos huérfanos salió
+**vacía**. No porque se hayan resuelto: porque **este mismo documento los nombra**, y el
+analizador perdona a cualquier módulo cuya ruta aparezca en un `.md`. Es exactamente la trampa del
+`README` de arriba, reproducida por el inventario que la denuncia.
+
+Un segundo caso, accidental y más divertido: la clase `Pieza` de
+`aplicaciones/_comun/empaquetar.py` estuvo escondida durante meses porque `flujo-resumen.md`
+titulaba sus secciones *"Pieza 1"*, *"Pieza 2"*… Al reescribir ese documento sobre los tres
+pilares, la palabra desapareció y la clase salió a la luz. Tiene un uso interno real, así que no
+es código muerto — pero mide bien lo frágil que es escudarse en el texto.
+
+**Regla para el próximo analizador:** el corpus de prosa sirve para *no borrar por error*, nunca
+para *dar por vivo*. Cuando algo sobreviva solo por una mención en texto, hay que mirar quién la
+escribió y si sigue siendo verdad.
+
 ## Recomendación, en orden
 
-1. **Borrar `graph_view_builder.py` y su prueba** (850 líneas). Es el único caso donde la decisión
-   ya está documentada como pendiente por el propio proyecto, y donde no hay ninguna ambigüedad
-   sobre quién lo llamaba.
-2. **Corregir `README.md:390` y `:446`** en el mismo cambio. Sin eso, el próximo inventario vuelve
-   a tropezar con la misma prosa.
-3. **Borrar las dos funciones de `circuit_analysis.py`** (39 líneas) y comprobar que el archivo
-   queda sin `torch`.
-4. **Decidir sobre `relevancia_lote.py`** (771 líneas con su prueba). Perdió a su cuaderno el
-   2026-08-14; si el barrido por lote va a volver, se queda; si no, se va al historial de git como
-   se fueron los nueve cuadernos.
-5. **No tocar `web_export.py`.** Está fuera del flujo por diseño, y es el único puente hacia
-   `site/`.
+- [x] **Borrar las dos funciones de `circuit_analysis.py`.** Hecho el 2026-08-18: 69 líneas fuera,
+  `torch` fuera del archivo, y una prueba que lo congela. La suite pasó de 2.790 a 2.791.
+- [ ] **Borrar `graph_view_builder.py` y su prueba** (850 líneas). Es el único caso donde la
+  decisión ya está documentada como pendiente por el propio proyecto, y donde no hay ninguna
+  ambigüedad sobre quién lo llamaba.
+- [ ] **Corregir `README.md:390` y `:446`** en el mismo cambio. Sin eso, el próximo inventario
+  vuelve a tropezar con la misma prosa.
+- [ ] **Decidir sobre `relevancia_lote.py`** (771 líneas con su prueba). Perdió a su cuaderno el
+  2026-08-14; si el barrido por lote va a volver, se queda; si no, se va al historial de git como
+  se fueron los nueve cuadernos.
+- [x] **No tocar `web_export.py`.** Está fuera del flujo por diseño, y es el único puente hacia
+  `site/`.
 
-Nada de esto es urgente y nada de esto rompe una prueba en verde hoy: las 38 pruebas de los tres
-módulos huérfanos pasan. Ese es justamente el riesgo — una suite verde no distingue entre código
-que funciona y código que además hace falta.
+Lo que queda no es urgente y no rompe una prueba en verde hoy: las 38 pruebas de los tres módulos
+huérfanos pasan. Ese es justamente el riesgo — una suite verde no distingue entre código que
+funciona y código que además hace falta.
