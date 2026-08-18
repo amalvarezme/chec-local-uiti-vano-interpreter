@@ -17,21 +17,72 @@ El proyecto toma todo ese historial y responde tres preguntas:
    cantidad de usuarios, la antigüedad del equipo.
 3. **¿Qué pasaría si** se interviniera un vano concreto — y cuánto costaría esa intervención.
 
-Todo sale del mismo archivo de historial. De ahí para adelante hay cuatro piezas.
+Todo sale del mismo archivo de historial. De ahí para adelante hay **tres pilares**, y se pueden
+usar por separado:
 
-## Pieza 1 — El modelo que predice
+| Pilar | En una frase | Para quién |
+|---|---|---|
+| **1 · Las aplicaciones** | Seis tableros que se abren con doble clic: cinco para *mirar* los datos y uno para *simular* cambios | Quien explora con el ratón |
+| **2 · Los comandos** | Traen el clima y redactan los informes, con asistentes de inteligencia artificial | Quien necesita un documento escrito |
+| **3 · La nube** | Un comando publica todo lo anterior en Databricks para que se abra desde el navegador | Quien lo comparte con toda CHEC |
+
+---
+
+## Pilar 1 — Las aplicaciones: mirar y simular
+
+Seis aplicaciones de escritorio, para Mac y para Windows, **sin conexión a internet y sin
+servidor**. Se abren con doble clic:
+
+| Aplicación | Qué muestra | Tipo |
+|---|---|---|
+| **CriticidadCHEC** | El menú: abre, vigila y cierra las otras cinco desde una sola ventana | — |
+| **Clima** | Cada vano sobre el mapa, con las variables de clima y su serie de tiempo | Describe |
+| **Agrupamiento de vanos** | Qué vanos se parecen entre sí por impacto acumulado y número de eventos | Describe |
+| **Trayectorias de circuitos** | Cómo se mueve cada circuito en el tiempo, con una ventana deslizante | Describe |
+| **Trayectorias de vanos** | Lo mismo, un nivel más abajo | Describe |
+| **Simulador** | *Qué pasaría si* se cambia una variable de un vano — y cuánto cuesta esa intervención | **Predice** |
+
+### Las cinco que describen
+
+Las cinco primeras se preparan una vez y después abren en menos de un segundo, porque todo el
+cálculo ya está hecho y la interacción vive en el navegador. No necesitan nada corriendo por
+detrás: son prácticamente indestructibles.
+
+### La que predice
+
+El **simulador** es distinto: cada vez que se presiona "Simular" vuelve a preguntarle al modelo,
+así que necesita el programa corriendo por detrás. Si pierde esa conexión **no lo dice**: se queda
+mudo, con los botones puestos.
+
+### El modelo que hay debajo
 
 Un modelo estadístico aprende a estimar el impacto de un vano durante una ventana de tiempo, a
 partir de los eventos que ocurrieron ahí. Se entrena una vez, se guarda en un archivo, y de ahí en
-adelante **todo lo demás solo lo lee**: ni el reporte ni el simulador pueden reentrenarlo. Eso está
-verificado automáticamente, no es una promesa.
+adelante **todo lo demás solo lo lee**: ni los informes ni el simulador pueden reentrenarlo. Eso
+está verificado automáticamente, no es una promesa.
 
 Una cosa que el proyecto dice en voz alta en vez de esconder: el modelo **ordena bien** —acierta
 cuáles vanos son peores que cuáles— pero **su nivel corre alto**, cerca de un 34%. Por eso, cada
 vez que se muestra una predicción al lado de una medición real, se muestra también ese margen de
 error. Un número del modelo nunca se presenta como si fuera una medición.
 
-## Pieza 2 — Los asistentes que redactan
+Todas las aplicaciones vigilan sus datos: si cambia el historial de eventos, el modelo o la lista
+de variables, se reconstruyen solas la próxima vez que se abren. No hay que acordarse de nada.
+
+---
+
+## Pilar 2 — Los comandos: traer datos y redactar informes
+
+Cinco comandos. Uno trae datos, tres escriben documentos, y el quinto limpia lo que esos tres
+dejaron.
+
+### Traer el clima
+
+**`/clima`** enriquece el historial con datos meteorológicos por hora. Pregunta tres cosas antes de
+salir a internet —qué ubicaciones, qué servicio, qué límite de gasto— y lleva su propia cuenta, así
+que una consulta interrumpida se retoma sin volver a pagar lo que ya trajo.
+
+### Los asistentes que redactan
 
 Cuatro asistentes de inteligencia artificial escriben las explicaciones en lenguaje natural. Cada
 uno mira el mismo caso desde un ángulo distinto:
@@ -48,7 +99,7 @@ puede citar lo que viene ahí. Además, cada uno revisa su propia respuesta cont
 antes de entregarla. Si no pasa la revisión, se reintenta o se guarda como falla explícita — nunca
 se publica algo sin validar.
 
-## Pieza 3 — Los reportes
+### Los informes
 
 Cuando alguien pide el análisis de un circuito, esto es lo que pasa:
 
@@ -62,38 +113,39 @@ Cuando alguien pide el análisis de un circuito, esto es lo que pasa:
 5. El reporte también se guarda en un archivo indexado, para poder buscarlo y relacionarlo con
    otros circuitos más adelante.
 
-Lo mismo se puede pedir para **un circuito**, para **un grupo entero** (por ejemplo, todos los de
-riesgo alto) o como **un informe gerencial** que sintetiza varios circuitos representativos a la vez.
+Lo mismo se puede pedir de tres formas:
 
-## Pieza 4 — Las aplicaciones
+- **`/report`** — un circuito.
+- **`/reporte-lote`** — un reporte individual por cada circuito de una banda de riesgo.
+- **`/informe-gerencial`** — **un solo** documento que sintetiza varios circuitos a la vez. Con una
+  banda toma los 12 peores de esa banda; con `todos` reparte 5 del grupo alto, 5 del medio-alto y 2
+  del medio, y abre mirando la flota completa antes de bajar a esos doce.
 
-Seis aplicaciones de escritorio, para Mac y para Windows, **sin conexión a internet y sin
-servidor**. Se abren con doble clic:
+Un detalle que conviene saber al leer un informe gerencial: **los circuitos elegidos son los peores
+de su banda, no los típicos.** El documento describe la peor cola del grupo, y eso es deliberado.
 
-| Aplicación | Qué muestra |
-|---|---|
-| **CriticidadCHEC** | El menú: abre, vigila y cierra las otras cinco desde una sola ventana |
-| **Clima** | Cada vano sobre el mapa, con las variables de clima y su serie de tiempo |
-| **Agrupamiento de vanos** | Qué vanos se parecen entre sí por impacto acumulado y número de eventos |
-| **Trayectorias de circuitos** | Cómo se mueve cada circuito en el tiempo, con una ventana deslizante |
-| **Trayectorias de vanos** | Lo mismo, un nivel más abajo |
-| **Simulador** | *Qué pasaría si* se cambia una variable de un vano — y cuánto cuesta esa intervención |
+### Limpiar
 
-Las cinco primeras se preparan una vez y después abren en menos de un segundo, porque todo el
-cálculo ya está hecho y la interacción vive en el navegador. El **simulador** es distinto: cada vez
-que se presiona "Simular" vuelve a preguntarle al modelo, así que necesita el programa corriendo
-por detrás.
+**`/limpiar-corridas`** borra los archivos desechables que dejan los tres comandos anteriores. Es
+irreversible, así que siempre muestra primero **qué va a borrar** y espera un sí explícito. Nunca
+borra por su cuenta.
 
-Todas vigilan sus datos: si cambia el historial de eventos, el modelo o la lista de variables, se
-reconstruyen solas la próxima vez que se abren. No hay que acordarse de nada.
+---
 
-## La misma cosa, pero en la nube
+## Pilar 3 — La nube: publicar en Databricks
 
 Las mismas aplicaciones se pueden publicar en **Databricks**, la plataforma en la nube de CHEC,
-para que se abran desde una dirección web sin instalar nada en el computador. Un comando copia los
-datos, sube el código y publica cada tablero.
+para que se abran desde una dirección web sin instalar nada en el computador. **Un solo comando**,
+`/subir-a-databricks`, hace las tres cosas en orden:
 
-Tres cosas que conviene saber:
+1. **Los datos** — el histórico y los mapas.
+2. **Las aplicaciones** — publicadas como tableros que se abren desde el navegador.
+3. **El cuaderno del modelo** — queda en el espacio de trabajo, para quien quiera reentrenarlo allá.
+
+Antes de subir cada cosa, pregunta si ya está. Sin eso, una publicación de rutina volvería a mover
+566 MB de datos que ya estaban y a reinstalar aplicaciones sanas.
+
+Cuatro cosas que conviene saber:
 
 - **Es una copia independiente.** Si alguien cambia el análisis local, la nube no se entera sola:
   hay que volver a subir.
@@ -101,10 +153,14 @@ Tres cosas que conviene saber:
   por prioridad.
 - **El estado de la nube no es durable.** Un espacio verificado como completo un día apareció vacío
   al siguiente, así que el proceso siempre comprueba antes de dar algo por hecho.
+- **Pregunta la dirección del espacio de trabajo en cada corrida.** Nunca la adivina. Equivocarse
+  de espacio no da error: sube todo, al sitio equivocado, en silencio.
 
 Y una regla de fondo: cuando el proceso choca con un permiso que no tiene, **no se detiene** —
 lo anota y sigue. Así, al final, entrega la lista completa de lo que hace falta pedirle al
 administrador, en vez de morir en el primer obstáculo.
+
+---
 
 ## Glosario rápido
 
@@ -114,7 +170,8 @@ administrador, en vez de morir en el primer obstáculo.
 | **Vano** | Un tramo pequeño dentro de un circuito, entre dos postes. |
 | **UITI_VANO** | Un número que mide qué tan grave fue el impacto de una falla en un vano. |
 | **Ventana** | Un periodo de tiempo recortado del historial, para mirar el circuito por tramos. |
-| **Criticidad** | Qué tan grave es un circuito comparado con los demás, de riesgo bajo a muy alto. |
+| **Criticidad** | Qué tan grave es un circuito comparado con los demás, de riesgo bajo a alto. |
+| **Banda de riesgo** | El grupo al que pertenece un circuito: bajo, medio, medio-alto o alto. |
 | **Modelo** | Un programa que aprendió del historial a estimar el impacto de un vano. |
 | **Agente de IA** | Un asistente que lee datos ya seleccionados y redacta una explicación, con reglas estrictas de validación. |
 | **Databricks** | La plataforma en la nube donde se publican las aplicaciones. |

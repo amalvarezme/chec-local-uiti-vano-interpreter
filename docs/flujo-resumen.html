@@ -124,146 +124,166 @@
 
 <main>
   <header class="masthead">
-    <p class="eyebrow">Guía para perfiles no técnicos</p>
-    <h1>¿Cómo funciona el proyecto CHEC UITI_VANO?</h1>
-    <p class="subtitle">Una explicación sin nombres de archivos ni comandos, pensada para quien quiere entender el "qué" y el "por qué", no el "cómo" técnico. Para el detalle completo, ver <a href="./flujo-detallado.html">flujo-detallado.html</a>.</p>
+    <p class="eyebrow">Gu&iacute;a para perfiles no t&eacute;cnicos</p>
+    <h1>&iquest;C&oacute;mo funciona el proyecto CHEC UITI_VANO?</h1>
+    <p class="subtitle">Una explicaci&oacute;n sin nombres de archivos ni comandos, pensada para quien quiere entender el "qu&eacute;" y el "por qu&eacute;", no el "c&oacute;mo" t&eacute;cnico. Para el detalle completo, ver <a href="./flujo-detallado.html">flujo-detallado.html</a>.</p>
   </header>
 
   <section>
-    <h2>¿Para qué sirve esto?</h2>
-    <p>CHEC opera líneas eléctricas de distribución divididas en <strong>circuitos</strong>. Cada circuito tiene muchos tramos pequeños llamados <strong>vanos</strong>. Cuando algo falla —una caída de energía, un daño en un poste— el sistema registra ese evento y lo asocia a un indicador llamado <strong>UITI_VANO</strong>, que mide qué tan grave fue el impacto para los usuarios conectados a ese tramo.</p>
-    <p>El proyecto toma todo ese historial y responde tres preguntas: <strong>qué tan crítico es cada circuito</strong> comparado con los demás; <strong>qué variables influyen más</strong> en que una falla sea grave; y <strong>qué pasaría si</strong> se interviniera un vano concreto, y cuánto costaría hacerlo.</p>
-    <p>Todo sale del mismo archivo de historial. De ahí para adelante hay cuatro piezas.</p>
+    <h2>&iquest;Para qu&eacute; sirve esto?</h2>
+    <p>CHEC opera l&iacute;neas el&eacute;ctricas de distribuci&oacute;n divididas en <strong>circuitos</strong>. Cada circuito tiene muchos tramos peque&ntilde;os llamados <strong>vanos</strong>. Cuando algo falla —una ca&iacute;da de energ&iacute;a, un da&ntilde;o en un poste— el sistema registra ese evento y lo asocia a un indicador llamado <strong>UITI_VANO</strong>, que mide qu&eacute; tan grave fue el impacto para los usuarios conectados a ese tramo.</p>
+    <p>El proyecto toma todo ese historial y responde tres preguntas: <strong>qu&eacute; tan cr&iacute;tico es cada circuito</strong> comparado con los dem&aacute;s; <strong>qu&eacute; variables influyen m&aacute;s</strong> en que una falla sea grave; y <strong>qu&eacute; pasar&iacute;a si</strong> se interviniera un vano concreto, y cu&aacute;nto costar&iacute;a hacerlo.</p>
+    <p>Todo sale del mismo archivo de historial. De ah&iacute; para adelante hay <strong>tres pilares</strong>, y se pueden usar por separado.</p>
     <div class="lanes">
       <div class="lane a">
-        <span class="lane-title">1 — El modelo que predice</span>
-        Aprende del historial a estimar el impacto de un vano. Se entrena una vez; todo lo demás solo lo lee.
+        <span class="lane-title">Pilar 1 — Las aplicaciones</span>
+        Seis tableros que se abren con doble clic: cinco para <i>mirar</i> los datos y uno para <i>simular</i> cambios. Para quien explora con el rat&oacute;n.
       </div>
       <div class="lane b">
-        <span class="lane-title">2 — Los asistentes que redactan</span>
-        Cuatro asistentes de IA que explican en lenguaje natural lo que dicen los datos y el modelo.
+        <span class="lane-title">Pilar 2 — Los comandos</span>
+        Traen el clima y redactan los informes, con asistentes de inteligencia artificial. Para quien necesita un documento escrito.
       </div>
       <div class="lane a">
-        <span class="lane-title">3 — Los reportes</span>
-        Una página web por circuito, por grupo de circuitos, o un informe gerencial.
-      </div>
-      <div class="lane b">
-        <span class="lane-title">4 — Las aplicaciones</span>
-        Seis tableros que se abren con doble clic, sin conexión — o publicados en la nube.
+        <span class="lane-title">Pilar 3 — La nube</span>
+        Un comando publica todo lo anterior en Databricks, para que se abra desde el navegador. Para quien lo comparte con toda CHEC.
       </div>
     </div>
   </section>
 
   <section>
+    <h2>Pilar 1 — Las aplicaciones: mirar y simular</h2>
+    <p>Seis aplicaciones de escritorio, para Mac y para Windows, <strong>sin conexi&oacute;n a internet y sin servidor</strong>. Se abren con doble clic.</p>
+    <table>
+      <thead><tr><th>Aplicaci&oacute;n</th><th>Qu&eacute; muestra</th><th>Tipo</th></tr></thead>
+      <tbody>
+        <tr><td><b>CriticidadCHEC</b></td><td>El men&uacute;: abre, vigila y cierra las otras cinco desde una sola ventana</td><td>—</td></tr>
+        <tr><td><b>Clima</b></td><td>Cada vano sobre el mapa, con las variables de clima y su serie de tiempo</td><td>Describe</td></tr>
+        <tr><td><b>Agrupamiento de vanos</b></td><td>Qu&eacute; vanos se parecen entre s&iacute; por impacto acumulado y n&uacute;mero de eventos</td><td>Describe</td></tr>
+        <tr><td><b>Trayectorias de circuitos</b></td><td>C&oacute;mo se mueve cada circuito en el tiempo, con una ventana deslizante</td><td>Describe</td></tr>
+        <tr><td><b>Trayectorias de vanos</b></td><td>Lo mismo, un nivel m&aacute;s abajo</td><td>Describe</td></tr>
+        <tr><td><b>Simulador</b></td><td><i>Qu&eacute; pasar&iacute;a si</i> se cambia una variable de un vano — y cu&aacute;nto cuesta esa intervenci&oacute;n</td><td><b>Predice</b></td></tr>
+      </tbody>
+    </table>
+
     <div class="flow-card">
-      <h3>Pieza 1 — El modelo que predice</h3>
+      <h3>Las cinco que describen</h3>
+      <p class="flow-dest">Se preparan una vez; despu&eacute;s abren en menos de un segundo.</p>
+      <p>Todo el c&aacute;lculo ya est&aacute; hecho y la interacci&oacute;n vive en el navegador. No necesitan nada corriendo por detr&aacute;s: son pr&aacute;cticamente indestructibles.</p>
+    </div>
+
+    <div class="flow-card">
+      <h3>La que predice</h3>
+      <p class="flow-dest">Necesita el programa corriendo por detr&aacute;s.</p>
+      <p>El <strong>simulador</strong> es distinto: cada vez que se presiona "Simular" vuelve a preguntarle al modelo.</p>
+      <div class="callout warn">
+        <span class="label">Un detalle que conviene reconocer</span>
+        <p>Si el simulador pierde esa conexi&oacute;n <strong>no lo dice</strong>: se queda mudo, con los botones puestos. Un tablero que no reacciona casi nunca es un error de los datos.</p>
+      </div>
+    </div>
+
+    <div class="flow-card">
+      <h3>El modelo que hay debajo</h3>
       <p class="flow-dest">Se entrena una vez y queda guardado en un archivo.</p>
-      <p>Un modelo estadístico aprende a estimar el impacto de un vano durante una ventana de tiempo, a partir de los eventos que ocurrieron ahí. De ahí en adelante <strong>todo lo demás solo lo lee</strong>: ni el reporte ni el simulador pueden reentrenarlo. Eso está verificado automáticamente, no es una promesa.</p>
+      <p>Un modelo estad&iacute;stico aprende a estimar el impacto de un vano durante una ventana de tiempo, a partir de los eventos que ocurrieron ah&iacute;. De ah&iacute; en adelante <strong>todo lo dem&aacute;s solo lo lee</strong>: ni los informes ni el simulador pueden reentrenarlo. Eso est&aacute; verificado autom&aacute;ticamente, no es una promesa.</p>
       <div class="callout warn">
         <span class="label">Lo que el proyecto dice en voz alta</span>
-        <p>El modelo <strong>ordena bien</strong> —acierta cuáles vanos son peores que cuáles— pero <strong>su nivel corre alto</strong>, cerca de un 34%. Por eso, cada vez que se muestra una predicción al lado de una medición real, se muestra también ese margen de error. Un número del modelo nunca se presenta como si fuera una medición.</p>
+        <p>El modelo <strong>ordena bien</strong> —acierta cu&aacute;les vanos son peores que cu&aacute;les— pero <strong>su nivel corre alto</strong>, cerca de un 34%. Por eso, cada vez que se muestra una predicci&oacute;n al lado de una medici&oacute;n real, se muestra tambi&eacute;n ese margen de error. Un n&uacute;mero del modelo nunca se presenta como si fuera una medici&oacute;n.</p>
       </div>
     </div>
 
+    <p>Todas las aplicaciones vigilan sus datos: si cambia el historial de eventos, el modelo o la lista de variables, se reconstruyen solas la pr&oacute;xima vez que se abren. No hay que acordarse de nada.</p>
+  </section>
+
+  <section>
+    <h2>Pilar 2 — Los comandos: traer datos y redactar informes</h2>
+    <p>Cinco comandos. Uno trae datos, tres escriben documentos, y el quinto limpia lo que esos tres dejaron.</p>
+
     <div class="flow-card">
-      <h3>Pieza 2 — Los asistentes que redactan</h3>
-      <p class="flow-dest">Cuatro asistentes de inteligencia artificial, cada uno con un ángulo distinto.</p>
-      <div class="steps">
-        <div class="step">
-          <span class="step-num">1</span>
-          <div class="step-body"><span class="step-title">Qué pasó</span><p>Explica el comportamiento del circuito durante ese periodo.</p></div>
-        </div>
-        <div class="step">
-          <span class="step-num">2</span>
-          <div class="step-body"><span class="step-title">Qué dice el modelo</span><p>Qué variables mueven el impacto de cada vano, cuál es el vano crítico y qué plan tendría sentido sobre él.</p></div>
-        </div>
-        <div class="step">
-          <span class="step-num">3</span>
-          <div class="step-body"><span class="step-title">Qué dicen los expertos</span><p>Compara todo lo anterior contra los informes técnicos de expertos humanos, para señalar coincidencias y diferencias.</p></div>
-        </div>
-        <div class="step">
-          <span class="step-num">4</span>
-          <div class="step-body"><span class="step-title">Leer los PDF</span><p>Decide qué párrafos de cada informe técnico son discusión aprovechable.</p></div>
-        </div>
-      </div>
-      <div class="callout">
-        <span class="label">Ninguno inventa</span>
-        <p>Cada asistente recibe un paquete de datos ya seleccionado por el programa y solo puede citar lo que viene ahí. Además, revisa su propia respuesta contra una plantilla antes de entregarla: si no pasa, se reintenta o se guarda como falla explícita. Nunca se publica algo sin validar.</p>
-      </div>
+      <h3>Traer el clima</h3>
+      <p class="flow-dest">Enriquece el historial con datos meteorol&oacute;gicos por hora.</p>
+      <p>Pregunta tres cosas antes de salir a internet —qu&eacute; ubicaciones, qu&eacute; servicio, qu&eacute; l&iacute;mite de gasto— y lleva su propia cuenta, as&iacute; que una consulta interrumpida se retoma sin volver a pagar lo que ya trajo.</p>
     </div>
 
     <div class="flow-card">
-      <h3>Pieza 3 — Los reportes</h3>
-      <p class="flow-dest">Se puede pedir para un circuito, para un grupo entero, o como informe gerencial.</p>
-      <div class="steps">
-        <div class="step">
-          <span class="step-num">1</span>
-          <div class="step-body"><span class="step-title">Confirmación</span><p>Se confirman el circuito y las fechas. Si el circuito no existe o no hubo eventos en ese periodo, se avisa y se para ahí mismo.</p></div>
-        </div>
-        <div class="step">
-          <span class="step-num">2</span>
-          <div class="step-body"><span class="step-title">Preparación</span><p>El programa selecciona los datos y arma el contexto, incluido lo que el modelo predice para hasta tres ventanas de tiempo del circuito.</p></div>
-        </div>
-        <div class="step">
-          <span class="step-num">3</span>
-          <div class="step-body"><span class="step-title">Los asistentes</span><p>Los dos primeros trabajan en paralelo; cuando terminan, entra el que compara contra los informes de expertos.</p></div>
-        </div>
-        <div class="step">
-          <span class="step-num">4</span>
-          <div class="step-body"><span class="step-title">Reporte web</span><p>Se arma una página HTML que cualquiera abre en el navegador, sin instalar nada.</p></div>
-        </div>
-        <div class="step">
-          <span class="step-num">5</span>
-          <div class="step-body"><span class="step-title">Archivo indexado</span><p>El reporte se guarda también en un archivo buscable, para poder relacionarlo con otros circuitos más adelante.</p></div>
-        </div>
-      </div>
+      <h3>Los asistentes que redactan</h3>
+      <p class="flow-dest">Cuatro, cada uno mirando el mismo caso desde un &aacute;ngulo distinto.</p>
+      <ul>
+        <li>Uno explica <strong>qu&eacute; pas&oacute;</strong> en ese circuito durante ese periodo.</li>
+        <li>Otro explica <strong>qu&eacute; dice el modelo</strong>: qu&eacute; variables mueven el impacto de cada vano, cu&aacute;l es el vano cr&iacute;tico y qu&eacute; plan tendr&iacute;a sentido sobre &eacute;l.</li>
+        <li>Un tercero <strong>compara</strong> todo eso contra lo que dicen los informes t&eacute;cnicos de expertos humanos, en PDF, para se&ntilde;alar coincidencias y diferencias.</li>
+        <li>Un cuarto se encarga de <strong>leer esos PDF</strong> y decidir qu&eacute; p&aacute;rrafos son discusi&oacute;n t&eacute;cnica aprovechable.</li>
+      </ul>
+      <p>Ninguno inventa: cada asistente recibe un paquete de datos ya seleccionado por el programa y solo puede citar lo que viene ah&iacute;. Adem&aacute;s, cada uno revisa su propia respuesta contra una plantilla antes de entregarla. Si no pasa la revisi&oacute;n, se reintenta o se guarda como falla expl&iacute;cita — nunca se publica algo sin validar.</p>
+    </div>
+
+    <h3>Los informes, paso a paso</h3>
+    <div class="steps">
+      <div class="step"><span class="step-num">1</span><div class="step-body"><span class="step-title">Confirmar</span>Se confirman el circuito y las fechas. Si el circuito no existe o no hubo eventos en ese periodo, se avisa y se para ah&iacute; mismo.</div></div>
+      <div class="step"><span class="step-num">2</span><div class="step-body"><span class="step-title">Armar el contexto</span>El programa selecciona los datos, incluido lo que el modelo predice para <strong>hasta tres ventanas de tiempo</strong> del circuito.</div></div>
+      <div class="step"><span class="step-num">3</span><div class="step-body"><span class="step-title">Redactar</span>Los dos primeros asistentes trabajan <strong>en paralelo</strong>; cuando terminan, entra el que compara contra los informes de expertos.</div></div>
+      <div class="step"><span class="step-num">4</span><div class="step-body"><span class="step-title">Publicar</span>Se arma <strong>un reporte en una p&aacute;gina HTML</strong> que cualquiera abre en el navegador, sin instalar nada.</div></div>
+      <div class="step"><span class="step-num">5</span><div class="step-body"><span class="step-title">Indexar</span>El reporte tambi&eacute;n se guarda en un archivo indexado, para poder buscarlo y relacionarlo con otros circuitos m&aacute;s adelante.</div></div>
+    </div>
+
+    <p>Lo mismo se puede pedir de tres formas:</p>
+    <table>
+      <thead><tr><th>Forma</th><th>Qu&eacute; entrega</th></tr></thead>
+      <tbody>
+        <tr><td><b>Un circuito</b></td><td>Un reporte completo de ese circuito.</td></tr>
+        <tr><td><b>Un lote</b></td><td>Un reporte individual por cada circuito de una banda de riesgo.</td></tr>
+        <tr><td><b>Un informe gerencial</b></td><td><b>Un solo</b> documento que sintetiza varios circuitos a la vez. Con una banda toma los 12 peores de esa banda; con <i>todos</i> reparte 5 del grupo alto, 5 del medio-alto y 2 del medio, y abre mirando la flota completa antes de bajar a esos doce.</td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn">
+      <span class="label">Al leer un informe gerencial</span>
+      <p>Los circuitos elegidos son <strong>los peores de su banda, no los t&iacute;picos</strong>. El documento describe la peor cola del grupo, y eso es deliberado.</p>
     </div>
 
     <div class="flow-card">
-      <h3>Pieza 4 — Las aplicaciones</h3>
-      <p class="flow-dest">Seis aplicaciones de escritorio, para Mac y Windows, sin conexión a internet y sin servidor.</p>
-      <dl class="glossary">
-        <div class="glossary-item"><dt>CriticidadCHEC</dt><dd>El menú: abre, vigila y cierra las otras cinco desde una sola ventana.</dd></div>
-        <div class="glossary-item"><dt>Clima</dt><dd>Cada vano sobre el mapa, con las variables de clima y su serie de tiempo.</dd></div>
-        <div class="glossary-item"><dt>Agrupamiento de vanos</dt><dd>Qué vanos se parecen entre sí por impacto acumulado y número de eventos.</dd></div>
-        <div class="glossary-item"><dt>Trayectorias de circuitos</dt><dd>Cómo se mueve cada circuito en el tiempo, con una ventana deslizante.</dd></div>
-        <div class="glossary-item"><dt>Trayectorias de vanos</dt><dd>Lo mismo, un nivel más abajo.</dd></div>
-        <div class="glossary-item"><dt>Simulador</dt><dd>Qué pasaría si se cambia una variable de un vano — y cuánto cuesta esa intervención.</dd></div>
-      </dl>
-      <p>Las cinco primeras se preparan una vez y después abren en menos de un segundo, porque todo el cálculo ya está hecho y la interacción vive en el navegador. El <strong>simulador</strong> es distinto: cada vez que se presiona "Simular" vuelve a preguntarle al modelo, así que necesita el programa corriendo por detrás.</p>
-      <p>Todas vigilan sus datos: si cambia el historial de eventos, el modelo o la lista de variables, se reconstruyen solas la próxima vez que se abren. No hay que acordarse de nada.</p>
+      <h3>Limpiar</h3>
+      <p class="flow-dest">Borra los archivos desechables que dejan los tres comandos anteriores.</p>
+      <p>Es irreversible, as&iacute; que siempre muestra primero <strong>qu&eacute; va a borrar</strong> y espera un s&iacute; expl&iacute;cito. Nunca borra por su cuenta.</p>
     </div>
   </section>
 
   <section>
-    <h2>La misma cosa, pero en la nube</h2>
-    <p>Las mismas aplicaciones se pueden publicar en <strong>Databricks</strong>, la plataforma en la nube de CHEC, para que se abran desde una dirección web sin instalar nada en el computador. Un comando copia los datos, sube el código y publica cada tablero.</p>
+    <h2>Pilar 3 — La nube: publicar en Databricks</h2>
+    <p>Las mismas aplicaciones se pueden publicar en <strong>Databricks</strong>, la plataforma en la nube de CHEC, para que se abran desde una direcci&oacute;n web sin instalar nada en el computador. <strong>Un solo comando</strong> hace las tres cosas en orden:</p>
+    <div class="steps">
+      <div class="step"><span class="step-num">1</span><div class="step-body"><span class="step-title">Los datos</span>El hist&oacute;rico y los mapas.</div></div>
+      <div class="step"><span class="step-num">2</span><div class="step-body"><span class="step-title">Las aplicaciones</span>Publicadas como tableros que se abren desde el navegador.</div></div>
+      <div class="step"><span class="step-num">3</span><div class="step-body"><span class="step-title">El cuaderno del modelo</span>Queda en el espacio de trabajo, para quien quiera reentrenarlo all&aacute;.</div></div>
+    </div>
+    <p>Antes de subir cada cosa, pregunta si ya est&aacute;. Sin eso, una publicaci&oacute;n de rutina volver&iacute;a a mover 566 MB de datos que ya estaban y a reinstalar aplicaciones sanas.</p>
+    <p>Cuatro cosas que conviene saber:</p>
     <ul>
-      <li><strong>Es una copia independiente.</strong> Si alguien cambia el análisis local, la nube no se entera sola: hay que volver a subir.</li>
-      <li><strong>Caben tres aplicaciones a la vez.</strong> El espacio de trabajo tiene ese tope, así que se publican por prioridad.</li>
-      <li><strong>El estado de la nube no es durable.</strong> Un espacio verificado como completo un día apareció vacío al siguiente, así que el proceso siempre comprueba antes de dar algo por hecho.</li>
+      <li><strong>Es una copia independiente.</strong> Si alguien cambia el an&aacute;lisis local, la nube no se entera sola: hay que volver a subir.</li>
+      <li><strong>Caben tres aplicaciones a la vez.</strong> El espacio de trabajo tiene ese tope, as&iacute; que se publican por prioridad.</li>
+      <li><strong>El estado de la nube no es durable.</strong> Un espacio verificado como completo un d&iacute;a apareci&oacute; vac&iacute;o al siguiente, as&iacute; que el proceso siempre comprueba antes de dar algo por hecho.</li>
+      <li><strong>Pregunta la direcci&oacute;n del espacio de trabajo en cada corrida.</strong> Nunca la adivina. Equivocarse de espacio no da error: sube todo, al sitio equivocado, en silencio.</li>
     </ul>
     <div class="callout">
-      <span class="label">Una regla de fondo</span>
-      <p>Cuando el proceso choca con un permiso que no tiene, <strong>no se detiene</strong>: lo anota y sigue. Así, al final, entrega la lista completa de lo que hace falta pedirle al administrador, en vez de morir en el primer obstáculo.</p>
+      <span class="label">La regla de fondo</span>
+      <p>Cuando el proceso choca con un permiso que no tiene, <strong>no se detiene</strong> — lo anota y sigue. As&iacute;, al final, entrega la lista completa de lo que hace falta pedirle al administrador, en vez de morir en el primer obst&aacute;culo.</p>
     </div>
   </section>
 
   <section>
-    <h2>Glosario rápido</h2>
+    <h2>Glosario r&aacute;pido</h2>
     <dl class="glossary">
-      <div class="glossary-item"><dt>Circuito</dt><dd>Una línea eléctrica de distribución completa, con muchos tramos.</dd></div>
-      <div class="glossary-item"><dt>Vano</dt><dd>Un tramo pequeño dentro de un circuito, entre dos postes.</dd></div>
-      <div class="glossary-item"><dt>UITI_VANO</dt><dd>Un número que mide qué tan grave fue el impacto de una falla en un vano.</dd></div>
+      <div class="glossary-item"><dt>Circuito</dt><dd>Una l&iacute;nea el&eacute;ctrica de distribuci&oacute;n completa, con muchos tramos.</dd></div>
+      <div class="glossary-item"><dt>Vano</dt><dd>Un tramo peque&ntilde;o dentro de un circuito, entre dos postes.</dd></div>
+      <div class="glossary-item"><dt>UITI_VANO</dt><dd>Un n&uacute;mero que mide qu&eacute; tan grave fue el impacto de una falla en un vano.</dd></div>
       <div class="glossary-item"><dt>Ventana</dt><dd>Un periodo de tiempo recortado del historial, para mirar el circuito por tramos.</dd></div>
-      <div class="glossary-item"><dt>Criticidad</dt><dd>Qué tan grave es un circuito comparado con los demás, de riesgo bajo a muy alto.</dd></div>
-      <div class="glossary-item"><dt>Modelo</dt><dd>Un programa que aprendió del historial a estimar el impacto de un vano.</dd></div>
-      <div class="glossary-item"><dt>Agente de IA</dt><dd>Un asistente que lee datos ya seleccionados y redacta una explicación, con reglas estrictas de validación.</dd></div>
+      <div class="glossary-item"><dt>Criticidad</dt><dd>Qu&eacute; tan grave es un circuito comparado con los dem&aacute;s, de riesgo bajo a alto.</dd></div>
+      <div class="glossary-item"><dt>Banda de riesgo</dt><dd>El grupo al que pertenece un circuito: bajo, medio, medio-alto o alto.</dd></div>
+      <div class="glossary-item"><dt>Modelo</dt><dd>Un programa que aprendi&oacute; del historial a estimar el impacto de un vano.</dd></div>
+      <div class="glossary-item"><dt>Agente de IA</dt><dd>Un asistente que lee datos ya seleccionados y redacta una explicaci&oacute;n, con reglas estrictas de validaci&oacute;n.</dd></div>
       <div class="glossary-item"><dt>Databricks</dt><dd>La plataforma en la nube donde se publican las aplicaciones.</dd></div>
     </dl>
   </section>
 
   <footer>
-    Versión ilustrativa — ver <a href="./flujo-detallado.html">flujo-detallado.html</a> para el detalle técnico completo. Actualizado 2026-08-13.
+    Versi&oacute;n ilustrativa — ver <a href="./flujo-detallado.html">flujo-detallado.html</a> para el detalle t&eacute;cnico completo. Actualizado 2026-08-18.
   </footer>
 </main>

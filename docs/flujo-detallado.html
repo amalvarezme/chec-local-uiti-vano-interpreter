@@ -113,236 +113,284 @@
 
 <main>
   <header class="masthead">
-    <p class="eyebrow">Flujo técnico completo &middot; chec-local-uiti-vano-interpreter</p>
+    <p class="eyebrow">Flujo t&eacute;cnico completo &middot; chec-local-uiti-vano-interpreter</p>
     <h1>Flujo detallado del proyecto</h1>
-    <p class="subtitle">Contraparte HTML de <a href="./flujo-detallado.md"><code>flujo-detallado.md</code></a> — mismo contenido. Para una versión sin jerga técnica, ver <a href="./flujo-resumen.html"><code>flujo-resumen.html</code></a>.</p>
+    <p class="subtitle">Contraparte HTML de <a href="./flujo-detallado.md"><code>flujo-detallado.md</code></a> — mismo contenido. Para una versi&oacute;n sin jerga t&eacute;cnica, ver <a href="./flujo-resumen.html"><code>flujo-resumen.html</code></a>.</p>
     <div class="meta-row">
-      <span class="chip">Actualizado: <b>2026-08-13</b></span>
-      <span class="chip">Audiencia: <b>ingeniería / mantenimiento</b></span>
-      <span class="chip">Alcance: <b>flujo esencial</b></span>
+      <span class="chip">Actualizado: <b>2026-08-18</b></span>
+      <span class="chip">Audiencia: <b>ingenier&iacute;a / mantenimiento</b></span>
+      <span class="chip">Estructura: <b>tres pilares</b></span>
     </div>
   </header>
 
   <section>
-    <h2><span class="num">§1</span> Panorama</h2>
-    <p class="section-lede">Este documento describe el flujo esencial del proyecto. La publicación de la página web de presentación queda fuera a propósito: es un canal interno de divulgación, no una pieza del flujo.</p>
-    <p>Todo parte de una sola fuente de verdad — el CSV <code>data/Indicadores_vano_v3.csv</code>, un histórico de eventos por vano — y se ramifica en <strong>cuatro planos</strong> que no comparten runtime:</p>
+    <h2><span class="num">&sect;1</span> Panorama — los tres pilares</h2>
+    <p class="section-lede">Este documento describe el flujo esencial del proyecto. La publicaci&oacute;n de la p&aacute;gina web de presentaci&oacute;n queda fuera a prop&oacute;sito: es un canal interno de divulgaci&oacute;n, no una pieza del flujo. Lo que queda fuera, y por qu&eacute;, est&aacute; inventariado en <a href="./inventario-de-lo-suelto.md"><code>inventario-de-lo-suelto.md</code></a>.</p>
+    <p>Todo parte de una sola fuente de verdad — el CSV <code>data/Indicadores_vano_v3.csv</code>, un hist&oacute;rico de eventos por vano — y se ramifica en <strong>tres pilares</strong>. No comparten runtime, no se llaman entre s&iacute;, y cada uno se puede usar sin los otros dos:</p>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Plano</th><th>Qué es</th><th>Dónde corre</th></tr></thead>
+        <thead><tr><th>Pilar</th><th>Qu&eacute; entrega</th><th>Qui&eacute;n lo usa</th><th>D&oacute;nde corre</th></tr></thead>
         <tbody>
-          <tr><td><b>El modelo MIL</b></td><td>El motor predictivo: aprende sobre bolsas <i>vano × ventana</i> y estima el UITI acumulado</td><td>Cuaderno <code>05</code>, local o Kaggle</td></tr>
-          <tr><td><b>Los agentes</b></td><td>Cuatro roles LLM que leen contexto ya seleccionado y redactan JSON validado</td><td>Claude Code, local</td></tr>
-          <tr><td><b>Los reportes</b></td><td>La familia <code>/report</code>: convierte modelo + datos + PDFs expertos en un HTML por circuito</td><td>Local</td></tr>
-          <tr><td><b>Las aplicaciones</b></td><td>Seis tableros interactivos, en el escritorio o publicados como Databricks Apps</td><td>macOS/Windows, o Databricks</td></tr>
+          <tr><td><b>1 &middot; IA descriptiva y predictiva</b></td><td>Seis aplicaciones: cinco tableros de CriticidadCHEC (descriptivos) y el simulador <i>qu&eacute; pasar&iacute;a si</i> sobre el modelo MIL (predictivo)</td><td>Quien explora los datos con el rat&oacute;n</td><td>macOS/Windows, sin servidor</td></tr>
+          <tr><td><b>2 &middot; Los comandos</b></td><td>Captura de clima, reportes por circuito, informes gerenciales y la limpieza de corridas — con agentes LLM y sus arneses de validaci&oacute;n</td><td>Quien necesita un documento redactado</td><td>Claude Code, local</td></tr>
+          <tr><td><b>3 &middot; La migraci&oacute;n a Databricks</b></td><td>Un solo comando que sube datos, publica las aplicaciones como Databricks Apps y deja el cuaderno del modelo en el Workspace</td><td>Quien publica para toda CHEC</td><td>Databricks, en la nube</td></tr>
         </tbody>
       </table>
     </div>
     <div class="callout">
-      Los planos se tocan en un punto y solo uno: <strong>el archivo del modelo</strong>, <code>data/models/mil_vano_ventana_v1.pt</code>. El cuaderno <code>05</code> lo escribe; el pipeline de reportes y el simulador lo cargan en <strong>solo lectura</strong>, nunca lo reentrenan. Esa asimetría es un invariante vigilado por pruebas (<code>tests/test_frozen_model_guard.py</code>), no una convención.
+      Los tres se tocan en un punto y solo uno: <strong>el archivo del modelo</strong>, <code>data/models/mil_vano_ventana_v1.pt</code>. El cuaderno <code>05</code> lo escribe; el simulador del pilar 1 y el pipeline de reportes del pilar 2 lo cargan en <strong>solo lectura</strong>, nunca lo reentrenan. Esa asimetr&iacute;a es un invariante vigilado por pruebas (<code>tests/test_frozen_model_guard.py</code>), no una convenci&oacute;n.
     </div>
+    <div class="pipeline">data/Indicadores_vano_v3.csv
+   &#9474;
+   &#9500;&#9472;&rarr; cuaderno 05 &#9472;&#9472;&rarr; data/models/mil_vano_ventana_v1.pt  (se escribe UNA vez)
+   &#9474;                        &#9474;
+   &#9474;                        &#9500;&#9472;&rarr; PILAR 1 &middot; simulador (solo lectura)
+   &#9474;                        &#9492;&#9472;&rarr; PILAR 2 &middot; agente `inference` (solo lectura)
+   &#9474;
+   &#9500;&#9472;&rarr; PILAR 1 &middot; los cinco tableros descriptivos
+   &#9500;&#9472;&rarr; PILAR 2 &middot; /clima, /report, /reporte-lote, /informe-gerencial, /limpiar-corridas
+   &#9492;&#9472;&rarr; PILAR 3 &middot; /subir-a-databricks  (copia los tres a la nube)</div>
   </section>
 
   <section>
-    <h2><span class="num">§2</span> El modelo MIL (cuaderno <code>05_mil_vano_ventana</code>)</h2>
+    <h2><span class="num">Pilar 1</span> IA descriptiva y predictiva</h2>
+    <p class="section-lede">Seis carpetas en <code>aplicaciones/</code>, para macOS y Windows, <strong>sin servidor y sin conexi&oacute;n</strong>. Cinco tableros descriptivos, un men&uacute; que los gobierna, y un simulador que es lo &uacute;nico predictivo del pilar.</p>
 
-    <h3>Qué aprende</h3>
-    <p>Multiple Instance Learning sobre <strong>bolsas</strong>: una bolsa es un vano dentro de una ventana de tiempo, y sus instancias son los eventos que cayeron ahí. El modelo estima el <strong>UITI acumulado</strong> de la bolsa y, en paralelo, su clase de criticidad. El número de eventos NO es una salida del modelo: es contexto observado.</p>
+    <h3><span class="num">&sect;2</span> El modelo MIL (cuaderno <code>05_mil_vano_ventana</code>)</h3>
+    <p>Es el motor del lado predictivo. Vive en un cuaderno, produce un archivo, y ese archivo es todo lo que el resto del proyecto ve de &eacute;l.</p>
+    <p>Multiple Instance Learning sobre <strong>bolsas</strong>: una bolsa es un vano dentro de una ventana de tiempo, y sus instancias son los eventos que cayeron ah&iacute;. El modelo estima el <strong>UITI acumulado</strong> de la bolsa y, en paralelo, su clase de criticidad. El n&uacute;mero de eventos NO es una salida del modelo: es contexto observado.</p>
     <div class="table-wrap">
       <table>
         <tbody>
           <tr><td>Artefacto</td><td><code>data/models/mil_vano_ventana_v1.pt</code></td></tr>
-          <tr><td>Configuración</td><td><code>fusion="film"</code>, <code>LAMBDA_CLASE=1.0</code>, <code>TEMPERATURA_CLASE=0.01</code>, 30 épocas</td></tr>
+          <tr><td>Configuraci&oacute;n</td><td><code>fusion="film"</code>, <code>LAMBDA_CLASE=1.0</code>, <code>TEMPERATURA_CLASE=0.01</code>, 30 &eacute;pocas</td></tr>
           <tr><td>macro-F1 (CV agrupada, 62.114 bolsas)</td><td>0,870982</td></tr>
           <tr><td>Referencia RandomForest estructural</td><td>0,881231</td></tr>
-          <tr><td><b>Veredicto de la barra pre-registrada A1</b></td><td><b>NEGATIVO</b> (−1,02 puntos)</td></tr>
+          <tr><td><b>Veredicto de la barra pre-registrada A1</b></td><td><b>NEGATIVO</b> (&minus;1,02 puntos)</td></tr>
         </tbody>
       </table>
     </div>
     <div class="callout warn">
-      <span class="label">Por qué el veredicto negativo está publicado</span>
-      <p>El modelo <strong>ordena</strong> bien — correlaciona 0,950 con el UITI observado sobre 599 bolsas — pero su <strong>nivel</strong> corre +34%, con error relativo mediano del 39,4%. Por eso todo lo que lo consume publica su incertidumbre en vez de presentar la predicción como una medición.</p>
+      <span class="label">Por qu&eacute; el veredicto negativo est&aacute; publicado</span>
+      <p>El modelo <strong>ordena</strong> bien — correlaciona 0,950 con el UITI observado sobre 599 bolsas — pero su <strong>nivel</strong> corre +34%, con error relativo mediano del 39,4%. Por eso todo lo que lo consume publica su incertidumbre en vez de presentar la predicci&oacute;n como una medici&oacute;n. El detalle completo est&aacute; en <a href="./mil-vano-ventana-estado-y-mejoras.md"><code>mil-vano-ventana-estado-y-mejoras.md</code></a>.</p>
+    </div>
+    <p>El cuaderno arranca por defecto como <strong>visor</strong> (<code>EJECUCION="visualizacion"</code>): carga el modelo ya entrenado y dibuja, en segundos. Reentrenar es expl&iacute;cito — <code>EJECUCION="entrenamiento"</code>, unos 40 minutos. Nadie reentrena por accidente al abrir el cuaderno.</p>
+    <p>Reentrenar corre <strong>m&aacute;s r&aacute;pido en CPU que en GPU</strong>: medido sobre un pliegue real de 88.987 bolsas en un M4 Max, la CPU con 2 hilos gana 6&times; a MPS y usa 3,4&times; menos memoria. El valor <code>auto</code> elige justamente el peor de los dos.</p>
+    <p>El grafo experto de variables <strong>no se lee de disco</strong>: <code>construir_matriz_adyacencia_mgcecdl</code> lo construye en c&oacute;digo y el <code>.pt</code> lo guarda dentro, junto con las aristas preservadas. El modelo y su grafo viajan juntos, que es lo que impide reconstruir uno con el otro desfasado.</p>
+
+    <h3><span class="num">&sect;3</span> Las seis aplicaciones</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Carpeta</th><th>Puerto</th><th>Qu&eacute; abre</th><th>M&oacute;dulo</th><th>Lado</th></tr></thead>
+        <tbody>
+          <tr><td><code>00_criticidad_chec/</code></td><td>8800</td><td><b>CriticidadCHEC</b>: el men&uacute;. Abre, vigila y cierra las otras cinco</td><td>—</td><td>—</td></tr>
+          <tr><td><code>01_clima/</code></td><td>8801</td><td>Nube por vano sobre el mapa, 6 variables, serie de doble eje y 6 violines</td><td><code>chec_tableros.clima</code></td><td>Descriptivo</td></tr>
+          <tr><td><code>02_agrupamiento_vanos/</code></td><td>8802</td><td>Agrupamiento de vanos por UITI acumulado y n&uacute;mero de eventos</td><td><code>chec_tableros.agrupamiento</code></td><td>Descriptivo</td></tr>
+          <tr><td><code>03_trayectorias_circuitos/</code></td><td>8803</td><td>Trayectoria y agrupamiento de circuitos con ventana deslizante</td><td><code>chec_tableros.trayectorias_circuitos</code></td><td>Descriptivo</td></tr>
+          <tr><td><code>04_trayectorias_vanos/</code></td><td>8804</td><td>Lo mismo un nivel m&aacute;s abajo: agrupamiento y evoluci&oacute;n por vano</td><td><code>chec_tableros.trayectorias_vanos</code></td><td>Descriptivo</td></tr>
+          <tr><td><code>06_simulador/</code></td><td>8866</td><td>Simulador de riesgo por vano: <i>qu&eacute; pasar&iacute;a si</i>, sobre el modelo MIL</td><td><code>chec_tableros.simulador</code></td><td><b>Predictivo</b></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Cada carpeta trae los mismos cuatro lanzadores: <code>instalar</code> (una vez, crea el entorno) e <code>iniciar</code> (cada vez). En macOS hay adem&aacute;s un <code>Iniciar.app</code> para el doble clic — un bundle de verdad y no un <code>.command</code>, porque si el usuario tiene otra terminal instalada, LaunchServices se queda el <code>.command</code> y no lo ejecuta.</p>
+    <p>Su comando es uno solo: <code class="cmd">/app-local-criticidadCHEC</code>, que abre el men&uacute; en el puerto 8800. <strong>Los cinco tableros se abren desde su p&aacute;gina</strong>, no con comandos propios: cada uno arranca como proceso hijo, en el puerto fijo que le da la tabla de arriba, y el men&uacute; los vigila y los cierra. Hasta el 2026-08-17 cada tablero ten&iacute;a adem&aacute;s su propio comando; seis comandos para una sola aplicaci&oacute;n significaban seis copias del mismo preflight separ&aacute;ndose entre s&iacute;.</p>
+
+    <h4>Por qu&eacute; <code>01</code>-<code>04</code> son livianas y <code>06</code> no</h4>
+    <p>No es estilo: es la diferencia entre describir y predecir.</p>
+    <ul>
+      <li><strong><code>01</code>-<code>04</code> no necesitan Python en ejecuci&oacute;n.</strong> Sus m&oacute;dulos precomputan todo y entregan un HTML donde la interacci&oacute;n entera vive en JavaScript. La aplicaci&oacute;n es un <strong>constructor</strong> (se corre una vez) y un <strong>servidor est&aacute;tico</strong> de biblioteca est&aacute;ndar. Los K-Means de <code>03</code> y <code>04</code> se ajustan al construir, y lo que viaja al navegador son coordenadas y etiquetas ya resueltas.</li>
+      <li><strong><code>06</code> necesita un kernel vivo</strong>, porque cada "Simular" vuelve a llamar al modelo MIL — eso es lo que lo hace predictivo y no descriptivo. Todo su panel es <code>ipywidgets</code> y se sirve con <strong>Voila</strong> sobre un kernel real. Para no pagar el CSV de 540 MB en cada arranque, congela un <strong>paquete</strong> con lo que las celdas de arranque derivan; el arranque baja de 2.867 MB a 579 MB.</li>
+    </ul>
+    <div class="callout warn">
+      <span class="label">Corolario operativo</span>
+      <p>Los cuatro est&aacute;ticos aguantan casi cualquier cosa; al <code>06</code> solo lo mata perder el kernel, y cuando lo pierde <strong>no lo dice</strong> — se queda mudo.</p>
     </div>
 
-    <h3>Cómo se corre</h3>
-    <p>El cuaderno arranca por defecto como <strong>visor</strong> (<code>EJECUCION="visualizacion"</code>): carga el modelo ya entrenado y dibuja, en segundos. Reentrenar es explícito — <code>EJECUCION="entrenamiento"</code>, unos 40 minutos. Nadie reentrena por accidente al abrir el cuaderno.</p>
-    <p>El grafo experto de variables <strong>no se lee de disco</strong>: <code>construir_matriz_adyacencia_mgcecdl</code> lo construye en código y el <code>.pt</code> lo guarda dentro, junto con las aristas preservadas. El modelo y su grafo viajan juntos, que es lo que impide reconstruir uno con el otro desfasado.</p>
+    <h4>Reaccionan a los datos, no a la fecha</h4>
+    <p>Las seis vigilan sus insumos por <strong>huella</strong> (sha1 de lo peque&ntilde;o, tama&ntilde;o+fecha de lo pesado) y se reconstruyen solas cuando algo cambia: el CSV, los shapefiles, el modelo, <code>Variables_simular.xlsx</code> o el propio m&oacute;dulo del tablero. Un <code>git checkout</code> mueve la fecha de todo sin cambiar nada, y por eso lo peque&ntilde;o se mira por contenido. El detalle est&aacute; en <a href="../aplicaciones/DATOS-Y-ACTUALIZACIONES.md"><code>DATOS-Y-ACTUALIZACIONES.md</code></a>, y los tiempos y la memoria medidos en <a href="../aplicaciones/RENDIMIENTO-Y-REQUISITOS.md"><code>RENDIMIENTO-Y-REQUISITOS.md</code></a>.</p>
   </section>
 
   <section>
-    <h2><span class="num">§3</span> Los agentes</h2>
-    <p>Cuatro roles, cada uno con su skill, su esquema JSON y su contrato de citación. Ninguno inventa datos: reciben contexto <strong>ya seleccionado</strong> por código determinista y solo pueden citar lo que viene en su sobre.</p>
+    <h2><span class="num">Pilar 2</span> Los comandos</h2>
+    <p class="section-lede">Cinco comandos. Uno captura datos, tres redactan documentos con agentes LLM, y el quinto borra lo que esos tres dejaron.</p>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Agente</th><th>Qué produce</th><th>Entrada</th></tr></thead>
+        <thead><tr><th>Comando</th><th>Uso</th><th>Qu&eacute; produce</th></tr></thead>
         <tbody>
-          <tr><td><code>historical</code></td><td>El diagnóstico descriptivo del comportamiento del UITI_VANO en la ventana</td><td><code>run_dir/historical.bc.json</code></td></tr>
-          <tr><td><code>inference</code></td><td>La interpretación del modelo MIL: relevancia por vano hacia el UITI mínimo, diagnóstico del vano crítico con su plan, coherencia con el grafo</td><td><code>run_dir/inference.bc.json</code></td></tr>
-          <tr><td><code>expert-alignment</code></td><td>La comparación contra la discusión experta extraída de los PDFs</td><td><code>run_dir/expert_alignment.bc.json</code></td></tr>
-          <tr><td><code>pdf-discussion-extraction</code></td><td>Decide qué secciones de un PDF técnico se vuelven filas de la tabla de discusión</td><td>Un PDF por corrida</td></tr>
+          <tr><td><code class="cmd">/clima</code></td><td><code>/clima</code></td><td>Enriquece los datos con clima de Open-Meteo (3 compuertas interactivas)</td></tr>
+          <tr><td><code class="cmd">/report</code></td><td><code>/report CIRCUITO [fecha_inicio fecha_fin]</code></td><td>El HTML de un circuito, 9 pasos</td></tr>
+          <tr><td><code class="cmd">/reporte-lote</code></td><td><code>/reporte-lote &lt;grupo&gt; [fecha_inicio fecha_fin]</code></td><td>Un reporte por circuito de la banda</td></tr>
+          <tr><td><code class="cmd">/informe-gerencial</code></td><td><code>/informe-gerencial &lt;grupo&gt; [fecha_inicio fecha_fin]</code></td><td>Un HTML gerencial cross-circuito sobre los representativos de la banda</td></tr>
+          <tr><td><code class="cmd">/limpiar-corridas</code></td><td><code>/limpiar-corridas</code></td><td>Borra artefactos desechables de corridas previas (dry-run primero, confirmaci&oacute;n expl&iacute;cita)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout">
+      <code>&lt;grupo&gt;</code> es una de las <strong>cuatro bandas del ranking de circuitos</strong> — <code>bajo | medio | medio-alto | alto</code> — o <code>todos</code>. Cualquier otro valor es un error de uso rechazado antes de tocar el dataset; en particular los cinco niveles del K-Means retirado (<code>muy-alta</code>, <code>alta</code>, …) se rechazan <strong>a prop&oacute;sito</strong>, porque si no resolver&iacute;an a una banda vac&iacute;a sin decir que el vocabulario cambi&oacute;. La lista vive una sola vez, en <code>batch_report_contract.GROUP_SLUGS</code>, y <code>informe_gerencial_contract</code> la reexporta: los dos comandos no pueden separarse.
+    </div>
+    <p><code>reporte-lote</code> e <code>informe-gerencial</code> <strong>nunca reimplementan</strong> el razonamiento: reinvocan <code>.claude/skills/report/SKILL.md</code> por referencia. Esa cita cruzada es lo que mantiene a la familia sincronizada en vez de a la deriva.</p>
+
+    <h3><span class="num">&sect;4</span> <code class="cmd">/clima</code> — la captura de datos</h3>
+    <p>Enriquece las tablas del proyecto con clima horario de Open-Meteo. Es totalmente interactivo: tres compuertas de decisi&oacute;n antes de tocar la red (qu&eacute; ubicaciones, API gratuita o de pago, qu&eacute; l&iacute;mites de consumo) y despu&eacute;s uno de dos modos — <strong>A</strong>, actualizar las columnas de clima de <code>Indicadores_vano_v3</code>; <strong>B</strong>, consultar puntos por d&iacute;a o por rango sobre una tabla que el usuario elige de <code>data/</code>.</p>
+    <p>El motor es <code>src/chec_local_interpreter/clima_engine.py</code> y la invocaci&oacute;n can&oacute;nica es <code>.claude/skills/clima/assets/runbook.py</code>. <strong>No toca ninguno de los agentes LLM</strong>: es captura de datos, no redacci&oacute;n. Lleva su propio limitador persistente de presupuesto diario y mensual, as&iacute; que una corrida interrumpida se reanuda sin volver a pagar lo ya tra&iacute;do.</p>
+
+    <h3><span class="num">&sect;5</span> Los agentes y su arn&eacute;s</h3>
+    <p>Cuatro roles, cada uno con su skill, su esquema JSON y su contrato de citaci&oacute;n. Ninguno inventa datos: reciben contexto <strong>ya seleccionado</strong> por c&oacute;digo determinista y solo pueden citar lo que viene en su sobre.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Agente</th><th>Qu&eacute; produce</th><th>Entrada</th></tr></thead>
+        <tbody>
+          <tr><td><code>historical</code></td><td>El diagn&oacute;stico descriptivo del comportamiento del UITI_VANO en la ventana</td><td><code>run_dir/historical.bc.json</code></td></tr>
+          <tr><td><code>inference</code></td><td>La interpretaci&oacute;n del modelo MIL: relevancia por vano hacia el UITI m&iacute;nimo, diagn&oacute;stico del vano cr&iacute;tico con su plan, coherencia con el grafo</td><td><code>run_dir/inference.bc.json</code></td></tr>
+          <tr><td><code>expert-alignment</code></td><td>La comparaci&oacute;n contra la discusi&oacute;n experta extra&iacute;da de los PDFs</td><td><code>run_dir/expert_alignment.bc.json</code></td></tr>
+          <tr><td><code>pdf-discussion-extraction</code></td><td>Decide qu&eacute; secciones de un PDF t&eacute;cnico se vuelven filas de la tabla de discusi&oacute;n</td><td>Un PDF por corrida</td></tr>
         </tbody>
       </table>
     </div>
     <p>Reglas duras, en <code>.claude/agents/rules/invariants.md</code>:</p>
     <ul>
-      <li><strong>Cada agente valida su propio JSON contra un esquema antes de aceptarlo.</strong> Un JSON inválido se reintenta o se guarda como fallo explícito; nunca se publica sin validar.</li>
-      <li><strong>Ningún agente entrena ni reentrena nada.</strong> Una prueba escanea los <code>.md</code> de roles y skills buscando vocabulario de entrenamiento, en español y en inglés, y falla si aparece.</li>
+      <li><strong>Cada agente valida su propio JSON contra un esquema antes de aceptarlo.</strong> Un JSON inv&aacute;lido se reintenta o se guarda como fallo expl&iacute;cito; nunca se publica sin validar.</li>
+      <li><strong>Ning&uacute;n agente entrena ni reentrena nada.</strong> Una prueba escanea los <code>.md</code> de roles y skills buscando vocabulario de entrenamiento, en espa&ntilde;ol y en ingl&eacute;s, y falla si aparece.</li>
       <li><strong><code>historical</code> e <code>inference</code> son independientes</strong> y se despachan en paralelo obligatoriamente. Correrlos en serie no compra seguridad: no comparten estado.</li>
     </ul>
-    <p>La arquitectura de cuatro capas (Skills vs. roles vs. playbooks de prompt) está en <a href="./agents-guide.md"><code>agents-guide.md</code></a>.</p>
-  </section>
-
-  <section>
-    <h2><span class="num">§4</span> El flujo de reportes</h2>
-
-    <h3>Los comandos</h3>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Comando</th><th>Uso</th><th>Qué produce</th></tr></thead>
-        <tbody>
-          <tr><td><code>/report</code></td><td><code>/report CIRCUITO [fecha_inicio fecha_fin]</code></td><td>El HTML de un circuito, 9 pasos</td></tr>
-          <tr><td><code>/reporte-lote</code></td><td><code>/reporte-lote grupo=alta</code></td><td>Un reporte por circuito del grupo + el scatter de agrupamiento</td></tr>
-          <tr><td><code>/informe-gerencial</code></td><td><code>/informe-gerencial grupo=media</code></td><td>Un HTML gerencial cross-circuito sobre los representativos del grupo</td></tr>
-          <tr><td><code>/clima</code></td><td><code>/clima</code></td><td>Enriquece los datos con clima de Open-Meteo (3 compuertas interactivas)</td></tr>
-          <tr><td><code>/limpiar-corridas</code></td><td><code>/limpiar-corridas</code></td><td>Borra artefactos desechables (dry-run primero, confirmación explícita)</td></tr>
-        </tbody>
-      </table>
+    <div class="callout warn">
+      <span class="label">Dos cosas aprendidas en corridas reales</span>
+      <p><strong>El sobre importa.</strong> Un agente debe escribir <code>{"ok": true, "data": {…}}</code>, no el objeto pelado. Cuando el requisito no se enunciaba en el despacho, 4 de 14 agentes escrib&iacute;an el JSON sin envoltorio <strong>y reportaban &eacute;xito</strong>; enunciarlo llev&oacute; la conformidad a 36 de 36.</p>
+      <p><strong>Los nombres de variable se expanden al RENDER, nunca al guardar.</strong> El <code>.out.json</code> es lo que el <code>validate</code> del propio agente acept&oacute;; reescribirlo lo separar&iacute;a de su validaci&oacute;n. Por eso un informe se puede regenerar desde corridas existentes y recoge el cambio sin relanzar agentes.</p>
     </div>
-    <p><code>reporte-lote</code> e <code>informe-gerencial</code> <strong>nunca reimplementan</strong> el razonamiento: reinvocan <code>.claude/skills/report/SKILL.md</code> por referencia. Esa cita cruzada es lo que mantiene a la familia sincronizada en vez de a la deriva.</p>
+    <p>La arquitectura de cuatro capas (Skills vs. roles vs. playbooks de prompt) est&aacute; en <a href="./agents-guide.md"><code>agents-guide.md</code></a>.</p>
 
-    <h3>Las nueve etapas de <code>/report</code></h3>
+    <h3><span class="num">&sect;6</span> Las nueve etapas de <code class="cmd">/report</code></h3>
     <p>El orquestador es <code>src/chec_local_interpreter/report_pipeline.py</code>.</p>
     <ol>
-      <li><strong>Validar y confirmar.</strong> Se rechaza una fecha suelta, se comprueba que el circuito exista y que la ventana tenga eventos — todo antes de crear el <code>run_dir</code>. Un circuito inexistente o una ventana vacía es una alerta y una parada, nunca una repregunta. Aquí va el <strong>único</strong> punto de confirmación del usuario en toda la corrida.</li>
-      <li><strong><code>prepare</code>.</strong> Escribe los tres sobres y arma la capa de inferencia MIL en solo lectura: carga el <code>.pt</code> y la caché de bolsas, y resuelve el catálogo de controles. Construirlo desde cero cuesta 3,40 s y 2.257 MB de pico —medido— para 18 perillas; la caché lo recarga en 0,80 s y 182 MB. Una caché corrupta o sin permiso de escritura <strong>degrada</strong> a "esta corrida lo paga completo", nunca a una corrida que falla.<br>El reporte se ancla a la <strong>ventana</strong>: hasta tres por circuito, y cada una produce su escenario con la relevancia por vano, el diagnóstico del vano crítico (≤15) y la simulación de intervención. Un circuito sin bolsas en una ventana simplemente no produce escenario — un circuito tranquilo es un resultado real, no un fallo.</li>
+      <li><strong>Validar y confirmar.</strong> Se rechaza una fecha suelta, se comprueba que el circuito exista y que la ventana tenga eventos — todo antes de crear el <code>run_dir</code>. Un circuito inexistente o una ventana vac&iacute;a es una alerta y una parada, nunca una repregunta. Aqu&iacute; va el <strong>&uacute;nico</strong> punto de confirmaci&oacute;n del usuario en toda la corrida.</li>
+      <li><strong><code>prepare</code>.</strong> Escribe los tres sobres y arma la capa de inferencia MIL en solo lectura. Construirlo desde cero cuesta 3,40 s y 2.257 MB de pico —medido— para 18 perillas; la cach&eacute; lo recarga en 0,80 s y 182 MB. Una cach&eacute; corrupta <strong>degrada</strong> a "esta corrida lo paga completo", nunca a una corrida que falla. El reporte se ancla a la <strong>ventana</strong>: hasta tres por circuito, cada una con su relevancia por vano, el diagn&oacute;stico del vano cr&iacute;tico (&le;15) y la simulaci&oacute;n de intervenci&oacute;n. Un circuito sin bolsas en una ventana simplemente no produce escenario.</li>
       <li><strong><code>historical</code></strong> y <strong><code>inference</code></strong>, en paralelo. Cada uno lee su sobre y escribe su <code>*.out.json</code>.</li>
       <li><strong><code>prepare_expert_alignment</code></strong> — cuando los dos anteriores terminan.</li>
-      <li><strong><code>expert-alignment</code></strong> — compara contra la discusión experta en PDF.</li>
+      <li><strong><code>expert-alignment</code></strong> — compara contra la discusi&oacute;n experta en PDF.</li>
       <li><strong><code>render</code></strong> — el HTML del circuito.</li>
       <li><strong>Reportar la ruta al usuario.</strong> <code>/report</code> es local: no publica nada por su cuenta.</li>
-      <li><strong>Nota de vault + graphify</strong> (alerta-y-continúa). La skill <code>vault-circuito</code> proyecta los tres JSON validados a <code>reports/vault/*.md</code> y encadena <code>graphify --update</code>. Si esto falla, el HTML ya existe y no se revierte.</li>
+      <li><strong>Nota de vault + graphify</strong> (alerta-y-contin&uacute;a). La skill <code>vault-circuito</code> proyecta los tres JSON validados a <code>reports/vault/*.md</code> y encadena <code>graphify --update</code>. Si esto falla, el HTML ya existe y no se revierte.</li>
     </ol>
     <div class="callout warn">
-      <span class="label">Lección aprendida — aislamiento de graphify</span>
-      <p>El <code>--update</code> queda acotado <strong>siempre</strong> al grafo propio de <code>reports/vault</code>, nunca al del proyecto. Viene de un incidente real: una actualización con alcance mal delimitado podó ~271 archivos no relacionados.</p>
+      <span class="label">Lecci&oacute;n aprendida — el anclaje de graphify</span>
+      <p>El <code>--update</code> se encadena <strong>desde la ra&iacute;z del proyecto</strong>, nunca acotado a <code>reports/vault</code>. El manifiesto guarda sus claves relativas a la ra&iacute;z, as&iacute; que escanear desde la carpeta estrecha las re-ancla contra ella, las resuelve a rutas que nunca existieron y graphify las reporta como borradas: <strong>426 borrados fantasma</strong> sobre un grafo de 6.479 nodos. Eso es p&eacute;rdida de datos, no gasto de tokens.</p>
+      <p>Antes de encadenar se corre la guarda <code>python -m chec_local_interpreter.graphify_guarda</code>, que comprueba <strong>d&oacute;nde</strong> ancla el manifiesto —no si los archivos existen— y solo se sigue si sale con c&oacute;digo 0. La regla anterior ("abortar si alg&uacute;n borrado reportado no existe en disco") bloqueaba tambi&eacute;n los borrados leg&iacute;timos, porque un borrado de verdad tampoco existe en disco: proteg&iacute;a el grafo congel&aacute;ndolo.</p>
     </div>
 
-    <h3>Qué distingue una predicción de una medición</h3>
-    <p>En el reporte y en el simulador conviven dos clases de número y nunca se mezclan en silencio: lo que dice la base de datos (medido) y lo que dice el modelo (simulado). Donde se comparan —las barras del cuaderno <code>06</code>, el <code>±</code> del título— la diferencia se publica con el desfase del modelo en la base de ese mismo vano, que es la única cantidad local y medible que hay.</p>
+    <h3><span class="num">&sect;7</span> <code class="cmd">/informe-gerencial</code> — la s&iacute;ntesis cross-circuito</h3>
+    <p>Produce <strong>un solo</strong> HTML que sintetiza varios circuitos a la vez, en vez de uno por circuito. Vive en <code>reports/informesgerenciales/</code>, su propia ra&iacute;z.</p>
+    <ul>
+      <li>Con una banda (<code>alto</code>, <code>medio-alto</code>, …) toma los <strong>12 circuitos con m&aacute;s vanos cr&iacute;ticos</strong> de esa banda. Sesgo conocido, y hay que decirlo al leer: los 12 quedan contra el borde superior, as&iacute; que el informe describe la <strong>cola peor</strong> de la banda, no la banda.</li>
+      <li>Con <code>todos</code> reparte por <strong>cuota</strong>: 5 de <code>Riesgo Alto</code>, 5 de <code>Riesgo Medio-Alto</code> y 2 de <code>Riesgo Medio</code>. El panorama de apertura, en cambio, mira <strong>la flota entera</strong> — todos los circuitos y todos los vanos — y solo despu&eacute;s baja a los 12 representativos.</li>
+      <li>El denominador de circuitos siempre es la <strong>flota</strong>, nunca la propia banda: "7 de 7" no dice nada, "7 de 208" s&iacute;.</li>
+    </ul>
+
+    <h3><span class="num">&sect;8</span> <code class="cmd">/limpiar-corridas</code> — la limpieza</h3>
+    <p>Borra los artefactos desechables que dejan los tres comandos de reporte. Es irreversible, as&iacute; que el contrato es r&iacute;gido: <strong>dry-run siempre primero</strong>, se muestra el resumen completo al usuario sin truncar, se espera una confirmaci&oacute;n expl&iacute;cita en el chat, y solo entonces se corre con <code>--confirm "BORRAR TODO"</code> y exactamente los mismos filtros <code>--only</code>/<code>--skip</code> que el usuario aprob&oacute;. Nunca se pasa <code>--confirm</code> de forma especulativa.</p>
+    <p>Ojo con un efecto de segundo orden: una nota de b&oacute;veda borrada aqu&iacute; <strong>no vuelve sola</strong>. Se reproyecta la pr&oacute;xima vez que ese circuito pase por <code class="cmd">/report</code>.</p>
+
+    <h3><span class="num">&sect;9</span> Qu&eacute; distingue una predicci&oacute;n de una medici&oacute;n</h3>
+    <p>En el reporte y en el simulador conviven dos clases de n&uacute;mero y nunca se mezclan en silencio: lo que dice la base de datos (medido) y lo que dice el modelo (simulado). Donde se comparan —las barras del simulador, el <code>&plusmn;</code> del t&iacute;tulo— la diferencia se publica con el desfase del modelo en la base de ese mismo vano, que es la &uacute;nica cantidad local y medible que hay.</p>
+    <p>Toda variable que ve un lector se escribe <strong><code>Nombre natural (CODIGO)</code></strong> — "densidad de descargas a tierra (DDT)" — en prosa y en tablas. En figuras (barras, violines, nodos del grafo) se queda el c&oacute;digo pelado: no cabe el nombre y el eje ya dice de qu&eacute; se habla.</p>
   </section>
 
   <section>
-    <h2><span class="num">§5</span> Las aplicaciones locales</h2>
-    <p>Seis carpetas en <code>aplicaciones/</code>, para macOS y Windows, <strong>sin servidor y sin conexión</strong>. Cinco tableros y un menú que los gobierna.</p>
+    <h2><span class="num">Pilar 3</span> La migraci&oacute;n autom&aacute;tica a Databricks</h2>
+
+    <h3><span class="num">&sect;10</span> Un solo comando, tres etapas</h3>
+    <p>Es <strong>un solo comando</strong>, <code class="cmd">/subir-a-databricks</code>, que reutiliza por referencia cruzada el contrato compartido (<code>_contrato-despliegue-databricks.md</code>): bit&aacute;cora obligatoria, regla de no-abortar y resoluci&oacute;n del cat&aacute;logo en runtime.</p>
+    <p>Cada etapa le pregunta primero a Databricks qu&eacute; hay ya y solo sube lo que falta — sin eso, una corrida de rutina vuelve a mover 566 MB de CSV que ya estaban y redespliega una app sana, que en el simulador son diez minutos de <code>pip install torch</code> a cambio de nada.</p>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Carpeta</th><th>Puerto</th><th>Qué abre</th><th>Cuaderno</th></tr></thead>
+        <thead><tr><th>Etapa</th><th>Qu&eacute; verifica</th><th>Qu&eacute; sube si falta</th></tr></thead>
         <tbody>
-          <tr><td><code>00_criticidad_chec/</code></td><td>8800</td><td><b>CriticidadCHEC</b>: el menú. Abre, vigila y cierra las otras cinco</td><td>—</td></tr>
-          <tr><td><code>01_clima/</code></td><td>8801</td><td>Nube por vano sobre el mapa, 6 variables, serie de doble eje y 6 violines</td><td><code>01_uiti_vano_clima</code></td></tr>
-          <tr><td><code>02_agrupamiento_vanos/</code></td><td>8802</td><td>Agrupamiento de vanos por UITI acumulado y número de eventos</td><td><code>02_uiti_vano_kmeans</code></td></tr>
-          <tr><td><code>03_trayectorias_circuitos/</code></td><td>8803</td><td>Trayectoria y agrupamiento de circuitos con ventana deslizante</td><td><code>03_uiti_vano_trayectorias_circuitos</code></td></tr>
-          <tr><td><code>04_trayectorias_vanos/</code></td><td>8804</td><td>Lo mismo un nivel más abajo: agrupamiento y evolución por vano</td><td><code>04_uiti_vano_trayectorias_vano</code></td></tr>
-          <tr><td><code>06_simulador/</code></td><td>8866</td><td>Simulador de riesgo por vano: <i>qué pasaría si</i>, sobre el modelo MIL</td><td><code>06_uiti_vano_explicabilidad_simulador</code></td></tr>
+          <tr><td><b>Datos</b></td><td>El Volume, el CSV con su tama&ntilde;o real (~566 MB, no un puntero de LFS) y el juego completo de shapefiles con sus sidecars</td><td><code>data/</code> entero, m&aacute;s <code>site/data/variables.json</code> (&uacute;nica excepci&oacute;n fuera de <code>data/</code>)</td></tr>
+          <tr><td><b>Aplicaciones</b></td><td>Que las dos apps existan, est&eacute;n <code>ACTIVE</code>/<code>RUNNING</code>/<code>SUCCEEDED</code> y sirvan contenido al d&iacute;a</td><td><code>criticidad-chec</code> (los cuatro tableros en cuatro rutas) y <code>simulador-vano</code> (Voila, kernel vivo)</td></tr>
+          <tr><td><b>Cuaderno del modelo</b></td><td>Que el cuaderno est&eacute; en el Workspace y no sea m&aacute;s viejo que su generador</td><td><code>notebooks/05_mil_vano_ventana.ipynb</code>, como cuaderno y deliberadamente sin app</td></tr>
         </tbody>
       </table>
     </div>
-    <p>Cada carpeta trae los mismos cuatro lanzadores: <code>instalar</code> (una vez, crea el entorno) e <code>iniciar</code> (cada vez). En macOS hay además un <code>Iniciar.app</code> para el doble clic — un bundle de verdad y no un <code>.command</code>, porque si el usuario tiene otra terminal instalada, LaunchServices se queda el <code>.command</code> y no lo ejecuta.</p>
-    <p>Su comando es uno solo: <a href="../.claude/commands/app-local-criticidadCHEC.md"><code>/app-local-criticidadCHEC</code></a>, que abre el menú en el puerto 8800. <strong>Los cinco tableros se abren desde su página</strong>, no con comandos propios: cada uno arranca como proceso hijo, en el puerto fijo que le da la tabla de ese archivo, y el menú los vigila y los cierra. Hasta el 2026-08-17 cada tablero tenía además su propio comando (<code>/app-local-clima</code> y los otros cuatro); seis comandos para una sola aplicación significaban seis copias del mismo preflight separándose entre sí, y un usuario que tenía que saber cuál de los seis quería antes de ver nada. El contrato que compartían —puerto fijo, comprobación de "ya está corriendo", preflight, arranque en segundo plano— quedó absorbido en ese mismo archivo.</p>
+    <p>El orden es el del pilar 1 al rev&eacute;s: primero los datos que todo necesita, despu&eacute;s las aplicaciones que los consumen, y de &uacute;ltimo el cuaderno del modelo, que es el &uacute;nico que no se publica como app.</p>
+    <p>Eran ocho comandos. Cuatro publicaban un tablero cada uno parcheando un <code>.ipynb</code> que ya no existe: ese c&oacute;digo vive en <code>src/chec_tableros/</code>. Los otros cuatro segu&iacute;an siendo correctos y se absorbieron el 2026-08-17, porque repartidos en cuatro invocaciones dejaban cuatro reportes parciales y obligaban a recordar el orden.</p>
+    <p>El comando <strong>se autorrepara</strong>: crea el Volume si falta, configura el permiso de lectura de la app declarando el Volume como recurso, y no aborta ante un muro de permisos —lo anota y sigue, para que el reporte salga con la lista completa de lo que bloquea el despliegue.</p>
 
-    <h3>Por qué <code>01</code>-<code>04</code> son livianas y <code>06</code> no</h3>
-    <p>No es estilo: es lo que cada tablero necesita.</p>
+    <h3><span class="num">&sect;11</span> Las dos reglas del contrato</h3>
     <ul>
-      <li><strong><code>01</code>-<code>04</code> no necesitan Python en ejecución.</strong> Sus cuadernos precomputan todo y entregan un HTML donde la interacción entera vive en JavaScript. La aplicación es un <strong>constructor</strong> (se corre una vez) y un <strong>servidor estático</strong> de biblioteca estándar. Los K-Means de <code>03</code> y <code>04</code> no son excepción: se ajustan al construir, y lo que viaja al navegador son coordenadas y etiquetas ya resueltas.</li>
-      <li><strong><code>06</code> necesita un kernel vivo.</strong> Todo su panel es <code>ipywidgets</code> y cada "Simular" vuelve a llamar al modelo, así que se sirve con <strong>Voila</strong> sobre un kernel real. Para no pagar el CSV de 540 MB en cada arranque, congela un <strong>paquete</strong> con lo que las celdas de arranque derivan; el arranque baja de 2.867 MB a 579 MB.</li>
+      <li><strong>Bit&aacute;cora obligatoria.</strong> Se abre <i>antes</i> de preguntarle nada al usuario, se anota cada paso numerado al terminarlo y siempre se cierra. Su ruta y su estado final son parte del reporte.</li>
+      <li><strong>Nunca abortar.</strong> Una restricci&oacute;n se registra y se rodea; el comando corre hasta el final. Es lo que hace que una corrida contra un workspace ajeno produzca la lista completa de permisos que faltan en vez de morir en el primero.</li>
     </ul>
-
-    <h3>Reaccionan a los datos, no a la fecha</h3>
-    <p>Las seis vigilan sus insumos por <strong>huella</strong> (sha1 de lo pequeño, tamaño+fecha de lo pesado) y se reconstruyen solas cuando algo cambia: el CSV, los shapefiles, el modelo, <code>Variables_simular.xlsx</code> o el propio cuaderno. Un <code>git checkout</code> mueve la fecha de todo sin cambiar nada, y por eso lo pequeño se mira por contenido. El detalle está en <a href="../aplicaciones/DATOS-Y-ACTUALIZACIONES.md"><code>DATOS-Y-ACTUALIZACIONES.md</code></a>.</p>
-  </section>
-
-  <section>
-    <h2><span class="num">§6</span> La subida a Databricks</h2>
-    <p>Un solo comando, <code>/subir-a-databricks</code>, en <code>.claude/commands/</code>, apoyado en el contrato compartido (<a href="../.claude/commands/_contrato-despliegue-databricks.md"><code>_contrato-despliegue-databricks.md</code></a>): bitácora obligatoria, regla de no-abortar y resolución del catálogo en runtime.</p>
-    <p>Son <strong>tres etapas</strong>, y cada una le pregunta primero a Databricks qué hay ya y solo sube lo que falta — sin eso, una corrida de rutina vuelve a mover 566 MB de CSV que ya estaban y redespliega una app sana, que en el simulador son diez minutos de <code>pip install torch</code> a cambio de nada.</p>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Etapa</th><th>Qué verifica</th><th>Qué sube si falta</th></tr></thead>
-        <tbody>
-          <tr><td>3</td><td>El Volume, el CSV con su tamaño real (~566 MB, no un puntero de LFS) y el juego completo de shapefiles con sus sidecars</td><td><code>data/</code> entero, más <code>site/data/variables.json</code> (única excepción fuera de <code>data/</code>)</td></tr>
-          <tr><td>4</td><td>Que las dos apps existan, estén <code>ACTIVE</code>/<code>RUNNING</code>/<code>SUCCEEDED</code> y sirvan contenido al día</td><td><code>criticidad-chec</code> (los cuatro tableros en cuatro rutas) y <code>simulador-vano</code> (Voila, kernel vivo)</td></tr>
-          <tr><td>5</td><td>Que el cuaderno esté en el Workspace y no sea más viejo que su generador</td><td><code>notebooks/05_mil_vano_ventana.ipynb</code>, como cuaderno y deliberadamente sin app</td></tr>
-        </tbody>
-      </table>
+    <div class="callout warn">
+      <span class="label">Y una tercera, que se paga cara si se olvida</span>
+      <p><strong>El workspace se pregunta en cada corrida</strong>, nunca se deduce del perfil con sesi&oacute;n vigente. El cat&aacute;logo, en cambio, se descubre en runtime. Equivocarse de workspace no da error: sube todo, al sitio equivocado, en silencio.</p>
     </div>
-    <p>Eran ocho comandos. Cuatro (<code>/app-vano-clima</code>, <code>/app-agrupamiento-vanos-circuitos</code>, <code>/app-trayectorias-circuitos</code>, <code>/app-trayectorias-vanos</code>) publicaban un tablero cada uno parcheando un <code>.ipynb</code> que ya no existe: ese código vive en <code>src/chec_tableros/</code>. Los otros cuatro (<code>/subir-datos-databricks</code>, <code>/subir-notebooks-databricks</code>, <code>/app-criticidad-chec</code>, <code>/app-simulador-vano</code>) seguían siendo correctos y se absorbieron el 2026-08-17, porque repartidos en cuatro invocaciones dejaban cuatro reportes parciales y obligaban a recordar el orden.</p>
-    <p>El comando <strong>se autorrepara</strong>: crea el Volume si falta, configura el permiso de lectura de la app declarando el Volume como recurso, y no aborta ante un muro de permisos —lo anota y sigue, para que el reporte salga con la lista completa de lo que bloquea el despliegue. Pregunta solo la URL del workspace, y la pregunta <strong>cada corrida</strong>: nunca la deduce del perfil con sesión vigente.</p>
 
-    <h3>Dos reglas del contrato</h3>
+    <h3><span class="num">&sect;12</span> Restricciones ya conocidas (D1&ndash;D10)</h3>
+    <p>Si aparece una de estas, no se rediagnostica: est&aacute; en el contrato con su rodeo.</p>
     <ul>
-      <li><strong>Bitácora obligatoria.</strong> Se abre <i>antes</i> de preguntarle nada al usuario, se anota cada paso numerado al terminarlo y siempre se cierra. Su ruta y su estado final son parte del reporte.</li>
-      <li><strong>Nunca abortar.</strong> Una restricción se registra y se rodea; el comando corre hasta el final. Es lo que hace que una corrida contra un workspace ajeno produzca la lista completa de permisos que faltan en vez de morir en el primero.</li>
+      <li><b>D1</b> el cat&aacute;logo <code>workspace</code> no existe y no se puede crear; <b>D2</b> el FUSE de <code>/Volumes</code> responde 403 mientras la Files API s&iacute; funciona; <b>D3/D4</b> <code>uc_securable</code> necesita <code>USE CATALOG</code> y el <code>GRANT</code> est&aacute; denegado al asistente — solo el due&ntilde;o del cat&aacute;logo puede darlo.</li>
+      <li><b>D5 — cupo de apps: el workspace topa en 3</b>, y una app en <code>DELETING</code> sigue contando. Adem&aacute;s, el <code>create</code> deja el stdout vac&iacute;o cuando la app queda en <code>ERROR</code>.</li>
+      <li><b>D6</b> l&iacute;mites de subida: <code>--format JUPYTER</code> topa en 10 MB y para este conjunto no es un caso borde sino la norma, as&iacute; que hay que limpiar <code>outputs</code> y <code>execution_count</code> de cada copia. <code>workspace import</code> tampoco crea carpetas padre.</li>
+      <li><b>D8</b> un cuaderno con <code>ipywidgets</code> no corre en Serverless: el simulador necesita cluster cl&aacute;sico.</li>
+      <li><b>D9 — el estado del workspace no es durable entre sesiones.</b> Un workspace verificado como completo un d&iacute;a apareci&oacute; vac&iacute;o al siguiente. Siempre verificar en vivo antes de asumir.</li>
+      <li><b>D10</b> <code>git push</code> puede fallar por la API de locks de LFS.</li>
     </ul>
 
-    <h3>Restricciones ya conocidas (D1–D10)</h3>
-    <p>Si aparece una de estas, no se rediagnostica: está en el contrato con su rodeo.</p>
-    <ul>
-      <li><strong>D1</strong> el catálogo <code>workspace</code> no existe y no se puede crear; <strong>D2</strong> el FUSE de <code>/Volumes</code> responde 403 mientras la Files API sí funciona; <strong>D3/D4</strong> <code>uc_securable</code> necesita <code>USE CATALOG</code> y el <code>GRANT</code> está denegado al asistente — solo el dueño del catálogo puede darlo.</li>
-      <li><strong>D5 — cupo de apps: el workspace topa en 3</strong>, y una app en <code>DELETING</code> sigue contando.</li>
-      <li><strong>D6</strong> límites de subida: <code>--format JUPYTER</code> topa en 10 MB y para este conjunto no es un caso borde sino la norma (<code>01</code> pesa 81,43 MB con salidas), así que hay que limpiar <code>outputs</code> y <code>execution_count</code> de cada copia. <code>workspace import</code> tampoco crea carpetas padre.</li>
-      <li><strong>D8</strong> un cuaderno con <code>ipywidgets</code> no corre en Serverless: el <code>06</code> necesita cluster clásico.</li>
-      <li><strong>D9 — el estado del workspace no es durable entre sesiones.</strong> Un workspace verificado como completo un día apareció vacío al siguiente. Siempre verificar en vivo antes de asumir.</li>
-      <li><strong>D10</strong> <code>git push</code> puede fallar por la API de locks de LFS.</li>
-    </ul>
-
-    <h3>El stack Lakeview se retiró</h3>
-    <p>El dashboard AI/BI y el job de tablas Delta que lo respaldaba ya no existen. Lakeview no ejecuta Python ni JS arbitrario, así que nunca pudo mostrar el análisis real de los cuadernos (K-Means, Voronoi, los mapas MapLibre). Las Databricks Apps sí, y son el único camino de publicación.</p>
+    <h3><span class="num">&sect;13</span> El stack Lakeview se retir&oacute;</h3>
+    <p>El dashboard AI/BI y el job de tablas Delta que lo respaldaba ya no existen. Lakeview no ejecuta Python ni JS arbitrario, as&iacute; que nunca pudo mostrar el an&aacute;lisis real de los tableros (K-Means, Voronoi, los mapas MapLibre). Las Databricks Apps s&iacute;, y son el &uacute;nico camino de publicaci&oacute;n.</p>
   </section>
 
   <section>
-    <h2><span class="num">§7</span> Los cuadernos</h2>
-    <p>En <code>notebooks/</code> queda <strong>uno</strong>: <code>05_mil_vano_ventana</code> (el modelo). En <code>notebooks/base_apps/</code> quedan <strong>cinco</strong>: los tableros <code>uiti_vano</code> (<code>01</code>-<code>04</code> y <code>06</code>) que son la fuente de las aplicaciones.</p>
-    <p>Eran quince hasta el 2026-08-14. Se borraron nueve: <code>07_relevancia_lote_por_vano</code> y los ocho del pipeline MGCECDL original. Ninguno se ejecutaba ni se importaba desde ningún sitio — solo los nombraba prosa. Están en el historial de git, y los artefactos que produjeron (el clasificador congelado de <code>data/models/</code>, el grafo experto de <code>data/graphs/</code>) siguen en su sitio y siguen usándose; lo que ya no está en el árbol es el código que los generó.</p>
+    <h2><span class="num">&sect;14</span> Los cuadernos</h2>
+    <p>Queda <strong>uno</strong>: <code>notebooks/05_mil_vano_ventana.ipynb</code>, el modelo del pilar 1. Es tambi&eacute;n salida generada de <code>scripts/generate_notebook_10.py</code>, as&iacute; que editarlo a mano lo borra la pr&oacute;xima regeneraci&oacute;n.</p>
+    <p>Eran quince hasta el 2026-08-14. Se borraron nueve ese d&iacute;a: <code>07_relevancia_lote_por_vano</code> y los ocho del pipeline MGCECDL original. Ninguno se ejecutaba ni se importaba desde ning&uacute;n sitio — solo los nombraba prosa. Est&aacute;n en el historial de git, y los artefactos que produjeron siguen en su sitio y siguen us&aacute;ndose; lo que ya no est&aacute; en el &aacute;rbol es el c&oacute;digo que los gener&oacute;.</p>
+    <p>Los cinco restantes eran los tableros <code>uiti_vano</code> (<code>01</code>-<code>04</code> y <code>06</code>), y <strong>eran la fuente de las cinco aplicaciones</strong>. Se migraron a <code>src/chec_tableros/</code> entre el 15 y el 16 de agosto de 2026, uno por rebanada y cada uno verificado contra un golden congelado antes de empezar. Que nadie vuelva a ejecutar un <code>.ipynb</code> lo fija <code>tests/test_ningun_modulo_ejecuta_un_ipynb.py</code>.</p>
+    <div class="pipeline">chec_tableros.clima                    panel clim&aacute;tico (violines + nube de rezagos)
+chec_tableros.agrupamiento             agrupamiento de circuitos y de vanos
+chec_tableros.trayectorias_circuitos   trayectorias de circuito por ventanas + mapa
+chec_tableros.trayectorias_vanos       idem a nivel de vano
+   &#9474;
+data/geometria_kmeans_014_v1.json      la geometr&iacute;a KMeans, versionada y verificada por sha1
+   &#9500;&rarr; 05_mil_vano_ventana              el modelo MIL sobre bolsas vano &times; ventana
+   &#9492;&rarr; chec_tableros.simulador          explicabilidad + simulador, kernel vivo</div>
+    <p>La geometr&iacute;a KMeans <strong>dej&oacute; de ser una dependencia entre cuadernos</strong> el 2026-08-15. Era de <code>04</code>, y <code>05</code> y <code>06</code> la extra&iacute;an de su salida guardada: tres artefactos atados, y un checkout limpio que no pod&iacute;a asignar clases. Ahora es <code>data/geometria_kmeans_014_v1.json</code>, versionada y reproducible con <code>scripts/exportar_geometria.py</code>. <code>ventanas_015.cargar_clases_criticidad</code> la lee de ah&iacute; y <strong>verifica su sha1</strong>, de modo que mover los centroides falla ruidosamente en vez de derivar en silencio.</p>
     <div class="callout">
-      El nombre de la carpeta engaña, y por eso conviene decirlo: <strong>estar en <code>base_apps/</code> no significa estar muerto.</strong> Los cinco que quedan son justo lo que construyen las cinco aplicaciones de escritorio, vía <code>CUADERNOS_APPS</code> en <code>aplicaciones/_comun/raiz.py</code>. El <code>04</code> ajusta la geometría KMeans que <code>05</code> y <code>06</code> también usan; desde el 2026-08-15 esa geometría no se extrae de su salida guardada, sino que vive versionada en <code>data/geometria_kmeans_014_v1.json</code>.
+      Ojo con la colisi&oacute;n de numeraci&oacute;n: <code>02</code>-<code>06</code> significan cosas distintas en cada generaci&oacute;n y ahora comparten carpeta. Un n&uacute;mero suelto se refiere siempre al grupo <code>uiti_vano</code>; los MGCECDL se nombran con su archivo completo.
     </div>
-    <div class="pipeline">01_uiti_vano_clima                     panel climático (violines + nube de rezagos)
-02_uiti_vano_kmeans                    agrupamiento de circuitos y de vanos
-03_uiti_vano_trayectorias_circuitos    trayectorias de circuito por ventanas + mapa
-04_uiti_vano_trayectorias_vano         idem a nivel de vano; DUEÑO de la geometría KMeans
-   │                                   que 05 y 06 replican (verificada por sha1)
-   ├→ 05_mil_vano_ventana              el modelo MIL sobre bolsas vano × ventana
-   └→ 06_uiti_vano_explicabilidad_simulador   explicabilidad + simulador, kernel vivo</div>
-    <p>La única dependencia dura es la geometría de <code>04</code>: <code>05</code> y <code>06</code> la reutilizan a través de <code>chec_local_interpreter.ventanas_015</code>, que la extrae del archivo de <code>04</code> y <strong>verifica su sha1</strong>. Si alguien mueve los centroides, los dos fallan ruidosamente en vez de derivar en silencio.</p>
-    <p>Ojo con la colisión de numeración: <code>02</code>-<code>06</code> significan cosas distintas en cada generación y ahora comparten carpeta. Un número suelto se refiere siempre al grupo <code>uiti_vano</code>; los MGCECDL se nombran con su archivo completo.</p>
   </section>
 
   <section>
-    <h2><span class="num">§8</span> Referencia rápida — todos los comandos</h2>
+    <h2><span class="num">&sect;15</span> Referencia r&aacute;pida — todos los comandos</h2>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Comando</th><th>Plano</th><th>Uso</th></tr></thead>
+        <thead><tr><th>Comando</th><th>Pilar</th><th>Uso</th></tr></thead>
         <tbody>
-          <tr><td><code>/report</code></td><td>Reportes</td><td><code>/report CIRCUITO [fecha_inicio fecha_fin]</code></td></tr>
-          <tr><td><code>/reporte-lote</code></td><td>Reportes</td><td><code>/reporte-lote grupo=alta</code></td></tr>
-          <tr><td><code>/informe-gerencial</code></td><td>Reportes</td><td><code>/informe-gerencial grupo=media</code></td></tr>
-          <tr><td><code>/clima</code></td><td>Datos</td><td>enriquecimiento Open-Meteo</td></tr>
-          <tr><td><code>/limpiar-corridas</code></td><td>Mantenimiento</td><td>dry-run y confirmación explícita</td></tr>
-          <tr><td><code>/app-local-criticidadCHEC</code></td><td>Aplicaciones</td><td>el menú en el puerto 8800; los cinco tableros se abren desde su página</td></tr>
-          <tr><td><code>/subir-a-databricks</code></td><td>Databricks</td><td>datos → apps → cuaderno, verificando antes de subir cada uno; deja bitácora</td></tr>
+          <tr><td><code class="cmd">/app-local-criticidadCHEC</code></td><td>1 &middot; IA descriptiva y predictiva</td><td>el men&uacute; en el puerto 8800; los cinco tableros se abren desde su p&aacute;gina</td></tr>
+          <tr><td><code class="cmd">/clima</code></td><td>2 &middot; Comandos</td><td>enriquecimiento Open-Meteo, 3 compuertas interactivas</td></tr>
+          <tr><td><code class="cmd">/report</code></td><td>2 &middot; Comandos</td><td><code>/report CIRCUITO [fecha_inicio fecha_fin]</code></td></tr>
+          <tr><td><code class="cmd">/reporte-lote</code></td><td>2 &middot; Comandos</td><td><code>/reporte-lote &lt;grupo&gt; [fecha_inicio fecha_fin]</code></td></tr>
+          <tr><td><code class="cmd">/informe-gerencial</code></td><td>2 &middot; Comandos</td><td><code>/informe-gerencial &lt;grupo&gt; [fecha_inicio fecha_fin]</code></td></tr>
+          <tr><td><code class="cmd">/limpiar-corridas</code></td><td>2 &middot; Comandos</td><td>dry-run y confirmaci&oacute;n expl&iacute;cita</td></tr>
+          <tr><td><code class="cmd">/subir-a-databricks</code></td><td>3 &middot; Databricks</td><td>datos &rarr; apps &rarr; cuaderno, verificando antes de subir cada uno; deja bit&aacute;cora</td></tr>
         </tbody>
       </table>
     </div>
   </section>
 
   <section>
-    <h2><span class="num">§9</span> Más detalle</h2>
+    <h2><span class="num">&sect;16</span> M&aacute;s detalle</h2>
     <ul>
       <li><a href="./agents-guide.md"><code>agents-guide.md</code></a> — arquitectura de 4 capas del framework de agentes.</li>
-      <li><a href="./report-runtime-contract.md"><code>report-runtime-contract.md</code></a> — contrato de invocación de <code>/report</code> entre runtimes.</li>
+      <li><a href="./report-runtime-contract.md"><code>report-runtime-contract.md</code></a> — contrato de invocaci&oacute;n de <code>/report</code> entre runtimes.</li>
       <li><a href="./mil-vano-ventana-estado-y-mejoras.md"><code>mil-vano-ventana-estado-y-mejoras.md</code></a> — estado del modelo MIL y mejoras pendientes.</li>
+      <li><a href="./REQUISITOS-MINIMOS.md"><code>REQUISITOS-MINIMOS.md</code></a> — qu&eacute; equipo hace falta, por pilar y medido.</li>
+      <li><a href="./inventario-de-lo-suelto.md"><code>inventario-de-lo-suelto.md</code></a> — qu&eacute; archivos y funciones NO participan en ninguno de los tres pilares.</li>
       <li><a href="../aplicaciones/README.md"><code>aplicaciones/README.md</code></a> — las seis aplicaciones, con sus requisitos.</li>
-      <li>Los diagramas del flujo end-to-end y de la familia <code>/report</code> viven en el <code>README.md</code>, en Mermaid y en línea.</li>
+      <li><a href="./flujo-detallado.md"><code>flujo-detallado.md</code></a> — este mismo documento en Markdown.</li>
     </ul>
   </section>
+
+  <footer>
+    Actualizado 2026-08-18 &middot; contraparte de <a href="./flujo-detallado.md">flujo-detallado.md</a> &middot; versi&oacute;n sin jerga en <a href="./flujo-resumen.html">flujo-resumen.html</a>.
+  </footer>
 </main>
