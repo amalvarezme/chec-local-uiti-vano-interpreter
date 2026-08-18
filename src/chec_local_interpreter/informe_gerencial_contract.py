@@ -332,6 +332,154 @@ def _structured_fields(run_dir: Path) -> dict[str, Any]:
     }
 
 
+def _orden_ventana(etiqueta: str) -> tuple[int, str]:
+    """`V10` va DESPUES de `V9`, no entre `V1` y `V2`.
+
+    El mismo criterio que `mil_inferencia._orden_ventana`, repetido aqui y no importado
+    a proposito: este modulo no depende del artefacto MIL ni de torch, y traerse ese
+    import por una funcion de cuatro lineas le costaria el arranque entero.
+    """
+    resto = str(etiqueta).lstrip("Vv")
+    return (int(resto), "") if resto.isdigit() else (10**9, str(etiqueta))
+
+
+def ventanas_del_grupo(
+    sampled: Sequence[str],
+    *,
+    runs_root: str | Path | None = None,
+) -> list[dict[str, Any]]:
+    """En que VENTANAS se concentra la criticidad del grupo.
+
+    El informe agregaba por circuito y perdia la dimension en la que el modelo trabaja:
+    la unidad del MIL es la bolsa `(vano, ventana)`, y cada `/report` estudia TRES
+    ventanas de su circuito. Sumando los circuitos sin mirar la ventana, dos hallazgos
+    de meses distintos se leen como el mismo problema.
+
+    La fuente es el SOBRE de inferencia (`inference.bc.json`) y no la salida del agente.
+    Medido sobre las corridas en disco, los escenarios que el agente devuelve traen
+    `nombre`, `interpretacion` y `provenance` -- sin `ventana` ni `vanos_criticos`. Lo
+    que `prepare` dejo en el sobre si trae la ventana, cuantos vanos tiene, cuales son
+    criticos y cuales alcanzan el grupo Bajo.
+
+    Nunca lanza: un circuito sin corrida, o con un sobre ilegible, simplemente no aporta
+    ventanas. El informe ya declara en otra parte cuales quedaron sin correr.
+    """
+    acumulado: dict[str, dict[str, Any]] = {}
+    for circuito in sampled or ():
+        run_dir = find_latest_run(str(circuito), runs_root=runs_root)
+        if run_dir is None:
+            continue
+        try:
+            sobre = json.loads((run_dir / "inference.bc.json").read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+            continue
+        periodos = sobre.get("periodos_ventana") or {}
+        for escenario in sobre.get("escenarios") or []:
+            ventana = str(escenario.get("ventana") or "").strip()
+            if not ventana:
+                continue
+            criticos = list(escenario.get("vanos_criticos") or [])
+            fila = acumulado.setdefault(ventana, {
+                "ventana": ventana, "periodo": "", "circuitos": 0,
+                "vanos_criticos": 0, "alcanzan_bajo": 0,
+            })
+            fila["circuitos"] += 1
+            fila["vanos_criticos"] += len(criticos)
+            fila["alcanzan_bajo"] += sum(1 for c in criticos if c.get("alcanza"))
+            # El periodo lo escribe el primero que lo traiga: es el mismo calendario
+            # para todos los circuitos, porque la rejilla de ventanas es del dataset.
+            if not fila["periodo"] and periodos.get(ventana):
+                fila["periodo"] = str(periodos[ventana])
+    return [acumulado[v] for v in sorted(acumulado, key=_orden_ventana)]
+
+
+def figura_por_ventana(filas: Sequence[Mapping[str, Any]]):
+    """Vanos criticos contra los que la intervencion alcanza a sacar del grupo critico.
+
+    Las dos cifras juntas SON la lectura: cuantos vanos hay que atender en esa ventana,
+    y en cuantos la obra basta. Una sola de las dos deja media decision.
+    """
+    filas = list(filas or ())
+    if not filas:
+        return None
+
+    import plotly.graph_objects as go
+
+    etiquetas = [str(f["ventana"]) for f in filas]
+    hover = [
+        f"<b>Ventana {f['ventana']}</b>"
+        + (f"<br>{f['periodo']}" if f.get("periodo") else "")
+        + f"<br>{f.get('circuitos', 0)} circuitos del grupo la estudiaron"
+        f"<br>{f.get('vanos_criticos', 0)} vanos críticos"
+        f"<br>{f.get('alcanzan_bajo', 0)} alcanzan el grupo Bajo"
+        for f in filas
+    ]
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=etiquetas, y=[int(f.get("vanos_criticos", 0)) for f in filas],
+        name="Vanos críticos",
+        marker=dict(color="#c62828", line=dict(width=0.4, color="#5b4a48")),
+        hovertext=hover, hoverinfo="text",
+    ))
+    fig.add_trace(go.Bar(
+        x=etiquetas, y=[int(f.get("alcanzan_bajo", 0)) for f in filas],
+        name="Alcanzan el grupo Bajo",
+        marker=dict(color="#1a9641", line=dict(width=0.4, color="#5b4a48"),
+                    pattern=dict(shape="/", solidity=0.35, fgcolor="#5b4a48")),
+        hovertext=hover, hoverinfo="text",
+    ))
+    fig.update_layout(
+        height=320, barmode="group", bargap=0.28,
+        margin=dict(l=10, r=10, t=26, b=10),
+        paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
+        legend=dict(orientation="h", yanchor="bottom", y=1.0, x=0),
+        font=dict(size=11, color="#2b2b2b"),
+    )
+    fig.update_xaxes(title_text="Ventana", type="category")
+    fig.update_yaxes(title_text="Vanos", rangemode="tozero", gridcolor="#e2e8f0")
+    return fig
+
+
+def _ventanas_html(filas: Sequence[Mapping[str, Any]]) -> str:
+    """La seccion "Concentracion por ventana", o nada si no hay ventanas.
+
+    Determinista: sale de los sobres que `prepare` dejo en disco, sin pasar por ningun
+    agente, y por eso lleva el mismo distintivo que las demas secciones calculadas.
+    """
+    filas = list(filas or ())
+    if not filas:
+        return ""
+
+    figura = figura_por_ventana(filas)
+    grafica = ("" if figura is None else
+               figura.to_html(full_html=False, include_plotlyjs=False,
+                              div_id="grafica-ventanas"))
+    renglones = "".join(
+        f"<tr><td><strong>{_escape(f['ventana'])}</strong></td>"
+        f"<td>{_escape(f.get('periodo') or '&mdash;')}</td>"
+        f"<td>{_escape(f.get('circuitos', 0))}</td>"
+        f"<td>{_escape(f.get('vanos_criticos', 0))}</td>"
+        f"<td>{_escape(f.get('alcanzan_bajo', 0))}</td></tr>"
+        for f in filas
+    )
+    return f"""
+<section class="report-section">
+<h2>Concentración por ventana</h2>
+<p class="badge-deterministic">Cálculo determinista</p>
+<p>La unidad del modelo es la celda <em>vano &times; ventana</em>, y cada informe de
+circuito estudia tres ventanas. Aquí se suman las de todos los circuitos muestreados:
+dónde se concentra el problema del grupo en el tiempo, y en cuántos de esos vanos la
+intervención alcanza a sacarlos del grupo crítico.</p>
+{grafica}
+<table class="tabla-ventanas">
+<thead><tr><th>Ventana</th><th>Período</th><th>Circuitos</th>
+<th>Vanos críticos</th><th>Alcanzan Bajo</th></tr></thead>
+<tbody>{renglones}</tbody>
+</table>
+</section>
+"""
+
+
 def load_circuit_content(
     circuito: str,
     *,
@@ -1331,6 +1479,15 @@ def _annex_html(annex: Sequence[dict[str, Any]]) -> str:
 
 
 _REPORT_CSS = """
+/* La tabla de ventanas y el grafo de conceptos, con el mismo trato que las
+   tablas del informe por circuito: bordes de fila y columna, encabezado tenido, y
+   desbordamiento horizontal propio para que la pagina nunca se desplace en
+   horizontal. */
+.tabla-ventanas { width: 100%; border-collapse: collapse; font-size: .9rem; margin-top: 12px; }
+.tabla-ventanas th, .tabla-ventanas td { border: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; }
+.tabla-ventanas th { background: #f8fafc; color: #1e3a8a; }
+.grafo-conceptos { border: 1px solid #e2e8f0; border-radius: 8px; background: #ffffff; padding: 8px; }
+.grafo-conceptos .plotly-graph-div { width: 100% !important; }
 body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; padding: 0 24px 48px; color: #0f172a; background: #f8fafc; }
 h1 { font-size: 1.6rem; margin-top: 24px; }
 h2 { font-size: 1.2rem; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; }
@@ -1390,6 +1547,9 @@ def render_managerial_report(
     intervention_section_html = _intervention_graph_html(
         graph_intervencion_html, intervention_summary, n_sampled=len(sampled)
     )
+    # La concentracion por VENTANA. Va antes de las causas: primero cuando pasa, y
+    # despues por que. Determinista, de los sobres que `prepare` dejo en disco.
+    ventanas_section_html = _ventanas_html(ventanas_del_grupo(sampled))
     graph_section_html = _graph_patterns_html(
         graph_patterns, graph_view_html, n_sampled=len(sampled)
     )
@@ -1417,7 +1577,7 @@ def render_managerial_report(
 <p class="badge-deterministic">Cálculo determinista</p>
 {_list_html(synthesis['patrones_comunes'])}
 </section>
-{intervention_section_html}{graph_section_html}
+{ventanas_section_html}{intervention_section_html}{graph_section_html}
 <section class="report-section">
 <h2>Circuitos atípicos (outliers)</h2>
 {_outliers_html(synthesis['circuitos_atipicos'])}
