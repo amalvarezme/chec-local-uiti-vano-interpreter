@@ -51,6 +51,11 @@ from chec_local_interpreter.batch_report_contract import (
 from chec_local_interpreter.batch_report_contract import normalize_request as _batch_normalize_request
 from chec_local_interpreter.circuit_clustering_contract import RuntimeMetadata, _dataset_date_range
 from chec_local_interpreter.circuit_identity import canonical_circuit_identity
+from chec_local_interpreter.informe_estilo import (
+    CSS_IDENTIDAD,
+    escudo_chec_html,
+    pie_agentes_html,
+)
 from chec_local_interpreter.config import DEFAULT_DATA_PATH, PROJECT_ROOT
 from chec_local_interpreter.data_loader import filter_events, load_dataset
 from chec_local_interpreter.plotting import (
@@ -1478,19 +1483,16 @@ def _annex_html(annex: Sequence[dict[str, Any]]) -> str:
     )
 
 
-_REPORT_CSS = """
-/* La tabla de ventanas y el grafo de conceptos, con el mismo trato que las
-   tablas del informe por circuito: bordes de fila y columna, encabezado tenido, y
-   desbordamiento horizontal propio para que la pagina nunca se desplace en
-   horizontal. */
+# Lo COMPARTIDO -- tipografia, marco, encabezados, tablas, escudo y pie -- se inyecta
+# desde `informe_estilo`, no se copia: dos hojas escritas por separado es exactamente
+# como estos dos informes se separaron. Aqui abajo queda solo lo PROPIO del gerencial.
+_REPORT_CSS = CSS_IDENTIDAD + """
+/* La tabla de ventanas y el grafo de conceptos. */
 .tabla-ventanas { width: 100%; border-collapse: collapse; font-size: .9rem; margin-top: 12px; }
 .tabla-ventanas th, .tabla-ventanas td { border: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; }
 .tabla-ventanas th { background: #f8fafc; color: #1e3a8a; }
 .grafo-conceptos { border: 1px solid #e2e8f0; border-radius: 8px; background: #ffffff; padding: 8px; }
 .grafo-conceptos .plotly-graph-div { width: 100% !important; }
-body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; padding: 0 24px 48px; color: #0f172a; background: #f8fafc; }
-h1 { font-size: 1.6rem; margin-top: 24px; }
-h2 { font-size: 1.2rem; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; }
 .meta { color: #475569; }
 .report-section { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px 20px; margin: 16px 0; }
 .muted { color: #94a3b8; font-style: italic; }
@@ -1563,6 +1565,8 @@ def render_managerial_report(
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
 </head>
 <body>
+<div class="container">
+{escudo_chec_html()}
 <h1>Informe Gerencial: Circuitos con Criticidad {_escape(label)}</h1>
 <p class="meta">Ventana: {_escape(resolved_window.get('fecha_inicio'))} a {_escape(resolved_window.get('fecha_fin'))}
 &middot; Circuitos muestreados: {len(sampled)} de {circuit_count}</p>
@@ -1602,7 +1606,8 @@ def render_managerial_report(
 <h2>Anexo por circuito</h2>
 {_annex_html(synthesis['anexo_por_circuito'])}
 </section>
-
+{pie_agentes_html()}
+</div>
 </body>
 </html>"""
 

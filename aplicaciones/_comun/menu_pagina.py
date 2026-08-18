@@ -487,7 +487,7 @@ def _diagrama(titulos: list[str]) -> str:
   <text x="134" y="375" text-anchor="middle" class="dn">del UITI que logran en cada vano</text>
 
   <rect x="268" y="326" width="113" height="69" rx="6" fill="#fff" stroke="$BORDE_FUERTE"/>
-  <text x="324" y="346" text-anchor="middle" class="dt">Intervencion</text>
+  <text x="324" y="346" text-anchor="middle" class="dt">Intervención</text>
   <text x="324" y="364" text-anchor="middle" class="dn">qué hacer</text>
   <text x="324" y="377" text-anchor="middle" class="dn">valor sugerido</text>
 

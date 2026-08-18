@@ -10,6 +10,14 @@ import pandas as pd
 from chec_local_interpreter.config import PROJECT_ROOT
 from chec_local_interpreter.event_counts import count_unique_event_dates
 from chec_local_interpreter.glosario_variables import nombre_con_codigo
+# La identidad visual que este informe COMPARTE con el gerencial. Se inyecta como
+# valor en la f-string de abajo, asi que sus llaves van SIMPLES y no se vuelven a
+# escanear; las reglas propias de esta plantilla siguen escribiendose dobles.
+from chec_local_interpreter.informe_estilo import (
+    CSS_IDENTIDAD,
+    escudo_chec_html,
+    pie_agentes_html,
+)
 
 
 import numpy as np
@@ -1679,28 +1687,11 @@ def render_llm_analysis(
     else:
         subtitle_info = f"Período de análisis: {period_str} | (Solo visualización, sin análisis LLM)"
 
-    # Los dos logos viajan DENTRO del HTML como `data:` URI. El informe se abre desde
-    # cualquier carpeta del disco y se manda por correo: un `<img src="site/...">`
-    # daria un icono roto en cuanto el archivo cambie de sitio. Si el PNG falta, no se
-    # dibuja nada -- un informe no se pierde por un adorno.
-    _dir_logos = PROJECT_ROOT / "site" / "assets" / "site" / "logos"
-
-    def _logo_html(nombre_archivo, clase, alt):
-        ruta = _dir_logos / nombre_archivo
-        if not ruta.is_file():
-            return ""
-        import base64 as _b64
-
-        dato = _b64.b64encode(ruta.read_bytes()).decode("ascii")
-        return (f"<img class='{clase}' alt='{_escape(alt)}' "
-                f"src='data:image/png;base64,{dato}'>")
-
-    # Arriba a la derecha, el escudo de quien OPERA la red: es el destinatario.
-    escudo_html = _logo_html("checlogo.png", "escudo-chec", "CHEC Grupo EPM")
-    # Abajo a la derecha, junto al texto, el logo de quien PRODUJO el informe. Separado
-    # del escudo a proposito: juntos arriba se leerian como dos marcas del mismo emisor.
-    logo_labia_html = _logo_html("logo_labIA.png", "logo-labia",
-                                 "Laboratorio de Inteligencia Artificial")
+    # El escudo y el pie salen de `informe_estilo`, que es de donde los saca tambien el
+    # informe gerencial. Dos implementaciones del mismo `data:` URI es como los dos
+    # informes se separaron la primera vez.
+    escudo_html = escudo_chec_html()
+    pie_html = pie_agentes_html()
 
     title_html = f"Reporte Criticidad - Circuito: {primary_circuit}<br><span style='font-size: 0.6em; color: #64748b;'>{subtitle_info}</span>"
 
@@ -1834,18 +1825,11 @@ def render_llm_analysis(
         <meta charset="UTF-8">
         <title>{title_str}</title>
         <style>
-            body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f8fafc; color: #334155; margin: 0; padding: 20px; }}
-            .container {{ position: relative; max-width: 1200px; margin: auto; padding: 25px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }}
-            h1 {{ color: #0f172a; border-bottom: 3px solid #2563eb; padding-bottom: 10px; }}
-            h2 {{ color: #1e3a8a; margin-top: 30px; }}
-            h3 {{ color: #1e40af; margin-top: 18px; margin-bottom: 8px; font-size: 1rem; }}
-            h4 {{ color: #334155; margin-bottom: 5px; margin-top: 15px; }}
+{CSS_IDENTIDAD}
             .summary-box {{ background: #eff6ff; padding: 15px 18px; border-left: 5px solid #3b82f6; border-radius: 6px; margin-bottom: 20px; }}
             .content-box {{ background: #ffffff; padding: 15px 18px; border: 1px solid #cbd5e1; border-radius: 6px; margin-bottom: 20px; }}
             ul.report-list {{ margin: 6px 0 4px 0; padding-left: 20px; list-style: disc; }}
             ul.report-list li {{ margin-bottom: 5px; line-height: 1.55; font-size: 0.95rem; }}
-            ul {{ margin: 6px 0 4px 0; padding-left: 20px; }}
-            li {{ margin-bottom: 5px; line-height: 1.55; }}
             .chart-container {{ margin-bottom: 40px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }}
             .chart-grid {{ display: grid; gap: 18px; margin-bottom: 28px; }}
             .chart-grid.two-col {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
@@ -1855,16 +1839,6 @@ def render_llm_analysis(
             /* El anillo del grafo, a la mitad y centrado. Cuadrado a ancho completo
                ocupa tanto alto como ancho y desplaza al resto de la seccion. */
             .figura-mitad .embedded-figure {{ width: 50%; margin: 0 auto; }}
-            /* El escudo, fijo arriba a la derecha de cada pagina del informe. */
-            .escudo-chec {{ position: absolute; top: 18px; right: 22px; height: 54px;
-                            width: auto; }}
-            /* El pie alinea el texto y el logo del laboratorio a la DERECHA, sobre la
-               misma linea de base: el logo firma la frase, no la encabeza. */
-            .pie-agentes {{ display: flex; align-items: center; justify-content: flex-end;
-                            gap: 12px; color: #64748b; font-size: 12px;
-                            padding: 14px 22px 8px 0; border-top: 1px solid #e2e8f0;
-                            margin-top: 26px; }}
-            .logo-labia {{ height: 34px; width: auto; }}
             /* UN visor de mapa: las capas se apilan en el mismo sitio y el deslizador
                elige cual se ve. Tres mapas seguidos obligan a bajar y subir, y a esa
                distancia la comparacion se hace de memoria. */
@@ -1882,10 +1856,6 @@ def render_llm_analysis(
             .graph-panel iframe {{ width: 100%; height: 620px; border: 0; background: #ffffff; }}
             .graph-actions {{ padding: 10px 14px; border-bottom: 1px solid #e2e8f0; background: #ffffff; }}
             .graph-actions a {{ color: #1d4ed8; font-weight: 600; text-decoration: none; }}
-            .table-scroll {{ overflow-x: auto; }}
-            .compact-table {{ width: 100%; border-collapse: collapse; font-size: 0.9rem; }}
-            .compact-table th, .compact-table td {{ border: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; vertical-align: top; }}
-            .compact-table th {{ background: #f8fafc; color: #1e3a8a; }}
             .item-details span {{ display: block; margin-top: 4px; }}
             .muted {{ color: #64748b; margin: 6px 0 4px 0; }}
             .tabs {{ margin-top: 18px; }}
@@ -1914,7 +1884,7 @@ def render_llm_analysis(
                     {html_expert_alignment}
                 </section>
             </div>
-            <div class="pie-agentes"><span>Reporte construido por agentes de IA</span>{logo_labia_html}</div>
+            {pie_html}
         </div>
         <script>
             document.querySelectorAll('.tab-button').forEach(function(button) {{
