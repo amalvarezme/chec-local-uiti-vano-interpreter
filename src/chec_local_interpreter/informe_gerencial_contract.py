@@ -53,6 +53,7 @@ from chec_local_interpreter.batch_report_contract import (
 from chec_local_interpreter.batch_report_contract import normalize_request as _batch_normalize_request
 from chec_local_interpreter.circuit_clustering_contract import RuntimeMetadata, _dataset_date_range
 from chec_local_interpreter.circuit_identity import canonical_circuit_identity
+from chec_local_interpreter.glosario_variables import nombre_con_codigo
 from chec_local_interpreter.informe_estilo import (
     CSS_IDENTIDAD,
     escudo_chec_html,
@@ -838,67 +839,15 @@ def load_circuit_content(
     }
 
 
-GRAPH_PATTERNS_SCHEMA_VERSION = "informe-gerencial-graph-patterns/v1"
 GRAPH_PATTERNS_MIN_SUPPORT = 2
 
 
-def load_graph_patterns(
-    path: str | Path | None, sampled: Sequence[str]
-) -> list[dict[str, Any]] | None:
-    """Load + validate the cross-circuit graph-patterns JSON produced by the
-    SKILL runbook's step 2.5 (`informe-gerencial-graph-patterns/v1`; design:
-    "LLM step lives in the SKILL runbook, file handoff to Python").
-
-    Pure I/O + validation, no LLM call, never raises (threat matrix: path
-    injection via `--graph-patterns`):
-    - `path is None` or the file does not exist -> `None` (distinguishes
-      "step never ran" from "ran empty").
-    - malformed/unreadable JSON -> `[]` (ran, but produced nothing usable).
-    - each pattern's `circuitos` is intersected with `sampled` (a stale
-      pattern may reference circuits outside the CURRENT sample), `soporte`
-      is recomputed from that intersection, and the pattern is dropped if
-      the recomputed `soporte < GRAPH_PATTERNS_MIN_SUPPORT`.
-    """
-    if path is None:
-        return None
-    candidate = Path(path)
-    if not candidate.is_file():
-        return None
-
-    try:
-        payload = json.loads(candidate.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
-        return []
-
-    if not isinstance(payload, dict):
-        return []
-    raw_patterns = payload.get("patterns")
-    if not isinstance(raw_patterns, list):
-        return []
-
-    sampled_set = set(sampled)
-    result: list[dict[str, Any]] = []
-    for entry in raw_patterns:
-        if not isinstance(entry, dict):
-            continue
-        tema = entry.get("tema")
-        raw_circuitos = entry.get("circuitos")
-        if not tema or not isinstance(raw_circuitos, list):
-            continue
-        circuitos = [c for c in raw_circuitos if c in sampled_set]
-        soporte = len(circuitos)
-        if soporte < GRAPH_PATTERNS_MIN_SUPPORT:
-            continue
-        result.append({"tema": tema, "circuitos": circuitos, "soporte": soporte})
-
-    return result
-
 
 def load_graph_view(path: str | Path | None) -> str | None:
-    """Load the raw HTML text produced by `graph_view_builder build` (step
-    2.5.6), if any -- pure I/O, no `graphify` import/call here (non-goal:
+    """Load the raw HTML text of a pre-built figure -- today only the radial
+    causes/strategies graph of step 2.6, if any -- pure I/O, no `graphify` import/call here (non-goal:
     this module stays graphify-free), never raises (threat matrix: path
-    injection via `--graph-view`):
+    injection via `--graph-intervencion`):
     - `path is None` or the file does not exist -> `None`.
     - unreadable (`OSError`/decode failure) -> `None`.
     - readable -> the raw HTML text, verbatim, for `_iframe_srcdoc` to embed.
@@ -1351,7 +1300,13 @@ def _annex_summary_lines(content: dict[str, Any] | None) -> list[str | dict[str,
             if item.get("variable")
         ][:3]
         if variables:
-            lines.append(f"Variables priorizadas: {', '.join(variables)}")
+            # Con el nombre delante y el codigo entre parentesis, igual que /report, la
+            # boveda y el contexto del agente. El informe escribia los codigos pelados: en
+            # el de DON23L14, `NR_T` veinticuatro veces sin decir en ningun sitio que es.
+            lines.append(
+                "Variables priorizadas: "
+                + ", ".join(nombre_con_codigo(str(v)) for v in variables)
+            )
 
     if not lines:
         # No structured fields recovered at all (e.g. a vault note whose
@@ -1427,7 +1382,10 @@ def _executive_summary(
 
     variable_counter = _variable_priority_counter(loaded_content)
     if variable_counter:
-        top_vars = ", ".join(f"{var} ({count}/{n})" for var, count in variable_counter.most_common(3))
+        top_vars = ", ".join(
+            f"{nombre_con_codigo(str(var))}: {count}/{n}"
+            for var, count in variable_counter.most_common(3)
+        )
         items.append(
             f"Variables técnicas priorizadas de forma transversal en la muestra: {top_vars}, "
             "señalando factores recurrentes asociados a las fallas."
@@ -1625,7 +1583,7 @@ def _intervention_graph_html(
     """Render the "Causas y estrategias de intervención" section: the radial
     figure plus the same causes/strategies written out as text.
 
-    Deliberately INDEPENDENT of the graph-patterns section below it. The two
+    Deliberately INDEPENDENT of everything else. The two
     answer different questions from different sources, and coupling them (as
     the previous dual-graph toggle did) meant a failed `graphify` rebuild also
     took down a figure that never needed `graphify` in the first place. Omitted
@@ -1641,6 +1599,10 @@ def _intervention_graph_html(
         '<p class="badge-agentes">Síntesis de los agentes '
         "(histórico + alineamiento experto)</p>"
     )
+    # Perezoso: `intervention_graph` importa de este modulo, asi que hacerlo arriba
+    # cierra el ciclo y ninguno de los dos llega a cargarse.
+    from chec_local_interpreter.intervention_graph import etiqueta_de_estrategia
+
     bloques = [badge]
     if summary:
         causas = summary.get("causas") or []
@@ -1653,8 +1615,10 @@ def _intervention_graph_html(
             )
             bloques.append(f"<h3>Causas compartidas</h3><ul>{filas}</ul>")
         if estrategias:
+            # La MISMA etiqueta que dibuja el grafo, no el concepto crudo: el texto que va
+            # al lado de la figura tiene que nombrar los nodos como la figura los nombra.
             filas = "".join(
-                f"<li><strong>{_escape(item.get('concepto'))}</strong> &mdash; "
+                f"<li><strong>{_escape(etiqueta_de_estrategia(str(item.get('concepto') or '')))}</strong> &mdash; "
                 f"{_escape(item.get('soporte'))} de {n_sampled} circuitos, "
                 f"prioridad {_escape(item.get('prioridad') or 'sin definir')}</li>"
                 for item in estrategias
@@ -1675,61 +1639,6 @@ def _intervention_graph_html(
 </section>
 """
 
-
-def _graph_patterns_html(
-    graph_patterns: list[dict[str, Any]] | None,
-    graph_view_html: str | None,
-    *,
-    n_sampled: int,
-) -> str:
-    """Render the "Patrones cross-circuito (grafo)" subsection per the render
-    states (design: "Section always assembled in Python" / D5 "3-way graph-
-    embed state"): omitted entirely when `n_sampled < 2` (empty string,
-    caller skips the whole `<section>`); muted "not available this run" when
-    the patterns step never produced a file (`graph_patterns is None`);
-    muted "no recurring pattern" when it ran but produced nothing meeting
-    min-support (`graph_patterns == []`); otherwise the populated itemized
-    pattern list, always carrying the visible LLM-assisted provenance badge
-    (spec: "Provenance labeling of the graph subsection") -- PLUS, only when
-    the itemized list itself is populated, the embedded community figure
-    (`graph_view_html`), or a muted "not available this run" indicator when
-    that figure failed to build (independent degradation from the list
-    itself).
-
-    The radial causes/strategies figure USED to share this section behind a
-    toggle; it now has its own (`_intervention_graph_html`) because it no
-    longer comes from `graphify` and must not degrade with it.
-    """
-    if n_sampled < 2:
-        return ""
-
-    badge = '<p class="badge-llm">Interpretación asistida por LLM (grafo)</p>'
-    if graph_patterns is None:
-        body = "<p class='muted'>análisis de grafo no disponible en esta corrida.</p>"
-    elif not graph_patterns:
-        body = "<p class='muted'>sin patrones recurrentes con soporte &gt;= 2.</p>"
-    else:
-        rows = "".join(
-            "<li>"
-            f"{_escape(pattern['tema'])} &mdash; circuitos "
-            f"[{_escape(', '.join(pattern['circuitos']))}] (soporte {_escape(pattern['soporte'])})"
-            "</li>"
-            for pattern in graph_patterns
-        )
-        body = f"<ul>{rows}</ul>"
-        body += (
-            _iframe_srcdoc(graph_view_html)
-            if graph_view_html
-            else "<p class='muted'>figura de grafo no disponible en esta corrida.</p>"
-        )
-
-    return f"""
-<section class="report-section">
-<h2>Patrones cross-circuito (grafo)</h2>
-{badge}
-{body}
-</section>
-"""
 
 
 def _resumen_item_html(item: str | dict[str, Any]) -> str:
@@ -1897,8 +1806,6 @@ def render_managerial_report(
     group: dict[str, Any],
     resolved_window: dict[str, Any],
     sampled: Sequence[str],
-    graph_patterns: list[dict[str, Any]] | None = None,
-    graph_view_html: str | None = None,
     graph_intervencion_html: str | None = None,
     intervention_summary: dict[str, Any] | None = None,
 ) -> str:
@@ -1916,16 +1823,12 @@ def render_managerial_report(
     podia explicar el grupo del que hablaba el texto. Es el mismo arreglo que
     `context_builder` ya habia hecho para el informe por circuito.
     """
-    fig = plot_ranking_circuitos(
-        raw_df,
-        list(sampled),
-        resolved_window.get("fecha_inicio"),
-        resolved_window.get("fecha_fin"),
-    )
+    # El ranking se dibuja UNA sola vez, arriba, dentro del panorama. Aqui abajo repetia
+    # exactamente la misma figura, y la de abajo llegaba sin la prosa que la explica: dos
+    # copias de un grafico de 208 barras pesan 0,13 MB y no dicen nada nuevo.
     # `plotly.js` UNA vez y en la cabeza, no colgando del dispersograma: el grafo de
     # conceptos va INLINE y se quedaria sin motor si esta figura faltara. Es el mismo
     # fallo que ya se corrigio en el informe por circuito.
-    scatter_html = fig.to_html(full_html=False, include_plotlyjs=False) if fig else ""
 
     label = group.get("label") or group.get("slug") or "grupo"
     circuit_count = group.get("circuit_count", len(sampled))
@@ -1951,9 +1854,6 @@ def render_managerial_report(
         label, circuit_count,
     )
     ventanas_section_html = _ventanas_html(ventanas_del_grupo(sampled))
-    graph_section_html = _graph_patterns_html(
-        graph_patterns, graph_view_html, n_sampled=len(sampled)
-    )
 
     return f"""<!DOCTYPE html>
 <html lang="es">
@@ -1975,17 +1875,7 @@ def render_managerial_report(
 {_list_html(synthesis['resumen_ejecutivo'])}
 </section>
 
-<section class="report-section">
-<h2>Patrones comunes</h2>
-<p class="badge-deterministic">Cálculo determinista</p>
-{_list_html(synthesis['patrones_comunes'])}
-</section>
-{ventanas_section_html}{intervention_section_html}{graph_section_html}
-<section class="report-section">
-<h2>Circuitos atípicos (outliers)</h2>
-{_outliers_html(synthesis['circuitos_atipicos'])}
-</section>
-
+{ventanas_section_html}{intervention_section_html}
 <section class="report-section">
 <h2>Riesgo agregado</h2>
 {_list_html(synthesis['riesgo_agregado']['items'])}
@@ -1994,11 +1884,6 @@ def render_managerial_report(
 <section class="report-section">
 <h2>Acciones recomendadas</h2>
 {_list_html(synthesis['acciones_recomendadas'])}
-</section>
-
-<section class="report-section">
-<h2>Mapa de agrupamiento (flota completa, muestra destacada)</h2>
-{scatter_html}
 </section>
 
 <section class="report-section">
@@ -2018,8 +1903,6 @@ def render_and_write(
     runs_root: str | Path | None = None,
     vault_root: str | Path | None = None,
     output_root: str | Path | None = None,
-    graph_patterns_path: str | Path | None = None,
-    graph_view_path: str | Path | None = None,
     graph_intervencion_path: str | Path | None = None,
 ) -> InformeGerencialOutcome:
     """Full render pipeline: re-resolve the SAME deterministic group/window/
@@ -2028,7 +1911,7 @@ def render_and_write(
     and persist the HTML report.
 
     `graph_intervencion_path` (the `intervention_graph build` figure) is loaded
-    via the SAME `load_graph_view` reused for `graph_view_path` -- both are
+    via `load_graph_view` -- it is
     raw, pre-rendered HTML text with an identical never-raise degrade
     contract, so no new loader is needed. Its sibling
     `<figura>.resumen.json` is read alongside it, so the section can also
@@ -2095,8 +1978,6 @@ def render_and_write(
     loaded_content = [
         load_circuit_content(circuito, runs_root=runs_root, vault_root=vault_root) for circuito in sampled
     ]
-    graph_patterns = load_graph_patterns(graph_patterns_path, sampled)
-    graph_view_html = load_graph_view(graph_view_path)
     graph_intervencion_html = load_graph_view(graph_intervencion_path)
     intervention_summary = load_intervention_summary(
         _intervention_summary_path(graph_intervencion_path)
@@ -2109,8 +1990,6 @@ def render_and_write(
         group=group,
         resolved_window=resolved_window,
         sampled=sampled,
-        graph_patterns=graph_patterns,
-        graph_view_html=graph_view_html,
         graph_intervencion_html=graph_intervencion_html,
         intervention_summary=intervention_summary,
     )
@@ -2170,8 +2049,6 @@ def _build_parser() -> argparse.ArgumentParser:
     render_command.add_argument("--runs-root")
     render_command.add_argument("--vault-root")
     render_command.add_argument("--output-root")
-    render_command.add_argument("--graph-patterns")
-    render_command.add_argument("--graph-view")
     render_command.add_argument("--graph-intervencion")
 
     return parser
@@ -2222,8 +2099,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             runs_root=args.runs_root,
             vault_root=args.vault_root,
             output_root=args.output_root,
-            graph_patterns_path=args.graph_patterns,
-            graph_view_path=args.graph_view,
             graph_intervencion_path=args.graph_intervencion,
         )
         print(outcome.to_json_text())

@@ -49,6 +49,7 @@ from typing import Any, Literal, Sequence
 from chec_local_interpreter.agent_output import ReportPipelineError, load_validated_agent_output
 from chec_local_interpreter.agent_tools._atomic_io import atomic_write_text
 from chec_local_interpreter.circuit_identity import canonical_circuit_identity
+from chec_local_interpreter.glosario_variables import nombre_con_codigo
 from chec_local_interpreter.informe_gerencial_contract import (
     CAUSE_THEME_KEYWORDS,
     DEFAULT_RUNS_ROOT,
@@ -59,6 +60,7 @@ from chec_local_interpreter.informe_gerencial_contract import (
 )
 
 __all__ = [
+    "etiqueta_de_estrategia",
     "SCHEMA_VERSION",
     "InterventionGraphOutcome",
     "build_concept_model",
@@ -376,10 +378,57 @@ def build_concept_model(
 # ---------------------------------------------------------------------------
 
 
+#: Margen angular que se deja en las puntas de cada semicircunferencia. Sin el, el primer
+#: y el ultimo nodo caen exactamente sobre la vertical (coseno 0) y quedan pisando la
+#: frontera entre las dos mitades, que es justo lo que la disposicion quiere separar.
+_MARGEN_ARCO = 0.16
+
+
+def etiqueta_de_estrategia(concepto: str) -> str:
+    """`Inspección en campo · NR_T` -> `Inspección en campo · Riesgo por vegetación... (NR_T)`.
+
+    El concepto sigue siendo la IDENTIDAD -- es la clave con la que se agrupan las
+    estrategias entre circuitos y la que viaja al `.resumen.json` --, asi que no se toca:
+    solo se traduce lo que se DIBUJA. Un informe que solo diera el nombre bonito obligaria
+    a traducir de vuelta a mano para buscar la columna en el dataset; uno que solo diera el
+    codigo obliga a saberse los nombres de columna de este CSV en particular.
+    """
+    if " · " not in concepto:
+        return concepto
+    familia, _, variable = concepto.partition(" · ")
+    return f"{familia} · {nombre_con_codigo(variable)}"
+
+
+def _arc_angles(count: int, desde: float, hasta: float) -> list[float]:
+    """`count` angulos repartidos por igual dentro de `[desde, hasta]`.
+
+    Con un solo elemento va al centro del arco y no a una punta: un nodo suelto pegado al
+    borde se lee como si le faltaran vecinos.
+    """
+    if count <= 0:
+        return []
+    if count == 1:
+        return [(desde + hasta) / 2.0]
+    paso = (hasta - desde) / (count - 1)
+    return [desde + paso * i for i in range(count)]
+
+
 def _circuit_angles(circuits: Sequence[str]) -> dict[str, float]:
+    """Los circuitos ocupan la semicircunferencia IZQUIERDA.
+
+    Antes los tres anillos eran circunferencias completas y concentricas, y toda arista
+    circuito -> causa podia salir en cualquier direccion: con 7 circuitos y 4 causas la
+    figura era una maraña. Con las dos mitades enfrentadas -- circuitos a la izquierda,
+    causas y estrategias a la derecha -- TODA arista cruza el centro una sola vez y en el
+    mismo sentido, que es lo que deja seguirla con la vista.
+    """
     ordered = sorted(circuits, key=canonical_circuit_identity)
-    count = len(ordered) or 1
-    return {circuit: (2 * math.pi * index / count) for index, circuit in enumerate(ordered)}
+    angulos = _arc_angles(
+        len(ordered),
+        math.pi / 2 + _MARGEN_ARCO,
+        3 * math.pi / 2 - _MARGEN_ARCO,
+    )
+    return {circuit: angulo for circuit, angulo in zip(ordered, angulos)}
 
 
 def _mean_angle(members: Sequence[str], circuit_angles: dict[str, float]) -> float:
@@ -419,18 +468,26 @@ def _place(
             concept["concepto"],
         ),
     )
-    count = len(ordered) or 1
-    placed: list[tuple[dict[str, Any], float, float]] = []
-    for index, concept in enumerate(ordered):
-        angle = 2 * math.pi * index / count
-        placed.append(
-            (
-                concept,
-                round(base_radius * math.cos(angle), 4),
-                round(base_radius * math.sin(angle), 4),
-            )
+    # La mitad DERECHA, de arriba abajo. El orden es el de la media circular de sus
+    # circuitos, asi que un concepto queda enfrentado a los circuitos que lo nombran y su
+    # arista cruza el centro casi horizontal, no en diagonal.
+    #
+    # El recorrido va de `pi/2` a `-pi/2` (y no al reves) para que el concepto cuya media
+    # cae ARRIBA en la mitad izquierda quede tambien ARRIBA en la derecha. Invertirlo
+    # cruzaba todas las aristas en aspa.
+    angulos = _arc_angles(
+        len(ordered),
+        math.pi / 2 - _MARGEN_ARCO,
+        -math.pi / 2 + _MARGEN_ARCO,
+    )
+    return [
+        (
+            concept,
+            round(base_radius * math.cos(angle), 4),
+            round(base_radius * math.sin(angle), 4),
         )
-    return placed
+        for concept, angle in zip(ordered, angulos)
+    ]
 
 
 def _ring_radius(labels: Sequence[str], *, at_least: float) -> float:
@@ -508,15 +565,29 @@ def build_graph_elements(
         return [], []
     circuit_angles = _circuit_angles(circuitos)
 
-    # Rings sized from the inside out: each one only has to clear its own
-    # labels, and the next starts a fixed gap beyond it.
-    radio_estrategia = _ring_radius(
-        [item["concepto"] for item in estrategias], at_least=_MIN_INNER_RADIUS
-    )
+    # Radios de dentro hacia fuera, siguiendo la cadena que la figura cuenta:
+    # circuito -> causa -> estrategia. La CAUSA va pegada al centro y la ESTRATEGIA por
+    # fuera, asi la mitad derecha se lee de dentro hacia afuera igual que se lee la frase.
+    #
+    # Antes la estrategia era el anillo mas interno y la causa el del medio, porque los
+    # tres eran circunferencias completas y lo que mandaba era el conteo de nodos. Con las
+    # dos mitades enfrentadas manda la direccion de lectura.
+    #
+    # Cada arco solo tiene que despejar sus PROPIAS etiquetas, y como ahora ocupa media
+    # vuelta y no una entera, sus nodos van al doble de apretados: el radio se calcula
+    # sobre el doble de nodos para conservar el mismo aire entre vecinos.
     radio_causa = _ring_radius(
-        [item["concepto"] for item in causas], at_least=radio_estrategia + _RING_GAP_PX
+        [item["concepto"] for item in causas] * 2, at_least=_MIN_INNER_RADIUS
     )
-    radio_circuito = _ring_radius(circuitos, at_least=radio_causa + _RING_GAP_PX)
+    radio_estrategia = _ring_radius(
+        # La etiqueta DIBUJADA, no el concepto: al expandir el codigo a su nombre el texto
+        # crece, y un radio calculado sobre el codigo pelado deja los nodos pisandose.
+        [etiqueta_de_estrategia(item["concepto"]) for item in estrategias] * 2,
+        at_least=radio_causa + _RING_GAP_PX,
+    )
+    # Los circuitos van en la otra mitad, a la distancia de la estrategia: las dos mitades
+    # se ven del mismo tamano y el centro queda libre para que crucen las aristas.
+    radio_circuito = _ring_radius(circuitos * 2, at_least=radio_estrategia)
 
     causa_ids = {concept["concepto"]: f"causa::{concept['concepto']}" for concept in causas}
     estrategia_ids = {
@@ -599,7 +670,7 @@ def build_graph_elements(
             {
                 "id": estrategia_ids[concept["concepto"]],
                 "kind": "estrategia",
-                "label": concept["concepto"],
+                "label": etiqueta_de_estrategia(concept["concepto"]),
                 "soporte": concept["soporte"],
                 "total_circuitos": len(circuitos),
                 "prioridad": concept["prioridad"],

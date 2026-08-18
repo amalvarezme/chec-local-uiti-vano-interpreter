@@ -304,7 +304,10 @@ class TestGraphElements:
             )
         return ig.build_concept_model(list(circuitos), runs_root=runs_root)
 
-    def test_los_tres_anillos_estan_a_radios_distintos(self, runs_root: Path) -> None:
+    def test_la_causa_va_dentro_y_la_estrategia_fuera(self, runs_root: Path) -> None:
+        """La mitad derecha se lee de dentro hacia fuera igual que la cadena
+        circuito -> causa -> estrategia. Antes era al reves porque los tres eran
+        circunferencias completas y lo que mandaba era el conteo de nodos."""
         nodes, _ = ig.build_graph_elements(self._modelo(runs_root))
 
         radios = {}
@@ -312,8 +315,7 @@ class TestGraphElements:
             radios.setdefault(node["kind"], set()).add(
                 round((node["x"] ** 2 + node["y"] ** 2) ** 0.5, 2)
             )
-        assert max(radios["circuito"]) > max(radios["causa"])
-        assert max(radios["causa"]) > max(radios["estrategia"])
+        assert max(radios["causa"]) < max(radios["estrategia"])
 
     def test_los_circuitos_van_en_orden_alfabetico_canonico(self, runs_root: Path) -> None:
         modelo = self._modelo(runs_root, ("CCC23L13", "AAA23L11", "BBB23L12"))
@@ -374,7 +376,7 @@ class TestGraphElements:
                     separacion = ((a["x"] - b["x"]) ** 2 + (a["y"] - b["y"]) ** 2) ** 0.5
                     assert separacion > 90, f"{kind}: {a['label']} y {b['label']} se encima"
 
-    def test_los_anillos_no_se_invaden_entre_si(self, runs_root: Path) -> None:
+    def test_los_dos_arcos_no_se_invaden_entre_si(self, runs_root: Path) -> None:
         variables = [
             _variable(f"VARIABLE_LARGA_{i:02d}", validacion="Contrastar con el histórico.")
             for i in range(10)
@@ -390,8 +392,12 @@ class TestGraphElements:
         radio = {}
         for node in nodes:
             radio.setdefault(node["kind"], []).append((node["x"] ** 2 + node["y"] ** 2) ** 0.5)
-        assert min(radio["causa"]) > max(radio["estrategia"])
-        assert min(radio["circuito"]) > max(radio["causa"])
+        # Los dos arcos de la mitad derecha no se pisan, ni con rotulos largos.
+        assert max(radio["causa"]) < min(radio["estrategia"])
+        # Los circuitos viven en la OTRA mitad, asi que su radio ya no tiene que
+        # superar al de nadie: lo que los separa es el signo de la x.
+        assert all(n["x"] < 0 for n in nodes if n["kind"] == "circuito")
+        assert all(n["x"] > 0 for n in nodes if n["kind"] in ("causa", "estrategia"))
 
     def test_el_rotulo_se_parte_en_dos_lineas(self) -> None:
         assert ig._wrap_label("Inspección en campo · CNT_TRF") == "Inspección en campo\nCNT_TRF"
@@ -600,3 +606,100 @@ class TestCli:
         )
         assert code == 2
         assert json.loads(capsys.readouterr().out)["status"] == "execution_error"
+
+
+# ---------------------------------------------------------------------------
+# Disposicion en DOS semicircunferencias enfrentadas
+# ---------------------------------------------------------------------------
+
+
+def _modelo_de_prueba():
+    return {
+        "circuitos": ["C1", "C2", "C3", "C4"],
+        "causas": [
+            {"concepto": "clima/atmosférico", "soporte": 3,
+             "circuitos": ["C1", "C2", "C3"], "evidencia": {}},
+            {"concepto": "conductor/vegetación", "soporte": 2,
+             "circuitos": ["C3", "C4"], "evidencia": {}},
+        ],
+        "estrategias": [
+            {"concepto": "Inspección en campo · NR_T", "soporte": 3, "variable": "NR_T",
+             "prioridad": "alta", "circuitos": ["C1", "C2", "C3"], "evidencia": {}},
+            {"concepto": "Inspección en campo · CONDUCTOR", "soporte": 2, "variable": "CONDUCTOR",
+             "prioridad": "media", "circuitos": ["C3", "C4"], "evidencia": {}},
+        ],
+        "causas_por_circuito": {
+            "C1": {"clima/atmosférico"}, "C2": {"clima/atmosférico"},
+            "C3": {"clima/atmosférico", "conductor/vegetación"},
+            "C4": {"conductor/vegetación"},
+        },
+        "estrategias_por_circuito": {
+            "C1": {"Inspección en campo · NR_T"}, "C2": {"Inspección en campo · NR_T"},
+            "C3": {"Inspección en campo · NR_T", "Inspección en campo · CONDUCTOR"},
+            "C4": {"Inspección en campo · CONDUCTOR"},
+        },
+        "circuitos_sin_corrida": [],
+    }
+
+
+def _por_tipo(nodes):
+    salida = {}
+    for n in nodes:
+        salida.setdefault(n["kind"], []).append(n)
+    return salida
+
+
+def test_los_circuitos_ocupan_un_semicirculo_y_los_conceptos_el_otro():
+    """Tres anillos concentricos hacian que las aristas cruzaran la figura entera. Con dos
+    semicircunferencias enfrentadas, toda arista circuito->causa cruza el centro UNA vez y
+    en la misma direccion, y el ojo puede seguirla."""
+    from chec_local_interpreter import intervention_graph as ig
+
+    nodes, _ = ig.build_graph_elements(_modelo_de_prueba())
+    t = _por_tipo(nodes)
+
+    assert all(n["x"] < 0 for n in t["circuito"]), "algun circuito se salio de su mitad"
+    assert all(n["x"] > 0 for n in t["causa"]), "alguna causa se salio de su mitad"
+    assert all(n["x"] > 0 for n in t["estrategia"]), "alguna estrategia se salio de su mitad"
+
+
+def test_la_estrategia_va_por_FUERA_de_su_causa():
+    """Dentro de la mitad derecha se lee de dentro hacia fuera, igual que la cadena
+    circuito -> causa -> estrategia. Se compara el RADIO y no la x: cerca del borde del
+    arco el coseno achica la x de un nodo lejano, y eso no significa que este mas cerca."""
+    from chec_local_interpreter import intervention_graph as ig
+
+    nodes, _ = ig.build_graph_elements(_modelo_de_prueba())
+    t = _por_tipo(nodes)
+    radio = lambda n: (n["x"] ** 2 + n["y"] ** 2) ** 0.5
+
+    assert max(radio(n) for n in t["causa"]) < min(radio(n) for n in t["estrategia"])
+
+
+def test_ningun_nodo_queda_encima_de_otro():
+    from chec_local_interpreter import intervention_graph as ig
+
+    nodes, _ = ig.build_graph_elements(_modelo_de_prueba())
+    posiciones = [(round(n["x"], 1), round(n["y"], 1)) for n in nodes]
+
+    assert len(posiciones) == len(set(posiciones))
+
+
+def test_la_estrategia_nombra_la_variable_con_su_codigo():
+    from chec_local_interpreter import intervention_graph as ig
+    from chec_local_interpreter.glosario_variables import nombre_con_codigo
+
+    nodes, _ = ig.build_graph_elements(_modelo_de_prueba())
+    etiquetas = " ".join(n["label"] for n in nodes if n["kind"] == "estrategia")
+
+    assert nombre_con_codigo("NR_T").split(" (")[0] in etiquetas
+    assert "(NR_T)" in etiquetas
+
+
+def test_la_disposicion_es_reproducible():
+    from chec_local_interpreter import intervention_graph as ig
+
+    a, _ = ig.build_graph_elements(_modelo_de_prueba())
+    b, _ = ig.build_graph_elements(_modelo_de_prueba())
+
+    assert [(n["id"], n["x"], n["y"]) for n in a] == [(n["id"], n["x"], n["y"]) for n in b]

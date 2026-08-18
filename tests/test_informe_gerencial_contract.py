@@ -22,6 +22,30 @@ from chec_local_interpreter.informe_gerencial_contract import (
 from chec_local_interpreter.circuit_identity import canonical_circuit_identity
 
 
+def _known_tier_df_coords_with_distance() -> pd.DataFrame:
+    names = [f"ALTO_{i}" for i in range(25)]
+    distances = list(range(25))
+    df = _df_coords(names, distances)
+    df["criticidad"] = "Riesgo Alto"
+    return df
+
+
+_RADIAL_HTML = "<html><body>grafo radial de causas</body></html>"
+_RESUMEN = {
+    "schema_version": "informe-gerencial-grafo-intervencion/v1",
+    "causas": [{"concepto": "clima/atmosférico", "soporte": 2, "circuitos": ["ALTO_0", "ALTO_1"]}],
+    "estrategias": [
+        {
+            "concepto": "Inspección en campo · CNT_TRF",
+            "soporte": 2,
+            "prioridad": "alta",
+            "circuitos": ["ALTO_0", "ALTO_1"],
+        }
+    ],
+    "circuitos_sin_corrida": [],
+}
+
+
 def _rows_for_circuit(circuit: str, n_events: int, total_uiti: float, start: str = "2026-01-01") -> pd.DataFrame:
     """Build `n_events` distinct-date rows for `circuit` whose UITI_VANO sums to `total_uiti`."""
     dates = pd.date_range(start, periods=n_events, freq="D").strftime("%Y-%m-%d").tolist()
@@ -412,85 +436,6 @@ def _write_graph_patterns_json(path: Path, patterns: list[dict]) -> None:
         ),
         encoding="utf-8",
     )
-
-
-def test_load_graph_patterns_drops_patterns_below_min_support(tmp_path):
-    path = tmp_path / "graph-patterns.json"
-    _write_graph_patterns_json(
-        path,
-        [
-            {"tema": "fauna en vanos", "circuitos": ["DON23L13", "AMA23L12"], "soporte": 2},
-            {"tema": "clima aislado", "circuitos": ["HER23L16"], "soporte": 1},
-        ],
-    )
-    sampled = ["DON23L13", "AMA23L12", "HER23L16"]
-
-    result = informe_contract.load_graph_patterns(path, sampled)
-
-    assert result == [{"tema": "fauna en vanos", "circuitos": ["DON23L13", "AMA23L12"], "soporte": 2}]
-
-
-def test_load_graph_patterns_intersects_circuitos_with_sampled_and_recomputes_soporte(tmp_path):
-    """A pattern's `circuitos` may include a circuit that is NOT part of the
-    current sampled set (e.g. graph staleness) -- it must be intersected with
-    `sampled`, `soporte` recomputed from the intersection, and dropped if the
-    recomputed soporte falls below 2.
-    """
-    path = tmp_path / "graph-patterns.json"
-    _write_graph_patterns_json(
-        path,
-        [
-            # 3 circuitos claimed, but only 2 are in the current sample ->
-            # recomputed soporte = 2, kept.
-            {"tema": "fauna en vanos", "circuitos": ["DON23L13", "AMA23L12", "NOTSAMPLED"], "soporte": 3},
-            # 2 circuitos claimed, only 1 is in the current sample ->
-            # recomputed soporte = 1, dropped.
-            {"tema": "clima aislado", "circuitos": ["HER23L16", "OTHERSTALE"], "soporte": 2},
-        ],
-    )
-    sampled = ["DON23L13", "AMA23L12", "HER23L16"]
-
-    result = informe_contract.load_graph_patterns(path, sampled)
-
-    assert len(result) == 1
-    assert result[0]["tema"] == "fauna en vanos"
-    assert set(result[0]["circuitos"]) == {"DON23L13", "AMA23L12"}
-    assert result[0]["soporte"] == 2
-
-
-def test_load_graph_patterns_missing_path_returns_none(tmp_path):
-    missing_path = tmp_path / "does-not-exist.json"
-
-    result = informe_contract.load_graph_patterns(missing_path, ["DON23L13"])
-
-    assert result is None
-
-
-def test_load_graph_patterns_none_path_returns_none():
-    assert informe_contract.load_graph_patterns(None, ["DON23L13"]) is None
-
-
-def test_load_graph_patterns_malformed_json_returns_empty_list_never_raises(tmp_path):
-    path = tmp_path / "graph-patterns.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("{not valid json::", encoding="utf-8")
-
-    result = informe_contract.load_graph_patterns(path, ["DON23L13"])
-
-    assert result == []
-
-
-# ---------------------------------------------------------------------------
-# resolve() status matrix + CLI + path-injection guards (Phase 4, tasks 4.1-4.3)
-# ---------------------------------------------------------------------------
-
-
-def _known_tier_df_coords_with_distance() -> pd.DataFrame:
-    names = [f"ALTO_{i}" for i in range(25)]
-    distances = list(range(25))
-    df = _df_coords(names, distances)
-    df["criticidad"] = "Riesgo Alto"
-    return df
 
 
 def test_resolve_awaiting_confirmation_with_missing_runs(monkeypatch, tmp_path):
@@ -1063,7 +1008,7 @@ def test_synthesize_surfaces_cross_circuit_technical_patterns_and_causes():
 # ---------------------------------------------------------------------------
 
 
-def test_render_managerial_report_embeds_scatter_and_all_sections():
+def test_render_managerial_report_embebe_la_figura_y_las_secciones_que_quedan():
     raw_df = _four_tier_raw_df(per_tier=2)
     sampled_records = _sampled_records(
         [
@@ -1088,14 +1033,13 @@ def test_render_managerial_report_embeds_scatter_and_all_sections():
 
     assert "<title>Informe Gerencial: Circuitos en Riesgo Alto</title>" in html
     assert "<h1>Informe Gerencial: Circuitos en Riesgo Alto</h1>" in html
+    assert "Panorama del grupo" in html
     assert "Resumen ejecutivo" in html
-    assert "Patrones comunes" in html
-    assert "Circuitos atípicos" in html
     assert "Riesgo agregado" in html
     assert "Acciones recomendadas" in html
     assert "Anexo por circuito" in html
-    # The embedded scatter is real -- Plotly's JS bootstrap call is present,
-    # not a placeholder string.
+    # La figura del panorama es real: la llamada de arranque de Plotly esta ahi, no una
+    # cadena de relleno.
     assert "Plotly.newPlot" in html
     # Real synthesis content actually lands in the page (HTML-escaped, since
     # narrative text may contain user-influenced characters), not just headings
@@ -1107,50 +1051,27 @@ def test_render_managerial_report_embeds_scatter_and_all_sections():
         assert html_lib.escape(item) in html
 
 
-def test_render_managerial_report_barras_de_la_flota_completa_con_solo_los_muestreados_resaltados(monkeypatch):
-    """La invariante de "nunca se esconde nada" sobrevive al cambio de figura: las barras
-    se dibujan sobre la flota ENTERA aunque el informe hable de una sola banda."""
+def test_las_barras_del_panorama_cubren_la_flota_completa():
+    """La invariante de "nunca se esconde nada" sobrevive al traslado: el ranking se dibuja
+    ahora UNA vez, dentro del panorama, y sigue trayendo la flota entera aunque el informe
+    hable de una sola banda."""
     raw_df = _ranking_raw_df({f"C{i:02d}": i * 8 for i in range(1, 13)}, vanos_por_circuito=110)
-    sampled_names = ["C12", "C11"]
-    sampled_records = _sampled_records(
-        [
-            ("C12", 40, 50000.0, "Riesgo Alto"),
-            ("C11", 20, 5000.0, "Riesgo Medio-Alto"),
-        ]
-    )
+    sampled_records = _sampled_records([("C12", 40, 50000.0, "Riesgo Alto")])
     group = {"slug": "alto", "label": "Riesgo Alto", "circuit_count": 1}
-    synthesis = synthesize(sampled_records, [None, None], group)
-
-    calls: dict = {}
-    real_plot = informe_contract.plot_ranking_circuitos
-
-    def _spy(df, destacados, *args, **kwargs):
-        calls["n_rows"] = len(df)
-        calls["destacados"] = destacados
-        return real_plot(df, destacados, *args, **kwargs)
-
-    monkeypatch.setattr(informe_contract, "plot_ranking_circuitos", _spy)
 
     html = render_managerial_report(
         raw_df,
-        synthesis=synthesis,
+        synthesis=synthesize(sampled_records, [None], group),
         group=group,
         resolved_window={"fecha_inicio": "2026-01-01", "fecha_fin": "2026-12-31"},
-        sampled=sampled_names,
+        sampled=["C12"],
     )
 
-    # El `raw_df` COMPLETO y sin filtrar llega a la figura, nunca un recorte a la banda.
-    assert calls["n_rows"] == len(raw_df)
-    assert calls["destacados"] == sampled_names
-    # Los circuitos de OTRAS bandas siguen visibles; solo cambia el resaltado.
-    assert "C01" in html
-    assert "C06" in html
-
-
-# ---------------------------------------------------------------------------
-# Cross-circuit graph-patterns render states + CLI flag (Phase 3, tasks 3.1-3.7)
-# ---------------------------------------------------------------------------
-
+    # Los doce circuitos de la flota siguen en la figura, no solo el de la banda.
+    for circuito in (f"C{i:02d}" for i in range(1, 13)):
+        assert circuito in html
+    # Y se dibuja una sola vez: el mapa del final se retiro por ser la misma figura.
+    assert "Mapa de agrupamiento" not in html
 
 def _render_report_html(
     *,
@@ -1180,246 +1101,12 @@ def _render_report_html(
     )
 
 
-def test_render_managerial_report_omits_graph_section_when_fewer_than_2_sampled():
-    html = _render_report_html(sampled=["ALTO_0"], graph_patterns=[{"tema": "x", "circuitos": ["ALTO_0"], "soporte": 2}])
-
-    assert "Patrones cross-circuito" not in html
-
-
-def test_render_managerial_report_graph_section_muted_when_patterns_none():
-    html = _render_report_html(sampled=["ALTO_0", "ALTO_1"], graph_patterns=None)
-
-    assert "Patrones cross-circuito" in html
-    assert "análisis de grafo no disponible en esta corrida" in html
-
-
-def test_render_managerial_report_graph_section_muted_when_patterns_empty():
-    html = _render_report_html(sampled=["ALTO_0", "ALTO_1"], graph_patterns=[])
-
-    assert "Patrones cross-circuito" in html
-    assert "sin patrones recurrentes con soporte" in html
-
-
-def test_render_managerial_report_graph_section_lists_patterns_with_provenance_badge():
-    patterns = [{"tema": "fauna en vanos", "circuitos": ["ALTO_0", "ALTO_1"], "soporte": 2}]
-
-    html = _render_report_html(sampled=["ALTO_0", "ALTO_1"], graph_patterns=patterns)
-
-    assert "fauna en vanos" in html
-    assert "ALTO_0" in html and "ALTO_1" in html
-    assert "soporte 2" in html
-    # Explicit LLM-assisted provenance badge, visibly distinct from the
-    # deterministic "Patrones comunes" table (spec: "Provenance labeling").
-    assert "Interpretación asistida por LLM (grafo)" in html
-
-
-def test_render_managerial_report_patrones_comunes_labeled_deterministic():
-    html = _render_report_html(sampled=["ALTO_0", "ALTO_1"], graph_patterns=None)
-
-    assert "Cálculo determinista" in html
-
-
-def test_cli_render_passes_graph_patterns_path_through_to_output(monkeypatch, capsys, tmp_path):
-    frame = _four_tier_raw_df(per_tier=2)
-    monkeypatch.setattr(informe_contract, "load_dataset", lambda path: frame)
-    df_coords = _known_tier_df_coords_full()
-    monkeypatch.setattr(informe_contract, "resolve_group_dataframe", lambda *a, **k: df_coords)
-    monkeypatch.setattr(
-        informe_contract,
-        "load_circuit_content",
-        lambda circuito, **kwargs: {"circuito": circuito, "source": "vault_note", "content": f"Narrativa {circuito}"},
-    )
-    output_root = tmp_path / "html"
-    graph_patterns_path = tmp_path / "graph-patterns.json"
-    _write_graph_patterns_json(
-        graph_patterns_path,
-        [{"tema": "fauna en vanos", "circuitos": ["ALTO_0", "ALTO_1", "ALTO_2"], "soporte": 3}],
-    )
-
-    exit_code = informe_contract.main(
-        [
-            "render",
-            "alto",
-            "2026-01-01",
-            "2026-01-02",
-            "--data-path",
-            "data.csv",
-            "--output-root",
-            str(output_root),
-            "--graph-patterns",
-            str(graph_patterns_path),
-        ]
-    )
-
-    assert exit_code == 0
-    payload = json.loads(capsys.readouterr().out)
-    assert payload["status"] == "success"
-    written = Path(payload["output_html"]).read_text(encoding="utf-8")
-    assert "fauna en vanos" in written
-    assert "Interpretación asistida por LLM (grafo)" in written
-
-
-# ---------------------------------------------------------------------------
-# Graph-view embed: `<ul>/<li>` structural guard + load_graph_view + 3-way
-# states + CLI arg (Phase 4, tasks 4.1-4.4)
-# ---------------------------------------------------------------------------
-
-
-_LI_ITEM_RE = re.compile(r"<li>.*?</li>", re.DOTALL)
-
-
-def test_graph_patterns_html_renders_ul_li_structural():
-    """Locks the ALREADY-correct itemized-list rendering: a populated
-    pattern list must produce real `<ul>`/`<li>` elements (structural, not
-    substring-only), guarding against regression to non-list rendering
-    (spec: "Itemized patterns list is structurally verifiable").
-    """
-    patterns = [
-        {"tema": "fauna en vanos", "circuitos": ["ALTO_0", "ALTO_1"], "soporte": 2},
-        {"tema": "clima aislado", "circuitos": ["ALTO_0", "ALTO_2"], "soporte": 2},
-    ]
-
-    html = informe_contract._graph_patterns_html(patterns, None, n_sampled=2)
-
-    ul_match = re.search(r"<ul>(.*?)</ul>", html, re.DOTALL)
-    assert ul_match is not None
-    li_items = _LI_ITEM_RE.findall(ul_match.group(1))
-    assert len(li_items) == 2
-    assert "fauna en vanos" in li_items[0]
-    assert "clima aislado" in li_items[1]
-
-
-def test_load_graph_view_missing_or_omitted_path_returns_none(tmp_path):
-    assert informe_contract.load_graph_view(None) is None
-    assert informe_contract.load_graph_view(tmp_path / "does-not-exist.html") is None
-
-
-def test_load_graph_view_readable_path_returns_raw_html(tmp_path):
-    path = tmp_path / "graph-view.html"
-    path.write_text("<html><body>grafo</body></html>", encoding="utf-8")
-
-    result = informe_contract.load_graph_view(path)
-
-    assert result == "<html><body>grafo</body></html>"
-
-
-def test_load_graph_view_unreadable_path_degrades_to_none(tmp_path):
-    directory_as_path = tmp_path / "not-a-file"
-    directory_as_path.mkdir()
-
-    result = informe_contract.load_graph_view(directory_as_path)
-
-    assert result is None
-
-
-@pytest.mark.parametrize(
-    "graph_patterns,graph_view_html,expect_ul,expect_figure,expect_muted_no_figure",
-    [
-        # patterns present + view present -> <ul> list + embedded figure.
-        (
-            [{"tema": "fauna en vanos", "circuitos": ["ALTO_0", "ALTO_1"], "soporte": 2}],
-            "<html><body>view</body></html>",
-            True,
-            True,
-            False,
-        ),
-        # patterns present + view None -> list only, muted figure-unavailable indicator.
-        (
-            [{"tema": "fauna en vanos", "circuitos": ["ALTO_0", "ALTO_1"], "soporte": 2}],
-            None,
-            True,
-            False,
-            True,
-        ),
-        # patterns None + view present -> existing muted "no data" state, no figure.
-        (None, "<html><body>view</body></html>", False, False, False),
-        # patterns [] + view present -> existing muted "no pattern" state, no figure.
-        ([], "<html><body>view</body></html>", False, False, False),
-    ],
-)
-def test_graph_patterns_html_three_way_graph_embed_states(
-    graph_patterns, graph_view_html, expect_ul, expect_figure, expect_muted_no_figure
-):
-    html = informe_contract._graph_patterns_html(graph_patterns, graph_view_html, n_sampled=2)
-
-    assert ("<ul>" in html) is expect_ul
-    assert ("srcdoc=" in html) is expect_figure
-    assert ("figura de grafo no disponible en esta corrida" in html) is expect_muted_no_figure
-
-
-def test_cli_render_accepts_graph_view_arg(monkeypatch, capsys, tmp_path):
-    frame = _four_tier_raw_df(per_tier=2)
-    monkeypatch.setattr(informe_contract, "load_dataset", lambda path: frame)
-    df_coords = _known_tier_df_coords_full()
-    monkeypatch.setattr(informe_contract, "resolve_group_dataframe", lambda *a, **k: df_coords)
-    monkeypatch.setattr(
-        informe_contract,
-        "load_circuit_content",
-        lambda circuito, **kwargs: {"circuito": circuito, "source": "vault_note", "content": f"Narrativa {circuito}"},
-    )
-    output_root = tmp_path / "html"
-    graph_view_path = tmp_path / "graph-view.html"
-    graph_view_path.write_text("<html><body>vista de grafo</body></html>", encoding="utf-8")
-    graph_patterns_path = tmp_path / "graph-patterns.json"
-    _write_graph_patterns_json(
-        graph_patterns_path,
-        [{"tema": "fauna en vanos", "circuitos": ["ALTO_0", "ALTO_1", "ALTO_2"], "soporte": 3}],
-    )
-
-    exit_code = informe_contract.main(
-        [
-            "render",
-            "alto",
-            "2026-01-01",
-            "2026-01-02",
-            "--data-path",
-            "data.csv",
-            "--output-root",
-            str(output_root),
-            "--graph-patterns",
-            str(graph_patterns_path),
-            "--graph-view",
-            str(graph_view_path),
-        ]
-    )
-
-    assert exit_code == 0
-    payload = json.loads(capsys.readouterr().out)
-    assert payload["status"] == "success"
-    written = Path(payload["output_html"]).read_text(encoding="utf-8")
-    assert "srcdoc=" in written
-
-
-
-
-# ---------------------------------------------------------------------------
-# Causas y estrategias de intervención: sección propia, independiente del paso
-# de graphify (reemplaza el antiguo toggle de dos grafos)
-# ---------------------------------------------------------------------------
-
-
-_RADIAL_HTML = "<html><body>grafo radial de causas</body></html>"
-_RESUMEN = {
-    "schema_version": "informe-gerencial-grafo-intervencion/v1",
-    "causas": [{"concepto": "clima/atmosférico", "soporte": 2, "circuitos": ["ALTO_0", "ALTO_1"]}],
-    "estrategias": [
-        {
-            "concepto": "Inspección en campo · CNT_TRF",
-            "soporte": 2,
-            "prioridad": "alta",
-            "circuitos": ["ALTO_0", "ALTO_1"],
-        }
-    ],
-    "circuitos_sin_corrida": [],
-}
-
-
 def test_la_seccion_de_intervencion_nombra_las_causas_y_las_estrategias():
     html = informe_contract._intervention_graph_html(_RADIAL_HTML, _RESUMEN, n_sampled=2)
 
     assert "Causas y estrategias de intervención" in html
     assert "clima/atmosférico" in html
-    assert "Inspección en campo · CNT_TRF" in html
+    assert "(CNT_TRF)" in html
     assert "prioridad alta" in html
     assert 'class="grafo-conceptos"' in html
 
@@ -1462,15 +1149,15 @@ def test_el_grafo_radial_no_depende_del_paso_de_graphify(monkeypatch, tmp_path):
         request,
         data_path="data.csv",
         output_root=tmp_path / "html",
-        graph_patterns_path=None,
-        graph_view_path=None,
         graph_intervencion_path=figura,
     )
 
     assert outcome.status == "success"
     written = Path(outcome.output_html).read_text(encoding="utf-8")
     assert "grafo radial de causas" in written
-    assert "análisis de grafo no disponible" in written
+    # El grafo radial se dibuja aunque graphify no haya corrido nunca: no hay ninguna
+    # seccion que dependa de el, y este paso lee los artefactos de los agentes.
+    assert "Causas y estrategias de intervención" in written
 
 
 def test_el_contrato_y_el_constructor_derivan_el_mismo_archivo_de_resumen(tmp_path):
@@ -1565,8 +1252,11 @@ def test_e2e_el_constructor_real_alimenta_el_informe(monkeypatch, tmp_path):
     assert 'class="grafo-conceptos"' in written
     assert "<!DOCTYPE html>" not in written.split('class="grafo-conceptos"', 1)[1]
     assert "plotly" in written.lower()
-    # El resumen escrito por el constructor real es el que nombra la sección.
-    assert "Inspección en campo · CNT_TRF" in written
+    # El resumen escrito por el constructor real es el que nombra la sección, y la nombra
+    # con el NOMBRE de la variable y su código entre paréntesis, igual que la figura.
+    from chec_local_interpreter.glosario_variables import nombre_con_codigo
+
+    assert html_lib.escape(f"Inspección en campo · {nombre_con_codigo('CNT_TRF')}") in written
 
 
 def test_cli_render_acepta_grafo_de_intervencion(monkeypatch, capsys, tmp_path):
@@ -1602,28 +1292,6 @@ def test_cli_render_acepta_grafo_de_intervencion(monkeypatch, capsys, tmp_path):
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "success"
     assert "grafo radial de causas" in Path(payload["output_html"]).read_text(encoding="utf-8")
-
-
-def test_la_seccion_de_comunidades_sigue_embebiendo_su_figura():
-    """El grafo de comunidades (graphify) conserva su comportamiento previo,
-    ahora sin el toggle: lista + figura, o lista + indicador apagado.
-    """
-    patrones = [{"tema": "fauna en vanos", "circuitos": ["ALTO_0", "ALTO_1"], "soporte": 2}]
-
-    con_figura = informe_contract._graph_patterns_html(
-        patrones, "<html><body>comunidades</body></html>", n_sampled=2
-    )
-    sin_figura = informe_contract._graph_patterns_html(patrones, None, n_sampled=2)
-
-    assert con_figura.count("srcdoc=") == 1
-    assert "fauna en vanos" in con_figura
-    assert "figura de grafo no disponible en esta corrida" in sin_figura
-    assert "srcdoc=" not in sin_figura
-
-
-# ---------------------------------------------------------------------------
-# Temas de causa: compartidos entre la prosa y la figura
-# ---------------------------------------------------------------------------
 
 
 def test_los_temas_de_causa_ignoran_los_acentos():
@@ -1807,39 +1475,11 @@ def test_plot_ranking_circuitos_sigue_aceptando_un_solo_nombre():
     assert "C08" in fig.layout.title.text
 
 
-def test_el_informe_embebe_las_barras_del_ranking_y_no_la_nube_kmeans(monkeypatch):
-    """La figura tiene que ser la MISMA que define los grupos del informe. Con la nube
-    de K-Means, el informe agrupaba por un criterio que su propia figura no mostraba."""
-    llamadas = {}
-
-    def _falso_ranking(raw_df, destacados, start=None, end=None):
-        llamadas["destacados"] = destacados
-        import plotly.graph_objects as go
-        return go.Figure()
-
-    monkeypatch.setattr(informe_contract, "plot_ranking_circuitos", _falso_ranking)
-    # El modulo ya ni siquiera importa la nube: no queda camino por el que volver a ella.
+def test_el_contrato_no_conserva_ninguna_via_de_vuelta_a_la_nube():
+    """El modulo ya ni siquiera importa la nube de K-Means ni su calculo de grupos: no
+    queda camino por el que volver a ella."""
     assert not hasattr(informe_contract, "plot_interactive_circuit_clustering")
     assert not hasattr(informe_contract, "compute_circuit_criticality_groups")
-
-    informe_contract.render_managerial_report(
-        raw_df=pd.DataFrame({"CIRCUITO": ["C1"], "FECHA": ["2026-01-01"], "UITI_VANO": [1.0]}),
-        resolved_window={"fecha_inicio": "2026-01-01", "fecha_fin": "2026-02-01"},
-        group={"slug": "alto", "label": "Riesgo Alto", "circuit_count": 7},
-        sampled=["C1", "C2"],
-        synthesis={
-            "resumen_ejecutivo": [], "patrones_comunes": [], "circuitos_atipicos": [],
-            "riesgo_agregado": {"items": []}, "acciones_recomendadas": [],
-            "anexo_por_circuito": [],
-        },
-    )
-
-    assert llamadas["destacados"] == ["C1", "C2"]
-
-
-# ---------------------------------------------------------------------------
-# Preambulo: vision general de la banda antes de cualquier sintesis
-# ---------------------------------------------------------------------------
 
 
 def test_perfil_de_banda_cuenta_vanos_por_grupo_y_su_parte_de_la_flota():
@@ -2000,3 +1640,92 @@ def test_preambulo_html_destaca_el_grupo_donde_la_banda_mas_concentra():
     assert "208" in html                      # el denominador correcto
     assert "22,8" in html                     # la concentracion en el grupo Alto
     assert html.count("Alto") >= 2
+
+
+# ---------------------------------------------------------------------------
+# El informe adelgaza: fuera patrones, atipicos, grafo cross-circuito y el mapa
+# ---------------------------------------------------------------------------
+
+
+def _html_del_informe(sampled=("C12",)):
+    raw_df = _ranking_raw_df({f"C{i:02d}": i * 8 for i in range(1, 13)}, vanos_por_circuito=110)
+    recs = _sampled_records([(c, 40, 50000.0, "Riesgo Alto") for c in sampled])
+    group = {"slug": "alto", "label": "Riesgo Alto", "circuit_count": len(sampled)}
+    return render_managerial_report(
+        raw_df,
+        synthesis=synthesize(recs, [None] * len(sampled), group),
+        group=group,
+        resolved_window={"fecha_inicio": "2026-01-01", "fecha_fin": "2026-02-01"},
+        sampled=list(sampled),
+    )
+
+
+def test_el_informe_ya_no_trae_patrones_atipicos_ni_grafo_cross_circuito():
+    html = _html_del_informe()
+
+    assert "<h2>Patrones comunes</h2>" not in html
+    assert "Circuitos atípicos" not in html
+    assert "Patrones cross-circuito" not in html
+
+
+def test_el_mapa_de_agrupamiento_sale_porque_ya_esta_arriba():
+    """Las barras del ranking abren el informe en el Panorama. Repetirlas al final es la
+    MISMA figura dos veces, y la de abajo llega sin la prosa que la explica."""
+    html = _html_del_informe()
+
+    assert "Mapa de agrupamiento" not in html
+    # Pero el ranking sigue, arriba, dentro del panorama.
+    assert "Panorama del grupo" in html
+    assert "Ranking de la flota" in html
+
+
+def test_las_secciones_que_quedan_van_en_este_orden():
+    """`Concentración por ventana` y `Causas y estrategias` dependen de corridas en disco;
+    con el fixture vacio degradan y no aparecen, que es lo correcto. Lo que se afirma aqui
+    es el ORDEN de las que si estan y que ninguna de las retiradas vuelva."""
+    html = _html_del_informe()
+    orden = [
+        "Panorama del grupo",
+        "Resumen ejecutivo del grupo",
+        "Concentración por ventana",
+        "Causas y estrategias de intervención",
+        "Riesgo agregado",
+        "Acciones recomendadas",
+        "Anexo por circuito",
+    ]
+    presentes = [s for s in orden if f"<h2>{s}</h2>" in html]
+    assert presentes[0] == "Panorama del grupo"
+    assert presentes[-1] == "Anexo por circuito"
+    posiciones = [html.index(f"<h2>{s}</h2>") for s in presentes]
+    assert posiciones == sorted(posiciones)
+    for retirada in ("Patrones comunes", "Circuitos atípicos", "Patrones cross-circuito",
+                     "Mapa de agrupamiento"):
+        assert retirada not in html
+
+
+def test_el_anexo_nombra_la_variable_con_su_codigo():
+    from chec_local_interpreter.glosario_variables import nombre_con_codigo
+
+    contenido = {
+        "circuito": "C01", "source": "vault_note", "content": "x",
+        "variables_a_priorizar": [{"variable": "NR_T", "prioridad": "alta"}],
+    }
+    lineas = informe_contract._annex_summary_lines(contenido)
+    texto = " ".join(str(l) for l in lineas)
+
+    assert nombre_con_codigo("NR_T") in texto
+    assert "(NR_T)" in texto
+
+
+def test_el_resumen_ejecutivo_nombra_la_variable_con_su_codigo():
+    recs = _sampled_records([("C01", 40, 50000.0, "Riesgo Alto")])
+    contenido = [{
+        "circuito": "C01", "source": "vault_note", "content": "x",
+        "variables_a_priorizar": [{"variable": "NR_T", "prioridad": "alta"}],
+    }]
+    group = {"slug": "alto", "label": "Riesgo Alto", "circuit_count": 1}
+
+    resumen = synthesize(recs, contenido, group)["resumen_ejecutivo"]
+
+    assert any("(NR_T)" in item for item in resumen)
+    assert any("vegetaci" in item.lower() for item in resumen)
