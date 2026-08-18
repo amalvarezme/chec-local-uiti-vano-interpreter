@@ -61,6 +61,11 @@ CLAVE_APP = "simulador"
 # escrita dos veces -- en Python y en el guion -- se separan sin que nada falle.
 CLASE_BOTON = "chec-cerrar-simulador"
 
+# La marca del aviso de "te quedaste sin motor de calculo". Vive aqui por lo mismo que
+# `CLASE_BOTON`: escrita dos veces -- en Python y en el guion -- se separan sin que nada
+# falle, y es ademas por donde la prueba viva la encuentra en la pagina.
+CLASE_SIN_KERNEL = "chec-sin-kernel"
+
 # --- El camino que NO pasa por el kernel ---------------------------------------------
 # El boton es un `widgets.Button`: su clic viaja por el comm al kernel. Sin kernel no hay
 # quien lo atienda, y el widget no avisa -- se queda mudo. MEDIDO: con el kernel muerto se
@@ -112,6 +117,146 @@ JS_ENGANCHE = """
   }, true);
 })();
 """
+
+
+# --- El aviso de que el tablero se quedo sin motor de calculo ------------------------
+#
+# El kernel se va solo por los dos caminos que ya documenta el bloque de arriba, y
+# cuando se va pasa esto, MEDIDO tres veces: `jupyter_client` levanta otro con el mismo
+# id pero VACIO -- nunca ejecuto el cuaderno --, el navegador se reconecta sin
+# protestar, y la pagina se queda ENTERA en pantalla y muda. `Limpiar` deja los quince
+# vanos marcados donde estaban. Recargar lo recupera del todo, y no habia como saberlo.
+#
+# ## Que se pregunta, y por que no se pregunta otra cosa
+#
+# Un kernel con el tablero montado tiene un comm abierto por cada widget; el resucitado
+# no tiene ninguno. Medido sobre el tablero de verdad: **730 comms vivo, 0 tras
+# matarlo**. Eso es un hecho, no un sintoma. `comm_info_request` es de los pocos
+# mensajes que Voila deja pasar (`allowed_message_types` en `voila/app.py`).
+#
+# `kernel_info_request` NO sirve: el kernel vacio tambien contesta.
+#
+# Se probaron antes los dos detectores mas obvios y los dos se cayeron al medirlos:
+#   * envolver `window.WebSocket` para ver las reconexiones no ve NADA, porque el
+#     bundle de Jupyter no pasa por el global cuando reconecta;
+#   * la consola dice exactamente lo mismo -- `Connection lost, reconnecting` -- en una
+#     reconexion sana (pestania congelada, sin red: las dos se recuperan solas) que en
+#     una fatal.
+#
+# ## Por que solo al volver a la pestania, y no en un temporizador
+#
+# Preguntarle al kernel le refresca su `last_activity`. Preguntar cada tantos segundos
+# mantendria vivo para siempre el kernel de una pestania olvidada, que es justo lo que
+# el `cull_idle_timeout=180` de `app.py` existe para evitar a ~780 MB por kernel. Al
+# volver a la pestania se pregunta una vez, y esa es ademas la situacion del reporte:
+# "me voy a otro programa, vuelvo, y ya no responde".
+#
+# Y solo se avisa con una respuesta CONCLUYENTE -- cero comms --: un socket que no abre
+# no prueba que el tablero este muerto, y un aviso falso encima de un tablero que
+# funciona es peor que no avisar.
+JS_VIGILANTE = """
+(function () {
+  var MARCA = %(sin_kernel)s;
+  var cfg = document.getElementById('jupyter-config-data');
+  if (!cfg) { return; }
+  var conf = JSON.parse(cfg.textContent);
+  var base = conf.baseUrl || '/';
+  if (base.charAt(base.length - 1) !== '/') { base += '/'; }
+  if (!conf.kernelId) { return; }
+  window.__chec_vigilante = true;
+
+  function avisar() {
+    if (document.querySelector('.' + MARCA)) { return; }
+    var caja = document.createElement('div');
+    caja.className = MARCA;
+    caja.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:99999;' +
+      'background:#fdecea;border-bottom:2px solid #c62828;color:#2b2b2b;' +
+      'font:16px/1.5 system-ui;padding:14px 18px;display:flex;gap:16px;' +
+      'align-items:center;justify-content:center;flex-wrap:wrap';
+    var texto = document.createElement('span');
+    // Lo escribe el navegador: con el kernel muerto, nada que dependa de Python
+    // llega a la pantalla. Es la misma razon del "Cerrando..." del boton de cerrar.
+    texto.innerHTML = '<b>El simulador perdio su motor de calculo.</b> ' +
+      'Paso un rato sin actividad o al equipo le falto memoria. Lo que ves sigue ' +
+      'dibujado, pero ya no responde: hay que recargar para volver a empezar.';
+    var boton = document.createElement('button');
+    boton.textContent = 'Recargar el tablero';
+    boton.style.cssText = 'background:rgb(0,128,36);color:#fff;border:0;' +
+      'border-radius:6px;padding:10px 18px;font:600 16px system-ui;cursor:pointer';
+    boton.addEventListener('click', function () { location.reload(); });
+    caja.appendChild(texto);
+    caja.appendChild(boton);
+    document.body.appendChild(caja);
+  }
+
+  // Le pregunta al kernel cuantos comms tiene. Sin subprotocolo a proposito: asi el
+  // servidor contesta JSON de texto y no el binario, que habria que decodificar.
+  function revisar() {
+    if (document.querySelector('.' + MARCA)) { return; }
+    var sesion = 'chec-vigilante-' + Math.floor(Math.random() * 1e9);
+    var proto = (location.protocol === 'https:') ? 'wss:' : 'ws:';
+    var ws;
+    try {
+      ws = new WebSocket(proto + '//' + location.host + base + 'api/kernels/' +
+                         conf.kernelId + '/channels?session_id=' + sesion);
+    } catch (e) { return; }
+    var listo = false;
+    var acabar = function () {
+      if (listo) { return; }
+      listo = true;
+      try { ws.close(); } catch (e) {}
+    };
+    // Si no contesta, no se concluye nada: callarse es lo correcto.
+    setTimeout(acabar, 10000);
+    ws.onopen = function () {
+      ws.send(JSON.stringify({
+        header: {msg_id: sesion + '-1', username: 'chec', session: sesion,
+                 msg_type: 'comm_info_request', version: '5.3',
+                 date: new Date().toISOString()},
+        parent_header: {}, metadata: {},
+        content: {target_name: 'jupyter.widget'},
+        channel: 'shell', buffers: []
+      }));
+    };
+    ws.onmessage = function (ev) {
+      if (typeof ev.data !== 'string') { return; }
+      var m;
+      try { m = JSON.parse(ev.data); } catch (e) { return; }
+      if (((m.header || {}).msg_type) !== 'comm_info_reply') { return; }
+      var comms = Object.keys((m.content || {}).comms || {}).length;
+      acabar();
+      // CERO y no "pocos": el tablero abre cientos, y cualquier otro numero es un
+      // kernel que sigue teniendo sus widgets.
+      if (comms === 0) { avisar(); }
+    };
+  }
+
+  // Volver a la pestania: la situacion del reporte.
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) { revisar(); }
+  });
+
+  // Y al pulsar algo, que es cuando el usuario se DA CUENTA -- "hago clic y no pasa
+  // nada" --. Hace falta ademas de lo anterior: si el kernel se cae por memoria con
+  // la pestania delante, no hay ningun `visibilitychange` que dispare el aviso.
+  //
+  // Con freno de %(freno)s s entre preguntas: sin el, cada clic abriria un socket y le
+  // refrescaria la actividad al kernel. En captura, como el enganche del boton de
+  // cerrar, para que corra aunque el widget se coma el evento.
+  var ultima = 0;
+  document.addEventListener('click', function () {
+    var ahora = Date.now();
+    if (ahora - ultima < %(freno)s000) { return; }
+    ultima = ahora;
+    revisar();
+  }, true);
+})();
+"""
+
+# Cuanto se espera entre dos preguntas al kernel cuando el usuario esta pulsando. No es
+# cosmetico: cada pregunta le refresca al kernel su `last_activity`, y sin freno un
+# usuario activo dejaria sin efecto el reciclado que protege la memoria.
+FRENO_VIGILANTE_S = 30
 
 
 def barra(*, js: str | None = None) -> widgets.HBox:
@@ -208,6 +353,12 @@ def barra(*, js: str | None = None) -> widgets.HBox:
             "clave": json.dumps(CLAVE_APP),
             "clase": json.dumps(CLASE_BOTON),
             "cerrar": js or JS_CERRAR,
+        }))
+        # El vigilante de la conexion, por el mismo `Output` y sin condicion ninguna:
+        # el tablero se queda igual de mudo sin kernel lleve o no boton de cerrar.
+        display(Javascript(JS_VIGILANTE % {
+            "sin_kernel": json.dumps(CLASE_SIN_KERNEL),
+            "freno": FRENO_VIGILANTE_S,
         }))
 
     # Ancho AUTO, no 100%: dentro de la fila del encabezado la barra al 100% empujaba al

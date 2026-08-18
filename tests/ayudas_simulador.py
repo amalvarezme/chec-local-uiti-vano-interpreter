@@ -18,16 +18,25 @@ y no lo que el kernel cree.
 from __future__ import annotations
 
 import json
-import socket
 import subprocess
 import time
 import urllib.request
 from pathlib import Path
 
+# El navegador y los gestos de "irse y volver". Se reexportan al final de este modulo
+# para que `A.Navegador` siga siendo lo que era: hay pruebas que lo llaman asi.
+from ayudas_navegador import (  # noqa: F401
+    CHROME,
+    Navegador,
+    avisos,
+    congelar,
+    espiar_consola,
+    puerto_libre,
+    sin_red,
+)
+
 RAIZ = Path(__file__).resolve().parents[1]
 APP = RAIZ / "aplicaciones" / "06_simulador"
-CHROME = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
-
 ESPERA_CORTA = 2.5
 ESPERA_MEDIA = 6.0
 ESPERA_SIMULAR = 120.0
@@ -46,12 +55,6 @@ def hay_con_que_correr() -> str | None:
     except ImportError:
         return "falta websocket-client para hablar por CDP"
     return None
-
-
-def puerto_libre() -> int:
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
 
 
 # --------------------------------------------------------------------- el servidor
@@ -123,77 +126,9 @@ class Simulador:
 
 
 # ------------------------------------------------------------------- el navegador
-
-
-class Navegador:
-    def __init__(self, carpeta: Path, ancho: int = 2000, alto: int = 1400):
-        import websocket
-        self._ws_mod = websocket
-        self.puerto = puerto_libre()
-        self.proceso = subprocess.Popen([
-            str(CHROME), "--headless=new", "--disable-gpu", "--use-gl=swiftshader",
-            "--enable-unsafe-swiftshader", "--no-sandbox",
-            f"--remote-debugging-port={self.puerto}", "--remote-allow-origins=*",
-            f"--user-data-dir={carpeta}", f"--window-size={ancho},{alto}",
-            "about:blank",
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        url = None
-        for _ in range(80):
-            time.sleep(0.4)
-            try:
-                with urllib.request.urlopen(
-                        f"http://127.0.0.1:{self.puerto}/json/list") as r:
-                    objetivos = json.load(r)
-                # El PRIMERO de la lista no siempre es una pestania: puede ser el
-                # propio navegador o una extension, y ese no acepta el tamanio de
-                # pantalla -- responde "Target does not support metrics override",
-                # que no dice en ningun lado que el problema sea a quien preguntas.
-                paginas = [o for o in objetivos if o.get("type") == "page"
-                           and o.get("webSocketDebuggerUrl")]
-                if paginas:
-                    url = paginas[0]["webSocketDebuggerUrl"]
-                    break
-            except Exception:
-                pass
-        if url is None:
-            self.proceso.kill()
-            raise RuntimeError("Chrome no levanto")
-        self.ws = websocket.create_connection(url, timeout=600)
-        self.n = 0
-        self.errores: list[str] = []
-        self.cmd("Runtime.enable")
-        self.cmd("Page.enable")
-        # El ancho importa: el zoom de los mapas se calcula contra el tamanio del
-        # subplot, asi que una ventana estrecha cambia lo que se esta midiendo.
-        self.cmd("Emulation.setDeviceMetricsOverride", width=ancho, height=alto,
-                 deviceScaleFactor=1, mobile=False)
-
-    def cmd(self, metodo: str, **params):
-        self.n += 1
-        self.ws.send(json.dumps({"id": self.n, "method": metodo, "params": params}))
-        while True:
-            msg = json.loads(self.ws.recv())
-            if msg.get("method") == "Runtime.exceptionThrown":
-                texto = msg["params"].get("exceptionDetails", {}).get("text", "")
-                self.errores.append(str(texto)[:200])
-            if msg.get("id") == self.n:
-                if "error" in msg:
-                    raise RuntimeError(f"{metodo}: {msg['error']}")
-                return msg.get("result", {})
-
-    def js(self, expr: str):
-        r = self.cmd("Runtime.evaluate", expression=expr, returnByValue=True,
-                     awaitPromise=True)
-        if "exceptionDetails" in r:
-            raise RuntimeError(str(r["exceptionDetails"])[:400])
-        return r["result"].get("value")
-
-    def cerrar(self) -> None:
-        try:
-            self.ws.close()
-        except Exception:
-            pass
-        self.proceso.kill()
+#
+# Vive en `ayudas_navegador.py` y se importa arriba. Salio de aqui porque conducir
+# Chrome no tiene nada de simulador: los cuatro tableros estaticos se conducen igual.
 
 
 _UTILES = """
@@ -344,6 +279,36 @@ def deslizadores(nav: Navegador) -> int:
     """
     # El primero es el deslizador de la ventana, que no es una variable.
     return max(0, int(nav.js("document.querySelectorAll('.noUi-target').length")) - 1)
+
+
+def responde(nav: Navegador) -> dict:
+    """Dos gestos que SOLO puede contestar el kernel, uno en cada sentido.
+
+    `Limpiar` desmarca los quince vanos del top; cambiar de circuito vuelve a marcar
+    el top del nuevo. Las casillas las pinta el navegador, pero CUALES quedan
+    marcadas lo decide el tablero, que corre en el kernel. Sin kernel el gesto se ve
+    -- el boton se hunde -- y no pasa nada.
+
+    Se necesitan los dos sentidos: quedarse solo con `Limpiar` daria por vivo a un
+    tablero que ya estaba en cero, y quedarse solo con el cambio de circuito daria
+    por vivo a uno que ya tenia sus quince marcados.
+
+    Un `Simular` no sirve como sonda: el mapa simulado CONSERVA lo ultimo que dibujo,
+    asi que "tiene vertices" se cumple igual con el kernel muerto.
+    """
+    al_entrar = marcadas(nav)
+    pulsar(nav, "Limpiar", espera=6.0)
+    tras_limpiar = marcadas(nav)
+
+    actual = circuito_actual(nav)
+    destino = next((c for c in circuitos(nav) if c != actual), None)
+    cambiar_circuito(nav, destino, espera=10.0)
+    tras_cambiar = marcadas(nav)
+    dibujo = estado(nav)["base"]["vertices"]
+    return {"ok": bool(tras_limpiar == 0 and tras_cambiar > 0 and dibujo > 0),
+            "marcadas_al_entrar": al_entrar, "tras_limpiar": tras_limpiar,
+            "tras_cambiar_circuito": tras_cambiar, "circuito": destino,
+            "vertices_base": dibujo}
 
 
 def simular(nav: Navegador, limite: float = ESPERA_SIMULAR) -> dict:
