@@ -99,6 +99,9 @@ from chec_local_interpreter.mil_inferencia import (
     seleccionar_ventanas_reporte,
 )
 from chec_local_interpreter.mil_figuras import figuras_de_escenario
+from chec_local_interpreter.mil_figuras_interactivas import (
+    figuras_interactivas_de_escenario,
+)
 from chec_local_interpreter.config import (
     DEFAULT_DATA_PATH,
     DEFAULT_MODEL_DIR,
@@ -432,12 +435,27 @@ def prepare(
         for _escenario in inference_context["escenarios"]:
             _fids = [c["fid"] for c in _escenario.get("vanos_criticos", [])]
             try:
-                render_assets[_escenario["ventana"]] = figuras_de_escenario(
-                    _escenario,
-                    series=[_series_por_fid[f] for f in _fids if f in _series_por_fid],
-                    destino=run_dir / SUBDIR_FIGURAS_INFERENCIA,
-                    features=inference_context.get("features", []),
-                )
+                render_assets[_escenario["ventana"]] = {
+                    **figuras_de_escenario(
+                        _escenario,
+                        series=[_series_por_fid[f] for f in _fids
+                                if f in _series_por_fid],
+                        destino=run_dir / SUBDIR_FIGURAS_INFERENCIA,
+                        features=inference_context.get("features", []),
+                    ),
+                    # Los tres paneles que el tablero del 06 presenta vivos -- el top de
+                    # variables, el UITI medido contra el simulado y el anillo de
+                    # relaciones -- tambien en Plotly, para que el informe y el tablero
+                    # dibujen lo mismo y el informe conserve el hover. Van como JSON de
+                    # Plotly porque `prepare` y `render` son dos procesos y una figura
+                    # interactiva no cruza ese limite como imagen. Los PNG se siguen
+                    # escribiendo: son el respaldo si algo falla al rehidratar el JSON.
+                    **figuras_interactivas_de_escenario(
+                        _escenario,
+                        destino=run_dir / SUBDIR_FIGURAS_INFERENCIA,
+                        features=inference_context.get("features", []),
+                    ),
+                }
             except OSError as exc:
                 # Un fallo de disco dibujando un panel no puede tumbar una corrida que
                 # ya tiene su diagnostico: se avisa y el informe sale sin esa figura.
@@ -671,10 +689,17 @@ def _build_inference_results(run_dir: Path) -> dict[str, Any] | None:
             # Los cuatro paneles del MIL. `fig_barras` conserva su nombre porque el
             # renderizador ya lo pinta: es la relevancia, que es lo que ocupaba el
             # sitio que ocupaban las barras de atribucion.
-            "fig_barras": _resolve(asset.get("relevancia_png")),
+            # Interactivo si esta, PNG si no. Los tres paneles del tablero se
+            # guardan como JSON de Plotly; el PNG queda de respaldo para que una
+            # corrida vieja -- o una en la que fallara el JSON -- siga mostrando algo
+            # en vez de perder el panel.
+            "fig_barras": _resolve(asset.get("top_json")
+                                   or asset.get("relevancia_png")),
             "fig_serie": _resolve(asset.get("serie_png")),
-            "fig_uiti": _resolve(asset.get("uiti_png")),
-            "fig_grafo": _resolve(asset.get("grafo_png")),
+            "fig_uiti": _resolve(asset.get("uiti_json")
+                                 or asset.get("uiti_png")),
+            "fig_grafo": _resolve(asset.get("grafo_json")
+                                  or asset.get("grafo_png")),
             "grafo_motivo": asset.get("grafo_motivo") or "",
             "contexto": escenarios_by_nombre.get(nombre, {}),
         }

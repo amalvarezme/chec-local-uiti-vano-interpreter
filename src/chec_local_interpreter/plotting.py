@@ -1152,7 +1152,14 @@ def render_llm_analysis(
 
     primary_circuit = selected_circuitos[0] if selected_circuitos else "TODOS"
 
-    html_clusters = fig_ranking.to_html(full_html=False, include_plotlyjs='cdn') if fig_ranking else ""
+    # `plotly.js` UNA vez y por su cuenta, no colgando de la figura del ranking. Todas
+    # las demas se embeben con `include_plotlyjs=False`, asi que mientras esto viajaba
+    # dentro del ranking, un informe sin ranking dejaba MUDAS a las otras: los paneles
+    # interactivos del MIL se montaban en un `<div>` sin biblioteca que los dibujara, y
+    # eso no da error, da un hueco en blanco.
+    html_plotlyjs = (
+        "<script src='https://cdn.plot.ly/plotly-2.35.2.min.js' charset='utf-8'></script>")
+    html_clusters = fig_ranking.to_html(full_html=False, include_plotlyjs=False) if fig_ranking else ""
 
     def _escape(text):
         import html
@@ -1204,6 +1211,27 @@ def render_llm_analysis(
     def _figure_html(fig, title=None, show_title=False):
         if not fig:
             return ""
+        if isinstance(fig, (str, Path)) and str(fig).endswith(".json"):
+            # Los tres paneles que el tablero del 06 presenta vivos viajan como JSON de
+            # Plotly: `prepare()` y `render()` son dos procesos, y una figura
+            # interactiva no cruza ese limite como imagen. Se rehidrata y se embebe
+            # INTERACTIVA, con su hover -- que es donde vive el nombre completo de cada
+            # variable y el desglose de cada barra.
+            #
+            # Un JSON ilegible cae al mismo aviso que cualquier otro fallo de figura, y
+            # nunca tumba el informe: el panel se pierde, la corrida no.
+            try:
+                import plotly.io as pio
+
+                ruta_json = Path(fig)
+                if not ruta_json.exists():
+                    raise FileNotFoundError(f"Figura no encontrada: {ruta_json}")
+                figura = pio.from_json(ruta_json.read_text(encoding="utf-8"))
+                if show_title and title:
+                    figura.update_layout(title=dict(text=title, font=dict(size=14)))
+                return figura.to_html(full_html=False, include_plotlyjs=False)
+            except Exception as exc:
+                return f"<p class='muted'>No se pudo renderizar la figura: {_escape(exc)}</p>"
         if isinstance(fig, (str, Path)):
             # `_run_inference_simulator` (task 3.2) persists figures as PNG
             # files under run_dir rather than passing live matplotlib Figure
@@ -1868,6 +1896,7 @@ def render_llm_analysis(
             .tab-panel.active {{ display: block; }}
             @media (max-width: 900px) {{ .chart-grid.two-col {{ grid-template-columns: 1fr; }} }}
         </style>
+        {html_plotlyjs}
     </head>
     <body>
         <div class="container">

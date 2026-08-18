@@ -902,3 +902,65 @@ def test_ninguna_cadena_del_informe_se_imprime_sin_tilde(tmp_path, monkeypatch):
             sospechosas.append(palabra)
 
     assert not sospechosas, f"el renderizador imprime sin tilde: {sorted(set(sospechosas))}"
+
+
+# ---------------------------------------------------------------------------
+# Los tres paneles del tablero, INTERACTIVOS dentro del informe
+# ---------------------------------------------------------------------------
+
+
+def test_una_figura_guardada_como_json_se_embebe_interactiva_y_no_como_imagen(tmp_path):
+    """El informe dibujaba estos tres paneles en matplotlib y los pegaba como PNG.
+
+    Son los MISMOS que el simulador presenta vivos, y en imagen se pierde el hover, que
+    es donde vive el nombre completo de cada variable y el desglose de cada barra.
+    """
+    import plotly.graph_objects as go
+
+    from chec_local_interpreter.mil_figuras_interactivas import figura_top_variables
+
+    figura = figura_top_variables({
+        "vanos": {"V1": {"variables": [
+            {"knob_id": "NR_T", "label": "Riesgo por vegetación", "caida": 1.2,
+             "valor_optimo": 0.0, "alcanza": True}]}}})
+    ruta = tmp_path / "V9_top.json"
+    ruta.write_text(figura.to_json(), encoding="utf-8")
+
+    html = render_llm_analysis(
+        validation_data={}, raw_df=_minimal_raw_df(), selected_circuitos=["C1"],
+        inference_results={"V9": {"fig_barras": str(ruta), "contexto": {}}},
+        inference_analysis={}, output_dir=tmp_path / "html",
+    ).read_text(encoding="utf-8")
+
+    assert "plotly" in html.lower(), "no se embebio ninguna figura de Plotly"
+    assert "NR_T" in html
+    assert isinstance(figura, go.Figure)
+
+
+def test_el_informe_carga_plotly_aunque_no_haya_figura_de_ranking(tmp_path):
+    """`plotly.js` viajaba DENTRO de la figura del ranking, y las demas se embeben con
+    `include_plotlyjs=False`.
+
+    Un informe sin ranking dejaba mudas a todas las otras: los paneles se montaban en un
+    `<div>` sin biblioteca que los dibujara, y eso no da error -- da un hueco en blanco.
+    """
+    html = render_llm_analysis(
+        validation_data={}, raw_df=_minimal_raw_df(), selected_circuitos=["C1"],
+        inference_results=None, inference_analysis={}, output_dir=tmp_path,
+    ).read_text(encoding="utf-8")
+
+    assert "cdn.plot.ly" in html, "el informe no carga plotly.js por su cuenta"
+
+
+def test_un_json_ilegible_no_se_lleva_el_informe(tmp_path):
+    """Un panel se pierde; la corrida no."""
+    roto = tmp_path / "V9_top.json"
+    roto.write_text("{esto no es json", encoding="utf-8")
+
+    html = render_llm_analysis(
+        validation_data={}, raw_df=_minimal_raw_df(), selected_circuitos=["C1"],
+        inference_results={"V9": {"fig_barras": str(roto), "contexto": {}}},
+        inference_analysis={}, output_dir=tmp_path / "html",
+    ).read_text(encoding="utf-8")
+
+    assert "No se pudo renderizar la figura" in html

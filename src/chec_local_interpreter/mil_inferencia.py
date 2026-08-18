@@ -1001,11 +1001,28 @@ def simulacion_de_circuito(
         max_values_imputed=recursos.max_values_imputed,
     )
 
+    # El UITI acumulado OBSERVADO de cada bolsa, para que el panel pueda enfrentar lo
+    # MEDIDO contra lo simulado -- que es lo que hace el tablero -- en vez de la base
+    # del modelo contra la simulada. Esas dos son de la misma naturaleza y esconden el
+    # desfase de nivel del modelo, que sobre 599 bolsas corre +34%. Sale de
+    # `bag_index.y` indexado por las bolsas que la seleccion ya resolvio: no cuesta una
+    # pasada. `None` cuando el artefacto no lo expone, nunca un cero -- un cero se
+    # dibuja como un vano sin impacto, que es lo contrario de "no se sabe".
+    _y = getattr(recursos.bag_index, "y", None)
+    _bolsas = np.asarray(seleccion.get("bolsas", []), dtype=np.int64)
+    _observado: dict[str, float] = {}
+    if _y is not None and len(_bolsas):
+        _serie = np.asarray(_y, dtype=float)
+        _observado = {str(f): float(_serie[b])
+                      for f, b in zip(seleccion["fid"], _bolsas)
+                      if 0 <= int(b) < len(_serie)}
+
     vanos = [
         {
             "fid": str(fila["FID_VANO"]),
             "u_base": float(fila["u_base"]),
             "u_simulado": float(fila["u_simulado"]),
+            "u_observado": _observado.get(str(fila["FID_VANO"])),
             "clase_base": int(fila["base_clase_idx"]),
             "clase_simulada": int(fila["simulado_clase_idx"]),
             "delta_grupo": int(fila["delta_riesgo_ordinal"]),

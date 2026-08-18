@@ -797,3 +797,46 @@ def test_el_top_de_uiti_se_corta_en_quince():
     assert len(mapa["top_uiti"]) == 15
     assert mapa["top_uiti"][0] == "V39", "tiene que ir de mayor a menor"
     assert mapa["top_uiti"][-1] == "V25"
+
+
+def test_la_simulacion_trae_el_uiti_OBSERVADO_de_cada_vano():
+    """El panel de UITI compara lo MEDIDO con lo simulado, como el tablero.
+
+    Sin el observado, el informe solo podia enfrentar la base del MODELO contra la
+    simulada -- dos numeros de la misma naturaleza -- y ahi el desfase de nivel del
+    modelo, medido en +34% sobre 599 bolsas, queda escondido. Con el observado, la
+    barra de error del panel es `|u_base - observado|`: el error del modelo en la base
+    de ese mismo vano.
+
+    Sale de `bag_index.y`, que es el UITI acumulado observado de cada bolsa, indexado
+    por las bolsas que la seleccion ya resolvio. No cuesta una pasada del modelo.
+    """
+    from chec_local_interpreter.mil_inferencia import simulacion_de_circuito
+
+    recursos = _recursos()
+    # `simulacion_de_circuito` solo mueve palancas de INTERVENCION: sin declararla, la
+    # funcion devuelve el escenario vacio y la prueba pasaria sin comprobar nada.
+    recursos.grupos_por_knob = {"u_driver": "Intervencion"}
+    recursos.bag_index.y = np.array([7.5, 4.25])
+
+    simulacion = simulacion_de_circuito(
+        recursos, circuito="C1", ventana="W1", fids=["V1", "V2"])
+
+    observados = {v["fid"]: v["u_observado"] for v in simulacion["vanos"]}
+    assert observados == {"V1": 7.5, "V2": 4.25}
+
+
+def test_sin_uiti_observado_la_simulacion_lo_declara_en_vez_de_inventarlo():
+    """Un artefacto que no exponga `y` deja al panel sin la mitad medida. `None` y no
+    un cero: un cero se dibuja como un vano sin impacto, que es justo lo contrario."""
+    from chec_local_interpreter.mil_inferencia import simulacion_de_circuito
+
+    recursos = _recursos()
+    recursos.grupos_por_knob = {"u_driver": "Intervencion"}
+    recursos.bag_index.y = None
+
+    simulacion = simulacion_de_circuito(
+        recursos, circuito="C1", ventana="W1", fids=["V1", "V2"])
+
+    assert simulacion["vanos"], "sin vanos la comprobacion pasaria sin mirar nada"
+    assert all(v["u_observado"] is None for v in simulacion["vanos"])
