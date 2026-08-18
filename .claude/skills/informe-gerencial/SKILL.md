@@ -1,6 +1,6 @@
 ---
 name: informe-gerencial
-description: "Produce one cross-circuit managerial report synthesized across a criticality group's most representative circuits, with a full-fleet clustering scatter highlighting the sampled set. Trigger: /informe-gerencial, managerial report, cross-circuit synthesis, executive report for a criticality tier."
+description: "Produce one cross-circuit managerial report synthesized across a risk band's worst circuits, with the full-fleet ranking bars highlighting the sampled set. Trigger: /informe-gerencial, managerial report, cross-circuit synthesis, executive report for a risk band."
 license: Apache-2.0
 metadata:
   author: chec-local-uiti-vano-interpreter
@@ -17,16 +17,16 @@ metadata:
 `/informe-gerencial` produces exactly ONE managerial-facing HTML report synthesized ACROSS the most
 representative circuits of one criticality group (or the whole fleet, for `todos`), instead of one
 report per circuit. It does not reimplement `/report`'s single-circuit pipeline, `/reporte-lote`'s
-batch loop, or `compute_circuit_criticality_groups`'s clustering. It owns exactly the pieces those
-three do not: sampling a group down to its 12 most representative circuits (by `centroid_distance`
-to their assigned cluster centroid), detecting which of those 12 are missing a prior `/report` run,
+batch loop, or `ranking_circuitos`'s band computation. It owns exactly the pieces those
+three do not: sampling a band down to its 12 WORST circuits (largest `vanos_criticos`, i.e. the head of the
+ranking's own `posicion`), detecting which of those 12 are missing a prior `/report` run,
 gating on a single explicit confirmation before auto-triggering `/report` for the missing ones (by
 reference to [`report/SKILL.md`](../report/SKILL.md), never by copying its prose), **always**
 rendering the standalone circuit-clustering chart for the confirmed window right after that same
 checkpoint (step 1.5, reusing the shared circuit-clustering contract by reference, never a
 second confirmation), loading each sampled circuit's narrative content, and assembling the
 cross-circuit synthesis (common patterns, notable outliers, aggregate/fleet-level risk, recommended
-actions) plus one embedded full-fleet clustering scatter and one radial causes/intervention-strategies
+actions) plus one embedded full-fleet ranking bar chart and one radial causes/intervention-strategies
 graph (step 2.6, built from the agents' own run artifacts, no `graphify` involved) into a single HTML
 page. `report/SKILL.md` is never edited and a standalone
 `/report`/`/reporte-lote` invocation is completely unaffected by this Skill's existence.
@@ -49,8 +49,8 @@ runs it synthesises, `reports/reportescircuitos/html/` for their reports, and
 ## When to Use
 
 Load this Skill when the user wants a single, synthesized, cross-circuit managerial view of a
-criticality tier or the whole fleet — e.g. "informe gerencial de Alta", "resumen ejecutivo del grupo
-Muy Alta", "/informe-gerencial todos". If the user wants one circuit's full report, use `/report`
+risk band or the whole fleet — e.g. "informe gerencial de Riesgo Alto", "resumen ejecutivo del grupo
+Medio-Alto", "/informe-gerencial todos". If the user wants one circuit's full report, use `/report`
 directly. If the user wants every circuit's INDIVIDUAL report run in one batch (not a synthesized
 cross-circuit view), use `/reporte-lote` instead.
 
@@ -58,8 +58,12 @@ cross-circuit view), use `/reporte-lote` instead.
 
 Invocation: `/informe-gerencial <grupo> [fecha_inicio fecha_fin]`.
 
-- `grupo` — **required**. Must be one of `muy-alta|alta|medio-alta|medio-baja|baja|todos`; any other value
-  is a usage error, rejected before any dataset access — same allowlist `/reporte-lote` uses.
+- `grupo` — **required**. Must be one of `bajo|medio|medio-alto|alto|todos`; any other value is a
+  usage error, rejected before any dataset access. These are the four RISK BANDS of the circuit
+  ranking (`ranking_circuitos.NOMBRES_RANGO`), **not** `/reporte-lote`'s five K-Means tiers — see
+  "Which grouping this Skill speaks" below. `/reporte-lote` shares this exact allowlist; the retired
+  K-Means slugs (`muy-alta|alta|…|baja`) are a usage error in both, deliberately, because they would
+  otherwise resolve to an empty band without saying the vocabulary changed.
 - `fecha_inicio` / `fecha_fin` — **optional, as a PAIR**, same pair contract `/reporte-lote` uses:
   - Both omitted: resolve to the dataset-wide date range.
   - Both given: passed through unchanged.
@@ -69,17 +73,43 @@ Examples:
 
 | Invocation | Result |
 |---|---|
-| `/informe-gerencial alta` | Group `alta` resolved against the full dataset-wide date range |
-| `/informe-gerencial medio-alta 2026-01-01 2026-02-01` | Group `medio-alta` resolved against that explicit window |
-| `/informe-gerencial baja 2026-01-01` | **Rejected** — usage error, `fecha_fin` missing |
-| `/informe-gerencial critica` | **Rejected** — usage error, unknown `grupo` |
-| `/informe-gerencial todos` | Full fleet computed via `compute_circuit_criticality_groups`, then sampled to 12 |
+| `/informe-gerencial alto` | Band `Riesgo Alto` (top 3% by critical vanos) over the full dataset-wide range |
+| `/informe-gerencial medio-alto 2026-01-01 2026-02-01` | Band `Riesgo Medio-Alto` over that explicit window |
+| `/informe-gerencial bajo 2026-01-01` | **Rejected** — usage error, `fecha_fin` missing |
+| `/informe-gerencial alta` | **Rejected** — usage error, that is `/reporte-lote`'s K-Means vocabulary |
+| `/informe-gerencial todos` | Full fleet computed via `ranking_circuitos`, then sampled to 12 |
 
-## Representativeness sampling (>12 circuits)
+## Which grouping this Skill speaks
 
-When the resolved group has more than 12 circuits, exactly the 12 circuits with the smallest
-`centroid_distance` (most representative of their cluster) are used — never all of them, never a
-random subset. Groups with 12 or fewer circuits use all of them unfiltered. This is entirely owned by
+The bands come from the **circuit ranking** — `src/chec_local_interpreter/ranking_circuitos.py`, the
+verbatim Python port of the second dashboard of notebook 02 (`src/chec_tableros/agrupamiento.py`):
+per circuit, the COUNT of its vanos in Medio-Alto + Alto, cut at P50/P75/P97 into `Riesgo Bajo`,
+`Riesgo Medio`, `Riesgo Medio-Alto`, `Riesgo Alto`. That is the same calculation that paints the bar
+chart, the same one `/report` cites through `context_builder`, and the same one whose band name goes
+to the Circuitos sheet of the Excel export.
+
+It used to come from `plotting.compute_circuit_criticality_groups` — K-Means over the circuit's event
+count × UITI sum, five tiers including `Riesgo Muy Alto` and `Riesgo Medio-Bajo`. Both vocabularies
+contain the string "Riesgo Alto" and it means DIFFERENT circuits: measured over the 208-circuit fleet,
+16 circuits by K-Means, 7 by the ranking, only 3 in both. The managerial report was grouping by a
+criterion its own embedded figure could not show. `context_builder` had already been migrated for
+`/report`; this Skill was the last holdout.
+
+`/reporte-lote` migrated with it: `batch_report_contract.GROUP_SLUGS` holds the single shared
+definition and `informe_gerencial_contract` re-exports it, so the two commands cannot drift apart
+again. Splitting them would mean splitting that allowlist, never copying it.
+
+## Sampling to 12 (>12 circuits in the band)
+
+When the resolved band has more than 12 circuits, exactly the 12 with the LARGEST `vanos_criticos`
+are used — the head of the ranking's own `posicion` (1 = worst) — never all of them, never a random
+subset. Bands with 12 or fewer circuits use all of them unfiltered, which is the normal case for
+`Riesgo Alto` (7 circuits, the top 3% of the fleet).
+
+**Known bias, state it when reading the report:** the 12 sit against the band's UPPER edge, so the
+report describes the band's worst tail, not the band. The previous criterion (smallest
+`centroid_distance`, the most TYPICAL circuit of its K-Means class) had the opposite bias and no
+analogue here — the ranking has no circuit centroids. Owned entirely by
 `informe_gerencial_contract.sample_representatives`; this Skill never re-derives or overrides it.
 
 ## Single user checkpoint (missing-run confirmation gate)
@@ -102,15 +132,21 @@ This mirrors the `awaiting_confirmation` → `confirm`/`confirm_and_trigger_miss
 convention `reporte-lote/SKILL.md` uses for its own gate — never a second confirmation later in the
 run, never a per-circuit prompt.
 
-## Full-fleet scatter (non-negotiable)
+## Full-fleet ranking bars (non-negotiable)
 
-The embedded clustering scatter in the final report ALWAYS shows the FULL fleet — all 5 criticality
-tiers, unfiltered by the requested `grupo` — via `plotting.plot_interactive_circuit_clustering(raw_df,
-start_date, end_date, highlighted_circuits=<sampled circuits>)`, called AS-IS against the unfiltered
-circuit universe. Only the sampled circuits are marked with an 'X' marker; every other circuit
-remains visible as a normal point. Nothing is ever hidden from the scatter, regardless of `grupo`.
-This is implemented once, inside `render_managerial_report`; this Skill never builds or filters the
-scatter itself.
+The embedded figure in the final report ALWAYS shows the FULL fleet — all 208 circuits and all 4
+risk bands, unfiltered by the requested `grupo` — via `plotting.plot_ranking_circuitos(raw_df,
+<sampled circuits>, start_date, end_date)`, called AS-IS against the unfiltered circuit universe.
+Only the sampled circuits get a thick bar border; every other circuit stays visible as a normal bar,
+in the color of its own band. Nothing is ever hidden, regardless of `grupo`.
+
+This used to be `plot_interactive_circuit_clustering`'s K-Means scatter. It was swapped when the
+grouping moved to the ranking: the scatter placed a circuit by SIZE (events × accumulated UITI) and
+its five classes were not the four bands the report was grouping by, so the reader saw a figure that
+could not explain the group the text was talking about. `plot_ranking_circuitos` now accepts either a
+single circuit name (`/report`, unchanged) or a list (this Skill); with a list it borders every one
+of them and annotates none — twelve arrows over 208 bars of 2.8 px cover exactly what they point at.
+Implemented once, inside `render_managerial_report`; this Skill never builds or filters it.
 
 ## Allowed tools
 
@@ -171,9 +207,9 @@ Given `grupo` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
       `PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.informe_gerencial_contract resolve <grupo> [fecha_inicio fecha_fin] --runtime claude`.
       This delegates to `resolve(...)`, which loads the dataset, resolves the window (dataset-wide
       default via `_dataset_date_range` when omitted, or the explicit pair), computes criticality via
-      `compute_circuit_criticality_groups` directly (independent of, and never calling,
-      `batch_report_contract.preflight_batch`'s own `todos` bypass), samples down to the 12 most
-      representative circuits when the group exceeds that threshold, and checks each sampled circuit
+      `ranking_circuitos` directly (independent of, and never calling,
+      `batch_report_contract.preflight_batch`'s own `todos` bypass), samples down to the 12 worst
+      circuits of the band when it exceeds that threshold, and checks each sampled circuit
       for a prior `/report` run.
    3. Branch on the returned `status`:
       - `usage_error` or `execution_error` — **alert** with the returned error message(s) and
@@ -470,8 +506,9 @@ the single checkpoint is step 1.4 only.
 - `plotting.run_kmeans`'s signature and return value are never modified by this Skill or its
   contract.
 - `batch_report_contract.preflight_batch`'s own `todos` bypass is never called or modified; this
-  Skill's `todos` path always goes through `compute_circuit_criticality_groups` directly via
-  `resolve_group_dataframe`.
+  Skill's `todos` path always goes through `ranking_circuitos` directly via
+  `resolve_group_dataframe`. `batch_report_contract` is no longer imported by this contract at all —
+  the two speak different group vocabularies on purpose.
 - `/reporte-lote` and `/report` (direct invocation) behavior is unchanged by this Skill's existence —
   their own SKILL.md files are never edited here.
 - No shared HTML-shell helper is extracted from `plotting.render_llm_analysis` in this change; the
@@ -502,10 +539,11 @@ the single checkpoint is step 1.4 only.
   [`src/chec_local_interpreter/report_pipeline.py`](../../../src/chec_local_interpreter/report_pipeline.py)
 - Structurally closest sibling Skill (batch resolution + single-checkpoint gate, alert-and-continue
   loop convention): [`.claude/skills/reporte-lote/SKILL.md`](../reporte-lote/SKILL.md)
-- Shared criticality-group computation reused directly (never through `preflight_batch`'s `todos`
-  bypass): `plotting.compute_circuit_criticality_groups`
-- Shared full-fleet clustering scatter, reused AS-IS with `highlighted_circuits`:
-  `plotting.plot_interactive_circuit_clustering`
+- Shared risk-band computation reused directly (never through `preflight_batch`'s `todos` bypass):
+  [`src/chec_local_interpreter/ranking_circuitos.py`](../../../src/chec_local_interpreter/ranking_circuitos.py),
+  the Python port of `src/chec_tableros/agrupamiento.py`'s second dashboard
+- Shared full-fleet ranking bars, reused AS-IS with a list of highlighted circuits:
+  `plotting.plot_ranking_circuitos` (the same figure `/report` opens with)
 - Standalone pre-batch clustering chart, invoked directly by its render verb in step 1.5 (distinct
   from the full-fleet scatter embedded in the final HTML above; it had its own
   `/agrupamiento-circuitos` Skill until 2026-08-17, and the contract module outlived it because

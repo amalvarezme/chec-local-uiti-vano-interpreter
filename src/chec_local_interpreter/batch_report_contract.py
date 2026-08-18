@@ -27,15 +27,22 @@ from chec_local_interpreter.agent_tools._atomic_io import atomic_write_text
 from chec_local_interpreter.circuit_clustering_contract import RuntimeMetadata, _dataset_date_range
 from chec_local_interpreter.config import DEFAULT_DATA_PATH, PROJECT_ROOT
 from chec_local_interpreter.data_loader import available_circuits, filter_events, load_dataset
-from chec_local_interpreter.plotting import CRITICALITY_GROUP_LABELS, compute_circuit_criticality_groups
+from chec_local_interpreter.ranking_circuitos import NOMBRES_RANGO, ranking_circuitos
 
 SCHEMA_VERSION = "batch-report-contract/v1"
 
-# Drift-proof by construction: zipped against CRITICALITY_GROUP_LABELS so the
-# CLI slug vocabulary can never fall out of sync with the shared clustering
-# helper's tier ordering.
-GROUP_SLUGS: tuple[str, ...] = ("muy-alta", "alta", "medio-alta", "medio-baja", "baja")
-GROUP_SLUG_TO_LABEL: dict[str, str] = dict(zip(GROUP_SLUGS, CRITICALITY_GROUP_LABELS))
+# Las cuatro bandas de riesgo del RANKING de circuitos -- el conteo de vanos en
+# Medio-Alto + Alto cortado en P50/P75/P97 --, que es lo que pinta el tablero del
+# cuaderno 02, lo que /report cita en prosa y lo que /informe-gerencial agrupa. Antes
+# aqui vivian las cinco clases de K-Means sobre eventos x UITI del circuito
+# (`plotting.CRITICALITY_GROUP_LABELS`), que son otro metodo Y otro vocabulario: los dos
+# tenian la cadena "Riesgo Alto" queriendo decir circuitos distintos -- medido sobre los
+# 208 de la flota, 16 por K-Means y 7 por el ranking, con solo 3 en comun.
+#
+# A prueba de deriva por construccion: se cierra con `NOMBRES_RANGO`, asi que el
+# vocabulario de la linea de comandos no se puede separar del que dibuja la barra.
+GROUP_SLUGS: tuple[str, ...] = ("bajo", "medio", "medio-alto", "alto")
+GROUP_SLUG_TO_LABEL: dict[str, str] = dict(zip(GROUP_SLUGS, NOMBRES_RANGO))
 ALL_GROUPS_SLUG = "todos"
 VALID_GROUP_SLUGS: tuple[str, ...] = (*GROUP_SLUGS, ALL_GROUPS_SLUG)
 
@@ -145,8 +152,10 @@ def preflight_batch(
         if request.grupo == ALL_GROUPS_SLUG:
             circuitos = available_circuits(filtered)
         else:
-            df_coords = compute_circuit_criticality_groups(filtered)
-            circuitos = df_coords[df_coords["criticidad"] == request.criticidad].index.tolist()
+            tabla = ranking_circuitos(filtered).tabla
+            circuitos = tabla.loc[
+                tabla["rango"] == request.criticidad, "circuito"
+            ].tolist()
     except (FileNotFoundError, ValueError, ReportPipelineError) as exc:
         return BatchReportOutcome(status="execution_error", request=request, errors=[str(exc)])
 

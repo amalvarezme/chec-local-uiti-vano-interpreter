@@ -368,6 +368,11 @@ def plot_ranking_circuitos(raw_df, circuito_destacado, start_date=None, end_date
     El color de cada barra ES su banda de riesgo, asi que el circuito estudiado se marca
     con el BORDE y con una anotacion, nunca recoloreandolo: cambiarle el color mentiria
     sobre la banda en la que cae, que es justo el dato que la figura existe para dar.
+
+    `circuito_destacado` admite un nombre (el informe por circuito) o una lista (el
+    informe gerencial, que resalta los circuitos muestreados del grupo). Con varios se
+    marcan todos los bordes pero no se anota ninguno: doce flechas sobre 208 barras de
+    2,8 px tapan justo la figura que vienen a senalar.
     """
     from chec_local_interpreter.ranking_circuitos import (
         COLORES_RANGO,
@@ -380,10 +385,16 @@ def plot_ranking_circuitos(raw_df, circuito_destacado, start_date=None, end_date
     if tabla.empty:
         return go.Figure()
 
-    destacado = str(circuito_destacado or "")
+    if circuito_destacado is None:
+        destacados = []
+    elif isinstance(circuito_destacado, str):
+        destacados = [circuito_destacado] if circuito_destacado else []
+    else:
+        destacados = [str(c) for c in circuito_destacado if c]
+    conjunto = set(destacados)
     posiciones = list(range(len(tabla)))
     valores = tabla["vanos_criticos"].tolist()
-    es_destacado = [c == destacado for c in tabla["circuito"]]
+    es_destacado = [c in conjunto for c in tabla["circuito"]]
 
     hover = [
         f"<b>{fila.circuito}</b>"
@@ -438,7 +449,15 @@ def plot_ranking_circuitos(raw_df, circuito_destacado, start_date=None, end_date
     por_banda = tabla["rango"].value_counts()
     reparto = " | ".join(f"{nombre}: {int(por_banda.get(nombre, 0))}"
                          for nombre in NOMBRES_RANGO)
-    if any(es_destacado):
+    if len(conjunto) > 1 and any(es_destacado):
+        # Varios destacados: se dicen CUANTOS y de que banda, sin anotar ninguno.
+        marcados = int(sum(es_destacado))
+        encabezado = (
+            f"Ranking de circuitos por vanos criticos &mdash; {marcados} circuitos "
+            f"resaltados de {len(tabla)}"
+        )
+    elif any(es_destacado):
+        destacado = destacados[0]
         fila = tabla[tabla["circuito"] == destacado].iloc[0]
         encabezado = (
             f"Ranking de circuitos por vanos criticos &mdash; {destacado}: "

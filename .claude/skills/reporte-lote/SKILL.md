@@ -1,6 +1,6 @@
 ---
 name: reporte-lote
-description: "Run /report for every circuit belonging to one criticality group (or the whole fleet). Trigger: /reporte-lote, batch report, criticality-group report, run report for all circuits in a tier."
+description: "Run /report for every circuit belonging to one risk band of the circuit ranking (or the whole fleet). Trigger: /reporte-lote, batch report, risk-band report, run report for all circuits in a band."
 license: Apache-2.0
 metadata:
   author: chec-local-uiti-vano-interpreter
@@ -13,7 +13,7 @@ metadata:
 
 ## Overview
 
-`/reporte-lote` batches `/report` across every circuit in one circuit-criticality group (or every
+`/reporte-lote` batches `/report` across every circuit in one circuit risk band (or every
 circuit in the dataset, for `todos`). It does not reimplement any part of the single-circuit report
 pipeline. It owns exactly one thing `/report` does not: resolving a group slug to a concrete circuit
 list plus a shared dataset-wide date window, behind a single up-front confirmation. Once that
@@ -45,8 +45,19 @@ this Skill is strictly for the multi-circuit, group-resolved case.
 
 Invocation: `/reporte-lote <grupo> [fecha_inicio fecha_fin]`.
 
-- `grupo` — **required**. Must be one of `muy-alta|alta|medio-alta|medio-baja|baja|todos`; any other value
-  is a usage error, rejected before any dataset access — no preflight call, no run_dir, nothing.
+- `grupo` — **required**. Must be one of `bajo|medio|medio-alto|alto|todos`; any other value is a
+  usage error, rejected before any dataset access — no preflight call, no run_dir, nothing.
+
+  These are the four RISK BANDS of the circuit ranking (`ranking_circuitos.NOMBRES_RANGO`): per
+  circuit, the COUNT of its vanos in Medio-Alto + Alto, cut at P50/P75/P97. Same calculation that
+  paints the bar chart of notebook 02's second dashboard, that `/report` opens with and cites in
+  prose, and that `/informe-gerencial` groups by — `batch_report_contract.GROUP_SLUGS` is the single
+  shared definition both commands import.
+
+  It used to be `muy-alta|alta|medio-alta|medio-baja|baja` — K-Means over the circuit's event count ×
+  UITI sum. Both vocabularies contain "Riesgo Alto" and it named DIFFERENT circuits: measured over
+  the 208-circuit fleet, 16 by K-Means and 7 by the ranking, only 3 in both. The batch was running
+  `/report` over a set of circuits that each circuit's own report then contradicted.
 - `fecha_inicio` / `fecha_fin` — **optional, as a PAIR**, same pair contract `/report` uses:
   - Both omitted: resolve to the **dataset-wide** date range (the min/max `FECHA` across ALL
     circuits, not any single circuit's `circuit_date_range`) — the batch spans potentially many
@@ -59,11 +70,11 @@ Examples:
 
 | Invocation | Result |
 |---|---|
-| `/reporte-lote muy-alta` | Group resolved against the full dataset-wide date range |
-| `/reporte-lote alta 2026-01-01 2026-02-01` | Group resolved against that explicit window |
-| `/reporte-lote medio-alta 2026-01-01` | **Rejected** — usage error, `fecha_fin` missing |
-| `/reporte-lote critica` | **Rejected** — usage error, unknown `grupo` |
-| `/reporte-lote todos` | Every circuit in the dataset, no criticality-label filtering |
+| `/reporte-lote alto` | Band `Riesgo Alto` (top 3% by critical vanos) over the dataset-wide range |
+| `/reporte-lote medio-alto 2026-01-01 2026-02-01` | Band `Riesgo Medio-Alto` over that explicit window |
+| `/reporte-lote bajo 2026-01-01` | **Rejected** — usage error, `fecha_fin` missing |
+| `/reporte-lote muy-alta` | **Rejected** — usage error, that is the retired K-Means vocabulary |
+| `/reporte-lote todos` | Every circuit in the dataset, no band filtering |
 
 ## Single user checkpoint (start of flow only)
 
@@ -109,7 +120,7 @@ Given `grupo` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
       This delegates to `preflight_batch(...)`, which loads the dataset, resolves the window
       (dataset-wide default via `_dataset_date_range` when omitted, or the explicit pair), filters to
       that window, and resolves `grupo` to a circuit list (`available_circuits` for `todos`, or the
-      circuits whose `compute_circuit_criticality_groups` label matches otherwise).
+      circuits whose `ranking_circuitos` band matches otherwise).
    3. Branch on the returned `status`:
       - `usage_error` or `execution_error` (e.g. zero events anywhere in the resolved window) —
         **generate an alert** with the returned error message(s) and **stop**. Do not create a
@@ -219,8 +230,10 @@ alert-and-continue recorded as `SUCCESS` with a degradation note.
 - Step 9's own vault-note + graphify chaining, invoked transitively via `report/SKILL.md` step 9 for
   every circuit in the batch: [`.claude/skills/vault-circuito/SKILL.md`](../vault-circuito/SKILL.md) /
   [`src/chec_local_interpreter/vault_note_contract.py`](../../../src/chec_local_interpreter/vault_note_contract.py)
-- Shared criticality-group computation used by the batch contract:
-  `plotting.compute_circuit_criticality_groups`
+- Shared risk-band computation used by the batch contract (and by `/informe-gerencial`, through the
+  same `GROUP_SLUGS` definition):
+  [`src/chec_local_interpreter/ranking_circuitos.py`](../../../src/chec_local_interpreter/ranking_circuitos.py),
+  the Python port of `src/chec_tableros/agrupamiento.py`'s second dashboard
 - Shared render verb that step 1.5 invokes directly for the mandatory pre-batch clustering chart
   (it had its own `/agrupamiento-circuitos` Skill until 2026-08-17; the command was retired and
   the contract module it exposed stayed, because this Skill and `/informe-gerencial` call it

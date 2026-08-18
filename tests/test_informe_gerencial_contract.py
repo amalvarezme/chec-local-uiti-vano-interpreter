@@ -35,9 +35,19 @@ def _rows_for_circuit(circuit: str, n_events: int, total_uiti: float, start: str
     )
 
 
-def _df_coords(names: list[str], distances: list[float]) -> pd.DataFrame:
+def _df_coords(names: list[str], vanos_criticos: list[float]) -> pd.DataFrame:
+    """El marco que devuelve `resolve_group_dataframe`: columnas del ranking."""
+    n = len(names)
     return pd.DataFrame(
-        {"centroid_distance": distances},
+        {
+            "vanos_criticos": [int(v) for v in vanos_criticos],
+            "vanos_medio_alto": [int(v) for v in vanos_criticos],
+            "vanos_alto": [0] * n,
+            "vanos_con_eventos": [int(v) + 10 for v in vanos_criticos],
+            "uiti_total": [float(v) * 10 for v in vanos_criticos],
+            "eventos_total": [int(v) * 3 for v in vanos_criticos],
+            "posicion": list(range(1, n + 1)),
+        },
         index=pd.Index(names, name="CIRCUITO"),
     )
 
@@ -58,27 +68,26 @@ def test_sample_representatives_under_threshold_returns_all_circuits():
     assert set(result.index) == set(names)
 
 
-def test_sample_representatives_over_threshold_returns_exactly_12_smallest():
+def test_sample_representatives_over_threshold_returns_exactly_12_worst():
     names = [f"C{i:02d}" for i in range(37)]
-    distances = list(range(37))  # C00 has smallest distance, C36 the largest
-    df_coords = _df_coords(names, distances)
+    # C36 es el peor: mas vanos criticos.
+    df_coords = _df_coords(names, list(range(37)))
 
     result = sample_representatives(df_coords)
 
     assert len(result) == 12
-    assert set(result.index) == {f"C{i:02d}" for i in range(12)}
-    assert result["centroid_distance"].max() == 11
+    assert set(result.index) == {f"C{i:02d}" for i in range(25, 37)}
+    assert result["vanos_criticos"].min() == 25
 
 
 def test_sample_representatives_deterministic_tie_break_by_ascending_name():
-    # 11 circuits with unique, strictly-smaller distances are certain top-11.
-    names = [f"C{i:02d}" for i in range(11)]
-    distances = list(range(11))
-    # Two circuits tied at the boundary distance (11): only one fits in the
-    # top-12. Alphabetically earlier name ("AAA_TIE" < "ZZZ_TIE") must win.
+    # 11 circuitos estrictamente peores son los 11 seguros.
+    names = [f"C{i:02d}" for i in range(20, 31)]
+    criticos = list(range(20, 31))
+    # Dos empatados en el borde: solo uno cabe en los 12. Gana el nombre menor.
     names += ["ZZZ_TIE", "AAA_TIE"]
-    distances += [11, 11]
-    df_coords = _df_coords(names, distances)
+    criticos += [19, 19]
+    df_coords = _df_coords(names, criticos)
 
     result = sample_representatives(df_coords)
     result_again = sample_representatives(df_coords)
@@ -86,7 +95,7 @@ def test_sample_representatives_deterministic_tie_break_by_ascending_name():
     assert len(result) == 12
     assert "AAA_TIE" in result.index
     assert "ZZZ_TIE" not in result.index
-    # Reproducible: identical input produces the identical 12-circuit set.
+    # Reproducible: la misma entrada elige exactamente los mismos doce.
     assert list(result.index) == list(result_again.index)
 
 
@@ -120,22 +129,23 @@ def _four_tier_raw_df(per_tier: int = 2) -> pd.DataFrame:
 
 
 def test_resolve_group_dataframe_named_group_filters_by_criticidad():
-    raw_df = _four_tier_raw_df(per_tier=2)
+    raw_df = _ranking_raw_df({f"C{i:02d}": i * 8 for i in range(1, 13)}, vanos_por_circuito=110)
 
-    result = resolve_group_dataframe(raw_df, "muy-alta", "Riesgo Muy Alto")
+    result = resolve_group_dataframe(raw_df, "alto", "Riesgo Alto")
 
-    assert set(result.index) <= {"MUYALTA_0", "MUYALTA_1"}
-    assert (result["criticidad"] == "Riesgo Muy Alto").all()
+    assert not result.empty
+    assert (result["criticidad"] == "Riesgo Alto").all()
 
 
-def test_resolve_group_dataframe_todos_returns_full_universe_all_64_circuits():
-    raw_df = _four_tier_raw_df(per_tier=16)  # 16 circuits x 4 tiers = 64
+def test_resolve_group_dataframe_todos_returns_full_universe():
+    raw_df = _ranking_raw_df({f"C{i:02d}": i * 4 for i in range(1, 21)}, vanos_por_circuito=90)
 
     result = resolve_group_dataframe(raw_df, "todos", None)
 
-    assert len(result) == 64
-    assert set(result["criticidad"]) == {
-        "Riesgo Muy Alto", "Riesgo Alto", "Riesgo Medio-Alto", "Riesgo Medio-Bajo", "Riesgo Bajo",
+    # Entran TODOS los circuitos de la base, incluidos los que quedan en cero.
+    assert len(result) == 20
+    assert set(result["criticidad"]) <= {
+        "Riesgo Bajo", "Riesgo Medio", "Riesgo Medio-Alto", "Riesgo Alto",
     }
 
     sampled = sample_representatives(result)
@@ -476,10 +486,10 @@ def test_load_graph_patterns_malformed_json_returns_empty_list_never_raises(tmp_
 
 
 def _known_tier_df_coords_with_distance() -> pd.DataFrame:
-    names = [f"MUYALTA_{i}" for i in range(25)]
+    names = [f"ALTO_{i}" for i in range(25)]
     distances = list(range(25))
     df = _df_coords(names, distances)
-    df["criticidad"] = "Muy Alta"
+    df["criticidad"] = "Riesgo Alto"
     return df
 
 
@@ -491,7 +501,7 @@ def test_resolve_awaiting_confirmation_with_missing_runs(monkeypatch, tmp_path):
     )
     runs_root = tmp_path / "runs"  # empty -- every sampled circuit is missing a run
 
-    request = informe_contract.normalize_request("muy-alta", runtime="claude")
+    request = informe_contract.normalize_request("alto", runtime="claude")
     outcome = informe_contract.resolve(request, data_path="data.csv", runs_root=runs_root)
 
     assert outcome.status == "awaiting_confirmation"
@@ -506,10 +516,10 @@ def test_resolve_awaiting_confirmation_without_missing_runs(monkeypatch, tmp_pat
     df_coords = _known_tier_df_coords_with_distance()
     monkeypatch.setattr(informe_contract, "resolve_group_dataframe", lambda *a, **k: df_coords)
     runs_root = tmp_path / "runs"
-    for circuito in df_coords.sort_index().nsmallest(20, "centroid_distance").index:
+    for circuito in df_coords.sort_index().nlargest(20, "vanos_criticos").index:
         _write_valid_run(runs_root, circuito, timestamp="20260101T000000000000")
 
-    request = informe_contract.normalize_request("muy-alta", runtime="claude")
+    request = informe_contract.normalize_request("alto", runtime="claude")
     outcome = informe_contract.resolve(request, data_path="data.csv", runs_root=runs_root)
 
     assert outcome.status == "awaiting_confirmation"
@@ -537,7 +547,7 @@ def test_resolve_never_loads_content_or_writes_output_declined_confirmation_safe
     monkeypatch.setattr(informe_contract, "load_circuit_content", _fail_if_called)
     monkeypatch.setattr(informe_contract, "atomic_write_text", _fail_if_called)
 
-    request = informe_contract.normalize_request("muy-alta", runtime="claude")
+    request = informe_contract.normalize_request("alto", runtime="claude")
     outcome = informe_contract.resolve(request, data_path="data.csv", runs_root=tmp_path / "runs")
 
     assert outcome.status == "awaiting_confirmation"
@@ -549,7 +559,7 @@ def test_resolve_empty_group_status(monkeypatch):
     empty_df = pd.DataFrame({"criticidad": []}, index=pd.Index([], name="CIRCUITO"))
     monkeypatch.setattr(informe_contract, "resolve_group_dataframe", lambda *a, **k: empty_df)
 
-    request = informe_contract.normalize_request("baja")
+    request = informe_contract.normalize_request("bajo")
     outcome = informe_contract.resolve(request, data_path="data.csv")
 
     assert outcome.status == "empty_group"
@@ -607,7 +617,7 @@ def test_cli_resolve_exit_code_matches_status(monkeypatch, capsys, tmp_path):
     runs_root = tmp_path / "runs"
 
     exit_code = informe_contract.main(
-        ["resolve", "muy-alta", "--data-path", "data.csv", "--runs-root", str(runs_root)]
+        ["resolve", "alto", "--data-path", "data.csv", "--runs-root", str(runs_root)]
     )
 
     assert exit_code == 0
@@ -616,19 +626,10 @@ def test_cli_resolve_exit_code_matches_status(monkeypatch, capsys, tmp_path):
 
 
 def _known_tier_df_coords_full() -> pd.DataFrame:
-    """Same shape `render_and_write` needs end to end: `event_count` and
-    `uiti_vano_sum` alongside `criticidad`/`centroid_distance`.
-    """
-    names = [f"MUYALTA_{i}" for i in range(3)]
-    df = pd.DataFrame(
-        {
-            "event_count": [40.0, 41.0, 39.0],
-            "uiti_vano_sum": [50000.0, 51000.0, 49000.0],
-            "criticidad": ["Muy Alta"] * 3,
-            "centroid_distance": [0.0, 1.0, 2.0],
-        },
-        index=pd.Index(names, name="CIRCUITO"),
-    )
+    """La misma forma que `render_and_write` necesita de punta a punta: las columnas del
+    RANKING junto a `criticidad`."""
+    df = _df_coords([f"ALTO_{i}" for i in range(3)], [180, 190, 175])
+    df["criticidad"] = "Riesgo Alto"
     return df
 
 
@@ -644,7 +645,7 @@ def test_render_and_write_persists_html_and_returns_success(monkeypatch, tmp_pat
     )
     output_root = tmp_path / "html"
 
-    request = informe_contract.normalize_request("muy-alta", "2026-01-01", "2026-01-02", runtime="claude")
+    request = informe_contract.normalize_request("alto", "2026-01-01", "2026-01-02", runtime="claude")
     outcome = informe_contract.render_and_write(request, data_path="data.csv", output_root=output_root)
 
     assert outcome.status == "success"
@@ -672,7 +673,7 @@ def test_cli_render_exit_code_matches_status(monkeypatch, capsys, tmp_path):
     exit_code = informe_contract.main(
         [
             "render",
-            "muy-alta",
+            "alto",
             "2026-01-01",
             "2026-01-02",
             "--data-path",
@@ -710,29 +711,37 @@ def test_outcome_json_text_has_sorted_keys():
 
 
 def _sampled_records(specs: list[tuple[str, float, float, str]]) -> list[dict]:
-    """`specs` = [(circuito, event_count, uiti_vano_sum, criticidad), ...]."""
+    """`specs` = [(circuito, eventos_total, uiti_total, criticidad), ...].
+
+    El esquema es el del RANKING. `vanos_criticos` se deriva del UITI para que el orden
+    por criticidad sea coherente con el que tendria una corrida real.
+    """
     return [
         {
             "circuito": circuito,
-            "event_count": event_count,
-            "uiti_vano_sum": uiti_vano_sum,
+            "vanos_criticos": int(uiti_total // 100),
+            "vanos_medio_alto": int(uiti_total // 150),
+            "vanos_alto": int(uiti_total // 300),
+            "vanos_con_eventos": int(eventos_total),
+            "uiti_total": uiti_total,
+            "eventos_total": int(eventos_total),
             "criticidad": criticidad,
-            "centroid_distance": 0.0,
+            "posicion": i + 1,
         }
-        for circuito, event_count, uiti_vano_sum, criticidad in specs
+        for i, (circuito, eventos_total, uiti_total, criticidad) in enumerate(specs)
     ]
 
 
 def test_synthesize_returns_all_required_sections_with_real_content():
     sampled_records = _sampled_records(
         [
-            ("C01", 40, 50000.0, "Muy Alta"),
-            ("C02", 42, 52000.0, "Muy Alta"),
+            ("C01", 40, 50000.0, "Riesgo Alto"),
+            ("C02", 42, 52000.0, "Riesgo Alto"),
             # C03 is a genuine numeric outlier: UITI_VANO far above the
             # group median AND event_count far below it (high risk, sparse
             # activity) -- the exact cross-circuit pattern synthesize()
             # must surface.
-            ("C03", 5, 500000.0, "Muy Alta"),
+            ("C03", 5, 500000.0, "Riesgo Alto"),
         ]
     )
     loaded_content = [
@@ -740,7 +749,7 @@ def test_synthesize_returns_all_required_sections_with_real_content():
         {"circuito": "C02", "source": "raw_json", "content": "Texto narrativo C02."},
         None,  # missing content even after auto-trigger (edge case)
     ]
-    group = {"slug": "muy-alta", "label": "Muy Alta", "circuit_count": 3}
+    group = {"slug": "alto", "label": "Riesgo Alto", "circuit_count": 3}
 
     result = synthesize(sampled_records, loaded_content, group)
 
@@ -750,13 +759,13 @@ def test_synthesize_returns_all_required_sections_with_real_content():
     resumen = result["resumen_ejecutivo"]
     assert isinstance(resumen, list)
     assert 5 <= len(resumen) <= 7
-    assert any("Muy Alta" in item for item in resumen)
+    assert any("Riesgo Alto" in item for item in resumen)
     # Never cites the internal JSON/markdown artifacts -- only the circuit's
     # own HTML report or PDF base documents are citable.
     assert not any(".json" in item.lower() or ".md" in item.lower() for item in resumen)
 
     assert result["patrones_comunes"]
-    assert any("Muy Alta" in p for p in result["patrones_comunes"])
+    assert any("Riesgo Alto" in p for p in result["patrones_comunes"])
     # patrones_comunes must never name the internal content-sourcing format.
     assert not any("json" in p.lower() or "bóveda" in p.lower() for p in result["patrones_comunes"])
 
@@ -790,7 +799,7 @@ def test_annex_per_circuit_summary_uses_structured_findings_when_available():
     dump of the full raw narrative text.
     """
     long_raw_text = "Frase técnica extensa sobre causas y variables. " * 15  # ~735 chars
-    sampled_records = _sampled_records([("C01", 40, 50000.0, "Muy Alta")])
+    sampled_records = _sampled_records([("C01", 40, 50000.0, "Riesgo Alto")])
     loaded_content = [
         {
             "circuito": "C01",
@@ -805,7 +814,7 @@ def test_annex_per_circuit_summary_uses_structured_findings_when_available():
             "variables_a_priorizar": [{"variable": "CNT_TRF", "prioridad": "alta"}],
         }
     ]
-    group = {"slug": "muy-alta", "label": "Muy Alta", "circuit_count": 1}
+    group = {"slug": "alto", "label": "Riesgo Alto", "circuit_count": 1}
 
     result = synthesize(sampled_records, loaded_content, group)
 
@@ -834,11 +843,11 @@ def test_annex_hypothesis_shown_as_single_subitem_when_it_fits():
     "consistent flow across runs").
     """
     short_cause = "Posible degradación del transformador de distribución."
-    sampled_records = _sampled_records([("C01", 40, 50000.0, "Muy Alta")])
+    sampled_records = _sampled_records([("C01", 40, 50000.0, "Riesgo Alto")])
     loaded_content = [
         {"circuito": "C01", "source": "vault_note", "content": "x", "cause_hypothesis_note": short_cause}
     ]
-    group = {"slug": "muy-alta", "label": "Muy Alta", "circuit_count": 1}
+    group = {"slug": "alto", "label": "Riesgo Alto", "circuit_count": 1}
 
     result = synthesize(sampled_records, loaded_content, group)
     resumen = result["anexo_por_circuito"][0]["resumen"]
@@ -868,11 +877,11 @@ def test_annex_hypothesis_split_into_subitems_by_clause_when_long():
         "modulador adicional sobre la frecuencia y severidad, pero el contexto entregado no "
         "permite aislar su contribucion especifica por vano."
     )
-    sampled_records = _sampled_records([("C01", 40, 50000.0, "Muy Alta")])
+    sampled_records = _sampled_records([("C01", 40, 50000.0, "Riesgo Alto")])
     loaded_content = [
         {"circuito": "C01", "source": "vault_note", "content": "x", "cause_hypothesis_note": long_cause}
     ]
-    group = {"slug": "muy-alta", "label": "Muy Alta", "circuit_count": 1}
+    group = {"slug": "alto", "label": "Riesgo Alto", "circuit_count": 1}
 
     result = synthesize(sampled_records, loaded_content, group)
     resumen = result["anexo_por_circuito"][0]["resumen"]
@@ -894,11 +903,11 @@ def test_annex_hypothesis_with_newlines_is_whitespace_collapsed_but_complete():
     only whitespace collapsed -- not one word of content dropped.
     """
     cause_with_newlines = "Falla de linea de\nmedia tension  rota,   confirmada por dos eventos independientes."
-    sampled_records = _sampled_records([("C01", 40, 50000.0, "Muy Alta")])
+    sampled_records = _sampled_records([("C01", 40, 50000.0, "Riesgo Alto")])
     loaded_content = [
         {"circuito": "C01", "source": "vault_note", "content": "x", "cause_hypothesis_note": cause_with_newlines}
     ]
-    group = {"slug": "muy-alta", "label": "Muy Alta", "circuit_count": 1}
+    group = {"slug": "alto", "label": "Riesgo Alto", "circuit_count": 1}
 
     result = synthesize(sampled_records, loaded_content, group)
     resumen = result["anexo_por_circuito"][0]["resumen"]
@@ -918,7 +927,7 @@ def test_annex_html_renders_hypothesis_as_nested_subitem_list():
     annex = [
         {
             "circuito": "C01",
-            "criticidad": "Muy Alta",
+            "criticidad": "Riesgo Alto",
             "fuente": "vault_note",
             "resumen": [
                 "Titular breve.",
@@ -942,9 +951,9 @@ def test_annex_per_circuit_summary_falls_back_to_shortened_raw_content():
     the full unreadable dump.
     """
     long_text = "Frase técnica extensa sobre causas y variables. " * 15  # ~735 chars
-    sampled_records = _sampled_records([("C01", 40, 50000.0, "Muy Alta")])
+    sampled_records = _sampled_records([("C01", 40, 50000.0, "Riesgo Alto")])
     loaded_content = [{"circuito": "C01", "source": "raw_json", "content": long_text}]
-    group = {"slug": "muy-alta", "label": "Muy Alta", "circuit_count": 1}
+    group = {"slug": "alto", "label": "Riesgo Alto", "circuit_count": 1}
 
     result = synthesize(sampled_records, loaded_content, group)
 
@@ -966,7 +975,7 @@ def test_synthesize_with_no_outliers_and_full_content_produces_empty_outlier_lis
     loaded_content = [
         {"circuito": c, "source": "vault_note", "content": f"Narrativa {c}"} for c in ["D01", "D02", "D03"]
     ]
-    group = {"slug": "alta", "label": "Alta", "circuit_count": 3}
+    group = {"slug": "medio-alto", "label": "Riesgo Medio-Alto", "circuit_count": 3}
 
     result = synthesize(sampled_records, loaded_content, group)
 
@@ -986,7 +995,7 @@ def test_executive_summary_has_a_floor_of_5_items_even_with_sparse_content():
         ]
     )
     loaded_content = [{"circuito": c, "source": "vault_note", "content": f"Narrativa {c}"} for c in ["E01", "E02"]]
-    group = {"slug": "alta", "label": "Alta", "circuit_count": 2}
+    group = {"slug": "medio-alto", "label": "Riesgo Medio-Alto", "circuit_count": 2}
 
     result = synthesize(sampled_records, loaded_content, group)
 
@@ -1002,9 +1011,9 @@ def test_synthesize_surfaces_cross_circuit_technical_patterns_and_causes():
     """
     sampled_records = _sampled_records(
         [
-            ("F01", 40, 50000.0, "Muy Alta"),
-            ("F02", 41, 51000.0, "Muy Alta"),
-            ("F03", 39, 49000.0, "Muy Alta"),
+            ("F01", 40, 50000.0, "Riesgo Alto"),
+            ("F02", 41, 51000.0, "Riesgo Alto"),
+            ("F03", 39, 49000.0, "Riesgo Alto"),
         ]
     )
     loaded_content = [
@@ -1036,7 +1045,7 @@ def test_synthesize_surfaces_cross_circuit_technical_patterns_and_causes():
             "recommended_actions": [],
         },
     ]
-    group = {"slug": "muy-alta", "label": "Muy Alta", "circuit_count": 3}
+    group = {"slug": "alto", "label": "Riesgo Alto", "circuit_count": 3}
 
     result = synthesize(sampled_records, loaded_content, group)
 
@@ -1058,15 +1067,15 @@ def test_render_managerial_report_embeds_scatter_and_all_sections():
     raw_df = _four_tier_raw_df(per_tier=2)
     sampled_records = _sampled_records(
         [
-            ("MUYALTA_0", 40, 50000.0, "Muy Alta"),
-            ("MUYALTA_1", 41, 51000.0, "Muy Alta"),
+            ("ALTO_0", 40, 50000.0, "Riesgo Alto"),
+            ("ALTO_1", 41, 51000.0, "Riesgo Alto"),
         ]
     )
     loaded_content = [
-        {"circuito": "MUYALTA_0", "source": "vault_note", "content": "Narrativa MUYALTA_0."},
+        {"circuito": "ALTO_0", "source": "vault_note", "content": "Narrativa ALTO_0."},
         None,
     ]
-    group = {"slug": "muy-alta", "label": "Muy Alta", "circuit_count": 2}
+    group = {"slug": "alto", "label": "Riesgo Alto", "circuit_count": 2}
     synthesis = synthesize(sampled_records, loaded_content, group)
 
     html = render_managerial_report(
@@ -1074,11 +1083,11 @@ def test_render_managerial_report_embeds_scatter_and_all_sections():
         synthesis=synthesis,
         group=group,
         resolved_window={"fecha_inicio": "2026-01-01", "fecha_fin": "2026-12-31"},
-        sampled=["MUYALTA_0", "MUYALTA_1"],
+        sampled=["ALTO_0", "ALTO_1"],
     )
 
-    assert "<title>Informe Gerencial: Circuitos con Criticidad Muy Alta</title>" in html
-    assert "<h1>Informe Gerencial: Circuitos con Criticidad Muy Alta</h1>" in html
+    assert "<title>Informe Gerencial: Circuitos en Riesgo Alto</title>" in html
+    assert "<h1>Informe Gerencial: Circuitos en Riesgo Alto</h1>" in html
     assert "Resumen ejecutivo" in html
     assert "Patrones comunes" in html
     assert "Circuitos atípicos" in html
@@ -1098,28 +1107,29 @@ def test_render_managerial_report_embeds_scatter_and_all_sections():
         assert html_lib.escape(item) in html
 
 
-def test_render_managerial_report_full_fleet_scatter_with_only_sampled_highlighted(monkeypatch):
-    raw_df = _four_tier_raw_df(per_tier=2)  # 8 circuits across all 4 tiers
-    sampled_names = ["MUYALTA_0", "ALTA_0"]
+def test_render_managerial_report_barras_de_la_flota_completa_con_solo_los_muestreados_resaltados(monkeypatch):
+    """La invariante de "nunca se esconde nada" sobrevive al cambio de figura: las barras
+    se dibujan sobre la flota ENTERA aunque el informe hable de una sola banda."""
+    raw_df = _ranking_raw_df({f"C{i:02d}": i * 8 for i in range(1, 13)}, vanos_por_circuito=110)
+    sampled_names = ["C12", "C11"]
     sampled_records = _sampled_records(
         [
-            ("MUYALTA_0", 40, 50000.0, "Muy Alta"),
-            ("ALTA_0", 20, 5000.0, "Alta"),
+            ("C12", 40, 50000.0, "Riesgo Alto"),
+            ("C11", 20, 5000.0, "Riesgo Medio-Alto"),
         ]
     )
-    loaded_content = [None, None]
-    group = {"slug": "todos", "label": None, "circuit_count": 8}
-    synthesis = synthesize(sampled_records, loaded_content, group)
+    group = {"slug": "alto", "label": "Riesgo Alto", "circuit_count": 1}
+    synthesis = synthesize(sampled_records, [None, None], group)
 
     calls: dict = {}
-    real_plot = informe_contract.plot_interactive_circuit_clustering
+    real_plot = informe_contract.plot_ranking_circuitos
 
-    def _spy(df, *args, **kwargs):
+    def _spy(df, destacados, *args, **kwargs):
         calls["n_rows"] = len(df)
-        calls["highlighted"] = kwargs.get("highlighted_circuits")
-        return real_plot(df, *args, **kwargs)
+        calls["destacados"] = destacados
+        return real_plot(df, destacados, *args, **kwargs)
 
-    monkeypatch.setattr(informe_contract, "plot_interactive_circuit_clustering", _spy)
+    monkeypatch.setattr(informe_contract, "plot_ranking_circuitos", _spy)
 
     html = render_managerial_report(
         raw_df,
@@ -1129,14 +1139,12 @@ def test_render_managerial_report_full_fleet_scatter_with_only_sampled_highlight
         sampled=sampled_names,
     )
 
-    # The FULL, unfiltered raw_df was passed to the shared clustering plot --
-    # never a subset limited to the sampled/highlighted circuits.
+    # El `raw_df` COMPLETO y sin filtrar llega a la figura, nunca un recorte a la banda.
     assert calls["n_rows"] == len(raw_df)
-    assert calls["highlighted"] == sampled_names
-    # Circuits from tiers/groups OUTSIDE the sampled set are still visible in
-    # the rendered scatter (nothing hidden -- only highlighting differs).
-    assert "MEDIA_0" in html
-    assert "BAJA_1" in html
+    assert calls["destacados"] == sampled_names
+    # Los circuitos de OTRAS bandas siguen visibles; solo cambia el resaltado.
+    assert "C01" in html
+    assert "C06" in html
 
 
 # ---------------------------------------------------------------------------
@@ -1157,10 +1165,10 @@ def _render_report_html(
     if raw_df is None:
         raw_df = _four_tier_raw_df(per_tier=2)
     sampled_records = _sampled_records(
-        [(name, 40, 50000.0, "Muy Alta") for name in sampled]
+        [(name, 40, 50000.0, "Riesgo Alto") for name in sampled]
     )
     loaded_content = [None] * len(sampled)
-    group = {"slug": "muy-alta", "label": "Muy Alta", "circuit_count": len(sampled)}
+    group = {"slug": "alto", "label": "Riesgo Alto", "circuit_count": len(sampled)}
     synthesis = synthesize(sampled_records, loaded_content, group)
     return render_managerial_report(
         raw_df,
@@ -1173,32 +1181,32 @@ def _render_report_html(
 
 
 def test_render_managerial_report_omits_graph_section_when_fewer_than_2_sampled():
-    html = _render_report_html(sampled=["MUYALTA_0"], graph_patterns=[{"tema": "x", "circuitos": ["MUYALTA_0"], "soporte": 2}])
+    html = _render_report_html(sampled=["ALTO_0"], graph_patterns=[{"tema": "x", "circuitos": ["ALTO_0"], "soporte": 2}])
 
     assert "Patrones cross-circuito" not in html
 
 
 def test_render_managerial_report_graph_section_muted_when_patterns_none():
-    html = _render_report_html(sampled=["MUYALTA_0", "MUYALTA_1"], graph_patterns=None)
+    html = _render_report_html(sampled=["ALTO_0", "ALTO_1"], graph_patterns=None)
 
     assert "Patrones cross-circuito" in html
     assert "análisis de grafo no disponible en esta corrida" in html
 
 
 def test_render_managerial_report_graph_section_muted_when_patterns_empty():
-    html = _render_report_html(sampled=["MUYALTA_0", "MUYALTA_1"], graph_patterns=[])
+    html = _render_report_html(sampled=["ALTO_0", "ALTO_1"], graph_patterns=[])
 
     assert "Patrones cross-circuito" in html
     assert "sin patrones recurrentes con soporte" in html
 
 
 def test_render_managerial_report_graph_section_lists_patterns_with_provenance_badge():
-    patterns = [{"tema": "fauna en vanos", "circuitos": ["MUYALTA_0", "MUYALTA_1"], "soporte": 2}]
+    patterns = [{"tema": "fauna en vanos", "circuitos": ["ALTO_0", "ALTO_1"], "soporte": 2}]
 
-    html = _render_report_html(sampled=["MUYALTA_0", "MUYALTA_1"], graph_patterns=patterns)
+    html = _render_report_html(sampled=["ALTO_0", "ALTO_1"], graph_patterns=patterns)
 
     assert "fauna en vanos" in html
-    assert "MUYALTA_0" in html and "MUYALTA_1" in html
+    assert "ALTO_0" in html and "ALTO_1" in html
     assert "soporte 2" in html
     # Explicit LLM-assisted provenance badge, visibly distinct from the
     # deterministic "Patrones comunes" table (spec: "Provenance labeling").
@@ -1206,7 +1214,7 @@ def test_render_managerial_report_graph_section_lists_patterns_with_provenance_b
 
 
 def test_render_managerial_report_patrones_comunes_labeled_deterministic():
-    html = _render_report_html(sampled=["MUYALTA_0", "MUYALTA_1"], graph_patterns=None)
+    html = _render_report_html(sampled=["ALTO_0", "ALTO_1"], graph_patterns=None)
 
     assert "Cálculo determinista" in html
 
@@ -1225,13 +1233,13 @@ def test_cli_render_passes_graph_patterns_path_through_to_output(monkeypatch, ca
     graph_patterns_path = tmp_path / "graph-patterns.json"
     _write_graph_patterns_json(
         graph_patterns_path,
-        [{"tema": "fauna en vanos", "circuitos": ["MUYALTA_0", "MUYALTA_1", "MUYALTA_2"], "soporte": 3}],
+        [{"tema": "fauna en vanos", "circuitos": ["ALTO_0", "ALTO_1", "ALTO_2"], "soporte": 3}],
     )
 
     exit_code = informe_contract.main(
         [
             "render",
-            "muy-alta",
+            "alto",
             "2026-01-01",
             "2026-01-02",
             "--data-path",
@@ -1267,8 +1275,8 @@ def test_graph_patterns_html_renders_ul_li_structural():
     (spec: "Itemized patterns list is structurally verifiable").
     """
     patterns = [
-        {"tema": "fauna en vanos", "circuitos": ["MUYALTA_0", "MUYALTA_1"], "soporte": 2},
-        {"tema": "clima aislado", "circuitos": ["MUYALTA_0", "MUYALTA_2"], "soporte": 2},
+        {"tema": "fauna en vanos", "circuitos": ["ALTO_0", "ALTO_1"], "soporte": 2},
+        {"tema": "clima aislado", "circuitos": ["ALTO_0", "ALTO_2"], "soporte": 2},
     ]
 
     html = informe_contract._graph_patterns_html(patterns, None, n_sampled=2)
@@ -1309,7 +1317,7 @@ def test_load_graph_view_unreadable_path_degrades_to_none(tmp_path):
     [
         # patterns present + view present -> <ul> list + embedded figure.
         (
-            [{"tema": "fauna en vanos", "circuitos": ["MUYALTA_0", "MUYALTA_1"], "soporte": 2}],
+            [{"tema": "fauna en vanos", "circuitos": ["ALTO_0", "ALTO_1"], "soporte": 2}],
             "<html><body>view</body></html>",
             True,
             True,
@@ -1317,7 +1325,7 @@ def test_load_graph_view_unreadable_path_degrades_to_none(tmp_path):
         ),
         # patterns present + view None -> list only, muted figure-unavailable indicator.
         (
-            [{"tema": "fauna en vanos", "circuitos": ["MUYALTA_0", "MUYALTA_1"], "soporte": 2}],
+            [{"tema": "fauna en vanos", "circuitos": ["ALTO_0", "ALTO_1"], "soporte": 2}],
             None,
             True,
             False,
@@ -1355,13 +1363,13 @@ def test_cli_render_accepts_graph_view_arg(monkeypatch, capsys, tmp_path):
     graph_patterns_path = tmp_path / "graph-patterns.json"
     _write_graph_patterns_json(
         graph_patterns_path,
-        [{"tema": "fauna en vanos", "circuitos": ["MUYALTA_0", "MUYALTA_1", "MUYALTA_2"], "soporte": 3}],
+        [{"tema": "fauna en vanos", "circuitos": ["ALTO_0", "ALTO_1", "ALTO_2"], "soporte": 3}],
     )
 
     exit_code = informe_contract.main(
         [
             "render",
-            "muy-alta",
+            "alto",
             "2026-01-01",
             "2026-01-02",
             "--data-path",
@@ -1393,13 +1401,13 @@ def test_cli_render_accepts_graph_view_arg(monkeypatch, capsys, tmp_path):
 _RADIAL_HTML = "<html><body>grafo radial de causas</body></html>"
 _RESUMEN = {
     "schema_version": "informe-gerencial-grafo-intervencion/v1",
-    "causas": [{"concepto": "clima/atmosférico", "soporte": 2, "circuitos": ["MUYALTA_0", "MUYALTA_1"]}],
+    "causas": [{"concepto": "clima/atmosférico", "soporte": 2, "circuitos": ["ALTO_0", "ALTO_1"]}],
     "estrategias": [
         {
             "concepto": "Inspección en campo · CNT_TRF",
             "soporte": 2,
             "prioridad": "alta",
-            "circuitos": ["MUYALTA_0", "MUYALTA_1"],
+            "circuitos": ["ALTO_0", "ALTO_1"],
         }
     ],
     "circuitos_sin_corrida": [],
@@ -1449,7 +1457,7 @@ def test_el_grafo_radial_no_depende_del_paso_de_graphify(monkeypatch, tmp_path):
     figura = tmp_path / "grafo-intervencion.html"
     figura.write_text(_RADIAL_HTML, encoding="utf-8")
 
-    request = informe_contract.normalize_request("muy-alta", "2026-01-01", "2026-01-02")
+    request = informe_contract.normalize_request("alto", "2026-01-01", "2026-01-02")
     outcome = informe_contract.render_and_write(
         request,
         data_path="data.csv",
@@ -1483,7 +1491,7 @@ def test_e2e_el_constructor_real_alimenta_el_informe(monkeypatch, tmp_path):
     de agentes en disco -> `intervention_graph build` -> `render_and_write`.
     """
     runs_root = tmp_path / "runs"
-    sampled = ["MUYALTA_0", "MUYALTA_1", "MUYALTA_2"]
+    sampled = ["ALTO_0", "ALTO_1", "ALTO_2"]
     for circuito in sampled:
         run_dir = runs_root / canonical_circuit_identity(circuito) / "20260101T000000000000"
         run_dir.mkdir(parents=True)
@@ -1541,7 +1549,7 @@ def test_e2e_el_constructor_real_alimenta_el_informe(monkeypatch, tmp_path):
         lambda circuito, **kwargs: {"circuito": circuito, "source": "vault_note", "content": "x"},
     )
 
-    request = informe_contract.normalize_request("muy-alta", "2026-01-01", "2026-01-02")
+    request = informe_contract.normalize_request("alto", "2026-01-01", "2026-01-02")
     outcome = informe_contract.render_and_write(
         request,
         data_path="data.csv",
@@ -1578,7 +1586,7 @@ def test_cli_render_acepta_grafo_de_intervencion(monkeypatch, capsys, tmp_path):
     exit_code = informe_contract.main(
         [
             "render",
-            "muy-alta",
+            "alto",
             "2026-01-01",
             "2026-01-02",
             "--data-path",
@@ -1600,7 +1608,7 @@ def test_la_seccion_de_comunidades_sigue_embebiendo_su_figura():
     """El grafo de comunidades (graphify) conserva su comportamiento previo,
     ahora sin el toggle: lista + figura, o lista + indicador apagado.
     """
-    patrones = [{"tema": "fauna en vanos", "circuitos": ["MUYALTA_0", "MUYALTA_1"], "soporte": 2}]
+    patrones = [{"tema": "fauna en vanos", "circuitos": ["ALTO_0", "ALTO_1"], "soporte": 2}]
 
     con_figura = informe_contract._graph_patterns_html(
         patrones, "<html><body>comunidades</body></html>", n_sampled=2
@@ -1636,3 +1644,194 @@ def test_la_prosa_y_la_figura_nombran_las_mismas_causas():
 
     assert de_la_prosa == de_la_figura
     assert "línea MT / falla física" in de_la_prosa
+
+
+# ---------------------------------------------------------------------------
+# Las bandas del RANKING (cuaderno 02 / tablero de agrupamiento), no el K-Means
+# ---------------------------------------------------------------------------
+
+
+# Cuatro perfiles de VANO, separados en eventos y UITI para que el K-Means de
+# `geometria_vanos` encuentre sus cuatro grupos. Ordenados por mediana de UITI, asi que
+# los indices 2 y 3 -- los dos ultimos -- son los que el ranking cuenta como criticos.
+_PERFILES_VANO = ((2, 1.0), (6, 10.0), (20, 100.0), (60, 1000.0))
+
+
+def _ranking_raw_df(spec: dict[str, int], vanos_por_circuito: int = 400) -> pd.DataFrame:
+    """Una base con `FID_VANO` real, para que `ranking_circuitos` pueda contar vanos.
+
+    `spec` da, por circuito, cuantos de sus vanos caen en los grupos criticos
+    (Medio-Alto + Alto). El resto se reparte entre los dos perfiles bajos, que tienen
+    que estar presentes: con menos de cuatro perfiles distintos el K-Means de vanos
+    converge a menos grupos y los indices criticos quedan VACIOS -- todos los circuitos
+    salen en cero y en "Riesgo Bajo", que es un fixture que no prueba nada.
+    """
+    filas = []
+    for circuito, criticos in spec.items():
+        for v in range(vanos_por_circuito):
+            if v < criticos:
+                perfil = _PERFILES_VANO[2 + (v % 2)]
+            else:
+                perfil = _PERFILES_VANO[v % 2]
+            n_eventos, uiti = perfil
+            for e in range(n_eventos):
+                filas.append({
+                    "CIRCUITO": circuito,
+                    "FID_VANO": f"{circuito}_{v}",
+                    "FECHA": f"2026-01-{(e % 28) + 1:02d}",
+                    "UITI_VANO": uiti,
+                })
+    return pd.DataFrame(filas)
+
+
+def test_slugs_del_gerencial_son_las_cuatro_bandas_del_ranking():
+    """Guarda anti-deriva: el vocabulario sale de `ranking_circuitos.NOMBRES_RANGO`,
+    que es el MISMO que pinta la barra del tablero y el que cita /report."""
+    from chec_local_interpreter.ranking_circuitos import NOMBRES_RANGO
+
+    assert informe_contract.RANKING_GROUP_SLUGS == ("bajo", "medio", "medio-alto", "alto")
+    assert tuple(informe_contract.RANKING_SLUG_TO_LABEL.values()) == NOMBRES_RANGO
+    assert informe_contract.VALID_GROUP_SLUGS == (
+        "bajo", "medio", "medio-alto", "alto", "todos"
+    )
+
+
+def test_normalize_request_traduce_el_slug_a_la_banda_del_ranking():
+    request = informe_contract.normalize_request("alto", runtime="claude")
+
+    assert request.grupo == "alto"
+    assert request.criticidad == "Riesgo Alto"
+
+
+def test_normalize_request_rechaza_los_slugs_viejos_del_kmeans():
+    """`muy-alta` y `medio-baja` son bandas que el ranking NO tiene: aceptarlas
+    devolveria un grupo vacio en vez de decir que el vocabulario cambio."""
+    for slug in ("muy-alta", "alta", "medio-alta", "medio-baja", "baja"):
+        with pytest.raises(ValueError, match="grupo desconocido"):
+            informe_contract.normalize_request(slug)
+
+
+def test_los_dos_comandos_comparten_un_solo_vocabulario():
+    """`/reporte-lote` y `/informe-gerencial` migraron JUNTOS al ranking. Una sola
+    definicion del allowlist es lo que impide que se vuelvan a separar: mientras
+    coexistieron los dos, la cadena "Riesgo Alto" nombraba 16 circuitos en un comando y
+    7 en el otro, con solo 3 en comun."""
+    from chec_local_interpreter import batch_report_contract
+
+    assert batch_report_contract.VALID_GROUP_SLUGS == informe_contract.VALID_GROUP_SLUGS
+    assert batch_report_contract.GROUP_SLUG_TO_LABEL == informe_contract.RANKING_SLUG_TO_LABEL
+    for slug in ("muy-alta", "alta", "medio-alta", "medio-baja", "baja"):
+        assert slug not in batch_report_contract.VALID_GROUP_SLUGS
+
+
+def test_resolve_group_dataframe_usa_el_ranking_y_no_el_kmeans():
+    raw_df = _ranking_raw_df({f"C{i:02d}": i * 8 for i in range(1, 13)}, vanos_por_circuito=110)
+
+    result = informe_contract.resolve_group_dataframe(raw_df, "todos", None)
+
+    # Las columnas son las del ranking, no las del K-Means de circuitos.
+    assert "vanos_criticos" in result.columns
+    assert "posicion" in result.columns
+    assert "centroid_distance" not in result.columns
+    assert set(result["criticidad"]) <= {
+        "Riesgo Bajo", "Riesgo Medio", "Riesgo Medio-Alto", "Riesgo Alto"
+    }
+
+
+def test_resolve_group_dataframe_filtra_por_la_banda_del_ranking():
+    raw_df = _ranking_raw_df({f"C{i:02d}": i * 8 for i in range(1, 13)}, vanos_por_circuito=110)
+
+    result = informe_contract.resolve_group_dataframe(raw_df, "alto", "Riesgo Alto")
+
+    assert not result.empty
+    assert (result["criticidad"] == "Riesgo Alto").all()
+
+
+def test_sample_representatives_toma_los_12_peores_por_vanos_criticos():
+    """El criterio deja de ser `centroid_distance` -- que el ranking no tiene -- y pasa
+    a ser el puesto: 1 = el peor, el mismo numero que /report cita en prosa."""
+    df = pd.DataFrame(
+        {"vanos_criticos": list(range(20, 0, -1))},
+        index=pd.Index([f"C{i:02d}" for i in range(20)], name="circuito"),
+    )
+
+    sampled = informe_contract.sample_representatives(df)
+
+    assert len(sampled) == 12
+    assert list(sampled.index) == [f"C{i:02d}" for i in range(12)]
+    assert sampled["vanos_criticos"].tolist() == list(range(20, 8, -1))
+
+
+def test_sample_representatives_desempata_por_nombre_ascendente():
+    df = pd.DataFrame(
+        {"vanos_criticos": [50] * 14},
+        index=pd.Index([f"C{i:02d}" for i in range(13, -1, -1)], name="circuito"),
+    )
+
+    sampled = informe_contract.sample_representatives(df)
+
+    assert list(sampled.index) == [f"C{i:02d}" for i in range(12)]
+
+
+def test_sample_representatives_bajo_el_umbral_devuelve_todos():
+    df = pd.DataFrame(
+        {"vanos_criticos": [9, 4, 7]},
+        index=pd.Index(["C1", "C2", "C3"], name="circuito"),
+    )
+
+    assert len(informe_contract.sample_representatives(df)) == 3
+
+
+def test_plot_ranking_circuitos_acepta_varios_circuitos_destacados():
+    """La figura del gerencial resalta los 12 muestreados, no uno solo."""
+    from chec_local_interpreter.plotting import plot_ranking_circuitos
+
+    raw_df = _ranking_raw_df({f"C{i:02d}": i * 8 for i in range(1, 9)}, vanos_por_circuito=70)
+
+    fig = plot_ranking_circuitos(raw_df, ["C08", "C07", "C06"])
+    anchos = list(fig.data[0].marker.line.width)
+
+    assert sum(1 for w in anchos if w >= 3.0) == 3
+
+
+def test_plot_ranking_circuitos_sigue_aceptando_un_solo_nombre():
+    """Compatibilidad: /report lo llama con un `str` y no se toca."""
+    from chec_local_interpreter.plotting import plot_ranking_circuitos
+
+    raw_df = _ranking_raw_df({f"C{i:02d}": i * 8 for i in range(1, 9)}, vanos_por_circuito=70)
+
+    fig = plot_ranking_circuitos(raw_df, "C08")
+    anchos = list(fig.data[0].marker.line.width)
+
+    assert sum(1 for w in anchos if w >= 3.0) == 1
+    assert "C08" in fig.layout.title.text
+
+
+def test_el_informe_embebe_las_barras_del_ranking_y_no_la_nube_kmeans(monkeypatch):
+    """La figura tiene que ser la MISMA que define los grupos del informe. Con la nube
+    de K-Means, el informe agrupaba por un criterio que su propia figura no mostraba."""
+    llamadas = {}
+
+    def _falso_ranking(raw_df, destacados, start=None, end=None):
+        llamadas["destacados"] = destacados
+        import plotly.graph_objects as go
+        return go.Figure()
+
+    monkeypatch.setattr(informe_contract, "plot_ranking_circuitos", _falso_ranking)
+    # El modulo ya ni siquiera importa la nube: no queda camino por el que volver a ella.
+    assert not hasattr(informe_contract, "plot_interactive_circuit_clustering")
+    assert not hasattr(informe_contract, "compute_circuit_criticality_groups")
+
+    informe_contract.render_managerial_report(
+        raw_df=pd.DataFrame({"CIRCUITO": ["C1"], "FECHA": ["2026-01-01"], "UITI_VANO": [1.0]}),
+        resolved_window={"fecha_inicio": "2026-01-01", "fecha_fin": "2026-02-01"},
+        group={"slug": "alto", "label": "Riesgo Alto", "circuit_count": 7},
+        sampled=["C1", "C2"],
+        synthesis={
+            "resumen_ejecutivo": [], "patrones_comunes": [], "circuitos_atipicos": [],
+            "riesgo_agregado": {"items": []}, "acciones_recomendadas": [],
+            "anexo_por_circuito": [],
+        },
+    )
+
+    assert llamadas["destacados"] == ["C1", "C2"]

@@ -7,11 +7,11 @@ universe via `compute_circuit_criticality_groups` (reusing
 `batch_report_contract`'s `normalize_request`/`GROUP_SLUGS`/
 `_dataset_date_range` for argument and date-window resolution ONLY --
 `batch_report_contract.preflight_batch`'s own `todos` bypass is NEVER called
-or modified here; this module always computes criticality via
-`compute_circuit_criticality_groups` for every group including `todos`), then
-samples the top-12 most representative circuits (smallest `centroid_distance`
-to their assigned cluster centroid), detects any of them missing a prior
-`/report` run, and loads their narrative content.
+or modified here; this module always computes bands via `ranking_circuitos`
+for every group including `todos`), then
+samples the top-12 WORST circuits of the band (largest `vanos_criticos`,
+i.e. the head of the ranking's own `posicion`), detects any of them missing a
+prior `/report` run, and loads their narrative content.
 
 Content sourcing (Phase 3): vault-note-preferred, with the raw
 `expert-alignment.out.json` under
@@ -46,6 +46,8 @@ from chec_local_interpreter.agent_output import ReportPipelineError, load_valida
 from chec_local_interpreter.agent_tools._atomic_io import atomic_write_text
 from chec_local_interpreter.batch_report_contract import (
     ALL_GROUPS_SLUG,
+    GROUP_SLUGS as RANKING_GROUP_SLUGS,
+    GROUP_SLUG_TO_LABEL as RANKING_SLUG_TO_LABEL,
     VALID_GROUP_SLUGS,
 )
 from chec_local_interpreter.batch_report_contract import normalize_request as _batch_normalize_request
@@ -58,14 +60,24 @@ from chec_local_interpreter.informe_estilo import (
 )
 from chec_local_interpreter.config import DEFAULT_DATA_PATH, PROJECT_ROOT
 from chec_local_interpreter.data_loader import filter_events, load_dataset
-from chec_local_interpreter.plotting import (
-    compute_circuit_criticality_groups,
-    plot_interactive_circuit_clustering,
-)
+from chec_local_interpreter.plotting import plot_ranking_circuitos
+from chec_local_interpreter.ranking_circuitos import ranking_circuitos
 
 SCHEMA_VERSION = "informe-gerencial-contract/v1"
 
 TOP_N_REPRESENTATIVE = 12
+
+# El vocabulario de grupos sale del RANKING del cuaderno 02 -- las cuatro bandas que
+# pinta el tablero de agrupamiento y que /report ya cita --, no del K-Means de circuitos
+# sobre eventos x UITI. Los dos coexistian con la MISMA palabra queriendo decir cosas
+# distintas: medido sobre los 208 circuitos, "Riesgo Alto" eran 16 circuitos por K-Means
+# y 7 por el ranking, y solo 3 estaban en los dos. El informe agrupaba por un criterio
+# que su propia figura no mostraba.
+#
+# El allowlist se sigue COMPARTIENDO con `batch_report_contract` -- se reexporta con los
+# nombres de aqui -- porque los dos comandos migraron juntos y una sola definicion es lo
+# que impide que se vuelvan a separar. Si algun dia uno cambia de agrupacion, lo que hay
+# que partir es el allowlist, no copiarlo.
 
 DEFAULT_RUNS_ROOT = PROJECT_ROOT / "reports" / "reportescircuitos" / "runs"
 DEFAULT_VAULT_ROOT = PROJECT_ROOT / "reports" / "vault"
@@ -135,41 +147,58 @@ InformeStatus = Literal[
 
 
 def sample_representatives(df_coords: pd.DataFrame, limit: int = TOP_N_REPRESENTATIVE) -> pd.DataFrame:
-    """Select the `limit` most representative circuits (smallest
-    `centroid_distance`), deterministically breaking ties by ascending
-    circuit id (the frame's index).
+    """Los `limit` circuitos PEORES de la banda: mayor conteo de vanos en Medio-Alto +
+    Alto, que es el puesto que el ranking ya calcula y que /report cita en prosa.
 
-    If `df_coords` has `limit` or fewer rows, ALL rows are returned
-    unfiltered (spec: "Group under threshold").
+    El criterio anterior era la menor `centroid_distance` al centroide de su clase de
+    K-Means -- el circuito mas TIPICO de su grupo --. El ranking no tiene centroides de
+    circuito, asi que ese numero no existe aqui; y dentro de una banda de percentil el
+    circuito tipico no es el que hay que atender. Se elige por criticidad.
 
-    Tie-break mechanism (design decision): `sort_index()` first so that
-    `nsmallest`'s default `keep="first"` (which preserves the ORDER rows
-    appear in when values tie) resolves ties by ascending circuit id --
-    reproducible given `run_kmeans`'s fixed `random_state=42` seeding.
+    Sesgo que esto introduce, y que conviene tener presente al leer el informe: los doce
+    quedan pegados al borde SUPERIOR de la banda. El informe describe la cola peor del
+    grupo, no el grupo entero. Cuando la banda trae `limit` circuitos o menos entran
+    todos, que es el caso de "Riesgo Alto" -- son el 3% superior de la flota.
+
+    Desempate por nombre ascendente (`sort_index()` antes de `nlargest`, que con
+    `keep="first"` conserva el orden de llegada) para que dos corridas sobre los mismos
+    datos elijan exactamente los mismos doce.
     """
     if len(df_coords) <= limit:
         return df_coords
-    return df_coords.sort_index().nsmallest(limit, "centroid_distance")
+    return df_coords.sort_index().nlargest(limit, "vanos_criticos")
 
 
 def resolve_group_dataframe(
     filtered_df: pd.DataFrame, grupo: str, criticidad: str | None
 ) -> pd.DataFrame:
-    """Resolve a criticality-group slug (or `todos`) to its circuit universe.
+    """Resuelve un slug de banda (o `todos`) a su universo de circuitos, con el RANKING
+    del cuaderno 02: el conteo de vanos en Medio-Alto + Alto por circuito, cortado en
+    P50/P75/P97.
 
-    Always computes criticality tiers via `compute_circuit_criticality_groups`
-    directly -- independent of, and never calling,
-    `batch_report_contract.preflight_batch`'s own `todos` bypass (which
-    returns raw `available_circuits` instead of clustering results and MUST
-    remain unmodified per design/spec non-goals).
+    Es exactamente el mismo calculo que dibuja la barra del tablero de agrupamiento y el
+    que `context_builder` ya cita en el informe por circuito. Antes salia de
+    `compute_circuit_criticality_groups` -- K-Means sobre eventos x UITI del circuito --,
+    que es otro metodo Y otro vocabulario: cinco bandas con "Riesgo Muy Alto" y "Riesgo
+    Medio-Bajo", que la barra no tiene. El gerencial era el ultimo consumidor que
+    agrupaba por un criterio que su propia figura no mostraba.
 
-    `grupo == "todos"` returns the FULL computed frame (all 5 tiers); any
-    named group slug returns only the rows whose `criticidad` matches.
+    `batch_report_contract.preflight_batch` sigue sin llamarse ni modificarse.
+
+    Devuelve el marco indexado por circuito, con las columnas del ranking
+    (`vanos_criticos`, `vanos_medio_alto`, `vanos_alto`, `vanos_con_eventos`,
+    `uiti_total`, `eventos_total`, `posicion`) mas `criticidad`, que lleva la banda.
     """
-    df_coords = compute_circuit_criticality_groups(filtered_df)
+    tabla = ranking_circuitos(filtered_df).tabla
+    if tabla.empty:
+        return tabla
+    marco = (tabla.rename(columns={"rango": "criticidad"})
+             .set_index("circuito")
+             .drop(columns=["color"], errors="ignore"))
+    marco.index.name = "CIRCUITO"
     if grupo == ALL_GROUPS_SLUG:
-        return df_coords
-    return df_coords[df_coords["criticidad"] == criticidad]
+        return marco
+    return marco[marco["criticidad"] == criticidad]
 
 
 # ---------------------------------------------------------------------------
@@ -717,14 +746,13 @@ def normalize_request(
     provider: str | None = None,
     model: str | None = None,
 ) -> InformeGerencialRequest:
-    """Validate/normalize CLI-shaped arguments into an
+    """Valida y normaliza los argumentos de linea de comandos a un
     `InformeGerencialRequest`.
 
-    Reuses `batch_report_contract.normalize_request` for the identical
-    `grupo`/`fecha_inicio`/`fecha_fin` validation shape (allowlisted
-    `VALID_GROUP_SLUGS`, paired-dates rule) so the two contracts can never
-    drift on what a valid `grupo`/date pair looks like -- then repackages the
-    result into this module's own request type (spec: "Argument contract").
+    Reusa `batch_report_contract.normalize_request` para la MISMA validacion de
+    `grupo`/`fecha_inicio`/`fecha_fin` (allowlist de `VALID_GROUP_SLUGS`, regla de fechas
+    en pareja), asi los dos contratos no se pueden separar en que es un `grupo` valido, y
+    reempaqueta el resultado en el tipo de peticion de este modulo.
     """
     batch_request = _batch_normalize_request(
         grupo, fecha_inicio, fecha_fin, runtime=runtime, provider=provider, model=model
@@ -845,20 +873,20 @@ def _compute_outliers(sampled_records: Sequence[dict[str, Any]]) -> list[dict[st
     if len(sampled_records) < 3:
         return []
 
-    uiti_median = statistics.median(r["uiti_vano_sum"] for r in sampled_records)
-    event_median = statistics.median(r["event_count"] for r in sampled_records)
+    uiti_median = statistics.median(r["uiti_total"] for r in sampled_records)
+    event_median = statistics.median(r["eventos_total"] for r in sampled_records)
 
     outliers: list[dict[str, str]] = []
     for record in sampled_records:
         reasons: list[str] = []
-        if uiti_median > 0 and record["uiti_vano_sum"] > 2 * uiti_median:
+        if uiti_median > 0 and record["uiti_total"] > 2 * uiti_median:
             reasons.append(
-                f"UITI_VANO acumulado ({record['uiti_vano_sum']:,.2f}) más del doble de la "
+                f"UITI_VANO acumulado ({record['uiti_total']:,.2f}) más del doble de la "
                 f"mediana del grupo muestreado ({uiti_median:,.2f})"
             )
-        if event_median > 0 and record["event_count"] < 0.5 * event_median:
+        if event_median > 0 and record["eventos_total"] < 0.5 * event_median:
             reasons.append(
-                f"frecuencia de eventos ({record['event_count']:,.0f}) muy por debajo de la "
+                f"eventos por vano ({record['eventos_total']:,.0f}) muy por debajo de la "
                 f"mediana del grupo muestreado ({event_median:,.1f})"
             )
         if reasons:
@@ -963,28 +991,30 @@ def _aggregate_risk(
     loaded_content: Sequence[dict[str, Any] | None],
     group: dict[str, Any],
 ) -> dict[str, Any]:
-    uiti_values = [record["uiti_vano_sum"] for record in sampled_records]
-    event_values = [record["event_count"] for record in sampled_records]
+    uiti_values = [record["uiti_total"] for record in sampled_records]
     total_uiti = sum(uiti_values)
     n = len(sampled_records)
     avg_uiti = total_uiti / n if n else 0.0
-    avg_events = sum(event_values) / n if n else 0.0
+    total_criticos = sum(record["vanos_criticos"] for record in sampled_records)
     missing_count = sum(1 for content in loaded_content if content is None)
 
     label = group.get("label") or group.get("slug") or "grupo"
     items = [
+        # El conteo de vanos criticos primero: es la magnitud que DEFINE la banda, y por
+        # tanto la unica que explica por que estos circuitos estan en este informe.
+        f"Los {n} circuitos de la muestra suman {total_criticos:,} vanos en Medio-Alto + "
+        f"Alto, que es la magnitud con la que se define la banda '{label}'.",
         f"UITI_VANO acumulado en la muestra del grupo '{label}': {total_uiti:,.2f} unidades, "
-        f"con un promedio de {avg_uiti:,.2f} por circuito entre {n} circuitos representativos.",
-        f"Frecuencia promedio de eventos por circuito en la ventana analizada: {avg_events:,.1f} eventos.",
+        f"con un promedio de {avg_uiti:,.2f} por circuito entre {n} circuitos.",
     ]
     if missing_count:
         items.append(
             f"{missing_count} circuito(s) de la muestra sin contenido narrativo previo disponible."
         )
     return {
+        "vanos_criticos_total": total_criticos,
         "uiti_vano_total": total_uiti,
         "uiti_vano_promedio": avg_uiti,
-        "eventos_promedio": avg_events,
         "circuitos_sin_contenido": missing_count,
         "items": items,
     }
@@ -1154,15 +1184,15 @@ def _executive_summary(
     items: list[str] = [
         f"Informe gerencial del grupo '{label}': se analizaron {n} circuitos representativos "
         f"de un universo de {universe} en la ventana evaluada.",
-        f"Los {n} circuitos se seleccionaron por menor distancia a su centroide de criticidad, "
-        "maximizando su representatividad estadística del grupo muestreado.",
+        f"Los {n} circuitos son los de mayor conteo de vanos en Medio-Alto + Alto dentro "
+        f"de la banda, es decir su cola más crítica; no describen la banda completa.",
     ]
 
-    total_uiti = sum(record["uiti_vano_sum"] for record in sampled_records)
-    avg_events = sum(record["event_count"] for record in sampled_records) / n if n else 0.0
+    total_uiti = sum(record["uiti_total"] for record in sampled_records)
+    total_criticos = sum(record["vanos_criticos"] for record in sampled_records)
     items.append(
-        f"El grupo acumula {total_uiti:,.2f} unidades de UITI_VANO con un promedio de "
-        f"{avg_events:,.1f} eventos por circuito en la ventana analizada."
+        f"La muestra suma {total_criticos:,} vanos en Medio-Alto + Alto y "
+        f"{total_uiti:,.2f} unidades de UITI_VANO acumulado en la ventana analizada."
     )
 
     variable_counter = _variable_priority_counter(loaded_content)
@@ -1178,10 +1208,11 @@ def _executive_summary(
         items.append(f"Distribución de criticidad en la muestra: {tier_summary}." if tier_summary else "Sin distribución de criticidad disponible en la muestra.")
 
     if sampled_records:
-        top_record = max(sampled_records, key=lambda record: record["uiti_vano_sum"])
+        top_record = max(sampled_records, key=lambda record: record["vanos_criticos"])
         items.append(
-            f"El circuito con mayor UITI_VANO acumulado en la muestra es {top_record['circuito']} "
-            f"({top_record['uiti_vano_sum']:,.2f}), de mayor peso relativo en el riesgo del grupo."
+            f"El circuito peor situado de la muestra es {top_record['circuito']}: puesto "
+            f"{top_record['posicion']} de la flota, con {top_record['vanos_criticos']:,} vanos "
+            f"en Medio-Alto + Alto y {top_record['uiti_total']:,.2f} de UITI_VANO acumulado."
         )
 
     conditional: list[str] = []
@@ -1189,7 +1220,7 @@ def _executive_summary(
         names = ", ".join(item["circuito"] for item in outliers)
         conditional.append(
             f"Se identificaron {len(outliers)} circuito(s) atípico(s) ({names}) con desviación "
-            "marcada en UITI_VANO o frecuencia de eventos respecto a la mediana muestral."
+            "marcada en UITI_VANO o en eventos por vano respecto a la mediana muestral."
         )
 
     theme_counter = _cause_theme_counter(loaded_content)
@@ -1226,8 +1257,8 @@ def synthesize(
 ) -> dict[str, Any]:
     """Assemble the cross-circuit synthesis sections (spec: "Report
     structure") from the sampled circuits' numeric profile
-    (`sampled_records`, one dict per circuit with `event_count`,
-    `uiti_vano_sum`, `criticidad`) and their loaded narrative content
+    (`sampled_records`, one dict per circuit with `vanos_criticos`,
+    `uiti_total`, `eventos_total`, `criticidad`, `posicion`) and their loaded content
     (`loaded_content`, same order, `None` where content is unavailable).
 
     Pure Python, no LLM call -- aggregates/derives from data already produced
@@ -1542,23 +1573,25 @@ def render_managerial_report(
     graph_intervencion_html: str | None = None,
     intervention_summary: dict[str, Any] | None = None,
 ) -> str:
-    """Render the single standalone HTML report (spec: "Single HTML output
-    per invocation") -- resumen/patrones/outliers/riesgo/acciones sections
-    plus one embedded full-fleet clustering scatter with only `sampled`
-    highlighted.
+    """Renderiza el unico HTML del informe -- resumen/patrones/atipicos/riesgo/acciones
+    mas las barras del RANKING de la flota entera, con solo los `sampled` resaltados.
 
-    The scatter reuses `plot_interactive_circuit_clustering(raw_df, ...)`
-    AS-IS against the FULL, unfiltered `raw_df` (design decision: "always
-    shows all 5 criticality tiers with only the current report's sampled
-    circuits highlighted, nothing hidden") and embeds it with the SAME
-    `to_html(full_html=False, include_plotlyjs='cdn')` idiom already used by
-    `plotting.render_llm_analysis` for the per-circuit report.
+    La figura reusa `plot_ranking_circuitos(raw_df, ...)` TAL CUAL contra el `raw_df`
+    completo y sin filtrar: siguen apareciendo los 208 circuitos y las cuatro bandas,
+    nunca se esconde nada, y los muestreados se marcan con el borde.
+
+    Antes aqui iba la nube de K-Means (`plot_interactive_circuit_clustering`). Se cambio
+    porque el informe pasó a agrupar por el ranking: la nube situaba al circuito por
+    TAMANO -- eventos contra UITI acumulado -- y sus cinco clases no eran las cuatro
+    bandas por las que el informe estaba agrupando. El lector veia una figura que no
+    podia explicar el grupo del que hablaba el texto. Es el mismo arreglo que
+    `context_builder` ya habia hecho para el informe por circuito.
     """
-    fig = plot_interactive_circuit_clustering(
+    fig = plot_ranking_circuitos(
         raw_df,
+        list(sampled),
         resolved_window.get("fecha_inicio"),
         resolved_window.get("fecha_fin"),
-        highlighted_circuits=list(sampled),
     )
     # `plotly.js` UNA vez y en la cabeza, no colgando del dispersograma: el grafo de
     # conceptos va INLINE y se quedaria sin motor si esta figura faltara. Es el mismo
@@ -1581,14 +1614,14 @@ def render_managerial_report(
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<title>Informe Gerencial: Circuitos con Criticidad {_escape(label)}</title>
+<title>Informe Gerencial: Circuitos en {_escape(label)}</title>
 <style>{_REPORT_CSS}</style>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
 </head>
 <body>
 <div class="container">
 {escudo_chec_html()}
-<h1>Informe Gerencial: Circuitos con Criticidad {_escape(label)}</h1>
+<h1>Informe Gerencial: Circuitos en {_escape(label)}</h1>
 <p class="meta">Ventana: {_escape(resolved_window.get('fecha_inicio'))} a {_escape(resolved_window.get('fecha_fin'))}
 &middot; Circuitos muestreados: {len(sampled)} de {circuit_count}</p>
 
@@ -1696,10 +1729,19 @@ def render_and_write(
     sampled_records = [
         {
             "circuito": circuito,
-            "event_count": float(row["event_count"]),
-            "uiti_vano_sum": float(row["uiti_vano_sum"]),
+            # Los numeros del RANKING. Ojo con `eventos_total`: es la suma de los eventos
+            # de cada vano del circuito, la unidad de este tablero. NO es el conteo de
+            # fechas distintas que usaba el K-Means de circuitos -- una misma salida
+            # golpea muchos vanos y ahi contaba una sola vez --, asi que los dos numeros
+            # no son comparables entre corridas viejas y nuevas.
+            "vanos_criticos": int(row["vanos_criticos"]),
+            "vanos_medio_alto": int(row["vanos_medio_alto"]),
+            "vanos_alto": int(row["vanos_alto"]),
+            "vanos_con_eventos": int(row["vanos_con_eventos"]),
+            "uiti_total": float(row["uiti_total"]),
+            "eventos_total": int(row["eventos_total"]),
             "criticidad": row["criticidad"],
-            "centroid_distance": float(row["centroid_distance"]),
+            "posicion": int(row["posicion"]),
         }
         for circuito, row in sampled_df.iterrows()
     ]
