@@ -7,6 +7,10 @@ Todos los números de la sección local están **medidos en este repositorio**, 
 La máquina de referencia es un Apple Silicon con `.venv` ya creado y los datos presentes.
 Los de Databricks salen de las mediciones que guardan los comandos de despliegue.
 
+> Esta página cubre **las aplicaciones**. Para el equipo mínimo del proyecto completo
+> —incluyendo el reentrenamiento del cuaderno `mil_vano` y la generación de informes con
+> agentes— ver [`docs/REQUISITOS-MINIMOS.md`](../docs/REQUISITOS-MINIMOS.md).
+
 > **Cómo leer una cifra de aquí.** Un tiempo de construcción vale para tu máquina si tiene
 > disco SSD y los datos locales; sobre un disco de red se multiplica. Un tiempo de dibujo
 > depende del navegador y de la resolución. Lo que no cambia entre máquinas es el ORDEN de
@@ -117,14 +121,23 @@ Cada aplicación instala **solo sus dependencias**, en su propio `.venv`. No com
 | 02 Agrupamiento | 530 MB | 7 |
 | 03 Trayectorias circuitos | 633 MB | 8 |
 | 04 Trayectorias vanos | 633 MB | 8 |
-| 06 Simulador | **1,6 GB** | 21 (incluye PyTorch, SHAP, Optuna) |
+| 06 Simulador | **1,6 GB** (1,4 GB en instalación nueva) | 19 (incluye PyTorch) |
 | | **≈ 3,9 GB** | |
 
 Más los datos (`data/Indicadores_vano_v3.csv` son 540 MB) y los paneles construidos
 (73 MB entre los cuatro). El simulador añade su paquete precalculado: 96 MB.
 
-**Total realista en disco: 5 GB** si se usan las cinco. **1,5 GB** si solo se usan las
-cuatro estáticas.
+**El entorno del simulador adelgazó 186 MB el 2026-08-17.** Declaraba `shap` y `optuna`
+por una justificación que había dejado de ser cierta —que `mil_persistencia` los
+arrastraba al importarse—, y con ellos entraban `llvmlite` (125 MB), `numba` (30 MB),
+`sqlalchemy` (19 MB) y `alembic` (2,6 MB). Medido construyendo el tablero de verdad,
+ninguno de los dos aparece en `sys.modules`. El ahorro se ve en una instalación limpia:
+quitarlos de la lista no desinstala nada del entorno que ya existe.
+
+**Total realista en disco: 5 GB** si se usan las cinco. **2,4 GB** si solo se usan las
+cuatro estáticas más el menú — que es lo que suma esta misma tabla al quitarle el
+simulador (3,9 − 1,6), más los paneles. La cifra que estuvo aquí antes, 1,5 GB,
+contradecía a su propia tabla.
 
 ### 4.2 Memoria
 

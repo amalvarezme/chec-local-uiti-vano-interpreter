@@ -1,51 +1,117 @@
-# === Core data & ML ===
-numpy
-pandas
-scipy
-scikit-learn
-matplotlib
-seaborn
-tqdm
-joblib
+# Dependencias del entorno RAIZ (`.venv`): el que corre las pruebas, los cuadernos, el
+# REENTRENAMIENTO del cuaderno 05 y la generacion de informes (/report, /reporte-lote,
+# /informe-gerencial).
+#
+# NO es el entorno de las aplicaciones locales. Cada una de las seis tiene su propia
+# lista en `aplicaciones/<app>/requirements.txt` y su propio `.venv`, y ese aislamiento
+# es deliberado: el menu pesa 15 MB porque no importa a nadie. Ver
+# `aplicaciones/RENDIMIENTO-Y-REQUISITOS.md`.
+#
+# --- Piso de Python -----------------------------------------------------------------
+# **3.11 o superior**, y es un piso real, no una preferencia: `pandas>=3.0` y
+# `numpy>=2.4` no publican ruedas por debajo de 3.11.
+#
+# El rango esta ejercitado en los dos extremos, no supuesto: este entorno raiz corre
+# en **3.11.15** y los seis entornos de `aplicaciones/` corren en **3.14.6**, que es
+# el `python3` del sistema en la maquina de referencia. `aplicaciones/_comun/entorno.py`
+# lo comprueba antes de crear cualquiera de ellos.
+#
+# --- De donde salen los limites inferiores -------------------------------------------
+# Son las versiones del entorno donde se MIDIO todo lo que afirma
+# `docs/REQUISITOS-MINIMOS.md` (Python 3.11.15, macOS 15 en Apple Silicon, 1,9 GB
+# instalados). Subir uno es libre; bajarlo invalida esas cifras.
+#
+# --- macOS y Windows ------------------------------------------------------------------
+# Ningun paquete de esta lista es exclusivo de un sistema, asi que el archivo es UNO
+# solo y no lleva marcadores de entorno. Lo que si cambia son tres cosas, y las tres
+# estan verificadas:
+#
+# 1. **`torch` en Windows desde PyPI es CPU.** La rueda `win_amd64` pesa 116 MB;
+#    las de CUDA viven en `https://download.pytorch.org/whl/cu<version>` y no se
+#    instalan con este archivo. Para reentrenar con GPU NVIDIA:
+#        pip install torch --index-url https://download.pytorch.org/whl/cu124
+#    No hace falta para nada mas: los informes y los tableros solo hacen inferencia.
+# 2. **En macOS `torch` trae MPS, y conviene NO usarlo para reentrenar.** Medido en
+#    un M4 Max: CPU 5,5 s por epoca y pliegue con pico de 3,3 GB; MPS 19,6 s y pico
+#    de 11,2 GB. Es 3,6x mas lento y 3,4x mas hambriento. Ver `docs/REQUISITOS-MINIMOS.md`.
+# 3. **Las ruedas binarias grandes (`torch`, `geopandas`, `pyarrow`, `scipy`) existen
+#    para los dos.** No hace falta compilador en ninguno de los dos sistemas.
 
-# === Deep learning / inference ===
-torch
+# === Datos y ML ======================================================================
+numpy>=2.4
+pandas>=3.0
+scipy>=1.17
+scikit-learn>=1.9
+matplotlib>=3.10
+joblib>=1.5
 
-# === Hyperparameter search ===
-optuna
+# === Aprendizaje profundo / inferencia ===============================================
+# El modelo MIL de bolsas del cuaderno 05. Lo cargan el simulador, el informe y los
+# tableros; lo ENTRENA solo el cuaderno 05 con `EJECUCION="entrenamiento"`.
+torch>=2.6
 
-# === Visualization ===
-plotly
-umap-learn  # 2D projection of MGCECDL embeddings -- no in-repo consumer since notebooks 11/12 were removed
+# === Busqueda de hiperparametros =====================================================
+# Su consumidor es `src/chec_impacto/models/mgcecdl_graph_search.py`, que lo usa de
+# verdad (`optuna.create_study` y companiia), mas su prueba. Los estudios ya corridos
+# viven en `data/optuna/`.
+#
+# **No** entra por `mil_persistencia`, aunque este archivo lo afirmo durante meses:
+# medido el 2026-08-17 construyendo el tablero del simulador, `optuna` no aparece en
+# `sys.modules`. Por esa afirmacion falsa el entorno del simulador lo instalaba, y ya
+# no lo hace.
+#
+# Cuidado al retirar el clasificador MGCECDL: si `mgcecdl_graph_search.py` se va,
+# optuna se queda sin ningun consumidor y debe salir de aqui con el.
+optuna>=4.9
 
-# === Data I/O ===
-openpyxl
-pyarrow
+# === Visualizacion ===================================================================
+# Las cuatro aplicaciones estaticas FIJAN `plotly==6.9.0` porque comparten el
+# `plotly.js` empaquetado en el cache del navegador. Aqui basta un minimo: el HTML del
+# informe se sirve solo.
+plotly>=6.8
 
-# === PDF extraction ===
-PyMuPDF
-pdfplumber
+# === Entrada/salida de datos =========================================================
+openpyxl>=3.1      # `pandas.read_excel` sobre Variables_seleccion/simular.xlsx
+pyarrow>=24.0      # lectura por bloques del CSV de 540 MB (`pyarrow.csv.open_csv`)
+xlsxwriter>=3.2    # `relevancia_lote` escribe fila a fila en modo `constant_memory`
 
-# === Weather / external API ===
+# === Extraccion de PDF ===============================================================
+# Los informes tecnicos de expertos que alimentan `pdf_discussion_pipeline`.
+pdfplumber>=0.11
+
+# === Clima / API externa =============================================================
 openmeteo-requests
-requests-cache
-retry-requests
+requests-cache>=1.3
+retry-requests>=2.0
 
-# === Validation & config ===
-python-dotenv
-pydantic
-jsonschema
+# === Validacion ======================================================================
+# Las respuestas de los tres agentes se validan contra esquema antes de entrar al
+# informe. Un agente que devuelve algo fuera de contrato se RECHAZA, no se maquilla.
+jsonschema>=4.23
 
-# === Jupyter & dev ===
-ipython
-jupyter
-ipykernel
-papermill  # parametrized notebook execution -- notebook 05 carries a tagged `parameters` cell
-ipywidgets  # 01.5's live-kernel controls (D3); requires anywidget for plotly's go.FigureWidget
-anywidget  # backs plotly>=6's go.FigureWidget -- without it FigureWidget() raises ImportError
+# === Grafos ==========================================================================
+# `graph_view_builder` y el generador del cuaderno 05. El grafo que se DIBUJA es
+# vis-network escrito a mano en `intervention_graph`, no una biblioteca de Python.
+networkx>=3.6
 
-# === Testing ===
-pytest
+# === Jupyter y cuadernos =============================================================
+ipython>=9.0
+jupyter>=1.1
+ipykernel>=6.29
+papermill>=2.7     # `-p mode full` sobre la celda de parametros del cuaderno 05
+nbformat>=5.10     # `scripts/generate_notebook_10.py` genera el cuaderno 05
+ipywidgets>=8.1    # controles con kernel vivo
+anywidget>=0.11    # plotly>=6 respalda `go.FigureWidget` con anywidget; sin el, ImportError
+
+# === Geoespacial =====================================================================
+geopandas>=1.1
+pyogrio>=0.13      # motor de lectura de geopandas; sin el, cae a uno mas lento
+shapely>=2.1
+pyproj>=3.7
+folium>=0.20       # mapas del informe y del tablero de circuitos
+
+# === Pruebas =========================================================================
+pytest>=8.0
 # Para probar `aplicaciones/databricks/criticidad_chec`, la app consolidada que sirve
 # los cuatro tableros en Databricks. Su `app.py` no corre en este entorno -- corre en
 # el contenedor de la app --, pero SI se prueba aqui: enrutado, negociacion de gzip y
@@ -56,23 +122,43 @@ pytest
 # disco. Es la unica llamada que este entorno no puede hacer de verdad.
 fastapi   # la app consolidada de Databricks
 httpx     # lo necesita `fastapi.testclient.TestClient`
+# Las pruebas que conducen un tablero de verdad hablan con Chrome por CDP, y CDP es un
+# WebSocket. Sin este paquete esas pruebas SE SALTAN, que es peor que fallar: una
+# prueba saltada se lee igual que una que pasa. Necesitan ademas Google Chrome
+# instalado, que no es un paquete de Python y por eso no puede estar en esta lista.
+websocket-client>=1.9
 
+# === Grafo de conocimiento ===========================================================
+# **El nombre del paquete NO es el nombre del modulo.** La distribucion se llama
+# `graphifyy` (dos "y") y el modulo que instala se llama `graphify`. Escribir
+# `pip install graphify` falla con "No matching distribution found": ese nombre no
+# existe en PyPI.
+#
+# No es opcional y no degrada: `graph_view_builder.py` hace `from graphify.export
+# import to_html` EN EL NIVEL SUPERIOR del modulo, asi que sin el paquete el paso 2.5
+# de `/informe-gerencial` (`python -m chec_local_interpreter.graph_view_builder build`)
+# muere con ImportError antes de leer nada. Es el unico modulo del repositorio que
+# importa graphify; `informe_gerencial_contract.py` consume su HTML ya escrito.
+#
+# El comentario anterior de este bloque describia un `graph_extractor.py` que ya no
+# existe, una llamada por subproceso que ya no ocurre y un respaldo en PyVis que nunca
+# se escribio. Se corrige entero en vez de retocarse.
+graphifyy>=0.8.41
 
-# === Graph Visualization ===
-networkx
-pyvis
-
-# === Geospatial analysis ===
-geopandas
-pyogrio
-shapely
-pyproj
-folium
-mapclassify
-
-# === Knowledge Graph Skill ===
-# `graphify` (src/chec_local_interpreter/graph_extractor.py:build_graphify_context) shells out to
-# an external `graphify` CLI binary (a Claude Code skill's own bundled tool, not a PyPI package)
-# via subprocess.run(["graphify", ...]). It is optional at runtime: the function degrades
-# gracefully to a native PyVis fallback graph when the binary is absent or fails, so it is
-# intentionally not pip-installed here.
+# === Retirados, y por que ============================================================
+# Ocho paquetes salieron de esta lista porque NADIE en el repositorio los importa. Se
+# verifico uno por uno contra `src/`, `scripts/`, `tests/`, `aplicaciones/` y los tres
+# cuadernos, no contra la memoria. Se dejan nombrados para que nadie los reponga por
+# reflejo, y para que quien encuentre un consumidor sepa que aqui se busco:
+#
+#   seaborn        ninguna figura lo usa; todas son matplotlib o plotly
+#   umap-learn     su consumidor eran los cuadernos 11/12, retirados
+#   tqdm           entra igual, como dependencia de `shap`
+#   pydantic       entra igual, como dependencia de `fastapi`
+#   python-dotenv  `config.py` no lee ningun `.env`; resuelve rutas contra la raiz
+#   mapclassify    solo hace falta para `GeoDataFrame.explore()`, que no se llama
+#   PyMuPDF        el pipeline de PDF importa `pdfplumber`; `fitz` solo se NOMBRA en un comentario
+#   pyvis          el grafo interactivo es vis-network escrito a mano, no pyvis
+#
+# `kaleido` tampoco esta: no hay ni un `write_image` en el repositorio. Los PNG del
+# informe salen de `matplotlib.savefig`.
