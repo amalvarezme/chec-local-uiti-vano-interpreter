@@ -498,29 +498,41 @@ already completed — dispatch it alone, immediately once both are done, without
    step is additive only — it does not change step 8's own report or `report_pipeline.py`'s
    `prepare`/`render` behavior in any way.
 
-   **Before chaining `/graphify`, check the deletion count — it can PRUNE the graph.** Run the
-   incremental detection yourself first and abort the chain if it reports deletions that are not
-   real:
+   **Chain `/graphify` from the PROJECT ROOT, and check the anchoring first.**
 
-   ```bash
-   $(cat graphify-out/.graphify_python) -c "
-   import json; from pathlib import Path
-   from graphify.detect import detect_incremental
-   r = detect_incremental(Path('reports/vault'))
-   borrados = list(r.get('deleted_files', []))
-   print('nuevos:', r.get('new_total', 0), '| borrados:', len(borrados),
-         '| de esos, existen:', sum(1 for f in borrados if Path(f).exists()))
-   "
+   The graph in `graphify-out/` was built from the whole project: its manifest holds 426 keys,
+   all relative to the repo root (`astro.config.mjs`, `data/models/…`, `src/…`), and **zero** of
+   them live under `reports/vault`. Running the incremental update against the vault re-anchors
+   every one of those keys against that narrower root, so they resolve to paths that never
+   existed and graphify reports them as DELETED. Measured on a real run:
+
+   ```
+   detect_incremental('reports/vault')  ->    1 new,  426 deleted,  0 exist   <- all phantom
+   detect_incremental('.')              ->  152 new,   16 deleted,  0 exist   <- all genuine
    ```
 
-   Measured on a real `/report` run: `nuevos: 1 | borrados: 426 | de esos, existen: 0`. The 426 are
-   the whole-project manifest's keys (`astro.config.mjs`, `data/models/…`, stored relative to `.`)
-   re-anchored against the narrower `reports/vault` scan root, so they resolve to paths that never
-   existed. Letting the flow continue prunes those 426 files out of a 6.479-node graph — data loss,
-   not wasted tokens. **If any reported deletion does not exist on disk, skip the graphify chain
-   entirely**, delete `graphify-out/.graphify_incremental.json` so no later run picks it up and
-   prunes from it, and report it under this step's alert-and-continue rule: the HTML from step 8
-   stands, and the vault note itself was already written by (1).
+   Continuing from the vault prunes 426 files out of a 6.479-node graph. That is data loss, not
+   wasted tokens. The vault note is itself under the project root, so scanning from the root
+   picks it up as a changed file — nothing is lost by widening the scan.
+
+   Run the guard before chaining:
+
+   ```bash
+   PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.graphify_guarda
+   ```
+
+   It prints the number that decides — `claves del manifiesto que resuelven bajo la raiz de
+   escaneo: 426/426 (100%) -> SEGUIR` — and exits non-zero when the manifest is anchored
+   somewhere else. **Only chain `/graphify` when it exits 0.** On a non-zero exit, delete
+   `graphify-out/.graphify_incremental.json` so no later run prunes from it, and report it under
+   this step's alert-and-continue rule: the HTML from step 8 stands and the vault note was
+   already written by (1).
+
+   The guard checks LOCATION, not existence, and that distinction is the whole point. The
+   previous rule was "if any reported deletion does not exist on disk, abort" — but a genuine
+   deletion never exists on disk, that is what makes it a deletion. That rule also blocked the
+   16 real deletions above (retired tests, commands and skills), so the graph could never learn
+   that anything had gone. It protected the graph by freezing it.
 
 ## Error handling summary
 
