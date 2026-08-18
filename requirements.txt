@@ -51,17 +51,25 @@ joblib>=1.5
 torch>=2.6
 
 # === Busqueda de hiperparametros =====================================================
-# Su consumidor es `src/chec_impacto/models/mgcecdl_graph_search.py`, que lo usa de
-# verdad (`optuna.create_study` y companiia), mas su prueba. Los estudios ya corridos
-# viven en `data/optuna/`.
+# **Se queda, y se reviso a proposito.** Al retirar el clasificador MGCECDL (2cf942b)
+# desaparecio casi toda la maquinaria de Optuna del proyecto -- las funciones de
+# `training/mgcecdl.py` y hasta la carpeta `data/optuna/` con sus estudios --, asi que
+# la pregunta "¿sigue haciendo falta?" era legitima. La respuesta es si, y por un solo
+# consumidor: `src/chec_impacto/models/mgcecdl_graph_search.py`.
+#
+# Son dos cosas distintas y conviene no confundirlas. Lo que se fue era la busqueda del
+# CLASIFICADOR. Lo que queda es la busqueda del autocodificador de compuertas por arista
+# (`mgcecdl_graph`), que esta muy vivo: de el cuelgan `mgcecdl_mil`, `mil_persistencia`,
+# `mil_vano_ventana` y el simulador.
+#
+# Es una herramienta de fuera de linea: ningun camino de informe, tablero ni cuaderno la
+# invoca; se corre a mano cuando hay que re-ajustar. Si algun dia ese modulo se retira,
+# optuna se queda sin ningun consumidor y sale de aqui con el.
 #
 # **No** entra por `mil_persistencia`, aunque este archivo lo afirmo durante meses:
 # medido el 2026-08-17 construyendo el tablero del simulador, `optuna` no aparece en
 # `sys.modules`. Por esa afirmacion falsa el entorno del simulador lo instalaba, y ya
 # no lo hace.
-#
-# Cuidado al retirar el clasificador MGCECDL: si `mgcecdl_graph_search.py` se va,
-# optuna se queda sin ningun consumidor y debe salir de aqui con el.
 optuna>=4.9
 
 # === Visualizacion ===================================================================
