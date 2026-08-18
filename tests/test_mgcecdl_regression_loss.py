@@ -3,29 +3,30 @@ kernel-density-weighted MSE building block (`KernelDensityWeightedMSELoss`).
 
 Both live in `src/chec_impacto/models/mgcecdl.py` (NOT
 `src/chec_impacto/training/mgcecdl.py`, which is under an explicit `Edit`
-deny in this repo's `.claude/settings.json` protecting the production
-classification training module) -- they reuse that module's private helpers
+deny in this repo's `.claude/settings.json`) -- they reuse that module's private helpers
 (`_MGCECDLGraphReconstructionLoss`, `_reduce_modality_supervision_loss`,
 `_normalize_unit_interval`, `_safe_log_count`) via a deferred import inside
 `__init__` (not a top-level import, to avoid a models<->training circular
 import), so the underlying computation is genuinely shared, not
 reimplemented, without ever writing to the denied path.
 
-Both are new, additive production code, built to give `MGCECDLRegressor` the
-SAME auxiliary loss structure that
-`MGCECDLClassificationLoss` gives `MGCECDLClassifier`: a fused supervised term,
+Su estructura auxiliar es la que `MGCECDLClassificationLoss` daba a
+`MGCECDLClassifier` -- los dos retirados con el clasificador, que ningun camino del
+flujo actual cargaba. La forma se conserva y la prosa la nombra porque la EXPLICA:
+a fused supervised term,
 a per-modality reliability-weighted supervised term, a cross-modality
 agreement term, a reliability-KL regularization term, and the graph
 reconstruction + mutual-information terms inherited from
 `_MGCECDLGraphReconstructionLoss`. The only deliberate, documented deviation
-from classification's structure is the classification-only `entropy_loss`
+from esa estructura is the classification-only `entropy_loss`
 term (defined over categorical probabilities, with no direct regression
 analogue), which is dropped from `regularization_loss` -- everything else is
 full parity, just swapping the supervised term from generalized
 cross-entropy to a configurable regression loss (`mse`, `huber`, or
 `kernel_weighted_mse`).
 
-`MGCECDLClassificationLoss`/`MGCECDLClassifier` are untouched by this change.
+Hoy `MGCECDLRegressionLoss` es la unica perdida MGCECDL del repositorio, y la que
+entrena el modelo MIL de bolsas.
 """
 
 from __future__ import annotations
@@ -226,11 +227,10 @@ def test_kernel_weighted_base_loss_runs_end_to_end_when_provided() -> None:
     assert torch.isfinite(total_loss)
 
 
-def test_classification_loss_import_still_works_unaffected() -> None:
-    """Adding MGCECDLRegressionLoss must not disturb MGCECDLClassificationLoss."""
-    from chec_impacto.training.mgcecdl import MGCECDLClassificationLoss
-
-    assert MGCECDLClassificationLoss is not None
+# `test_classification_loss_import_still_works_unaffected` se retiro con
+# `MGCECDLClassificationLoss`: afirmaba que anadir la perdida de regresion no perturbara a
+# la de clasificacion, y ya no hay perdida de clasificacion que perturbar. El flujo MIL
+# solo entrena regresion.
 
 
 # ---------------------------------------------------------------------------

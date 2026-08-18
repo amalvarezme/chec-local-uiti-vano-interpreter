@@ -401,12 +401,32 @@ def test_generator_never_edits_upstream_notebooks_or_variable_selection(tmp_path
     )
 
 
-def test_generator_touches_no_training_package_files():
-    diff = subprocess.run(
-        ["git", "diff", "--stat", "--", "src/chec_impacto/training"],
+def test_generator_touches_no_training_package_files(tmp_path):
+    """El generador LEE `chec_impacto.training`; no puede reescribirlo.
+
+    Antes esto preguntaba `git diff --stat -- src/chec_impacto/training` y exigia la
+    cadena vacia. Eso no mide al generador -- ni siquiera lo ejecuta --: mide si el arbol
+    de trabajo tiene cambios sin confirmar en esa carpeta. Cualquier edicion legitima al
+    paquete lo ponia rojo, y con el retiro de `MGCECDLClassifier` lo puso. Lo que el
+    nombre promete es antes-y-despues alrededor de UNA corrida del generador, que es lo
+    que se mide aqui.
+    """
+    paquete = REPO_ROOT / "src" / "chec_impacto" / "training"
+    archivos = sorted(p for p in paquete.rglob("*.py"))
+    assert archivos, "no se encontro el paquete de entrenamiento"
+
+    def _huellas():
+        return {p: hashlib.sha256(p.read_bytes()).hexdigest() for p in archivos}
+
+    antes = _huellas()
+    subprocess.run(
+        [sys.executable, str(REPO_ROOT / "scripts" / "generate_notebook_10.py"),
+         "--out", str(tmp_path / "10_para_la_prueba.ipynb")],
         cwd=REPO_ROOT, capture_output=True, text=True, check=True,
-    ).stdout
-    assert diff == ""
+    )
+
+    cambiados = sorted(p.name for p in archivos if antes[p] != _huellas()[p])
+    assert not cambiados, f"el generador reescribio el paquete de entrenamiento: {cambiados}"
 
 
 def test_arm_selecting_parameters_are_papermill_overridable(notebook):

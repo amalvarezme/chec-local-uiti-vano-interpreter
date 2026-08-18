@@ -1,14 +1,9 @@
 from __future__ import annotations
 
-import pytest
-
 from chec_local_interpreter.config import (
-    DEFAULT_MODEL_BASENAME,
     DEFAULT_MODEL_DIR,
-    DEFAULT_OPTUNA_STUDY_PATH,
     DEFAULT_VARIABLES_SELECCION_PATH,
     PROJECT_ROOT,
-    _modelo_mas_reciente,
 )
 
 
@@ -22,17 +17,6 @@ def test_default_model_dir_resolves_under_project_root():
     assert DEFAULT_MODEL_DIR.is_absolute()
 
 
-def test_default_model_basename_is_the_known_artifact_name():
-    assert DEFAULT_MODEL_BASENAME == "mgcecdl_classifier_best.zip"
-
-
-def test_default_optuna_study_path_resolves_under_project_root():
-    assert DEFAULT_OPTUNA_STUDY_PATH == (
-        PROJECT_ROOT / "data" / "optuna" / "mgcecdl_classification_feature_attention_params.journal"
-    )
-    assert DEFAULT_OPTUNA_STUDY_PATH.is_absolute()
-
-
 def test_default_variables_seleccion_path_resolves_under_project_root():
     assert DEFAULT_VARIABLES_SELECCION_PATH == PROJECT_ROOT / "data" / "Variables_seleccion.xlsx"
     assert DEFAULT_VARIABLES_SELECCION_PATH.is_absolute()
@@ -42,25 +26,8 @@ def test_default_variables_seleccion_path_resolves_under_project_root():
 # afirmaba que una constante valia lo que decia su propia linea de asignacion.
 
 
-# ---------------------------------------------------------------------------
-# Task 1.2 -- `_modelo_mas_reciente` picks the latest of several candidates.
-# ---------------------------------------------------------------------------
-
-
-def test_modelo_mas_reciente_picks_latest_of_three_fixture_filenames(tmp_path):
-    model_dir = tmp_path / "models"
-    model_dir.mkdir()
-    for name in ("mgcecdl_classifier_best.zip", "mgcecdl_classifier_best_2025-01-01.zip", "mgcecdl_classifier_best_2026-06-01.zip"):
-        (model_dir / name).write_bytes(b"stub")
-
-    selected = _modelo_mas_reciente(model_dir, "mgcecdl_classifier_best.zip")
-
-    assert selected == model_dir / "mgcecdl_classifier_best_2026-06-01.zip"
-
-
-def test_modelo_mas_reciente_raises_when_no_candidate_exists(tmp_path):
-    model_dir = tmp_path / "models"
-    model_dir.mkdir()
-
-    with pytest.raises(FileNotFoundError):
-        _modelo_mas_reciente(model_dir, "mgcecdl_classifier_best.zip")
+# `_modelo_mas_reciente` y `DEFAULT_MODEL_BASENAME` se retiraron con el clasificador
+# MGCECDL: nombraban `mgcecdl_classifier_best.zip`, un artefacto que ya no existe.
+# El simulador y el informe cargan `mil_vano_ventana_v1.pt` por su nombre exacto, sin
+# eleccion entre candidatos fechados. Lo mismo con `DEFAULT_OPTUNA_STUDY_PATH`: este
+# proyecto no busca hiperparametros, solo lee lo que ya esta en disco.

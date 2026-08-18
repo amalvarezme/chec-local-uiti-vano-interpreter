@@ -5,7 +5,7 @@ These are not style guidance — violating any of them is a defect. Every role f
 
 ## Rule 1 — Frozen-Model Boundary
 
-The M-GCECDL model artifact (`data/models/mgcecdl_classifier_best.zip`) and the restricted
+The frozen model artifact (`data/models/mil_vano_ventana_v1.pt`, el modelo MIL de bolsas) and the restricted
 model-implementation subpackage are off-limits to every agent role. No agent may read or write
 the model artifact, and no `agent_tools` code may import that subpackage — directly or through
 any submodule.

@@ -93,6 +93,11 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+Requiere **Python 3.11 o superior**. Qué máquina hace falta —RAM, CPU, disco y las
+diferencias entre macOS y Windows, desglosado por aplicaciones, reentrenamiento del
+cuaderno `mil_vano` y generación de informes— está medido en
+[`docs/REQUISITOS-MINIMOS.md`](docs/REQUISITOS-MINIMOS.md).
+
 ## Configuración
 
 ```bash
@@ -308,16 +313,13 @@ flowchart TD
         CSV --> P1
     end
 
-    subgraph LANE2["Modelado ML, M-GCECDL (histórico: cuadernos borrados el 2026-08-14, en el historial de git)"]
-        P1 --> P2[Búsqueda de hiperparámetros con Optuna]
+    subgraph LANE2["Modelado ML (histórico: el clasificador M-GCECDL y su artefacto se retiraron el 2026-08-17)"]
         VARS[(variables.json /<br/>Variables_seleccion.xlsx)] --> P7[Construcción de grafo experto]
         P7 --> ADJ[(matriz de adyacencia + edges)]
-        P2 --> P3[Entrenamiento en Colab GPU]
+        P1 --> P3["Entrenamiento MIL por bolsas<br/>05_mil_vano_ventana.ipynb"]
         ADJ --> P3
-        P3 --> MODEL[(mgcecdl_classifier_best.zip)]
-        MODEL --> P4[Evaluación de desempeño]
+        P3 --> MODEL[(mil_vano_ventana_v1.pt)]
         MODEL --> P5[Relevancia hacia el UITI mínimo por circuito]
-        MODEL --> P6[Replicación documental]
     end
 
     subgraph LANE3[Interpretación local, agentes]

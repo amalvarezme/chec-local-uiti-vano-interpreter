@@ -33,7 +33,6 @@ from typing import Any
 #: `from .x import (...)` de antes, en la forma que permite resolverla tarde.
 _ORIGEN: dict[str, str] = {
     "KernelDensityWeightedMSELoss": "mgcecdl",
-    "MGCECDLClassifier": "mgcecdl",
     "MGCECDLRegressionLoss": "mgcecdl",
     "MGCECDLRegressor": "mgcecdl",
     "GatedSelfSupervisedLoss": "mgcecdl_graph",

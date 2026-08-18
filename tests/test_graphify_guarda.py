@@ -155,8 +155,15 @@ def test_el_veredicto_se_puede_imprimir_para_el_runbook(tmp_path):
 def test_el_proyecto_REAL_esta_anclado_en_su_raiz_y_no_en_la_boveda():
     """Contra el manifiesto de verdad, que es el que aborto todas las corridas.
 
-    Medido: 426 claves, 0 bajo `reports/vault`. Escanear la boveda con ese manifiesto
-    reporta 426 borrados fantasma; escanear la raiz reporta 16, y esos 16 son reales.
+    Medido cuando se escribio: 426 claves, 0 bajo `reports/vault`. Escanear la boveda con
+    ese manifiesto reporta 426 borrados fantasma; escanear la raiz reporta 16, y esos 16
+    son reales.
+
+    La cuenta exacta NO es el contrato. Tras la primera corrida sana el manifiesto tiene
+    448 claves y UNA de ellas -- `reports/vault/DON23L14.md` -- si cuelga de la boveda,
+    porque el grafo por fin la conoce. Un `== 0` aqui convertiria esa buena noticia en un
+    fallo. Lo que se afirma es la FRACCION contra el umbral: 1 de 448 sigue siendo "casi
+    ninguna", que es justo lo que la guarda mide.
     """
     raiz = Path(__file__).resolve().parents[1]
     if not (raiz / "graphify-out" / "manifest.json").is_file():
@@ -168,7 +175,9 @@ def test_el_proyecto_REAL_esta_anclado_en_su_raiz_y_no_en_la_boveda():
 
     assert desde_raiz.seguir is True, desde_raiz.motivo
     assert desde_vault.seguir is False
-    assert desde_vault.resuelven == 0
+    assert desde_vault.fraccion < ANCLAJE_MINIMO, (
+        f"{desde_vault.resuelven}/{desde_vault.total} claves cuelgan de la boveda: el "
+        "manifiesto dejo de estar anclado en la raiz")
 
 
 def test_el_veredicto_es_un_dato_y_no_una_excepcion(tmp_path):

@@ -1,16 +1,14 @@
-"""Unit tests for the additive MGCECDL regression head (`MGCECDLRegressor`).
+"""Pruebas de la cabeza de regresion MGCECDL (`MGCECDLRegressor`).
 
-`MGCECDLRegressor` is a new, additive sibling of `MGCECDLClassifier`
-(`src/chec_impacto/models/mgcecdl.py`) built for the VANO-level regression
-exploration in `notebooks/02.1_mgcecdl_regression_embeddings.ipynb`.
-It reuses `_BaseMGCECDL`'s modality encoders/decoders/reliability heads and
-replaces the per-modality classification heads with per-modality linear
-regression heads, fusing predictions via the same reliability-weighted
-mechanism `MGCECDLClassifier` uses for class probabilities -- but as a
-weighted average of scalar predictions instead of a mixture of softmax
-distributions.
+`MGCECDLRegressor` (`src/chec_impacto/models/mgcecdl.py`) reutiliza los
+codificadores/decodificadores/cabezas de fiabilidad de `_BaseMGCECDL` y pone una cabeza
+lineal de regresion por modalidad, fusionando con el mismo mecanismo ponderado por
+fiabilidad -- pero como promedio de escalares.
 
-`MGCECDLClassifier`'s existing behavior is untouched by this change.
+Nacio como hermano aditivo de `MGCECDLClassifier`, que fusionaba una mezcla de softmax.
+Ese clasificador se RETIRO junto con su artefacto: ningun camino del flujo actual lo
+cargaba. Hoy `MGCECDLRegressor` es el unico consumidor de `_BaseMGCECDL` y la base del
+modelo MIL de bolsas que el simulador y el informe si usan.
 """
 
 from __future__ import annotations
@@ -18,7 +16,6 @@ from __future__ import annotations
 import torch
 
 from chec_impacto.models import MGCECDLRegressor
-from chec_impacto.models.mgcecdl import MGCECDLClassifier
 
 
 def _modality_feature_indices() -> dict[str, list[int]]:
@@ -99,22 +96,6 @@ def test_masked_modality_gets_near_zero_reliability() -> None:
     assert torch.allclose(output["reliabilities"][:, 0], torch.ones(2), atol=1e-3)
 
 
-def test_regressor_and_classifier_are_independent_siblings() -> None:
-    """Adding MGCECDLRegressor must not alter MGCECDLClassifier's behavior."""
-    torch.manual_seed(4)
-    classifier = MGCECDLClassifier(
-        modality_feature_indices=_modality_feature_indices(),
-        n_classes=4,
-        hidden_dim=16,
-        embed_dim=8,
-        dropout=0.0,
-        temperature=1.0,
-    )
-    x = torch.randn(4, 5)
-    classifier_output = classifier(x)
-
-    assert classifier_output["fused_probs"].shape == (4, 4)
-    assert not hasattr(classifier, "modality_regressors")
-
-    regressor = _build_model()
-    assert not hasattr(regressor, "modality_classifiers")
+# `test_regressor_and_classifier_are_independent_siblings` se retiro con
+# `MGCECDLClassifier`: comprobaba que anadir el regresor no alterara al clasificador,
+# y ya no hay clasificador al que alterar. El flujo MIL solo usa el regresor.

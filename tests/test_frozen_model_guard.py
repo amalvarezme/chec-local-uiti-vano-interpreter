@@ -5,8 +5,15 @@ has — that the M-GCECDL model artifact and its training package are never
 touched by the agent-tools surface:
 
 (a) Static import guard — no `agent_tools` module imports `chec_impacto.training`.
-(b) sha256 manifest — the model zip's hash must match the recorded, tracked
+(b) sha256 manifest — the model artifact's hash must match the recorded, tracked
     manifest; any drift (accidental write/retrain) fails loudly.
+
+    El artefacto CAMBIO. Era `mgcecdl_classifier_best.zip`, el clasificador MGCECDL,
+    que se retiro junto con `MGCECDLClassifier`: ningun camino del flujo actual lo
+    cargaba. Lo que el simulador, el informe y los cuadernos cargan de verdad es
+    `mil_vano_ventana_v1.pt`, el modelo MIL de bolsas -- la unidad es la celda
+    `(vano, ventana)`. La guarda apunta ahi, que es donde de verdad duele que el
+    archivo se mueva.
 (c) Content guard — agent role / Claude Code Skill markdown files must never
     mention training/retraining vocabulary. WU5a/WU5b have since landed
     `.claude/agents/**/*.md` and `.claude/skills/expert-alignment/**/*.md`;
@@ -24,9 +31,9 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 AGENT_TOOLS_DIR = PROJECT_ROOT / "src" / "chec_local_interpreter" / "agent_tools"
-MODEL_ZIP_PATH = PROJECT_ROOT / "data" / "models" / "mgcecdl_classifier_best.zip"
+MODEL_ARTIFACT_PATH = PROJECT_ROOT / "data" / "models" / "mil_vano_ventana_v1.pt"
 MODEL_MANIFEST_PATH = PROJECT_ROOT / "data" / "models" / "manifest.sha256.json"
-MODEL_MANIFEST_KEY = "data/models/mgcecdl_classifier_best.zip"
+MODEL_MANIFEST_KEY = "data/models/mil_vano_ventana_v1.pt"
 
 GOVERNANCE_MARKDOWN_ROOTS = (
     PROJECT_ROOT / ".claude" / "agents",
@@ -104,20 +111,25 @@ def test_agent_tools_modules_never_import_the_training_package():
     )
 
 
-def test_agent_tools_modules_never_reference_the_model_zip_path():
-    """Defense in depth: no agent_tools source should even name the model artifact."""
+def test_agent_tools_modules_never_reference_the_model_artifact_path():
+    """Defense in depth: no agent_tools source should even name the model artifact.
+
+    Se nombran los DOS: el artefacto vivo y el retirado. El retirado sigue en la lista
+    para que reaparecer no sea gratis -- borrarlo del guardian junto con el archivo
+    dejaria la puerta abierta a que alguien lo vuelva a cablear.
+    """
     violations: list[str] = []
     for path in _agent_tools_modules():
         source = path.read_text()
-        if "mgcecdl_classifier_best" in source:
+        if "mgcecdl_classifier_best" in source or "mil_vano_ventana_v1" in source:
             violations.append(str(path.relative_to(PROJECT_ROOT)))
 
     assert not violations, f"agent_tools must never reference the frozen model artifact: {violations}"
 
 
-def test_model_zip_sha256_matches_the_tracked_manifest():
-    assert MODEL_ZIP_PATH.exists(), (
-        f"Frozen model artifact is missing: {MODEL_ZIP_PATH}. "
+def test_model_artifact_sha256_matches_the_tracked_manifest():
+    assert MODEL_ARTIFACT_PATH.exists(), (
+        f"Frozen model artifact is missing: {MODEL_ARTIFACT_PATH}. "
         "This guard must fail loudly, not silently skip, if the artifact disappears."
     )
     assert MODEL_MANIFEST_PATH.exists(), (
@@ -129,7 +141,7 @@ def test_model_zip_sha256_matches_the_tracked_manifest():
     assert MODEL_MANIFEST_KEY in manifest, f"manifest has no entry for {MODEL_MANIFEST_KEY}: {manifest}"
 
     recorded_digest = manifest[MODEL_MANIFEST_KEY]
-    actual_digest = hashlib.sha256(MODEL_ZIP_PATH.read_bytes()).hexdigest()
+    actual_digest = hashlib.sha256(MODEL_ARTIFACT_PATH.read_bytes()).hexdigest()
 
     assert actual_digest == recorded_digest, (
         "Frozen model artifact hash drifted from the recorded manifest — the model "

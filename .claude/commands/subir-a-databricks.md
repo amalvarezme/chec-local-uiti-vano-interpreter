@@ -195,8 +195,13 @@ find data -name ".DS_Store" -o -name ".gitkeep" -o -name ".openmeteo_cache.sqlit
 
 Nothing is converted to Delta: `uiti_vano_tables.py` went with the retired Lakeview stack,
 so `indicadores_vano` / `circuit_clustering` / `circuit_geo` no longer exist and nothing
-here creates them. The CSV, the shapefile sidecars, `graphs/*.npy`, `models/*.zip`,
-`optuna/*.journal` and the two `.xlsx` all go up as-is.
+here creates them. The CSV, the shapefile sidecars, `graphs/*.npy`, `models/*.pt` and the
+two `.xlsx` all go up as-is.
+
+`models/*.zip` and `optuna/*.journal` no longer match anything: they were
+`mgcecdl_classifier_best.zip` and its hyperparameter study, retired with
+`MGCECDLClassifier`. The only model artifact that travels now is
+`models/mil_vano_ventana_v1.pt`.
 
 **One file from outside `data/`, and only one**: `site/data/variables.json`. Notebook 05
 reads it for the expert A–F thematic classification that labels its feature tables, through

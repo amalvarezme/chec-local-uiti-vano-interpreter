@@ -179,85 +179,20 @@ class _BaseMGCECDL(nn.Module):
         return F.softmax(stacked_reliability_scores / self.temperature, dim=1)
 
 
-class MGCECDLClassifier(_BaseMGCECDL):
-    """Classification adaptation of M-GCECDL using modality-specific class heads and reliabilities."""
-
-    def __init__(
-        self,
-        modality_feature_indices: Mapping[str, Sequence[int]],
-        n_classes: int,
-        hidden_dim: int = 128,
-        embed_dim: int = 64,
-        dropout: float = 0.10,
-        temperature: float = 1.0,
-    ) -> None:
-        super().__init__(
-            modality_feature_indices=modality_feature_indices,
-            hidden_dim=hidden_dim,
-            embed_dim=embed_dim,
-            dropout=dropout,
-            temperature=temperature,
-        )
-        if n_classes < 2:
-            raise ValueError("Classification requires at least two classes.")
-        self.n_classes = int(n_classes)
-        self.modality_classifiers = nn.ModuleList(
-            nn.Linear(embed_dim, self.n_classes) for _ in self.modality_feature_indices
-        )
-
-    def forward(
-        self,
-        x: torch.Tensor,
-        modality_masks: torch.Tensor | None = None,
-    ) -> dict[str, Any]:
-        modality_embeddings, reliability_scores = self._encode_modalities(x)
-        modality_reconstructions, reconstructed_features = self._decode_modalities(
-            modality_embeddings
-        )
-        modality_logits: list[torch.Tensor] = []
-
-        for embeddings, classifier_head in zip(modality_embeddings, self.modality_classifiers):
-            modality_logits.append(classifier_head(embeddings))
-
-        stacked_logits = torch.stack(modality_logits, dim=1)
-        reliabilities = self._compute_reliabilities(reliability_scores, modality_masks)
-        modality_probs = F.softmax(stacked_logits, dim=2)
-        weighted_log_probs = torch.sum(
-            reliabilities.unsqueeze(-1) * torch.log(modality_probs.clamp(min=1e-8)),
-            dim=1,
-        )
-        fused_probs = F.softmax(weighted_log_probs, dim=1)
-        confidence_contributions = reliabilities.unsqueeze(-1) * modality_probs
-
-        return {
-            "fused_probs": fused_probs,
-            "fused_log_probs": weighted_log_probs,
-            "predicted_classes": fused_probs.argmax(dim=1),
-            "modality_probs": modality_probs,
-            "modality_logits": stacked_logits,
-            "confidence_contributions": confidence_contributions,
-            "reliabilities": reliabilities,
-            "embeddings": modality_embeddings,
-            "modality_reconstructions": modality_reconstructions,
-            "reconstructed_features": reconstructed_features,
-            "modality_names": self.modality_names,
-        }
-
-
 class MGCECDLRegressor(_BaseMGCECDL):
     """Regression adaptation of M-GCECDL using modality-specific regression heads.
 
-    Additive sibling of `MGCECDLClassifier`: it reuses the same modality
-    encoders/decoders/reliability heads from `_BaseMGCECDL` and replaces the
-    per-modality classification heads with per-modality scalar regression
-    heads. Predictions are fused as a reliability-weighted average (instead
-    of `MGCECDLClassifier`'s reliability-weighted mixture of softmax
-    distributions), which is the natural regression analogue of the same
-    "trust the more reliable modality more" mechanism.
+    Reutiliza los codificadores/decodificadores/cabezas de fiabilidad de
+    `_BaseMGCECDL` y pone una cabeza de regresion escalar por modalidad. Las
+    predicciones se fusionan como un promedio ponderado por fiabilidad: el
+    mecanismo de "confia mas en la modalidad mas fiable", en su forma continua.
 
-    `MGCECDLClassifier`'s behavior is untouched -- this class does not
-    modify `_BaseMGCECDL` in any way that changes the classifier's forward
-    pass.
+    Nacio como hermano aditivo de `MGCECDLClassifier`, que fusionaba una mezcla
+    de distribuciones softmax ponderada por la misma fiabilidad. Ese clasificador
+    se RETIRO: ningun camino del flujo actual lo cargaba. Esta clase es hoy el
+    unico consumidor de `_BaseMGCECDL`, y es la base del modelo MIL de bolsas
+    (`mil_vano_ventana_v1.pt`), que predice `uiti_acumulado` sobre la celda
+    `(vano, ventana)`.
     """
 
     def __init__(
@@ -319,12 +254,10 @@ class KernelDensityWeightedMSELoss(nn.Module):
     kernel evaluation per batch) and normalized to a per-batch mean of 1 so
     the overall loss scale stays comparable to plain MSE.
 
-    Placed here (not in `chec_impacto.training.mgcecdl`, where
-    `MGCECDLClassificationLoss` lives) because
-    `src/chec_impacto/training/**` is under an explicit `Edit` deny in this
-    repository's `.claude/settings.json`, protecting the production
-    classification training module from edits -- this module is the
-    nearest safe, additive home for new regression-only training logic.
+    Vive aqui y no en `chec_impacto.training.mgcecdl` porque
+    `src/chec_impacto/training/**` esta bajo un `Edit` deny explicito en el
+    `.claude/settings.json` de este repositorio -- este modulo es el hogar
+    aditivo mas cercano y seguro para logica de entrenamiento de regresion.
     """
 
     def __init__(
@@ -424,8 +357,13 @@ def _elementwise_regression_loss(
 
 
 class MGCECDLRegressionLoss(nn.Module):
-    """Regression analogue of `MGCECDLClassificationLoss`, built for
-    `MGCECDLRegressor`, with the SAME auxiliary loss structure:
+    """Perdida auxiliar de `MGCECDLRegressor`.
+
+    Su estructura es la del retirado `MGCECDLClassificationLoss` -- de ahi salio, y
+    por eso los nombres de sus terminos suenan a clasificacion. El contraste con el
+    clasificador se conserva en la prosa PORQUE explica la forma; la clase en si ya
+    no existe.
+
 
     - `fused_loss`: supervised regression loss (configurable `base_loss`:
       `"mse"`, `"huber"`, or `"kernel_weighted_mse"`) on the fused
@@ -447,8 +385,8 @@ class MGCECDLRegressionLoss(nn.Module):
       `entropy_loss` is defined over categorical class probabilities and
       has no regression analogue, so it is deliberately dropped;
       `regularization_loss` here is `kl_loss` alone. This is the ONE
-      documented, intentional asymmetry versus `MGCECDLClassificationLoss`
-      -- everything else (fused/modality/agreement/kl/reconstruction/MI) is
+      documented, intentional asymmetry versus the classification shape it
+      came from -- everything else (fused/modality/agreement/kl/reconstruction/MI) is
       full parity.
     - `reconstruction_loss` / `mutual_information_loss`: computed by the
       SAME `_MGCECDLGraphReconstructionLoss` classification uses (held by
@@ -457,8 +395,8 @@ class MGCECDLRegressionLoss(nn.Module):
 
     Unlike classification's GCE-based terms (naturally bounded because they
     operate on a probability simplex), regression residuals are not
-    naturally bounded to `[0, 1]`, so -- unlike `MGCECDLClassificationLoss`
-    -- `fused_loss`/`modality_loss`/`agreement_loss` are NOT clamped here;
+    naturally bounded to `[0, 1]`, so -- unlike the classification shape it came
+    from -- `fused_loss`/`modality_loss`/`agreement_loss` are NOT clamped here;
     clamping them would silently equalize very different loss shapes (e.g.
     MSE vs. Huber on large residuals) and defeat the empirical loss-shape
     comparison this class exists to support.
@@ -466,14 +404,13 @@ class MGCECDLRegressionLoss(nn.Module):
     Implementation note on the import below: this class needs
     `_MGCECDLGraphReconstructionLoss`, `_reduce_modality_supervision_loss`,
     `_normalize_unit_interval`, and `_safe_log_count` from
-    `chec_impacto.training.mgcecdl`, but `chec_impacto.training.mgcecdl`
-    itself imports `MGCECDLClassifier` (and, transitively, this module) at
-    ITS top level. A top-level import here would therefore be circular.
-    The import is deferred to `__init__` instead: by the time any caller
-    actually instantiates `MGCECDLRegressionLoss`, both modules have
-    already finished loading, so the deferred import just fetches already-
-    initialized objects from `sys.modules` -- no behavior change, no edit
-    to `training/mgcecdl.py`, no circular import.
+    `chec_impacto.training.mgcecdl`. El aplazamiento nacio de una circularidad
+    real: aquel modulo importaba `MGCECDLClassifier` -- y con el, transitivamente,
+    este -- en SU nivel superior. Con el clasificador retirado esa circularidad ya
+    no existe, y medido: importar `models.mgcecdl` y `training.mgcecdl` en cualquier
+    orden funciona. El import se deja aplazado igual: sacarlo al nivel superior haria
+    que este modulo arrastre `training` -- y con el, sklearn -- en cuanto alguien
+    toque `MGCECDLRegressor`, que es justo lo que el flujo MIL evita.
     """
 
     def __init__(
@@ -610,10 +547,10 @@ class MGCECDLRegressionLoss(nn.Module):
             # everywhere, so the term keeps teaching instead of saturating.
             #
             # Applied HERE and not in `_MGCECDLGraphReconstructionLoss` on purpose: that class
-            # is shared with the production `MGCECDLClassificationLoss` and lives under an
-            # explicit `Edit` deny (`src/chec_impacto/training/**`). Classification's terms are
-            # naturally bounded on a probability simplex and do not suffer this saturation,
-            # so the fix belongs to the regression path only.
+            # vive bajo un `Edit` deny explicito (`src/chec_impacto/training/**`) y la comparte
+            # `mgcecdl_graph`. La saturacion es del camino de regresion -- los terminos de
+            # clasificacion de los que salio esta forma estaban acotados sobre un simplex de
+            # probabilidad y no la sufrian --, asi que el arreglo se queda aqui.
             raw_reconstruction = graph_components["reconstruction_loss_raw"]
             graph_components["reconstruction_loss"] = raw_reconstruction / (
                 1.0 + raw_reconstruction
