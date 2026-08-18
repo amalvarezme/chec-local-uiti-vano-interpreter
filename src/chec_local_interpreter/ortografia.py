@@ -38,7 +38,8 @@ __all__ = [
 ]
 
 
-SIEMPRE_CON_TILDE: dict[str, str | None] = {   'ademas': 'además',
+SIEMPRE_CON_TILDE: dict[str, str | None] = {
+    'ademas': 'además',
     'adonde': None,
     'agrupacion': 'agrupación',
     'ahi': 'ahí',
@@ -113,6 +114,7 @@ SIEMPRE_CON_TILDE: dict[str, str | None] = {   'ademas': 'además',
     'estara': 'estará',
     'estimacion': 'estimación',
     'evaluacion': 'evaluación',
+    'explicacion': 'explicación',
     'fisica': 'física',
     'fisico': 'físico',
     'formula': 'fórmula',
@@ -177,8 +179,10 @@ SIEMPRE_CON_TILDE: dict[str, str | None] = {   'ademas': 'además',
     'parametro': 'parámetro',
     'parametros': 'parámetros',
     'particion': 'partición',
+    'patron': 'patrón',
     'penalizacion': 'penalización',
     'periodo': None,
+    'perturbacion': 'perturbación',
     'poblacion': 'población',
     'podra': 'podrá',
     'podria': 'podría',
@@ -204,14 +208,18 @@ SIEMPRE_CON_TILDE: dict[str, str | None] = {   'ademas': 'además',
     'seccion': 'sección',
     'segun': 'según',
     'seleccion': 'selección',
+    'separacion': 'separación',
     'sera': 'será',
     'seran': 'serán',
     'seria': None,
     'simbolo': 'símbolo',
     'simulacion': 'simulación',
+    'simultaneamente': 'simultáneamente',
     'sintesis': 'síntesis',
     'sismico': 'sísmico',
+    'situa': 'sitúa',
     'tambien': 'también',
+    'taxonomia': 'taxonomía',
     'tecnica': 'técnica',
     'tecnicas': None,
     'tecnico': 'técnico',
@@ -220,10 +228,12 @@ SIEMPRE_CON_TILDE: dict[str, str | None] = {   'ademas': 'además',
     'teorico': 'teórico',
     'termica': 'térmica',
     'termico': 'térmico',
+    'todavia': 'todavía',
     'topologia': 'topología',
     'topologica': 'topológica',
     'topologico': 'topológico',
     'trafico': 'tráfico',
+    'transicion': 'transición',
     'tras': None,
     'ultima': 'última',
     'ultimas': 'últimas',
@@ -239,7 +249,8 @@ SIEMPRE_CON_TILDE: dict[str, str | None] = {   'ademas': 'además',
     'veria': 'vería',
     'verificacion': 'verificación',
     'version': 'versión',
-    'visualizacion': 'visualización'}
+    'visualizacion': 'visualización',
+}
 
 
 TONICOS: dict[str, str] = {   'como': 'cómo',
@@ -342,6 +353,25 @@ def _cadenas(valor: Any):
             yield from _cadenas(v)
 
 
+def _identificadores() -> frozenset[str]:
+    """Los VALORES que son interfaz y no prosa, asi que no se acentuan.
+
+    `_cadenas` ya se salta las CLAVES por esta misma razon. Un enum cerrado del esquema es
+    el mismo caso del otro lado del `:`: `variable_groups_used` solo admite `Proteccion` y
+    `Topologia` sin tilde, porque esa cadena viaja como identificador hasta
+    `/informe-gerencial`. Leerlas como prosa dejaba al agente sin ninguna forma valida --
+    el esquema exigia la que la guarda prohibia -- y ningun hallazgo podia atribuirse a
+    esos dos grupos.
+
+    Sale de `NOMBRE_LEGIBLE_GRUPO` y no de una lista copiada aqui: `Fisicas/Electricas`
+    pasaba por CASUALIDAD -- los plurales no estan en el diccionario aunque los singulares
+    si -- y una entrada nueva lo habria roto sin que nadie tocara esta guarda.
+    """
+    from chec_local_interpreter.domain_context import NOMBRE_LEGIBLE_GRUPO
+
+    return frozenset(NOMBRE_LEGIBLE_GRUPO)
+
+
 def errores_de_tilde(data: Any, *, limite: int = 25) -> list[str]:
     """Los defectos de tilde de una respuesta de agente, listos para la lista de errores
     de `validate`.
@@ -349,8 +379,11 @@ def errores_de_tilde(data: Any, *, limite: int = 25) -> list[str]:
     Se corta en `limite` para que un fallo masivo no entierre los demas errores del
     validador; el mensaje dice cuantos quedaron fuera.
     """
+    identificadores = _identificadores()
     vistos: dict[str, str] = {}
     for texto in _cadenas(data):
+        if texto.strip() in identificadores:
+            continue
         for escrita, correcta in palabras_sin_tilde(texto):
             vistos.setdefault(escrita, correcta)
     items = sorted(vistos.items())

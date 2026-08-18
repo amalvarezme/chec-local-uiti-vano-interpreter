@@ -1737,9 +1737,9 @@ def _preambulo_html(
             f"<p>Entre todos suman <strong>{_num(perfil['vanos_banda'], 0)} vanos</strong> "
             f"con eventos, el <strong>{_num(pct_vanos)}%</strong> de los "
             f"{_num(perfil['vanos_flota'], 0)} de la flota. De esos, "
-            f"<strong>{_num(perfil['vanos_criticos_banda'], 0)}</strong> estan en "
+            f"<strong>{_num(perfil['vanos_criticos_banda'], 0)}</strong> están en "
             f"Medio-Alto o Alto: el <strong>{_num(pct_criticos)}%</strong> de todos los "
-            f"vanos criticos de la red.</p>"
+            f"vanos críticos de la red.</p>"
         )
         # La desproporcion ES el argumento del informe. Se dice solo cuando existe, y con
         # el numero delante, nunca como adjetivo.

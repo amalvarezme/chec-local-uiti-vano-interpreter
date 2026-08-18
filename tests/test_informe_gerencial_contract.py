@@ -1729,3 +1729,36 @@ def test_el_resumen_ejecutivo_nombra_la_variable_con_su_codigo():
 
     assert any("(NR_T)" in item for item in resumen)
     assert any("vegetaci" in item.lower() for item in resumen)
+
+
+def test_la_prosa_determinista_del_informe_va_acentuada():
+    """El preambulo lo escribo yo, no un agente, y llego al informe con `estan` y
+    `criticos` sin tilde.
+
+    La guarda de tildes solo corre sobre las respuestas de los AGENTES -- ahi es donde
+    puede rechazar --, asi que la prosa que este modulo arma a mano no la revisaba nadie.
+    Es justo la que abre el informe.
+
+    Mide el HTML RENDERIZADO y no el fuente: los comentarios de este repo van sin tilde a
+    proposito, y una prueba sobre el fuente los marcaria a todos.
+    """
+    from chec_local_interpreter.ortografia import palabras_sin_tilde
+
+    perfil = {
+        "circuitos": ["C11", "C12"],
+        "vanos_banda": 184, "vanos_flota": 1320,
+        "vanos_criticos_banda": 184, "vanos_criticos_flota": 624,
+        "pct_criticos_de_la_flota": 29.49,
+        "pct_vanos_de_la_flota": 13.94,
+        "grupos": [
+            {"grupo": "Bajo", "vanos": 0, "pct_banda": 0.0, "vanos_flota": 400, "uiti": []},
+            {"grupo": "Medio", "vanos": 0, "pct_banda": 0.0, "vanos_flota": 296, "uiti": []},
+            {"grupo": "Medio-Alto", "vanos": 92, "pct_banda": 50.0, "vanos_flota": 312, "uiti": [1.0]},
+            {"grupo": "Alto", "vanos": 92, "pct_banda": 50.0, "vanos_flota": 312, "uiti": [2.0]},
+        ],
+    }
+    html = informe_contract._preambulo_html(perfil, "<div></div>", "Riesgo Alto", 2)
+    plano = re.sub(r"<[^>]+>", " ", html)
+    faltas = {escrita for escrita, _ in palabras_sin_tilde(plano)}
+
+    assert not faltas, f"prosa sin tilde en el preambulo: {sorted(faltas)}"

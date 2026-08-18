@@ -274,3 +274,86 @@ def test_lo_que_separa_un_codigo_de_la_prosa_es_el_GLOSARIO_no_la_caja():
 def test_la_guarda_acentua_un_rotulo_en_mayusculas_pero_no_una_columna():
     assert palabras_sin_tilde("GEOMETRIA DEL VANO") == [("GEOMETRIA", "GEOMETRÍA")]
     assert palabras_sin_tilde("Revisar DURACION por vano") == []
+
+
+def test_los_nombres_de_grupo_del_esquema_no_son_prosa():
+    """Cinco agentes de una misma corrida chocaron con esto por separado.
+
+    `variable_groups_used` es un enum CERRADO del esquema y dos de sus seis literales van
+    sin tilde a proposito -- `Proteccion` y `Topologia` --, porque la clave es un
+    identificador que viaja al contrato. La guarda los leia como prosa y los rechazaba, asi
+    que ningun informe podia atribuir un hallazgo a esos dos grupos: el esquema exigia una
+    forma que el validador prohibia. Es la misma razon por la que `_cadenas` ya se salta las
+    CLAVES -- una interfaz no se acentua --, aplicada al VALOR cuando el valor es la
+    interfaz.
+    """
+    from chec_local_interpreter.domain_context import NOMBRE_LEGIBLE_GRUPO
+
+    for grupo in NOMBRE_LEGIBLE_GRUPO:
+        assert errores_de_tilde({"variable_groups_used": [grupo]}) == [], grupo
+
+
+def test_el_esquema_y_la_exencion_no_pueden_separarse():
+    """La exencion sale de `NOMBRE_LEGIBLE_GRUPO`, no de una lista copiada a mano.
+
+    `Fisicas/Electricas` pasaba la guarda por CASUALIDAD -- los plurales `fisicas` y
+    `electricas` no estan en el diccionario aunque los singulares si --, de modo que una
+    entrada nueva en el diccionario habria roto un tercer grupo sin que nadie lo tocara.
+    """
+    import json
+    from pathlib import Path
+
+    from chec_local_interpreter.domain_context import NOMBRE_LEGIBLE_GRUPO
+
+    esquema = json.loads(
+        (
+            Path(__file__).resolve().parents[1]
+            / "src/chec_local_interpreter/prompt_assets"
+            / "uiti_vano_explanation.output_schema.json"
+        ).read_text(encoding="utf-8")
+    )
+    enum = esquema["properties"]["key_findings"]["items"]["properties"][
+        "variable_groups_used"
+    ]["items"]["enum"]
+
+    assert set(enum) == set(NOMBRE_LEGIBLE_GRUPO)
+
+
+def test_la_exencion_es_del_valor_entero_no_de_la_palabra():
+    """Exime al identificador, no al termino. `proteccion` dentro de una frase sigue siendo
+    prosa y sigue necesitando su tilde -- si no, la exencion abriria un agujero por el que
+    se cuela justo la palabra que mas veces aparecio sin tilde."""
+    assert errores_de_tilde({"nota": "La proteccion del vano fallo"}) != []
+    assert errores_de_tilde({"modo": "Proteccion y Topologia del tramo"}) != []
+
+
+def test_el_diccionario_cubre_lo_que_un_agente_tuvo_que_corregir_a_mano():
+    """Un agente de la corrida real lo dijo asi: "el diccionario es un piso, no un techo".
+
+    `errores_de_tilde` le devolvio CERO mientras su prosa todavia llevaba estas nueve
+    palabras sin tilde, ninguna en la lista. Las corrigio a mano y las reporto. Pasar la
+    guarda a cero no era lo mismo que escribir bien.
+    """
+    faltaban = {
+        "explicacion": "explicación",
+        "separacion": "separación",
+        "perturbacion": "perturbación",
+        "taxonomia": "taxonomía",
+        "todavia": "todavía",
+        "transicion": "transición",
+        "patron": "patrón",
+        "situa": "sitúa",
+        "simultaneamente": "simultáneamente",
+    }
+    for escrita, correcta in faltaban.items():
+        assert SIEMPRE_CON_TILDE.get(escrita) == correcta, escrita
+
+
+def test_los_plurales_en_ciones_siguen_sin_llevar_tilde():
+    """La trampa que ya costo cuatro entradas malas: `-cion` es aguda y lleva tilde;
+    `-ciones` es llana terminada en -s y NO la lleva. Cada palabra nueva del diccionario
+    puede volver a meter su plural por descuido."""
+    for singular in ("explicacion", "separacion", "perturbacion", "transicion"):
+        plural = singular + "es"
+        assert plural not in SIEMPRE_CON_TILDE, plural
+        assert palabras_sin_tilde(f"varias {plural} del tramo") == []
