@@ -4,8 +4,8 @@
 > reconstruido (9.289 nodos, 15.132 aristas, 1.002 comunidades).
 >
 > Audiencia: quien decida qué se borra. El documento nombra, mide y separa lo que de verdad está
-> suelto de lo que solo lo parece. Las **secciones B y E ya se ejecutaron** el mismo día, y de la
-> **A** se fue el primero de los tres; lo demás sigue siendo propuesta y no se ha tocado.
+> suelto de lo que solo lo parece. Las **secciones A, B y E ya se ejecutaron** el mismo día: de los
+> tres módulos huérfanos se fueron los dos que estaban muertos, y el tercero se queda por diseño.
 
 ## Qué se midió, y por qué así
 
@@ -25,12 +25,12 @@ verificar cada una contra el código que supuestamente la deja huérfana.
 ## A. Módulos sin ningún consumidor en producción
 
 Eran tres. Los tres tenían pruebas, y **las 38 pruebas pasaban**: verdes, y no los llamaba nadie.
-Uno ya se fue.
+Dos ya se fueron; el tercero se queda, y no por indecisión.
 
 | Módulo | Líneas | Su prueba | Último cambio | Por qué quedó suelto |
 |---|---:|---:|---|---|
 | ~~`src/chec_local_interpreter/graph_view_builder.py`~~ **BORRADO** | 264 | 586 | 2026-07-25 | Existía solo para el **paso 2.5 de `/informe-gerencial`**, retirado el 2026-08-18 junto con la sección "Patrones cross-circuito (grafo)" que lo consumía |
-| `src/chec_local_interpreter/relevancia_lote.py` | 408 | 363 | 2026-08-10 | Era del cuaderno `07_relevancia_lote_por_vano`, **borrado el 2026-08-14** con los ocho del pipeline MGCECDL |
+| ~~`src/chec_local_interpreter/relevancia_lote.py`~~ **BORRADO** | 408 | 363 | 2026-08-10 | Era del cuaderno `07_relevancia_lote_por_vano`, **borrado el 2026-08-14** con los ocho del pipeline MGCECDL |
 | `src/chec_local_interpreter/web_export.py` | 46 | 27 | 2026-08-16 | Puente manual hacia la página Astro. `report/SKILL.md` lo declara explícitamente opcional: *"call `web_export.export_latest_interpretability_report(html_path)` yourself when you actually…"* |
 
 **Los tres no son el mismo caso, y no merecen la misma decisión.**
@@ -41,8 +41,11 @@ Uno ya se fue.
   `tests/test_graph_view_builder_retirado.py`, que impide las dos formas de volver: el archivo y la
   prosa que lo resucitaría. El grafo que el informe sí dibuja hoy lo construye
   `intervention_graph.py` desde los artefactos de corrida, sin tocar graphify.
-- `relevancia_lote.py` perdió a su consumidor hace cuatro días y **nadie lo ha reclamado**. Su
-  prueba es lo único que lo importa.
+- `relevancia_lote.py` perdió a su consumidor el 2026-08-14 y nadie lo reclamó en cuatro días:
+  **se borró el 2026-08-18**, 771 líneas entre módulo y prueba, con su propia guarda de retiro. Lo
+  que sabía sigue escrito en git y en el docstring que la guarda cita: que barrer las 111.233
+  bolsas cuesta las MISMAS 197 pasadas que barrer cinco, y que en el grupo más bajo la pregunta se
+  invierte — ahí el ranking útil no es qué bajaría la bolsa, sino de qué depende que se quede.
 - `web_export.py` **no está muerto: está fuera del automatismo a propósito.** Publicar en la
   página web es un canal de divulgación, no una pieza del análisis, y `flujo-detallado.md` ya lo
   deja fuera explícitamente. Borrarlo cortaría el único puente que existe hacia `site/`.
@@ -150,11 +153,14 @@ escribió y si sigue siendo verdad.
   una guarda de retiro que cubre el archivo Y la prosa.
 - [x] **Corregir `README.md`** en el mismo cambio, junto con el bloque del `SKILL.md` que decía
   que el módulo se dejaba en pie.
-- [ ] **Decidir sobre `relevancia_lote.py`** (771 líneas con su prueba). Perdió a su cuaderno el
-  2026-08-14; si el barrido por lote va a volver, se queda; si no, se va al historial de git como
-  se fueron los nueve cuadernos.
+- [x] **Decidir sobre `relevancia_lote.py`.** Hecho el 2026-08-18: se fue al historial de git como
+  se fueron los nueve cuadernos, con guarda de retiro. Si el barrido por lote vuelve, vuelve con su
+  consumidor.
 - [x] **No tocar `web_export.py`.** Está fuera del flujo por diseño, y es el único puente hacia
   `site/`.
 
-Lo que queda no es urgente y no rompe una prueba en verde hoy. Ese es justamente el riesgo — una
-suite verde no distingue entre código que funciona y código que además hace falta.
+De la lista original no queda nada pendiente. Lo que se aprendió por el camino sí: **una suite
+verde no distingue entre código que funciona y código que además hace falta**, y las dos guardas
+de retiro (`test_graph_view_builder_retirado.py`, `test_relevancia_lote_retirado.py`) existen
+justamente porque el borrado por sí solo no impide la vuelta — la prosa que cita un módulo basta
+para que el próximo barrido lo dé por vivo.
