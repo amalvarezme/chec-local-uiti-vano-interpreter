@@ -122,7 +122,11 @@ _ANGLE_BUCKET_PRECISION = 6
 
 @dataclass(frozen=True)
 class InterventionGraphOutcome:
-    """Mirrors `graph_view_builder.GraphViewOutcome`'s shape/conventions."""
+    """A frozen status plus an optional path -- never an exception.
+
+    Same shape the retired step-2.5 community sub-graph builder used, kept because
+    every caller in this flow already degrades on `status` instead of catching.
+    """
 
     status: InterventionGraphStatus
     output_path: str | None = None
@@ -1142,7 +1146,7 @@ def build_intervention_graph(
 ) -> InterventionGraphOutcome:
     """Build the radial causes/strategies graph and write it to `output_path`.
 
-    Never raises -- same degrade contract as `graph_view_builder.build_graph_view`:
+    Never raises -- the degrade contract this flow has always used:
     - fewer than 2 sampled circuits -> `skipped_empty`;
     - no concept shared by `min_support` circuits -> `skipped_empty`;
     - anything unwritable/unrenderable -> `execution_error`;

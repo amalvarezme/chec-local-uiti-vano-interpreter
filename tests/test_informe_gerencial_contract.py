@@ -8,7 +8,6 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-import chec_local_interpreter.graph_view_builder as graph_view_builder
 import chec_local_interpreter.intervention_graph as intervention_graph
 import chec_local_interpreter.informe_gerencial_contract as informe_contract
 from chec_local_interpreter.informe_gerencial_contract import (

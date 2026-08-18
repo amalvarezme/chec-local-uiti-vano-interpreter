@@ -4,8 +4,8 @@
 > reconstruido (9.289 nodos, 15.132 aristas, 1.002 comunidades).
 >
 > Audiencia: quien decida qué se borra. El documento nombra, mide y separa lo que de verdad está
-> suelto de lo que solo lo parece. La **sección B ya se ejecutó** el mismo día; todo lo demás sigue
-> siendo una propuesta y no se ha tocado.
+> suelto de lo que solo lo parece. Las **secciones B y E ya se ejecutaron** el mismo día, y de la
+> **A** se fue el primero de los tres; lo demás sigue siendo propuesta y no se ha tocado.
 
 ## Qué se midió, y por qué así
 
@@ -24,20 +24,23 @@ verificar cada una contra el código que supuestamente la deja huérfana.
 
 ## A. Módulos sin ningún consumidor en producción
 
-Tres. Los tres tienen pruebas, y **las 38 pruebas pasan**: están verdes y no las llama nadie.
+Eran tres. Los tres tenían pruebas, y **las 38 pruebas pasaban**: verdes, y no los llamaba nadie.
+Uno ya se fue.
 
 | Módulo | Líneas | Su prueba | Último cambio | Por qué quedó suelto |
 |---|---:|---:|---|---|
-| `src/chec_local_interpreter/graph_view_builder.py` | 264 | 586 | 2026-07-25 | Existía solo para el **paso 2.5 de `/informe-gerencial`**, retirado el 2026-08-18 junto con la sección "Patrones cross-circuito (grafo)" que lo consumía |
+| ~~`src/chec_local_interpreter/graph_view_builder.py`~~ **BORRADO** | 264 | 586 | 2026-07-25 | Existía solo para el **paso 2.5 de `/informe-gerencial`**, retirado el 2026-08-18 junto con la sección "Patrones cross-circuito (grafo)" que lo consumía |
 | `src/chec_local_interpreter/relevancia_lote.py` | 408 | 363 | 2026-08-10 | Era del cuaderno `07_relevancia_lote_por_vano`, **borrado el 2026-08-14** con los ocho del pipeline MGCECDL |
 | `src/chec_local_interpreter/web_export.py` | 46 | 27 | 2026-08-16 | Puente manual hacia la página Astro. `report/SKILL.md` lo declara explícitamente opcional: *"call `web_export.export_latest_interpretability_report(html_path)` yourself when you actually…"* |
 
 **Los tres no son el mismo caso, y no merecen la misma decisión.**
 
-- `graph_view_builder.py` es **código muerto declarado**. El propio
-  `.claude/skills/informe-gerencial/SKILL.md:535` lo dice con todas las letras: *"is NO LONGER
-  invoked by this flow… nothing calls them — treat it as dead code pending a decision"*. Esta es
-  esa decisión pendiente. Son 850 líneas entre módulo y prueba.
+- `graph_view_builder.py` era **código muerto declarado**, y **se borró el 2026-08-18** — 850
+  líneas entre módulo y prueba. Su propio `SKILL.md` lo llamaba *"dead code pending a decision"*;
+  esta fue la decisión. En su lugar quedó
+  `tests/test_graph_view_builder_retirado.py`, que impide las dos formas de volver: el archivo y la
+  prosa que lo resucitaría. El grafo que el informe sí dibuja hoy lo construye
+  `intervention_graph.py` desde los artefactos de corrida, sin tocar graphify.
 - `relevancia_lote.py` perdió a su consumidor hace cuatro días y **nadie lo ha reclamado**. Su
   prueba es lo único que lo importa.
 - `web_export.py` **no está muerto: está fuera del automatismo a propósito.** Publicar en la
@@ -108,15 +111,19 @@ El grupo de los imports perezosos es el más traicionero: se introdujo **a prop�
 tocar cualquier submódulo de `chec_impacto` no arrastrara `torch` (1,49 s → 0,03 s de arranque), y
 el efecto colateral es que rompe la trazabilidad estática de todo el paquete.
 
-## E. Documentación que quedó desfasada
+## E. Documentación que quedó desfasada — ✅ CORREGIDA
 
-Encontrado de paso, verificado contra el código:
+Encontrado de paso, verificado contra el código, y arreglado el 2026-08-18 junto con el borrado:
 
-- **`README.md:390` y `README.md:446`** siguen describiendo el **paso 2.5** de `/informe-gerencial`
-  (*"graphify rebuild aislado + query temas recurrentes + graph_view_builder"*) como parte del
-  flujo. Ese paso se retiró el 2026-08-18. El `SKILL.md` ya está corregido; el `README.md` no.
-  Es, además, la única razón por la que el analizador no marcó `graph_view_builder.py` como
-  huérfano en la primera pasada: la prosa obsoleta lo mantuvo vivo.
+- **`README.md`** describía el **paso 2.5** de `/informe-gerencial` (*"graphify rebuild aislado +
+  query temas recurrentes"*) como parte del flujo, en la tabla de comandos y en el diagrama
+  Mermaid. Ese paso se retiró; hoy el paso es el **2.6**, `intervention_graph`, que lee los
+  artefactos de corrida y no invoca graphify.
+- El mismo diagrama afirmaba que graphify se encadena **acotado a `reports/vault`**, que es la regla
+  ANTERIOR y la que causaba 426 borrados fantasma. Se encadena desde la raíz, detrás de
+  `graphify_guarda`.
+- Esa prosa obsoleta fue, además, la única razón por la que el analizador no marcó
+  `graph_view_builder.py` como huérfano en la primera pasada.
 
 ### El analizador se escuda a sí mismo
 
@@ -139,17 +146,15 @@ escribió y si sigue siendo verdad.
 
 - [x] **Borrar las dos funciones de `circuit_analysis.py`.** Hecho el 2026-08-18: 69 líneas fuera,
   `torch` fuera del archivo, y una prueba que lo congela. La suite pasó de 2.790 a 2.791.
-- [ ] **Borrar `graph_view_builder.py` y su prueba** (850 líneas). Es el único caso donde la
-  decisión ya está documentada como pendiente por el propio proyecto, y donde no hay ninguna
-  ambigüedad sobre quién lo llamaba.
-- [ ] **Corregir `README.md:390` y `:446`** en el mismo cambio. Sin eso, el próximo inventario
-  vuelve a tropezar con la misma prosa.
+- [x] **Borrar `graph_view_builder.py` y su prueba.** Hecho el 2026-08-18: 850 líneas fuera, más
+  una guarda de retiro que cubre el archivo Y la prosa.
+- [x] **Corregir `README.md`** en el mismo cambio, junto con el bloque del `SKILL.md` que decía
+  que el módulo se dejaba en pie.
 - [ ] **Decidir sobre `relevancia_lote.py`** (771 líneas con su prueba). Perdió a su cuaderno el
   2026-08-14; si el barrido por lote va a volver, se queda; si no, se va al historial de git como
   se fueron los nueve cuadernos.
 - [x] **No tocar `web_export.py`.** Está fuera del flujo por diseño, y es el único puente hacia
   `site/`.
 
-Lo que queda no es urgente y no rompe una prueba en verde hoy: las 38 pruebas de los tres módulos
-huérfanos pasan. Ese es justamente el riesgo — una suite verde no distingue entre código que
-funciona y código que además hace falta.
+Lo que queda no es urgente y no rompe una prueba en verde hoy. Ese es justamente el riesgo — una
+suite verde no distingue entre código que funciona y código que además hace falta.

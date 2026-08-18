@@ -387,7 +387,7 @@ invoca ningún agente ni skill — solo hace mantenimiento sobre los artefactos 
 |---|---|---|---|
 | `/report` | Skill orquestador | Agentes `historical`, `inference`, `expert-alignment`; skill `vault-circuito` (paso 9) → `graphify` incremental | `report_pipeline.py` |
 | `/reporte-lote` | Skill de lote | `report` (pasos 2-9 completos, por circuito); `circuit_clustering_contract` (paso 1.5) | `batch_report_contract.py` |
-| `/informe-gerencial` | Skill de síntesis | `report` (solo pasos 2-8, circuitos faltantes); `circuit_clustering_contract`; `graphify` (rebuild completo aislado, paso 2.5) | `informe_gerencial_contract.py`, `graph_view_builder.py` |
+| `/informe-gerencial` | Skill de síntesis | `report` (solo pasos 2-8, circuitos faltantes); `circuit_clustering_contract`; `vault_note_contract` directo (sin encadenar `graphify`) | `informe_gerencial_contract.py`, `intervention_graph.py` |
 | `/limpiar-corridas` | Command de mantenimiento | Ninguno — dry-run + confirmación explícita antes de borrar | `cleanup_runs.py` |
 
 ```mermaid
@@ -419,11 +419,12 @@ flowchart TB
     end
     CMD_REPORT --> RP_PREPARE
 
-    subgraph GRAPHV["graphify aislado a reports/vault (nunca el grafo raiz del proyecto)"]
-        GV_INC["graphify reports/vault --update<br/>incremental, por circuito"]
-        GV_FULL["graphify reports/vault<br/>rebuild completo + query cross-circuito"]
+    subgraph GRAPHV["graphify encadenado DESDE LA RAIZ del proyecto"]
+        GV_GUARDA["graphify_guarda<br/>comprueba donde ancla el manifiesto<br/>sigue solo si sale 0"]
+        GV_INC["graphify . --update<br/>incremental, recoge la nota nueva"]
+        GV_GUARDA --> GV_INC
     end
-    VAULT --> GV_INC
+    VAULT --> GV_GUARDA
 
     subgraph LOTE["Skill reporte-lote — un grupo de criticidad"]
         direction TB
@@ -443,14 +444,13 @@ flowchart TB
         GER_CHART["renderizar chart clustering<br/>paso 1.5, misma ventana confirmada"]
         GER_MISSING["auto-trigger report pasos 2-8<br/>SOLO circuitos sin corrida previa<br/>(nunca el paso 9)"]
         GER_VAULT2["vault_note_contract.render directo<br/>(sin encadenar graphify aqui)"]
-        GER_GRAPH["paso 2.5: graphify rebuild aislado<br/>+ query temas recurrentes<br/>+ graph_view_builder"]
-        GER_SYNTH["synthesize() + render_managerial_report()<br/>scatter full-fleet + patrones de grafo"]
+        GER_GRAPH["paso 2.6: intervention_graph<br/>grafo radial causas/estrategias<br/>lee los artefactos de corrida, sin graphify"]
+        GER_SYNTH["synthesize() + render_managerial_report()<br/>barras de ranking full-fleet + grafo radial"]
         GER_RESOLVE --> GER_CHART --> GER_MISSING --> GER_VAULT2 --> GER_GRAPH --> GER_SYNTH
     end
     CMD_GER --> GER_RESOLVE
     GER_CHART -.reutiliza.-> CCC
     GER_MISSING -.ejecuta pasos 2-8 de.-> RP_PREPARE
-    GER_GRAPH -.rebuild completo.-> GV_FULL
 
     subgraph LIMPIAR["Command limpiar-corridas — mantenimiento"]
         direction TB

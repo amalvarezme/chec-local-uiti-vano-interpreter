@@ -532,9 +532,11 @@ identifiers and stay unaccented in `variable_groups_used`; when DISPLAYED they g
 
 - Vault-population sub-step (step 2), reused directly rather than via `report/SKILL.md`'s own step 9:
   [`src/chec_local_interpreter/vault_note_contract.py`](../../../src/chec_local_interpreter/vault_note_contract.py)
-- `src/chec_local_interpreter/graph_view_builder.py` is NO LONGER invoked by this flow: it existed
-  only for the retired step 2.5.6. The module and its tests are left in place rather than deleted,
-  but nothing calls them — treat it as dead code pending a decision.
+- The community sub-graph builder that served the retired step 2.5.6 was **deleted on 2026-08-18**,
+  module and tests together, once the decision it was waiting on was made. Nothing in this flow ever
+  called it again after that step went away. `tests/test_graph_view_builder_retirado.py` keeps both
+  the file and its prose from coming back: a stale mention in `README.md` was the only reason a dead-code
+  sweep had previously spared it.
 - Radial causes/strategies builder, invoked ONLY in step 2.6 (reads the agents' run artifacts
   directly; hand-authors its own fixed-position vis-network HTML, never imports/calls `graphify`):
   [`src/chec_local_interpreter/intervention_graph.py`](../../../src/chec_local_interpreter/intervention_graph.py)
@@ -547,10 +549,8 @@ identifiers and stay unaccented in `variable_groups_used`; when DISPLAYED they g
   section assembly including the independent intervention/community graph sections and their degradation states, full-fleet-highlight
   behavior, the `Panorama del grupo` preamble, the retired sections staying retired, CLI verbs
   including `--graph-intervencion`),
-  `tests/test_graph_view_builder.py` (seed/bridge sub-graph predicate, per-circuit community grouping
-  for the embedded figure's "Communities" panel — one toggleable group per sampled circuit plus a
-  shared bucket for off-circuit bridge nodes, never graphify's own topic-based clustering —
-  oversize/malformed-input/never-raise behavior, CLI exit codes),
+  `tests/test_graph_view_builder_retirado.py` (the retired community sub-graph builder stays retired —
+  neither the module nor a prose mention that would resurrect it),
   `tests/test_intervention_graph.py` (intervention-family classification, accent-insensitive cause
   bucketing, min-support filtering, verbatim evidence, three-ring layout, no circuit-to-strategy edge,
   no orphan strategy, byte-identical repeat builds, `</script>`-in-evidence escaping, never-raise
