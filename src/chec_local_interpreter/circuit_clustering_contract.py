@@ -107,11 +107,32 @@ def usage_error(message: str, request: ClusteringRequest | None = None) -> Clust
 
 
 def plot_interactive_circuit_clustering(*args, **kwargs):
+    """La nube de K-Means. Ya NO la usa `render_clustering` -- ver `plot_ranking_circuitos`
+    aqui abajo --, pero el envoltorio se conserva porque es el punto de intercepcion que las
+    pruebas del contrato monkeypatchean, y porque `plotting` sigue exponiendola para quien
+    la quiera directamente."""
     from chec_local_interpreter.plotting import (
         plot_interactive_circuit_clustering as _plot_interactive_circuit_clustering,
     )
 
     return _plot_interactive_circuit_clustering(*args, **kwargs)
+
+
+def plot_ranking_circuitos(*args, **kwargs):
+    """El ranking del cuaderno 02: los circuitos por su conteo de vanos en Medio-Alto +
+    Alto, con los cortes P50/P75/P97 que definen las cuatro bandas de riesgo.
+
+    Sustituye a la nube de K-Means en `render_clustering`. Los dos comandos que invocan
+    este paso -- `/reporte-lote` y `/informe-gerencial` -- agrupan por esas cuatro bandas,
+    asi que la grafica de apertura mostraba cinco clases (`Riesgo Muy Alto`,
+    `Riesgo Medio-Bajo`) que ninguno de los dos podia nombrar, sobre otro eje: la nube situa
+    al circuito por TAMANO (eventos x UITI acumulado) y no por vano critico. Era el ultimo
+    sitio del flujo con el vocabulario viejo."""
+    from chec_local_interpreter.plotting import (
+        plot_ranking_circuitos as _plot_ranking_circuitos,
+    )
+
+    return _plot_ranking_circuitos(*args, **kwargs)
 
 
 def _dataset_date_range(frame: pd.DataFrame) -> tuple[str | None, str | None]:
@@ -172,12 +193,10 @@ def render_clustering(
 ) -> ClusteringOutcome:
     try:
         frame, fecha_inicio, fecha_fin, event_count = _resolve_window(request, data_path=data_path)
-        fig = plot_interactive_circuit_clustering(
-            frame,
-            start_date=fecha_inicio,
-            end_date=fecha_fin,
-            highlighted_circuits=None,
-        )
+        # Sin circuito destacado: este artefacto es la foto de la flota ANTES de elegir
+        # el grupo, asi que resaltar uno adelantaria una decision que el paso siguiente
+        # todavia no ha tomado.
+        fig = plot_ranking_circuitos(frame, None, fecha_inicio, fecha_fin)
         target_root = Path(output_root) if output_root is not None else DEFAULT_OUTPUT_ROOT
         target = _default_output_path(target_root, fecha_inicio, fecha_fin)
         target.parent.mkdir(parents=True, exist_ok=True)

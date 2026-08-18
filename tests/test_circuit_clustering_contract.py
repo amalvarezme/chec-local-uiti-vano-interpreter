@@ -63,7 +63,7 @@ def test_preflight_returns_execution_error_when_window_has_no_events(monkeypatch
     assert outcome.errors == ["No events found in window '2026-02-01'..'2026-02-02'"]
 
 
-def test_render_clustering_reuses_plotting_and_writes_deterministic_html(monkeypatch, tmp_path):
+def test_render_clustering_reusa_el_ranking_y_escribe_html_determinista(monkeypatch, tmp_path):
     frame = clustering_contract.pd.DataFrame(
         {
             "CIRCUITO": ["C1", "C2"],
@@ -80,18 +80,14 @@ def test_render_clustering_reuses_plotting_and_writes_deterministic_html(monkeyp
             assert div_id == "circuit-clustering-chart"
             return "<html><body>chart</body></html>"
 
-    def fake_plot(raw_df, start_date=None, end_date=None, highlighted_circuits=None, group_labels=None, group_colors=None):
+    def fake_plot(raw_df, circuito_destacado=None, start_date=None, end_date=None):
         calls.append((raw_df.copy(), start_date, end_date))
-        assert highlighted_circuits is None
-        # render_clustering no longer overrides the tiers: it relies on
-        # plot_interactive_circuit_clustering's own defaults (the shared
-        # 5-tier CRITICALITY_GROUP_LABELS/_COLORS in plotting.py).
-        assert group_labels is None
-        assert group_colors is None
+        # Sin destacado: este artefacto es la foto de la flota ANTES de elegir el grupo.
+        assert circuito_destacado is None
         return FigureStub()
 
     monkeypatch.setattr(clustering_contract, "load_dataset", lambda path: frame)
-    monkeypatch.setattr(clustering_contract, "plot_interactive_circuit_clustering", fake_plot)
+    monkeypatch.setattr(clustering_contract, "plot_ranking_circuitos", fake_plot)
 
     outcome = render_clustering(
         normalize_request(runtime="pi"),
@@ -136,3 +132,37 @@ def test_cli_parse_outputs_json(capsys):
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "awaiting_confirmation"
     assert payload["request"]["runtime"]["runtime"] == "pi"
+
+
+def test_la_grafica_del_paso_1_5_dibuja_el_RANKING_y_no_la_nube_kmeans(monkeypatch, tmp_path):
+    """El paso 1.5 de /reporte-lote y /informe-gerencial era el ultimo sitio del flujo que
+    hablaba el vocabulario del K-Means. Los dos comandos agrupan por el ranking, asi que la
+    grafica de apertura tenia cinco clases que ninguno de los dos podia nombrar."""
+    import pandas as pd
+
+    from chec_local_interpreter import circuit_clustering_contract as cc
+
+    frame = pd.DataFrame({
+        "CIRCUITO": ["C1"] * 4 + ["C2"] * 4,
+        "FID_VANO": ["a", "a", "b", "b"] * 2,
+        "FECHA": ["2026-01-01", "2026-01-02"] * 4,
+        "UITI_VANO": [1.0, 2.0, 3.0, 4.0] * 2,
+    })
+    monkeypatch.setattr(cc, "load_dataset", lambda path: frame)
+    monkeypatch.setattr(
+        cc, "plot_interactive_circuit_clustering",
+        lambda *a, **k: pytest.fail("el paso 1.5 ya no dibuja la nube de K-Means"),
+    )
+
+    outcome = cc.render_clustering(
+        cc.normalize_request("2026-01-01", "2026-01-02"),
+        data_path="data.csv", output_root=tmp_path,
+    )
+
+    assert outcome.status == "success"
+    import pathlib
+    html = pathlib.Path(outcome.output_html).read_text(encoding="utf-8")
+    assert "Ranking de circuitos por vanos criticos" in html
+    # El vocabulario viejo no puede sobrevivir en el rotulo de la figura.
+    assert "Riesgo Muy Alto" not in html
+    assert "Riesgo Medio-Bajo" not in html

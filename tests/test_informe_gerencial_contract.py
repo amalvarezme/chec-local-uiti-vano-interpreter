@@ -1835,3 +1835,168 @@ def test_el_informe_embebe_las_barras_del_ranking_y_no_la_nube_kmeans(monkeypatc
     )
 
     assert llamadas["destacados"] == ["C1", "C2"]
+
+
+# ---------------------------------------------------------------------------
+# Preambulo: vision general de la banda antes de cualquier sintesis
+# ---------------------------------------------------------------------------
+
+
+def test_perfil_de_banda_cuenta_vanos_por_grupo_y_su_parte_de_la_flota():
+    """El preambulo responde 'cuantos vanos de la flota estan en esta banda', que es la
+    magnitud que justifica el informe. Se calcula sobre la geometria de vanos del ranking,
+    no re-agrupando por circuito."""
+    raw_df = _ranking_raw_df({f"C{i:02d}": i * 8 for i in range(1, 13)}, vanos_por_circuito=110)
+
+    perfil = informe_contract.perfil_de_banda(raw_df, ["C12"], None, None)
+
+    assert perfil["circuitos"] == ["C12"]
+    # Los cuatro grupos de VANO del ranking, en su orden.
+    assert [g["grupo"] for g in perfil["grupos"]] == [
+        "Bajo", "Medio", "Medio-Alto", "Alto"
+    ]
+    # Cada grupo trae el conteo de la banda, su porcentaje DENTRO de la banda, y el
+    # conteo de la flota entera para poder decir que parte se lleva.
+    for g in perfil["grupos"]:
+        assert {"grupo", "vanos", "pct_banda", "vanos_flota", "uiti"} <= set(g)
+    assert sum(g["vanos"] for g in perfil["grupos"]) == perfil["vanos_banda"]
+    assert abs(sum(g["pct_banda"] for g in perfil["grupos"]) - 100.0) < 0.01
+    assert perfil["vanos_flota"] > perfil["vanos_banda"]
+
+
+def test_perfil_de_banda_la_parte_critica_se_mide_contra_la_flota():
+    raw_df = _ranking_raw_df({f"C{i:02d}": i * 8 for i in range(1, 13)}, vanos_por_circuito=110)
+
+    perfil = informe_contract.perfil_de_banda(raw_df, ["C11", "C12"], None, None)
+
+    criticos_banda = sum(g["vanos"] for g in perfil["grupos"] if g["grupo"] in ("Medio-Alto", "Alto"))
+    criticos_flota = sum(g["vanos_flota"] for g in perfil["grupos"] if g["grupo"] in ("Medio-Alto", "Alto"))
+    assert perfil["vanos_criticos_banda"] == criticos_banda
+    assert perfil["vanos_criticos_flota"] == criticos_flota
+    assert perfil["pct_criticos_de_la_flota"] == pytest.approx(
+        100.0 * criticos_banda / criticos_flota, abs=0.01
+    )
+
+
+def test_perfil_de_banda_trae_el_uiti_por_vano_para_los_violines():
+    """El violin necesita la DISTRIBUCION, no un resumen: un promedio no distingue una
+    banda con muchos vanos medianos de una con pocos extremos."""
+    raw_df = _ranking_raw_df({f"C{i:02d}": i * 8 for i in range(1, 13)}, vanos_por_circuito=110)
+
+    perfil = informe_contract.perfil_de_banda(raw_df, ["C12"], None, None)
+
+    con_uiti = [g for g in perfil["grupos"] if g["uiti"]]
+    assert con_uiti, "ningun grupo trajo valores de UITI"
+    for g in con_uiti:
+        assert len(g["uiti"]) == g["vanos"]
+        assert all(v > 0 for v in g["uiti"])
+
+
+def test_perfil_de_banda_nunca_revienta_con_un_marco_vacio():
+    perfil = informe_contract.perfil_de_banda(pd.DataFrame(), ["C1"], None, None)
+
+    assert perfil["vanos_banda"] == 0
+    assert perfil["grupos"] == []
+
+
+def test_figura_preambulo_trae_las_tres_lecturas_del_tablero_2():
+    """Barras de ranking, barras de porcentaje y violines: las mismas tres del tablero de
+    agrupamiento, para que el gerencial y el tablero se lean como una sola cosa."""
+    raw_df = _ranking_raw_df({f"C{i:02d}": i * 8 for i in range(1, 13)}, vanos_por_circuito=110)
+    perfil = informe_contract.perfil_de_banda(raw_df, ["C12"], None, None)
+
+    fig = informe_contract.figura_preambulo(raw_df, ["C12"], perfil, None, None)
+
+    tipos = [t.type for t in fig.data]
+    assert "bar" in tipos
+    assert "violin" in tipos
+    # El ranking de la flota entera sigue siendo una barra por circuito.
+    barras_ranking = [t for t in fig.data if t.type == "bar" and len(t.x or []) == 12]
+    assert barras_ranking, "no esta el ranking de la flota completa"
+
+
+def test_preambulo_html_nombra_los_circuitos_y_sus_magnitudes():
+    perfil = {
+        "circuitos": ["C11", "C12"],
+        "vanos_banda": 184, "vanos_flota": 1320,
+        "vanos_criticos_banda": 184, "vanos_criticos_flota": 624,
+        "pct_criticos_de_la_flota": 29.49,
+        "pct_vanos_de_la_flota": 13.94,
+        "grupos": [
+            {"grupo": "Bajo", "vanos": 0, "pct_banda": 0.0, "vanos_flota": 400, "uiti": []},
+            {"grupo": "Medio", "vanos": 0, "pct_banda": 0.0, "vanos_flota": 296, "uiti": []},
+            {"grupo": "Medio-Alto", "vanos": 92, "pct_banda": 50.0, "vanos_flota": 312, "uiti": [1.0]},
+            {"grupo": "Alto", "vanos": 92, "pct_banda": 50.0, "vanos_flota": 312, "uiti": [2.0]},
+        ],
+    }
+
+    html = informe_contract._preambulo_html(perfil, "<div>FIGURA</div>", "Riesgo Alto", 2)
+
+    assert "FIGURA" in html
+    assert "C11" in html and "C12" in html
+    assert "184" in html          # vanos de la banda
+    assert "29,5" in html or "29.5" in html   # la parte critica de la flota
+    assert "Medio-Alto" in html
+
+
+def test_preambulo_html_dice_cuantos_circuitos_y_de_cuantos():
+    perfil = {
+        "circuitos": ["C12"], "vanos_banda": 92, "vanos_flota": 1320,
+        "vanos_criticos_banda": 92, "vanos_criticos_flota": 624,
+        "pct_criticos_de_la_flota": 14.7, "pct_vanos_de_la_flota": 7.0,
+        "grupos": [{"grupo": "Alto", "vanos": 92, "pct_banda": 100.0, "vanos_flota": 312, "uiti": [1.0]}],
+    }
+
+    html = informe_contract._preambulo_html(perfil, "", "Riesgo Alto", 1)
+
+    assert "1" in html and "Riesgo Alto" in html
+
+
+def test_el_preambulo_va_ANTES_del_resumen_ejecutivo(monkeypatch):
+    """Es un preambulo: si cae despues de la sintesis deja de serlo."""
+    raw_df = _ranking_raw_df({f"C{i:02d}": i * 8 for i in range(1, 13)}, vanos_por_circuito=110)
+    recs = _sampled_records([("C12", 40, 50000.0, "Riesgo Alto")])
+    group = {"slug": "alto", "label": "Riesgo Alto", "circuit_count": 1}
+
+    html = render_managerial_report(
+        raw_df,
+        synthesis=synthesize(recs, [None], group),
+        group=group,
+        resolved_window={"fecha_inicio": "2026-01-01", "fecha_fin": "2026-02-01"},
+        sampled=["C12"],
+    )
+
+    assert "Panorama del grupo" in html
+    assert html.index("Panorama del grupo") < html.index("Resumen ejecutivo del grupo")
+
+
+def test_perfil_de_banda_cuenta_los_circuitos_de_la_FLOTA_no_los_de_la_banda():
+    """"7 circuitos de los 7" no dice nada. El denominador es la flota."""
+    raw_df = _ranking_raw_df({f"C{i:02d}": i * 8 for i in range(1, 13)}, vanos_por_circuito=110)
+
+    perfil = informe_contract.perfil_de_banda(raw_df, ["C12"], None, None)
+
+    assert perfil["circuitos_flota"] == 12
+
+
+def test_preambulo_html_destaca_el_grupo_donde_la_banda_mas_concentra():
+    """La parte que la banda se lleva de CADA grupo es lo accionable: un 22,8% del grupo
+    Alto con solo un 10,5% de los vanos es el argumento, y en el agregado se diluye."""
+    perfil = {
+        "circuitos": ["C1"], "circuitos_flota": 208,
+        "vanos_banda": 2882, "vanos_flota": 27390,
+        "vanos_criticos_banda": 1563, "vanos_criticos_flota": 11679,
+        "pct_criticos_de_la_flota": 13.4, "pct_vanos_de_la_flota": 10.5,
+        "grupos": [
+            {"grupo": "Bajo", "vanos": 387, "pct_banda": 13.4, "vanos_flota": 4236, "uiti": [1.0]},
+            {"grupo": "Medio", "vanos": 932, "pct_banda": 32.3, "vanos_flota": 11475, "uiti": [1.0]},
+            {"grupo": "Medio-Alto", "vanos": 1236, "pct_banda": 42.9, "vanos_flota": 10243, "uiti": [1.0]},
+            {"grupo": "Alto", "vanos": 327, "pct_banda": 11.3, "vanos_flota": 1436, "uiti": [1.0]},
+        ],
+    }
+
+    html = informe_contract._preambulo_html(perfil, "", "Riesgo Alto", 1)
+
+    assert "208" in html                      # el denominador correcto
+    assert "22,8" in html                     # la concentracion en el grupo Alto
+    assert html.count("Alto") >= 2

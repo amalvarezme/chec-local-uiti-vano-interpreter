@@ -169,6 +169,236 @@ def sample_representatives(df_coords: pd.DataFrame, limit: int = TOP_N_REPRESENT
     return df_coords.sort_index().nlargest(limit, "vanos_criticos")
 
 
+# ---------------------------------------------------------------------------
+# Preambulo: el panorama de la banda antes de cualquier sintesis
+# ---------------------------------------------------------------------------
+
+
+def perfil_de_banda(
+    raw_df: pd.DataFrame,
+    circuitos: Sequence[str],
+    start_date: Any = None,
+    end_date: Any = None,
+) -> dict[str, Any]:
+    """Cuantos vanos tiene la banda, como se reparten entre los cuatro grupos de VANO, y
+    que parte de la flota se lleva.
+
+    Es la pregunta con la que abre el informe -- "de que tamano es el problema" -- y no se
+    puede responder con el marco por circuito: ese cuenta CIRCUITOS. Aqui se baja al vano,
+    con la misma geometria de K-Means que fija los grupos en `ranking_circuitos`, para que
+    un vano caiga en el mismo grupo aqui, en el tablero del cuaderno 02 y en el informe por
+    circuito.
+
+    `uiti` viaja como la lista completa de valores por vano, no como un resumen: el violin
+    necesita la DISTRIBUCION. Un promedio no distingue una banda con muchos vanos medianos
+    de una con pocos extremos, que es justo la diferencia que decide donde se interviene.
+
+    Un marco vacio o sin las columnas del ranking devuelve el perfil en cero, nunca levanta.
+    """
+    vacio: dict[str, Any] = {
+        "circuitos": [str(c) for c in circuitos],
+        "circuitos_flota": 0,
+        "grupos": [], "vanos_banda": 0, "vanos_flota": 0,
+        "vanos_criticos_banda": 0, "vanos_criticos_flota": 0,
+        "pct_criticos_de_la_flota": 0.0, "pct_vanos_de_la_flota": 0.0,
+    }
+    if raw_df is None or raw_df.empty:
+        return vacio
+    if not {"CIRCUITO", "FID_VANO", "UITI_VANO"} <= set(raw_df.columns):
+        return vacio
+
+    from chec_local_interpreter.ranking_circuitos import (
+        GRUPOS_CRITICOS,
+        NOMBRES_GRUPOS_VANO,
+        _por_vano,
+        _recortar,
+        geometria_vanos,
+        grupo_de_vanos,
+    )
+
+    geometria = geometria_vanos(raw_df)
+    if not geometria:
+        return vacio
+
+    vanos = _por_vano(_recortar(raw_df, start_date, end_date))
+    vanos = vanos[(vanos["eventos"] > 0) & (vanos["uiti"] > 0)]
+    if vanos.empty:
+        return vacio
+
+    vanos = vanos.assign(grupo=grupo_de_vanos(
+        vanos["eventos"].to_numpy(float), vanos["uiti"].to_numpy(float), geometria))
+    de_la_banda = vanos[vanos["CIRCUITO"].isin([str(c) for c in circuitos])]
+
+    grupos: list[dict[str, Any]] = []
+    n_banda = int(len(de_la_banda))
+    for idx, nombre in enumerate(NOMBRES_GRUPOS_VANO):
+        en_grupo = de_la_banda[de_la_banda["grupo"] == idx]
+        grupos.append({
+            "grupo": nombre,
+            "vanos": int(len(en_grupo)),
+            "pct_banda": round(100.0 * len(en_grupo) / n_banda, 2) if n_banda else 0.0,
+            "vanos_flota": int((vanos["grupo"] == idx).sum()),
+            "uiti": [float(v) for v in en_grupo["uiti"].to_numpy()],
+        })
+
+    criticos_banda = sum(g["vanos"] for i, g in enumerate(grupos) if i in GRUPOS_CRITICOS)
+    criticos_flota = sum(g["vanos_flota"] for i, g in enumerate(grupos) if i in GRUPOS_CRITICOS)
+    n_flota = int(len(vanos))
+    return {
+        "circuitos": [str(c) for c in circuitos],
+        # El denominador que importa es la FLOTA. "7 circuitos de los 7" no dice nada;
+        # `circuit_count` del grupo es el tamano de la BANDA, no de la red.
+        "circuitos_flota": int(raw_df["CIRCUITO"].astype(str).nunique()),
+        "grupos": grupos,
+        "vanos_banda": n_banda,
+        "vanos_flota": n_flota,
+        "vanos_criticos_banda": criticos_banda,
+        "vanos_criticos_flota": criticos_flota,
+        "pct_criticos_de_la_flota": round(100.0 * criticos_banda / criticos_flota, 2) if criticos_flota else 0.0,
+        "pct_vanos_de_la_flota": round(100.0 * n_banda / n_flota, 2) if n_flota else 0.0,
+    }
+
+
+def figura_preambulo(
+    raw_df: pd.DataFrame,
+    circuitos: Sequence[str],
+    perfil: Mapping[str, Any],
+    start_date: Any = None,
+    end_date: Any = None,
+):
+    """Las TRES lecturas del tablero de agrupamiento (cuaderno 02), en una sola figura:
+
+      fila 1  el ranking de la flota entera, con los circuitos de la banda resaltados
+      fila 2  izquierda: como se reparten los vanos de la banda entre los cuatro grupos,
+              con el conteo afuera y el porcentaje adentro
+              derecha:   el violin del UITI acumulado por grupo de vano
+
+    Son las mismas tres del tablero a proposito: quien abre el informe despues de mirar el
+    tablero tiene que reconocer la figura, no traducirla. El ranking va arriba porque situa
+    a la banda dentro de la flota -- sin el, los conteos de abajo no tienen contra que
+    compararse --, y el violin va al lado de las barras porque responde lo que el conteo no
+    puede: no cuantos vanos hay en cada grupo, sino como de graves son.
+    """
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
+
+    from chec_local_interpreter.ranking_circuitos import (
+        COLORES_RANGO,
+        NOMBRES_GRUPOS_VANO,
+        ranking_circuitos,
+    )
+
+    # Los cuatro grupos de VANO reusan el semaforo de las bandas: mismo orden, mismo
+    # significado de color. Dos escalas distintas para "de menos a mas grave" en la misma
+    # figura obligarian al lector a recordar cual es cual.
+    COLORES_GRUPO_VANO = COLORES_RANGO
+
+    fig = make_subplots(
+        rows=2, cols=2,
+        row_heights=[0.52, 0.48],
+        column_widths=[0.40, 0.60],
+        vertical_spacing=0.155, horizontal_spacing=0.10,
+        specs=[[{"colspan": 2}, None], [{}, {}]],
+        subplot_titles=(
+            "Ranking de la flota por vanos en Medio-Alto + Alto",
+            "Vanos de la banda por grupo",
+            "UITI acumulado por vano, dentro de la banda",
+        ),
+    )
+
+    # --- Fila 1: el ranking de la flota, con la banda resaltada ---------------------
+    resultado = ranking_circuitos(raw_df, start_date, end_date)
+    tabla = resultado.tabla
+    de_la_banda = {str(c) for c in circuitos}
+    if not tabla.empty:
+        marcado = [c in de_la_banda for c in tabla["circuito"]]
+        fig.add_trace(go.Bar(
+            x=list(range(len(tabla))),
+            y=tabla["vanos_criticos"].tolist(),
+            marker=dict(
+                color=tabla["color"].tolist(),
+                line=dict(
+                    width=[2.6 if d else 0.3 for d in marcado],
+                    color=["#0f172a" if d else "rgba(60,60,60,0.45)" for d in marcado],
+                ),
+            ),
+            showlegend=False, cliponaxis=False,
+            hovertext=[
+                f"<b>{f.circuito}</b><br>Medio-Alto + Alto: <b>{f.vanos_criticos}</b>"
+                f"<br>Puesto {int(f.posicion)} de {len(tabla)}<br><b>{f.rango}</b>"
+                for f in tabla.itertuples()
+            ],
+            hovertemplate="%{hovertext}<extra></extra>",
+        ), row=1, col=1)
+
+    # --- Fila 2 izquierda: conteo por grupo, con el porcentaje DENTRO ---------------
+    # Dos trazas y no una: una barra tiene un solo par `text`/`textposition`, asi que el
+    # conteo de afuera y el porcentaje de adentro no caben en la misma. Es la misma
+    # solucion que usa el tablero.
+    grupos = list(perfil.get("grupos") or [])
+    if grupos:
+        nombres = [g["grupo"] for g in grupos]
+        conteos = [g["vanos"] for g in grupos]
+        fig.add_trace(go.Bar(
+            x=nombres, y=conteos,
+            text=[f"{v:,}" for v in conteos], textposition="outside",
+            marker=dict(color=list(COLORES_GRUPO_VANO),
+                        line=dict(width=0.5, color="rgba(60,60,60,0.6)")),
+            showlegend=False, cliponaxis=False,
+            hovertext=[
+                f"<b>{g['grupo']}</b><br>{g['vanos']:,} vanos de la banda"
+                f"<br>{g['pct_banda']:.1f}% de la banda"
+                f"<br>de {g['vanos_flota']:,} en la flota"
+                for g in grupos
+            ],
+            hovertemplate="%{hovertext}<extra></extra>",
+        ), row=2, col=1)
+        # El porcentaje solo se escribe donde la barra lo puede sostener. Plotly no achica
+        # el texto: si no cabe lo saca afuera, y ahi choca con el conteo.
+        tope = max(conteos) if conteos else 0
+        fig.add_trace(go.Scatter(
+            x=nombres, y=[v / 2 for v in conteos], mode="text",
+            text=[f"{g['pct_banda']:.0f}%" if v > 0.12 * tope else ""
+                  for g, v in zip(grupos, conteos)],
+            textposition="middle center",
+            textfont=dict(size=11, color=["rgb(40,10,12)", "rgb(40,10,12)", "white", "white"]),
+            showlegend=False, hoverinfo="skip",
+        ), row=2, col=1)
+
+    # --- Fila 2 derecha: el violin del UITI por grupo de vano ----------------------
+    for idx, g in enumerate(grupos):
+        if not g.get("uiti"):
+            continue
+        fig.add_trace(go.Violin(
+            x=[g["grupo"]] * len(g["uiti"]), y=g["uiti"],
+            name=g["grupo"], showlegend=False,
+            line=dict(color="rgba(90,15,20,0.85)", width=1),
+            fillcolor=COLORES_GRUPO_VANO[idx % len(COLORES_GRUPO_VANO)],
+            opacity=0.85, box_visible=True, meanline_visible=False,
+            points=False, spanmode="hard",
+            hovertemplate="%{x} &mdash; UITI acumulado: %{y:,.1f}<extra></extra>",
+        ), row=2, col=2)
+
+    periodo = (f"{start_date} a {end_date}" if start_date and end_date else "periodo completo")
+    fig.update_layout(
+        height=760, template="plotly_white", bargap=0.35, violingap=0.3,
+        margin=dict(l=64, r=32, t=76, b=56),
+        plot_bgcolor="#f8fafc", paper_bgcolor="#ffffff", hovermode="closest",
+        title=dict(text=f"Panorama del grupo &mdash; {periodo}",
+                   font=dict(size=15, family="Arial, sans-serif")),
+    )
+    fig.update_xaxes(showticklabels=False, title_text="Circuitos de la flota, de menos a mas criticos",
+                     row=1, col=1)
+    fig.update_yaxes(title_text="Vanos en Medio-Alto + Alto", rangemode="tozero", row=1, col=1)
+    fig.update_yaxes(title_text="Vanos", rangemode="tozero", row=2, col=1)
+    # El UITI abarca varios ordenes de magnitud: en lineal los grupos bajos se aplastan
+    # contra el cero y el violin no muestra nada. Misma escala que usa el tablero.
+    fig.update_yaxes(title_text="UITI acumulado (log)", type="log", row=2, col=2)
+    for anot in fig.layout.annotations:
+        anot.font.size = 12
+    return fig
+
+
 def resolve_group_dataframe(
     filtered_df: pd.DataFrame, grupo: str, criticidad: str | None
 ) -> pd.DataFrame:
@@ -1561,6 +1791,105 @@ _REPORT_CSS = CSS_IDENTIDAD + """
 """
 
 
+def _num(x: float, dec: int = 1) -> str:
+    """Numero en convencion local: punto de miles y coma decimal."""
+    txt = f"{x:,.{dec}f}"
+    return txt.replace(",", "\u0000").replace(".", ",").replace("\u0000", ".")
+
+
+def _preambulo_html(
+    perfil: Mapping[str, Any], figura_html: str, label: str, circuit_count: int
+) -> str:
+    """El panorama con el que ABRE el informe: quienes son, cuantos son, y que parte del
+    problema de la flota concentran.
+
+    Va antes de toda sintesis a proposito. Sin el, el lector recibe patrones y acciones sin
+    saber sobre que poblacion se calcularon, y un "7 circuitos" suelto no dice si eso es
+    mucho o poco. Aqui se dice contra que se compara: cuantos de los 208, que porcentaje de
+    los vanos de la flota, y que parte de los vanos CRITICOS se lleva la banda -- que casi
+    siempre es mucho mayor que su parte por conteo, y esa desproporcion es el argumento.
+    """
+    circuitos = list(perfil.get("circuitos") or [])
+    grupos = list(perfil.get("grupos") or [])
+    n = len(circuitos)
+
+    lista = ", ".join(f"<code>{_escape(c)}</code>" for c in circuitos) or "&mdash;"
+    flota = perfil.get("circuitos_flota") or circuit_count
+    parrafos = [
+        f"<p>La banda <strong>{_escape(label)}</strong> la componen "
+        f"<strong>{n}</strong> circuito(s) de los <strong>{_num(flota, 0)}</strong> que el "
+        f"ranking evalúa en esta ventana: {lista}.</p>"
+    ]
+
+    if perfil.get("vanos_banda"):
+        pct_criticos = perfil.get("pct_criticos_de_la_flota", 0.0)
+        pct_vanos = perfil.get("pct_vanos_de_la_flota", 0.0)
+        parrafos.append(
+            f"<p>Entre todos suman <strong>{_num(perfil['vanos_banda'], 0)} vanos</strong> "
+            f"con eventos, el <strong>{_num(pct_vanos)}%</strong> de los "
+            f"{_num(perfil['vanos_flota'], 0)} de la flota. De esos, "
+            f"<strong>{_num(perfil['vanos_criticos_banda'], 0)}</strong> estan en "
+            f"Medio-Alto o Alto: el <strong>{_num(pct_criticos)}%</strong> de todos los "
+            f"vanos criticos de la red.</p>"
+        )
+        # La desproporcion ES el argumento del informe. Se dice solo cuando existe, y con
+        # el numero delante, nunca como adjetivo.
+        if pct_vanos > 0 and pct_criticos > pct_vanos:
+            veces = pct_criticos / pct_vanos
+            parrafos.append(
+                f"<p>La banda concentra <strong>{_num(veces, 1)} veces</strong> más vano "
+                f"crítico del que le correspondería por tamaño. Esa desproporción, y no el "
+                f"número de circuitos, es lo que justifica atenderla primero.</p>"
+            )
+        # El agregado DILUYE: la banda puede llevarse una parte modesta del critico total y
+        # aun asi dominar el grupo peor. Se nombra el grupo donde mas concentra, con su
+        # porcentaje, porque es donde la intervencion rinde.
+        candidatos = [
+            (100.0 * g["vanos"] / g["vanos_flota"], g)
+            for g in grupos if g.get("vanos_flota") and g.get("vanos")
+        ]
+        if candidatos:
+            pct_top, g_top = max(candidatos, key=lambda par: par[0])
+            if pct_top > pct_vanos:
+                parrafos.append(
+                    f"<p>Donde más concentra es en el grupo <strong>{_escape(g_top['grupo'])}</strong>: "
+                    f"{_num(g_top['vanos'], 0)} de los {_num(g_top['vanos_flota'], 0)} vanos que la "
+                    f"red entera tiene en ese grupo, el <strong>{_num(pct_top)}%</strong>. Es la cifra "
+                    f"que el agregado diluye y la que señala dónde rinde la intervención.</p>"
+                )
+
+    filas = "".join(
+        "<tr>"
+        f"<td>{_escape(g['grupo'])}</td>"
+        f"<td>{_num(g['vanos'], 0)}</td>"
+        f"<td>{_num(g['pct_banda'])}%</td>"
+        f"<td>{_num(g['vanos_flota'], 0)}</td>"
+        f"<td>{_num(100.0 * g['vanos'] / g['vanos_flota']) if g['vanos_flota'] else '0,0'}%</td>"
+        "</tr>"
+        for g in grupos
+    )
+    tabla = (
+        "<table class='compact-table'><thead><tr>"
+        "<th>Grupo de vano</th><th>Vanos en la banda</th><th>% de la banda</th>"
+        "<th>Vanos en la flota</th><th>% de ese grupo</th>"
+        "</tr></thead><tbody>" + filas + "</tbody></table>"
+    ) if filas else ""
+
+    return f"""
+<section class="report-section">
+<h2>Panorama del grupo</h2>
+<p class="badge-deterministic">Cálculo determinista</p>
+{''.join(parrafos)}
+{tabla}
+<p class="nota">Las tres lecturas son las del segundo tablero del cuaderno 02, con la misma
+geometría de grupos de vano: el ranking sitúa a la banda dentro de la flota, las barras
+reparten sus vanos entre los cuatro grupos, y el violín muestra cómo de grave es cada
+grupo &mdash; que es lo que el conteo no puede decir.</p>
+{figura_html}
+</section>
+"""
+
+
 def render_managerial_report(
     raw_df: pd.DataFrame,
     *,
@@ -1605,6 +1934,22 @@ def render_managerial_report(
     )
     # La concentracion por VENTANA. Va antes de las causas: primero cuando pasa, y
     # despues por que. Determinista, de los sobres que `prepare` dejo en disco.
+    # El PREAMBULO. Se calcula sobre los circuitos muestreados y la flota entera, y se
+    # arma antes que nada porque es lo primero que el lector ve: sin el, los patrones y las
+    # acciones llegan sin saber sobre que poblacion se calcularon.
+    perfil = perfil_de_banda(
+        raw_df, sampled,
+        resolved_window.get("fecha_inicio"), resolved_window.get("fecha_fin"),
+    )
+    fig_preambulo = figura_preambulo(
+        raw_df, sampled, perfil,
+        resolved_window.get("fecha_inicio"), resolved_window.get("fecha_fin"),
+    )
+    preambulo_html = _preambulo_html(
+        perfil,
+        fig_preambulo.to_html(full_html=False, include_plotlyjs=False) if fig_preambulo else "",
+        label, circuit_count,
+    )
     ventanas_section_html = _ventanas_html(ventanas_del_grupo(sampled))
     graph_section_html = _graph_patterns_html(
         graph_patterns, graph_view_html, n_sampled=len(sampled)
@@ -1624,7 +1969,7 @@ def render_managerial_report(
 <h1>Informe Gerencial: Circuitos en {_escape(label)}</h1>
 <p class="meta">Ventana: {_escape(resolved_window.get('fecha_inicio'))} a {_escape(resolved_window.get('fecha_fin'))}
 &middot; Circuitos muestreados: {len(sampled)} de {circuit_count}</p>
-
+{preambulo_html}
 <section class="report-section">
 <h2>Resumen ejecutivo del grupo</h2>
 {_list_html(synthesis['resumen_ejecutivo'])}

@@ -132,6 +132,39 @@ This mirrors the `awaiting_confirmation` → `confirm`/`confirm_and_trigger_miss
 convention `reporte-lote/SKILL.md` uses for its own gate — never a second confirmation later in the
 run, never a per-circuit prompt.
 
+## Preamble: "Panorama del grupo" (first section, always)
+
+The report OPENS with a deterministic overview of the band, before any synthesis, built by
+`perfil_de_banda` + `figura_preambulo` + `_preambulo_html`. It answers what the rest of the
+report assumes: who is in the band, how many of the fleet's circuits that is, and what share
+of the fleet's vanos — and of its CRITICAL vanos — they hold.
+
+Its figure carries the same three readings as notebook 02's second dashboard
+(`src/chec_tableros/agrupamiento.py`), deliberately, so a reader coming from the dashboard
+recognizes the figure instead of translating it:
+
+| Row | Panel | Answers |
+|---|---|---|
+| 1 | full-fleet ranking bars, band circuits outlined | where the band sits in the fleet |
+| 2 left | vano counts per group, count outside + percentage inside | how the band's vanos split across the four vano groups |
+| 2 right | violin of accumulated UITI per vano group (log axis) | how SEVERE each group is — what the count cannot say |
+
+Two prose rules the section enforces, both learned from a measured run:
+
+- The circuit denominator is the **fleet**, from `perfil["circuitos_flota"]`, never the
+  group's own `circuit_count`. "7 circuits out of 7" says nothing; "7 out of 208" is the point.
+- After the aggregate share, it names the single vano group where the band concentrates MOST,
+  with its percentage. Measured on `alto`: the band holds 13.4% of the fleet's critical vanos
+  overall but **22.8% of its `Alto` vanos** with only 10.5% of the vanos. The aggregate dilutes
+  exactly the number that says where intervention pays.
+
+`perfil_de_banda` drops to the VANO level using `ranking_circuitos`'s own
+`geometria_vanos`/`grupo_de_vanos`, so a vano lands in the same group here, in the dashboard,
+and in the per-circuit report. It carries the full per-vano UITI list, not a summary: the
+violin needs the DISTRIBUTION — a mean cannot tell a band of many mid vanos from one with a
+few extremes, which is the difference that decides where to intervene. An empty or
+column-less frame returns a zeroed profile; it never raises.
+
 ## Full-fleet ranking bars (non-negotiable)
 
 The embedded figure in the final report ALWAYS shows the FULL fleet — all 208 circuits and all 4
@@ -228,6 +261,12 @@ Given `grupo` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
       when nothing is missing, before step 3) — run the shared circuit-clustering
       contract directly by its render verb:
       `PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.circuit_clustering_contract render <fecha_inicio> <fecha_fin> --runtime claude`.
+      Since 2026-08-18 that contract renders the RANKING bars, not the K-Means scatter — it
+      was the last place in this flow speaking the retired five-tier vocabulary, showing
+      classes (`Riesgo Muy Alto`, `Riesgo Medio-Bajo`) that neither this Skill nor
+      `/reporte-lote` can name, on a different axis (circuit SIZE, events × UITI, rather than
+      critical vanos). It renders with no highlighted circuit: this artifact is the fleet's
+      picture BEFORE a band is chosen.
       Reuse this Skill's own already-resolved/confirmed `fecha_inicio`/`fecha_fin` from 1.2-1.4 — never
       re-run that contract's own preflight or add a second confirmation prompt, since that would
       ask the user to confirm the identical window a second time in the same checkpoint. Unconditional:

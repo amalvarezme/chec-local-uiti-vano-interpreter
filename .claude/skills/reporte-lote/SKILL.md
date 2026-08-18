@@ -234,7 +234,9 @@ alert-and-continue recorded as `SUCCESS` with a degradation note.
   same `GROUP_SLUGS` definition):
   [`src/chec_local_interpreter/ranking_circuitos.py`](../../../src/chec_local_interpreter/ranking_circuitos.py),
   the Python port of `src/chec_tableros/agrupamiento.py`'s second dashboard
-- Shared render verb that step 1.5 invokes directly for the mandatory pre-batch clustering chart
+- Shared render verb that step 1.5 invokes directly for the mandatory pre-batch chart — since
+  2026-08-18 it renders the RANKING bars, not the retired K-Means scatter, so the opening
+  figure speaks the same four-band vocabulary the batch groups by
   (it had its own `/agrupamiento-circuitos` Skill until 2026-08-17; the command was retired and
   the contract module it exposed stayed, because this Skill and `/informe-gerencial` call it
   directly and never went through the Skill):
