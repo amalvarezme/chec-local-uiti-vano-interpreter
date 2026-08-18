@@ -703,3 +703,76 @@ def test_la_disposicion_es_reproducible():
     b, _ = ig.build_graph_elements(_modelo_de_prueba())
 
     assert [(n["id"], n["x"], n["y"]) for n in a] == [(n["id"], n["x"], n["y"]) for n in b]
+
+
+# ---------------------------------------------------------------------------
+# Rotulos y hover: lo que el lector ve cuando el texto no cabe
+# ---------------------------------------------------------------------------
+
+
+_ROTULO_LARGO = "Inspección en campo · Riesgo por vegetación cercana al vano (NR_T)"
+
+
+def test_el_rotulo_del_anillo_no_se_corta_a_la_mitad_de_una_palabra():
+    """`[:38]` dejaba "Inspección en campo · Riesgo por veget" en el informe.
+
+    Y no era un limite del espacio: `_ring_radius` YA calcula el radio del anillo a
+    partir del rotulo ENVUELTO en dos lineas, asi que el hueco estaba reservado y el
+    dibujo no lo usaba. La geometria y el dibujo se contradecian, y ganaba el corte.
+    """
+    nodes = [{
+        "id": "e1", "kind": "estrategia", "label": _ROTULO_LARGO,
+        "x": 200.0, "y": 0.0, "soporte": 3, "total_circuitos": 12,
+    }]
+    fig = ig.figura_plotly(nodes, [])
+    textos = [a.text for a in fig.layout.annotations]
+
+    assert textos, "el anillo tiene que llevar su rotulo"
+    entero = "".join(textos).replace("<br>", " ")
+    assert "vegetación cercana al vano" in entero, f"rotulo cortado: {textos}"
+
+
+def test_el_rotulo_largo_se_reparte_en_dos_lineas_por_su_propio_separador():
+    """El corte va en el ` · ` que el propio concepto trae, no a mitad de palabra:
+    es el mismo criterio con el que `_ring_radius` midio el anillo."""
+    nodes = [{
+        "id": "e1", "kind": "estrategia", "label": _ROTULO_LARGO,
+        "x": 200.0, "y": 0.0, "soporte": 3, "total_circuitos": 12,
+    }]
+    fig = ig.figura_plotly(nodes, [])
+    texto = fig.layout.annotations[0].text
+
+    assert "<br>" in texto
+    cabeza, _, cola = texto.partition("<br>")
+    assert cabeza.strip() == "Inspección en campo"
+    assert cola.strip().startswith("Riesgo por vegetación")
+
+
+def test_el_hover_parte_las_lineas_largas():
+    """Plotly no envuelve el globo de hover: una linea de 200 caracteres lo hace mas
+    ancho que la figura y el navegador lo recorta por los DOS lados, que es como se veia
+    en el informe -- texto cortado a izquierda y a derecha a la vez.
+    """
+    larga = ("Entorno/Riesgo aporta NR_T, que describe el riesgo por vegetación cercana "
+             "al vano, y DDT, que describe la densidad de descargas a tierra, junto con "
+             "precipitación, nubosidad, viento y ráfagas, y las reglas del contexto los "
+             "vinculan de forma explícita con el indicador")
+    nodo = {
+        "label": "Clima/atmosférico", "soporte": 9, "total_circuitos": 12,
+        "detalle": [larga],
+    }
+
+    hover = ig._hover_de_nodo(nodo)
+    lineas = hover.split("<br>")
+
+    assert max(len(l) for l in lineas) <= ig.ANCHO_HOVER + 20, (
+        f"linea de {max(len(l) for l in lineas)} caracteres sin partir")
+    assert "vegetación cercana" in hover.replace("<br>", " ")
+
+
+def test_el_hover_no_parte_palabras():
+    nodo = {"label": "X", "detalle": ["palabra " * 60]}
+    hover = ig._hover_de_nodo(nodo)
+
+    for linea in hover.split("<br>"):
+        assert not linea.startswith("abra"), "corto una palabra por la mitad"

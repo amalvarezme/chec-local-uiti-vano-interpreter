@@ -763,6 +763,34 @@ _ETIQUETA_ANILLO = {"circuito": "Circuitos", "causa": "Causas",
 MAX_ROTULOS_ANILLO = 45
 
 
+#: Ancho maximo, en caracteres, de una linea del globo de hover.
+#: Plotly NO envuelve el texto del hover: dibuja el globo tan ancho como su linea mas
+#: larga. Una frase de agente de 200 caracteres lo hacia mas ancho que la figura y el
+#: navegador lo recortaba por los DOS lados a la vez -- se veia el centro de cada linea y
+#: se perdian el principio y el final. 90 cabe holgado en el ancho del informe.
+ANCHO_HOVER = 90
+
+
+def _partir_en_lineas(texto: str, ancho: int = ANCHO_HOVER) -> list[str]:
+    """`texto` repartido en lineas de a lo sumo `ancho` caracteres, sin partir palabras.
+
+    Una palabra mas larga que `ancho` se deja entera y desborda: cortarla la vuelve
+    ilegible, y en este dominio esas palabras son codigos (`PROMEDIO_KWH_TRF`) que hay
+    que poder copiar.
+    """
+    lineas: list[str] = []
+    actual = ""
+    for palabra in texto.split():
+        if actual and len(actual) + 1 + len(palabra) > ancho:
+            lineas.append(actual)
+            actual = palabra
+        else:
+            actual = f"{actual} {palabra}" if actual else palabra
+    if actual:
+        lineas.append(actual)
+    return lineas or [""]
+
+
 def _hover_de_nodo(node: dict[str, Any]) -> str:
     """Lo que el panel lateral del iframe mostraba al hacer clic.
 
@@ -781,7 +809,7 @@ def _hover_de_nodo(node: dict[str, Any]) -> str:
         lineas.append(f"Prioridad: {html_lib.escape(str(prioridad))}")
     detalle = list(node.get("detalle") or [])
     for linea in detalle[:6]:
-        lineas.append(html_lib.escape(str(linea)))
+        lineas.extend(_partir_en_lineas(html_lib.escape(str(linea))))
     if len(detalle) > 6:
         lineas.append(f"… y {len(detalle) - 6} más")
     return "<br>".join(lineas)
@@ -858,7 +886,11 @@ def figura_plotly(nodes: Sequence[dict[str, Any]], edges: Sequence[dict[str, Any
         radio = math.hypot(x, y) or 1.0
         fig.add_annotation(
             x=x * (1.0 + 26.0 / radio), y=y * (1.0 + 26.0 / radio),
-            text=html_lib.escape(str(node["label"]))[:38],
+            # Envuelto por su propio separador, NO cortado. `_ring_radius` ya midio
+            # este anillo con el rotulo partido en dos lineas, asi que el hueco esta
+            # reservado; el `[:38]` de antes dejaba "Riesgo por veget" en un espacio
+            # que ya cabia entero.
+            text=html_lib.escape(_wrap_label(str(node["label"]))).replace("\n", "<br>"),
             showarrow=False, textangle=angulo, xanchor=anclaje, yanchor="middle",
             font=dict(size=10, color="#334155"),
         )
