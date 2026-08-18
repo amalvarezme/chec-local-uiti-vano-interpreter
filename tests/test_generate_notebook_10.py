@@ -379,8 +379,8 @@ def test_generator_never_edits_upstream_notebooks_or_variable_selection(tmp_path
     # Compare the files' own bytes before and after, NOT `git diff` against HEAD.
     # The claim under test is "the generator does not modify these files", which is a
     # before/after delta. Asserting a clean working tree instead made this test fail
-    # whenever someone had legitimate uncommitted edits to 01.3/01.4 -- observed once
-    # for real, when a concurrent session was editing 01.4 while the suite ran.
+    # whenever someone had legitimate uncommitted edits to a watched file -- observed
+    # once for real, when a concurrent session was editing one while the suite ran.
     def _digests() -> dict[str, str]:
         return {p: hashlib.sha256((REPO_ROOT / p).read_bytes()).hexdigest() for p in existing}
 
@@ -396,8 +396,8 @@ def test_generator_never_edits_upstream_notebooks_or_variable_selection(tmp_path
     after = _digests()
     changed = sorted(p for p in existing if before[p] != after[p])
     assert not changed, (
-        "generating notebook 10 must never modify 01.2/01.3/01.4 or the variable "
-        f"selection, but these changed: {changed}"
+        "generar el cuaderno 05 nunca puede modificar los modulos de los tableros "
+        f"ni la seleccion de variables, y estos cambiaron: {changed}"
     )
 
 
@@ -515,3 +515,53 @@ def test_generator_fits_the_forest_once_per_fold(notebook):
         "el bucle debe derivar la clase de predecir_u_estructural, no reajustar el bosque"
     )
     assert source.count("predecir_u_estructural(") == 1
+
+
+# ---------------------------------------------------------------------------
+# El dispositivo de entrenamiento
+# ---------------------------------------------------------------------------
+
+
+def _celda_del_dispositivo(nb) -> str:
+    """La celda de importaciones, que es donde se resuelve `DEVICE`."""
+    return next(s for s in _code_sources(nb) if "RANDOM_STATE = 42" in s)
+
+
+def test_el_cuaderno_nunca_entrena_en_mps(notebook):
+    """MPS es el peor camino para ESTE modelo, y esta medido: 19,63 s por epoca y
+    pliegue contra 3,28 en CPU (49,1 min contra 8,2 en la validacion completa) y
+    11.234 MB de pico contra 3.293. Con 150.926 parametros y lotes de 256 bolsas
+    no hay con que amortizar el viaje de cada lote a la GPU.
+
+    La prueba EJECUTA la celda con un `resolve_training_device` que devuelve
+    `mps`, en vez de buscar el texto del guardia. Buscar el texto ata la prueba a
+    la forma en que hoy esta escrito; ejecutarlo ata la prueba a lo unico que
+    importa, que es con que dispositivo se acaba entrenando. Sin el guardia esta
+    misma celda deja `DEVICE` en `mps` -- comprobado.
+    """
+    import torch
+
+    espacio = {"resolve_training_device": lambda _pedido: torch.device("mps")}
+    exec(_celda_del_dispositivo(notebook), espacio)  # noqa: S102
+    assert espacio["DEVICE"].type == "cpu", (
+        f"el cuaderno entrenaria en {espacio['DEVICE']}, que esta medido 6x mas lento"
+    )
+
+
+def test_cuda_se_respeta_si_la_hay(notebook):
+    """El guardia descarta MPS, no toda GPU. CUDA no se midio aqui -- una NVIDIA
+    de escritorio podria ganarle a la CPU --, asi que forzar CPU sobre ella seria
+    inventar un resultado que nadie tomo."""
+    import torch
+
+    espacio = {"resolve_training_device": lambda _pedido: torch.device("cuda")}
+    exec(_celda_del_dispositivo(notebook), espacio)  # noqa: S102
+    assert espacio["DEVICE"].type == "cuda"
+
+
+def test_no_afirma_que_la_cpu_tarda_horas(notebook):
+    """El aviso viejo decia que con `mode='full'` la CPU podia tardar horas. Solo
+    salia cuando NO habia GPU -- o sea, en Windows -- y describia el camino MAS
+    RAPIDO de los tres medidos."""
+    todo = _all_code_source(notebook) + _all_markdown_source(notebook)
+    assert "puede tardar horas" not in todo

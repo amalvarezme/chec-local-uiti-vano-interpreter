@@ -82,9 +82,14 @@ Todo lo que sigue corre SOLO con `EJECUCION = "entrenamiento"`. Con el valor
 por defecto (`"visualizacion"`) cada celda de aquí en adelante no hace nada, y
 el cuaderno termina en segundos.
 
-Reentrenar con `mode = "full"` toma alrededor de 40 minutos y SOBREESCRIBE
-`data/models/mil_vano_ventana_v1.pt`, que es el artefacto que consume el
-simulador de 01.5.
+Reentrenar con `mode = "full"` toma **entre 8 y 14 minutos en CPU** -- medido
+sobre un pliegue real de 88.987 bolsas, proyectado a 30 épocas x 5 pliegues -- y
+SOBREESCRIBE `data/models/mil_vano_ventana_v1.pt`, que es el artefacto que
+consumen el simulador (`aplicaciones/06_simulador`), `/report` y los informes.
+
+El «alrededor de 40 minutos» que decía antes esta línea correspondía al camino
+por MPS, que la celda de dispositivo ahora descarta a propósito. Ver la sección
+siguiente.
 '''
 
 _MD_ARQUITECTURA = '''\
@@ -404,9 +409,10 @@ La unidad de aprendizaje no es el evento: es la celda **(circuito, vano,
 ventana)**. Cada bolsa es el conjunto de eventos de UN vano dentro de UNA
 ventana, y el modelo predice el UITI acumulado de esa celda.
 
-- **Ventanas.** Las mismas 11 de 04, reconstruidas aquí con el mismo corte: cada
-  mes calendario mas su cruce del 15 al 15 del mes siguiente, ordenados. No son
-  meses, así que no se pueden sumar entre si.
+- **Ventanas.** Las mismas 11 de 01.4, reconstruidas aquí con su mismo corte
+  (`ventanas_015.construir_ventanas`): cada mes calendario mas su cruce del 15 al
+  15 del mes siguiente, ordenados. No son meses, así que no se pueden sumar entre
+  si.
 - **Solapamiento a proposito.** Las ventanas se pisan. Un evento que cae en dos
   ventanas del mismo vano genera DOS instancias, una en cada bolsa. Es la
   duplicacion ~1.81x del diseno: se documenta, no se filtra. Filtrarla cambiaria
@@ -830,8 +836,9 @@ _MD_GUARDADO = '''\
 ## Guardado del modelo (solo al reentrenar)
 
 Persiste el modelo ajustado con sus nombres de features, su grafo y la
-geometría, para que 01.5 pueda cargarlo. Sin esto, el modelo final vivia solo
-en memoria y el simulador no tenia nada que levantar.
+geometría, para que el simulador (`aplicaciones/06_simulador`) pueda cargarlo.
+Sin esto, el modelo final vivia solo en memoria y el simulador no tenia nada que
+levantar.
 '''
 
 _CODE_GUARDADO = '''\
@@ -870,13 +877,30 @@ else:
 
 
 _MD_TITLE = '''\
-# 10. Aprendizaje de instancias multiples (MIL) sobre bolsas vano x ventana de 01.4
+# 05. Aprendizaje de instancias multiples (MIL) sobre bolsas vano x ventana
 
-Cada **bolsa** es una celda `(CIRCUITO, FID_VANO, ventana)` de
-`01.4_uiti_vano_trayectorias_vano.ipynb`; cada **instancia** es un evento de
-falla dentro de esa celda. Las 11 ventanas de 01.3/01.4 se solapan (mes
+Cada **bolsa** es una celda `(CIRCUITO, FID_VANO, ventana)`; cada **instancia**
+es un evento de falla dentro de esa celda. Las 11 ventanas se solapan (mes
 calendario mas la cruzada del 15 al 15), así que un mismo evento puede caer
 en dos bolsas del mismo vano -- se duplica, nunca se filtra.
+
+### Que es "01.4", que se nombra en todo este cuaderno
+
+Era `01.4_uiti_vano_trayectorias_vano.ipynb`, el cuaderno que fijo la geometría
+KMeans y el corte de las 11 ventanas. **Ese cuaderno ya no existe**: los tableros
+se retiraron y hoy este es el UNICO cuaderno del proyecto. Lo que sobrevivio de
+el, que es lo que aquí se hereda, vive en tres sitios y ninguno es un `.ipynb`:
+
+| lo que era de 01.4 | donde vive hoy |
+|---|---|
+| la geometría KMeans | `data/geometria_kmeans_014_v1.json`, versionado, producido por `scripts/exportar_geometria.py` |
+| el corte de las 11 ventanas | `chec_local_interpreter.ventanas_015.construir_ventanas` |
+| el tablero que lo mostraba | `aplicaciones/04_trayectorias_vanos` (`chec_tableros.trayectorias_vanos`) |
+
+El nombre "01.4" se conserva a proposito: es el que llevan los simbolos reales
+del codigo (`cargar_geometria_014`, `geometrias_014`, `verificar_sha1_geometrias`)
+y el del propio artefacto. Renombrarlo en la prosa lo desconectaria de lo que hay
+que leer.
 
 El modelo codifica cada instancia con `MGCECDLRegressor._encode_modalities`
 (reutilizado sin cambios), agrupa las instancias de una bolsa con atención
@@ -888,8 +912,9 @@ criticidad reportada es la regla de vecino-mas-cercano que 01.4 ya calculo
 con KMeans -- no se reajusta aquí.
 
 Generado por `scripts/generate_notebook_10.py` (COMMITTED, reproducible).
-Ver `sdd/notebook-10-mil-vano-ventana/{spec,design}` para el contrato
-completo.
+El nombre del generador conserva el numero viejo del cuaderno; la salida es
+`notebooks/05_mil_vano_ventana.ipynb`. Editar el `.ipynb` a mano no sirve: la
+siguiente generacion lo sobreescribe.
 
 **Este cuaderno se genera SIN ejecutar el entrenamiento.** Ninguna corrida
 MIL se ha cronometrado nunca en esta maquina -- la celda 6 mide UNA corrida
@@ -919,7 +944,7 @@ flowchart TD
 
 _CODE_PARAMETERS = '''\
 # Celda de parametros (papermill). Sobrescribir con `-p mode full` para la corrida real.
-# El default es "smoke" a proposito, mismo patron que la libreta 12.
+# El default es "smoke" a proposito: una corrida corta antes de comprometer 40 minutos.
 mode = "smoke"
 
 # COMO se ejecuta este cuaderno:
@@ -1053,9 +1078,23 @@ from sklearn.ensemble import RandomForestRegressor
 
 RANDOM_STATE = 42
 DEVICE = resolve_training_device("auto")
+
+# MPS se descarta A PROPOSITO. `auto` lo elige en cualquier Mac con Apple Silicon y no
+# avisa nada, pero para ESTE modelo esta medido que es el peor camino: 19,63 s por epoca
+# y pliegue contra 3,28 en CPU (49,1 min contra 8,2 en la validacion completa) y 11.234 MB
+# de pico contra 3.293. El modelo tiene 150.926 parametros y lotes de 256 bolsas: es
+# demasiado pequeno para amortizar el viaje de cada lote a la GPU. Ver la seccion 5.3 de
+# `docs/REQUISITOS-MINIMOS.md`. CUDA no se toca: una NVIDIA de escritorio podria ganarle
+# a la CPU, y eso no se ha medido aqui.
+if DEVICE.type == "mps":
+    DEVICE = torch.device("cpu")
+    print("MPS descartado a proposito: medido 6x mas lento y 3,4x mas memoria que la CPU.")
+
 print("Dispositivo de entrenamiento resuelto:", DEVICE)
 if DEVICE.type == "cpu":
-    print("AVISO: se entrenara en CPU. Con mode='full' esto puede tardar horas.")
+    print("CPU: con mode='full' la validacion completa toma entre 8 y 14 minutos.")
+    print(f"Hilos de torch: {torch.get_num_threads()}. Medido: MENOS hilos es MAS rapido")
+    print("  (2 hilos 3,28 s/epoca; 14 hilos 5,51). Ajustar con torch.set_num_threads(2).")
 '''
 
 _MD_CONFIG = '''\
@@ -1064,8 +1103,29 @@ _MD_CONFIG = '''\
 `N_SPLITS = 5` (D8, `StratifiedGroupKFold`) es fijo en ambos modos. Los demas
 hiperparametros del modelo (`HIDDEN_DIM`, `EMBED_DIM`, `ALPHA`, los `LAMBDA_*`)
 son valores fijos razonables -- este cuaderno no corre una busqueda de
-hiperparametros (a diferencia de la libreta 12, aquí no hay un objetivo de
-Optuna definido en el diseno).
+hiperparametros: no hay un objetivo de Optuna definido para este modelo, y el
+unico que existio, el del clasificador MGCECDL, se retiro junto con el.
+
+### Por qué la celda anterior descarta la GPU del Mac
+
+`resolve_training_device("auto")` elige CUDA, si no MPS, si no CPU. En cualquier
+Mac con Apple Silicon eso significa **MPS, en silencio**, y para este modelo está
+medido que es el peor de los caminos:
+
+| dispositivo | s por época y pliegue | proyección completa | pico de memoria |
+|---|---|---|---|
+| CPU, 2 hilos | **3,28** | **8,2 min** | 3.293 MB |
+| CPU, 14 hilos (todos, por defecto) | 5,51 | 13,8 min | 3.267 MB |
+| MPS (lo que elegía `auto` en un Mac) | 19,63 | 49,1 min | 11.234 MB |
+
+Con 150.926 parámetros y lotes de 256 bolsas, el modelo es demasiado pequeño para
+amortizar el viaje de cada lote a la GPU: lo que se gana en cómputo se pierde en
+transferencia. Y **más núcleos empeoran el tiempo**, monótonamente, porque
+coordinar hilos cuesta más que el trabajo que se reparte.
+
+CUDA no se toca: una NVIDIA de escritorio podría ganarle a la CPU, y eso no está
+medido aquí. El detalle completo vive en la sección 5.3 de
+`docs/REQUISITOS-MINIMOS.md`.
 '''
 
 _CODE_CONFIG = '''\
@@ -1527,7 +1587,7 @@ else:
 '''
 
 _MD_POR_CLASE = '''\
-## 9.1 Desglose por clase (matriz de confusion, precision/recall/F1, accuracy)
+## Desglose por clase (matriz de confusion, precision/recall/F1, accuracy)
 
 macro-F1 no distingue "mediocre parejo" de "abandono una clase", y aquí esa
 es la pregunta: `Alto` es el 10,21% del subconjunto de variacion intra-vano
@@ -1596,7 +1656,7 @@ else:
 '''
 
 _MD_DESGLOSE = '''\
-## 10. Desglose por circuito (reporte, nunca un piso de aceptacion)
+## Desglose por circuito (reporte, nunca un piso de aceptacion)
 
 La unidad de decision es el agregado global de la celda 9; este desglose
 informa, no condiciona -- se reporta pase o no pase la barra A1.
@@ -1731,7 +1791,7 @@ else:
 '''
 
 _MD_SIMULATOR = '''\
-## 15. Contrato del simulador (`predict_fn`), sin correr el simulador
+## Contrato del simulador (`predict_fn`), sin correr el simulador
 
 `predict_fn` fija el contrato `{"fused_probs": (n, 4), "predicted_classes":
 (n,)}` que `chec_local_interpreter/simulator.py` espera -- el simulador en si
@@ -1749,7 +1809,7 @@ else:
 '''
 
 _MD_LIMITACION = '''\
-## 16. Techo interpretativo honesto
+## Techo interpretativo honesto
 
 El techo teórico de este problema es la varianza intra-vano medida por 01.4:
 39.1% de la varianza de clase vive DENTRO del vano, el 60.9% restante lo
@@ -1761,7 +1821,7 @@ efectivamente mida.
 '''
 
 _MD_SUMMARY = '''\
-## 17. Resumen final
+## Resumen final
 
 Cantidades DERIVADAS en tiempo de ejecución (nunca literales, salvo las
 poblacionales pineadas y verificadas en la celda 4): `p`, `E`, `K`
@@ -1817,7 +1877,7 @@ esta en el segundo a proposito.
 
 **Lo medido, no lo supuesto.** Con `EJECUCION = "visualizacion"` este cuaderno
 corre completo sobre un checkout recien clonado -- sin `data/derived/`, sin
-haber ejecutado 01.4, sin entrenar -- en unos pocos segundos. La celda que sigue
+regenerar la geometría de 01.4, sin entrenar -- en unos pocos segundos. La celda que sigue
 lo verifica archivo por archivo en vez de afirmarlo.
 
 Funciona por una decision concreta: **todo lo que el visor necesita viaja dentro
@@ -2394,15 +2454,17 @@ resultados.
 
 ### El mismo procedimiento que el tablero 02, sobre tres unidades
 
-El tablero de agrupamiento (`02_uiti_vano_kmeans`) hace exactamente lo mismo dos
-veces, sobre unidades distintas:
+El tablero de agrupamiento (`aplicaciones/02_agrupamiento_vanos`, antes el
+cuaderno `01.2_uiti_vano_kmeans`) hace exactamente lo mismo dos veces, sobre
+unidades distintas:
 
 - **A nivel de circuito.** Un punto es un circuito. El eje x es cuantos eventos
   registro en el periodo y el eje y su UITI acumulado.
 - **A nivel de vano.** Un punto es un vano, con las mismas dos coordenadas.
 
-Y `04_uiti_vano_trayectorias_vano` repite el procedimiento una tercera vez, sobre
-la celda `(circuito, vano, ventana)`. Esa tercera es la que importa aquí.
+Y 01.4 repite el procedimiento una tercera vez, sobre la celda
+`(circuito, vano, ventana)`. Esa tercera es la que importa aquí, y es la que
+quedo congelada en `data/geometria_kmeans_014_v1.json`.
 
 En los tres casos: K-Means a **4 grupos** sobre un espacio FIJO -- eje x lineal,
 eje y en `log10`, escalador `minmax` -- ajustado **una sola vez sobre la ventana
@@ -2919,7 +2981,7 @@ def main() -> None:
     args = parser.parse_args()
 
     notebook = generate(args.out)
-    print(f"Notebook 10 written to {args.out} ({len(notebook.cells)} cells).")
+    print(f"Cuaderno 05 escrito en {args.out} ({len(notebook.cells)} cells).")
 
 
 if __name__ == "__main__":
