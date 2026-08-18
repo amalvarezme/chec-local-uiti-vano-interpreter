@@ -167,3 +167,58 @@ def test_sin_ventanas_la_seccion_no_aparece():
     from chec_local_interpreter.informe_gerencial_contract import _ventanas_html
 
     assert _ventanas_html([]) == ""
+
+
+def test_cuenta_tambien_los_que_BAJAN_DE_GRUPO_sin_llegar_a_bajo(tmp_path):
+    """Solo contaba `alcanza`, o sea llegar al grupo Bajo.
+
+    Medido sobre DON23L14 V11: de los 16 vanos que el plan mueve, 8 llegan a Bajo y
+    otros 8 bajan un grupo sin llegar. Contando solo los primeros, la mitad del efecto
+    de la obra desaparece del informe del grupo -- y una ventana donde nada llega a Bajo
+    pero todo baja un escalon se lee como una ventana sin nada que hacer.
+    """
+    from chec_local_interpreter.informe_gerencial_contract import ventanas_del_grupo
+
+    escenario = {
+        "ventana": "V9", "n_vanos": 50,
+        "vanos_criticos": [
+            {"fid": "A", "alcanza": True, "baja_de_grupo": True},
+            {"fid": "B", "alcanza": False, "baja_de_grupo": True},
+            {"fid": "C", "alcanza": False, "baja_de_grupo": False},
+        ],
+    }
+    _escribir_corrida(tmp_path, "C1", [escenario])
+
+    fila = ventanas_del_grupo(["C1"], runs_root=tmp_path)[0]
+
+    assert fila["alcanzan_bajo"] == 1
+    assert fila["bajan_de_grupo"] == 2, "no cuenta los que bajan sin llegar a Bajo"
+
+
+def test_una_corrida_vieja_sin_el_campo_no_inventa_bajadas(tmp_path):
+    """Las corridas anteriores al cambio no traen `baja_de_grupo`. Se cae a lo que si
+    se puede afirmar -- llegar a Bajo ES bajar de grupo -- y nada mas."""
+    from chec_local_interpreter.informe_gerencial_contract import ventanas_del_grupo
+
+    escenario = {
+        "ventana": "V9", "n_vanos": 50,
+        "vanos_criticos": [{"fid": "A", "alcanza": True}, {"fid": "B", "alcanza": False}],
+    }
+    _escribir_corrida(tmp_path, "C1", [escenario])
+
+    fila = ventanas_del_grupo(["C1"], runs_root=tmp_path)[0]
+
+    assert fila["alcanzan_bajo"] == 1
+    assert fila["bajan_de_grupo"] == 1
+
+
+def test_la_figura_muestra_las_tres_cifras():
+    from chec_local_interpreter.informe_gerencial_contract import figura_por_ventana
+
+    fig = figura_por_ventana([
+        {"ventana": "V9", "periodo": "marzo", "circuitos": 2, "vanos_criticos": 25,
+         "bajan_de_grupo": 10, "alcanzan_bajo": 2},
+    ])
+
+    nombres = {t.name for t in fig.data}
+    assert "Bajan de grupo" in nombres

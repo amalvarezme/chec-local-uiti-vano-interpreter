@@ -153,7 +153,14 @@ def _panel_uiti(simulacion: Mapping[str, Any], destino: Path,
     x = np.arange(len(vanos))
     ancho = 0.38
     color_medido, color_estimado = colores_de_barras_uiti(vanos)
-    ax.bar(x - ancho / 2, [v["u_base"] for v in vanos], ancho,
+    # Lo MEDIDO cuando el artefacto lo trae. Este panel se titulaba "UITI medido contra
+    # estimado" y dibujaba `u_base`, que es la base del MODELO: dos cantidades de
+    # naturaleza distinta, y la del modelo corre +34% sobre la observada -- medido sobre
+    # 599 bolsas. Bajo ese rotulo, el sesgo del modelo se lee como un dato de la base.
+    # Sin observado se cae a la base y el TITULO lo dice.
+    hay_medido = all(v.get("u_observado") is not None for v in vanos)
+    base = [float(v["u_observado"] if hay_medido else v["u_base"]) for v in vanos]
+    ax.bar(x - ancho / 2, base, ancho,
            color=color_medido, edgecolor="#5b4a48", linewidth=0.4)
     ax.bar(x + ancho / 2, [v["u_simulado"] for v in vanos], ancho,
            color=color_estimado, edgecolor="#5b4a48", linewidth=0.4,
@@ -165,21 +172,23 @@ def _panel_uiti(simulacion: Mapping[str, Any], destino: Path,
         for desplazamiento, campo in ((-ancho / 2, "clase_base"),
                                       (ancho / 2, "clase_simulada")):
             g = int(v[campo])
-            altura = v["u_base"] if campo == "clase_base" else v["u_simulado"]
+            altura = base[i] if campo == "clase_base" else v["u_simulado"]
             ax.annotate(NOMBRES_GRUPOS[g], (i + desplazamiento, altura),
                         ha="center", va="bottom", fontsize=6.5,
                         color=COLORES_GRUPOS[g], fontweight="bold")
     ax.set_xticks(x)
     ax.set_xticklabels([v["fid"] for v in vanos], rotation=45, ha="right", fontsize=7)
     ax.set_ylabel("UITI acumulado")
-    ax.set_title("UITI medido contra estimado, con su grupo de criticidad "
-                 "(solo palancas de intervención)")
+    ax.set_title(("UITI medido" if hay_medido else "UITI base del modelo")
+                 + " contra estimado, con su grupo de criticidad "
+                   "(solo palancas de intervención)")
     # La leyenda explica la TRAMA, no el color: con el color puesto por el grupo, una
     # muestra de color aqui tendria que elegir uno de los cuatro y mentiria sobre los
     # otros tres. El grupo lo rotula cada barra encima, con su nombre y su color.
     ax.legend(
         handles=[
-            Patch(facecolor="white", edgecolor="#5b4a48", label="Medido"),
+            Patch(facecolor="white", edgecolor="#5b4a48",
+                  label="Medido" if hay_medido else "Base del modelo"),
             Patch(facecolor="white", edgecolor="#5b4a48", hatch=TRAMA_ESTIMADO,
                   label="Estimado tras intervenir"),
         ],

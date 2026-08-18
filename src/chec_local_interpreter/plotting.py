@@ -1473,17 +1473,32 @@ def render_llm_analysis(
             except (TypeError, ValueError, IndexError):
                 return "N/D"
 
+        # La primera columna es lo MEDIDO cuando el artefacto lo trae. La cabecera decia
+        # "UITI medido" y la celda traia `u_base`, que es la base del MODELO: dos
+        # cantidades de naturaleza distinta, y la del modelo corre +34% sobre la
+        # observada -- medido sobre 599 bolsas. Bajo el rotulo "medido", ese sesgo se
+        # lee como un dato de la base y la diferencia con la simulada, como ahorro.
+        # Sin observado se cae a la base y se DICE en la cabecera.
+        hay_medido = all(v.get("u_observado") is not None for v in vanos)
+        rotulo_base = "UITI medido" if hay_medido else "UITI base del modelo"
+
         filas = []
         for vano in sorted(vanos, key=lambda v: -float(v.get("u_base") or 0.0))[:15]:
             delta = int(vano.get("delta_grupo") or 0)
             marca = "&#9660;" if delta < 0 else ("&#9650;" if delta > 0 else "&mdash;")
+            base = float((vano.get("u_observado") if hay_medido else vano.get("u_base")) or 0.0)
+            # Bajar de Alto a Medio-Alto es una mejora real, y sin decirlo se lee igual
+            # que no moverse: medido sobre DON23L14 V9, 91 de 93 vanos en Alto reciben un
+            # plan que baja el UITI y no cambia el grupo.
+            baja = bool(vano.get("baja_de_grupo")) or delta < 0
             filas.append(
                 "<tr>"
                 f"<td style='text-align:left;'>{_escape(vano.get('fid'))}</td>"
-                f"<td>{float(vano.get('u_base') or 0.0):,.1f}</td>"
+                f"<td>{base:,.1f}</td>"
                 f"<td>{float(vano.get('u_simulado') or 0.0):,.1f}</td>"
                 f"<td>{_escape(_grupo(vano.get('clase_base')))}</td>"
                 f"<td>{_escape(_grupo(vano.get('clase_simulada')))} {marca}</td>"
+                f"<td>{'sí' if baja else 'no'}</td>"
                 f"<td>{len(vano.get('pasos') or [])}</td>"
                 "</tr>"
             )
@@ -1496,9 +1511,9 @@ def render_llm_analysis(
         return (
             "<h4>Escenario de disminución</h4>"
             "<div class='table-scroll'><table class='compact-table'>"
-            "<thead><tr><th>Vano</th><th>UITI medido</th>"
+            f"<thead><tr><th>Vano</th><th>{rotulo_base}</th>"
             "<th>UITI simulado</th><th>Grupo actual</th><th>Grupo simulado</th>"
-            "<th>Pasos</th></tr></thead>"
+            "<th>Baja de grupo</th><th>Pasos</th></tr></thead>"
             f"<tbody>{''.join(filas)}</tbody></table></div>{pie}"
         )
 

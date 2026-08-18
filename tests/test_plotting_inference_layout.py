@@ -964,3 +964,69 @@ def test_un_json_ilegible_no_se_lleva_el_informe(tmp_path):
     ).read_text(encoding="utf-8")
 
     assert "No se pudo renderizar la figura" in html
+
+
+# ---------------------------------------------------------------------------
+# La tabla del escenario: lo MEDIDO es lo medido
+# ---------------------------------------------------------------------------
+
+
+def _simulacion_con_observado():
+    return {
+        "knobs_usados": ["NR_T"],
+        "vanos": [
+            {"fid": "V1", "u_base": 9.0, "u_simulado": 2.0, "u_observado": 7.5,
+             "clase_base": 3, "clase_simulada": 1, "delta_grupo": -2,
+             "pasos": [{"knob_id": "NR_T", "valor": 0.0}]},
+        ],
+    }
+
+
+def test_la_columna_UITI_medido_muestra_el_medido_y_no_la_base_del_modelo(tmp_path):
+    """La cabecera decia "UITI medido" y la celda traia `u_base`, que es la base del
+    MODELO.
+
+    No es un detalle de nombre: las dos cantidades son de naturaleza distinta y el
+    modelo corre +34% sobre el observado, medido sobre 599 bolsas. Presentar su
+    prediccion bajo el rotulo "medido" convierte el sesgo del modelo en un dato de la
+    base, y la diferencia con la simulada se lee como ahorro.
+    """
+    html = render_llm_analysis(
+        validation_data={}, raw_df=_minimal_raw_df(), selected_circuitos=["C1"],
+        inference_results={"V9": {"contexto": {"simulacion": _simulacion_con_observado()}}},
+        inference_analysis={}, output_dir=tmp_path,
+    ).read_text(encoding="utf-8")
+
+    fila = html[html.index("<td style='text-align:left;'>V1</td>"):][:400]
+    assert "7,5" in fila or "7.5" in fila, "la columna medida sigue trayendo la base del modelo"
+
+
+def test_sin_uiti_observado_la_columna_se_llama_por_lo_que_es(tmp_path):
+    """Un artefacto sin `u_observado` deja al informe sin la mitad medida. Se cae a la
+    base del modelo y se DICE en la cabecera, en vez de seguir llamandola medida."""
+    simulacion = _simulacion_con_observado()
+    simulacion["vanos"][0].pop("u_observado")
+
+    html = render_llm_analysis(
+        validation_data={}, raw_df=_minimal_raw_df(), selected_circuitos=["C1"],
+        inference_results={"V9": {"contexto": {"simulacion": simulacion}}},
+        inference_analysis={}, output_dir=tmp_path,
+    ).read_text(encoding="utf-8")
+
+    assert "UITI base del modelo" in html
+    assert ">UITI medido<" not in html
+
+
+def test_la_tabla_dice_si_el_vano_BAJA_DE_GRUPO_y_no_solo_si_llega_a_bajo(tmp_path):
+    """Bajar de Alto a Medio-Alto es una mejora real.
+
+    Medido sobre DON23L14: en V9, 91 de 93 vanos en Alto reciben un plan que baja el
+    UITI y NO cambia el grupo. Sin decirlo, esos 91 y los 2 que si bajan se leen igual.
+    """
+    html = render_llm_analysis(
+        validation_data={}, raw_df=_minimal_raw_df(), selected_circuitos=["C1"],
+        inference_results={"V9": {"contexto": {"simulacion": _simulacion_con_observado()}}},
+        inference_analysis={}, output_dir=tmp_path,
+    ).read_text(encoding="utf-8")
+
+    assert "Baja de grupo" in html

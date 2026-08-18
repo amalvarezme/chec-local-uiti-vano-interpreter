@@ -274,3 +274,34 @@ def test_una_clase_fuera_de_rango_no_tumba_el_panel():
     assert medido == [COLOR_SIN_GRUPO]
     assert estimado == [COLOR_SIN_GRUPO]
     assert COLOR_SIN_GRUPO not in COLORES_GRUPOS
+
+
+def test_el_panel_png_no_llama_MEDIDO_a_la_base_del_modelo(tmp_path):
+    """El PNG es el respaldo del panel interactivo y decia lo mismo que el otro decia
+    mal: "UITI medido contra estimado" sobre la base del MODELO.
+
+    Las dos cantidades son de naturaleza distinta y la del modelo corre +34% sobre la
+    observada, medido sobre 599 bolsas. Bajo el rotulo "medido" ese sesgo se lee como un
+    dato de la base.
+    """
+    import inspect
+
+    from chec_local_interpreter import mil_figuras
+
+    fuente = inspect.getsource(mil_figuras._panel_uiti)
+
+    assert "u_observado" in fuente, (
+        "el panel sigue dibujando la base del modelo bajo el rotulo de medido")
+
+
+def test_el_panel_png_usa_el_observado_cuando_lo_hay(tmp_path):
+    from chec_local_interpreter.mil_figuras import figuras_de_escenario
+
+    escenario = _escenario()
+    for vano in escenario["simulacion"]["vanos"]:
+        vano["u_observado"] = 2.5
+
+    activos = figuras_de_escenario(escenario, series=_series(), destino=tmp_path)
+
+    assert activos["uiti_png"], "se perdio el panel al introducir el observado"
+    assert (tmp_path / activos["uiti_png"]).stat().st_size > 0

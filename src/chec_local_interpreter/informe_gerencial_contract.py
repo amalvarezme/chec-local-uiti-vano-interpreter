@@ -386,11 +386,22 @@ def ventanas_del_grupo(
             criticos = list(escenario.get("vanos_criticos") or [])
             fila = acumulado.setdefault(ventana, {
                 "ventana": ventana, "periodo": "", "circuitos": 0,
-                "vanos_criticos": 0, "alcanzan_bajo": 0,
+                "vanos_criticos": 0, "bajan_de_grupo": 0, "alcanzan_bajo": 0,
             })
             fila["circuitos"] += 1
             fila["vanos_criticos"] += len(criticos)
             fila["alcanzan_bajo"] += sum(1 for c in criticos if c.get("alcanza"))
+            # Bajar un escalon sin llegar a Bajo tambien es efecto de la obra. Medido
+            # sobre DON23L14 V11: de los 16 vanos que el plan mueve, 8 llegan a Bajo y
+            # 8 bajan un grupo sin llegar. Contando solo los primeros, la mitad del
+            # efecto desaparece, y una ventana donde nada llega a Bajo pero todo baja un
+            # escalon se lee como una ventana sin nada que hacer.
+            #
+            # `alcanza or baja_de_grupo` y no solo el campo nuevo: las corridas
+            # anteriores al cambio no lo traen, y llegar a Bajo ES bajar de grupo. Se
+            # cae a lo que si se puede afirmar, sin inventar bajadas.
+            fila["bajan_de_grupo"] += sum(
+                1 for c in criticos if c.get("baja_de_grupo") or c.get("alcanza"))
             # El periodo lo escribe el primero que lo traiga: es el mismo calendario
             # para todos los circuitos, porque la rejilla de ventanas es del dataset.
             if not fila["periodo"] and periodos.get(ventana):
@@ -416,6 +427,7 @@ def figura_por_ventana(filas: Sequence[Mapping[str, Any]]):
         + (f"<br>{f['periodo']}" if f.get("periodo") else "")
         + f"<br>{f.get('circuitos', 0)} circuitos del grupo la estudiaron"
         f"<br>{f.get('vanos_criticos', 0)} vanos críticos"
+        f"<br>{f.get('bajan_de_grupo', 0)} bajan de grupo"
         f"<br>{f.get('alcanzan_bajo', 0)} alcanzan el grupo Bajo"
         for f in filas
     ]
@@ -424,6 +436,14 @@ def figura_por_ventana(filas: Sequence[Mapping[str, Any]]):
         x=etiquetas, y=[int(f.get("vanos_criticos", 0)) for f in filas],
         name="Vanos críticos",
         marker=dict(color="#c62828", line=dict(width=0.4, color="#5b4a48")),
+        hovertext=hover, hoverinfo="text",
+    ))
+    # Tres cifras y no dos: cuantos hay que atender, en cuantos la obra los baja un
+    # escalon, y en cuantos los saca del todo. La del medio era la que faltaba.
+    fig.add_trace(go.Bar(
+        x=etiquetas, y=[int(f.get("bajan_de_grupo", 0)) for f in filas],
+        name="Bajan de grupo",
+        marker=dict(color="#ef6c00", line=dict(width=0.4, color="#5b4a48")),
         hovertext=hover, hoverinfo="text",
     ))
     fig.add_trace(go.Bar(
@@ -464,6 +484,7 @@ def _ventanas_html(filas: Sequence[Mapping[str, Any]]) -> str:
         f"<td>{_escape(f.get('periodo') or '&mdash;')}</td>"
         f"<td>{_escape(f.get('circuitos', 0))}</td>"
         f"<td>{_escape(f.get('vanos_criticos', 0))}</td>"
+        f"<td>{_escape(f.get('bajan_de_grupo', 0))}</td>"
         f"<td>{_escape(f.get('alcanzan_bajo', 0))}</td></tr>"
         for f in filas
     )
@@ -478,7 +499,7 @@ intervención alcanza a sacarlos del grupo crítico.</p>
 {grafica}
 <table class="tabla-ventanas">
 <thead><tr><th>Ventana</th><th>Período</th><th>Circuitos</th>
-<th>Vanos críticos</th><th>Alcanzan Bajo</th></tr></thead>
+<th>Vanos críticos</th><th>Bajan de grupo</th><th>Alcanzan Bajo</th></tr></thead>
 <tbody>{renglones}</tbody>
 </table>
 </section>
