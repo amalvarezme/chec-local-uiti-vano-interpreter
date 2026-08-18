@@ -19,7 +19,7 @@ representative circuits of one criticality group (or the whole fleet, for `todos
 report per circuit. It does not reimplement `/report`'s single-circuit pipeline, `/reporte-lote`'s
 batch loop, or `ranking_circuitos`'s band computation. It owns exactly the pieces those
 three do not: sampling a band down to its 12 WORST circuits (largest `vanos_criticos`, i.e. the head of the
-ranking's own `posicion`), detecting which of those 12 are missing a prior `/report` run,
+ranking's own `posicion`) — or, for `todos`, down to 12 by BAND QUOTA (5 alto + 5 medio-alto + 2 medio), detecting which of those 12 are missing a prior `/report` run,
 gating on a single explicit confirmation before auto-triggering `/report` for the missing ones (by
 reference to [`report/SKILL.md`](../report/SKILL.md), never by copying its prose), **always**
 rendering the standalone circuit-clustering chart for the confirmed window right after that same
@@ -77,7 +77,7 @@ Examples:
 | `/informe-gerencial medio-alto 2026-01-01 2026-02-01` | Band `Riesgo Medio-Alto` over that explicit window |
 | `/informe-gerencial bajo 2026-01-01` | **Rejected** — usage error, `fecha_fin` missing |
 | `/informe-gerencial alta` | **Rejected** — usage error, that is `/reporte-lote`'s K-Means vocabulary |
-| `/informe-gerencial todos` | Full fleet computed via `ranking_circuitos`, then sampled to 12 |
+| `/informe-gerencial todos` | Full fleet via `ranking_circuitos`; preamble covers ALL circuits and vanos, then 12 sampled by band quota (5 alto + 5 medio-alto + 2 medio) |
 
 ## Which grouping this Skill speaks
 
@@ -111,6 +111,32 @@ report describes the band's worst tail, not the band. The previous criterion (sm
 `centroid_distance`, the most TYPICAL circuit of its K-Means class) had the opposite bias and no
 analogue here — the ranking has no circuit centroids. Owned entirely by
 `informe_gerencial_contract.sample_representatives`; this Skill never re-derives or overrides it.
+
+### `todos` samples by BAND QUOTA, not by fleet-wide top 12
+
+`todos` does **not** take the 12 largest `vanos_criticos` of the fleet. It fills a per-band quota,
+`informe_gerencial_contract.CUOTA_TODOS`:
+
+| Band | Circuits |
+|---|---|
+| `Riesgo Alto` | 5 |
+| `Riesgo Medio-Alto` | 5 |
+| `Riesgo Medio` | 2 |
+| `Riesgo Bajo` | 0 |
+
+Within each band the pick is still the largest `vanos_criticos`, same tie-break. Twelve total, the
+same cap a single band gets.
+
+**Why the quota exists:** the fleet-wide top 12 came entirely from `Riesgo Alto` and
+`Riesgo Medio-Alto` — measured, 7 + 5 — so a report titled "all circuits" never once looked at a
+`Riesgo Medio` circuit, and could not say what distinguishes the band that is not critical yet from
+the ones that are. The two worst bands weigh the same because that is where intervention happens;
+`Riesgo Medio` enters with two so the report can draw that contrast. `Riesgo Bajo` is excluded: 101
+circuits with no critical span.
+
+**A band shorter than its quota contributes what it has and the sample stays short** — 10, not 12.
+Backfilling from another band would silently change the composition the report declares, and the
+reader has no way to notice. `_cuota_por_banda` never backfills.
 
 ## Single user checkpoint (missing-run confirmation gate)
 
@@ -157,6 +183,29 @@ Two prose rules the section enforces, both learned from a measured run:
   with its percentage. Measured on `alto`: the band holds 13.4% of the fleet's critical vanos
   overall but **22.8% of its `Alto` vanos** with only 10.5% of the vanos. The aggregate dilutes
   exactly the number that says where intervention pays.
+
+### The preamble's universe is the GROUP, never the sample
+
+`render_managerial_report` takes `circuitos_grupo` alongside `sampled`, and `perfil_de_banda` is
+computed over the former. For a band of 12 or fewer the two coincide; for `todos` they differ by
+208 vs 12, and computing the profile over the sample made "% of the fleet" a comparison of the
+sample against itself. The `sampled` list is still what the ranking bars outline.
+
+### `todos` switches the preamble's question (`_preambulo_flota_html`)
+
+When `group["bandas"]` is present — set only for `todos` — the preamble takes a separate branch,
+because the band-mode prose degenerates:
+
+| Band mode asks | Why it fails for `todos` |
+|---|---|
+| who composes the group | 208 circuit codes in a row, which nobody reads |
+| what share of the fleet it holds | 100% by construction — the fleet compared to itself |
+| how disproportionate its critical share is | 1.0× by construction, so the paragraph is skipped |
+
+Fleet mode instead states the fleet's **composition by band** (7 / 40 / 60 / 101), what share of
+its OWN vanos are critical, and — required, not optional — that the sections after the preamble
+cover only the 12 sampled circuits and how those 12 were chosen. Without that last sentence the
+reader carries the fleet's counts into a synthesis built from twelve circuits.
 
 `perfil_de_banda` drops to the VANO level using `ranking_circuitos`'s own
 `geometria_vanos`/`grupo_de_vanos`, so a vano lands in the same group here, in the dashboard,
@@ -230,7 +279,7 @@ Given `grupo` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
       default via `_dataset_date_range` when omitted, or the explicit pair), computes criticality via
       `ranking_circuitos` directly (independent of, and never calling,
       `batch_report_contract.preflight_batch`'s own `todos` bypass), samples down to the 12 worst
-      circuits of the band when it exceeds that threshold, and checks each sampled circuit
+      circuits of the band when it exceeds that threshold (or, for `todos`, by the band quota), and checks each sampled circuit
       for a prior `/report` run.
    3. Branch on the returned `status`:
       - `usage_error` or `execution_error` — **alert** with the returned error message(s) and

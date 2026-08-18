@@ -147,7 +147,45 @@ InformeStatus = Literal[
 # ---------------------------------------------------------------------------
 
 
-def sample_representatives(df_coords: pd.DataFrame, limit: int = TOP_N_REPRESENTATIVE) -> pd.DataFrame:
+#: Cuantos circuitos aporta cada banda cuando se pide la flota entera (`todos`).
+#: Suma 12, el mismo tope que una banda suelta, pero repartido: con el criterio anterior
+#: -- los 12 mayores `vanos_criticos` de la flota -- los doce salian de Riesgo Alto y
+#: Medio-Alto, asi que el informe "de todos los circuitos" nunca miraba uno de Riesgo
+#: Medio. Las dos bandas peores pesan igual porque son donde se interviene; Riesgo Medio
+#: entra con dos para que el informe pueda decir en que se diferencia la cola de la banda
+#: que todavia no es critica. Riesgo Bajo no entra: son 101 circuitos sin vano critico.
+CUOTA_TODOS: tuple[tuple[str, int], ...] = (
+    ("Riesgo Alto", 5),
+    ("Riesgo Medio-Alto", 5),
+    ("Riesgo Medio", 2),
+)
+
+
+def _cuota_por_banda(df_coords: pd.DataFrame) -> pd.DataFrame:
+    """Los peores de cada banda segun `CUOTA_TODOS`, concatenados en ese mismo orden.
+
+    Una banda con menos circuitos que su cuota aporta los que tenga y la muestra queda
+    corta a proposito: rellenar desde otra banda cambiaria en silencio la composicion que
+    el informe declara, y el lector no tendria como notarlo.
+    """
+    if "criticidad" not in df_coords.columns:
+        return df_coords.sort_index().nlargest(TOP_N_REPRESENTATIVE, "vanos_criticos")
+    trozos = [
+        df_coords[df_coords["criticidad"] == banda].sort_index().nlargest(cuota, "vanos_criticos")
+        for banda, cuota in CUOTA_TODOS
+    ]
+    trozos = [t for t in trozos if not t.empty]
+    if not trozos:
+        return df_coords.iloc[:0]
+    return pd.concat(trozos)
+
+
+def sample_representatives(
+    df_coords: pd.DataFrame,
+    limit: int = TOP_N_REPRESENTATIVE,
+    *,
+    grupo: str | None = None,
+) -> pd.DataFrame:
     """Los `limit` circuitos PEORES de la banda: mayor conteo de vanos en Medio-Alto +
     Alto, que es el puesto que el ranking ya calcula y que /report cita en prosa.
 
@@ -165,6 +203,8 @@ def sample_representatives(df_coords: pd.DataFrame, limit: int = TOP_N_REPRESENT
     `keep="first"` conserva el orden de llegada) para que dos corridas sobre los mismos
     datos elijan exactamente los mismos doce.
     """
+    if grupo == ALL_GROUPS_SLUG and not df_coords.empty:
+        return _cuota_por_banda(df_coords)
     if len(df_coords) <= limit:
         return df_coords
     return df_coords.sort_index().nlargest(limit, "vanos_criticos")
@@ -1016,7 +1056,7 @@ def resolve(
             group=group,
         )
 
-    sampled_df = sample_representatives(df_group)
+    sampled_df = sample_representatives(df_group, grupo=request.grupo)
     sampled = list(sampled_df.index)
     missing_runs = detect_missing_runs(sampled, runs_root=runs_root)
 
@@ -1706,8 +1746,112 @@ def _num(x: float, dec: int = 1) -> str:
     return txt.replace(",", "\u0000").replace(".", ",").replace("\u0000", ".")
 
 
+def _preambulo_flota_html(
+    perfil: Mapping[str, Any],
+    figura_html: str,
+    bandas: Mapping[str, int],
+    muestreados: Sequence[str],
+) -> str:
+    """El panorama cuando el universo es la FLOTA entera (`todos`).
+
+    Responde otra pregunta que la version por banda, porque la de banda aqui no tiene
+    sentido: "que parte de la flota se lleva" es el 100% por construccion, y "quienes la
+    componen" son 208 codigos seguidos que nadie lee. Lo que si informa es como esta
+    repartida la criticidad de la red -- cuantos circuitos hay en cada banda y que parte de
+    los vanos es critica -- y, dicho explicitamente, de donde salen los doce que el resto
+    del informe estudia. Sin esa ultima frase el lector supone que los doce son la flota.
+    """
+    grupos = list(perfil.get("grupos") or [])
+    vanos = perfil.get("vanos_banda") or 0
+    criticos = perfil.get("vanos_criticos_banda") or 0
+    pct_criticos = (100.0 * criticos / vanos) if vanos else 0.0
+
+    orden = [b for b, _ in CUOTA_TODOS] + ["Riesgo Bajo"]
+    reparto = ", ".join(
+        f"<strong>{_num(bandas[b], 0)}</strong> en {_escape(b)}"
+        for b in orden if b in bandas
+    )
+
+    parrafos = [
+        f"<p>Este informe cubre <strong>toda la flota</strong>: los "
+        f"<strong>{_num(perfil.get('circuitos_flota') or len(perfil.get('circuitos') or []), 0)}</strong> "
+        f"circuitos que el ranking evalúa en esta ventana, con todos sus vanos. "
+        f"El reparto por banda es {reparto}.</p>",
+        f"<p>Entre todos suman <strong>{_num(vanos, 0)} vanos</strong> con eventos, de los "
+        f"cuales <strong>{_num(criticos, 0)}</strong> están en Medio-Alto o Alto: el "
+        f"<strong>{_num(pct_criticos)}%</strong> de la red. Esa es la cifra que el resto "
+        f"del informe intenta bajar.</p>",
+    ]
+
+    candidatos = [g for g in grupos if g.get("vanos")]
+    if candidatos:
+        peor = max(candidatos, key=lambda g: g["vanos"] and _uiti_mediana(g))
+        parrafos.append(
+            f"<p>El grupo <strong>{_escape(peor['grupo'])}</strong> reúne "
+            f"{_num(peor['vanos'], 0)} vanos, el <strong>{_num(peor['pct_banda'])}%</strong> "
+            f"de la red. El violín dice lo que el conteo no: cuánto separa a ese grupo de "
+            f"los demás en UITI acumulado, que es lo que decide si conviene atenderlo "
+            f"antes que a un grupo más numeroso.</p>"
+        )
+
+    if muestreados:
+        lista = ", ".join(f"<code>{_escape(c)}</code>" for c in muestreados)
+        cuota = ", ".join(f"{n} de {_escape(b)}" for b, n in CUOTA_TODOS)
+        parrafos.append(
+            f"<p>De esa población, el resto del informe estudia "
+            f"<strong>{len(muestreados)}</strong> circuitos representativos, tomados por "
+            f"cuota ({cuota}) y dentro de cada banda por mayor número de vanos críticos: "
+            f"{lista}. Los recuentos de arriba son de la flota completa; lo que viene "
+            f"después es de esos {len(muestreados)}.</p>"
+        )
+
+    filas = "".join(
+        "<tr>"
+        f"<td>{_escape(g['grupo'])}</td>"
+        f"<td>{_num(g['vanos'], 0)}</td>"
+        f"<td>{_num(g['pct_banda'])}%</td>"
+        "</tr>"
+        for g in grupos
+    )
+    tabla = (
+        "<table class='compact-table'><thead><tr>"
+        "<th>Grupo de vano</th><th>Vanos en la red</th><th>% de la red</th>"
+        "</tr></thead><tbody>" + filas + "</tbody></table>"
+    ) if filas else ""
+
+    return f"""
+<section class="report-section">
+<h2>Panorama del grupo</h2>
+<p class="badge-deterministic">Cálculo determinista</p>
+{''.join(parrafos)}
+{tabla}
+<p class="nota">Las tres lecturas son las del segundo tablero del cuaderno 02, con la misma
+geometría de grupos de vano: el ranking sitúa a cada circuito dentro de la flota, las barras
+reparten los vanos de la red entre los cuatro grupos, y el violín muestra cómo de grave es
+cada grupo &mdash; que es lo que el conteo no puede decir.</p>
+{figura_html}
+</section>
+"""
+
+
+def _uiti_mediana(grupo: Mapping[str, Any]) -> float:
+    """La mediana del UITI acumulado de un grupo de vano, o 0 si no trae valores."""
+    valores = sorted(float(v) for v in (grupo.get("uiti") or []))
+    if not valores:
+        return 0.0
+    medio = len(valores) // 2
+    if len(valores) % 2:
+        return valores[medio]
+    return (valores[medio - 1] + valores[medio]) / 2.0
+
+
 def _preambulo_html(
-    perfil: Mapping[str, Any], figura_html: str, label: str, circuit_count: int
+    perfil: Mapping[str, Any],
+    figura_html: str,
+    label: str,
+    circuit_count: int,
+    bandas: Mapping[str, int] | None = None,
+    muestreados: Sequence[str] | None = None,
 ) -> str:
     """El panorama con el que ABRE el informe: quienes son, cuantos son, y que parte del
     problema de la flota concentran.
@@ -1724,6 +1868,14 @@ def _preambulo_html(
 
     lista = ", ".join(f"<code>{_escape(c)}</code>" for c in circuitos) or "&mdash;"
     flota = perfil.get("circuitos_flota") or circuit_count
+
+    # `bandas` solo llega cuando el universo ES la flota (`todos`). Ahi la prosa de banda
+    # se vuelve tautologica -- "el 100% de la flota", y 208 codigos seguidos -- asi que
+    # cambia de pregunta: no que parte de la flota se lleva este grupo, sino como esta
+    # repartida la flota y de donde salen los doce que el informe estudia.
+    if bandas is not None:
+        return _preambulo_flota_html(perfil, figura_html, bandas, muestreados or [])
+
     parrafos = [
         f"<p>La banda <strong>{_escape(label)}</strong> la componen "
         f"<strong>{n}</strong> circuito(s) de los <strong>{_num(flota, 0)}</strong> que el "
@@ -1806,6 +1958,7 @@ def render_managerial_report(
     group: dict[str, Any],
     resolved_window: dict[str, Any],
     sampled: Sequence[str],
+    circuitos_grupo: Sequence[str] | None = None,
     graph_intervencion_html: str | None = None,
     intervention_summary: dict[str, Any] | None = None,
 ) -> str:
@@ -1840,8 +1993,14 @@ def render_managerial_report(
     # El PREAMBULO. Se calcula sobre los circuitos muestreados y la flota entera, y se
     # arma antes que nada porque es lo primero que el lector ve: sin el, los patrones y las
     # acciones llegan sin saber sobre que poblacion se calcularon.
+    # El panorama se calcula sobre el UNIVERSO del grupo, no sobre los muestreados. En una
+    # banda suelta los dos coinciden casi siempre; en `todos` no se parecen en nada -- 208
+    # circuitos contra 12 --, y calcularlo sobre la muestra hacia que "el % de la flota"
+    # saliera de comparar la muestra consigo misma. Los muestreados siguen siendo los que
+    # se resaltan en las barras del ranking.
+    universo = list(circuitos_grupo) if circuitos_grupo else list(sampled)
     perfil = perfil_de_banda(
-        raw_df, sampled,
+        raw_df, universo,
         resolved_window.get("fecha_inicio"), resolved_window.get("fecha_fin"),
     )
     fig_preambulo = figura_preambulo(
@@ -1852,6 +2011,8 @@ def render_managerial_report(
         perfil,
         fig_preambulo.to_html(full_html=False, include_plotlyjs=False) if fig_preambulo else "",
         label, circuit_count,
+        bandas=group.get("bandas"),
+        muestreados=list(sampled),
     )
     ventanas_section_html = _ventanas_html(ventanas_del_grupo(sampled))
 
@@ -1947,13 +2108,20 @@ def render_and_write(
         "label": request.criticidad,
         "circuit_count": int(len(df_group)),
     }
+    # Solo en `todos`: el preambulo cambia de pregunta y necesita saber como se
+    # reparte la flota por banda. En una banda suelta la clave no viaja y la prosa
+    # es la de siempre.
+    if request.grupo == ALL_GROUPS_SLUG and not df_group.empty:
+        group["bandas"] = {
+            str(b): int(n) for b, n in df_group["criticidad"].value_counts().items()
+        }
 
     if df_group.empty:
         return InformeGerencialOutcome(
             status="empty_group", request=request, resolved_window=resolved_window, group=group
         )
 
-    sampled_df = sample_representatives(df_group)
+    sampled_df = sample_representatives(df_group, grupo=request.grupo)
     sampled_records = [
         {
             "circuito": circuito,
@@ -1990,6 +2158,7 @@ def render_and_write(
         group=group,
         resolved_window=resolved_window,
         sampled=sampled,
+        circuitos_grupo=[str(c) for c in df_group.index],
         graph_intervencion_html=graph_intervencion_html,
         intervention_summary=intervention_summary,
     )

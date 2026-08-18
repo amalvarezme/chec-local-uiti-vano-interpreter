@@ -1762,3 +1762,218 @@ def test_la_prosa_determinista_del_informe_va_acentuada():
     faltas = {escrita for escrita, _ in palabras_sin_tilde(plano)}
 
     assert not faltas, f"prosa sin tilde en el preambulo: {sorted(faltas)}"
+
+
+def _marco_de_bandas(por_banda: dict[str, int]) -> pd.DataFrame:
+    """Un marco de circuitos ya clasificado, con `vanos_criticos` decreciente por banda.
+
+    Va directo contra `sample_representatives` en vez de pasar por `ranking_circuitos`:
+    aqui lo que se prueba es la CUOTA, no el corte de percentiles, y fabricar una flota
+    real que caiga en las cuatro bandas con los tamanos que cada caso necesita hace la
+    prueba sobre el K-Means de vanos y no sobre el muestreo.
+    """
+    filas = []
+    for banda, cuantos in por_banda.items():
+        for i in range(cuantos):
+            filas.append({
+                "CIRCUITO": f"{banda[:4].replace(' ', '')}{i:02d}",
+                "criticidad": banda,
+                # Decreciente: el indice 0 es el peor de su banda.
+                "vanos_criticos": (cuantos - i) * 10,
+            })
+    return pd.DataFrame(filas).set_index("CIRCUITO")
+
+
+def test_todos_reparte_por_cuota_de_banda_y_no_se_lo_lleva_todo_el_alto():
+    """`todos` no es "los 12 peores de la flota".
+
+    Con el criterio anterior -- los 12 mayores `vanos_criticos` de la flota entera -- los
+    doce salian de Riesgo Alto y Medio-Alto y el informe de la flota nunca miraba un
+    circuito de Riesgo Medio. La cuota fuerza que las tres bandas esten representadas.
+    """
+    marco = _marco_de_bandas({
+        "Riesgo Alto": 7, "Riesgo Medio-Alto": 40, "Riesgo Medio": 60, "Riesgo Bajo": 101,
+    })
+
+    muestra = informe_contract.sample_representatives(
+        marco, grupo=informe_contract.ALL_GROUPS_SLUG
+    )
+    por_banda = muestra["criticidad"].value_counts().to_dict()
+
+    assert por_banda == {"Riesgo Alto": 5, "Riesgo Medio-Alto": 5, "Riesgo Medio": 2}
+    assert len(muestra) == 12
+    assert "Riesgo Bajo" not in por_banda
+
+
+def test_dentro_de_cada_banda_la_cuota_toma_los_peores():
+    marco = _marco_de_bandas({
+        "Riesgo Alto": 7, "Riesgo Medio-Alto": 40, "Riesgo Medio": 60, "Riesgo Bajo": 101,
+    })
+
+    muestra = informe_contract.sample_representatives(
+        marco, grupo=informe_contract.ALL_GROUPS_SLUG
+    )
+
+    for banda, cuota in (("Riesgo Alto", 5), ("Riesgo Medio-Alto", 5), ("Riesgo Medio", 2)):
+        de_la_banda = marco[marco["criticidad"] == banda]
+        peores = list(de_la_banda.nlargest(cuota, "vanos_criticos").index)
+        elegidos = list(muestra[muestra["criticidad"] == banda].index)
+        assert sorted(elegidos) == sorted(peores), banda
+
+
+def test_una_banda_corta_no_se_rellena_con_otra():
+    """Si Riesgo Alto trae 3 circuitos, entran 3 y la muestra queda en 10, no en 12.
+
+    Rellenar desde otra banda para llegar a doce cambiaria en silencio la composicion que
+    el informe dice tener, y el lector no tendria como notarlo.
+    """
+    marco = _marco_de_bandas({
+        "Riesgo Alto": 3, "Riesgo Medio-Alto": 40, "Riesgo Medio": 60, "Riesgo Bajo": 101,
+    })
+
+    muestra = informe_contract.sample_representatives(
+        marco, grupo=informe_contract.ALL_GROUPS_SLUG
+    )
+    por_banda = muestra["criticidad"].value_counts().to_dict()
+
+    assert por_banda == {"Riesgo Alto": 3, "Riesgo Medio-Alto": 5, "Riesgo Medio": 2}
+    assert len(muestra) == 10
+
+
+def test_una_banda_concreta_sigue_tomando_los_peores_sin_cuota():
+    """La cuota es SOLO de `todos`. Pedir una banda sigue devolviendo su cola peor."""
+    marco = _marco_de_bandas({"Riesgo Medio-Alto": 40})
+
+    muestra = informe_contract.sample_representatives(marco, grupo="medio-alto")
+
+    assert len(muestra) == 12
+    assert set(muestra["criticidad"]) == {"Riesgo Medio-Alto"}
+
+
+def test_en_todos_el_panorama_cubre_la_flota_entera_y_no_los_doce():
+    """La primera parte del informe de `todos` discute la criticidad COMPLETA.
+
+    Las barras por grupo de vano y los violines son la lectura del tablero de agrupamiento,
+    y ahi el universo son todos los circuitos y todos sus vanos. Calculadas solo sobre los
+    doce muestreados decian "el 100% de los vanos de la banda" sobre una banda que era la
+    muestra, no la flota, y el porcentaje de la flota salia de comparar la muestra consigo
+    misma.
+    """
+    raw_df = _ranking_raw_df({f"C{i:02d}": i * 4 for i in range(1, 21)}, vanos_por_circuito=90)
+    todos = sorted(raw_df["CIRCUITO"].unique())
+    doce = todos[:12]
+
+    perfil_flota = informe_contract.perfil_de_banda(raw_df, todos, None, None)
+    perfil_muestra = informe_contract.perfil_de_banda(raw_df, doce, None, None)
+
+    assert perfil_flota["vanos_banda"] > perfil_muestra["vanos_banda"]
+    assert perfil_flota["vanos_banda"] == perfil_flota["vanos_flota"]
+    assert perfil_flota["pct_vanos_de_la_flota"] == pytest.approx(100.0)
+    assert perfil_flota["pct_criticos_de_la_flota"] == pytest.approx(100.0)
+
+
+def test_render_de_todos_usa_el_universo_completo_en_el_preambulo():
+    """Guarda de cableado: `render_managerial_report` recibe los circuitos del GRUPO
+    aparte de los muestreados, y el preambulo se calcula sobre los primeros."""
+    import inspect
+
+    firma = inspect.signature(informe_contract.render_managerial_report)
+
+    assert "circuitos_grupo" in firma.parameters
+
+
+def _perfil_de_flota() -> dict:
+    return {
+        "circuitos": [f"C{i:03d}" for i in range(208)],
+        "circuitos_flota": 208,
+        "vanos_banda": 27390, "vanos_flota": 27390,
+        "vanos_criticos_banda": 11650, "vanos_criticos_flota": 11650,
+        "pct_criticos_de_la_flota": 100.0,
+        "pct_vanos_de_la_flota": 100.0,
+        "grupos": [
+            {"grupo": "Bajo", "vanos": 9000, "pct_banda": 32.9, "vanos_flota": 9000, "uiti": [1.0]},
+            {"grupo": "Medio", "vanos": 6740, "pct_banda": 24.6, "vanos_flota": 6740, "uiti": [9.0]},
+            {"grupo": "Medio-Alto", "vanos": 8000, "pct_banda": 29.2, "vanos_flota": 8000, "uiti": [90.0]},
+            {"grupo": "Alto", "vanos": 3650, "pct_banda": 13.3, "vanos_flota": 3650, "uiti": [900.0]},
+        ],
+    }
+
+
+def test_el_panorama_de_la_flota_no_lista_los_208_ni_dice_el_100_por_ciento_de_si_misma():
+    """En `todos` el universo ES la flota, asi que "el 100% de la flota" compara la flota
+    consigo misma y no dice nada, y el listado de circuitos son 208 codigos seguidos.
+
+    Lo que si informa es como se reparten SUS vanos entre los cuatro grupos.
+    """
+    html = informe_contract._preambulo_html(
+        _perfil_de_flota(), "<div></div>", "Todos los circuitos", 208,
+        bandas={"Riesgo Alto": 7, "Riesgo Medio-Alto": 40, "Riesgo Medio": 60, "Riesgo Bajo": 101},
+        muestreados=[f"M{i:02d}" for i in range(12)],
+    )
+    plano = re.sub(r"<[^>]+>", " ", html)
+
+    assert "100,0%" not in plano
+    assert plano.count("C0") < 10, "no debe listar los 208 circuitos"
+    assert "11.650" in plano, "tiene que decir cuantos vanos criticos tiene la flota"
+    assert "42,5%" in plano, "y que parte de sus vanos son criticos"
+
+
+def test_el_panorama_de_la_flota_dice_la_composicion_por_banda_y_los_doce():
+    html = informe_contract._preambulo_html(
+        _perfil_de_flota(), "<div></div>", "Todos los circuitos", 208,
+        bandas={"Riesgo Alto": 7, "Riesgo Medio-Alto": 40, "Riesgo Medio": 60, "Riesgo Bajo": 101},
+        muestreados=[f"M{i:02d}" for i in range(12)],
+    )
+    plano = re.sub(r"<[^>]+>", " ", html)
+
+    for banda, cuantos in (("Riesgo Alto", 7), ("Riesgo Medio-Alto", 40), ("Riesgo Bajo", 101)):
+        assert banda in plano, banda
+        assert str(cuantos) in plano, f"{banda}={cuantos}"
+    assert "M00" in plano, "los doce muestreados van nombrados"
+
+
+def test_una_banda_suelta_conserva_su_prosa_de_siempre():
+    """La rama de flota es SOLO de `todos`. Pedir una banda sigue diciendo que parte de la
+    flota se lleva, que es donde esa comparacion si informa."""
+    perfil = {
+        "circuitos": ["C11", "C12"],
+        "circuitos_flota": 208,
+        "vanos_banda": 184, "vanos_flota": 1320,
+        "vanos_criticos_banda": 184, "vanos_criticos_flota": 624,
+        "pct_criticos_de_la_flota": 29.49,
+        "pct_vanos_de_la_flota": 13.94,
+        "grupos": [
+            {"grupo": "Bajo", "vanos": 0, "pct_banda": 0.0, "vanos_flota": 400, "uiti": []},
+            {"grupo": "Medio", "vanos": 0, "pct_banda": 0.0, "vanos_flota": 296, "uiti": []},
+            {"grupo": "Medio-Alto", "vanos": 92, "pct_banda": 50.0, "vanos_flota": 312, "uiti": [1.0]},
+            {"grupo": "Alto", "vanos": 92, "pct_banda": 50.0, "vanos_flota": 312, "uiti": [2.0]},
+        ],
+    }
+    plano = re.sub(r"<[^>]+>", " ", informe_contract._preambulo_html(
+        perfil, "<div></div>", "Riesgo Alto", 2))
+
+    assert "C11" in plano and "C12" in plano
+    assert "29,5%" in plano
+
+
+def test_el_panorama_de_flota_no_escupe_el_slug_como_prosa():
+    """`todos` es un SLUG de la linea de comandos, no una frase.
+
+    La rama de flota lo insertaba tal cual y el informe abria con "Este informe cubre
+    **todos**:", que es el argumento que escribio el operador, no una descripcion de la
+    poblacion. En la rama por banda el mismo hueco lleva "Riesgo Alto", que si es un
+    nombre, y por eso no se habia notado.
+
+    Mira el HTML CRUDO y no el texto sin etiquetas: al quitar `<strong>` quedan dos
+    espacios, asi que buscar "cubre todos" en el texto plano no encuentra nada y la
+    prueba pasa sin poder fallar. La primera version de esta prueba tenia justo ese
+    defecto, y ademas afirmaba una frase que ya estaba en otro parrafo.
+    """
+    html = informe_contract._preambulo_html(
+        _perfil_de_flota(), "<div></div>", "todos", 208,
+        bandas={"Riesgo Alto": 7, "Riesgo Medio-Alto": 45, "Riesgo Medio": 52, "Riesgo Bajo": 104},
+        muestreados=[f"M{i:02d}" for i in range(12)],
+    )
+
+    assert "<strong>todos</strong>" not in html
+    assert "toda la flota" in html
