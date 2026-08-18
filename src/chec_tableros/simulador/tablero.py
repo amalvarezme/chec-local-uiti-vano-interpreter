@@ -1112,7 +1112,8 @@ def construir(
     # que es el grano en que se decide una obra.
     # Las dos barras son cantidades de NATURALEZA distinta -- una medicion contra una
     # prediccion -- y eso no se puede esconder: medido sobre 599 bolsas, el modelo correlaciona
-    # 0,950 con el UITI observado pero su nivel corre +34%. Por eso la barra simulada lleva
+    # 0,950 con el UITI observado pero su nivel se desvia mucho, y con SIGNO variable
+    # segun el circuito y la ventana. Por eso la barra simulada lleva
     # barra de error con el desfase del modelo en la base de ESE vano, y el titulo publica la
     # reduccion con su +-: sin eso, el sesgo del modelo se leeria como ahorro.
     # El color de cada barra lo pone el GRUPO de su vano y se escribe al simular: aqui
@@ -2515,7 +2516,8 @@ def construir(
     Las dos barras son cantidades de NATURALEZA distinta -- la izquierda es lo que dice
     la base de datos, la derecha es lo que dice el modelo --, y eso no se puede esconder:
     medido sobre 599 bolsas reales, el modelo correlaciona 0,950 con el UITI observado
-    (ordena bien) pero su nivel corre +34%. De ahi las dos cosas que acompanian a las
+    (ordena bien) pero su nivel se desvia mucho, y con SIGNO variable segun el circuito
+    y la ventana. De ahi las dos cosas que acompanian a las
     barras: el error de la simulada es el desfase del modelo en la BASE de ese mismo vano
     -- lo unico local y medible que hay -- y el titulo publica la reduccion con su +-.
     Sin eso, el sesgo del modelo se leeria como ahorro.

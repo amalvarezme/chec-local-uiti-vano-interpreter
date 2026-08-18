@@ -194,3 +194,38 @@ def test_the_centre_has_no_radius_to_follow():
     """Un nodo exactamente en el centro no tiene direccion radial. Se deja horizontal
     en vez de inventarle un angulo desde un atan2 de (0, 0)."""
     assert rotacion_radial(0.0, 0.0) == (0.0, "left")
+
+
+def test_el_desfase_del_modelo_no_se_documenta_como_si_siempre_fuera_hacia_arriba():
+    """El +34% es un agregado de FLOTA, no una direccion garantizada por circuito.
+
+    Se escribio en seis sitios como "su nivel corre +34%", justificando con eso la barra
+    de error. La barra esta bien -- es `|u_base - observado|`, un valor ABSOLUTO que no
+    depende del signo --, pero la justificacion afirma de mas.
+
+    Medido sobre las tres ventanas estudiadas de DON23L14, razon `u_base / u_observado`:
+
+        V9   n=15   mediana 0,607
+        V10  n=15   mediana 0,593
+        V11  n= 9   mediana 1,032
+
+    En dos de las tres el modelo corre POR DEBAJO de lo medido, casi un 40%. Quien lea
+    "corre +34%" y vea una barra simulada mas baja que la medida concluye que la obra
+    ahorra menos de lo que dice, cuando lo que pasa es que el sesgo va al otro lado.
+
+    Se fija sobre la FUENTE porque es una afirmacion escrita, no un comportamiento: lo
+    que no puede volver es presentar el signo como fijo.
+    """
+    import pathlib
+
+    raiz = pathlib.Path(__file__).resolve().parents[1] / "src"
+    ofensores = []
+    for ruta in raiz.rglob("*.py"):
+        texto = ruta.read_text(encoding="utf-8")
+        for numero, linea in enumerate(texto.splitlines(), 1):
+            if "corre +34" in linea or "runs +34,0% high" in linea:
+                ofensores.append(f"{ruta.relative_to(raiz)}:{numero}")
+
+    assert not ofensores, (
+        "el desfase del modelo se sigue documentando con signo fijo en: "
+        + ", ".join(ofensores))

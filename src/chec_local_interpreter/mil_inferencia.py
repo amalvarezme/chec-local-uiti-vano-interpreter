@@ -1041,7 +1041,9 @@ def simulacion_de_circuito(
     # El UITI acumulado OBSERVADO de cada bolsa, para que el panel pueda enfrentar lo
     # MEDIDO contra lo simulado -- que es lo que hace el tablero -- en vez de la base
     # del modelo contra la simulada. Esas dos son de la misma naturaleza y esconden el
-    # desfase de nivel del modelo, que sobre 599 bolsas corre +34%. Sale de
+    # desfase de nivel del modelo, que es grande y cuyo SIGNO cambia con el circuito y
+    # la ventana -- 599 bolsas dan +34% agregado, y DON23L14 da 0,607 y 0,593 en V9 y
+    # V10, o sea el modelo POR DEBAJO. Sale de
     # `bag_index.y` indexado por las bolsas que la seleccion ya resolvio: no cuesta una
     # pasada. `None` cuando el artefacto no lo expone, nunca un cero -- un cero se
     # dibuja como un vano sin impacto, que es lo contrario de "no se sabe".

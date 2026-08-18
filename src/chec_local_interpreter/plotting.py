@@ -1475,9 +1475,10 @@ def render_llm_analysis(
 
         # La primera columna es lo MEDIDO cuando el artefacto lo trae. La cabecera decia
         # "UITI medido" y la celda traia `u_base`, que es la base del MODELO: dos
-        # cantidades de naturaleza distinta, y la del modelo corre +34% sobre la
-        # observada -- medido sobre 599 bolsas. Bajo el rotulo "medido", ese sesgo se
-        # lee como un dato de la base y la diferencia con la simulada, como ahorro.
+        # cantidades de naturaleza distinta, y la del modelo se desvia mucho de la
+        # observada. El SIGNO no es fijo: 599 bolsas dan +34% agregado, y DON23L14 da
+        # razones de 0,607 y 0,593 en V9 y V10 -- el modelo por DEBAJO -- y 1,032 en
+        # V11. Bajo el rotulo "medido", ese sesgo se lee como un dato de la base.
         # Sin observado se cae a la base y se DICE en la cabecera.
         hay_medido = all(v.get("u_observado") is not None for v in vanos)
         rotulo_base = "UITI medido" if hay_medido else "UITI base del modelo"

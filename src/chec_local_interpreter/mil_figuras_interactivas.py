@@ -167,7 +167,9 @@ def figura_uiti_medido_vs_simulado(simulacion: Mapping[str, Any] | None):
     el tablero: es el numero contra el que compara quien opera. La consecuencia hay que
     leerla con cuidado y por eso existe la barra de error: las dos barras son cantidades
     de NATURALEZA distinta, asi que su diferencia desnuda carga el error de nivel del
-    modelo -- medido sobre 599 bolsas, correlaciona 0,950 pero su nivel corre +34%. El
+    modelo -- medido sobre 599 bolsas correlaciona 0,950, pero su nivel se desvia mucho
+    y con SIGNO variable: el agregado queda 34% alto, y en DON23L14 la razon es 0,607 y
+    0,593 en V9 y V10 (modelo por DEBAJO) y 1,032 en V11. El
     error de cada barra simulada es `|u_base - observado|`, el desfase del modelo en la
     BASE de ese mismo vano: lo unico local, medible y sin coste extra que hay.
 

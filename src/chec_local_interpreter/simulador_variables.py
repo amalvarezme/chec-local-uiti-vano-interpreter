@@ -946,7 +946,10 @@ def barras_uiti_por_vano(
 
     That error was measured rather than guessed. Over 599 real bags the model
     correlates 0,950 with the observed UITI -- it ranks well -- but its median
-    relative error is 39,4% (p90 104%) and its total runs +34,0% high. So each
+    relative error is 39,4% (p90 104%) and its level is off by a lot -- the AGGREGATE
+    total runs 34,0% high, but the SIGN varies by circuit and window: measured on
+    DON23L14 the `u_base / u_observado` ratio is 0,607 in V9 and 0,593 in V10 (model
+    BELOW the measurement) and 1,032 in V11. So each
     bar's error is `|u_base - observado|`: what the model got wrong on the BASE of
     that same vano, which is a local, directly measured quantity and needs no extra
     model call.
