@@ -37,7 +37,7 @@ def test_normalize_request_preserves_paired_dates_and_runtime_metadata():
         " C1 ",
         "2026-01-01",
         "2026-01-02",
-        runtime="pi",
+        runtime="opencode",
         provider="openai",
         model="gpt-5.6-terra",
     )
@@ -47,7 +47,7 @@ def test_normalize_request_preserves_paired_dates_and_runtime_metadata():
         "fecha_inicio": "2026-01-01",
         "fecha_fin": "2026-01-02",
         "runtime": {
-            "runtime": "pi",
+            "runtime": "opencode",
             "provider": "openai",
             "model": "gpt-5.6-terra",
             "model_known": True,
@@ -235,7 +235,7 @@ def test_render_report_delegates_to_canonical_pipeline_and_passes_runtime_metada
         return report_path
 
     monkeypatch.setattr(report_contract.report_pipeline, "render", fake_render)
-    request = normalize_request("C1", runtime="pi", provider="el-gentleman", model="gpt-5.6-terra")
+    request = normalize_request("C1", runtime="opencode", provider="opencode", model="anthropic/claude-opus-5")
 
     outcome = render_report(
         request,
@@ -245,20 +245,19 @@ def test_render_report_delegates_to_canonical_pipeline_and_passes_runtime_metada
         llm_model=request.runtime.model,
     )
 
-    assert calls == [(run_dir, "html", "el-gentleman", "gpt-5.6-terra")]
+    assert calls == [(run_dir, "html", "opencode", "anthropic/claude-opus-5")]
     assert outcome.status == "success"
     assert outcome.report_html == str(report_path)
 
 
-def test_render_report_resolves_pi_model_from_settings_fallback(monkeypatch, tmp_path):
-    home = tmp_path / "home"
-    settings_dir = home / ".pi" / "agent"
-    settings_dir.mkdir(parents=True)
-    (settings_dir / "settings.json").write_text(
-        json.dumps({"defaultProvider": "openai-codex", "defaultModel": "gpt-5.5"}),
-        encoding="utf-8",
-    )
-    run_dir = tmp_path / "run"
+def test_render_report_resolves_model_from_environment_when_adapter_omits_it(monkeypatch, tmp_path):
+    """Env overrides are the portable evidence channel every runtime adapter shares.
+
+    Pi had a bespoke resolver that read its own session history. Nothing else does:
+    OpenCode and Copilot report the orchestrating model through the flags or through
+    `CHEC_LLM_PROVIDER` / `CHEC_LLM_MODEL`, so that is the only channel left.
+    """
+
     report_path = tmp_path / "report.html"
     calls = []
 
@@ -266,69 +265,47 @@ def test_render_report_resolves_pi_model_from_settings_fallback(monkeypatch, tmp
         calls.append((llm_provider, llm_model))
         return report_path
 
-    monkeypatch.setenv("HOME", str(home))
-    monkeypatch.delenv("CHEC_LLM_PROVIDER", raising=False)
-    monkeypatch.delenv("CHEC_LLM_MODEL", raising=False)
+    monkeypatch.setenv("CHEC_LLM_PROVIDER", "opencode")
+    monkeypatch.setenv("CHEC_LLM_MODEL", "anthropic/claude-opus-5")
     monkeypatch.setattr(report_contract.report_pipeline, "render", fake_render)
 
-    outcome = render_report(normalize_request("C1", runtime="pi"), run_dir)
+    outcome = render_report(normalize_request("C1", runtime="opencode"), tmp_path / "run")
 
-    assert calls == [("el-gentleman", "openai-codex/gpt-5.5")]
+    assert calls == [("opencode", "anthropic/claude-opus-5")]
     assert outcome.request is not None
-    assert outcome.request.runtime.to_json()["model"] == "openai-codex/gpt-5.5"
-
-
-def test_render_report_prefers_latest_pi_session_model_over_settings(monkeypatch, tmp_path):
-    home = tmp_path / "home"
-    settings_dir = home / ".pi" / "agent"
-    settings_dir.mkdir(parents=True)
-    (settings_dir / "settings.json").write_text(
-        json.dumps({"defaultProvider": "openai-codex", "defaultModel": "gpt-5.5"}),
-        encoding="utf-8",
-    )
-    project_dir = tmp_path / "project"
-    project_dir.mkdir()
-    encoded_cwd = "--" + "-".join(project_dir.resolve().parts[1:]) + "--"
-    session_dir = home / ".pi" / "agent" / "sessions" / encoded_cwd
-    session_dir.mkdir(parents=True)
-    (session_dir / "2026-07-15T00-00-00-000Z_session.jsonl").write_text(
-        "\n".join(
-            [
-                json.dumps({"type": "model_change", "provider": "openai-codex", "modelId": "gpt-5.4"}),
-                json.dumps({"type": "message", "message": {"role": "assistant", "provider": "openai-codex", "model": "gpt-5.6-terra"}}),
-            ]
-        ),
-        encoding="utf-8",
-    )
-    report_path = tmp_path / "report.html"
-    calls = []
-
-    def fake_render(received_run_dir, *, output_dir=None, llm_provider=None, llm_model=None):
-        calls.append((llm_provider, llm_model))
-        return report_path
-
-    monkeypatch.chdir(project_dir)
-    monkeypatch.setenv("HOME", str(home))
-    monkeypatch.delenv("CHEC_LLM_PROVIDER", raising=False)
-    monkeypatch.delenv("CHEC_LLM_MODEL", raising=False)
-    monkeypatch.setattr(report_contract.report_pipeline, "render", fake_render)
-
-    outcome = render_report(normalize_request("C1", runtime="pi"), tmp_path / "run")
-
-    assert calls == [("el-gentleman", "openai-codex/gpt-5.6-terra")]
-    assert outcome.request is not None
+    assert outcome.request.runtime.to_json()["model"] == "anthropic/claude-opus-5"
     assert outcome.request.runtime.to_json()["model_known"] is True
 
 
+def test_render_report_never_invents_a_model_when_no_runtime_evidence_exists(monkeypatch, tmp_path):
+    report_path = tmp_path / "report.html"
+    calls = []
+
+    def fake_render(received_run_dir, *, output_dir=None, llm_provider=None, llm_model=None):
+        calls.append((llm_provider, llm_model))
+        return report_path
+
+    monkeypatch.delenv("CHEC_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("CHEC_LLM_MODEL", raising=False)
+    monkeypatch.setattr(report_contract.report_pipeline, "render", fake_render)
+
+    outcome = render_report(normalize_request("C1", runtime="copilot"), tmp_path / "run")
+
+    assert calls == [(None, None)]
+    assert outcome.request is not None
+    assert outcome.request.runtime.to_json()["model"] == UNKNOWN_MODEL_LABEL
+    assert outcome.request.runtime.to_json()["model_known"] is False
+
+
 def test_cli_parse_outputs_json(capsys):
-    exit_code = report_contract.main(["parse", "C1", "--runtime", "pi"])
+    exit_code = report_contract.main(["parse", "C1", "--runtime", "opencode"])
 
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["schema_version"] == "report-contract/v1"
     assert payload["status"] == "awaiting_confirmation"
     assert payload["request"]["circuito"] == "C1"
-    assert payload["request"]["runtime"]["runtime"] == "pi"
+    assert payload["request"]["runtime"]["runtime"] == "opencode"
 
 
 def test_cli_lone_date_returns_usage_error(capsys):

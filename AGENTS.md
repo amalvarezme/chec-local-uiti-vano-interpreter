@@ -6,8 +6,8 @@ This repo is a local interpreter for `UITI_VANO`. It loads one wide structured d
 filters by circuits and dates, detects relevant points in the `UITI_VANO` daily series,
 builds a structured context package, and has five coding-agent-native LLM roles explain the
 behavior in Spanish and compare it against expert PDF reports — all with **zero external LLM
-API key**: the agent invoking this repo (Claude Code or Pi / el Gentleman) does the reasoning
-itself, never a Python call to Gemini/OpenAI.
+API key**: the agent invoking this repo (Claude Code, OpenCode or VS Code Copilot) does the
+reasoning itself, never a Python call to Gemini/OpenAI.
 
 ## Scope
 
@@ -44,8 +44,14 @@ context/prompt and validates the response's shape — the invoking coding agent 
 the JSON response, never a Python `call_llm()`. Role definitions:
 - Claude Code: `.claude/agents/<role>.md` (role/tool contract) + `.claude/skills/<role>/SKILL.md`
   (persona, invariants, run sequence).
-- Pi / el Gentleman: `.pi/agents/<role>.md` (thin mirror pointing back to the canonical Claude
-  role and skill) + `.pi/skills/<role>/SKILL.md`.
+- OpenCode: `.opencode/agent/<role>.md` + `.opencode/command/<role>.md`.
+- VS Code Copilot: `.github/agents/<role>.agent.md` + `.github/prompts/<role>.prompt.md`.
+
+The mirrors for the last two runtimes are **generated** by `scripts/portabilidad_agentes.py`
+from the canonical `.claude/` frontmatter, and `tests/test_portabilidad_agentes.py` fails when
+one is missing, stale or orphaned. Never hand-edit a mirror: change the canonical contract and
+re-run `PYTHONPATH=src .venv/bin/python scripts/portabilidad_agentes.py generar`. See
+`docs/portabilidad-agentes.md`, including why the earlier hand-written `.pi/` tree was retired.
 
 Do not add Databricks, Dash, FastAPI, RAG, or vector stores to `src/chec_local_interpreter` or
 any of the 5 LLM agent roles (`historical`, `inference`, `expert-alignment`, `auto-simulator`,

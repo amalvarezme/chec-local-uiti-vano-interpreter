@@ -15,3 +15,34 @@ source files when (a) modifying/debugging specific code, (b) the graph lacks the
 (c) the graph is missing or stale.
 
 Type `/graphify` in Copilot Chat to build or update the graph.
+
+## This repository's commands
+
+The canonical contract for every command, skill and agent role lives under `.claude/`.
+`AGENTS.md` in the repository root carries the project's scope, coding style and LLM-safety
+rules and applies here too.
+
+Copilot gets its own discovery paths through generated mirrors:
+
+- `.github/prompts/*.prompt.md` — one per invocable command (`/report`, `/reporte-lote`,
+  `/informe-gerencial`, `/clima`, `/redaccion-es`, `/limpiar-corridas`,
+  `/subir-a-databricks`, `/app-local-criticidadCHEC`, and the role entry points).
+- `.github/agents/*.agent.md` — one per LLM role (`historical`, `inference`,
+  `expert-alignment`, `pdf-discussion-extraction`).
+
+Those files are **generated** by `scripts/portabilidad_agentes.py` and hold no rule of their
+own: each one names the canonical `.claude/` file to read before doing anything. Change the
+canonical contract, then run:
+
+```bash
+PYTHONPATH=src .venv/bin/python scripts/portabilidad_agentes.py generar
+```
+
+`tests/test_portabilidad_agentes.py` fails when a mirror is missing, stale or orphaned, so a
+new skill without mirrors turns the suite red instead of quietly working in one editor only.
+
+## Running anything in this repository
+
+Every CLI verb runs from the repository root as `PYTHONPATH=src .venv/bin/python -m ...`.
+Bare `python`/`python3` cannot import `chec_local_interpreter`; that is not a broken
+environment, it is the wrong invocation.

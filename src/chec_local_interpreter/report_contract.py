@@ -214,80 +214,6 @@ def prepare_alignment(request: ReportRequest, run_dir: str | Path, *, pdf_discus
     )
 
 
-def _pi_session_dir_for_cwd(cwd: Path) -> Path:
-    """Return Pi's session-history directory for ``cwd``.
-
-    Pi currently stores per-directory histories under a filename-safe form that
-    wraps the slash-separated absolute path with ``--`` and joins path parts with
-    ``-`` (for example ``/Users/me/project`` becomes ``--Users-me-project--``).
-    """
-
-    encoded_cwd = "--" + "-".join(cwd.resolve().parts[1:]) + "--"
-    return Path.home() / ".pi" / "agent" / "sessions" / encoded_cwd
-
-
-def _model_from_pi_session_history(cwd: Path | None = None) -> tuple[str, str] | None:
-    """Return the latest effective Pi model as ``(provider, model)``.
-
-    Session history is execution evidence: it records explicit ``model_change``
-    events and assistant messages with the provider/model that actually ran.
-    Static adapter frontmatter is intentionally not consulted.
-    """
-
-    session_dir = _pi_session_dir_for_cwd(cwd or Path.cwd())
-    if not session_dir.exists():
-        return None
-
-    session_files = sorted(session_dir.glob("*.jsonl"), key=lambda path: path.stat().st_mtime)
-    for session_file in reversed(session_files):
-        latest: tuple[str, str] | None = None
-        try:
-            lines = session_file.read_text(encoding="utf-8").splitlines()
-        except OSError:
-            continue
-        for line in lines:
-            try:
-                entry = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if entry.get("type") == "model_change":
-                provider = str(entry.get("provider") or "").strip()
-                model = str(entry.get("modelId") or "").strip()
-                if provider and model:
-                    latest = (provider, model)
-            elif entry.get("type") == "message":
-                message = entry.get("message") or {}
-                if message.get("role") == "assistant":
-                    provider = str(message.get("provider") or "").strip()
-                    model = str(message.get("model") or "").strip()
-                    if provider and model:
-                        latest = (provider, model)
-        if latest:
-            return latest
-    return None
-
-
-def _model_from_pi_settings() -> tuple[str, str] | None:
-    settings_path = Path.home() / ".pi" / "agent" / "settings.json"
-    try:
-        settings = json.loads(settings_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-
-    provider = str(settings.get("defaultProvider") or "").strip()
-    model = str(settings.get("defaultModel") or "").strip()
-    if provider and model:
-        return provider, model
-    return None
-
-
-def _is_pi_runtime(runtime: str | None) -> bool:
-    normalized_runtime = (runtime or "").strip().lower()
-    if normalized_runtime:
-        return normalized_runtime == "pi"
-    return os.environ.get("PI_CODING_AGENT") == "true"
-
-
 def _resolve_effective_runtime_metadata(
     metadata: RuntimeMetadata,
     *,
@@ -296,24 +222,18 @@ def _resolve_effective_runtime_metadata(
 ) -> RuntimeMetadata:
     """Resolve the report-authoring provider/model from real runtime evidence.
 
-    Priority: explicit render arguments, normalized request metadata, CHEC env
-    overrides, then runtime-specific active/configured model. Markdown
-    frontmatter is not a reliable execution source and is deliberately ignored.
+    Priority: explicit render arguments, normalized request metadata, then the
+    ``CHEC_LLM_PROVIDER`` / ``CHEC_LLM_MODEL`` environment overrides. Markdown
+    frontmatter is not a reliable execution source and is deliberately ignored:
+    every runtime adapter reports the model that actually orchestrated the run,
+    through a flag or through the environment. When none of those is present the
+    model stays unknown and the report labels it as such -- guessing a default
+    would be worse than saying "Desconocido".
     """
 
     provider = (llm_provider or metadata.provider or os.environ.get("CHEC_LLM_PROVIDER") or "").strip() or None
     model = (llm_model or metadata.model or os.environ.get("CHEC_LLM_MODEL") or "").strip() or None
-    runtime = metadata.runtime
-
-    if _is_pi_runtime(runtime):
-        provider = provider or "el-gentleman"
-        if model is None:
-            pi_model = _model_from_pi_session_history() or _model_from_pi_settings()
-            if pi_model:
-                pi_provider, pi_model_id = pi_model
-                model = f"{pi_provider}/{pi_model_id}"
-
-    return RuntimeMetadata(runtime=runtime, provider=provider, model=model)
+    return RuntimeMetadata(runtime=metadata.runtime, provider=provider, model=model)
 
 
 def render_report(

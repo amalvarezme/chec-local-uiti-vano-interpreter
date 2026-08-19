@@ -332,7 +332,8 @@ runtimes:
 | Runtime | Invocation |
 |---|---|
 | Claude Code | `/report <circuito> [fecha_inicio fecha_fin]` |
-| Pi / el Gentleman | `/skill:report <circuito> [fecha_inicio fecha_fin]` |
+| OpenCode | `/report <circuito> [fecha_inicio fecha_fin]` |
+| VS Code Copilot | `/report <circuito> [fecha_inicio fecha_fin]` |
 
 This report entry point is **not** a fourth entry in the "Agent roles" table above — it does not
 itself author or validate one persona's JSON output, so it does not fit that table's L1/L2/L3/L4
@@ -344,7 +345,7 @@ final local HTML report.
 - Shared contract: [`src/chec_local_interpreter/report_contract.py`](../src/chec_local_interpreter/report_contract.py)
   — normalizes runtime requests, preflight outcomes, metadata, and JSON lifecycle states.
 - Claude Code Skill (runbook): [`.claude/skills/report/SKILL.md`](../.claude/skills/report/SKILL.md).
-- Pi skill adapter: [`.pi/skills/report/SKILL.md`](../.pi/skills/report/SKILL.md).
+- Generated runtime mirrors: [`.opencode/command/report.md`](../.opencode/command/report.md) and [`.github/prompts/report.prompt.md`](../.github/prompts/report.prompt.md), both written by [`scripts/portabilidad_agentes.py`](../scripts/portabilidad_agentes.py).
 - Runtime contract docs: [`docs/report-runtime-contract.md`](report-runtime-contract.md).
 - Orchestrator (L1, pure Python, no LLM call in this module):
   `src/chec_local_interpreter/report_pipeline.py` — `preflight(circuito, fecha_inicio=None,
@@ -398,35 +399,42 @@ PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.circuit_clustering_con
 - Output: local standalone HTML only; no publishing and no site-asset mutation.
 - Plot source of truth: `src/chec_local_interpreter/plotting.py::plot_interactive_circuit_clustering`.
 
-### Pi compatibility mirrors for Claude-native entry points
+### Portability mirrors for the Claude-native entry points
 
-Pi now exposes thin compatibility wrappers for the existing Claude-native skills and agent roles.
-These Pi files do not introduce new business logic: each Pi skill points to the canonical Claude skill
-through `metadata.canonical_skill`, and each Pi role mirror tells the runner to read the canonical
-Claude role plus Claude skill for the full contract.
+OpenCode and VS Code Copilot expose the same entry points through thin generated mirrors. They
+introduce no business logic: every mirror names the canonical `.claude/` file to read before doing
+anything, plus the invocation shape and the boundaries for that runtime.
+
+`scripts/portabilidad_agentes.py generar` writes them from the canonical frontmatter and
+`tests/test_portabilidad_agentes.py` fails when one is missing, stale or orphaned. The previous
+attempt at this (`.pi/`, hand-written mirrors for the Pi / el Gentleman runtime) was retired: three
+of the ten canonical skills never got a mirror and nothing ever noticed.
 
 #### Skill command equivalence
 
-| Capability | Claude Code | Pi / el Gentleman |
-|---|---|---|
-| Historical analysis | `.claude/skills/historical/SKILL.md` | `/skill:historical` -> `.pi/skills/historical/SKILL.md` |
-| Inference analysis | `.claude/skills/inference/SKILL.md` | `/skill:inference` -> `.pi/skills/inference/SKILL.md` |
-| Expert alignment | `.claude/skills/expert-alignment/SKILL.md` | `/skill:expert-alignment` -> `.pi/skills/expert-alignment/SKILL.md` |
-| PDF discussion extraction | `.claude/skills/pdf-discussion-extraction/SKILL.md` | `/skill:pdf-discussion-extraction` -> `.pi/skills/pdf-discussion-extraction/SKILL.md` |
-| Batch report | `/reporte-lote` -> `.claude/skills/reporte-lote/SKILL.md` | `/skill:reporte-lote` -> `.pi/skills/reporte-lote/SKILL.md` |
-| Managerial report | `/informe-gerencial` -> `.claude/skills/informe-gerencial/SKILL.md` | `/skill:informe-gerencial` -> `.pi/skills/informe-gerencial/SKILL.md` |
+The invocation is the same in all three; only the file each editor reads differs.
+
+| Capability | Claude Code | OpenCode | VS Code Copilot |
+|---|---|---|---|
+| Historical analysis | `.claude/skills/historical/SKILL.md` | `.opencode/command/historical.md` | `.github/prompts/historical.prompt.md` |
+| Inference analysis | `.claude/skills/inference/SKILL.md` | `.opencode/command/inference.md` | `.github/prompts/inference.prompt.md` |
+| Expert alignment | `.claude/skills/expert-alignment/SKILL.md` | `.opencode/command/expert-alignment.md` | `.github/prompts/expert-alignment.prompt.md` |
+| PDF discussion extraction | `.claude/skills/pdf-discussion-extraction/SKILL.md` | `.opencode/command/pdf-discussion-extraction.md` | `.github/prompts/pdf-discussion-extraction.prompt.md` |
+| Batch report | `/reporte-lote` -> `.claude/skills/reporte-lote/SKILL.md` | `.opencode/command/reporte-lote.md` | `.github/prompts/reporte-lote.prompt.md` |
+| Managerial report | `/informe-gerencial` -> `.claude/skills/informe-gerencial/SKILL.md` | `.opencode/command/informe-gerencial.md` | `.github/prompts/informe-gerencial.prompt.md` |
 
 #### Role mirror equivalence
 
-| Role | Claude Code role | Pi mirror |
-|---|---|---|
-| `historical` | `.claude/agents/historical.md` | `.pi/agents/historical.md` |
-| `inference` | `.claude/agents/inference.md` | `.pi/agents/inference.md` |
-| `expert-alignment` | `.claude/agents/expert-alignment.md` | `.pi/agents/expert-alignment.md` |
-| `pdf-discussion-extraction` | `.claude/agents/pdf-discussion-extraction.md` | `.pi/agents/pdf-discussion-extraction.md` |
+| Role | Claude Code role | OpenCode mirror | VS Code Copilot mirror |
+|---|---|---|---|
+| `historical` | `.claude/agents/historical.md` | `.opencode/agent/historical.md` | `.github/agents/historical.agent.md` |
+| `inference` | `.claude/agents/inference.md` | `.opencode/agent/inference.md` | `.github/agents/inference.agent.md` |
+| `expert-alignment` | `.claude/agents/expert-alignment.md` | `.opencode/agent/expert-alignment.md` | `.github/agents/expert-alignment.agent.md` |
+| `pdf-discussion-extraction` | `.claude/agents/pdf-discussion-extraction.md` | `.opencode/agent/pdf-discussion-extraction.md` | `.github/agents/pdf-discussion-extraction.agent.md` |
 
-In Pi, the intended flow is: invoke the thin `/skill:<name>` wrapper, then let that wrapper defer to
-Claude's canonical skill contract and the matching role mirror when the workflow needs an agent role.
+In both mirrored runtimes the intended flow is the same: invoke the thin entry point, let it read
+the canonical Claude contract, and dispatch the matching role mirror when the workflow needs an
+agent role. Every mirror is generated -- see [`portabilidad-agentes.md`](portabilidad-agentes.md).
 
 ## Follow-on (out of this slice)
 

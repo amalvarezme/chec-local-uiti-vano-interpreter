@@ -77,7 +77,6 @@ dist/
 
 # Gentle AI local harness metadata
 .atl/
-.pi/gentle-ai/
 openspec/
 
 # Climate skill runtime cache

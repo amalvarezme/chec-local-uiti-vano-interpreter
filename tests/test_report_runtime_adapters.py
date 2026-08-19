@@ -1,3 +1,12 @@
+"""El adaptador CANONICO del report y la matriz que lo documenta.
+
+Los espejos por runtime (OpenCode, VS Code Copilot) los cubre
+`tests/test_portabilidad_agentes.py`, que ademas los regenera y compara. Aqui
+queda lo que es de este lado y de nadie mas: que el runbook de Claude siga siendo
+la fuente, que la normalizacion no dependa del runtime, y que la matriz del
+documento nombre los tres caminos que existen de verdad.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -6,159 +15,79 @@ from chec_local_interpreter.report_contract import normalize_request
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-ADAPTERS = {
-    "claude": PROJECT_ROOT / ".claude" / "skills" / "report" / "SKILL.md",
-    "pi": PROJECT_ROOT / ".pi" / "skills" / "report" / "SKILL.md",
-}
+CANONICAL_ADAPTER = PROJECT_ROOT / ".claude" / "skills" / "report" / "SKILL.md"
+RUNTIME_CONTRACT_DOC = PROJECT_ROOT / "docs" / "report-runtime-contract.md"
 
-FORBIDDEN_BUSINESS_MARKERS = (
-    "build_daily_series",
-    "detect_critical_periods",
-    "rank_critical_points",
-    "render_llm_analysis(",
-    "simulate_automatic_minmax_sensitivity(",
-    "export_latest_interpretability_report",
-    "cargar_modelo_mgcecdl(",
-    "cargar_estudio_optuna_mgcecdl(",
-    "site/assets/site/results",
-)
-
-FORBIDDEN_DIRECT_IMPORTS = (
-    "from chec_local_interpreter.critical_points",
-    "from chec_local_interpreter.context_builder",
-    "from chec_local_interpreter.simulator",
-    "from chec_local_interpreter.plotting",
-    "from chec_impacto.training",
-    "from chec_impacto.interpretability",
-)
+# Los runtimes que hoy tienen un camino real hasta el contrato compartido.
+RUNTIME_KEYS = ("claude", "opencode", "copilot")
 
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def test_runtime_adapter_files_exist():
-    for runtime, path in ADAPTERS.items():
-        assert path.exists(), f"missing {runtime} adapter at {path}"
+def test_canonical_adapter_exists_and_is_named_report():
+    assert CANONICAL_ADAPTER.exists()
+    assert "name: report" in _read(CANONICAL_ADAPTER)
 
 
-def test_runtime_adapter_base_name_is_report():
-    assert "name: report" in _read(ADAPTERS["claude"])
-    assert "name: report" in _read(ADAPTERS["pi"])
+def test_canonical_invocation_is_explicit():
+    assert "/report <circuito> [fecha_inicio fecha_fin]" in _read(CANONICAL_ADAPTER)
 
 
-def test_runtime_invocation_discovery_is_explicit():
-    assert "/report <circuito> [fecha_inicio fecha_fin]" in _read(ADAPTERS["claude"])
-
-    pi = _read(ADAPTERS["pi"])
-    assert "/skill:report <circuito> [fecha_inicio fecha_fin]" in pi
-
-
-def test_adapters_point_to_shared_contract_and_canonical_runbook():
-    for runtime, path in ADAPTERS.items():
-        content = _read(path)
-        assert "report_contract" in content, runtime
-        assert "report_pipeline.py" in content, runtime
-        if runtime != "claude":
-            assert ".claude/skills/report/SKILL.md" in content, runtime
+def test_canonical_adapter_routes_through_the_shared_contract():
+    content = _read(CANONICAL_ADAPTER)
+    assert "report_contract" in content
+    assert "report_pipeline.py" in content
 
 
-def test_equivalent_runtime_inputs_normalize_to_same_report_request_except_metadata():
+def test_canonical_adapter_uses_the_shared_preflight_command_shape():
+    normalized = " ".join(_read(CANONICAL_ADAPTER).split())
+    assert "python -m chec_local_interpreter.report_contract preflight" in normalized
+
+
+def test_canonical_adapter_uses_the_project_virtualenv():
+    content = _read(CANONICAL_ADAPTER)
+    assert "PYTHONPATH=src .venv/bin/python" in content
+
+
+def test_equivalent_runtime_inputs_normalize_to_the_same_request_except_metadata():
+    """Cambiar de editor no puede cambiar que se le pide al pipeline."""
+
     base = normalize_request("C1", "2026-01-01", "2026-01-02")
-    runtime_requests = [
-        normalize_request("C1", "2026-01-01", "2026-01-02", runtime="claude"),
-        normalize_request("C1", "2026-01-01", "2026-01-02", runtime="pi"),
-    ]
 
-    for request in runtime_requests:
+    for runtime in RUNTIME_KEYS:
+        request = normalize_request("C1", "2026-01-01", "2026-01-02", runtime=runtime)
         assert request.circuito == base.circuito
         assert request.fecha_inicio == base.fecha_inicio
         assert request.fecha_fin == base.fecha_fin
+        assert request.runtime.runtime == runtime
 
 
-def test_runtime_adapters_do_not_contain_business_logic():
-    content = _read(ADAPTERS["pi"])
-
-    for marker in FORBIDDEN_BUSINESS_MARKERS:
-        assert marker not in content, f"pi adapter duplicates or calls business logic: {marker}"
-
-
-def test_runtime_adapters_do_not_directly_import_domain_modules():
-    for runtime, path in ADAPTERS.items():
-        if runtime == "claude":
-            continue
-        content = _read(path)
-        for marker in FORBIDDEN_DIRECT_IMPORTS:
-            assert marker not in content, f"{runtime} adapter bypasses report_contract: {marker}"
-
-
-def test_runtime_adapters_use_shared_preflight_command_shape():
-    expected = "python -m chec_local_interpreter.report_contract preflight"
-    for runtime, path in ADAPTERS.items():
-        normalized = " ".join(_read(path).split())
-        assert expected in normalized, runtime
-
-
-def test_runtime_contract_documentation_matrix_matches_adapters():
-    docs = _read(PROJECT_ROOT / "docs" / "report-runtime-contract.md")
+def test_runtime_contract_documentation_matrix_names_every_live_runtime():
+    docs = _read(RUNTIME_CONTRACT_DOC)
 
     assert "/report <circuito> [fecha_inicio fecha_fin]" in docs
-    assert "/skill:report <circuito> [fecha_inicio fecha_fin]" in docs
-    assert "no automatic publishing" in docs
-    assert "no site asset mutation" in docs
+    assert ".claude/skills/report/SKILL.md" in docs
+    assert ".opencode/command/report.md" in docs
+    assert ".github/prompts/report.prompt.md" in docs
+    assert "scripts/portabilidad_agentes.py" in docs
 
 
-def test_pi_adapter_uses_runtime_model_resolution_not_frontmatter():
-    pi = _read(ADAPTERS["pi"])
-    docs = _read(PROJECT_ROOT / "docs" / "report-runtime-contract.md")
+def test_runtime_contract_documents_model_resolution_without_session_sniffing():
+    docs = _read(RUNTIME_CONTRACT_DOC)
 
-    assert "report_contract render <circuito> --run-dir <run_dir> --runtime pi" in pi
-    assert "Pi session history" in docs
-    assert "settings.json" in docs
+    assert "CHEC_LLM_PROVIDER" in docs and "CHEC_LLM_MODEL" in docs
+    assert "Desconocido" in docs
     assert "frontmatter" in docs
-
-
-def test_runtime_adapters_forbid_ambiguous_generic_worker_dispatch():
-    content = _read(ADAPTERS["pi"])
-
-    assert "one explicit task per role" in content
-    assert "Never launch multiple identical workers" in content
-    assert all(rol in content for rol in ("historical", "inference", "expert-alignment"))
-
-
-def test_runtime_adapters_reject_read_only_workers_for_role_authoring():
-    pi = _read(ADAPTERS["pi"])
-    assert "inspect the candidate agent's tool permissions" in pi
-    assert "read-only generic worker" in pi
-    assert "gentle-ai-worker" in pi
-    assert "historical.out.json" in pi and "inference.out.json" in pi
-    assert "stalled role" in pi
-
-
-def test_runtime_adapters_require_measured_token_usage_when_available():
-    pi = _read(ADAPTERS["pi"])
-    assert "Record Pi subagent usage before render" in pi
-    assert "record-usage --run-dir <run_dir> --stage <role> --total <n>" in pi
-    assert "verify-usage" in pi
-    assert "Do not scrape prose or session history" in pi
-    assert '"historical": {"total": 77611}' in pi
-
-
-def test_runtime_adapters_use_project_virtualenv_before_declaring_environment_missing():
-    for runtime, path in ADAPTERS.items():
-        content = _read(path)
-        assert "PYTHONPATH=src .venv/bin/python" in content, runtime
-        assert "bare `python`/`python3`" in content, runtime
+    # El resolvedor especifico de Pi se retiro; el documento tiene que explicar por
+    # que, no dejar el hueco para que alguien reintroduzca un lector por runtime.
+    assert "no per-runtime session sniffing" in docs
 
 
 def test_runtime_docs_state_local_only_no_external_side_effects():
-    checked_paths = list(ADAPTERS.values()) + [PROJECT_ROOT / "docs" / "report-runtime-contract.md"]
-    for path in checked_paths:
-        normalized = " ".join(_read(path).lower().split())
-        assert "external llm" in normalized or "no llm call" in normalized or "no live llm call" in normalized
-        assert (
-            "automatic publishing" in normalized
-            or "publish automatically" in normalized
-            or "never touches `site/assets/site/results/`" in normalized
-        )
-        assert "model training" in normalized or "never trains" in normalized or "do not train" in normalized
+    normalized = " ".join(_read(RUNTIME_CONTRACT_DOC).lower().split())
+
+    assert "no external llm api calls" in normalized
+    assert "no automatic publishing" in normalized
+    assert "no model training" in normalized

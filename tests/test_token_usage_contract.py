@@ -47,7 +47,7 @@ def test_strict_render_requires_measured_executed_roles_before_render(capsys, tm
 
     exit_code = main(
         [
-            "render", "C1", "--run-dir", str(tmp_path), "--runtime", "pi",
+            "render", "C1", "--run-dir", str(tmp_path), "--runtime", "opencode",
             "--require-measured-usage", "--executed-role", "historical",
         ]
     )
