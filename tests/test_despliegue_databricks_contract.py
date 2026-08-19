@@ -529,16 +529,33 @@ def test_la_etapa_3_verifica_el_cache_de_bolsas_por_tamanio():
         "distinguir uno completo de uno truncado")
 
 
-def test_la_etapa_3_avisa_de_que_derived_esta_en_gitignore():
-    """La trampa que costo la corrida, escrita donde se cae en ella.
+def test_la_etapa_3_avisa_del_puntero_lfs_del_cache_de_bolsas():
+    """El cache de bolsas se versiono el 2026-08-19 -- la subida se hace clonando este
+    repo en otra maquina --, y al entrar a LFS hereda exactamente la trampa del CSV:
+    un clon sin `git lfs pull` deja 134 bytes que parecen el archivo.
 
-    No es un detalle de git: es que la pregunta "¿existe este archivo?" se contesta
-    distinto segun con que herramienta se haga, y la que respeta el gitignore miente.
+    La trampa anterior era la contraria y ya no aplica: estaba en `.gitignore`, asi que
+    git lo daba por inexistente aunque estuviera en el disco. Se conserva contada en la
+    misma nota, porque explica por que la etapa lo verifica.
     """
     etapa = _etapa("3", "Are the data in the Volume? Upload only if not")
-    assert ".gitignore" in etapa, (
-        "la etapa 3 no avisa de que `data/derived/` esta en .gitignore, que es como "
-        "un archivo de 199 MB que esta en el disco se reporta como inexistente")
+    assert "git lfs pull" in etapa, (
+        "la etapa 3 no dice como recuperar el cache de bolsas cuando el clon solo trajo "
+        "su puntero de LFS")
+    assert "134 bytes" in etapa, (
+        "la etapa 3 no dice cuanto mide el puntero, que es como se distingue de un "
+        "archivo truncado")
+
+
+def test_la_etapa_5_no_le_exige_al_cuaderno_las_bolsas():
+    """El cuaderno 05 no nombra `bolsas_mil_full` ni una vez: las produce al entrenar y
+    las consumen el simulador y el agente `inference`, no el.
+
+    Se fija porque esa confusion ya costo un `degradado` con un motivo falso.
+    """
+    etapa = _etapa("5", "Is the notebook in the Workspace? Import only if not")
+    assert "No necesita `data/derived/bolsas_mil_full.joblib`" in etapa, (
+        "la etapa 5 no desmiente que el cuaderno necesite las bolsas")
 
 
 def test_las_dos_apps_se_despliegan_siempre():
@@ -578,3 +595,20 @@ def test_con_un_solo_cupo_hay_un_desempate_escrito():
     ventana = etapa[inicio : inicio + 600]
     assert "criticidad-chec" in ventana, (
         "el desempate no nombra cual de las dos apps entra primero")
+
+
+def test_la_etapa_5_registra_la_restriccion_de_la_raiz_del_proyecto():
+    """`resolve_project_root` del cuaderno 05 exige `src/chec_impacto` y `data/` como
+    carpetas HERMANAS, y en el Workspace no hay ninguna de las dos: `src/` solo se
+    sincroniza en el paso 4c -- a otra ruta -- y `data/` vive en el Volume.
+
+    Se fija porque el motivo escrito importa: la bitacora del 2026-08-19 decia "faltan
+    las bolsas", que manda a buscar donde no es. Y porque el desempate de un solo cupo
+    favorece a `criticidad-chec`, asi que el caso sin `src/` en el workspace es el
+    probable y no el raro.
+    """
+    etapa = _etapa("5", "Is the notebook in the Workspace? Import only if not")
+    assert "RESTRICCION ABIERTA" in etapa, (
+        "la etapa 5 no registra que el cuaderno todavia no puede correr en el Workspace")
+    assert "resolve_project_root" in etapa, (
+        "la restriccion no nombra la causa, que es la resolucion de la raiz del proyecto")

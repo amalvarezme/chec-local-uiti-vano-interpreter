@@ -166,17 +166,22 @@ Check 5 mira `data/derived/bolsas_mil_full.joblib`, y mira su **tamaño**: son *
 (198.945.074 bytes en la copia del 2026-08-03). Un joblib truncado no falla al subir; falla
 despues dentro del simulador, con un error que no apunta hasta aqui.
 
-> **La trampa de `.gitignore`, y no es un detalle de git.** `data/derived/` cae bajo la
-> linea `data/*` de `.gitignore` y ningun `!` lo rescata, asi que **no esta rastreado**.
-> `git ls-files`, `git status` y cualquier herramienta de busqueda que respete el gitignore
-> lo dan por inexistente. El 2026-08-19 una corrida reporto por eso que el archivo "no
-> existe en esta maquina" mientras estaba en el disco, con sus 199 MB. La unica pregunta
-> que contesta la verdad es al sistema de archivos:
+> **Desde el 2026-08-19 viaja por Git LFS, y por eso hereda la trampa del CSV.** Antes
+> estaba en `.gitignore` — bajo la linea `data/*`, sin ningun `!` que lo rescatara — y una
+> corrida lo reporto como "no existe en esta maquina" mientras estaba en el disco con sus
+> 199 MB: `git ls-files` y toda busqueda que respete el gitignore lo daban por inexistente.
+> Se versiono precisamente porque **la subida se hace clonando este repo en otra maquina**,
+> y sin el no hay simulador que construir.
+>
+> Lo que hay que comprobar ahora es lo mismo que en el CSV: que sea el archivo y no su
+> puntero. Un clon reciente sin `git lfs pull` deja **134 bytes** que dicen
+> `version https://git-lfs.github.com/spec/v1`:
 > ```
 > ls -l data/derived/bolsas_mil_full.joblib
 > ```
-> Que un archivo no este en git no dice nada sobre si esta en el disco, y aqui lo que sube
-> es el disco.
+> Si mide bytes en vez de megabytes, `git lfs pull` en la raiz antes de seguir. Subir un
+> puntero como si fueran datos es peor que no subir nada: todo lo de abajo falla de una
+> forma que no apunta hasta aqui.
 
 **If everything is present**: record the step `ok` naming what was found and its sizes, and
 go to stage 4 without uploading anything.
@@ -637,10 +642,54 @@ importalo:
 
 Verifica que aterrizo listando de vuelta, en vez de fiarte del codigo de salida.
 
-`05` necesita `data/models/mil_vano_ventana_v1.pt` y `data/derived/bolsas_mil_full.joblib`
-(199 MB) — los dos viven bajo `data/`, asi que la etapa 3 ya los llevo. Si la etapa 3 quedo
-bloqueada, anota que `05` fallara al abrirse y marca este paso `degradado`, no `ok`: el
-cuaderno aterriza, pero no va a correr.
+**Que necesita `05` para correr, y que NO.** En su modo por defecto — visor — necesita
+`data/models/mil_vano_ventana_v1.pt` y `src/chec_impacto`, y nada mas: el desglose viaja
+DENTRO del artefacto justo para no depender de ningun derivado. Para reentrenar necesita
+ademas el CSV, `Variables_seleccion.xlsx` y `geometria_kmeans_014_v1.json`. Todos viven
+bajo `data/` o en el repositorio, asi que la etapa 3 ya los llevo.
+
+**No necesita `data/derived/bolsas_mil_full.joblib`**, y conviene no repetir lo contrario:
+el cuaderno no lo nombra ni una vez. Las bolsas las consumen el **simulador** y el agente
+`inference`, no este cuaderno — y el cuaderno es quien las PRODUCE al entrenar. El
+2026-08-19 esta etapa salio `degradado` con el motivo "no va a correr sin las bolsas", y ese
+motivo era falso.
+
+Si la etapa 3 quedo bloqueada de verdad — sin el `.pt` en el Volume — anota que `05` fallara
+al abrirse y marca este paso `degradado`, no `ok`: el cuaderno aterriza, pero no va a correr.
+
+> ### RESTRICCION ABIERTA — `05` todavia no puede correr en el Workspace
+>
+> Descubierta el 2026-08-19 leyendo el codigo, **no** en una corrida. Este paso importa el
+> cuaderno y nada mas, y el cuaderno arranca asi:
+>
+> ```python
+> def resolve_project_root():
+>     for candidate in [cwd, *cwd.parents]:
+>         if (candidate / "src" / "chec_impacto").exists() and (candidate / "data").exists():
+>             return candidate
+>     raise FileNotFoundError(...)
+> ```
+>
+> Pide **las dos carpetas hermanas**, y en `/Workspace/.../project_flow` no hay ninguna:
+> `src/chec_impacto` solo se sincroniza dentro del paso **4c**, a la carpeta de la app del
+> simulador, que es otra ruta; y `data/` vive en el **Volume**, que es otro sistema de
+> archivos. O sea que `05` levanta `FileNotFoundError` en su primera celda.
+>
+> Dos consecuencias que conviene no confundir:
+>
+> 1. El motivo real por el que `05` no corre **no son las bolsas** — no las lee — sino esta
+>    resolucion de raiz. Anotar "faltan las bolsas" manda a quien lea la bitacora a buscar
+>    donde no es.
+> 2. **Si el paso 4c queda omitido por cupo, ni siquiera hay un `src/chem_impacto` en el
+>    workspace.** El desempate de un solo cupo favorece a `criticidad-chec`, asi que este
+>    caso es el probable, no el raro.
+>
+> Mientras no se cierre: anota este paso `degradado` aunque el cuaderno aterrice bien, con
+> **este** motivo escrito, y registra la restriccion. Cerrarla pide una decision de diseño
+> que no es de este comando — sincronizar `src/chec_impacto` junto al cuaderno y darle a
+> `resolve_project_root` una salida para el layout de Databricks, donde `data/` esta en un
+> Volume — y toca `scripts/generate_notebook_10.py`, que este comando tiene prohibido
+> modificar.
 
 ```
 python3 scripts/bitacora_despliegue.py paso --archivo "$RUTA_BITACORA" \

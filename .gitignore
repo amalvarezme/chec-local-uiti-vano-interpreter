@@ -13,6 +13,14 @@ data/*
 !data/Indicadores_vano_v3.csv
 !data/COSTOS ITEMS CONTRATOS.xlsx
 !data/geometria_kmeans_014_v1.json
+# El cache de bolsas SI se versiona, por LFS. Es lo unico de data/derived/ que
+# viaja: el simulador no se puede construir sin el y la subida a Databricks se
+# hace clonando este repo en otra maquina. Los demas derivados son caches que
+# se rehacen solos (catalogo de controles, relevancias) o salidas opcionales
+# del cuaderno 05 (el .npz de predicciones fuera de pliegue).
+!data/derived/
+data/derived/*
+!data/derived/bolsas_mil_full.joblib
 !data/GEO/
 !data/GEO/**
 !data/models
