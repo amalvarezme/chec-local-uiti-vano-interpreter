@@ -195,6 +195,132 @@ print('RESULTADO ' + json.dumps({{
 """
 
 
+
+# Los botones de grupo, PULSADOS. Un `on_click` de ipywidgets corre en el proceso, sin
+# kernel y sin navegador, asi que esto se puede afirmar de verdad en vez de pincharlo
+# leyendo el fuente. Y hace falta: que un boton SUME en vez de reemplazar no se ve en el
+# codigo de un vistazo -- las dos versiones son una sola linea -- y falla en silencio,
+# porque una seleccion reemplazada es una seleccion perfectamente plausible.
+#
+# Se busca un circuito con los CUATRO grupos poblados en su ventana inicial: sin el, la
+# prueba de la suma no distingue "sumo" de "reemplazo por algo que ya estaba".
+_GUION_BOTONES = """
+import json, os, sys
+sys.path.insert(0, {src!r})
+os.environ['RUTA_VARIABLES_SIMULAR'] = {simular!r}
+from chec_tableros.simulador import derivacion, tablero
+D = derivacion.cargar({paquete!r})
+
+
+def hojas(w):
+    yield w
+    for h in getattr(w, 'children', ()):
+        yield from hojas(h)
+
+
+APP = tablero.construir(D, costos={costos!r})
+BOTON = {{w.description: w for w in hojas(APP) if type(w).__name__ == 'Button'}}
+SEL = [w for w in hojas(APP) if hasattr(w, 'desmarcar_todos')][0]
+CIRCUITO = [w for w in hojas(APP) if type(w).__name__ == 'Dropdown'][0]
+HTMLS = [w for w in hojas(APP) if type(w).__name__ == 'HTML']
+GRUPOS = ['G. Alto', 'G. Medio-Alto', 'G. Medio', 'G. Bajo']
+
+
+def aviso():
+    for w in HTMLS:
+        if 'en la ventana' in (w.value or '') and 'grupo' in (w.value or ''):
+            return w.value
+    return ''
+
+
+def solo(etiqueta):
+    \"\"\"Cuantos marca ESE boton, partiendo de cero. Medirlo sin desmarcar antes lee la
+    seleccion anterior cuando el grupo esta vacio y el boton no toca nada.\"\"\"
+    BOTON['Desmarcar'].click()
+    BOTON[etiqueta].click()
+    return len(SEL.value)
+
+
+elegido, cuentas = None, {{}}
+for c in list(CIRCUITO.options)[:20]:
+    CIRCUITO.value = c
+    cuentas = {{g: solo(g) for g in GRUPOS}}
+    if all(cuentas.values()):
+        elegido = c
+        break
+
+resultado = {{'circuito': elegido, 'cuentas': cuentas}}
+if elegido is not None:
+    # La SUMA: los cuatro grupos, uno tras otro, sin desmarcar en el medio.
+    BOTON['Desmarcar'].click()
+    acumulado = []
+    for g in GRUPOS:
+        BOTON[g].click()
+        acumulado.append(len(SEL.value))
+    resultado['acumulado'] = acumulado
+    resultado['aviso_lleno'] = aviso()
+    # Que ningun grupo pise a otro: la union de los cuatro es la seleccion final.
+    resultado['sin_duplicados'] = len(set(SEL.value)) == len(SEL.value)
+    # Desmarcar sigue siendo el unico que quita.
+    BOTON['Desmarcar'].click()
+    resultado['tras_desmarcar'] = len(SEL.value)
+    # Y una marca MANUAL sobrevive al boton de grupo.
+    fid_ajeno = next(f for f in SEL.casillas if f not in SEL.value)
+    SEL.alternar(fid_ajeno)
+    antes = set(SEL.value)
+    BOTON['G. Alto'].click()
+    resultado['manual_sobrevive'] = antes <= set(SEL.value)
+
+print('RESULTADO ' + json.dumps(resultado))
+"""
+
+
+@pytest.mark.skipif(not (PAQUETE / "catalogo.joblib").exists(),
+                    reason="requiere el paquete del simulador construido")
+def test_los_botones_de_grupo_suman_y_solo_desmarcar_quita():
+    """Los cuatro botones PULSADOS de verdad contra el paquete congelado.
+
+    Lo que se afirma es lo que el usuario pidio y lo que el fuente no prueba: que
+    encadenar dos grupos no pierde el primero, que ningun grupo pisa a otro, que una
+    marca hecha a mano sobrevive al boton, y que `Desmarcar` sigue siendo el unico que
+    quita. Corre en subproceso por lo mismo que su vecina: arma el tablero entero.
+    """
+    import subprocess
+
+    guion = _GUION_BOTONES.format(
+        src=str(RAIZ / "src"), paquete=str(PAQUETE),
+        simular=str(PAQUETE / "Variables_simular.xlsx"),
+        costos=str(PAQUETE / "Actividades_mantenimiento_costos_2026.xlsx"))
+    proceso = subprocess.run([sys.executable, "-c", guion], cwd=RAIZ,
+                             capture_output=True, text=True)
+    assert proceso.returncode == 0, proceso.stderr[-3000:]
+    linea = next(l for l in proceso.stdout.splitlines() if l.startswith("RESULTADO "))
+    r = json.loads(linea[len("RESULTADO "):])
+
+    assert r["circuito"] is not None, (
+        "ningun circuito de los 20 primeros tiene los cuatro grupos poblados en su "
+        f"ventana inicial; sin eso esta prueba no distingue sumar de reemplazar: {r}")
+
+    # La suma. Cada clic deja la seleccion en el total de los grupos pulsados hasta ahi:
+    # si reemplazara, el acumulado seria la cuenta de cada grupo por separado.
+    esperado, corriendo = [], 0
+    for g in ("G. Alto", "G. Medio-Alto", "G. Medio", "G. Bajo"):
+        corriendo += r["cuentas"][g]
+        esperado.append(corriendo)
+    assert r["acumulado"] == esperado, (
+        f"los botones no suman: {r['acumulado']} contra {esperado} ({r['cuentas']})")
+    assert r["sin_duplicados"], "un vano quedo marcado dos veces"
+
+    # El aviso dice cuantos hay, tambien cuando SI hay: era el unico caso que callaba.
+    assert "vanos en grupo" in r["aviso_lleno"], r["aviso_lleno"]
+    assert "en la ventana" in r["aviso_lleno"], r["aviso_lleno"]
+
+    assert r["tras_desmarcar"] == 0, "Desmarcar dejo vanos marcados"
+    assert r["manual_sobrevive"], (
+        "el boton de grupo se llevo por delante una marca hecha a mano; el mapa y las "
+        "casillas marcan igual que el, y ninguno de los dos es menos valido")
+
+
 @pytest.mark.skipif(not (PAQUETE / "catalogo.joblib").exists(),
                     reason="requiere el paquete del simulador construido")
 def test_el_tablero_se_arma_entero_contra_el_paquete_congelado():

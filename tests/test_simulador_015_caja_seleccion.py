@@ -362,17 +362,25 @@ def test_the_window_top_button_is_gone(fuente):
     assert "_auto_seleccion_ventana(circuito, ventana_i)" in fuente  # la auto-marca sigue
 
 
-def test_an_empty_group_says_so_instead_of_marking_something_else(fuente):
-    """Un boton que marca el grupo de al lado cuando el suyo esta vacio produce una
-    seleccion perfectamente plausible, y el usuario lo descubre al simular. El aviso
-    nombra el grupo Y la ventana con su fecha: 'no hay vanos en grupo Alto' sin decir
-    donde se lee como una propiedad del circuito y no de la ventana."""
-    cuerpo = fuente[fuente.index("def _marcar_grupo"):][:2600]
-    assert "No hay vanos en grupo " in cuerpo
+def test_the_group_button_always_reports_and_an_empty_group_marks_nothing(fuente):
+    """Las dos ramas hablan. La llena la pulsa de verdad
+    `test_simulador_derivacion.py::test_los_botones_de_grupo_suman_y_solo_desmarcar_quita`;
+    lo que se pincha aqui es la vacia, que no se puede provocar a voluntad contra el
+    paquete congelado: no marca NADA -- un boton que marca el grupo de al lado produce
+    una seleccion perfectamente plausible que el usuario descubre al simular -- y nombra
+    el grupo con la fecha de la ventana, porque 'no hay vanos en grupo Alto' a secas se
+    lee como una propiedad del circuito."""
+    cuerpo = fuente[fuente.index("def _marcar_grupo"):][:3400]
+    assert "No hay '" in cuerpo and "vanos {donde}" in cuerpo
     assert 'VENTANAS[ventana_i]["periodo"]' in cuerpo
-    # Y la seleccion no se toca: el aviso reemplaza a la marca, no la acompania.
-    assert cuerpo.index("AVISO_GRUPO.value = (") < cuerpo.index("vano_widget.value = tuple(")
-    assert "return" in cuerpo[:cuerpo.index("vano_widget.value = tuple(")]
+    # La rama vacia sale ANTES de tocar la seleccion, y sale de verdad.
+    vacia = cuerpo[:cuerpo.index("vano_widget.value = tuple(")]
+    assert "if not elegidos:" in vacia
+    assert "return" in vacia
+    # Y la rama llena tambien deja aviso: callar cuando SI hay vanos deja al usuario
+    # contando casillas, y con el boton sumando esa cuenta ya no es la seleccion entera.
+    llena = cuerpo[cuerpo.index("vano_widget.value = tuple("):]
+    assert "AVISO_GRUPO.value = (f'<span" in llena
 
 
 def test_the_empty_group_notice_dies_with_its_window(fuente):

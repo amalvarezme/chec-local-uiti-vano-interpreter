@@ -1970,34 +1970,53 @@ def construir(
 
 
     def _marcar_grupo(clase):
-        """Marca los vanos que la ventana activa pone en ese grupo de criticidad.
+        """SUMA a la seleccion los vanos que la ventana activa pone en ese grupo.
 
     El grupo sale de `clases_para`, o sea de la VENTANA: un vano no es Alto, es Alto en
     marzo. Leerlo del periodo entero contestaria otra pregunta -- cual fue el peor del
     anio -- y ademas no coincidiria con los colores que el mapa acaba de pintar.
 
-    Es un REEMPLAZO, como lo era la auto-marca del deslizador: el grupo es la pregunta
-    entera, y sumarlo a lo que hubiera antes dejaria una seleccion mezclada que ya no
-    corresponde a ningun boton. Para juntar dos grupos estan las casillas.
+    SUMA, no reemplaza. Los cuatro botones, las casillas y el clic en el mapa base son
+    cuatro maneras de decir lo mismo -- este vano me interesa -- y ninguna es mas valida
+    que las otras: un boton que borra lo que las otras tres pusieron obliga a rehacer a
+    mano un trabajo que ya estaba hecho. Quitar es UNA accion y tiene UN sitio:
+    "Desmarcar" para todo, la casilla o el mapa para uno.
 
-    Cuando el grupo esta VACIO no se toca la seleccion y se dice por que. Marcar lo mas
-    parecido -- el grupo de al lado, los de mayor UITI -- produce una seleccion
-    perfectamente plausible, y el usuario descubre que no era la que pidio recien al
-    simular. El aviso nombra el grupo Y la fecha de la ventana: "no hay vanos en grupo
-    Alto", a secas, se lee como una propiedad del circuito y no de la ventana.
+    El orden de la union pone lo que ya estaba primero: las casillas no se rebarajan bajo
+    la mano, y lo que el usuario venia siguiendo no se le mueve de sitio.
+
+    El aviso sale SIEMPRE, tanto si el grupo tiene vanos como si no. Callar cuando si
+    los hay deja al usuario contando casillas para saber que hizo el boton, y con el
+    boton sumando esa cuenta ya no es la seleccion entera. Nombra el grupo Y la fecha de
+    la ventana: "no hay vanos en grupo Alto", a secas, se lee como una propiedad del
+    circuito y no de la ventana. Y separa cuantos hay de cuantos entraron: pulsar dos
+    veces el mismo boton no marca nada nuevo, y decir "30 vanos" las dos veces se lee
+    como que la segunda hizo algo.
     """
+        # La seleccion se lee del widget y no de `_seleccion_actual`, que la devuelve como
+        # CONJUNTO: aqui hace falta el orden para poder anexar sin rebarajar.
         circuito, ventana_i, _marcados = _seleccion_actual()
+        marcados = [str(f) for f in vano_widget.value]
         elegidos = vanos_de_grupo(clases_para(circuito, ventana_i), clase,
                                   datos_ventana=DATOS_VENTANA[ventana_i])
+        donde = (f'en grupo <b>{NOMBRES_GRUPOS[clase]}</b> en la ventana '
+                 f'{VENTANAS[ventana_i]["etiqueta"]} ({VENTANAS[ventana_i]["periodo"]})')
         if not elegidos:
-            AVISO_GRUPO.value = (
-                f'<span style="font-size:12px;color:#c62828;">No hay vanos en grupo '
-                f'<b>{NOMBRES_GRUPOS[clase]}</b> en la ventana '
-                f'{VENTANAS[ventana_i]["etiqueta"]} '
-                f'({VENTANAS[ventana_i]["periodo"]}).</span>')
+            AVISO_GRUPO.value = (f'<span style="font-size:12px;color:#c62828;">No hay '
+                                 f'vanos {donde}.</span>')
             return
-        AVISO_GRUPO.value = ''
-        vano_widget.value = tuple(elegidos)
+        ya = set(marcados)
+        nuevos = [f for f in elegidos if f not in ya]
+        vano_widget.value = tuple([*marcados, *nuevos])
+        if not nuevos:
+            entraron = 'ya estaban todos marcados'
+        elif len(nuevos) == len(elegidos):
+            entraron = 'todos marcados'
+        else:
+            entraron = (f'se marcaron <b>{len(nuevos)}</b>; los otros '
+                        f'{len(elegidos) - len(nuevos)} ya estaban')
+        AVISO_GRUPO.value = (f'<span style="font-size:12px;color:#5b4a48;">Hay '
+                             f'<b>{len(elegidos)}</b> vanos {donde}: {entraron}.</span>')
 
 
     def _boton_de_grupo(clase):
@@ -2005,8 +2024,8 @@ def construir(
     clase que marca no puedan separarse al editar uno de los tres."""
         boton = widgets.Button(
             description=f'G. {NOMBRES_GRUPOS[clase]}', button_style='',
-            tooltip=f'Marca los vanos que la ventana activa clasifica como '
-                    f'{NOMBRES_GRUPOS[clase]}, reemplazando lo que tengas marcado')
+            tooltip=f'Suma a la seleccion los vanos que la ventana activa clasifica '
+                    f'como {NOMBRES_GRUPOS[clase]}, sin quitar lo que ya tengas marcado')
         boton.on_click(lambda _b, c=clase: _marcar_grupo(c))
         return boton
 
