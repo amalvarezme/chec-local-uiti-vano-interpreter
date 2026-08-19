@@ -340,11 +340,16 @@ def test_el_cupo_se_descubre_no_se_asume():
     assert "has reached the maximum limit of N apps" in texto
 
 
-def test_el_relevo_de_las_cuatro_apps_viejas_se_pregunta():
-    """Publicar la nueva no autoriza borrar las que reemplaza. Son cuatro apps que
-    alguien puede tener abiertas, y borrarlas es destructivo."""
+def test_el_relevo_de_las_apps_viejas_se_pregunta():
+    """Publicar la nueva no autoriza borrar las que reemplaza. Son apps que alguien
+    puede tener abiertas, y borrarlas es destructivo.
+
+    Se llamaban "las cuatro apps viejas" hasta el 2026-08-19. Dejaron de ser cuatro
+    cuando se descubrio que cada comando de la familia bautizaba su app a su manera:
+    la lista lleva los dos juegos de nombres, con y sin el prefijo `app-`.
+    """
     texto = _leer(ORQUESTADOR)
-    assert "Las cuatro apps viejas" in texto
+    assert "Las apps de la familia retirada" in texto
     assert "Preguntar antes de borrar cada una" in texto
 
 
@@ -472,3 +477,104 @@ def test_el_orquestador_dice_que_el_stack_se_retiro():
     texto = _leer(ORQUESTADOR)
     assert "Retired, not deferred" in texto
     assert "Appendix (optional)" not in texto
+
+
+# --------------------------------------------------------------------------
+# Lo que la corrida real del 2026-08-19 dejo al descubierto
+# --------------------------------------------------------------------------
+#
+# Tres hallazgos, y ninguno era un fallo de Databricks:
+#
+#   1. La etapa 3 reporto `data/derived/bolsas_mil_full.joblib` como "no existe en
+#      esta maquina". Existe: 198.945.074 bytes, del 2026-08-03. Lo que pasa es que
+#      `data/derived/` esta en `.gitignore` -- la linea `data/*` sin un `!` que lo
+#      rescate --, asi que `git ls-files` y cualquier herramienta que respete el
+#      gitignore lo dan por ausente. El inventario de la etapa 3 no lo nombraba, asi
+#      que nada contradijo esa lectura.
+#   2. El relevo de apps viejas solo reconocia `vano-clima`, sin prefijo. El
+#      workspace tenia `app-clima`, que es la misma app de la familia retirada, y al
+#      no reconocerla la conto como ajena: cupo ocupado por algo nuestro.
+#   3. Con un solo cupo libre para dos apps, el comando decia que "esa asimetria
+#      decide cual" y no decia cual. Sin desempate escrito, la corrida no desplego
+#      ninguna.
+
+RUTA_BOLSAS = "data/derived/bolsas_mil_full.joblib"
+
+
+def _etapa(numero: str, titulo: str) -> str:
+    """El texto de una etapa, de su encabezado al de la siguiente."""
+    texto = _leer(ORQUESTADOR)
+    inicio = texto.index(f"## {numero}. {titulo}")
+    return texto[inicio : texto.index("\n## ", inicio + 1)]
+
+
+def test_la_etapa_3_nombra_el_cache_de_bolsas_en_su_inventario():
+    """El inventario decia "el CSV, los sidecars, graphs/, models/ y los dos .xlsx" y
+    se saltaba `derived/`. `fs cp -r data` SI lo lleva, pero quien lee el inventario
+    para saber que sube concluye lo contrario -- y eso fue exactamente lo que paso.
+    """
+    etapa = _etapa("3", "Are the data in the Volume? Upload only if not")
+    assert RUTA_BOLSAS in etapa, (
+        "la etapa 3 no nombra el cache de bolsas; su inventario dice que sube y ese "
+        "archivo no aparece, aunque `fs cp -r data` lo lleve")
+
+
+def test_la_etapa_3_verifica_el_cache_de_bolsas_por_tamanio():
+    """Con el mismo criterio que el CSV: un joblib truncado no falla al subir, falla
+    dentro del simulador con un error que no apunta aqui."""
+    etapa = _etapa("3", "Are the data in the Volume? Upload only if not")
+    assert "data/derived" in etapa
+    assert "199 MB" in etapa or "198.945.074" in etapa, (
+        "la etapa 3 no dice cuanto debe pesar el cache de bolsas, asi que no puede "
+        "distinguir uno completo de uno truncado")
+
+
+def test_la_etapa_3_avisa_de_que_derived_esta_en_gitignore():
+    """La trampa que costo la corrida, escrita donde se cae en ella.
+
+    No es un detalle de git: es que la pregunta "¿existe este archivo?" se contesta
+    distinto segun con que herramienta se haga, y la que respeta el gitignore miente.
+    """
+    etapa = _etapa("3", "Are the data in the Volume? Upload only if not")
+    assert ".gitignore" in etapa, (
+        "la etapa 3 no avisa de que `data/derived/` esta en .gitignore, que es como "
+        "un archivo de 199 MB que esta en el disco se reporta como inexistente")
+
+
+def test_las_dos_apps_se_despliegan_siempre():
+    """No hay corrida en la que desplegar las apps sea opcional.
+
+    En la corrida del 2026-08-19 la etapa 4 salio `omitido` con las dos apps sin
+    desplegar. Lo que decide que se despliega es el cupo y el estado de cada app, no
+    una eleccion por corrida.
+    """
+    etapa = _etapa("4", "Are the apps deployed and serving? Deploy only if not")
+    assert "Las dos se despliegan siempre, por defecto" in etapa, (
+        "la etapa 4 no enuncia que las dos apps se despliegan por defecto")
+    assert "opcional" in etapa, (
+        "la etapa 4 no dice que publicarlas NO es opcional ni una pregunta al usuario")
+
+
+@pytest.mark.parametrize("nombre", ["app-clima", "app-vano-clima", "app-simulador-vano"])
+def test_el_relevo_reconoce_los_nombres_con_prefijo(nombre: str):
+    """La familia retirada dejo apps con y sin el prefijo `app-`, segun el comando que
+    las creo. Reconocer solo una forma cuenta a la otra como ajena y le regala cupo.
+    """
+    etapa = _etapa("4", "Are the apps deployed and serving? Deploy only if not")
+    assert nombre in etapa, (
+        f"la etapa 4 no reconoce `{nombre}` como app de la familia retirada, asi que "
+        "la contaria como ajena y no ofreceria retirarla")
+
+
+def test_con_un_solo_cupo_hay_un_desempate_escrito():
+    """Decir "esa asimetria decide cual" sin decir cual no es un desempate.
+
+    Con un solo cupo libre la corrida no desplego NINGUNA de las dos, que es el peor
+    de los tres resultados posibles.
+    """
+    etapa = _etapa("4", "Are the apps deployed and serving? Deploy only if not")
+    inicio = etapa.lower().index("un solo cupo") if "un solo cupo" in etapa.lower() else -1
+    assert inicio >= 0, "la etapa 4 no contempla el caso de un solo cupo libre"
+    ventana = etapa[inicio : inicio + 600]
+    assert "criticidad-chec" in ventana, (
+        "el desempate no nombra cual de las dos apps entra primero")

@@ -16,25 +16,23 @@ import variables from "../data/variables.json";
 
 
 
-const databricksCommandRows = [
-  ["/subir-a-databricks", "Orquestador de todo el flujo B", "Datos -> cuaderno 05 al Workspace -> apps por prioridad -> commit y push de la bitacora"],
-  ["/subir-datos-databricks", "data/ completo + site/data/variables.json", "Sube al Volume lo que consumen los cuadernos 01-06 y /report"],
-  ["/subir-notebooks-databricks", "Los tres paquetes fuente + los cuadernos de notebooks (copias adaptadas)", "Sube al Workspace; nunca modifica el cuaderno del repositorio"],
-  ["/app-vano-clima, /app-agrupamiento-vanos-circuitos, /app-simulador-vano", "Cuadernos 01, 02 y 06", "Databricks Apps con URL fija; son la prioridad cuando el cupo es de 3"],
-  ["/app-trayectorias-circuitos, /app-trayectorias-vanos", "Cuadernos 03 y 04", "Se despliegan solo si el workspace admite mas de 3 apps"]
+const databricksArtefactos = [
+  ["1", "data/", "Archivos en el Volume de Unity Catalog", "~945 MB: el CSV de eventos (566), el cache de bolsas (199), los tres shapefiles con sidecars (180), el modelo MIL, el grafo y los .xlsx"],
+  ["2", "Dos aplicaciones", "Databricks Apps, cada una en su compute", "Criticidad CHEC sirve los cuatro tableros en cuatro rutas; el Simulador necesita un interprete de Python vivo"],
+  ["3", "notebooks/05_mil_vano_ventana.ipynb", "Cuaderno en el Workspace", "El registro legible del modelo MIL; sin outputs, por el tope de 10 MB del importador"]
 ];
 
 
 
 const databricksMigrationSteps = [
-  ["0", "Preguntar al usuario", "Unico input: la URL del workspace de Databricks destino. Los nombres de las apps usan su valor por defecto."],
-  ["1", "Resolver perfil CLI e identidad", "Secciones E1 y E2 del contrato compartido; se resuelve una sola vez."],
+  ["0", "Preguntar la URL del workspace", "Es el unico dato que se pide, y se pide en cada corrida: nunca se deduce de un perfil que resulte tener sesion abierta."],
+  ["1", "Resolver perfil CLI e identidad", "Se derivan de esa URL, una sola vez."],
   ["2", "Resolver el destino en Unity Catalog", "El catalogo se descubre en tiempo de ejecucion, nunca se asume."],
-  ["3", "Verificar los datos en el Volume", "Si estan, no sube nada. Si falta algo, delega en /subir-datos-databricks."],
-  ["4", "Importar el cuaderno 05 al Workspace", "Como cuaderno, no como app: es el registro legible del modelo MIL."],
-  ["5", "Descubrir el cupo de apps y desplegar", "Por prioridad: 01, 02 y 06 primero; 03 y 04 si el cupo alcanza."],
+  ["3", "Compuerta: los datos en el Volume", "Pregunta primero que hay, con tamanios. Solo sube lo que falta: mover 566 MB que ya estaban es la corrida mas cara que existe."],
+  ["4", "Compuerta: las dos apps en compute", "Sana es `ACTIVE` + `RUNNING` + ultimo deploy `SUCCEEDED`, las tres a la vez. Una app sana y al dia no se toca."],
+  ["5", "Compuerta: el cuaderno en el Workspace", "Se importa sin outputs ni execution_count. Si la etapa 3 quedo bloqueada, el cuaderno aterriza pero no correra: eso se anota `degradado`, no `ok`."],
   ["6", "Commit y push de la bitacora", "En una rama, nunca sobre main."],
-  ["7", "Reportar al usuario", "Ruta de la bitacora, estado final y toda restriccion con quien la desbloquea."]
+  ["7", "Reportar al usuario", "Una fila por etapa, la ruta de la bitacora y cada restriccion con quien la desbloquea."]
 ];
 
 
@@ -1026,20 +1024,29 @@ const cronograma = [
           <h2>Migración a Databricks</h2>
           <p>
             Databricks es una <strong>copia independiente</strong>, no un espejo en vivo: lo que corre allá
-            es la misma cadena, con sus propios datos subidos y sus propias apps desplegadas. Cuatro
-            comandos la mueven, y los tres primeros sirven solos para una migración parcial.
+            es la misma cadena, con sus propios datos subidos y sus propias apps desplegadas. La mueve
+            <strong>un solo comando</strong>, <code>/subir-a-databricks</code>, que sube tres artefactos y
+            nada más.
           </p>
         </div>
 
         <div class="table-wrap compact-table">
           <table>
-            <thead><tr><th>Comando</th><th>Qué migra</th><th>Dónde aterriza</th></tr></thead>
+            <thead><tr><th>#</th><th>Artefacto</th><th>Dónde queda</th><th>Qué lleva</th></tr></thead>
             <tbody>
-              {databricksCommandRows.map(([comando, migra, toca]) => (
-                <tr><td><code>{comando}</code></td><td>{migra}</td><td>{toca}</td></tr>
+              {databricksArtefactos.map(([numero, que, donde, detalle]) => (
+                <tr><td>{numero}</td><td><code>{que}</code></td><td>{donde}</td><td>{detalle}</td></tr>
               ))}
             </tbody>
           </table>
+        </div>
+
+        <div class="note-callout">
+          <strong>Eran ocho comandos hasta agosto de 2026.</strong> Cuatro publicaban un tablero cada uno
+          parcheando su cuaderno, y murieron cuando ese código se mudó a <code>src/chec_tableros/</code>.
+          Los otros cuatro seguían siendo correctos y se absorbieron el 2026-08-17 por una razón distinta:
+          un despliegue partido en cuatro invocaciones deja cuatro reportes parciales y obliga al usuario a
+          acordarse del orden. Su procedimiento no se perdió — vive en las etapas 3, 4 y 5.
         </div>
 
         <div class="connection-intro">
@@ -1063,10 +1070,11 @@ const cronograma = [
         </ol>
 
         <div class="note-callout">
-          <strong>El cupo de apps manda el orden.</strong> Un workspace admite 3 apps, y una que está en
-          <code>DELETING</code> todavía ocupa su lugar. Por eso el despliegue va por prioridad: primero
-          clima, agrupamiento y simulador; trayectorias de circuitos y de vanos solo si el cupo alcanza.
-          El catálogo de Unity Catalog nunca se asume: se descubre en cada corrida.
+          <strong>Las dos apps se despliegan siempre.</strong> No es una elección por corrida: lo único que
+          puede impedirlo es el cupo del workspace —3 apps, y una en <code>DELETING</code> todavía ocupa su
+          lugar— o que la app ya esté sana y sirviendo contenido al día. Con un solo cupo libre entra
+          <strong>Criticidad CHEC</strong>, que publica cuatro tableros en vez de uno y arranca en segundos;
+          el Simulador espera turno. Desplegar una es siempre mejor que no desplegar ninguna.
         </div>
       </section>
 

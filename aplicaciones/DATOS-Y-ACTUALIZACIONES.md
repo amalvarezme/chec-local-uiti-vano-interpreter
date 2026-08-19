@@ -222,7 +222,7 @@ sin miedo.
 
 ---
 
-## 7. Dos trampas de Git LFS
+## 7. Tres trampas de Git
 
 1. **`Indicadores_vano_v3.csv` de 130 bytes.** Es el puntero de LFS sin descargar, no los
    datos. Las aplicaciones lo detectan y lo dicen con esas palabras; la salida es
@@ -230,6 +230,22 @@ sin miedo.
 2. **Un `git lfs pull` puede provocar una reconstrucción de más.** Los archivos pesados se
    vigilan por bytes + fecha, y LFS reescribe la fecha aunque el contenido sea idéntico.
    Es deliberado: una marca de tiempo falla del lado seguro. Cuesta unos segundos una vez.
+3. **`data/derived/` no está en git, y preguntar por él con la herramienta equivocada
+   miente.** `.gitignore` lleva la línea `data/*` y ningún `!` rescata `derived/`, así que
+   `bolsas_mil_full.joblib` —199 MB— **no está rastreado**. `git ls-files`, `git status` y
+   cualquier búsqueda que respete el gitignore lo reportan como inexistente aunque esté en
+   el disco. El 2026-08-19 una corrida de `/subir-a-databricks` lo dio por ausente por eso
+   y dejó el despliegue degradado. La única pregunta que contesta la verdad es al sistema
+   de archivos:
+
+   ```
+   ls -l data/derived/bolsas_mil_full.joblib
+   ```
+
+   Y la consecuencia real, que no es la del despliegue: **un checkout limpio tiene el CSV
+   de 566 MB (viaja por LFS) pero no tiene las bolsas**. Hay que correr
+   `notebooks/05_mil_vano_ventana.ipynb` antes de construir el simulador. El orden es
+   CSV → 05 → 04 → abrir las aplicaciones.
 
 Lo mismo vale para un `git checkout` que mueva fechas: por eso los archivos pequeños —
 cuadernos y catálogos, ~1 MB — se vigilan por **contenido** (sha1) y no por fecha.

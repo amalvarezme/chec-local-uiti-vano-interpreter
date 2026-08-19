@@ -151,6 +151,7 @@ continues, so the report ends up listing every other wall too, not just the firs
 | 2 | CSV present **and non-trivial** | `databricks fs ls dbfs:/Volumes/.../data -p <profile>` |
 | 3 | GEO shapefiles **with sidecars** | `databricks fs ls dbfs:/Volumes/.../data/GEO -p <profile>` |
 | 4 | Model artifacts | `databricks fs ls dbfs:/Volumes/.../data/models -p <profile>` |
+| 5 | Cache de bolsas **y su tamaño** | `databricks fs ls dbfs:/Volumes/.../data/derived -p <profile>` |
 
 Check 2 must look at the **size**, not just the name: a `Indicadores_vano_v3.csv` of a few
 hundred bytes is an interrupted upload or a Git-LFS pointer that got mirrored, and it will
@@ -160,6 +161,22 @@ Check 3 must confirm the **set**, not the folder (contract D6): at minimum
 `MVLINSEC.{shp,shx,dbf,prj}`, `GDBCHEC_TRANSFOR.{shp,shx,dbf,prj}`,
 `SWITCHES.{shp,shx,dbf,prj}`. A shapefile without its sidecars opens as an empty layer, not
 as an error.
+
+Check 5 mira `data/derived/bolsas_mil_full.joblib`, y mira su **tamaño**: son **199 MB**
+(198.945.074 bytes en la copia del 2026-08-03). Un joblib truncado no falla al subir; falla
+despues dentro del simulador, con un error que no apunta hasta aqui.
+
+> **La trampa de `.gitignore`, y no es un detalle de git.** `data/derived/` cae bajo la
+> linea `data/*` de `.gitignore` y ningun `!` lo rescata, asi que **no esta rastreado**.
+> `git ls-files`, `git status` y cualquier herramienta de busqueda que respete el gitignore
+> lo dan por inexistente. El 2026-08-19 una corrida reporto por eso que el archivo "no
+> existe en esta maquina" mientras estaba en el disco, con sus 199 MB. La unica pregunta
+> que contesta la verdad es al sistema de archivos:
+> ```
+> ls -l data/derived/bolsas_mil_full.joblib
+> ```
+> Que un archivo no este en git no dice nada sobre si esta en el disco, y aqui lo que sube
+> es el disco.
 
 **If everything is present**: record the step `ok` naming what was found and its sizes, and
 go to stage 4 without uploading anything.
@@ -195,8 +212,21 @@ find data -name ".DS_Store" -o -name ".gitkeep" -o -name ".openmeteo_cache.sqlit
 
 Nothing is converted to Delta: `uiti_vano_tables.py` went with the retired Lakeview stack,
 so `indicadores_vano` / `circuit_clustering` / `circuit_geo` no longer exist and nothing
-here creates them. The CSV, the shapefile sidecars, `graphs/*.npy`, `models/*.pt` and the
-two `.xlsx` all go up as-is.
+here creates them. Lo que sube, entero y tal cual:
+
+| Bajo `data/` | Que es | Peso |
+|---|---|---|
+| `Indicadores_vano_v3.csv` | la base de eventos | ~566 MB |
+| `derived/bolsas_mil_full.joblib` | las bolsas vano × ventana, del cuaderno 05 | ~199 MB |
+| `GEO/*.{shp,shx,dbf,prj}` | los tres shapefiles con sus sidecars | ~180 MB |
+| `models/mil_vano_ventana_v1.pt` | el modelo MIL entrenado | |
+| `graphs/*.npy` | el grafo de restriccion fisica | |
+| `*.xlsx` | variables, variables a simular y costos | |
+| `geometria_kmeans_014_v1.json` | la geometria KMeans, versionada | |
+
+`derived/` esta en esa tabla porque **se le olvidaba**: `fs cp -r data` siempre lo llevo,
+pero el inventario no lo nombraba, y un inventario que no nombra algo se lee como que ese
+algo no sube.
 
 `models/*.zip` and `optuna/*.journal` no longer match anything: they were
 `mgcecdl_classifier_best.zip` and its hyperparameter study, retired with
@@ -234,13 +264,24 @@ user both walls in one run.
 | 1 | Criticidad CHEC | `criticidad-chec` | los cuatro tableros estaticos, en cuatro rutas | serverless, arranca en segundos |
 | 2 | Simulador | `simulador-vano` | el simulador, con kernel vivo | clasico (D8), arranque de minutos |
 
+**Las dos se despliegan siempre, por defecto.** No hay corrida en la que publicarlas sea
+opcional ni una pregunta al usuario: lo unico que puede impedirlo es el cupo del workspace o
+que una app ya este sana y al dia. El 2026-08-19 esta etapa salio `omitido` con las dos sin
+desplegar, y ese es el peor de los resultados posibles.
+
 **No hay tabla de prioridad y no hace falta.** Eran cinco apps contra un cupo de tres, y
 cual entraba era una decision que este comando tomaba en cada corrida. Son dos: caben
 siempre.
 
 Las dos son distintas en lo unico que importa aqui: la primera **sirve archivos** — sus
 paneles se construyen antes de subir —, y la segunda **necesita un interprete de Python
-vivo** para correr el modelo MIL. Si solo una puede desplegarse, esa asimetria decide cual.
+vivo** para correr el modelo MIL.
+
+**Con un solo cupo libre entra `criticidad-chec`, y el desempate no se consulta.** Publica
+cuatro tableros en vez de uno, arranca en segundos en vez de diez minutos de `pip install
+torch`, y no depende de que el cache de bolsas haya llegado al Volume. `simulador-vano`
+queda `omitido` con el cupo como motivo, y se despliega en la siguiente corrida que
+encuentre sitio. Desplegar una es siempre mejor que no desplegar ninguna.
 
 **Read-only check first.** Redesplegar una app sana no es gratis: el simulador tarda diez
 minutos en `pip install torch` y durante ese rato la version anterior deja de servir.
@@ -280,11 +321,26 @@ Del listado de arriba, anota tres conteos, porque no son el mismo numero:
 
 Reporta los tres conteos al usuario en un mensaje antes de crear nada.
 
-**Las cuatro apps viejas.** Si el workspace todavia tiene `vano-clima`,
-`agrupamiento-circuitos`, `trayectorias-circuitos` o `trayectorias-vanos`, esas son las que
-`criticidad-chec` reemplaza. Estan ocupando cupo y sirviendo paneles que ya nadie
-reconstruye. **Preguntar antes de borrar cada una**, de a una, y anotar la respuesta:
-borrar una app es destructivo y publicar la nueva no autoriza retirar las viejas.
+**Las apps de la familia retirada.** Si el workspace todavia tiene alguna de estas, es
+nuestra y es a la que `criticidad-chec` o `simulador-vano` reemplazan:
+
+```
+vano-clima        app-clima        app-vano-clima
+agrupamiento-circuitos             app-agrupamiento-vanos-circuitos
+trayectorias-circuitos             app-trayectorias-circuitos
+trayectorias-vanos                 app-trayectorias-vanos
+simulador-vano-old                 app-simulador-vano
+```
+
+**Los dos juegos de nombres importan.** Cada comando de la familia bautizaba su app a su
+manera, unos con el prefijo `app-` y otros sin el. El 2026-08-19 el workspace tenia
+`app-clima` y esta etapa, que solo buscaba `vano-clima`, la conto como **ajena**: cupo
+nuestro regalado a algo que ya nadie reconstruye. Reconocer una sola forma es no reconocer
+la mitad.
+
+Estan ocupando cupo y sirviendo paneles que ya nadie reconstruye.
+**Preguntar antes de borrar cada una**, de a una, y anotar la respuesta: borrar una app es
+destructivo y publicar la nueva no autoriza retirar las viejas.
 
 On a `has reached the maximum limit of N apps`:
 1. Parse `N` from the message — **there is no quota API**, the limit announces itself in the
