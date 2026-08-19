@@ -87,16 +87,44 @@ ni los roles LLM. Solo viajan los datos que consumen los cuadernos `01`-`06` y e
 
 ## Instalación
 
+**Empezá por el diagnóstico.** Corre con el Python del sistema, antes de que exista
+ningún entorno, y dice qué le falta a *esta* máquina para cada una de las tres cosas que
+el proyecto hace en local —el cuaderno `mil_vano`, las aplicaciones y la subida a
+Databricks— con el comando exacto para arreglarlo en el sistema en el que estés:
+
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+python3 scripts/diagnostico_local.py     # macOS
+py -3 scripts/diagnostico_local.py       # Windows
 ```
 
-Requiere **Python 3.11 o superior**. Qué máquina hace falta —RAM, CPU, disco y las
-diferencias entre macOS y Windows, desglosado por aplicaciones, reentrenamiento del
-cuaderno `mil_vano` y generación de informes— está medido en
+Desde un agente, `/instalar-local` lo corre e instala lo que falte, en orden y
+preguntando una sola vez.
+
+A mano, el entorno de la raíz —el que corre el cuaderno 05 y el que construye los
+paneles que suben a Databricks— es:
+
+```bash
+# macOS
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+
+# Windows
+py -3 -m venv .venv && .venv\Scripts\pip install -r requirements.txt
+```
+
+Los seis entornos de `aplicaciones/` son aparte y se instalan con el lanzador de cada
+una (`instalar-en-terminal.command` en macOS, `instalar.bat` en Windows): cada
+aplicación instala **sólo** sus dependencias, porque el visor de tableros no necesita
+`torch` y el simulador no necesita `scikit-learn` en tiempo de ejecución.
+
+Requiere **Python 3.11 o superior**, y es un piso real: `pandas>=3.0`, `numpy>=2.4` y
+`scikit-learn>=1.9` no publican rueda por debajo. Qué máquina hace falta —RAM, CPU,
+disco y las diferencias entre macOS y Windows, desglosado por aplicaciones,
+reentrenamiento del cuaderno `mil_vano` y generación de informes— está medido en
 [`docs/REQUISITOS-MINIMOS.md`](docs/REQUISITOS-MINIMOS.md).
+
+Y antes de nada, `git lfs pull`: sin él, el CSV de 566 MB y las bolsas de 199 MB llegan
+como punteros de 134 bytes que **existen** y no sirven. El diagnóstico lo comprueba por
+contenido, no por presencia.
 
 ## Configuración
 

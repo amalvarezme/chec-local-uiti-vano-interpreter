@@ -32,32 +32,33 @@ comprueba por tamanio en el momento de usarlos -- lo hace la etapa 3 de
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 RAIZ = Path(__file__).resolve().parents[1]
+if str(RAIZ / "scripts") not in sys.path:
+    sys.path.insert(0, str(RAIZ / "scripts"))
+
+import diagnostico_local as _diagnostico  # noqa: E402
 
 # Los tres entregables que tienen que salir de un clon limpio, y lo que lee cada uno.
 # La fuente no es una lista escrita a mano: son las guardas que ya existen en el
 # codigo -- `aplicaciones/06_simulador/preparar.py`, los `construir.py` de los cuatro
 # visores y el inventario `_INSUMOS` del generador del cuaderno 05.
-INSUMOS = {
-    "data/Indicadores_vano_v3.csv": "la base de eventos (LFS)",
-    "data/Variables_seleccion.xlsx": "el diccionario de variables",
-    "data/Variables_simular.xlsx": "el catalogo de variables a simular",
-    "data/Actividades_mantenimiento_costos_2026.xlsx": "el catalogo de costos",
-    "data/geometria_kmeans_014_v1.json": "la geometria KMeans congelada",
-    "data/models/mil_vano_ventana_v1.pt": "el modelo MIL entrenado",
-    "data/graphs/mgcecdl_feature_order.json": "el orden de features del grafo",
-    "data/derived/bolsas_mil_full.joblib": "las bolsas vano x ventana (LFS)",
-    "site/data/variables.json": "los modos tematicos A-F del cuaderno 05",
-}
+#
+# Y no vive aqui: vive en `scripts/diagnostico_local.py`, que es codigo de produccion y
+# tiene la MISMA lista por otra pregunta -- esta comprueba que los insumos viajen en
+# git, y aquel que hayan llegado al disco de esta maquina. Estuvo escrita en este
+# archivo hasta que aparecio el segundo consumidor; dos copias de una lista es una que
+# se desactualiza.
+INSUMOS = _diagnostico.INSUMOS
 
 # Un shapefile sin sus sidecars abre como una capa VACIA, no como un error. Los tres
 # que se leen, con el minimo que los hace utiles.
-SHAPEFILES = ("MVLINSEC", "GDBCHEC_TRANSFOR", "SWITCHES")
-SIDECARS = ("shp", "shx", "dbf", "prj")
+SHAPEFILES = _diagnostico.SHAPEFILES
+SIDECARS = _diagnostico.SIDECARS
 
 # Derivados que NO viajan, y por que. Se fija la ausencia igual que la presencia: cada
 # uno es regenerable en destino, y meterlos a LFS es cuota que se paga cada mes.

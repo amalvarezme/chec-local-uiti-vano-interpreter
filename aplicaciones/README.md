@@ -87,6 +87,10 @@ menos de un segundo.
 ### Requisitos
 
 - **Python 3.11 o superior** en la máquina. macOS: `brew install python@3.11`.
+  Si no estás seguro de qué te falta, `python3 scripts/diagnostico_local.py`
+  (en Windows, `py -3 scripts/diagnostico_local.py`) lo dice todo de una vez:
+  Python, git-lfs, los datos, los seis entornos y los puertos, con el comando
+  de arreglo del sistema en el que estés.
   Windows: <https://www.python.org/downloads/> marcando *Add Python to PATH*.
 - El repositorio completo, con `data/` descargado (`git lfs pull`). Las cinco
   aplicaciones **construyen** desde los datos del repositorio; solo la 06 los sigue

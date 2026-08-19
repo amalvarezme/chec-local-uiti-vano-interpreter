@@ -62,6 +62,10 @@ ARGUMENT_HINTS: dict[str, str] = {
     "historical": "[args from the active workflow]",
     "inference": "[args from the active workflow]",
     "informe-gerencial": "<grupo> [fecha_inicio fecha_fin]",
+    # Sin argumentos: los tres destinos se preguntan en el paso 1, con el diagnostico
+    # ya a la vista. Una pista aqui invitaria a teclear `/instalar-local databricks`
+    # y a saltarse justamente la parte que decide que NO hay que instalar.
+    "instalar-local": "",
     "limpiar-corridas": "",
     "pdf-discussion-extraction": "[args from the active workflow]",
     "redaccion-es": "[ruta ...]",
