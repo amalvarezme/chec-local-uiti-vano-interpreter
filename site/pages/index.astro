@@ -4,6 +4,7 @@ import logoChec from "../assets/site/logos/checlogo.png";
 import logoUnal from "../assets/site/logos/logo_unal_transparente.png";
 import tableroClima from "../assets/site/results/tablero-clima.png";
 import tableroAgrupamiento from "../assets/site/results/tablero-agrupamiento.png";
+import rankingCircuitos from "../assets/site/results/ranking-circuitos.png";
 import tableroTrayCircuitos from "../assets/site/results/tablero-trayectorias-circuitos.png";
 import tableroTrayVanos from "../assets/site/results/tablero-trayectorias-vanos.png";
 import simuladorMapas from "../assets/site/results/simulador-mapas.png";
@@ -433,8 +434,8 @@ const cronograma = [
         </div>
 
         <figure class="shot wide">
-          <img src={tableroAgrupamiento.src} alt="Agrupamiento de vanos: reparto por grupo, espacio UITI contra eventos, top 10 de circuitos y ranking de los 208" loading="lazy" />
-          <figcaption>El mismo tablero, leído como método: los cinco paneles son los cinco pasos.</figcaption>
+          <img src={rankingCircuitos.src} alt="Ranking de los 208 circuitos por número de vanos en clase Medio-Alto y Alto, con los cortes de las cuatro bandas" loading="lazy" />
+          <figcaption>El paso 4 visto en el tablero: los 208 circuitos ordenados por vanos Medio-Alto + Alto, con los cortes de las cuatro bandas.</figcaption>
         </figure>
 
         <div class="diagram-card">
@@ -487,35 +488,29 @@ const cronograma = [
           <article>
             <strong>Por qué el nombre no lo pone el algoritmo</strong>
             <p>
-              K-Means numera sus grupos por el orden en que inicializa los centroides, que cambia entre
-              corridas. Si la etiqueta «Alto» viniera de ahí, el mismo vano cambiaría de grupo sin que
-              cambiara ni un dato. El nombre se asigna después, ordenando los cuatro grupos por la mediana
-              de su UITI acumulado: eso sí es estable y sí significa algo.
+              K-Means numera sus grupos por un orden que cambia entre corridas. El nombre lo pone
+              después la mediana del UITI: eso sí es estable.
             </p>
           </article>
           <article>
             <strong>Por qué el circuito se ordena por conteo y no por promedio</strong>
             <p>
-              Un promedio de UITI hunde a un circuito grande con muchos vanos tranquilos y un puñado
-              críticos —que es justo el caso que hay que atender—. El ranking cuenta <em>cuántos</em> vanos
-              caen en Medio-Alto y Alto, que es la carga real de trabajo en campo.
+              Un promedio hunde al circuito grande con muchos vanos tranquilos y pocos críticos. El
+              ranking cuenta <em>cuántos</em> caen en Medio-Alto y Alto: la carga real.
             </p>
           </article>
           <article>
             <strong>El eje temporal: ventanas, no un solo corte</strong>
             <p>
-              El periodo se parte en ventanas y cada vano aparece una vez por ventana. Así el agrupamiento
-              deja de ser una foto y pasa a ser una trayectoria: se ve cuándo un vano entra a Alto, cuánto
-              se queda y si vuelve a bajar. Las ventanas <strong>se traslapan</strong>, así que el UITI
-              acumulado no se suma sobre ellas.
+              Cada vano aparece una vez por ventana: el agrupamiento pasa de foto a trayectoria.
+              Las ventanas se traslapan, así que el UITI no se suma.
             </p>
           </article>
           <article>
             <strong>Un solo vocabulario</strong>
             <p>
-              Hubo dos formas distintas de decir «grupo de circuito» —la del K-Means y la del ranking—,
-              que sobre «Riesgo Alto» coincidían en apenas 3 circuitos de 16 y 7. Hoy están unificadas: el
-              grupo del circuito es el del ranking, y es el único que viaja al modelo y a los informes.
+              Había dos formas de decir «grupo de circuito» —K-Means y ranking— que sobre «Riesgo Alto»
+              coincidían en 3 circuitos. Hoy manda el del ranking.
             </p>
           </article>
         </div>
@@ -536,7 +531,7 @@ const cronograma = [
 
         <div class="diagram-card">
           <h3>Principio del modelo: entrenamiento e inferencia</h3>
-          <svg viewBox="0 0 980 640" role="img" aria-label="Diagrama del modelo MIL: insumos, bolsas, codificador, fusión FiLM, atención, cabeza de bolsa, asignación de clase, grafo de restricción física y función de costo" class="diagrama">
+          <svg viewBox="0 0 980 620" role="img" aria-label="Diagrama del modelo MIL: insumos, bolsas, codificador, fusión FiLM, atención, cabeza de bolsa, asignación de clase, grafo de restricción física y función de costo" class="diagrama">
             <defs>
               <marker id="fm" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
                 <path d="M0,0 L9,4.5 L0,9 z" fill="#5f6f77" />
@@ -551,20 +546,20 @@ const cronograma = [
 
               <rect x="16" y="38" width="216" height="76" rx="10" fill="#ffffff" stroke="#dce7e4" />
               <text x="30" y="60" font-weight="700" fill="#102129">Estructurales del vano</text>
-              <text x="30" y="79" fill="#5f6f77">CONDUCTOR, TIPO, CALIBRE_NEUTRO,</text>
-              <text x="30" y="95" fill="#5f6f77">NG_RED, ALTURA, VAL_CRIT_APOYO…</text>
+              <text x="30" y="79" fill="#5f6f77" font-size="11">CONDUCTOR, TIPO, ALTURA, NG_RED,</text>
+              <text x="30" y="95" fill="#5f6f77" font-size="11">CALIBRE_NEUTRO, VAL_CRIT_APOYO…</text>
               <text x="30" y="108" fill="#0b5f8a" font-size="11">numéricas · categóricas</text>
 
               <rect x="16" y="124" width="216" height="76" rx="10" fill="#ffffff" stroke="#dce7e4" />
               <text x="30" y="146" font-weight="700" fill="#102129">Climáticas, con 12 rezagos</text>
-              <text x="30" y="165" fill="#5f6f77">Precipitación, temperatura, viento,</text>
-              <text x="30" y="181" fill="#5f6f77">ráfaga, DDT (descargas)</text>
+              <text x="30" y="165" fill="#5f6f77" font-size="11">Precipitación, temperatura, viento,</text>
+              <text x="30" y="181" fill="#5f6f77" font-size="11">ráfaga, DDT (descargas)</text>
               <text x="30" y="194" fill="#0b5f8a" font-size="11">series numéricas (12 lags)</text>
 
               <rect x="16" y="210" width="216" height="76" rx="10" fill="#ffffff" stroke="#dce7e4" />
               <text x="30" y="232" font-weight="700" fill="#102129">Del evento</text>
-              <text x="30" y="251" fill="#5f6f77">COD_CAUSA codificado + su</text>
-              <text x="30" y="267" fill="#5f6f77">frecuencia relativa y 9 indicadores</text>
+              <text x="30" y="251" fill="#5f6f77" font-size="11">COD_CAUSA codificado + su</text>
+              <text x="30" y="267" fill="#5f6f77" font-size="11">frecuencia relativa y 9 indicadores</text>
               <text x="30" y="280" fill="#0b5f8a" font-size="11">categórica de alta cardinalidad</text>
 
               <line x1="236" y1="162" x2="276" y2="162" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fm)" />
@@ -617,12 +612,12 @@ const cronograma = [
               <text x="848" y="166" text-anchor="middle" fill="#102129">Se construye en código y viaja</text>
               <text x="848" y="184" text-anchor="middle" fill="#102129">DENTRO del <tspan font-family="monospace">.pt</tspan></text>
 
-              <path d="M732,150 C700,150 700,180 690,186" fill="none" stroke="#0b5f8a" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#fmg)" />
-              <text x="700" y="238" text-anchor="end" fill="#0b5f8a" font-size="11">regulariza</text>
+              <path d="M846,204 C846,244 712,248 692,198" fill="none" stroke="#0b5f8a" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#fmg)" />
+              <text x="800" y="228" text-anchor="middle" fill="#0b5f8a" font-size="11">regulariza</text>
 
-              <rect x="16" y="452" width="948" height="170" rx="12" fill="#ffffff" stroke="#dce7e4" />
-              <text x="34" y="478" font-weight="700" fill="#102129">Función de costo — seis términos, con sus pesos reales</text>
-              <text x="34" y="504" fill="#0b5f8a" font-family="monospace" font-size="12">L = λ_sup · L_sup + λ_rec · L_rec + λ_mi · L_mi + λ_gate · L_gate + λ_mod · L_mod + λ_clase · L_clase</text>
+              <rect x="16" y="452" width="948" height="150" rx="12" fill="#ffffff" stroke="#dce7e4" />
+              <text x="34" y="478" font-weight="700" fill="#102129">Función de costo — cuatro términos, con sus pesos reales</text>
+              <text x="34" y="504" fill="#0b5f8a" font-family="monospace" font-size="12">L = λ_sup · L_sup + λ_rec · L_rec + λ_mi · L_mi + λ_clase · L_clase</text>
 
               <text x="34" y="532" fill="#102129" font-weight="600">λ_sup = 1,0</text>
               <text x="150" y="532" fill="#5f6f77">MSE ponderado por densidad kernel entre la predicción de bolsa y el UITI observado</text>
@@ -632,8 +627,6 @@ const cronograma = [
               <text x="150" y="572" fill="#5f6f77">Información mutua entre modalidades: evita que una module a la otra a ciegas</text>
               <text x="34" y="592" fill="#102129" font-weight="600">λ_clase = 1,0</text>
               <text x="150" y="592" fill="#5f6f77">Sustituto diferenciable de la asignación de clase, con temperatura 0,01</text>
-              <text x="34" y="612" fill="#8a8a8a" font-weight="600">λ_gate = λ_mod = 0</text>
-              <text x="180" y="612" fill="#8a8a8a">Apagados hoy: se dejan declarados, no probados inertes</text>
             </g>
           </svg>
         </div>
@@ -674,15 +667,6 @@ const cronograma = [
               <li>La red devuelve û; la clase la decide después <code>asignar_clase</code> cayendo en la geometría.</li>
               <li>La atención deja además, por bolsa, <strong>qué variables pesaron</strong> — eso es lo que alimenta el diagnóstico del simulador.</li>
             </ol>
-            <p class="note-callout warn">
-              <strong>Una advertencia de honestidad.</strong> La barra pre-registrada para este modelo era
-              superar en 5 puntos a la mejor línea base. No se cumplió: macro-F1 <strong>0,871</strong> contra
-              <strong>0,881</strong> de un Random Forest estructural, es decir <strong>−1,02 puntos</strong>.
-              Lo que el MIL sí aporta y el Random Forest no es la <em>estructura</em>: atención por instancia,
-              grafo físico como regularizador y una salida que el simulador puede interrogar variable por
-              variable. Ninguna clase queda abandonada y el error es casi siempre de vecino inmediato:
-              confundir Bajo con Alto ocurre 1 vez de cada 13.323.
-            </p>
           </div>
         </div>
       </section>
@@ -700,10 +684,11 @@ const cronograma = [
         </div>
 
         <figure class="shot wide">
-          <img src={simuladorMapas.src} alt="Simulador corriendo sobre el circuito INS23L13: panel de control, mapas de criticidad original y simulada" loading="lazy" />
+          <img src={simuladorMapas.src} alt="Simulador: panel de control, mapas de criticidad original y simulada, perfil del circuito y serie de UITI por ventana" loading="lazy" />
           <figcaption>
-            Circuito INS23L13, ventana V11 (2026-04-01 a 2026-04-30). 34 vanos del grupo Medio-Alto
-            marcados con un solo botón, diagnosticados, con la intervención sugerida aplicada y ya simulados.
+            <strong>Arriba.</strong> Circuito INS23L13, ventana V11 (2026-04-01 a 2026-04-30): el panel de
+            control, los mapas de criticidad original y simulada, el perfil del circuito y la serie de UITI
+            acumulado y eventos por ventana.
           </figcaption>
         </figure>
 
@@ -719,10 +704,11 @@ const cronograma = [
         </ol>
 
         <figure class="shot wide">
-          <img src={simuladorResultados.src} alt="Resultados del simulador: UITI medido contra simulado, costo de la intervención, costo acumulado y grafo de relaciones" loading="lazy" />
+          <img src={simuladorResultados.src} alt="Resultados del simulador: caída de UITI por variable, medido contra simulado, costo de la intervención y grafo de relaciones" loading="lazy" />
           <figcaption>
-            Los mismos 34 vanos: medido contra simulado, costo por vano, costo acumulado
-            (369.703.635 COP) y el grafo de relaciones relevantes de esta simulación.
+            <strong>Abajo, la misma corrida.</strong> La caída de UITI que produce cada variable en cada
+            vano, el UITI medido contra el simulado, el costo por vano y el acumulado (369.703.635 COP), y
+            el grafo de relaciones relevantes de esta simulación.
           </figcaption>
         </figure>
 
@@ -955,7 +941,7 @@ const cronograma = [
               <rect x="716" y="124" width="250" height="52" rx="10" fill="#f3f8f6" stroke="#007a53" />
               <text x="841" y="146" text-anchor="middle" font-weight="700" fill="#005c45">nota de bóveda + grafo</text>
               <text x="841" y="165" text-anchor="middle" fill="#5f6f77">Alimenta la próxima corrida</text>
-              <path d="M841,180 C841,214 300,214 300,196" fill="none" stroke="#007a53" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#fa)" />
+              <path d="M841,180 C841,268 316,268 316,158" fill="none" stroke="#007a53" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#fa)" />
 
               <rect x="14" y="252" width="952" height="76" rx="10" fill="#ffffff" stroke="#f4b23a" />
               <text x="32" y="278" font-weight="700" fill="#102129">La interacción con el simulador</text>
