@@ -180,6 +180,85 @@ en la caché del sistema operativo y no en la memoria del proceso.
 matriz de 288.632×80, los mismos 26 controles, los mismos 208 circuitos, la misma
 interfaz (59 trazas) y una simulación real idéntica hasta el décimo decimal.
 
+## Puertos y redes de empresa
+
+Los puertos **son fijos y siempre lo han sido**. No se negocian al arrancar ni se
+buscan libres: cada aplicación pide el suyo y, si no lo consigue, no se levanta en otro.
+Esa es la condición para que el menú reconozca una aplicación abierta a mano y para que
+la URL del marcador siga sirviendo mañana.
+
+| aplicación | puerto |
+|---|---|
+| CriticidadCHEC (el menú) | **8800** |
+| 01 Clima | **8801** |
+| 02 Agrupamiento de vanos | **8802** |
+| 03 Trayectorias por circuito | **8803** |
+| 04 Trayectorias por vano | **8804** |
+| 06 Simulador | **8866** |
+
+Todos escuchan **solo en `127.0.0.1`**. No se publica nada a la red de la oficina: no
+hay que abrir ningún puerto en el firewall perimetral, y otra máquina no puede conectarse
+aunque quiera.
+
+### Un puerto bloqueado no es un puerto ocupado
+
+Son dos problemas distintos y tienen arreglos distintos:
+
+* **Ocupado** — hay otro programa escuchando ahí. Se arregla cerrándolo, y la aplicación
+  dice cuál con `netstat -ano | findstr :8801`.
+* **Bloqueado** — no hay *nadie* escuchando y aun así el sistema se niega a dar el
+  puerto. En Windows lo hacen los rangos que reservan **Hyper-V, WSL y Docker Desktop**
+  al arrancar; el `bind` sale con `WSAEACCES` (10013). Esto **no se arregla desde la
+  máquina del usuario**.
+
+Hasta el 2026-08-18 los dos casos se leían igual, y el bloqueado ni siquiera se
+detectaba: la conexión de sondeo rebota igual que en un puerto libre, así que la
+aplicación seguía adelante hasta reventar al atarse. Desde el menú eso eran **180 s de
+tarjeta en «preparando»** y un «el servidor no respondió» que no nombraba ni el puerto ni
+la causa; por doble clic, la aplicación arrancaba **en un puerto al azar** donde el menú
+no la vigila y el marcador no la encuentra. Las dos cosas se ven igual desde la silla:
+*se queda cargando*.
+
+Ahora se comprueba antes de instalar, construir o lanzar nada, y la tarjeta dice
+`puerto 8801 bloqueado por el sistema (rango reservado 8850-8949)`.
+
+### Qué pedirle a quien administra la máquina
+
+Para ver los rangos reservados, en una consola cualquiera:
+
+```
+netsh interface ipv4 show excludedportrange protocol=tcp
+```
+
+Si alguno de los seis puertos de la tabla cae dentro de un rango, la petición es
+exactamente esta: **liberar ese puerto TCP en `127.0.0.1`**. No sirve mudarse a otro —
+la URL es fija por diseño.
+
+### El proxy: pip no lee Opciones de Internet
+
+En una máquina recién clonada, lo primero que hace el menú al abrir un tablero es crear
+su entorno con pip. Y ahí aparece el otro *«se queda cargando»*, que **no tiene nada que
+ver con los puertos**: detrás de un proxy corporativo, pip no llega a PyPI y se queda
+reintentando. El menú lo lanza con la salida capturada y sin plazo, así que la tarjeta se
+queda en «creando el entorno» sin cambiar nunca.
+
+La causa es que el proxy de la empresa suele estar puesto en **Opciones de Internet**
+(WinINET) — que es lo que usa el navegador — y **pip no lo lee**. Solo lee variables de
+entorno:
+
+```
+setx HTTPS_PROXY http://usuario:clave@proxy.de.la.empresa:8080
+setx HTTP_PROXY  http://usuario:clave@proxy.de.la.empresa:8080
+```
+
+Hay que abrir una consola **nueva** después de ponerlas. El menú ahora lo comprueba antes
+de lanzar pip y lo dice en la tarjeta.
+
+> Esto también descarta una sospecha razonable: que el proxy esté estorbando al
+> **navegador**. No puede ser: la página del menú se sirve por `127.0.0.1:8800` y carga
+> bien, así que ese camino ya está despejado. Si el menú se ve, el navegador llega a
+> loopback.
+
 ## La regla de Ghostty — léela antes de tocar cualquier lanzador
 
 Este fallo ha vuelto tres veces y siempre por el mismo sitio: **algo entrega un archivo

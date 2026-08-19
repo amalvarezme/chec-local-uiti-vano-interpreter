@@ -19,6 +19,7 @@ tocar el disco.
 """
 from __future__ import annotations
 
+import errno
 import gzip
 import http.server
 import mimetypes
@@ -319,6 +320,130 @@ def puerto_tomado(puerto: int, espera: float = 0.6) -> bool:
         return False
 
 
+# ------------------------------------------------- libre, tomado, o BLOQUEADO
+
+# Los estados en que puede estar un puerto son TRES y no dos. El que faltaba es el
+# ultimo: el sistema puede NEGARSE a dar un puerto que no tiene nadie.
+#
+#   * En Windows, porque cae en un rango excluido. Hyper-V, WSL y Docker Desktop
+#     reservan bloques enteros al arrancar, y quien pide uno de ellos recibe
+#     `WSAEACCES` -- acceso denegado -- aunque al otro lado no haya nadie.
+#   * En POSIX, porque es un puerto privilegiado y el proceso no lo es.
+#
+# Las dos preguntas que este modulo sabia hacer contestan las dos que ese puerto esta
+# LIBRE: `puerto_tomado` abre una conexion, y sin nadie escuchando la rechazan igual;
+# `puerto_libre` se ata y ante cualquier `OSError` pasa al siguiente candidato. De ahi
+# salian los dos finales del fallo de Windows -- el `bind` reventando dentro de una
+# ventana de consola que el menu no mira, o la aplicacion servida en un puerto al azar
+# que nadie vigila --, y ninguno de los dos nombraba el puerto.
+LIBRE = "libre"
+TOMADO = "tomado"
+BLOQUEADO = "bloqueado"
+
+# `WSAEACCES`, por su numero: el modulo `errno` solo trae los nombres `WSA*` cuando
+# corre EN Windows, y este codigo tiene que poder nombrarlo desde cualquier sistema.
+WSAEACCES = 10013
+
+
+def _es_acceso_denegado(error: OSError) -> bool:
+    """Si el sistema NEGO el puerto, en vez de decir que ya lo tiene alguien.
+
+    Se miran los DOS atributos a proposito. En Windows, Python rellena `winerror` con
+    el codigo crudo de Winsock y `errno` con lo que traduzca su tabla; esa traduccion
+    no se puede comprobar desde macOS, y elegir mal el atributo dejaria todo esto sin
+    efecto justo en el sistema para el que se escribio. Mirar los dos no cuesta nada.
+    """
+    return (getattr(error, "errno", None) == errno.EACCES
+            or getattr(error, "winerror", None) == WSAEACCES)
+
+
+def estado_del_puerto(puerto: int) -> str:
+    """`LIBRE`, `TOMADO` o `BLOQUEADO`. Cuesta una conexion y un `bind` de prueba.
+
+    El orden importa: primero se pregunta si hay alguien escuchando, porque esa es la
+    respuesta barata y la mas frecuente. Solo cuando no lo hay se intenta el `bind`,
+    que es lo unico capaz de distinguir un puerto libre de uno que el sistema niega.
+
+    Un `OSError` que no sea acceso denegado se cuenta como `TOMADO`: no se puede servir
+    ahi, y ese es el mensaje que ya existe. Lo que no puede volver a pasar es que
+    cualquiera de los dos se lea como `LIBRE`.
+    """
+    if puerto_tomado(puerto):
+        return TOMADO
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        # La misma opcion que lleva el servidor de verdad, por lo mismo que en
+        # `puerto_libre`: un sondeo mas estricto que el servidor miente.
+        if _REUSAR_DIRECCION:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.bind(("127.0.0.1", puerto))
+        except OSError as error:
+            return BLOQUEADO if _es_acceso_denegado(error) else TOMADO
+    return LIBRE
+
+
+def _salida_de_netsh() -> str:
+    """Los rangos de puertos que Windows tiene reservados. Vacio si no se puede saber.
+
+    Es lo unico que nombra al culpable. `netstat` no lo dice -- no hay ningun proceso
+    escuchando ahi --, asi que sin esto el aviso solo puede decir "esta bloqueado" y no
+    por quien.
+    """
+    if os.name != "nt":
+        return ""
+    try:
+        return subprocess.run(
+            ["netsh", "interface", "ipv4", "show", "excludedportrange",
+             "protocol=tcp"],
+            capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def rango_reservado(puerto: int) -> tuple[int, int] | None:
+    """El rango excluido que se llevo ese puerto, si se puede averiguar.
+
+    La salida de `netsh` viene en columnas -- inicio y fin --, con un encabezado, una
+    linea de guiones y a veces un `*` al final de la fila. Se lee lo que sea un par de
+    numeros y se descarta el resto, que es lo que deja el parseo a salvo de que el
+    encabezado cambie de idioma con el del sistema.
+    """
+    for linea in _salida_de_netsh().splitlines():
+        partes = linea.split()
+        if len(partes) < 2:
+            continue
+        try:
+            inicio, fin = int(partes[0]), int(partes[1])
+        except ValueError:
+            continue
+        if inicio <= puerto <= fin:
+            return (inicio, fin)
+    return None
+
+
+def aviso_de_bloqueo(puerto: int, titulo: str) -> str:
+    """El texto de la alerta. Es lo que el usuario le lleva a quien administra la
+    maquina, asi que trae las tres cosas sin las que esa conversacion no avanza: QUE
+    puerto, que esta RESERVADO -- no ocupado, no hay nada que cerrar -- y con que orden
+    se comprueba desde el otro lado.
+    """
+    rango = rango_reservado(puerto)
+    donde = (f"  Cae dentro del rango reservado {rango[0]}-{rango[1]}.\n" if rango
+             else "")
+    return (
+        f"\n  PUERTO BLOQUEADO: el {puerto}, el de {titulo}.\n\n"
+        "  No lo tiene otro programa -- ahi no hay nadie escuchando --: es esta\n"
+        "  maquina la que se niega a darlo. En Windows lo hacen los rangos que\n"
+        "  reservan Hyper-V, WSL o Docker Desktop al arrancar; en macOS y Linux, un\n"
+        "  puerto por debajo del 1024.\n"
+        f"{donde}\n"
+        "  Para verlo desde la maquina:\n"
+        "    netsh interface ipv4 show excludedportrange protocol=tcp\n\n"
+        f"  Lo que hay que pedir a quien la administra: liberar el puerto {puerto} en\n"
+        f"  127.0.0.1. No sirve otro: la URL de {titulo} es fija, es la que espera\n"
+        "  CriticidadCHEC y la que queda en el marcador.\n")
+
+
 def escribir_pid(app: Path) -> Path:
     """Deja el pid de ESTE proceso en la carpeta de la aplicacion."""
     archivo = app / ARCHIVO_PID
@@ -390,6 +515,12 @@ def pid_de(app: Path) -> int | None:
 # el mensaje se quede en pantalla para que lo lean.
 SALIDA_PUERTO_AJENO = 2
 
+# Y el del puerto que la maquina no deja tomar. Distinto del anterior porque no es el
+# mismo problema y no tiene el mismo arreglo: uno se resuelve cerrando lo que hay ahi,
+# el otro no se resuelve desde esta maquina. Un lanzador tiene que poder separarlos sin
+# leer el texto del mensaje.
+SALIDA_PUERTO_BLOQUEADO = 3
+
 
 def revisar_puerto(app: Path, puerto: int, *, abrir: bool,
                    titulo: str | None = None,
@@ -417,10 +548,20 @@ def revisar_puerto(app: Path, puerto: int, *, abrir: bool,
     ventana atascada sobre el mensaje. Quien la pasa decide como se reconoce a los
     suyos; aqui solo se sabe que si dice que si, el puerto no es de un extranio.
     """
-    if not puerto_tomado(puerto):
+    titulo = titulo or app.name
+
+    estado = estado_del_puerto(puerto)
+    if estado == BLOQUEADO:
+        # Antes de este caso, un puerto reservado se contaba como libre y la aplicacion
+        # seguia adelante hasta reventar en el `bind`. Desde el menu eso son 180 s de
+        # tarjeta en "preparando" y un "el servidor no respondio" que no nombra ni el
+        # puerto ni la causa; por doble clic, un traceback dentro de una ventana de
+        # consola. En los dos, el usuario ve "se queda cargando".
+        print(aviso_de_bloqueo(puerto, titulo))
+        return SALIDA_PUERTO_BLOQUEADO
+    if estado == LIBRE:
         return None
 
-    titulo = titulo or app.name
     url = f"http://127.0.0.1:{puerto}/"
     if pid_de(app) is not None or (identificar is not None and identificar(puerto)):
         # "ya se esta sirviendo" y no "ya esta abierta": el titulo lo pone quien
@@ -463,7 +604,14 @@ def puerto_libre(preferido: int = 8765) -> int:
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             try:
                 s.bind(("127.0.0.1", candidato))
-            except OSError:
+            except OSError as error:
+                # La caida al puerto `0` es para el puerto OCUPADO, y se conserva. Para
+                # el BLOQUEADO seria lo peor que puede hacerse: la aplicacion arranca
+                # de verdad, en un puerto que el menu no vigila y que no esta en ningun
+                # marcador. Esta viva y es invisible, que es justo el sintoma que se
+                # esta persiguiendo.
+                if candidato and _es_acceso_denegado(error):
+                    raise SystemExit(aviso_de_bloqueo(candidato, "esta aplicacion"))
                 continue
             return s.getsockname()[1]
     raise SystemExit("No se pudo reservar ningun puerto local.")

@@ -237,7 +237,39 @@ class Control:
 
     def _preparar(self, app: Aplicacion) -> None:
         try:
+            # ANTES que nada, y antes de instalar o construir: si la maquina no deja
+            # tomar este puerto, todo lo que venga detras es trabajo tirado y el final
+            # es el mismo -- 180 s de "preparando" y un "el servidor no respondio" que
+            # no nombra ni el puerto ni la causa, porque el `bind` revienta dentro de
+            # una ventana de consola que el menu no mira.
+            #
+            # Cuesta un `bind` de prueba. La tarjeta es la unica ventana del usuario,
+            # asi que el numero del puerto tiene que caber en el detalle: es el dato
+            # que hay que llevarle a quien administra la maquina.
+            if _servidor.estado_del_puerto(app.puerto) == _servidor.BLOQUEADO:
+                rango = _servidor.rango_reservado(app.puerto)
+                reserva = f" (rango reservado {rango[0]}-{rango[1]})" if rango else ""
+                self._fallo(app, f"puerto {app.puerto} bloqueado por el sistema"
+                                 f"{reserva}: no hay nada escuchando ahi, es la "
+                                 "maquina la que no lo deja tomar. Hay que pedir que "
+                                 "lo liberen en 127.0.0.1", None)
+                return
             if not app.instalada():
+                # Y antes de pip, por lo mismo que el puerto: sin salida a la red pip
+                # no falla rapido, se queda reintentando. El menu lo lanza con la
+                # salida capturada y sin `timeout`, asi que ese cuelgue no tiene final
+                # y la tarjeta se queda en "creando el entorno" para siempre.
+                #
+                # El aviso entero no cabe en una tarjeta, pero el nombre de la variable
+                # si, y es lo unico que arregla el caso: en Windows el proxy suele estar
+                # en Opciones de Internet, que pip no lee.
+                if not entorno.hay_salida_para_pip():
+                    self._fallo(app, "sin salida a pypi.org: pip no puede instalar "
+                                     "nada. Si esta maquina sale por proxy, hay que "
+                                     "poner HTTPS_PROXY y HTTP_PROXY en el entorno "
+                                     "(pip no lee el proxy de Opciones de Internet)",
+                                None)
+                    return
                 app.detalle = "creando el entorno (varios minutos, solo la primera vez)"
                 hecho = subprocess.run(
                     [sys.executable, str(GESTOR), "instalar", "--app", str(app.carpeta)],
