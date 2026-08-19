@@ -2040,6 +2040,31 @@ def construir(
     # De mayor a menor, que es el orden en que se lee la urgencia y no el del enum.
     BOTONES_GRUPO = [_boton_de_grupo(c) for c in (3, 2, 1, 0)]
 
+    # Los cinco botones ENVUELVEN, no se encogen. Medido en una ventana de 1.512 px: al
+    # ancho por defecto de ipywidgets cada uno mide 148 px, los cinco en fila suman 825 y
+    # el panel mide 445 -- "G. Bajo" se salia 365 px, y lo que sale del panel cae debajo de
+    # la columna de figuras, encima del mapa.
+    #
+    # Encogerlos hasta que quepan los cinco en una fila NO era la salida: la fila util mide
+    # 379 px, o sea 76 px por boton, y el rotulo mas largo -- "G. Medio-Alto" -- pide 80 px
+    # de texto SIN contar el relleno del boton. Se leeria "G. Medio-A...". Ni siquiera con
+    # el panel al 31,5%: da 80 px justos.
+    #
+    # Tres por fila a `31%` caben con holgura -- 123 px contra los 104 que pide el rotulo
+    # mas ancho con su relleno -- y dejan la segunda fila con dos. El `max_width` va con el
+    # `width` por lo mismo que las casillas del catalogo: sin el, un boton dentro de un
+    # contenedor mas estrecho no se recorta a el.
+    FILA_BOTONES_VANO = widgets.Box(
+        [boton_desmarcar, *BOTONES_GRUPO],
+        layout=widgets.Layout(display='flex', flex_flow='row wrap', width='100%',
+                              align_items='flex-start'))
+    for _b in (boton_desmarcar, *BOTONES_GRUPO):
+        _b.layout.width = '31%'
+        _b.layout.max_width = '100%'
+        # Un hueco propio y no el del contenedor: `Box` no lleva `gap` en ipywidgets, y sin
+        # margen los tres de una fila se tocan y se leen como un solo control segmentado.
+        _b.layout.margin = '0 1% 4px 0'
+
 
     def _auto_seleccion_ventana(circuito, ventana_i):
         """A quien se le marca la casilla sola al mover el deslizador: los vanos de mayor
@@ -3081,7 +3106,11 @@ def construir(
             # cuando se quieren DOS por fila.
             columnas.append((fid, widgets.VBox(
                 [encabezado, *controles.values(), *_bloque_de_costos(fid)],
-                layout=widgets.Layout(margin='0 14px 0 0', align_items='flex-start',
+                # El margen de 14 px baja a 10: es de donde salen los 2% de ancho que gana
+                # cada columna. Los 5% del panel ya las hacen crecer por su cuenta -- de 175
+                # a 186 px medidos --, asi que el 2% se mide SOBRE eso y no sobre el ancho
+                # viejo; con el margen a la mitad daban 193 px, o sea un 10% y no un 2%.
+                layout=widgets.Layout(margin='0 10px 0 0', align_items='flex-start',
                                       flex='1 1 0%', min_width='0'))))
 
         # Un vano marcado SIN celda en la ventana activa no tiene de donde sacar un valor
@@ -3814,9 +3843,7 @@ def construir(
             # lado, asi que nombrarlos era repetir lo que el propio control ya dice.
             _grupo(circuito_widget),
             _grupo(ventana_widget),
-            _grupo(vano_widget,
-                   widgets.HBox([boton_desmarcar, *BOTONES_GRUPO]),
-                   AVISO_GRUPO, AVISO_VANOS),
+            _grupo(vano_widget, FILA_BOTONES_VANO, AVISO_GRUPO, AVISO_VANOS),
             _grupo(_titulo('Variables del simulador'), knob_selector_widget,
                    AVISO_BLOQUEADOS),
             # Las actividades van DESPUES de las variables y antes de la rejilla, en el
@@ -3877,18 +3904,23 @@ def construir(
     # extremos opuestos del scroll. En columnas la pagina baja a 2.565 px -- un 34% menos --
     # porque las dos piezas dejan de sumarse a lo alto.
     #
-    # 30/70 y no mitad y mitad: lo que manda es la figura. Con el panel al 50% la figura se
-    # queda en 741 px y sus dos mapas, que ocupan mitades de esa fila, bajarian de 614 a 300
-    # px cada uno. Al 70% mide 1.037 px, que es de donde salen los 414 px de lado del grafo.
+    # 31,5/68,5 y no mitad y mitad: lo que manda sigue siendo la figura. Con el panel al 50%
+    # la figura se queda en 741 px y sus dos mapas, que ocupan mitades de esa fila, bajarian
+    # de 614 a 300 px cada uno. Al 68,5% mide 1.015 px, que es de donde sale el lado del
+    # grafo.
+    #
+    # Era 30/70. El 5% que gana el panel -- medido: de 445 a 467 px en una ventana de 1.512
+    # -- se lo cede la figura entera y no un panel suyo, porque las dos columnas reparten
+    # una sola fila: darle al panel sin quitarle a la figura la empuja fuera del viewport.
     #
     # En porcentaje y no en pixeles: esto se sirve en pantallas de 1.280 a 1.900 px y un
     # ancho fijo deja banda blanca en la grande o corta en la chica.
     COLUMNA_CONTROLES = widgets.VBox(
-        [PANEL], layout=widgets.Layout(width='30%', align_items='stretch'))
+        [PANEL], layout=widgets.Layout(width='31.5%', align_items='stretch'))
     # Los dos botones de encuadre viajan con la FIGURA y no con los controles: cada uno se
     # posa sobre su mapa, y en la otra columna apuntarian a un sitio donde no hay mapa.
     COLUMNA_FIGURAS = widgets.VBox(
-        [ENCUADRES, fig], layout=widgets.Layout(width='70%', align_items='stretch'))
+        [ENCUADRES, fig], layout=widgets.Layout(width='68.5%', align_items='stretch'))
     # `align_items='flex-start'`: sin esto las dos columnas se estiran a la altura de la mas
     # alta, y la corta queda con un vacio abajo que se lee como un panel a medio cargar.
     CUERPO = widgets.HBox([COLUMNA_CONTROLES, COLUMNA_FIGURAS],

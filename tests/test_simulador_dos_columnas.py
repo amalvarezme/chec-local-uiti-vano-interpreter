@@ -63,17 +63,31 @@ def test_el_cuerpo_del_tablero_es_una_fila_de_dos_columnas():
         f"la fila lleva {hijos}; los controles van a la IZQUIERDA, o sea primero")
 
 
-@pytest.mark.parametrize("columna,ancho", [("COLUMNA_CONTROLES", "30%"),
-                                           ("COLUMNA_FIGURAS", "70%")])
+@pytest.mark.parametrize("columna,ancho", [("COLUMNA_CONTROLES", "31.5%"),
+                                           ("COLUMNA_FIGURAS", "68.5%")])
 def test_cada_columna_declara_su_ancho(columna: str, ancho: str):
-    """30% y 70%, escritos donde se leen. En porcentaje y no en pixeles: el tablero se
-    sirve en pantallas de 1.280 a 1.900 px y un ancho fijo deja banda o corta."""
+    """31,5% y 68,5%, escritos donde se leen. En porcentaje y no en pixeles: el tablero
+    se sirve en pantallas de 1.280 a 1.900 px y un ancho fijo deja banda o corta.
+
+    Fue 30/70 hasta que el panel gano un 5%: medido, de 445 a 467 px en una ventana de
+    1.512."""
     celda = _celda_del_tablero()
     definicion = re.search(rf"{columna} = widgets\.VBox\((?:[^()]|\([^()]*\))*?\)", celda,
                            re.S)
     assert definicion, f"{columna} no se define en la celda del tablero"
     assert f"width='{ancho}'" in definicion.group(0), (
         f"{columna} no declara `width='{ancho}'`")
+
+
+def test_los_dos_anchos_suman_el_ancho_entero():
+    """Las dos columnas reparten UNA fila. Subir el panel sin bajar la figura la empuja
+    fuera del viewport, y esa es la falla que un porcentaje suelto no delata: cada uno
+    por separado sigue siendo un numero razonable."""
+    import re as _re
+    anchos = [float(m) for m in _re.findall(
+        r"width='(\d+(?:\.\d+)?)%', align_items='stretch'", _celda_del_tablero())]
+    assert len(anchos) == 2, f"se esperaban las dos columnas, hay {anchos}"
+    assert sum(anchos) == 100.0, f"las dos columnas suman {sum(anchos)}% y no 100%"
 
 
 def test_la_figura_va_en_la_columna_derecha_con_sus_botones_de_encuadre():

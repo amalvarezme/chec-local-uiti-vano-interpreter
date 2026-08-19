@@ -349,8 +349,12 @@ def test_the_selection_panel_has_one_button_per_criticality_group(fuente):
     cuerpo = fuente[fuente.index("def _marcar_grupo"):][:2600]
     assert "clases_para(circuito, ventana_i)" in cuerpo
     assert "datos_ventana=DATOS_VENTANA[ventana_i]" in cuerpo
-    # El orden de la fila, que es el de la urgencia y no el del enum.
-    assert _tiene(fuente, "widgets.HBox([boton_desmarcar, *BOTONES_GRUPO])")
+    # El orden de la fila, que es el de la urgencia y no el del enum. Y la fila ENVUELVE:
+    # cinco botones legibles no caben en una de 379 px, medido. Que de verdad ninguno se
+    # salga del panel lo prueba en el navegador
+    # `test_simulador_flujo_vivo.py::test_los_botones_de_seleccion_caben_en_su_panel`.
+    assert _tiene(fuente, "[boton_desmarcar, *BOTONES_GRUPO],")
+    assert "flex_flow='row wrap'" in fuente[fuente.index("FILA_BOTONES_VANO = "):][:400]
 
 
 def test_the_window_top_button_is_gone(fuente):

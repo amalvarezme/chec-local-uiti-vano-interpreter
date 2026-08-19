@@ -205,6 +205,69 @@ def test_marcar_y_desmarcar_vanos_no_vacia_el_mapa(nav):
     assert antes > 0
 
 
+# ------------------------------------------------------ los anchos del panel
+
+
+_SONDA_ANCHOS = r"""
+(() => {
+  const txt = e => (e.textContent||'').trim();
+  const panel = document.querySelector('.panel-v15');
+  const botones = [...document.querySelectorAll('button')]
+      .filter(b => txt(b)==='Desmarcar' || txt(b).startsWith('G. '));
+  const rp = panel.getBoundingClientRect();
+  // El ancho NATURAL de cada rotulo: lo que el texto pide sin recortarse. Es lo que
+  // decide si cinco botones caben en una fila, y no el ancho que hoy tengan.
+  const rotulo = b => {
+    const s = document.createElement('span');
+    s.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap';
+    s.style.font = getComputedStyle(b).font;
+    s.textContent = txt(b);
+    document.body.appendChild(s);
+    const w = s.getBoundingClientRect().width;
+    s.remove();
+    return Math.ceil(w);
+  };
+  const cajas = botones.map(b => {
+    const r = b.getBoundingClientRect();
+    return {t: txt(b), x: Math.round(r.x), r: Math.round(r.right),
+            w: Math.round(r.width), texto: rotulo(b)};
+  });
+  return {
+    panel: {x: Math.round(rp.x), r: Math.round(rp.right), w: Math.round(rp.width)},
+    botones: cajas,
+    // Cuanto se sale del panel el que mas se sale. Negativo = todos dentro.
+    desborde: Math.round(Math.max(...cajas.map(b => b.r)) - rp.right),
+    // Cuantos rotulos no caben en su propio boton.
+    recortados: cajas.filter(b => b.texto > b.w - 8).map(b => b.t),
+  };
+})()
+"""
+
+
+def test_los_botones_de_seleccion_caben_en_su_panel(nav):
+    """El sintoma que lo destapo: "G. Bajo" se sale del panel de seleccion.
+
+    Cinco botones al ancho por defecto de ipywidgets miden 148 px cada uno -- 825 px
+    en fila -- dentro de un panel de 445. Que se salgan no es cosmetico: lo que queda
+    fuera del panel queda debajo de la columna de figuras, encima del mapa.
+
+    Se miden las DOS cosas, porque arreglar una sola las rompe a la vez: que ningun
+    boton pase del borde derecho del panel, y que ningun rotulo se corte dentro de su
+    boton. Estrechar cinco botones hasta que quepan en una fila cumple lo primero y
+    rompe lo segundo -- "G. Medio-Alto" pide 80 px de texto --, y por eso la fila
+    envuelve en vez de encoger.
+    """
+    r = nav.js(_SONDA_ANCHOS)
+
+    assert len(r["botones"]) == 5, f"faltan botones en el panel: {r['botones']}"
+    assert r["desborde"] <= 0, (
+        f"un boton se sale {r['desborde']} px del panel de {r['panel']['w']} px: "
+        f"{[(b['t'], b['r']) for b in r['botones']]}")
+    assert not r["recortados"], (
+        f"estos rotulos no caben en su boton: {r['recortados']} "
+        f"({[(b['t'], b['texto'], b['w']) for b in r['botones']]})")
+
+
 # ------------------------------------------- intervencion, escenario y simulacion
 
 
@@ -229,6 +292,23 @@ def test_la_intervencion_y_el_escenario_sugeridos_no_rompen_los_mapas(nav):
     assert despues["pct"] >= COBERTURA_MINIMA or despues["pct"] == antes["pct"]
 
 
+def _marcar_vanos_con_eventos(nav) -> int:
+    """Marca vanos que SI tienen celda en la ventana activa, y dice cuantos.
+
+    Una rebanada de la lista de casillas no sirve: la lista es el circuito ENTERO y
+    solo el 21% de sus vanos tiene eventos en una ventana dada -- medido sobre 30
+    circuitos --, asi que `indices_de_vano(nav)[:4]` casi siempre marca cuatro vanos
+    que el modelo no puede puntuar. Los botones de grupo, en cambio, salen de las
+    clases de ESA ventana: lo que marcan tiene celda por construccion.
+    """
+    A.pulsar(nav, "Desmarcar")
+    for grupo in ("G. Alto", "G. Medio-Alto", "G. Medio", "G. Bajo"):
+        A.pulsar(nav, grupo)
+        if A.marcadas(nav):
+            return A.marcadas(nav)
+    return 0
+
+
 def test_aplicar_lo_sugerido_necesita_haber_diagnosticado_antes(nav):
     """Los dos botones de aplicar leen el ULTIMO diagnostico.
 
@@ -240,7 +320,9 @@ def test_aplicar_lo_sugerido_necesita_haber_diagnosticado_antes(nav):
     circuitos = A.circuitos(nav)
     A.cambiar_circuito(nav, circuitos[45])
     A.pulsar(nav, "Limpiar")
-    A.marcar(nav, A.indices_de_vano(nav)[:4], True)
+    assert _marcar_vanos_con_eventos(nav), (
+        "ningun grupo tiene vanos en esta ventana; sin vanos puntuables el "
+        "diagnostico sale vacio y esta prueba no mide lo que dice medir")
 
     A.pulsar(nav, "Aplicar intervencion sugerida")
     sin_diagnostico = A.deslizadores(nav)
@@ -339,8 +421,12 @@ def test_cambiar_de_circuito_despues_de_simular_limpia_el_mapa_simulado(nav):
 # --------------------------------------------------------------- los demas botones
 
 
-@pytest.mark.parametrize("boton", ["Diagnostico", "Top de la ventana", "Limpiar"])
+@pytest.mark.parametrize("boton", ["Diagnostico", "Limpiar", "Desmarcar",
+                                   "G. Alto", "G. Medio-Alto", "G. Medio", "G. Bajo"])
 def test_los_botones_del_panel_no_dejan_el_mapa_vacio(nav, boton):
+    """`Top de la ventana` salio de aqui con el boton, y en su lugar entran los cuatro
+    de grupo. Un grupo VACIO tambien tiene que dejar el mapa dibujado: no marca nada, y
+    el mapa sigue pintando el circuito entero con sus colores de clase."""
     circuitos = A.circuitos(nav)
     A.cambiar_circuito(nav, circuitos[33])
     A.marcar(nav, A.indices_de_vano(nav)[:3], True)
