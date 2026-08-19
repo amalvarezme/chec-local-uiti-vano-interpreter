@@ -56,6 +56,11 @@ GENERATED_BY = "scripts/portabilidad_agentes.py"
 # alguien agrega un skill, `generar` falla nombrandolo, y esa es la unica forma
 # barata de obligar a decidir como se invoca desde los otros dos editores.
 ARGUMENT_HINTS: dict[str, str] = {
+    # Sin argumentos: lo que hay que rehacer lo decide `scripts/estado_actualizacion.py`
+    # comparando huellas, no quien teclea. Una pista aqui invitaria a `/actualizar
+    # reentrenar` y a saltarse la medicion, que es justo lo que evita gastar catorce
+    # minutos de CPU por una celda de un `.xlsx` que ni entra al modelo.
+    "actualizar": "",
     "app-local-criticidadCHEC": "",
     "clima": "",
     "expert-alignment": "[args from the active workflow]",
