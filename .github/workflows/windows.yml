@@ -1,0 +1,46 @@
+# Lo que solo se rompe en Windows, corriendo en Windows.
+#
+# Los tres fallos del 2026-08-13 -- `signal.SIGKILL`, que alli no existe; `SO_REUSEADDR`,
+# que alli significa lo contrario; y los finales de linea de los `.bat` -- no se ven
+# leyendo el codigo en un Mac. Las pruebas que los fijan viven en el repositorio desde
+# entonces y hasta hoy solo corrian en macOS, donde comprueban el TEXTO de la rama que
+# Windows tomaria. Esto la ejecuta.
+#
+# Medido sobre un clon limpio del 2026-08-19 (sin `git lfs pull`, o sea con punteros de
+# 134 bytes, y sin los `panel/` construidos, que estan en .gitignore):
+# **187 pasan, 4 se saltan, 3 quedan fuera, en 0,55 s**.
+name: aplicaciones en Windows
+
+on: [push, pull_request]
+
+jobs:
+  pruebas:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        # Sin LFS a proposito: nada de esto lee un dato: solo rutas, constantes,
+        # finales de linea y huellas. Bajar los 900 MB costaria minutos por nada.
+        with: { lfs: false }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      # El piso real del proyecto, y no una version mas nueva: si algo deja de correr en
+      # 3.11, esta es la maquina donde tiene que verse.
+      - run: pip install pytest ipywidgets numpy
+      # `--noconftest` no es opcional: `tests/conftest.py` tiene un fixture `autouse`
+      # que importa la pila de agent-tools (pandas, matplotlib, pdfplumber), y eso
+      # arrastraria medio repositorio a unas pruebas que solo leen archivos.
+      #
+      # Los tres `--deselect` son los unicos que necesitan la pila real del simulador
+      # --- `preparar.py` importa la derivacion, y de ahi salen matplotlib y torch ---.
+      # No se saltan en silencio: se nombran aqui, y en la suite completa de macOS
+      # corren enteros. Una prueba saltada se lee como una prueba pasada.
+      - run: >
+          pytest --noconftest -q
+          tests/test_windows_aplicaciones.py
+          tests/test_aplicaciones_locales.py
+          tests/test_huellas_aplicaciones.py
+          tests/test_piso_de_python.py
+          tests/test_app_simulador_databricks.py
+          --deselect tests/test_aplicaciones_locales.py::test_preparar_se_vigila_a_si_mismo_como_insumo
+          --deselect tests/test_aplicaciones_locales.py::test_el_cuaderno_06_ya_no_es_insumo_de_su_aplicacion
+          --deselect tests/test_aplicaciones_locales.py::test_las_cinco_vigilan_el_codigo_de_las_librerias

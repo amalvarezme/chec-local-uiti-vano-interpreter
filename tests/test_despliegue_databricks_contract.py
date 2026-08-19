@@ -687,3 +687,73 @@ def test_la_etapa_4c_prepara_su_fuente_con_el_empacador():
     assert "--volumen-paquete" in etapa, (
         "la etapa 4c no resuelve la ruta del Volume del paquete; sin eso la app "
         "arranca buscandolo en `workspace.default`, que en CHEC no existe (D1)")
+
+
+# ---------------------------------------------------------------------------
+# El inventario de la etapa 3 no puede nombrar lo que no existe
+# ---------------------------------------------------------------------------
+
+
+def test_el_inventario_de_la_etapa_3_no_nombra_archivos_inexistentes():
+    """La fila `graphs/*.npy` describia "el grafo de restriccion fisica" y no hay ni un
+    `.npy` en todo `data/`: el grafo experto se CONSTRUYE en codigo
+    (`construir_matriz_adyacencia_mgcecdl`) y viaja dentro del `.pt`.
+
+    Es el error simetrico del que costo la corrida del 2026-08-19. Alli el inventario se
+    saltaba `derived/` y quien lo leyo concluyo que no subia; aqui nombra algo que no
+    esta, y quien lo comprueba reporta un hueco que no existe. Un inventario miente en
+    los dos sentidos.
+    """
+    etapa = _etapa("3", "Are the data in the Volume? Upload only if not")
+    # Solo las FILAS de la tabla de inventario, no la prosa: explicar por que `*.npy` no
+    # esta exige nombrarlo, y prohibir la palabra prohibe tambien explicarla. Una fila
+    # es `| \`ruta\` | que es | peso |`.
+    filas = re.findall(r"^\|\s*`([^`]+)`\s*\|", etapa, re.M)
+    for ruta in filas:
+        if not ruta.startswith(("graphs/", "models/", "derived/", "GEO/")):
+            continue
+        # `GEO/*.{shp,shx,dbf,prj}` es notacion legitima y `glob` no la entiende: se
+        # expanden las llaves a un patron por extension y basta con que UNA acierte.
+        llaves = re.search(r"\{([^}]+)\}", ruta)
+        patrones = ([ruta.replace(llaves.group(0), alternativa)
+                     for alternativa in llaves.group(1).split(",")]
+                    if llaves else [ruta])
+        encontrados = [f for patron in patrones
+                       for f in (PROJECT_ROOT / "data").glob(patron)]
+        assert encontrados, (
+            f"el inventario de la etapa 3 nombra `{ruta}` y no existe ningun archivo "
+            "asi bajo data/")
+
+
+# ---------------------------------------------------------------------------
+# El cuaderno necesita un computo que traiga torch
+# ---------------------------------------------------------------------------
+
+
+def test_la_etapa_5_dice_sobre_que_computo_corre_el_cuaderno():
+    """Aterrizar no es correr, y el comando ya lo dice para el permiso del Volume. Le
+    faltaba la otra mitad: `05` importa `torch`, `scikit-learn`, `plotly`, `networkx` y
+    `pyarrow`, asi que en Serverless o en un DBR estandar muere en su cuarta celda con
+    `ModuleNotFoundError: torch` -- con el cuaderno perfectamente importado.
+
+    D8 cubre el caso vecino (ipywidgets no corre en Serverless) y por eso este se leia
+    como cubierto. No es el mismo: alli el problema es el widget, aqui la imagen.
+    """
+    etapa = _etapa("5", "Is the notebook in the Workspace? Import only if not")
+    assert "torch" in etapa, (
+        "la etapa 5 no dice que el cuaderno necesita torch, que es lo que decide el "
+        "runtime al que hay que adjuntarlo")
+    assert re.search(r"\bML\b", etapa), (
+        "la etapa 5 no nombra el runtime de Databricks que trae torch instalado")
+
+
+def test_la_etapa_5_no_decide_la_frescura_por_fechas_de_archivos_versionados():
+    """En un clon nuevo --- que es el escenario declarado de este comando --- todos los
+    archivos versionados llevan la fecha del clon, con milisegundos de diferencia entre
+    ellos. Comparar la fecha del `.ipynb` con la de su generador ahi es echar una
+    moneda: medido en este checkout, 0,4 ms de diferencia.
+    """
+    etapa = _etapa("5", "Is the notebook in the Workspace? Import only if not")
+    assert "clon" in etapa.lower(), (
+        "la etapa 5 no advierte que las fechas de dos archivos versionados no se pueden "
+        "comparar en un clon recien hecho")

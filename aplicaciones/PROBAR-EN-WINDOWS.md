@@ -6,44 +6,38 @@ finales de línea de los `.bat`— **no se ven leyendo el código en un Mac**, y
 habría fallado en las pruebas de aquí. Esta nota es el plan para que no dependa de la
 suerte.
 
-Nada de esto está montado todavía. Es una propuesta con los números ya medidos.
+El **nivel 1 ya está montado** (`.github/workflows/windows.yml`). El nivel 2 sigue
+siendo una propuesta, con los números medidos.
 
 ---
 
-## Nivel 1 — GitHub Actions en `windows-latest`
+## Nivel 1 — GitHub Actions en `windows-latest` ✅
 
-Es lo barato y lo permanente. **Medido** el 2026-08-13:
+Es lo barato y lo permanente, y **está montado** en `.github/workflows/windows.yml`.
+Vuelto a medir el 2026-08-19, esta vez sobre un **clon de verdad** —`git clone` sin
+`git lfs pull`, o sea con punteros de 134 bytes, y sin los `panel/` construidos, que
+están en `.gitignore`—:
 
 | | |
 |---|---|
-| pruebas que corren | 152 pasan, 8 se saltan |
-| dependencias | **solo `pytest`** — ni torch, ni geopandas, ni pandas |
+| pruebas que corren | **187 pasan, 4 se saltan, 3 quedan fuera** |
+| dependencias | `pytest ipywidgets numpy` |
 | datos | **ninguno**. No hace falta `git lfs pull` |
-| tiempo | 0,5 s de pruebas; ~1 min de reloj con checkout e instalación |
+| tiempo | 0,55 s de pruebas; ~1 min de reloj con checkout e instalación |
 
-Se comprobó simulando un clon limpio (moviendo los `panel/` fuera, que es lo que ve un
-runner: están en `.gitignore`).
+**Los números de la propuesta de agosto ya no valían, y conviene saber por qué.** Decía
+«152 pasan» y «solo `pytest`». Medido hoy con sólo `pytest`: 188 pasan y **6 fallan**,
+porque `test_aplicaciones_locales.py` creció hacia el simulador y ahora importa
+`ipywidgets` y `numpy`. Con esos dos quedan 3, y ésos necesitan la pila real
+(`preparar.py` → la derivación → matplotlib y torch): son los tres `--deselect` del
+workflow, nombrados uno a uno ahí mismo. **No se saltan en silencio** —en la suite
+completa de macOS corren enteros—, y esa distinción no es cosmética: en este repositorio
+ya hubo un arnés que afirmaba un título obsoleto durante semanas porque su prueba estaba
+saltada y se leía como pasada.
 
-El job sería:
-
-```yaml
-# .github/workflows/windows.yml
-name: aplicaciones en Windows
-on: [push, pull_request]
-jobs:
-  pruebas:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
-      - run: pip install pytest
-      - run: >
-          pytest --noconftest -q
-          tests/test_windows_aplicaciones.py
-          tests/test_aplicaciones_locales.py
-          tests/test_huellas_aplicaciones.py
-```
+Se añadieron además dos archivos que no estaban en la propuesta y que sí valen en
+Windows: `test_piso_de_python.py` (el piso de 3.11 contra las ruedas reales) y
+`test_app_simulador_databricks.py` (sólo lee archivos).
 
 **`--noconftest` no es opcional, y conviene saber por qué.** `tests/conftest.py` tiene un
 fixture `autouse` que importa la pila de agent-tools (pandas, matplotlib, pdfplumber), y

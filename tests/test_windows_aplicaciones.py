@@ -228,3 +228,32 @@ def test_los_guiones_de_shell_no_llevan_retorno_de_carro(app: Path):
         ruta = app / pieza
         if ruta.exists():
             assert b"\r\n" not in ruta.read_bytes(), f"{app.name}/{pieza} trae CRLF"
+
+
+# ---------------------------------------------------------------------------
+# Y que algo lo CORRA en Windows, no solo que este escrito
+# ---------------------------------------------------------------------------
+
+
+def test_hay_un_trabajo_que_corre_estas_pruebas_en_windows():
+    """Todas las de este archivo leen codigo desde macOS. Eso atrapa lo que ya se sabe
+    y nada de lo que todavia no.
+
+    Los tres fallos de Windows del 2026-08-13 -- `signal.SIGKILL`, `SO_REUSEADDR` y los
+    finales de linea -- no se ven leyendo el codigo en un Mac, y ninguno habria fallado
+    aqui hasta que alguien los entendio y escribio la prueba. `PROBAR-EN-WINDOWS.md`
+    proponia el trabajo de CI con los numeros ya medidos; llevaba desde entonces sin
+    montarse, y el unico workflow del repositorio publicaba la pagina.
+    """
+    trabajo = RAIZ / ".github" / "workflows" / "windows.yml"
+    assert trabajo.is_file(), (
+        "no hay ningun trabajo de CI que corra en Windows; lo de este archivo se queda "
+        "en leer codigo desde macOS")
+    texto = trabajo.read_text(encoding="utf-8")
+    assert "windows-latest" in texto
+    assert Path(__file__).name in texto, (
+        "el trabajo de Windows no corre este mismo archivo, que es el que existe para "
+        "eso")
+    assert "--noconftest" in texto, (
+        "sin `--noconftest`, el fixture autouse de tests/conftest.py arrastra pandas y "
+        "pdfplumber a unas pruebas que solo leen archivos")

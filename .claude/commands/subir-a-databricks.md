@@ -225,7 +225,7 @@ here creates them. Lo que sube, entero y tal cual:
 | `derived/bolsas_mil_full.joblib` | las bolsas vano × ventana, del cuaderno 05 | ~199 MB |
 | `GEO/*.{shp,shx,dbf,prj}` | los tres shapefiles con sus sidecars | ~180 MB |
 | `models/mil_vano_ventana_v1.pt` | el modelo MIL entrenado | |
-| `graphs/*.npy` | el grafo de restriccion fisica | |
+| `graphs/mgcecdl_feature_order.json` | el orden congelado de las 70 features | |
 | `*.xlsx` | variables, variables a simular y costos | |
 | `geometria_kmeans_014_v1.json` | la geometria KMeans, versionada | |
 
@@ -237,6 +237,13 @@ algo no sube.
 `mgcecdl_classifier_best.zip` and its hyperparameter study, retired with
 `MGCECDLClassifier`. The only model artifact that travels now is
 `models/mil_vano_ventana_v1.pt`.
+
+Y `graphs/*.npy` tampoco: esa fila describia "el grafo de restriccion fisica" y no hay ni
+un `.npy` en todo `data/`. El grafo experto **se construye en codigo**
+(`construir_matriz_adyacencia_mgcecdl`) y viaja dentro del `.pt`; lo unico que hay en esa
+carpeta es el orden congelado de las features. Un inventario miente en los dos sentidos:
+saltarse `derived/` hizo que una corrida lo diera por no subido, y nombrar un `.npy`
+inexistente hace que la siguiente reporte un hueco que no existe.
 
 **One file from outside `data/`, and only one**: `site/data/variables.json`. Notebook 05
 reads it for the expert A–F thematic classification that labels its feature tables, through
@@ -633,10 +640,20 @@ reentrenar lo abre y cambia el parametro; nadie quiere eso detras de una URL web
 databricks workspace list /Workspace/Users/<userName>/databricks-integration/project_flow -p <profile>
 ```
 
-**If everything is present**: el cuaderno esta ahi. Compara su fecha contra la del archivo
-local y la de `scripts/generate_notebook_10.py`, que es quien lo escribe. Si el del Workspace
-es igual o mas nuevo que el generador, anota el paso `ok` con la ruta y pasa a la etapa 6 sin
-importar nada.
+**If everything is present**: el cuaderno esta ahi. Para saber si esta al dia, **regenera y
+compara el contenido**, no las fechas:
+```
+python3 scripts/generate_notebook_10.py   # reescribe notebooks/05_mil_vano_ventana.ipynb
+git status --porcelain notebooks/05_mil_vano_ventana.ipynb
+```
+Si queda limpio, lo publicado corresponde al generador actual — anota el paso `ok` con la
+ruta y pasa a la etapa 6 sin importar nada.
+
+**No compares las dos fechas locales.** Este comando se corre desde un **clon** recien
+hecho, y en un clon todos los archivos versionados llevan la fecha del clon: medido en un
+checkout real, el `.ipynb` y su generador quedaron a 0,4 ms uno del otro, y cual salia
+"mas nuevo" era una moneda al aire. Lo que si vale comparar por fecha es lo del Workspace
+contra lo local, que son dos escrituras de verdad.
 
 **If anything is missing** — no esta, o el generador es mas nuevo que lo publicado —
 regeneralo primero, para que lo que aterrice sea lo que el generador dice, y despues
@@ -676,6 +693,17 @@ motivo era falso.
 
 Si la etapa 3 quedo bloqueada de verdad — sin el `.pt` en el Volume — anota que `05` fallara
 al abrirse y marca este paso `degradado`, no `ok`: el cuaderno aterriza, pero no va a correr.
+
+**Y sobre que computo corre.** El cuaderno importa `torch`, `scikit-learn`, `plotly`,
+`networkx` y `pyarrow`, asi que hay que adjuntarlo a un cluster con un **Databricks Runtime
+ML**, que los trae instalados. En Serverless o en un DBR estandar aterriza igual de bien y
+muere en su cuarta celda con `ModuleNotFoundError: torch` — o sea, en un sitio que no
+apunta a esta decision. Es el vecino de D8 y no el mismo caso: alli lo que Serverless no
+soporta es `ipywidgets`, aqui es la imagen la que no trae PyTorch.
+
+Anota en la bitacora a que runtime quedo adjunto. Si el workspace no ofrece un DBR ML, eso
+es una restriccion `bloqueante` con nombre —`pip install torch` dentro del cuaderno es la
+salida, y cuesta minutos en cada arranque en frio— y se sigue igual (regla B).
 
 **El cuaderno no viaja solo: `src/chec_impacto` va con el.** Su primera celda resuelve dos
 cosas por separado — donde esta el CODIGO y donde estan los DATOS — y en el Workspace no son
