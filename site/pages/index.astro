@@ -2,119 +2,18 @@
 import logoLab from "../assets/site/logos/logo_labIA.png";
 import logoChec from "../assets/site/logos/checlogo.png";
 import logoUnal from "../assets/site/logos/logo_unal_transparente.png";
-import metodologia from "../assets/site/results/metodologia_actual.svg";
-import dataIntelligenceEngine from "../assets/site/results/data_intelligence_engine.png";
-import databricksLogo from "../assets/site/results/databricks.png";
-import mgcecdlConfusionMatrix from "../assets/site/results/mgcecdl_confusion_matrix.png";
-import mgcecdlRocCurve from "../assets/site/results/mgcecdl_roc_curve.png";
-import mgcecdlModeImportance from "../assets/site/results/mgcecdl_mode_importance.png";
-import mgcecdlTopUitiPeriodoBarras from "../assets/site/results/mgcecdl_top_uiti_periodo_barras.png";
-import mgcecdlTopUitiPeriodoRadar from "../assets/site/results/mgcecdl_top_uiti_periodo_radar.png";
+import tableroClima from "../assets/site/results/tablero-clima.png";
+import tableroAgrupamiento from "../assets/site/results/tablero-agrupamiento.png";
+import tableroTrayCircuitos from "../assets/site/results/tablero-trayectorias-circuitos.png";
+import tableroTrayVanos from "../assets/site/results/tablero-trayectorias-vanos.png";
+import simuladorMapas from "../assets/site/results/simulador-mapas.png";
+import simuladorResultados from "../assets/site/results/simulador-resultados.png";
 import variables from "../data/variables.json";
 
-const grafoRedNivel2 = `${import.meta.env.BASE_URL}grafo_red_nivel2.html`;
-const grafoRedNivel2Seleccionadas = `${import.meta.env.BASE_URL}grafo_red_nivel2_seleccionadas.html`;
-const grafoTopUitiPeriodoMgcecdl = `${import.meta.env.BASE_URL}mgcecdl_top_uiti_periodo_grafo.html`;
-const reportVersion = "20260708-map-legend-frequency";
-const latestInterpretabilityReport = `${import.meta.env.BASE_URL}latest_interpretability_report.html?v=${reportVersion}`;
-const baseCircuitMap = `${import.meta.env.BASE_URL}base_circuit_map.html?v=${reportVersion}`;
-const baseCircuitMapUiti = `${import.meta.env.BASE_URL}base_circuit_map_uiti.html?v=${reportVersion}`;
-const baseCriticalPoints = `${import.meta.env.BASE_URL}base_critical_points.html?v=${reportVersion}`;
 
-const vaciosApi = [
-  ["CAPACIDAD_NOMINAL", "126.732", "76,855715 %"],
-  ["CNT_USUS", "126.732", "76,855715 %"],
-  ["CODIGO", "126.732", "76,855715 %"],
-  ["FECHA_OPERACION_TRF", "126.732", "76,855715 %"],
-  ["FID_TRAFO", "126.732", "76,855715 %"],
-  ["PROMEDIO_KWH_TRF", "126.732", "76,855715 %"],
-  ["NR_T", "92.430", "56,053513 %"],
-  ["CALIBRE_NEUTRO", "28.573", "17,327892 %"],
-  ["LONG_CRUCETA", "24.355", "14,769916 %"],
-  ["NORMA", "9.840", "5,967398 %"],
-  ["ALTURA", "5.426", "3,290559 %"],
-  ["CLASE", "5.426", "3,290559 %"],
-  ["VAL_CRIT_APOYO", "5.426", "3,290559 %"],
-  ["PROMEDIO_KWH_VANO", "5.228", "3,170483 %"]
-];
 
-const variablesSeleccionadas = [
-  ["CNT_VN", "Vanos hasta el equipo que protege", "Numérica"],
-  ["UITI_VANO", "Objetivo: UiTi ponderado por vano", "Objetivo"],
-  ["CNT_TRF", "Transformadores afectados", "Numérica"],
-  ["TIPO", "Tipo de equipo protector", "Categórica"],
-  ["LONGITUD", "Longitud del vano", "Numérica"],
-  ["CNT_FASES", "Cantidad de fases", "Numérica"],
-  ["CONDUCTOR", "Conductor de fases", "Categórica"],
-  ["CALIBRE_NEUTRO", "Calibre del neutro", "Categórica"],
-  ["NG_RED", "Presencia de guarda o neutro", "Categórica"],
-  ["FECHA_OPERACION_VANO", "Entrada en operación del vano", "Fecha"],
-  ["X2 / Y2", "Coordenadas finales del vano", "Numérica"],
-  ["ALTURA", "Altura del apoyo final", "Numérica"],
-  ["CANTIDAD_TIERRA", "Presencia de puesta a tierra", "Numérica"],
-  ["VAL_CRIT_APOYO", "Criticidad por clase de apoyo", "Numérica"],
-  ["CAPACIDAD_NOMINAL", "Capacidad del transformador", "Numérica"],
-  ["FECHA_OPERACION_TRF", "Entrada en operación del transformador", "Fecha"],
-  ["PROMEDIO_KWH_TRF", "Consumo mensual del transformador", "Numérica"],
-  ["TIPO_TAX", "Taxonomía del vano", "Categórica"],
-  ["NR_T", "Riesgo por vegetación", "Numérica"],
-  ["LONG_CRUCETA", "Longitud de cruceta", "Numérica"],
-  ["PROMEDIO_KWH_VANO", "Energía mensual del vano", "Numérica"],
-  ["DDT", "Densidad de descargas a tierra", "Numérica"],
-  ["prep / temp / wind_gust_spd / wind_spd", "Clima horario", "12 rezagos por variable"]
-];
 
-const baseModelFeatures = [
-  "CNT_VN", "CNT_TRF", "TIPO", "LONGITUD", "CNT_FASES", "CONDUCTOR",
-  "CALIBRE_NEUTRO", "NG_RED", "FECHA_OPERACION_VANO", "X2", "Y2", "ALTURA",
-  "CANTIDAD_TIERRA", "VAL_CRIT_APOYO", "CAPACIDAD_NOMINAL", "FECHA_OPERACION_TRF",
-  "PROMEDIO_KWH_TRF", "TIPO_TAX", "NR_T", "LONG_CRUCETA", "PROMEDIO_KWH_VANO", "DDT"
-];
-const climatePrefixes = ["prep", "temp", "wind_gust_spd", "wind_spd"];
-const modelFeatures = [
-  ...baseModelFeatures,
-  ...climatePrefixes.flatMap((prefix) => Array.from({ length: 12 }, (_, lag) => `${prefix}_${lag}`))
-];
-const mgcecdlModes = [
-  ["Climáticos / exógenos", "50 variables", "DDT, NR_T y las familias prep, temp, wind_gust_spd y wind_spd con rezagos 0…11."],
-  ["Estructurales / endógenos", "20 variables", "Topología, protección, geometría, activos, consumos, taxonomía y características físicas del vano."]
-];
-const mgcecdlComponents = [
-  ["Atención por variable", "Pondera variables dentro de cada modo antes de construir sus embeddings."],
-  ["Codificadores por modo", "Aprende representaciones separadas para información climática/exógena y estructural/endógena."],
-  ["Confiabilidad modal", "Estima cuánto peso aporta cada modo para la salida fusionada."],
-  ["Reconstrucción", "Regulariza las representaciones para preservar información de entrada por modalidad."],
-  ["Clasificación de criticidad", "Organiza UITI_VANO en niveles ordinales para priorización operativa."]
-];
-const pdfDiscussionRows = [
-  ["AGU23L15", "2016-01-01", "2025-12-21", "Degradación positiva de la red, ciclicidad asociada a pluviosidad y señales de reincidencia operativa."],
-  ["AGU23L15", "2025-09-23", "2025-12-18", "Análisis de señales del interruptor de cabecera; función 51N frecuente y mayor exposición en fase A."],
-  ["DON23L13", "2021-01-01", "2026-03-19", "Eventos SCADA combinan arranques de protección, recierres, enclavamientos y telemetría del IED."],
-  ["DON23L13", "2025-01-06", "2026-04-30", "Mejora de severidad posterior a intervención de junio de 2025, compatible con reducción de tiempos de restablecimiento."],
-  ["DON23L13", "2025-12-11", "2026-10-02", "Ventanas móviles de 90 días para contrastar causas ambientales con intervenciones programadas."]
-];
-const pdfDiscussionColumns = ["Circuito", "Fecha inicio", "Fecha fin", "Análisis técnico"];
-const llmNotebookFlow = [
-  ["historical", "Interpreta el contexto estructurado del circuito: selección, serie diaria, puntos críticos, variables disponibles, causas observadas, metadatos faltantes y grafos de relación técnica."],
-  ["inference", "Interpreta con cautela las señales predictivas M-GCECDL/SHAP: relevancias por escenario, modos climático/estructural, variables de entrada del modelo y coherencia del grafo."],
-  ["auto-simulator", "Interpreta la tabla automática de sensibilidad mínimo/máximo (escenario base vs. mínimo/máximo observado por variable). Corre junto a historical e inference y se omite sin bloquear el reporte si falta bc.json."],
-  ["expert-alignment", "Contrasta el diagnóstico histórico y la interpretación predictiva con la tabla de discusiones técnicas extraída de PDFs; reporta coincidencias, diferencias y variables priorizadas."]
-];
-const pdfExtractionSteps = [
-  ["1. Lectura documental", "Carga PDFs técnicos desde el repositorio documental y extrae texto por página con PyMuPDF o pdfplumber."],
-  ["2. Segmentación", "Agrupa páginas en fragmentos comparables, conserva el circuito inferido desde el nombre del PDF y propaga intervalos configurados cuando aplica."],
-  ["3. Extracción con skill", "La skill de extracción de discusiones PDF decide si el fragmento contiene una discusión técnica verificable."],
-  ["4. Validación", "Solo acepta filas con circuito, fecha o intervalo válido, análisis técnico breve y evidencia textual verificable."],
-  ["5. Tabla base", "Guarda el Excel tabla_pdfs_intervalo_2025-11-01_2026-04-30.xlsx como insumo documental para el contraste experto en la generación de reportes."]
-];
 
-const databricksNotebookRows = [
-  ["CPU", "Carga tabular, limpieza, selección de circuito, agregación diaria, detección de puntos críticos, extracción PDF y validaciones JSON.", "Bajo", "Puede ejecutarse en notebooks CPU o jobs pequeños si el volumen se mantiene cercano al actual."],
-  ["T4", "Entrenamiento M-GCECDL, evaluación, ROC, matriz de confusión, SHAP por lotes y generación de visuales.", "Medio", "T4 sirve como referencia para entrenamiento pequeño, pruebas y ejecución batch controlada."],
-  ["GPU mayor", "LLM local 32B tipo DeepSeek-R1-Distill-Qwen-32B, deepseek-r1:32b, QwQ-32B o similar.", "Alto / crítico", "No debe asumirse T4 como suficiente salvo evidencia de cuantización agresiva, contexto bajo, baja concurrencia y rendimiento aceptable."],
-  ["API externa", "Agentes LLM de extracción documental, análisis histórico, interpretación predictiva y cotejo experto cuando usan Google u OpenAI.", "Bajo / medio", "Conviene para reportes bajo demanda; el costo depende de tokens, reintentos y número de circuitos procesados."],
-  ["Serving", "Endpoints persistentes para M-GCECDL o para un LLM local disponible como servicio.", "Alto / crítico", "No está implementado en el repositorio; si se activa 24/7, el costo cambia de batch a alojamiento continuo."]
-];
 
 const databricksCommandRows = [
   ["/subir-a-databricks", "Orquestador de todo el flujo B", "Datos -> cuaderno 05 al Workspace -> apps por prioridad -> commit y push de la bitacora"],
@@ -124,20 +23,7 @@ const databricksCommandRows = [
   ["/app-trayectorias-circuitos, /app-trayectorias-vanos", "Cuadernos 03 y 04", "Se despliegan solo si el workspace admite mas de 3 apps"]
 ];
 
-const databricksDataObjectRows = [
-  ["data/Indicadores_vano_v3.csv", "Archivo en el Volume", "566 MB, la base de eventos que leen los cuadernos 01-04 y 06"],
-  ["data/GEO/*.shp (+ sidecars)", "Archivos en el Volume", "MVLINSEC, GDBCHEC_TRANSFOR y SWITCHES; un .shp sin .shx/.dbf/.prj no sirve"],
-  ["data/models/mil_vano_ventana_v1.pt", "Archivo en el Volume", "Modelo MIL que leen los cuadernos 05 y 06"],
-  ["data/derived/bolsas_mil_full.joblib", "Archivo en el Volume", "199 MB de bolsas vano x ventana precalculadas"],
-  ["data/Variables_seleccion.xlsx", "Archivo en el Volume", "Diccionario de variables que usan los cuadernos 05, 06 y /report"]
-];
 
-const databricksWidgetRows = [
-  ["Cuaderno 01 -> app", "Nube por vano sobre el mapa, 6 variables seleccionables, serie de doble eje y 6 violines."],
-  ["Cuaderno 02 -> app", "Agrupamiento de vanos por UITI acumulado y top 10 de circuitos en clase Alto."],
-  ["Cuaderno 06 -> app", "Simulador de riesgo por vano, servido con Voila sobre un kernel vivo."],
-  ["Cuadernos 03 y 04 -> app", "Trayectorias por ventanas deslizantes, a nivel de circuito y de vano."]
-];
 
 const databricksMigrationSteps = [
   ["0", "Preguntar al usuario", "Unico input: la URL del workspace de Databricks destino. Los nombres de las apps usan su valor por defecto."],
@@ -150,100 +36,14 @@ const databricksMigrationSteps = [
   ["7", "Reportar al usuario", "Ruta de la bitacora, estado final y toda restriccion con quien la desbloquea."]
 ];
 
-const databricksVolumeNotes = [
-  ["Solo 04 y 07 escriben salidas visuales", "De los 9 notebooks, solo el 04 (PNG) y el 07 (grafos HTML) generan resultados visuales originalmente. Sus copias subidas redirigen esa salida a carpetas del Volume sin la palabra \"site\": SITE_RESULTS_DIR = RESULTS_DIR en el 04; outputs/graphs/ en el 07."],
-  ["Copia modificada, nunca el original", "/subir-notebooks-databricks sube cada uno de los 9 notebooks como copia modificada, reescribiendo solo su celda de resolución de rutas (alias a variables del Volume, no reemplazo total)."],
-  ["pip install propio por notebook", "Cada copia necesita su propia celda %pip install -q -r requirements.txt como primera celda: el entorno local preconfigurado no existe en Databricks. Sin esto, un notebook que importe chec_impacto/chec_local_interpreter puede fallar con ModuleNotFoundError (confirmado con optuna en el 09)."],
-  ["requirements.txt recortado", "El requirements.txt subido excluye jupyter, ipykernel, pytest, python-dotenv y pydantic: 0 referencias verificadas en src/ o en los notebooks."],
-  ["mkdirs explícito antes de subir", "workspace import / import-dir no crean carpetas padre; hace falta databricks workspace mkdirs explícito antes de subir archivos sueltos o notebooks."],
-  ["Límite de 10MB en formato JUPYTER", "--format JUPYTER tiene un límite de 10MB; un notebook con salidas locales embebidas (ej. mapas folium del 08) puede superarlo aunque su código sea pequeño. Hay que limpiar outputs y execution_count de las 9 copias antes de subir."],
-  ["Warehouse, cluster o Serverless, no cualquiera", "Los SQL Warehouse solo ejecutan celdas SQL, nunca notebooks completos: hace falta un cluster o Serverless (compute Python). El 09_simulador.ipynb necesita un cluster clásico porque su interfaz usa ipywidgets, que Databricks excluye de Serverless; los otros 8 notebooks sí corren en Serverless."],
-  ["El Volume no persiste garantizado", "chec-simulador no persiste entre sesiones de forma garantizada: un workspace verificado como completamente poblado un día apareció vacío (0 tablas, sin Volume) al día siguiente. Conviene verificar siempre en vivo (SHOW TABLES, databricks fs ls) antes de asumir estado previo."]
-];
 
-const azureFlowTimingRows = [
-  ["01_climate.ipynb", "36.5 min", "CPU Job"],
-  ["01_pdf_discussion_table_from_pdfs.ipynb", "2 min", "CPU Job"],
-  ["02_local_uiti_vano_interpretability_v3.ipynb", "5 min", "GPU T4 Job"],
-  ["02_mgcecdl_optuna_classification_search.ipynb", "2 h para 20 trials", "GPU T4 Job"],
-  ["03_mgcecdl_training.ipynb", "10 min para 100 épocas", "GPU T4 Job"],
-  ["04_mgcecdl_performance.ipynb", "1 min", "GPU T4 o CPU"],
-  ["05_mgcecdl_circuit_analysis.ipynb", "5 min", "GPU T4 Job"],
-  ["06_mgcecdl_document_replication.ipynb", "2 h 30 min", "GPU T4 Job"],
-  ["Total aproximado", "5.49 h", "Flujo completo"]
-];
 
-const azureInteractiveRows = [
-  ["Sin idle", "5.49 h", "USD 5.11-7.41"],
-  ["Idle +15 min", "5.74 h", "USD 5.34-7.75"],
-  ["Idle +30 min", "5.99 h", "USD 5.57-8.09"],
-  ["Idle +1 h", "6.49 h", "USD 6.04-8.76"]
-];
 
-const azureLlmRows = [
-  ["Gemini 2.5 Flash-Lite API", "~168k input / ~6.2k output", "USD 0.019 por ciclo"],
-  ["Gemini 2.5 Flash API", "~168k input / ~6.2k output", "USD 0.066 por ciclo"],
-  ["Gemini 2.5 Pro API", "contexto <= 200k tokens", "USD 0.272 por ciclo"],
-  ["GPT-5.4 nano API", "~168k input / ~6.2k output", "USD 0.041 por ciclo"],
-  ["GPT-5.4 mini API", "~168k input / ~6.2k output", "USD 0.154 por ciclo"],
-  ["FMS abierto económico", "GPT OSS 20B vía Databricks", "USD 0.014 por ciclo"],
-  ["FMS Llama 3.3 70B", "pay-per-token vía Databricks", "USD 0.093 por ciclo"]
-];
 
-const azureProductionRows = [
-  ["Jobs Compute + Gemini API", "CPU Jobs + GPU T4 Jobs", "USD 3.48-5.07"],
-  ["Jobs Compute + GPT-5.4 mini API", "CPU Jobs + GPU T4 Jobs", "USD 3.61-5.20"],
-  ["Jobs Compute + FMS abierto económico", "CPU Jobs + GPU T4 Jobs", "USD 3.47-5.07"],
-  ["Jobs Compute + FMS Llama 3.3 70B", "CPU Jobs + GPU T4 Jobs", "USD 3.55-5.14"],
-  ["Margen operativo recomendado", "Producción completa estabilizada", "USD 4-6 por ejecución"],
-  ["All-Purpose mal apagado", "idle o clúster interactivo encendido", "USD 8-15+ por ejecución"]
-];
 
-const azureLocalLlmRows = [
-  ["32B 4-bit", "A100 80 GB o equivalente con margen", "T4 no recomendada"],
-  ["32B batch", "A100 80 GB durante 5 h", "USD 22-40 adicionales"],
-  ["32B 24/7", "A100 80 GB activo todo el mes", "USD 3.300-5.800+/mes"],
-  ["70B local", "A100 80 GB o multi-GPU", "USD 5-15+/h"],
-  ["120B local", "multi-GPU", "USD 15-40+/h"],
-  ["FMS disponible", "Llama 70B, Qwen 80B/122B, GPT OSS 120B", "Probar pay-per-token antes de local"]
-];
 
-const databricksCostRows = [
-  ["All-Purpose T4 interactivo", "Fase de ajuste usando Azure NC4as_T4_v3 y DBU All-Purpose para todo el flujo.", "Medio", "USD 5-8 por ejecución completa; USD 6-9 con idle moderado.", "Útil para migración y depuración inicial; no es la arquitectura productiva recomendada."],
-  ["Jobs Compute productivo", "Separación CPU Jobs para clima/PDF y GPU T4 Jobs para M-GCECDL, Optuna, SHAP y reportes.", "Bajo / medio", "USD 4-6 por ejecución completa estabilizada.", "Jobs Compute apaga recursos al terminar; reduce idle frente a All-Purpose."],
-  ["Optuna", "Búsqueda de 20 trials estimada en 2 h sobre T4.", "Medio", "USD 1.85-2.70 por búsqueda; USD 0.09-0.14 por trial.", "No incluye repeticiones por afinamiento adicional."],
-  ["Entrenamiento M-GCECDL", "100 épocas con T4.", "Bajo", "USD 0.15-0.23 por ejecución de entrenamiento.", "El costo aislado es bajo frente a Optuna y al notebook 06."],
-  ["Replicación documental M-GCECDL", "06_mgcecdl_document_replication.ipynb agrega 2.5 h de T4.", "Medio", "USD 2.33-3.38 por ejecución.", "Pasa a ser uno de los principales componentes de costo computacional."],
-  ["GPU mayor para LLM local 32B+", "Soporte futuro Ollama/deepseek-r1:32b; no activo actualmente.", "Alto / crítico", "A100 80 GB: USD 4.5-8/h; 5 h: USD 22-40; 24/7: USD 3.300-5.800+/mes.", "T4 de 16 GB no debe tratarse como suficiente para 32B salvo evidencia fuerte de cuantización, contexto bajo y rendimiento aceptable."],
-  ["APIs externas", "Flujo completo estimado: ~168k tokens input y ~6.2k output.", "Bajo", "Gemini Flash-Lite ~USD 0.019; GPT-5.4 mini ~USD 0.154 por ciclo.", "El costo LLM por API es menor que GPU/DBU; la decisión pesa más por gobierno, privacidad y calidad."],
-  ["Foundation Model Serving", "FMS abierto o propietario desde Databricks pay-per-token.", "Bajo / medio", "FMS económico ~USD 0.014; Llama 3.3 70B ~USD 0.093 por ciclo.", "Si se llama desde notebooks Databricks, sumar compute del job más costo FMS."],
-  ["Almacenamiento de datos", "Peso local observado: data cerca de 695 MB; reports cerca de 70 MB. En Azure pueden existir Delta, DBFS, Unity Catalog Volumes, ADLS, originales, procesados, temporales y versiones históricas.", "Bajo hoy; medio si crece la retención", "Menos de USD 5-50/mes si permanece bajo 100 GB; no estimable para producción sin retención y volumen real.", "No asumir almacenamiento gratis: faltan tamaño final, particiones, historial Delta, temporales, backups y política de borrado."],
-  ["Modelos y artefactos", "Checkpoints, modelo entrenado, Optuna, métricas, HTML, prompts, salidas crudas y errores.", "Bajo / medio", "USD 5-100/mes si los artefactos siguen livianos.", "Incluye MLflow, logs, resultados intermedios, imágenes, HTML y experiment tracking."],
-  ["Alojamiento de modelos", "No hay endpoints persistentes implementados para M-GCECDL ni LLM.", "Despreciable hoy; alto si se activa", "Actual: USD 0 persistente; endpoint GPU 24/7 puede pasar a miles USD/mes.", "Batch apaga recursos; serving mantiene capacidad caliente o reservada."],
-  ["Transferencia de datos y red", "No hay transferencia entre regiones ni egress productivo declarado; sí habría lecturas/escrituras contra storage cloud y descargas de modelos si se migra.", "Bajo / desconocido", "No estimable con la información actual.", "Considerar lectura/escritura Databricks-storage, egress a internet, APIs externas, descarga Hugging Face/Ollama y tráfico de endpoints."],
-  ["Logs, monitoreo y auditoría", "El proyecto guarda prompts, contextos, errores, artefactos HTML, métricas de modelo y salidas inválidas.", "Bajo / medio", "USD 5-100+/mes según retención, volumen de logs y monitoreo de endpoints.", "Faltan retención, cantidad de usuarios, linaje, auditoría, alertas, MLflow tracking y volumen histórico."],
-  ["Jobs recurrentes y orquestación", "No hay workflows programados en el repositorio; la ejecución actual es manual por notebook.", "Despreciable hoy; medio si se programa", "Mensual = costo por ejecución x frecuencia + reintentos/fallos.", "Incluir reintentos automáticos, tareas fallidas y ventanas idle entre tareas."],
-  ["Costos por clúster idle", "All-Purpose puede quedar encendido después de terminar el trabajo.", "Medio / alto", "+15 min: USD 5.34-7.75; +1 h: USD 6.04-8.76 por ejecución interactiva.", "En producción conviene Jobs Compute y auto-termination estricta."],
-  ["Embeddings e índices vectoriales", "El flujo documental implementado no usa FAISS, Chroma ni vector store; la tabla PDF se construye con fragmentos trazables y validación.", "Despreciable hoy; medio si se agregan", "Actual: USD 0 evidenciado. Futuro: no estimable sin tamaño de corpus, embeddings e índice.", "Si se agrega RAG vectorial real, incluir embeddings guardados, índices, refrescos y consultas."],
-  ["Resumen ejecutivo de rubros", "Cómputo, DBU, GPU, almacenamiento, alojamiento, APIs, transferencia, logs, jobs, endpoints e idle aparecen separados.", "Bajo / medio para batch; crítico para LLM local 32B+ 24/7", "Ajuste interactivo: USD 5-8. Producción Jobs: USD 4-6 por ejecución.", "El costo mensual requiere frecuencia de ejecuciones, usuarios, retención, endpoints activos y política de apagado."]
-];
 
-const contractCostRows = [
-  ["Transformadores", "CNT_TRF, CAPACIDAD_NOMINAL, PROMEDIO_KWH_TRF", "Instalación, reemplazo, bajantes y transporte manual de transformador.", "$109.345 - $696.655 aprox."],
-  ["Apoyos y postes", "ALTURA, VAL_CRIT_APOYO, COD_APOYO_FIN", "Marcación, retiro de apoyo de concreto y adecuación de vestida de poste.", "$24.960 - $202.370 aprox."],
-  ["Puesta a tierra", "CANTIDAD_TIERRA, DDT", "Instalación o reparación de puesta a tierra primaria, secundaria o con contrapesos.", "$118.348 - $333.116 aprox."],
-  ["Vegetación", "NR_T", "Poda en redes rurales o urbanas, con lectura de complejidad operativa.", "$166.112 - $5.131.579 aprox."],
-  ["Crucetas y red primaria", "LONG_CRUCETA, LONGITUD, CONDUCTOR, CNT_FASES", "Adecuación de crucetas, instalación por hilo y trabajos asociados a red primaria.", "$3.565 - $465.230 aprox."],
-  ["Inspección y mantenimiento", "TIPO, TIPO_TAX, CNT_VN", "Inspección, mantenimiento de redes y apoyo logístico de materiales o vehículo.", "$35.563 - $50.804 aprox."]
-];
 
-const baseColumnsExcludedFromModel = [
-  "CIRCUITO", "FID_SW", "COD_EQ_PROTEGE", "FID_VANO", "T_USUS_EQ_PROT", "LVSW",
-  "CNT_VN_SW", "FECHA", "DURACION", "UITI", "TOT_USUS", "COD_CAUSA", "DESC_CAUSA",
-  "PORC_APORTE_VANO", "X1", "Y1", "COD_APOYO_FIN", "FID_APOYO_FIN", "PROPIETARIO",
-  "CLASE", "ELEMENTO", "NORMA", "FID_TRAFO", "CODIGO", "CNT_USUS"
-];
-const climateFamiliesExcludedFromV3 = ["pres", "sp", "rh", "solar_rad", "clouds"];
 
 const etapas = [
   ["Entradas de información", "Consolidación de fuentes técnicas, históricas y económicas para alimentar el simulador."],
@@ -285,12 +85,8 @@ const cronograma = [
       <nav aria-label="Navegación principal">
         <a href="#acta">Acta</a>
         <a href="#cronograma">Cronograma</a>
-        <a href="#resultados">Metodología</a>
-        <a href="#migracion-databricks">Migración</a>
-        <a href="#arquitectura">Arquitectura</a>
-        <a href="#modelo-matematica">Modelo</a>
-        <a href="#costos-items-contratos">Costos ítems</a>
-        <a href="#costos-databricks">Costos</a>
+        <a href="#ia-criticidad">IA + Criticidad CHEC</a>
+        <a href="#costos-databricks">Costos Databricks</a>
       </nav>
     </header>
 
@@ -496,135 +292,762 @@ const cronograma = [
         </div>
       </section>
 
-      <section id="resultados" class="section results">
+      <section id="ia-criticidad" class="section results">
         <div class="section-heading">
-          <p class="eyebrow">Resultados actuales</p>
-          <h2>Metodología implementada</h2>
+          <p class="eyebrow">Lo que hay funcionando hoy</p>
+          <h2>IA + Criticidad CHEC</h2>
           <p>
-            Vista actual del flujo de trabajo del simulador de criticidad, integrando datos, agentes,
-            modelado y visualización para la toma de decisiones.
+            Cinco aplicaciones locales, un modelo predictivo entrenado, un simulador contrafactual y
+            una familia de agentes que redactan los informes. Todo corre en la máquina del usuario
+            —en <code>127.0.0.1</code>, sin publicar nada a la red— y todo se puede migrar a
+            Databricks con los comandos del final.
           </p>
         </div>
-        <figure>
-          <img src={metodologia.src} alt="Metodología actual del simulador de criticidad CHEC: datos, preparación determinista, despacho paralelo de agentes (historical, inference, auto-simulator), alineación experta, render del reporte y vault; con /reporte-lote + /informe-gerencial como síntesis multi-circuito y Flujo B hacia Databricks Apps" />
-          <figcaption>Figura de avance: metodología del simulador de criticidad CHEC, según el flujo actual del pipeline <code>/report</code>.</figcaption>
-        </figure>
+
+        <nav class="sub-nav" aria-label="Secciones de IA + Criticidad CHEC">
+          <a href="#tableros">Tableros</a>
+          <a href="#agrupamiento-temporal">Agrupamiento y análisis temporal</a>
+          <a href="#modelo-mil">Modelo IA predictiva</a>
+          <a href="#simulador">Simulador ¿Qué pasa si…?</a>
+          <a href="#agentes-informes">Agentes e informes</a>
+          <a href="#migracion-databricks">Migración Databricks</a>
+        </nav>
       </section>
 
-      <section id="despliegue" class="section cloud">
+      <section id="tableros" class="section tinted">
         <div class="section-heading">
-          <p class="eyebrow">Flujo B - Despliegue en nube CHEC</p>
-          <h2>Databricks como copia independiente, no en vivo</h2>
+          <p class="eyebrow">IA + Criticidad CHEC · 1 de 6</p>
+          <h2>Tableros</h2>
           <p>
-            Databricks recibe una copia de los datos que consumen los cuadernos <code>01</code>-<code>06</code>
-            y el comando <code>/report</code>, y publica esos cuadernos como Databricks Apps con URL fija.
-            No crea tablas Delta, vistas ni dashboards: el stack Lakeview se retiró porque no ejecuta Python
-            ni JS arbitrario, y por tanto nunca pudo mostrar el análisis real de los cuadernos. No comparte
-            runtime ni credenciales con el pipeline local: un cambio local no se refleja en Databricks hasta
-            que se vuelve a correr el despliegue.
+            Cuatro visores y un simulador, cada uno con su propio entorno y su puerto fijo, gobernados
+            por el menú <strong>CriticidadCHEC</strong>. Los cuatro visores se congelan en HTML estático
+            y abren en menos de un segundo; el simulador necesita un intérprete vivo. Los pantallazos de
+            abajo son capturas reales de cada tablero servido, con sus gráficas cargadas.
           </p>
-        </div>
-
-        <div class="cloud-layout">
-          <div class="cloud-copy">
-            <a class="cloud-link" href="https://www.databricks.com/" target="_blank" rel="noreferrer">
-              Ir a Databricks
-            </a>
-            <a class="cloud-link secondary-cloud-link" href="#costos-databricks">
-              Ver estimación de costos
-            </a>
-            <div class="cloud-items">
-              <article>
-                <h3>4 comandos cooperan</h3>
-                <p>Todos en <code>.claude/commands/</code>, reutilizando por referencia cruzada la misma resolución de perfil CLI / SQL warehouse, nunca duplicada. Detalle completo en <a href="#migracion-databricks">#migracion-databricks</a>.</p>
-              </article>
-              <article>
-                <h3>5 objetos de datos reproducibles</h3>
-                <p>3 tablas Delta + 2 vistas, todas reconstruibles desde este repo: sin prerrequisito externo sin ETL.</p>
-              </article>
-              <article>
-                <h3>Regla dura: nada de site/</h3>
-                <p>Ninguno de los 4 comandos crea una ruta <code>site/</code> en el Volume. La web del proyecto solo se regenera con una corrida local.</p>
-              </article>
-            </div>
-          </div>
-          <div class="cloud-visuals" aria-label="Referencias visuales de Databricks">
-            <img class="databricks-mark" src={databricksLogo.src} alt="Logo Databricks" />
-            <img
-              class="engine-figure"
-              src={dataIntelligenceEngine.src}
-              alt="Esquema Data Intelligence Engine de Databricks"
-            />
-          </div>
         </div>
 
         <div class="table-wrap compact-table">
           <table>
-            <thead><tr><th>Objeto</th><th>Tipo</th><th>Origen</th></tr></thead>
+            <thead><tr><th>Tablero</th><th>Puerto</th><th>Cómo corre</th></tr></thead>
             <tbody>
-              {databricksDataObjectRows.map(([objeto, tipo, origen]) => (
-                <tr><td><code>{objeto}</code></td><td>{tipo}</td><td>{origen}</td></tr>
-              ))}
+              <tr><td>CriticidadCHEC (menú)</td><td><code>8800</code></td><td>Servidor de control; abre y apaga a los demás</td></tr>
+              <tr><td>Nube por vano y clima</td><td><code>8801</code></td><td>HTML congelado</td></tr>
+              <tr><td>Agrupamiento de vanos</td><td><code>8802</code></td><td>HTML congelado</td></tr>
+              <tr><td>Trayectorias de circuitos</td><td><code>8803</code></td><td>HTML congelado</td></tr>
+              <tr><td>Trayectorias de vanos</td><td><code>8804</code></td><td>HTML congelado</td></tr>
+              <tr><td>Simulador ¿Qué pasa si…?</td><td><code>8866</code></td><td>Voila + kernel de Python vivo</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <article class="tablero-card" id="tablero-clima">
+          <h3>Nube por vano y clima</h3>
+          <figure class="shot">
+            <img src={tableroClima.src} alt="Tablero de nube por vano y clima, con el mapa del circuito DON23L13 y las gráficas cargadas" loading="lazy" />
+            <figcaption>Circuito DON23L13 — 79 días con eventos entre 2025-11-01 y 2026-04-30.</figcaption>
+          </figure>
+          <ul class="func-list">
+            <li><strong>Mapa del circuito con el UITI diario por vano</strong>, con cortes de criticidad fijos e iguales para todos los circuitos (Bajo, Medio, Medio-Alto, Alto), más transformadores e interruptores.</li>
+            <li><strong>Nube de la variable climática elegida</strong> superpuesta al mapa: precipitación, temperatura, viento, ráfaga, descargas o vegetación, con su propia escala.</li>
+            <li><strong>Dos deslizadores</strong>: el día —solo los que tuvieron eventos— y las horas <em>antes</em> del evento, para mirar la condición previa y no solo la del momento.</li>
+            <li><strong>UITI del día contra la mediana de la variable elegida</strong> a lo largo de todo el periodo, en dos ejes.</li>
+            <li><strong>Violines de las 12 horas previas</strong>: lluvia y temperatura, viento y ráfaga, vegetación y descargas.</li>
+          </ul>
+
+          <h4>Capturar datos nuevos de clima</h4>
+          <p>
+            El clima no se descarga solo: se pide con el comando <code>/clima</code>, que consulta
+            Open-Meteo y tiene <strong>tres compuertas bloqueantes</strong> antes de gastar cuota. La API key
+            del modo pago la escribe el usuario, vive solo en memoria y nunca se guarda.
+          </p>
+          <div class="table-wrap compact-table">
+            <table>
+              <thead><tr><th>Paso</th><th>Qué decide</th><th>Detalle</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Modo</strong></td><td>A o B</td><td><strong>A</strong> reescribe <code>data/Indicadores_vano_v3.csv</code> con coordenadas <code>X1</code>/<code>Y1</code>. <strong>B</strong> toma cualquier tabla de <code>data/</code>, con <code>XPOS1_RED_BASE</code>/<code>YPOS1_RED_AFECTA</code>, y deja un CSV nuevo.</td></tr>
+                <tr><td><strong>Compuerta 1</strong></td><td>Ubicaciones</td><td>Va primero y es bloqueante: sin coordenadas válidas no se sigue. Se resuelve con <code>a_gate1()</code> o <code>b_gate1(archivo)</code>.</td></tr>
+                <tr><td><strong>Compuerta 2</strong></td><td>API gratuita o paga</td><td>La gratuita no pide nada. La paga pide la <code>apikey</code> al usuario, en el momento; no se persiste ni se registra en ningún log.</td></tr>
+                <tr><td><strong>Compuerta 3</strong></td><td>Límites de cuota</td><td>Compara las llamadas necesarias contra el presupuesto disponible <em>antes</em> de empezar. Si no alcanza, se detiene y lo dice.</td></tr>
+                <tr><td><strong>Salida</strong></td><td>Dónde queda</td><td>Modo A: el mismo v3. Modo B: <code>data/clima_&lt;fuente&gt;_&lt;ini&gt;_a_&lt;fin&gt;.csv</code>. El registro de consumo va aparte, a <code>.clima_cache/</code>.</td></tr>
+                <tr><td><strong>Unificar</strong></td><td>Concatenar corridas</td><td>Solo entre archivos con el <strong>mismo</strong> <code>origen_id</code>: mezclar orígenes distintos produce una tabla que parece válida y no lo es.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="tablero-card" id="tablero-agrupamiento">
+          <h3>Agrupamiento de vanos</h3>
+          <figure class="shot">
+            <img src={tableroAgrupamiento.src} alt="Tablero de agrupamiento de vanos con los cuatro grupos de criticidad y el ranking de circuitos" loading="lazy" />
+            <figcaption>27.390 vanos con eventos entre 2025-11 y 2026-04; K-Means con k=4.</figcaption>
+          </figure>
+          <ul class="func-list">
+            <li><strong>K-Means (k=4) sobre el par (UITI acumulado, número de eventos)</strong> de cada vano. Los grupos se <em>nombran</em> por el ranking de la mediana del UITI —Bajo, Medio, Medio-Alto, Alto—, nunca por el índice que devuelve el algoritmo.</li>
+            <li><strong>Rango de fechas ajustable</strong>, redondeado a meses completos, con descarga de las etiquetas resultantes a Excel.</li>
+            <li><strong>Reparto por grupo y distribución del UITI</strong>: 4.189 Bajo (15,3 %), 11.449 Medio (41,8 %), 10.314 Medio-Alto (37,7 %) y 1.438 Alto (5,3 %).</li>
+            <li><strong>Top 10 de circuitos</strong> por porcentaje de vanos en Medio-Alto + Alto.</li>
+            <li><strong>Ranking de los 208 circuitos</strong> por número de vanos Medio-Alto + Alto — el que define el grupo de criticidad del circuito, y el insumo del modelo predictivo.</li>
+          </ul>
+        </article>
+
+        <article class="tablero-card" id="tablero-trayectorias-circuitos">
+          <h3>Trayectorias de circuitos</h3>
+          <figure class="shot">
+            <img src={tableroTrayCircuitos.src} alt="Tablero de trayectorias de circuitos con ventana deslizante y mapa" loading="lazy" />
+            <figcaption>Circuito AGU23L12 — 6 de 11 ventanas con eventos.</figcaption>
+          </figure>
+          <ul class="func-list">
+            <li><strong>Cada punto es un par circuito × ventana</strong>, no un circuito: el mismo circuito aparece tantas veces como ventanas tenga, y así se ve por dónde se mueve en el tiempo.</li>
+            <li><strong>Ventana deslizante</strong> sobre las 11 ventanas del periodo, con las fechas exactas a la vista.</li>
+            <li><strong>Mapa del circuito con el UITI del vano en la ventana activa</strong>, con los mismos cortes fijos para todos los circuitos.</li>
+            <li><strong>Trayectoria del circuito</strong> a lo largo de las ventanas, coloreada por el grupo de cada momento: se ve cuándo salta de grupo y cuándo vuelve.</li>
+            <li><strong>Muestras, UITI y eventos por grupo</strong> para leer la trayectoria contra la población entera.</li>
+          </ul>
+        </article>
+
+        <article class="tablero-card" id="tablero-trayectorias-vanos">
+          <h3>Trayectorias de vanos</h3>
+          <figure class="shot">
+            <img src={tableroTrayVanos.src} alt="Tablero de trayectorias de vanos con la selección por casillas y el perfil del circuito" loading="lazy" />
+            <figcaption>Circuito AGU23L12 — 15 de 47 vanos marcados, que concentran el 88,3 % del UITI.</figcaption>
+          </figure>
+          <ul class="func-list">
+            <li><strong>Cada punto es un par vano × ventana</strong>, con el K-Means ajustado <em>una sola vez</em> sobre todas las celdas: los cortes no se recalculan al cambiar de circuito, así que dos circuitos son comparables.</li>
+            <li><strong>Selección de vanos por casillas</strong>, con <em>Marcar todos</em> y <em>Desmarcar</em>; lo marcado manda en todos los paneles a la vez.</li>
+            <li><strong>Perfil del circuito</strong>: cuánto del UITI del periodo concentran los vanos marcados —en el ejemplo, 15 de 47 vanos explican el 88,3 %—.</li>
+            <li><strong>Evolución por vano</strong> con UITI y número de eventos superpuestos, ventana a ventana.</li>
+            <li><strong>Es un insumo, no solo un visor</strong>: la geometría que produce este tablero es la que consume después el cálculo de criticidad.</li>
+          </ul>
+        </article>
+      </section>
+
+      <section id="agrupamiento-temporal" class="section">
+        <div class="section-heading">
+          <p class="eyebrow">IA + Criticidad CHEC · 2 de 6</p>
+          <h2>Agrupamiento de vanos y análisis temporal</h2>
+          <p>
+            De dónde sale la etiqueta de criticidad. No es un umbral escrito a mano: sale de agrupar los
+            vanos por su comportamiento observado, y de ordenar después los circuitos por cuántos vanos
+            críticos acumulan. Esa etiqueta es lo que el modelo predictivo aprende a anticipar.
+          </p>
+        </div>
+
+        <figure class="shot wide">
+          <img src={tableroAgrupamiento.src} alt="Agrupamiento de vanos: reparto por grupo, espacio UITI contra eventos, top 10 de circuitos y ranking de los 208" loading="lazy" />
+          <figcaption>El mismo tablero, leído como método: los cinco paneles son los cinco pasos.</figcaption>
+        </figure>
+
+        <div class="diagram-card">
+          <h3>De vano a grupo de circuito, en cuatro pasos</h3>
+          <svg viewBox="0 0 960 250" role="img" aria-label="Cadena: vanos, K-Means, nombrado por mediana, ranking de circuitos" class="diagrama">
+            <defs>
+              <marker id="fl" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+                <path d="M0,0 L9,4.5 L0,9 z" fill="#5f6f77" />
+              </marker>
+            </defs>
+            <g font-family="Inter, sans-serif" font-size="13">
+              <rect x="8" y="60" width="200" height="118" rx="12" fill="#ffffff" stroke="#dce7e4" />
+              <text x="108" y="88" text-anchor="middle" font-weight="700" fill="#102129">1 · Celda vano × ventana</text>
+              <text x="108" y="112" text-anchor="middle" fill="#5f6f77">27.390 vanos con eventos</text>
+              <text x="108" y="132" text-anchor="middle" fill="#5f6f77">UITI acumulado</text>
+              <text x="108" y="152" text-anchor="middle" fill="#5f6f77">Número de eventos</text>
+
+              <line x1="212" y1="119" x2="244" y2="119" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fl)" />
+
+              <rect x="250" y="60" width="200" height="118" rx="12" fill="#ffffff" stroke="#dce7e4" />
+              <text x="350" y="88" text-anchor="middle" font-weight="700" fill="#102129">2 · K-Means, k = 4</text>
+              <text x="350" y="112" text-anchor="middle" fill="#5f6f77">Sobre ese plano de dos ejes</text>
+              <text x="350" y="132" text-anchor="middle" fill="#5f6f77">Devuelve 4 etiquetas</text>
+              <text x="350" y="152" text-anchor="middle" fill="#b8860b">sin orden propio</text>
+
+              <line x1="454" y1="119" x2="486" y2="119" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fl)" />
+
+              <rect x="492" y="60" width="212" height="118" rx="12" fill="#ffffff" stroke="#dce7e4" />
+              <text x="598" y="88" text-anchor="middle" font-weight="700" fill="#102129">3 · Nombrado por mediana</text>
+              <text x="598" y="112" text-anchor="middle" fill="#5f6f77">Se ordenan los 4 grupos por la</text>
+              <text x="598" y="132" text-anchor="middle" fill="#5f6f77">mediana de su UITI acumulado</text>
+              <text x="598" y="154" text-anchor="middle" fill="#007a53" font-weight="600">Bajo · Medio · Medio-Alto · Alto</text>
+
+              <line x1="708" y1="119" x2="740" y2="119" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fl)" />
+
+              <rect x="746" y="60" width="206" height="118" rx="12" fill="#f3f8f6" stroke="#007a53" />
+              <text x="849" y="88" text-anchor="middle" font-weight="700" fill="#005c45">4 · Ranking de circuitos</text>
+              <text x="849" y="112" text-anchor="middle" fill="#5f6f77">208 circuitos ordenados por</text>
+              <text x="849" y="132" text-anchor="middle" fill="#5f6f77">vanos Medio-Alto + Alto</text>
+              <text x="849" y="154" text-anchor="middle" fill="#0b5f8a" font-weight="600">insumo del modelo MIL</text>
+
+              <text x="480" y="216" text-anchor="middle" fill="#5f6f77" font-size="12.5">
+                104 circuitos en Riesgo Bajo · 53 Medio · 44 Medio-Alto · 7 Alto · 24 sin ningún vano Medio-Alto ni Alto
+              </text>
+            </g>
+          </svg>
+        </div>
+
+        <div class="process-grid">
+          <article>
+            <strong>Por qué el nombre no lo pone el algoritmo</strong>
+            <p>
+              K-Means numera sus grupos por el orden en que inicializa los centroides, que cambia entre
+              corridas. Si la etiqueta «Alto» viniera de ahí, el mismo vano cambiaría de grupo sin que
+              cambiara ni un dato. El nombre se asigna después, ordenando los cuatro grupos por la mediana
+              de su UITI acumulado: eso sí es estable y sí significa algo.
+            </p>
+          </article>
+          <article>
+            <strong>Por qué el circuito se ordena por conteo y no por promedio</strong>
+            <p>
+              Un promedio de UITI hunde a un circuito grande con muchos vanos tranquilos y un puñado
+              críticos —que es justo el caso que hay que atender—. El ranking cuenta <em>cuántos</em> vanos
+              caen en Medio-Alto y Alto, que es la carga real de trabajo en campo.
+            </p>
+          </article>
+          <article>
+            <strong>El eje temporal: ventanas, no un solo corte</strong>
+            <p>
+              El periodo se parte en ventanas y cada vano aparece una vez por ventana. Así el agrupamiento
+              deja de ser una foto y pasa a ser una trayectoria: se ve cuándo un vano entra a Alto, cuánto
+              se queda y si vuelve a bajar. Las ventanas <strong>se traslapan</strong>, así que el UITI
+              acumulado no se suma sobre ellas.
+            </p>
+          </article>
+          <article>
+            <strong>Un solo vocabulario</strong>
+            <p>
+              Hubo dos formas distintas de decir «grupo de circuito» —la del K-Means y la del ranking—,
+              que sobre «Riesgo Alto» coincidían en apenas 3 circuitos de 16 y 7. Hoy están unificadas: el
+              grupo del circuito es el del ranking, y es el único que viaja al modelo y a los informes.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section id="modelo-mil" class="section tinted">
+        <div class="section-heading">
+          <p class="eyebrow">IA + Criticidad CHEC · 3 de 6</p>
+          <h2>Modelo de IA predictiva — MIL sobre bolsas vano × ventana</h2>
+          <p>
+            El modelo no predice un vano: predice una <strong>bolsa</strong>. Una bolsa es un par
+            vano × ventana, y dentro lleva todas las instancias observadas de ese vano en esa ventana.
+            Es <em>Multiple Instance Learning</em>: la etiqueta existe a nivel de bolsa —el UITI acumulado y
+            su grupo de criticidad—, mientras que las variables se observan a nivel de instancia. El
+            artefacto entrenado es <code>data/models/mil_vano_ventana_v1.pt</code>.
+          </p>
+        </div>
+
+        <div class="diagram-card">
+          <h3>Principio del modelo: entrenamiento e inferencia</h3>
+          <svg viewBox="0 0 980 640" role="img" aria-label="Diagrama del modelo MIL: insumos, bolsas, codificador, fusión FiLM, atención, cabeza de bolsa, asignación de clase, grafo de restricción física y función de costo" class="diagrama">
+            <defs>
+              <marker id="fm" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+                <path d="M0,0 L9,4.5 L0,9 z" fill="#5f6f77" />
+              </marker>
+              <marker id="fmg" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+                <path d="M0,0 L9,4.5 L0,9 z" fill="#0b5f8a" />
+              </marker>
+            </defs>
+            <g font-family="Inter, sans-serif" font-size="12.5">
+
+              <text x="24" y="26" font-size="13" font-weight="700" fill="#005c45">INSUMOS · 80 columnas por instancia</text>
+
+              <rect x="16" y="38" width="216" height="76" rx="10" fill="#ffffff" stroke="#dce7e4" />
+              <text x="30" y="60" font-weight="700" fill="#102129">Estructurales del vano</text>
+              <text x="30" y="79" fill="#5f6f77">CONDUCTOR, TIPO, CALIBRE_NEUTRO,</text>
+              <text x="30" y="95" fill="#5f6f77">NG_RED, ALTURA, VAL_CRIT_APOYO…</text>
+              <text x="30" y="108" fill="#0b5f8a" font-size="11">numéricas · categóricas</text>
+
+              <rect x="16" y="124" width="216" height="76" rx="10" fill="#ffffff" stroke="#dce7e4" />
+              <text x="30" y="146" font-weight="700" fill="#102129">Climáticas, con 12 rezagos</text>
+              <text x="30" y="165" fill="#5f6f77">Precipitación, temperatura, viento,</text>
+              <text x="30" y="181" fill="#5f6f77">ráfaga, DDT (descargas)</text>
+              <text x="30" y="194" fill="#0b5f8a" font-size="11">series numéricas (12 lags)</text>
+
+              <rect x="16" y="210" width="216" height="76" rx="10" fill="#ffffff" stroke="#dce7e4" />
+              <text x="30" y="232" font-weight="700" fill="#102129">Del evento</text>
+              <text x="30" y="251" fill="#5f6f77">COD_CAUSA codificado + su</text>
+              <text x="30" y="267" fill="#5f6f77">frecuencia relativa y 9 indicadores</text>
+              <text x="30" y="280" fill="#0b5f8a" font-size="11">categórica de alta cardinalidad</text>
+
+              <line x1="236" y1="162" x2="276" y2="162" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fm)" />
+
+              <rect x="282" y="112" width="176" height="100" rx="10" fill="#f3f8f6" stroke="#007a53" />
+              <text x="370" y="136" text-anchor="middle" font-weight="700" fill="#005c45">Bolsa = vano × ventana</text>
+              <text x="370" y="158" text-anchor="middle" fill="#5f6f77">n instancias observadas</text>
+              <text x="370" y="176" text-anchor="middle" fill="#5f6f77">Etiqueta: UITI acumulado</text>
+              <text x="370" y="196" text-anchor="middle" fill="#5f6f77" font-size="11">62.114 bolsas en la CV agrupada</text>
+
+              <line x1="462" y1="162" x2="500" y2="162" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fm)" />
+
+              <rect x="506" y="98" width="180" height="42" rx="9" fill="#ffffff" stroke="#dce7e4" />
+              <text x="596" y="124" text-anchor="middle" fill="#102129">Codificador de instancia</text>
+
+              <line x1="596" y1="144" x2="596" y2="160" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fm)" />
+
+              <rect x="506" y="166" width="180" height="42" rx="9" fill="#ffffff" stroke="#0b5f8a" />
+              <text x="596" y="185" text-anchor="middle" fill="#0b5f8a" font-weight="700">Fusión FiLM</text>
+              <text x="596" y="201" text-anchor="middle" fill="#5f6f77" font-size="11">una modalidad modula a la otra</text>
+
+              <line x1="596" y1="212" x2="596" y2="228" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fm)" />
+
+              <rect x="506" y="234" width="180" height="42" rx="9" fill="#ffffff" stroke="#dce7e4" />
+              <text x="596" y="253" text-anchor="middle" fill="#102129">Atención sobre instancias</text>
+              <text x="596" y="269" text-anchor="middle" fill="#5f6f77" font-size="10.5">agrega la bolsa y dice qué pesó</text>
+
+              <line x1="596" y1="280" x2="596" y2="296" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fm)" />
+
+              <rect x="506" y="302" width="180" height="40" rx="9" fill="#ffffff" stroke="#dce7e4" />
+              <text x="596" y="327" text-anchor="middle" fill="#102129">Cabeza de bolsa → û</text>
+
+              <line x1="690" y1="322" x2="726" y2="322" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fm)" />
+
+              <rect x="732" y="284" width="232" height="78" rx="10" fill="#f3f8f6" stroke="#007a53" />
+              <text x="848" y="308" text-anchor="middle" font-weight="700" fill="#005c45" font-size="12">asignar_clase(n_obs, û, geometría)</text>
+              <text x="848" y="329" text-anchor="middle" fill="#5f6f77">La clase NO sale de la red: sale de</text>
+              <text x="848" y="347" text-anchor="middle" fill="#5f6f77" font-size="11">caer en la geometría K-Means congelada</text>
+
+              <rect x="732" y="374" width="232" height="52" rx="10" fill="#ffffff" stroke="#dce7e4" />
+              <text x="848" y="396" text-anchor="middle" font-weight="700" fill="#102129">Bajo · Medio · Medio-Alto · Alto</text>
+              <text x="848" y="415" text-anchor="middle" fill="#5f6f77" font-size="11">macro-F1 0,871 en CV agrupada</text>
+              <line x1="848" y1="364" x2="848" y2="370" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fm)" />
+
+              <rect x="732" y="60" width="232" height="140" rx="10" fill="#ffffff" stroke="#0b5f8a" stroke-dasharray="5 4" />
+              <text x="848" y="84" text-anchor="middle" font-weight="700" fill="#0b5f8a">Grafo de restricción física</text>
+              <text x="848" y="106" text-anchor="middle" fill="#5f6f77">Nodos: las variables del vano</text>
+              <text x="848" y="124" text-anchor="middle" fill="#5f6f77" font-size="11.5">Aristas: relación físico-eléctrica</text>
+              <text x="848" y="142" text-anchor="middle" fill="#5f6f77" font-size="11.5">conocida (no aprendida de los datos)</text>
+              <text x="848" y="166" text-anchor="middle" fill="#102129">Se construye en código y viaja</text>
+              <text x="848" y="184" text-anchor="middle" fill="#102129">DENTRO del <tspan font-family="monospace">.pt</tspan></text>
+
+              <path d="M732,150 C700,150 700,180 690,186" fill="none" stroke="#0b5f8a" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#fmg)" />
+              <text x="700" y="238" text-anchor="end" fill="#0b5f8a" font-size="11">regulariza</text>
+
+              <rect x="16" y="452" width="948" height="170" rx="12" fill="#ffffff" stroke="#dce7e4" />
+              <text x="34" y="478" font-weight="700" fill="#102129">Función de costo — seis términos, con sus pesos reales</text>
+              <text x="34" y="504" fill="#0b5f8a" font-family="monospace" font-size="12">L = λ_sup · L_sup + λ_rec · L_rec + λ_mi · L_mi + λ_gate · L_gate + λ_mod · L_mod + λ_clase · L_clase</text>
+
+              <text x="34" y="532" fill="#102129" font-weight="600">λ_sup = 1,0</text>
+              <text x="150" y="532" fill="#5f6f77">MSE ponderado por densidad kernel entre la predicción de bolsa y el UITI observado</text>
+              <text x="34" y="552" fill="#102129" font-weight="600">λ_rec = 0,01</text>
+              <text x="150" y="552" fill="#5f6f77">Reconstrucción del grafo: castiga alejarse de la estructura física conocida</text>
+              <text x="34" y="572" fill="#102129" font-weight="600">λ_mi = 0,01</text>
+              <text x="150" y="572" fill="#5f6f77">Información mutua entre modalidades: evita que una module a la otra a ciegas</text>
+              <text x="34" y="592" fill="#102129" font-weight="600">λ_clase = 1,0</text>
+              <text x="150" y="592" fill="#5f6f77">Sustituto diferenciable de la asignación de clase, con temperatura 0,01</text>
+              <text x="34" y="612" fill="#8a8a8a" font-weight="600">λ_gate = λ_mod = 0</text>
+              <text x="180" y="612" fill="#8a8a8a">Apagados hoy: se dejan declarados, no probados inertes</text>
+            </g>
+          </svg>
+        </div>
+
+        <div class="two-col">
+          <div>
+            <h3>Los tipos de variable que entran</h3>
+            <div class="table-wrap compact-table">
+              <table>
+                <thead><tr><th>Familia</th><th>Tipo</th><th>Ejemplos</th></tr></thead>
+                <tbody>
+                  <tr><td>Estructural del vano</td><td>Numérica</td><td><code>ALTURA</code>, <code>CNT_FASES</code>, <code>LONG_CRUCETA</code>, <code>VAL_CRIT_APOYO</code>, <code>CANTIDAD_TIERRA</code></td></tr>
+                  <tr><td>Estructural del vano</td><td>Categórica</td><td><code>CONDUCTOR</code>, <code>TIPO</code>, <code>CALIBRE_NEUTRO</code>, <code>NG_RED</code>, <code>TIPO_TAX</code></td></tr>
+                  <tr><td>Transformador</td><td>Numérica</td><td><code>CAPACIDAD_NOMINAL</code>, <code>PROMEDIO_KWH_TRF</code>, <code>CNT_TRF</code></td></tr>
+                  <tr><td>Topología</td><td>Numérica</td><td><code>CNT_VN</code> (vanos hasta el equipo que protege)</td></tr>
+                  <tr><td>Entorno</td><td>Numérica</td><td><code>NR_T</code> (riesgo por vegetación)</td></tr>
+                  <tr><td>Clima</td><td>Serie, 12 rezagos</td><td>Precipitación, temperatura, viento, ráfaga, <code>DDT</code></td></tr>
+                  <tr><td>Evento</td><td>Categórica codificada</td><td><code>COD_CAUSA</code> + frecuencia relativa + 9 indicadores</td></tr>
+                  <tr><td>Espacio-tiempo</td><td>Coordenada / fecha</td><td><code>X2</code>, <code>Y2</code>, <code>FECHA_OPERACION_VANO</code></td></tr>
+                  <tr><td><strong>Objetivo</strong></td><td>Numérica por bolsa</td><td><code>UITI_VANO</code> acumulado en la ventana</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="note-callout">
+              <strong>80 columnas, no 70.</strong> El modelo corre sobre una matriz que incluye la frecuencia
+              de <code>COD_CAUSA</code> y sus 9 indicadores. Pasarle las 70 crudas <em>no lanza error</em>:
+              puntúa columnas distintas y devuelve un mapa creíble y falso. Por eso el cargador verifica los
+              nombres de las columnas y rechaza la matriz que no corresponde.
+            </p>
+          </div>
+
+          <div>
+            <h3>Cómo se usa en datos nuevos</h3>
+            <ol class="pasos">
+              <li>Se arma la matriz de instancias con el <em>mismo</em> codificador de <code>COD_CAUSA</code> del entrenamiento.</li>
+              <li>Se carga el <code>.pt</code>, que trae los pesos, el grafo físico y la geometría K-Means congelada.</li>
+              <li>Cada fila entra como <strong>bolsa unitaria con <code>n_obs = 1</code></strong>, que es lo correcto al puntuar eventos individuales.</li>
+              <li>La red devuelve û; la clase la decide después <code>asignar_clase</code> cayendo en la geometría.</li>
+              <li>La atención deja además, por bolsa, <strong>qué variables pesaron</strong> — eso es lo que alimenta el diagnóstico del simulador.</li>
+            </ol>
+            <p class="note-callout warn">
+              <strong>Una advertencia de honestidad.</strong> La barra pre-registrada para este modelo era
+              superar en 5 puntos a la mejor línea base. No se cumplió: macro-F1 <strong>0,871</strong> contra
+              <strong>0,881</strong> de un Random Forest estructural, es decir <strong>−1,02 puntos</strong>.
+              Lo que el MIL sí aporta y el Random Forest no es la <em>estructura</em>: atención por instancia,
+              grafo físico como regularizador y una salida que el simulador puede interrogar variable por
+              variable. Ninguna clase queda abandonada y el error es casi siempre de vecino inmediato:
+              confundir Bajo con Alto ocurre 1 vez de cada 13.323.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="simulador" class="section">
+        <div class="section-heading">
+          <p class="eyebrow">IA + Criticidad CHEC · 4 de 6</p>
+          <h2>Simulador ¿Qué pasa si…?</h2>
+          <p>
+            El único tablero con un intérprete vivo detrás, porque cada simulación vuelve a llamar al
+            modelo. Se elige un circuito y una ventana, se marcan vanos, se pregunta qué hacer, se mueve
+            lo que se quiera mover y se compara la criticidad observada contra la simulada — con el costo
+            de la intervención al lado.
+          </p>
+        </div>
+
+        <figure class="shot wide">
+          <img src={simuladorMapas.src} alt="Simulador corriendo sobre el circuito INS23L13: panel de control, mapas de criticidad original y simulada" loading="lazy" />
+          <figcaption>
+            Circuito INS23L13, ventana V11 (2026-04-01 a 2026-04-30). 34 vanos del grupo Medio-Alto
+            marcados con un solo botón, diagnosticados, con la intervención sugerida aplicada y ya simulados.
+          </figcaption>
+        </figure>
+
+        <ol class="func-list numbered">
+          <li><strong>Marcar los vanos de tres maneras, y todas suman.</strong> Un botón por grupo de criticidad —<em>G. Alto</em>, <em>G. Medio-Alto</em>, <em>G. Medio</em>, <em>G. Bajo</em>— marca los de ese grupo <em>en la ventana fijada</em>; también se marca casilla por casilla, o pulsando el vano sobre el mapa. Pulsar un grupo y luego otro no desmarca nada: el único botón que quita es <em>Desmarcar</em>. Debajo siempre queda dicho cuántos vanos hay en ese grupo y esa ventana, con la fecha.</li>
+          <li><strong>El diagnóstico estudia exactamente lo marcado, y solo eso.</strong> Sin nada marcado toma los 15 de mayor UITI de la ventana. Marcar acota la pregunta, no la siembra — y si quedan vanos con eventos fuera de la selección, lo dice y ofrece incluirlos.</li>
+          <li><strong>Devuelve dos listas ordenadas por caída media del UITI.</strong> <em>Intervención — qué HACER</em> y <em>Escenario — bajo qué CONDICIONES</em>, cada renglón con el valor sugerido y cuánto baja el UITI en promedio. Cuando una sola variable basta para cambiar de grupo en algún vano, lo señala.</li>
+          <li><strong>Aplicar lo sugerido abre los controles ya puestos.</strong> Un botón por mitad: se puede simular solo la intervención, solo el escenario, o las dos. En el ejemplo, 34 vanos abrieron 374 controles en su valor sugerido.</li>
+          <li><strong>Y todo se puede mover a mano.</strong> Cada vano marcado tiene su panel con sus variables; cada control abre en el valor actual de ese vano en la ventana activa —mediana de sus instancias, moda si es categórica—, no en un valor genérico.</li>
+          <li><strong>Los costos se asocian a mano, actividad por actividad.</strong> El catálogo del contrato trae 142 actividades con su costo unitario. Lo que se marque aparece como una fila bajo <em>cada</em> vano marcado, con su cantidad; el tablero multiplica y acumula, pero <strong>no decide</strong> qué actividad corresponde a qué cambio de variable.</li>
+          <li><strong>Simular vuelve a llamar al modelo y compara.</strong> Dos mapas lado a lado —<em>Criticidad Original</em> y <em>Criticidad Simulada</em>—, el UITI medido contra el simulado por vano y para todo el circuito, el top 10 de lo que baja el UITI en cada vano, el costo por vano y el costo acumulado.</li>
+          <li><strong>Sin tope.</strong> Diagnóstico, aplicación e informes cubren <em>todos</em> los vanos marcados, sean 3 o sean 407. El caso más grande medido —circuito DON23L13, 407 vanos— marca en 4,0 s, diagnostica en 2,8 s y aplica en 5,8 s abriendo 4.477 controles.</li>
+        </ol>
+
+        <figure class="shot wide">
+          <img src={simuladorResultados.src} alt="Resultados del simulador: UITI medido contra simulado, costo de la intervención, costo acumulado y grafo de relaciones" loading="lazy" />
+          <figcaption>
+            Los mismos 34 vanos: medido contra simulado, costo por vano, costo acumulado
+            (369.703.635 COP) y el grafo de relaciones relevantes de esta simulación.
+          </figcaption>
+        </figure>
+
+        <div class="diagram-card">
+          <h3>Cómo se usa el MIL entrenado para simular: grafo de diferencias y sensibilidad</h3>
+          <svg viewBox="0 0 980 400" role="img" aria-label="Diagrama de simulación: estado observado y contrafactual pasan por el mismo modelo, la diferencia produce el grafo de diferencias y el análisis de sensibilidad" class="diagrama">
+            <defs>
+              <marker id="fs" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+                <path d="M0,0 L9,4.5 L0,9 z" fill="#5f6f77" />
+              </marker>
+            </defs>
+            <g font-family="Inter, sans-serif" font-size="12.5">
+              <rect x="12" y="46" width="196" height="72" rx="10" fill="#ffffff" stroke="#dce7e4" />
+              <text x="110" y="72" text-anchor="middle" font-weight="700" fill="#102129">Estado observado</text>
+              <text x="110" y="92" text-anchor="middle" fill="#5f6f77">El vano tal como está</text>
+              <text x="110" y="109" text-anchor="middle" fill="#5f6f77">en la ventana activa</text>
+
+              <rect x="12" y="192" width="196" height="88" rx="10" fill="#f3f8f6" stroke="#007a53" />
+              <text x="110" y="218" text-anchor="middle" font-weight="700" fill="#005c45">Estado contrafactual</text>
+              <text x="110" y="238" text-anchor="middle" fill="#5f6f77">El mismo vano con las</text>
+              <text x="110" y="255" text-anchor="middle" fill="#5f6f77">variables movidas por el</text>
+              <text x="110" y="272" text-anchor="middle" fill="#5f6f77">usuario o por la sugerencia</text>
+
+              <rect x="268" y="106" width="180" height="110" rx="10" fill="#ffffff" stroke="#0b5f8a" />
+              <text x="358" y="140" text-anchor="middle" font-weight="700" fill="#0b5f8a">MIL entrenado</text>
+              <text x="358" y="162" text-anchor="middle" fill="#5f6f77">El MISMO modelo,</text>
+              <text x="358" y="179" text-anchor="middle" fill="#5f6f77">los MISMOS pesos,</text>
+              <text x="358" y="196" text-anchor="middle" fill="#5f6f77">sin reentrenar nada</text>
+
+              <path d="M212,82 C245,82 240,140 264,148" fill="none" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fs)" />
+              <path d="M212,236 C245,236 240,182 264,174" fill="none" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fs)" />
+
+              <rect x="504" y="106" width="164" height="110" rx="10" fill="#ffffff" stroke="#dce7e4" />
+              <text x="586" y="136" text-anchor="middle" font-weight="700" fill="#102129">Diferencia</text>
+              <text x="586" y="158" text-anchor="middle" fill="#5f6f77">û simulado − û observado</text>
+              <text x="586" y="178" text-anchor="middle" fill="#5f6f77">por vano y por variable</text>
+              <text x="586" y="200" text-anchor="middle" fill="#5f6f77">y el cambio de grupo</text>
+              <line x1="452" y1="161" x2="500" y2="161" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fs)" />
+
+              <rect x="724" y="36" width="244" height="106" rx="10" fill="#f3f8f6" stroke="#007a53" />
+              <text x="846" y="62" text-anchor="middle" font-weight="700" fill="#005c45">Grafo de diferencias</text>
+              <text x="846" y="84" text-anchor="middle" fill="#5f6f77">Sobre el grafo físico, se resaltan</text>
+              <text x="846" y="102" text-anchor="middle" fill="#5f6f77">las aristas cuyas variables se</text>
+              <text x="846" y="120" text-anchor="middle" fill="#5f6f77">movieron y sí cambiaron el UITI</text>
+              <text x="846" y="136" text-anchor="middle" fill="#0b5f8a" font-size="10.5">las que no movieron nada, no se pintan</text>
+
+              <rect x="724" y="180" width="244" height="106" rx="10" fill="#ffffff" stroke="#dce7e4" />
+              <text x="846" y="206" text-anchor="middle" font-weight="700" fill="#102129">Análisis de sensibilidad</text>
+              <text x="846" y="228" text-anchor="middle" fill="#5f6f77">Cada variable se mueve sola y se</text>
+              <text x="846" y="246" text-anchor="middle" fill="#5f6f77">mide su caída media del UITI</text>
+              <text x="846" y="264" text-anchor="middle" fill="#5f6f77">→ el orden del diagnóstico</text>
+              <text x="846" y="280" text-anchor="middle" fill="#0b5f8a" font-size="11">y el «sola basta en N de M vanos»</text>
+
+              <path d="M672,140 C700,140 700,100 720,92" fill="none" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fs)" />
+              <path d="M672,182 C700,182 700,220 720,228" fill="none" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fs)" />
+
+              <rect x="12" y="316" width="956" height="64" rx="10" fill="#ffffff" stroke="#f4b23a" />
+              <text x="30" y="340" font-weight="700" fill="#102129">La búsqueda es semi-automática, a propósito.</text>
+              <text x="30" y="362" fill="#5f6f77">El tablero propone el conjunto de cambios que más baja el UITI y lo deja puesto; quién decide si ese cambio es ejecutable en campo, y con qué actividad del contrato se paga, es la persona.</text>
+            </g>
+          </svg>
+        </div>
+
+        <div class="diagram-card">
+          <h3>Cómo entran los costos por actividad</h3>
+          <svg viewBox="0 0 980 300" role="img" aria-label="Diagrama de costos: catálogo de actividades, asignación manual por vano, cantidad, costo por vano y costo acumulado" class="diagrama">
+            <defs>
+              <marker id="fc" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+                <path d="M0,0 L9,4.5 L0,9 z" fill="#5f6f77" />
+              </marker>
+            </defs>
+            <g font-family="Inter, sans-serif" font-size="12.5">
+              <rect x="12" y="52" width="204" height="96" rx="10" fill="#ffffff" stroke="#dce7e4" />
+              <text x="114" y="78" text-anchor="middle" font-weight="700" fill="#102129">Catálogo del contrato</text>
+              <text x="114" y="100" text-anchor="middle" fill="#5f6f77">142 actividades con su</text>
+              <text x="114" y="118" text-anchor="middle" fill="#5f6f77">costo unitario en COP</text>
+              <text x="114" y="138" text-anchor="middle" fill="#5f6f77" font-size="11">viene del .xlsx del contrato</text>
+
+              <line x1="220" y1="100" x2="256" y2="100" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fc)" />
+
+              <rect x="262" y="40" width="216" height="120" rx="10" fill="#fdf6e6" stroke="#f4b23a" />
+              <text x="370" y="66" text-anchor="middle" font-weight="700" fill="#8a6212">Asignación MANUAL</text>
+              <text x="370" y="88" text-anchor="middle" fill="#5f6f77">La persona marca qué</text>
+              <text x="370" y="106" text-anchor="middle" fill="#5f6f77">actividades corresponden</text>
+              <text x="370" y="124" text-anchor="middle" fill="#5f6f77">a la intervención simulada</text>
+              <text x="370" y="148" text-anchor="middle" fill="#8a6212" font-size="11">el modelo no lo deduce</text>
+
+              <line x1="482" y1="100" x2="518" y2="100" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fc)" />
+
+              <rect x="524" y="52" width="204" height="96" rx="10" fill="#ffffff" stroke="#dce7e4" />
+              <text x="626" y="78" text-anchor="middle" font-weight="700" fill="#102129">Una fila bajo CADA vano</text>
+              <text x="626" y="100" text-anchor="middle" fill="#5f6f77">Con su cantidad, editable</text>
+              <text x="626" y="118" text-anchor="middle" fill="#5f6f77">vano por vano</text>
+              <text x="626" y="138" text-anchor="middle" fill="#5f6f77" font-size="11">cantidad × costo unitario</text>
+
+              <line x1="732" y1="100" x2="768" y2="100" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fc)" />
+
+              <rect x="774" y="52" width="194" height="96" rx="10" fill="#f3f8f6" stroke="#007a53" />
+              <text x="871" y="78" text-anchor="middle" font-weight="700" fill="#005c45">Costo por vano</text>
+              <text x="871" y="100" text-anchor="middle" fill="#005c45" font-weight="700">y costo acumulado</text>
+              <text x="871" y="122" text-anchor="middle" fill="#5f6f77">Se lee al lado de la caída</text>
+              <text x="871" y="140" text-anchor="middle" fill="#5f6f77">de UITI que la produjo</text>
+
+              <rect x="12" y="196" width="956" height="86" rx="10" fill="#ffffff" stroke="#dce7e4" />
+              <text x="30" y="222" font-weight="700" fill="#102129">Por qué esta mitad no se automatiza</text>
+              <text x="30" y="246" fill="#5f6f77">Bajar <tspan font-family="monospace">NR_T</tspan> en un vano puede ser una poda urbana de $5.131.579 o una roceria de $14.445, según el terreno, el acceso y</text>
+              <text x="30" y="266" fill="#5f6f77">quién sea el propietario del predio. Nada de eso está en los datos, así que el tablero calcula la aritmética y deja la equivalencia a quien la sabe.</text>
+            </g>
+          </svg>
+        </div>
+
+        <h3>Las tres clases de variable, y por qué</h3>
+        <p>
+          No todas las variables del modelo se pueden mover, y las que se mueven no significan lo mismo.
+          El simulador las separa en tres, y la separación no es cosmética: cambia qué pregunta se está
+          contestando.
+        </p>
+        <div class="var-grid">
+          <article class="var-card interven">
+            <h4>Intervención — qué HACER <span>11 variables</span></h4>
+            <p>
+              Atributos del activo que CHEC <strong>puede cambiar con una obra</strong>. Mover una de éstas
+              es preguntar «¿y si intervengo?».
+            </p>
+            <p class="chips">
+              <code>TIPO</code><code>CNT_FASES</code><code>CONDUCTOR</code><code>CALIBRE_NEUTRO</code><code>NG_RED</code><code>ALTURA</code><code>CANTIDAD_TIERRA</code><code>VAL_CRIT_APOYO</code><code>CAPACIDAD_NOMINAL</code><code>NR_T</code><code>LONG_CRUCETA</code>
+            </p>
+            <p class="por-que">
+              <strong>Por qué éstas:</strong> cada una corresponde a una actividad ejecutable del contrato
+              —cambiar conductor, subir el apoyo, mejorar la puesta a tierra, podar—. Si no hay obra que la
+              mueva, no es intervención.
+            </p>
+          </article>
+
+          <article class="var-card escenario">
+            <h4>Escenario — bajo qué CONDICIONES <span>7 variables</span></h4>
+            <p>
+              Condiciones del entorno y de la demanda que <strong>nadie controla</strong>, pero que sí se
+              pueden suponer. Mover una de éstas es preguntar «¿y si me toca un mes así?».
+            </p>
+            <p class="chips">
+              <code>DDT</code><code>Precipitación (12 lags)</code><code>Temperatura (12 lags)</code><code>Viento (12 lags)</code><code>Ráfaga de viento (12 lags)</code><code>PROMEDIO_KWH_TRF</code><code>PROMEDIO_KWH_VANO</code>
+            </p>
+            <p class="por-que">
+              <strong>Por qué separadas:</strong> mezclarlas con las de intervención produciría un plan que
+              «funciona» porque supuso un verano seco. Se simulan aparte, y el tablero dice cuál de las dos
+              mitades entró.
+            </p>
+          </article>
+
+          <article class="var-card fijas">
+            <h4>No simulables <span>8 variables</span></h4>
+            <p>
+              Entran a la simulación <strong>con el valor observado de cada vano</strong> —el modelo las
+              necesita— pero no se pueden mover.
+            </p>
+            <p class="chips">
+              <code>CNT_TRF</code><code>CNT_VN</code><code>FECHA_OPERACION_TRF</code><code>FECHA_OPERACION_VANO</code><code>LONGITUD</code><code>TIPO_TAX</code><code>X2</code><code>Y2</code>
+            </p>
+            <p class="por-que">
+              <strong>Por qué no:</strong> son <em>identidad</em>, no palanca. <code>X2</code>/<code>Y2</code>
+              son dónde está el vano; <code>LONGITUD</code> y <code>TIPO_TAX</code>, qué es; las fechas,
+              cuándo entró; <code>CNT_TRF</code> y <code>CNT_VN</code>, dónde está en la topología. Moverlas
+              no simula una intervención: simula <strong>otro vano</strong>, y la respuesta sería creíble y
+              sin sentido.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section id="agentes-informes" class="section tinted">
+        <div class="section-heading">
+          <p class="eyebrow">IA + Criticidad CHEC · 5 de 6</p>
+          <h2>Agentes e informes automáticos</h2>
+          <p>
+            El simulador es donde una persona <em>explora</em>; los agentes son donde eso queda
+            <em>escrito</em>. Comparten motor: el diagnóstico que el simulador muestra en pantalla —qué
+            variable baja cuánto el UITI en cada vano— es exactamente el que el agente <code>inference</code>
+            recibe y redacta. Lo que los agentes agregan es el contexto que no cabe en un tablero: la serie
+            histórica, la discusión experta de los informes en PDF y la comparación entre ambas.
+          </p>
+        </div>
+
+        <div class="diagram-card">
+          <h3>Informe por circuito — <code>/report</code></h3>
+          <svg viewBox="0 0 980 430" role="img" aria-label="Flujo del comando report: preparación determinista, tres agentes, render y nota de bóveda" class="diagrama">
+            <defs>
+              <marker id="fa" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+                <path d="M0,0 L9,4.5 L0,9 z" fill="#5f6f77" />
+              </marker>
+            </defs>
+            <g font-family="Inter, sans-serif" font-size="12.5">
+              <text x="20" y="26" font-weight="700" fill="#005c45">INSUMOS</text>
+              <rect x="14" y="36" width="176" height="34" rx="8" fill="#ffffff" stroke="#dce7e4" />
+              <text x="102" y="58" text-anchor="middle" fill="#102129">Datos estructurados</text>
+              <rect x="14" y="78" width="176" height="34" rx="8" fill="#ffffff" stroke="#0b5f8a" />
+              <text x="102" y="100" text-anchor="middle" fill="#0b5f8a">Artefacto MIL (.pt)</text>
+              <rect x="14" y="120" width="176" height="34" rx="8" fill="#ffffff" stroke="#dce7e4" />
+              <text x="102" y="142" text-anchor="middle" fill="#102129">Informes expertos (PDF)</text>
+              <rect x="14" y="162" width="176" height="34" rx="8" fill="#ffffff" stroke="#dce7e4" />
+              <text x="102" y="184" text-anchor="middle" fill="#102129">Bóveda del circuito</text>
+
+              <line x1="194" y1="116" x2="228" y2="116" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fa)" />
+
+              <rect x="234" y="80" width="164" height="72" rx="10" fill="#f3f8f6" stroke="#007a53" />
+              <text x="316" y="106" text-anchor="middle" font-weight="700" fill="#005c45">prepare</text>
+              <text x="316" y="126" text-anchor="middle" fill="#5f6f77" font-size="11">Determinista, sin modelo</text>
+              <text x="316" y="144" text-anchor="middle" fill="#5f6f77" font-size="11">de lenguaje: arma el contexto</text>
+
+              <line x1="402" y1="116" x2="436" y2="116" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fa)" />
+
+              <rect x="442" y="24" width="230" height="60" rx="10" fill="#ffffff" stroke="#dce7e4" />
+              <text x="557" y="46" text-anchor="middle" font-weight="700" fill="#102129">1 · historical</text>
+              <text x="557" y="66" text-anchor="middle" fill="#5f6f77" font-size="11.5">Diagnóstico descriptivo de la serie</text>
+
+              <rect x="442" y="92" width="230" height="60" rx="10" fill="#ffffff" stroke="#0b5f8a" />
+              <text x="557" y="114" text-anchor="middle" font-weight="700" fill="#0b5f8a">2 · inference</text>
+              <text x="557" y="134" text-anchor="middle" fill="#5f6f77" font-size="11">Lee el MIL: relevancia por vano y plan</text>
+
+              <rect x="442" y="160" width="230" height="60" rx="10" fill="#ffffff" stroke="#dce7e4" />
+              <text x="557" y="182" text-anchor="middle" font-weight="700" fill="#102129">3 · expert-alignment</text>
+              <text x="557" y="202" text-anchor="middle" fill="#5f6f77" font-size="11">Coteja modelo contra discusión experta</text>
+
+              <line x1="676" y1="116" x2="710" y2="116" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fa)" />
+
+              <rect x="716" y="60" width="250" height="52" rx="10" fill="#ffffff" stroke="#dce7e4" />
+              <text x="841" y="82" text-anchor="middle" font-weight="700" fill="#102129">render</text>
+              <text x="841" y="101" text-anchor="middle" fill="#5f6f77">Informe HTML del circuito</text>
+
+              <rect x="716" y="124" width="250" height="52" rx="10" fill="#f3f8f6" stroke="#007a53" />
+              <text x="841" y="146" text-anchor="middle" font-weight="700" fill="#005c45">nota de bóveda + grafo</text>
+              <text x="841" y="165" text-anchor="middle" fill="#5f6f77">Alimenta la próxima corrida</text>
+              <path d="M841,180 C841,214 300,214 300,196" fill="none" stroke="#007a53" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#fa)" />
+
+              <rect x="14" y="252" width="952" height="76" rx="10" fill="#ffffff" stroke="#f4b23a" />
+              <text x="32" y="278" font-weight="700" fill="#102129">La interacción con el simulador</text>
+              <text x="32" y="300" fill="#5f6f77">El agente <tspan font-family="monospace">inference</tspan> y el botón <tspan font-style="italic">Diagnóstico</tspan> del simulador consumen el MISMO modelo y la MISMA sensibilidad por variable. El simulador deja</text>
+              <text x="32" y="320" fill="#5f6f77">probar una intervención y verla en el mapa; el agente la escribe con la serie histórica y la discusión experta al lado. Ninguno reemplaza al otro.</text>
+
+              <rect x="14" y="344" width="952" height="72" rx="10" fill="#ffffff" stroke="#dce7e4" />
+              <text x="32" y="370" font-weight="700" fill="#102129">Lo que cuesta</text>
+              <text x="32" y="392" fill="#5f6f77">Un informe por circuito consume del orden de <tspan font-weight="600">318.760 tokens</tspan>. El requisito real de estos informes no es una máquina grande: es <tspan font-weight="600">cuota de modelo</tspan>.</text>
+              <text x="32" y="410" fill="#5f6f77">La preparación y el render son deterministas y corren sin modelo de lenguaje; solo los tres agentes lo usan.</text>
+            </g>
+          </svg>
+        </div>
+
+        <div class="diagram-card">
+          <h3>Informe gerencial — <code>/informe-gerencial</code></h3>
+          <svg viewBox="0 0 980 330" role="img" aria-label="Flujo del informe gerencial: banda de riesgo, muestreo de 12 circuitos, report por circuito, síntesis y barras de flota" class="diagrama">
+            <defs>
+              <marker id="fg2" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+                <path d="M0,0 L9,4.5 L0,9 z" fill="#5f6f77" />
+              </marker>
+            </defs>
+            <g font-family="Inter, sans-serif" font-size="12.5">
+              <rect x="14" y="54" width="180" height="86" rx="10" fill="#ffffff" stroke="#dce7e4" />
+              <text x="104" y="80" text-anchor="middle" font-weight="700" fill="#102129">Banda de riesgo</text>
+              <text x="104" y="102" text-anchor="middle" fill="#5f6f77">Del ranking de circuitos</text>
+              <text x="104" y="120" text-anchor="middle" fill="#5f6f77" font-size="11">(Bajo · Medio · Medio-Alto · Alto)</text>
+
+              <line x1="198" y1="97" x2="232" y2="97" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fg2)" />
+
+              <rect x="238" y="42" width="196" height="110" rx="10" fill="#fdf6e6" stroke="#f4b23a" />
+              <text x="336" y="68" text-anchor="middle" font-weight="700" fill="#8a6212">Muestreo a 12</text>
+              <text x="336" y="90" text-anchor="middle" fill="#5f6f77">Si la banda tiene más de 12,</text>
+              <text x="336" y="108" text-anchor="middle" fill="#5f6f77">se toman los 12 PEORES</text>
+              <text x="336" y="132" text-anchor="middle" fill="#8a6212" font-size="10.5">el informe describe la cola, no el típico</text>
+
+              <line x1="438" y1="97" x2="472" y2="97" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fg2)" />
+
+              <rect x="478" y="54" width="188" height="86" rx="10" fill="#f3f8f6" stroke="#007a53" />
+              <text x="572" y="80" text-anchor="middle" font-weight="700" fill="#005c45">/report por circuito</text>
+              <text x="572" y="102" text-anchor="middle" fill="#5f6f77">Reutiliza la corrida si ya</text>
+              <text x="572" y="120" text-anchor="middle" fill="#5f6f77">existe; si falta, la pide</text>
+
+              <line x1="670" y1="97" x2="704" y2="97" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fg2)" />
+
+              <rect x="710" y="30" width="256" height="60" rx="10" fill="#ffffff" stroke="#dce7e4" />
+              <text x="838" y="52" text-anchor="middle" font-weight="700" fill="#102129">Panorama del grupo</text>
+              <text x="838" y="72" text-anchor="middle" fill="#5f6f77" font-size="11.5">El universo es el GRUPO, nunca la muestra</text>
+
+              <rect x="710" y="98" width="256" height="60" rx="10" fill="#ffffff" stroke="#dce7e4" />
+              <text x="838" y="120" text-anchor="middle" font-weight="700" fill="#102129">Barras de la flota completa</text>
+              <text x="838" y="140" text-anchor="middle" fill="#5f6f77">Los 208, con la muestra resaltada</text>
+
+              <rect x="710" y="166" width="256" height="60" rx="10" fill="#ffffff" stroke="#0b5f8a" />
+              <text x="838" y="188" text-anchor="middle" font-weight="700" fill="#0b5f8a">Grafo radial de causas</text>
+              <text x="838" y="208" text-anchor="middle" fill="#5f6f77">Patrones que cruzan circuitos</text>
+
+              <rect x="14" y="250" width="952" height="66" rx="10" fill="#ffffff" stroke="#f4b23a" />
+              <text x="32" y="276" font-weight="700" fill="#102129">Una advertencia que el informe lleva escrita</text>
+              <text x="32" y="298" fill="#5f6f77">La muestra son los 12 peores de la banda, no 12 circuitos típicos. Lo que el gerencial describe es la <tspan font-style="italic">cola</tspan> del grupo; leerlo como el promedio del grupo sobreestima el problema.</text>
+            </g>
+          </svg>
+        </div>
+
+        <div class="table-wrap compact-table">
+          <table>
+            <thead><tr><th>Comando</th><th>Qué produce</th><th>Alcance</th></tr></thead>
+            <tbody>
+              <tr><td><code>/report</code></td><td>Informe HTML de un circuito, con figuras y trazabilidad por afirmación</td><td>Un circuito, una ventana</td></tr>
+              <tr><td><code>/reporte-lote</code></td><td>Encadena <code>/report</code> sobre una lista de circuitos</td><td>Varios circuitos</td></tr>
+              <tr><td><code>/informe-gerencial</code></td><td>Síntesis por banda de riesgo, con barras de la flota entera y grafo radial</td><td>Hasta 12 circuitos de una banda</td></tr>
+              <tr><td><code>/clima</code></td><td>Enriquece los datos con Open-Meteo, con tres compuertas de cuota</td><td>Toda la tabla elegida</td></tr>
+              <tr><td><code>/graphify</code></td><td>Convierte las notas de bóveda en un grafo de conocimiento navegable</td><td>Acumulativo entre corridas</td></tr>
             </tbody>
           </table>
         </div>
       </section>
 
-
       <section id="migracion-databricks" class="section cloud">
         <div class="section-heading">
-          <p class="eyebrow">Flujo B - Mecánica de la migración</p>
-          <h2>Cómo funciona la migración, paso a paso</h2>
+          <p class="eyebrow">IA + Criticidad CHEC · 6 de 6</p>
+          <h2>Migración a Databricks</h2>
           <p>
-            <a href="#despliegue">#despliegue</a> explica qué es Databricks como copia independiente.
-            Esta sección reúne los comandos con su detalle de uso, el orden real de
-            <code>/subir-a-databricks</code> y cómo cada paso interactúa con el Volume de Databricks.
-          </p>
-        </div>
-
-        <div class="flow-diagram" aria-label="Secuencia real de /subir-a-databricks">
-          <div class="flow-title">
-            <h3>Orquestación real de <code>/subir-a-databricks</code></h3>
-            <p>
-              Nueve pasos: un solo input al usuario, resolución compartida de perfil CLI y SQL warehouse,
-              delegación por referencia a los tres comandos independientes, tablas condicionales, reportes de
-              interpretabilidad y publicación del dashboard al final.
-            </p>
-          </div>
-          <ol class="migration-steps">
-            {databricksMigrationSteps.map(([numero, titulo, detalle]) => (
-              <li>
-                <span class="step-num">{numero}</span>
-                <div>
-                  <strong>{titulo}</strong>
-                  <p>{detalle}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </div>
-
-        <div class="note-callout">
-          <strong>Los demás comandos también corren solos.</strong>
-          <code>/subir-datos-databricks</code>, <code>/subir-notebooks-databricks</code> y los cinco
-          <code>/app-*</code> no dependen de <code>/subir-a-databricks</code>: cada uno resuelve por su
-          cuenta el mismo perfil CLI y solo pide la URL del workspace destino cuando se invoca de forma
-          independiente, útil para una migración parcial. Todos escriben en la misma bitácora cuando los
-          invoca el orquestador, y en una propia cuando se corren sueltos.
-        </div>
-
-        <div class="connection-intro">
-          <h3>Los 4 comandos, uno por uno</h3>
-          <p>
-            Mismo perfil CLI / SQL warehouse reutilizado por referencia, nunca duplicado. Los tres primeros
-            sirven para una migración parcial; <code>/subir-a-databricks</code> es el orquestador de los 9 pasos
-            anteriores.
+            Databricks es una <strong>copia independiente</strong>, no un espejo en vivo: lo que corre allá
+            es la misma cadena, con sus propios datos subidos y sus propias apps desplegadas. Cuatro
+            comandos la mueven, y los tres primeros sirven solos para una migración parcial.
           </p>
         </div>
 
         <div class="table-wrap compact-table">
           <table>
-            <thead><tr><th>Comando</th><th>Qué migra</th><th>Toca tablas/dashboard</th></tr></thead>
+            <thead><tr><th>Comando</th><th>Qué migra</th><th>Dónde aterriza</th></tr></thead>
             <tbody>
               {databricksCommandRows.map(([comando, migra, toca]) => (
                 <tr><td><code>{comando}</code></td><td>{migra}</td><td>{toca}</td></tr>
@@ -634,1319 +1057,36 @@ const cronograma = [
         </div>
 
         <div class="connection-intro">
-          <h3>Interacción con el Volume de Databricks</h3>
+          <h3>El orden real de <code>/subir-a-databricks</code></h3>
           <p>
-            Ninguno de los 4 comandos crea una ruta <code>site/</code> en el Volume (regla ya cubierta en
-            <a href="#despliegue">#despliegue</a>). Lo que sigue son las restricciones y gotchas reales de subir
-            notebooks y datos a un Volume/Workspace compartido, no cubiertas antes:
+            Un solo dato al usuario —la URL del workspace destino—; todo lo demás se resuelve o se
+            descubre en tiempo de ejecución.
           </p>
         </div>
 
-        <div class="process-grid">
-          {databricksVolumeNotes.map(([titulo, detalle]) => (
-            <article><strong>{titulo}</strong><p>{detalle}</p></article>
+        <ol class="migration-steps">
+          {databricksMigrationSteps.map(([numero, titulo, detalle]) => (
+            <li>
+              <span class="step-num">{numero}</span>
+              <div>
+                <strong>{titulo}</strong>
+                <p>{detalle}</p>
+              </div>
+            </li>
           ))}
-        </div>
-      </section>
-
-      <section id="criticidad-fisica" class="section physics">
-        <div class="section-heading">
-          <p class="eyebrow">Estudio de la criticidad por redes informadas por la física</p>
-          <h2>Grafo físico, eléctrico y espacio-temporal</h2>
-          <p>
-            La red de Nivel de Tensión 2 se modela como un grafo de eventos, activos, protecciones,
-            topología, entorno y clima. Cada falla se interpreta como una interacción entre infraestructura,
-            condiciones ambientales y propagación eléctrica hacia el impacto UiTi ponderado por vano.
-          </p>
-        </div>
-
-        <div class="physics-summary">
-          {variables.resumen.map((item) => (
-            <article>
-              <h3>{item.titulo}</h3>
-              <p>{item.descripcion}</p>
-            </article>
-          ))}
-        </div>
-
-        <div class="table-wrap physics-table modes-table">
-          <table>
-            <thead>
-              <tr>
-                <th>Modo</th>
-                <th>Nodos en el grafo</th>
-                <th>Descripción resumida</th>
-              </tr>
-            </thead>
-            <tbody>
-              {variables.modos.map((modo) => (
-                <tr>
-                  <td>{modo.nombre}</td>
-                  <td>{modo.cantidad}</td>
-                  <td>{modo.descripcion}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div class="connection-intro">
-          <h3>Descripción de conexiones físico/lógicas</h3>
-          <p>
-            El grafo conecta variables por reglas de causalidad técnica: acumulación climática, susceptibilidad
-            material, propagación hacia protecciones, impacto demográfico y cálculo regulatorio.
-          </p>
-        </div>
-
-        <div class="table-wrap physics-table connections-table">
-          <table>
-            <thead>
-              <tr>
-                <th>Origen</th>
-                <th>Destino</th>
-                <th>Relación / peso</th>
-                <th>Justificación técnica</th>
-              </tr>
-            </thead>
-            <tbody>
-              {variables.conexiones.map((conexion) => (
-                <tr>
-                  <td>{conexion.origen}</td>
-                  <td>{conexion.destino}</td>
-                  <td>{conexion.relacion}</td>
-                  <td>{conexion.justificacion}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-      </section>
-
-      <section id="arquitectura" class="section architecture">
-        <div class="section-heading">
-          <p class="eyebrow">Arquitectura y flujo de operación</p>
-          <h2>Simulador multimodal con agentes de IA</h2>
-          <p>
-            El flujo integra datos tabulares, documentos técnicos, bitácoras operativas y un modelo
-            M-GCECDL entrenado sobre dos modos de información para analizar vanos de interés, explicar
-            puntos críticos y generar reportes de evidencia para la toma de decisiones.
-          </p>
-        </div>
-
-        <div class="architecture-pillars">
-          <a class="pillar-card" href="#datos-estructurados" aria-label="Abrir detalle de datos estructurados">
-            <span>01</span>
-            <h3>Datos estructurados</h3>
-            <p>Selección de circuito o vano, eventos, protecciones, UiTi, UiTi ponderado y variables de activos.</p>
-            <strong>Explorar datos y grafos →</strong>
-          </a>
-          <a class="pillar-card" href="#historial-rag" aria-label="Abrir detalle de historial y discusión experta">
-            <span>02</span>
-            <h3>Historial y discusión experta</h3>
-            <p>Extracción de discusiones expertas desde PDFs y contraste con los agentes del flujo de reporte.</p>
-            <strong>Ver tabla y flujo de agentes →</strong>
-          </a>
-          <a class="pillar-card" href="#modelo-mgcecdl" aria-label="Abrir detalle del modelo M-GCECDL">
-            <span>03</span>
-            <h3>Modelo M-GCECDL</h3>
-            <p>Clasificación de criticidad de <code>UITI_VANO</code> y relevancias por modo climático y estructural.</p>
-            <strong>Ver preparación y modos →</strong>
-          </a>
-          <a class="pillar-card" href="#costos-items-contratos" aria-label="Abrir detalle de costos por ítems de contrato">
-            <span>04</span>
-            <h3>Costos por ítems</h3>
-            <p>Referencia económica opcional para variables priorizadas por el simulador softmax y el análisis experto.</p>
-            <strong>Ver costos del agente →</strong>
-          </a>
-        </div>
-
-        <div class="agent-grid">
-          <a class="agent-card" href="#agente-rag" aria-label="Abrir detalle del rol pdf-discussion-extraction">
-            <span class="agent-type high">High / Batch</span>
-            <h3>pdf-discussion-extraction</h3>
-            <p>Decide, PDF por PDF, qué secciones candidatas se convierten en filas de la tabla base de discusiones (circuito, fecha, análisis, evidencia).</p>
-          </a>
-          <a class="agent-card" href="#agente-base" aria-label="Abrir detalle del rol historical">
-            <span class="agent-type high">High / Context</span>
-            <h3>historical</h3>
-            <p>Produce el diagnóstico descriptivo/base del comportamiento de <code>UITI_VANO</code> del circuito, citando solo el contexto estructurado ya seleccionado.</p>
-          </a>
-          <a class="agent-card" href="#orquestador-mgcecdl" aria-label="Abrir detalle del rol inference">
-            <span class="agent-type model">MGCECDL / SHAP</span>
-            <h3>inference</h3>
-            <p>Interpreta con cautela las señales predictivas de MGCECDL/SHAP: importancia por variable/modo y coherencia del grafo, sin ejecutar el modelo.</p>
-          </a>
-          <a class="agent-card" href="#agente-simulacion" aria-label="Abrir detalle del rol auto-simulator">
-            <span class="agent-type low">Low / Opcional</span>
-            <h3>auto-simulator</h3>
-            <p>Interpreta la tabla automática de sensibilidad mínimo/máximo (base vs. escenario mínimo/máximo observado por variable). Única etapa que puede degradarse y omitirse sin romper el reporte, si falta <code>bc.json</code>.</p>
-          </a>
-          <a class="agent-card" href="#agente-causalidad" aria-label="Abrir detalle del rol expert-alignment">
-            <span class="agent-type high">High / Reasoning</span>
-            <h3>expert-alignment</h3>
-            <p>Compara histórico e inferencia contra la discusión experta en PDF, y prioriza variables revisables con evidencia citada.</p>
-          </a>
-        </div>
-
-        <div class="flow-diagram detailed-flow" aria-label="Diagrama de bloques con conexiones del pipeline /report">
-          <div class="flow-title">
-            <h3>Orquestación real de <code>/report</code> (motor <code>report_pipeline.py</code>)</h3>
-            <p>Nueve pasos: preparación determinista, despacho paralelo obligatorio de tres agentes, join hacia el contraste experto, render del HTML y proyección aislada al vault.</p>
-          </div>
-
-          <div class="flow-lane">
-            <span class="lane-label">1-2. Selección y prepare()</span>
-            <article class="flow-node user-node">
-              <span>Runtime del agente</span>
-              <strong>Confirma circuito + ventana de fechas, una sola vez</strong>
-            </article>
-            <div class="flow-connector">
-              <strong>1</strong>
-              <span>Circuito + fechas</span>
-            </div>
-            <article class="flow-node data-node">
-              <span>CSV Indicadores_vano_v3</span>
-              <strong>Detección determinista de puntos críticos</strong>
-            </article>
-            <div class="flow-connector">
-              <strong>2</strong>
-              <span>Puntos críticos</span>
-            </div>
-            <article class="flow-node context-node">
-              <span>prepare()</span>
-              <strong>Contexto estructurado + simulador MGCECDL-SHAP + escaneo automático mínimo/máximo</strong>
-            </article>
-            <div class="flow-connector dashed">
-              <strong>opc.</strong>
-              <span>bc.json, si existe</span>
-            </div>
-            <article class="flow-node data-node">
-              <span>bc.json</span>
-              <strong>Insumo opcional; alimenta solo a auto-simulator</strong>
-            </article>
-          </div>
-
-          <div class="flow-lane">
-            <span class="lane-label">3. Despacho paralelo obligatorio</span>
-            <article class="flow-node agent-high-node">
-              <span>historical</span>
-              <strong>Diagnóstico descriptivo/base de UITI_VANO</strong>
-            </article>
-            <div class="flow-connector bidirectional">
-              <strong>3a</strong>
-              <span>Independientes entre sí</span>
-            </div>
-            <article class="flow-node agent-high-node">
-              <span>inference</span>
-              <strong>Interpretación MGCECDL/SHAP</strong>
-            </article>
-            <div class="flow-connector">
-              <strong>3b</strong>
-              <span>Corre junto, degrada solo</span>
-            </div>
-            <article class="flow-node agent-low-node">
-              <span>auto-simulator</span>
-              <strong>Sensibilidad mínimo/máximo; se omite si falta bc.json, sin romper el reporte</strong>
-            </article>
-            <div class="flow-connector merge">
-              <strong>4</strong>
-              <span>Join: espera historical + inference</span>
-            </div>
-            <article class="flow-node context-node">
-              <span>join</span>
-              <strong>auto-simulator no bloquea el join</strong>
-            </article>
-          </div>
-
-          <div class="flow-lane">
-            <span class="lane-label">5-6. Alineación experta</span>
-            <article class="flow-node doc-node">
-              <span>tabla_pdfs_intervalo_*.xlsx</span>
-              <strong>Discusión experta extraída de PDFs (skill pdf-discussion-extraction)</strong>
-            </article>
-            <div class="flow-connector">
-              <strong>5</strong>
-              <span>prepare_expert_alignment()</span>
-            </div>
-            <article class="flow-node context-node">
-              <span>prepare_expert_alignment()</span>
-              <strong>Arma el contexto de contraste</strong>
-            </article>
-            <div class="flow-connector">
-              <strong>6</strong>
-              <span>historical + inference + PDF</span>
-            </div>
-            <article class="flow-node agent-high-node emphasis-node">
-              <span>expert-alignment</span>
-              <strong>Contrasta y prioriza variables revisables</strong>
-            </article>
-            <div class="flow-connector">
-              <strong>7</strong>
-              <span>3 JSON validados</span>
-            </div>
-            <article class="flow-node output-node">
-              <span>render()</span>
-              <strong>Fusiona las salidas validadas en el HTML del circuito</strong>
-            </article>
-          </div>
-
-          <div class="flow-lane">
-            <span class="lane-label">8-9. Publicación y vault</span>
-            <article class="flow-node output-node">
-              <span>Reporte HTML</span>
-              <strong>reports/interpretability/html/</strong>
-            </article>
-            <div class="flow-connector">
-              <strong>8</strong>
-              <span>Paso 9, alert-and-continue</span>
-            </div>
-            <article class="flow-node data-node">
-              <span>vault-circuito</span>
-              <strong>Proyecta los 3 JSON validados a reports/vault/*.md</strong>
-            </article>
-            <div class="flow-connector dashed">
-              <strong>9</strong>
-              <span>Aislado, nunca el manifiesto amplio</span>
-            </div>
-            <article class="flow-node agent-low-node">
-              <span>graphify --update</span>
-              <strong>Indexa solo reports/vault/graphify-out/graph.json</strong>
-            </article>
-            <div class="flow-connector cycle">
-              <strong>→</strong>
-              <span>Reutilizable entre circuitos</span>
-            </div>
-            <article class="flow-node context-node">
-              <span>Vault Obsidian</span>
-              <strong>Consultable entre circuitos, aislado del grafo raíz del proyecto</strong>
-            </article>
-          </div>
-        </div>
-
-        <div class="value-cycle">
-          <article>
-            <strong>Comprender</strong>
-            <p>Selección de circuito o vano e identificación de puntos de interés.</p>
-          </article>
-          <article>
-            <strong>Contextualizar</strong>
-            <p>Historial numérico más evidencia documental y normativa.</p>
-          </article>
-          <article>
-            <strong>Validar</strong>
-            <p>Causas contrastadas con evidencias del modelo M-GCECDL.</p>
-          </article>
-          <article>
-            <strong>Actuar</strong>
-            <p>Simulaciones fundamentadas para priorizar intervenciones.</p>
-          </article>
-          <article>
-            <strong>Documentar</strong>
-            <p>Reporte final automatizado para soporte técnico y directivo.</p>
-          </article>
-        </div>
-      </section>
-
-      <section id="modelo-matematica" class="section">
-        <div class="section-heading">
-          <p class="eyebrow">Resumen técnico del modelo</p>
-          <h2>Diagrama de bloques y matemática del M-GCECDL</h2>
-          <p>
-            Síntesis de <a href="#modelo-mgcecdl">#modelo-mgcecdl</a> para el bloque de cómputo puro: los 5
-            componentes del modelo, las 4 ecuaciones que gobiernan su fusión y su regularización, y el grafo
-            conceptual de variables que actúa como prior experto durante el entrenamiento.
-          </p>
-        </div>
-
-        <div class="process-grid">
-          {mgcecdlComponents.map(([componente, descripcion]) => (
-            <article><strong>{componente}</strong><p>{descripcion}</p></article>
-          ))}
-        </div>
-
-        <div class="connection-intro">
-          <h3>Las 4 ecuaciones más relevantes</h3>
-          <p>
-            Notación: <code>x</code> variables de entrada de un modo, <code>z</code> su embedding, <code>x̂</code>{" "}
-            su reconstrucción, <code>p</code> probabilidad por clase, <code>α</code> pesos de confiabilidad
-            entre modos.
-          </p>
-        </div>
-
-        <div class="equation-grid">
-          <article class="equation-card">
-            <span>1. Atención por variable (dentro de cada modo)</span>
-            <pre>{`s = W_a · LayerNorm(x)
-a = softmax(s)
-x' = x ⊙ a · d`}</pre>
-            <p><code>d</code> es el número de variables del modo: reescala la ponderación softmax para no aplanar la magnitud de entrada antes del codificador.</p>
-          </article>
-          <article class="equation-card">
-            <span>2. Fusión ponderada por confiabilidad</span>
-            <pre>{`α = softmax(r / τ),  r_m = Linear(z_m)
-p_fused = softmax( Σ_m α_m · log p_m )`}</pre>
-            <p>Cada modo aporta su propia distribución de clase <code>p_m</code>; la mezcla es un pool logarítmico de opiniones ponderado por confiabilidad, no un promedio simple.</p>
-          </article>
-          <article class="equation-card">
-            <span>3. Regularización con el grafo experto</span>
-            <pre>{`K_g[i,j]  = exp(−‖g_i − g_j‖² / 2σ_g²)
-K_x̂[i,j] = exp(−‖x̂_i − x̂_j‖² / 2σ²)
-I_α(K_x̂, K_g) = H(K_x̂) + H(K_g) − H(K_x̂ ⊙ K_g)`}</pre>
-            <p><code>g_i</code> es la fila <code>i</code> de la matriz de adyacencia del grafo experto, en el mismo orden que las columnas del modelo. <code>H</code> es la entropía cuadrática de Rényi; maximizar <code>I_α</code> acerca la similitud entre variables reconstruidas por el modelo a la similitud definida por el grafo de dominio.</p>
-          </article>
-          <article class="equation-card">
-            <span>4. Pérdida total de entrenamiento</span>
-            <pre>{`L = L_fusión + γ_sup·L_modal + γ_agr·L_acuerdo
-  + γ_reg·L_reg + λ_rec·L_reconstr + λ_mi·(1 − I_α / log n)`}</pre>
-            <p>Seis términos independientes: ajuste supervisado fusionado, supervisión por modo, acuerdo entre modos (divergencia GJS), regularización de confiabilidad (KL + entropía), reconstrucción MSE y el término de información mutua del grafo.</p>
-          </article>
-        </div>
-
-        <div class="connection-intro">
-          <h3>Grafo conceptual base usado como regularización</h3>
-          <p>
-            La matriz de adyacencia <code>g</code> de la ecuación 3 es el grafo de variables seleccionadas —mismo
-            orden de columnas que alimenta al modelo—, construido a partir de las relaciones físico/lógicas de
-            dominio descritas en <a href="#criticidad-fisica">#criticidad-fisica</a>. El entrenamiento no ve
-            etiquetas del grafo: solo alinea, vía kernel RBF e información mutua de Rényi, la forma en que el
-            modelo reconstruye cada variable con la forma en que el experto dice que esas variables se
-            relacionan entre sí.
-          </p>
-        </div>
-
-        <div class="detail-block">
-          <h3>Grafo base embebido</h3>
-          <iframe class="graph-frame" src={grafoRedNivel2Seleccionadas} title="Grafo experto de variables seleccionadas, usado como regularización del M-GCECDL"></iframe>
-        </div>
-      </section>
-
-      <section id="comandos" class="section">
-        <div class="section-heading">
-          <p class="eyebrow">Puntos de entrada reales</p>
-          <h2>Familia de comandos de reporte</h2>
-          <p>
-            Cinco comandos nativos del runtime operan sobre el mismo pipeline determinista. <code>/report</code> es
-            el único orquestador de un circuito; <code>/reporte-lote</code> e <code>/informe-gerencial</code> lo
-            invocan por referencia (nunca copian su lógica) y reutilizan el mismo contrato de clustering que
-            <code>/agrupamiento-circuitos</code> expone como comando standalone; <code>/limpiar-corridas</code> es
-            el único que no invoca ningún agente.
-          </p>
-        </div>
-
-        <div class="agent-grid">
-          <article class="agent-card">
-            <span class="agent-type high">Orquestador</span>
-            <h3>/report</h3>
-            <p><code>/report CIRCUITO [fecha_inicio fecha_fin]</code> — reporte HTML de un circuito, los 9 pasos completos: agentes <code>historical</code>, <code>inference</code>, <code>auto-simulator</code> y <code>expert-alignment</code>, más la proyección al vault (paso 9).</p>
-          </article>
-          <article class="agent-card">
-            <span class="agent-type high">Lote</span>
-            <h3>/reporte-lote</h3>
-            <p><code>/reporte-lote grupo=alta</code> — invoca <code>/report</code> (pasos 2-9 completos) para cada circuito de un grupo de criticidad, precedido por el scatter de clustering del paso 1.5.</p>
-          </article>
-          <article class="agent-card">
-            <span class="agent-type high">Síntesis</span>
-            <h3>/informe-gerencial</h3>
-            <p><code>/informe-gerencial grupo=media</code> — informe gerencial cross-circuito sobre hasta 12 circuitos representativos del grupo, con el scatter de clustering de toda la flota y el grafo circular de patrones cross-circuito (toggle junto al grafo por comunidades).</p>
-          </article>
-          <article class="agent-card">
-            <span class="agent-type model">Standalone</span>
-            <h3>/agrupamiento-circuitos</h3>
-            <p>Solo el scatter interactivo de clustering de criticidad, sin generar reporte. Expone el contrato que reutilizan <code>/reporte-lote</code> e <code>/informe-gerencial</code>.</p>
-          </article>
-          <article class="agent-card">
-            <span class="agent-type low">Mantenimiento</span>
-            <h3>/limpiar-corridas</h3>
-            <p>Dry-run con resumen por categoría, seguido de confirmación explícita e irreversible para borrar artefactos desechables de corridas previas (runs, HTML, vault). No invoca ningún agente ni skill.</p>
-          </article>
-        </div>
-      </section>
-
-      <section id="datos-estructurados" class="detail-panel" aria-labelledby="datos-title">
-        <div class="detail-shell">
-          <a class="back-link" href="#arquitectura">← Volver al simulador multimodal</a>
-          <div class="section-heading">
-            <p class="eyebrow">Componente 01</p>
-            <h2 id="datos-title">Datos estructurados</h2>
-            <p>
-              Trazabilidad desde el archivo enriquecido de 273 columnas, pasando por la versión v3 de 173
-              columnas, hasta las 71 columnas seleccionadas y los 70 predictores usados por el modelo M-GCECDL.
-            </p>
-          </div>
-
-          <div class="detail-stats">
-            <article><strong>164.896</strong><span>filas originales</span></article>
-            <article><strong>273</strong><span>columnas después del enriquecimiento climático</span></article>
-            <article><strong>173</strong><span>columnas conservadas en la versión v3</span></article>
-            <article><strong>71</strong><span>columnas seleccionadas, incluido el objetivo</span></article>
-            <article><strong>70</strong><span>predictores finales del modelo</span></article>
-          </div>
-
-          <div class="detail-block">
-            <h3>Resumen de los datos originales</h3>
-            <p>
-              Cada fila representa la relación entre una falla, el vano afectado, su equipo de protección,
-              atributos eléctricos y físicos, e información climática horaria. El archivo enriquecido contiene
-              48 columnas base y nueve familias climáticas con 25 horas cada una: <code>48 + 9 × 25 = 273</code>.
-            </p>
-            <div class="table-wrap wide-table">
-              <table>
-                <thead><tr><th>Índice</th><th>CIRCUITO</th><th>FID_SW</th><th>COD_EQ_PROTEGE</th><th>FID_VANO</th><th>T_USUS_EQ_PROT</th><th>LVSW</th><th>CNT_VN</th><th>CNT_VN_SW</th><th>FECHA</th><th>DURACION</th><th>…</th><th>clouds_15</th><th>clouds_16</th><th>clouds_17</th><th>clouds_18</th><th>clouds_19</th><th>clouds_20</th><th>clouds_21</th><th>clouds_22</th><th>clouds_23</th><th>clouds_24</th></tr></thead>
-                <tbody>
-                  <tr><td>0</td><td>AGU23L14</td><td>20142930</td><td>AGU23L14</td><td>20139439</td><td>1821</td><td>2,568</td><td>16</td><td>22</td><td>2025-11-03 23:56:04</td><td>0,008</td><td>…</td><td>100</td><td>100</td><td>100</td><td>100</td><td>100</td><td>100</td><td>100</td><td>100</td><td>100</td><td>100</td></tr>
-                  <tr><td>1</td><td>AGU23L14</td><td>20142930</td><td>AGU23L14</td><td>20139439</td><td>1821</td><td>2,568</td><td>16</td><td>22</td><td>2025-11-18 17:08:14</td><td>0,008</td><td>…</td><td>100</td><td>100</td><td>84</td><td>99</td><td>99</td><td>98</td><td>98</td><td>97</td><td>98</td><td>100</td></tr>
-                  <tr><td>2</td><td>AGU23L14</td><td>20142930</td><td>AGU23L14</td><td>20139439</td><td>1821</td><td>2,568</td><td>16</td><td>22</td><td>2025-11-19 20:25:50</td><td>0,008</td><td>…</td><td>79</td><td>99</td><td>100</td><td>100</td><td>100</td><td>97</td><td>100</td><td>100</td><td>99</td><td>98</td></tr>
-                  <tr class="ellipsis-row"><td>…</td><td colspan="21">164.886 registros intermedios</td></tr>
-                  <tr><td>164891</td><td>GTO23L13</td><td>31291927</td><td>L22261</td><td>357636441</td><td>15</td><td>1,657</td><td>17</td><td>21</td><td>2025-11-16 06:55:00</td><td>8,833</td><td>…</td><td>100</td><td>100</td><td>88</td><td>61</td><td>98</td><td>55</td><td>68</td><td>87</td><td>100</td><td>100</td></tr>
-                  <tr><td>164895</td><td>GTO23L13</td><td>31291927</td><td>L22261</td><td>357636454</td><td>15</td><td>2,142</td><td>21</td><td>21</td><td>2025-11-16 06:55:00</td><td>8,833</td><td>…</td><td>100</td><td>100</td><td>88</td><td>61</td><td>98</td><td>55</td><td>68</td><td>87</td><td>100</td><td>100</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div class="detail-block">
-            <h3>Trazabilidad de columnas: 273 → 173 → 71 → 70</h3>
-            <div class="process-grid">
-              <article><strong>273 → 173</strong><p>Se retiran las 25 horas de <code>{climateFamiliesExcludedFromV3.slice(0, 4).join(", ")}</code>: cuatro familias completas, equivalentes a 100 columnas.</p></article>
-              <article><strong>173 → 71</strong><p>El Excel conserva 22 variables base, cuatro familias climáticas y <code>UITI_VANO</code>. Cada familia se limita a los rezagos <code>0…11</code>.</p></article>
-              <article><strong>102 descartadas</strong><p>Se excluyen 25 columnas base con <code>SELECCIÓN = 0</code>, la familia <code>clouds</code> y 52 columnas climáticas de rezagos <code>12…24</code>.</p></article>
-              <article><strong>71 → 70</strong><p><code>UITI_VANO</code> se separa como variable objetivo; las 70 columnas restantes forman la matriz del modelo.</p></article>
-            </div>
-            <p><strong>Columnas base no usadas por el modelo:</strong></p>
-            <div class="feature-list">{baseColumnsExcludedFromModel.map((column) => <code>{column}</code>)}</div>
-          </div>
-
-          <div class="detail-block">
-            <h3>Grafo original de variables</h3>
-            <p>
-              El grafo no representa una etapa de reducción del dataset. Conserva todas las variables del catálogo:
-              48 variables base y las nueve familias climáticas, usando solo 12 horas por familia. Por eso contiene
-              <strong>156 nodos</strong>: <code>48 + 9 × 12</code>.
-            </p>
-            <iframe class="graph-frame" src={grafoRedNivel2} title="Grafo original de la red Nivel 2"></iframe>
-          </div>
-
-          <div class="detail-block">
-            <h3>Vacíos después de completar con API</h3>
-            <p>
-              El reporte se calcula antes de la limpieza final. Los mayores vacíos se concentran en datos del
-              transformador y riesgo de vegetación; esto evidencia qué atributos no retornó la fuente externa.
-            </p>
-            <div class="table-wrap compact-table">
-              <table><thead><tr><th>Columna</th><th>Vacíos API</th><th>Porcentaje</th></tr></thead><tbody>
-                {vaciosApi.map(([columna, vacios, porcentaje]) => <tr><td>{columna}</td><td>{vacios}</td><td>{porcentaje}</td></tr>)}
-              </tbody></table>
-            </div>
-          </div>
-
-          <div class="detail-block cleaning-block">
-            <h3>Tratamiento aplicado y generación de la versión v3</h3>
-            <div class="process-grid">
-              <article><strong>1. Imputación numérica</strong><p>Se reemplazan por cero los vacíos de consumos, riesgo, usuarios y capacidad nominal.</p></article>
-              <article><strong>2. Imputación textual</strong><p><code>CALIBRE_NEUTRO</code> vacío se representa con la categoría <code>"0"</code>.</p></article>
-              <article><strong>3. Consistencia temporal</strong><p><code>FECHA_OPERACION_TRF</code> toma la fecha de operación del vano cuando falta.</p></article>
-              <article><strong>4. Criterio de calidad</strong><p>Se eliminan 5.426 filas sin <code>ALTURA</code> y se vuelve a auditar el resultado.</p></article>
-            </div>
-            <p class="note-callout">La limpieza resuelve los campos operativos definidos por el flujo. Las columnas no imputadas se conservan para auditoría y se reportan nuevamente antes del entrenamiento.</p>
-          </div>
-
-          <div class="detail-block">
-            <h3>Variables seleccionadas</h3>
-            <p>
-              El archivo <code>Variables_seleccion.xlsx</code> evalúa 57 entradas y marca 27: una corresponde al
-              objetivo, 22 son predictores base y cuatro son familias climáticas que se expanden en 12 horas cada una.
-              Esto produce 71 columnas seleccionadas, incluyendo <code>UITI_VANO</code>, y 70 predictores después
-              de separar el objetivo.
-            </p>
-            <div class="table-wrap compact-table">
-              <table><thead><tr><th>Variable</th><th>Descripción</th><th>Uso</th></tr></thead><tbody>
-                {variablesSeleccionadas.map(([nombre, descripcion, uso]) => <tr><td><code>{nombre}</code></td><td>{descripcion}</td><td>{uso}</td></tr>)}
-              </tbody></table>
-            </div>
-          </div>
-
-          <div class="detail-block">
-            <h3>Grafo con variables seleccionadas</h3>
-            <p>La segunda vista concentra el análisis en las variables que alimentan el modelo y sus relaciones técnicas.</p>
-            <iframe class="graph-frame" src={grafoRedNivel2Seleccionadas} title="Grafo de variables seleccionadas"></iframe>
-          </div>
-          <a class="back-link bottom" href="#arquitectura">← Volver al simulador multimodal</a>
-        </div>
-      </section>
-
-      <section id="historial-rag" class="detail-panel" aria-labelledby="historial-title">
-        <div class="detail-shell">
-          <a class="back-link" href="#arquitectura">← Volver al simulador multimodal</a>
-          <div class="section-heading">
-            <p class="eyebrow">Componente 02</p>
-            <h2 id="historial-title">Historial y discusión experta en PDF</h2>
-            <p>
-              Construcción de una memoria técnica verificable a partir de reportes expertos en PDF y su uso
-              posterior como contexto documental para comparar el análisis histórico, la interpretación
-              predictiva y la evidencia operacional disponible.
-            </p>
-          </div>
-
-          <div class="detail-stats">
-            <article><strong>8</strong><span>PDFs técnicos de entrada</span></article>
-            <article><strong>14</strong><span>discusiones expertas validadas</span></article>
-            <article><strong>5</strong><span>columnas del Excel base</span></article>
-            <article><strong>4</strong><span>agentes del flujo de reporte</span></article>
-          </div>
-
-          <div class="detail-block">
-            <h3>Proceso de extracción PDF</h3>
-            <p>
-              El proceso transforma documentos técnicos en una tabla auditable. No usa embeddings, FAISS,
-              Chroma ni una base vectorial: el control se hace mediante fragmentos trazables, una skill de
-              extracción y validación de campos.
-            </p>
-            <div class="process-grid">
-              {pdfExtractionSteps.map(([paso, descripcion]) => (
-                <article><strong>{paso}</strong><p>{descripcion}</p></article>
-              ))}
-            </div>
-          </div>
-
-          <div class="detail-block">
-            <h3>Tabla base de discusiones técnicas</h3>
-            <p>
-              El resultado queda en <code>tabla_pdfs_intervalo_2025-11-01_2026-04-30.xlsx</code>.
-              Esta tabla es la entrada documental que luego permite buscar coincidencias temporales y técnicas
-              con el circuito analizado.
-            </p>
-            <div class="table-wrap compact-table">
-              <table>
-                <thead>
-                  <tr>{pdfDiscussionColumns.map((column) => <th>{column}</th>)}</tr>
-                </thead>
-                <tbody>
-                  {pdfDiscussionRows.map((row) => (
-                    <tr>{row.map((value) => <td>{value}</td>)}</tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div class="detail-block">
-            <h3>Flujo de generación de reportes</h3>
-            <p>
-              El despacho paralelo obligatorio de <code>/report</code> corre <code>historical</code>,
-              <code>inference</code> y <code>auto-simulator</code> juntos; cuando los dos primeros terminan,
-              <code>expert-alignment</code> compara sus resultados contra la memoria experta de los PDFs.
-            </p>
-            <div class="process-grid model-process">
-              {llmNotebookFlow.map(([agente, descripcion]) => (
-                <article><strong>{agente}</strong><p>{descripcion}</p></article>
-              ))}
-            </div>
-            <p class="note-callout">
-              <code>historical</code> e <code>inference</code> producen diagnósticos independientes;
-              <code>auto-simulator</code> corre junto y puede omitirse sin bloquear el reporte.
-              <code>expert-alignment</code> no reemplaza esos análisis: los compara con las discusiones
-              expertas para marcar coincidencias, diferencias y variables a priorizar.
-            </p>
-          </div>
-          <a class="back-link bottom" href="#arquitectura">← Volver al simulador multimodal</a>
-        </div>
-      </section>
-
-      <section id="agente-base" class="detail-panel" aria-labelledby="agente-base-title">
-        <div class="detail-shell">
-          <a class="back-link" href="#arquitectura">← Volver al simulador multimodal</a>
-          <div class="section-heading">
-            <p class="eyebrow">Agente base</p>
-            <h2 id="agente-base-title">Descriptor histórico del circuito</h2>
-            <p>
-              Construye el paquete histórico que interpreta el primer LLM del reporte. El flujo selecciona
-              circuito y ventana, agrupa eventos por día, detecta puntos críticos y prepara un contexto
-              estructurado con métricas, causas observadas, variables disponibles, faltantes y relaciones del
-              grafo. El LLM no decide esos cálculos: los recibe ya determinados por Python.
-            </p>
-          </div>
-          <div class="detail-block">
-            <h3>Selección de circuito y ventana</h3>
-            <p>
-              Esta etapa define el alcance del análisis antes de cualquier llamada al LLM. La selección controla
-              qué registros entran a la serie diaria, qué mapa se exporta como apoyo visual y qué fechas pueden
-              aparecer después en el JSON validado.
-            </p>
-            <div class="process-grid">
-              <article><strong>Circuito</strong><p>Si existe una selección explícita, se toma el primer circuito seleccionado. Si no existe, se usa el primer circuito disponible en la base.</p></article>
-              <article><strong>Fechas</strong><p>La ventana usa fecha inicial y final cuando están definidas; si no, trabaja con el período disponible para el circuito.</p></article>
-              <article><strong>Agrupación</strong><p>Los eventos filtrados se agrupan por día para construir la serie diaria de UITI_VANO y número de eventos.</p></article>
-              <article><strong>Mapa</strong><p>El mapa usa GEO para dibujar vanos, transformadores e interruptores; colorea los vanos por eventos o UITI_VANO.</p></article>
-            </div>
-          </div>
-
-          <div class="detail-block">
-            <h3>Mapas base del circuito</h3>
-            <p>
-              El mapa se exporta como referencia para el usuario y para la trazabilidad del reporte. No es la
-              fuente primaria del razonamiento del LLM: la fuente primaria es el contexto estructurado con
-              circuito, vanos, conteos, fechas y resumen de eventos. Los mapas permiten verificar visualmente
-              que el análisis corresponde al circuito y ventana seleccionados, incluyendo transformadores e
-              interruptores cargados desde la carpeta GEO.
-            </p>
-            <iframe class="graph-frame compact-frame" src={baseCircuitMap} title="Mapa base por número de eventos"></iframe>
-            <iframe class="graph-frame compact-frame" src={baseCircuitMapUiti} title="Mapa base por UITI_VANO"></iframe>
-          </div>
-
-          <div class="detail-block">
-            <h3>Estimación de puntos críticos</h3>
-            <div class="process-grid">
-              <article><strong>Serie diaria</strong><p>Se construye una tabla diaria desde los eventos filtrados del circuito y la ventana seleccionada.</p></article>
-              <article><strong>Features diarias</strong><p>Se calculan variables derivadas sobre UITI_VANO para comparar magnitud, comportamiento local y recurrencia.</p></article>
-              <article><strong>Razones</strong><p>El detector asigna motivos técnicos a cada día candidato usando umbrales de criticidad configurados.</p></article>
-              <article><strong>Ranking</strong><p>Los candidatos se ordenan y se conservan hasta el máximo de puntos críticos definido para el análisis.</p></article>
-            </div>
-            <div class="formula-box">
-              <p><strong>Base diaria:</strong> primero se resume la información por día, acumulando el impacto UITI_VANO de los eventos y contando cuántos registros ocurrieron en esa fecha.</p>
-              <p><strong>Comportamiento esperado:</strong> cada día se compara contra la línea base de la ventana usando una medida robusta, menos sensible a valores extremos que un promedio simple.</p>
-              <p><strong>Cambios bruscos:</strong> el flujo revisa si el impacto de un día sube de forma marcada frente al día anterior, porque un salto repentino puede señalar una condición operativa relevante.</p>
-              <p><strong>Peso dentro del período:</strong> también se mide cuánto aporta cada día al impacto total de la ventana; así se identifican fechas que concentran una parte importante del problema.</p>
-              <p><strong>Candidatos:</strong> un día se considera crítico si combina señales como valor alto, salto positivo, aporte relevante al total o pico local frente a los días vecinos.</p>
-              <p><strong>Selección final:</strong> cada candidato recibe un puntaje técnico, se ordena por criticidad e impacto, y se conservan los puntos definidos para alimentar el análisis del agente base.</p>
-            </div>
-          </div>
-
-          <div class="detail-block">
-            <h3>Visual de puntos críticos</h3>
-            <p>
-              La visualización muestra la misma selección que entra al contexto del agente base: serie diaria,
-              número de eventos y fechas críticas detectadas por reglas determinísticas. Su función es auditar
-              qué días fueron entregados al LLM como puntos de discusión; el agente solo puede referirse a esas
-              fechas si existen en el contexto.
-            </p>
-            <iframe class="graph-frame compact-frame" src={baseCriticalPoints} title="Puntos críticos del circuito seleccionado"></iframe>
-          </div>
-
-          <div class="detail-block">
-            <h3>Skills y contrato del agente base</h3>
-            <p>
-              Con el circuito, la ventana, la serie diaria y los puntos críticos ya calculados, el LLM recibe
-              un paquete de contexto estructurado. Ese paquete incluye resumen temporal, métricas agregadas,
-              identificadores de puntos críticos, causas registradas en los datos, variables disponibles,
-              columnas opcionales faltantes y relaciones del grafo. Las skills indican cómo convertir ese
-              contexto en explicación sin inventar fechas, causas, variables ni relaciones.
-            </p>
-            <div class="process-grid">
-              <article><strong>Structured context builder</strong><p>Construye el paquete que el LLM recibe: selección, métricas diarias, puntos críticos, variables disponibles y faltantes.</p></article>
-              <article><strong>Behavior explainer</strong><p>Convierte serie, causas observadas y puntos críticos en hipótesis históricas verificables.</p></article>
-              <article><strong>Graph guardrails</strong><p>Permite usar relaciones del grafo como apoyo de contexto.</p></article>
-              <article><strong>Base output contract</strong><p>Define las secciones y referencias obligatorias del JSON para integrarlo al reporte HTML.</p></article>
-            </div>
-            <p class="note-callout">
-              La salida esperada no es texto libre: es un JSON de análisis con secciones, referencias a fechas
-              y puntos críticos existentes, hipótesis y limitaciones. La validación comprueba ese JSON antes de
-              convertirlo en contenido del reporte.
-            </p>
-          </div>
-
-          <div class="detail-block">
-            <h3>Validación y reparación del JSON</h3>
-            <p>
-              Esta etapa protege el flujo. Antes de mostrar resultados, el sistema revisa que la respuesta del
-              LLM cumpla el contrato, use identificadores reales del contexto y no introduzca referencias que no
-              fueron calculadas por el cuaderno.
-            </p>
-            <div class="process-grid">
-              <article><strong>Intento base</strong><p>El prompt inicial se envía al LLM con el paquete de contexto y el contrato de salida.</p></article>
-              <article><strong>Validación</strong><p>La respuesta se valida contra el esquema y contra identificadores presentes en el contexto.</p></article>
-              <article><strong>Artefactos inválidos</strong><p>Si la salida no valida, se guarda el texto crudo y los errores para auditoría.</p></article>
-              <article><strong>Reparación</strong><p>El prompt de reparación pide corregir solo el JSON final. Si vuelve a fallar, se reintenta con mayor presupuesto de salida.</p></article>
-            </div>
-            <p class="note-callout">
-              Si después de los reintentos no existe un JSON válido, el flujo detiene la generación del HTML.
-              Así la página y el reporte no presentan análisis que no cumpla el contrato.
-            </p>
-          </div>
-          <a class="back-link bottom" href="#arquitectura">← Volver al simulador multimodal</a>
-        </div>
-      </section>
-
-      <section id="agente-rag" class="detail-panel" aria-labelledby="rag-title">
-        <div class="detail-shell">
-          <a class="back-link" href="#arquitectura">← Volver al simulador multimodal</a>
-          <div class="section-heading">
-            <p class="eyebrow">Agente extractor</p>
-            <h2 id="rag-title">Extractor documental de discusiones técnicas</h2>
-            <p>
-              Construye la memoria documental que luego usan los agentes de reporte. El flujo toma reportes
-              expertos en PDF, los divide en fragmentos trazables y pide al LLM que genere una fila estructurada
-              únicamente cuando el fragmento contiene una discusión técnica con evidencia y fecha comparable.
-            </p>
-          </div>
-
-          <div class="detail-block">
-            <h3>Selección de documentos y ventana</h3>
-            <p>
-              El flujo parte de los reportes técnicos disponibles y de una ventana de fechas definida por el
-              usuario. Cada PDF se asocia a un circuito desde el nombre del archivo; si el nombre no permite
-              identificar el circuito, ese documento no se usa para generar filas de la tabla.
-            </p>
-            <div class="process-grid">
-              <article><strong>PDFs de entrada</strong><p>Se recorren los reportes expertos almacenados para el análisis documental.</p></article>
-              <article><strong>Circuito del PDF</strong><p>El circuito se toma del nombre del archivo y se conserva como identificador obligatorio de la fila.</p></article>
-              <article><strong>Ventana solicitada</strong><p>La discusión solo se acepta si su fecha o intervalo se traslapa con el rango definido para la tabla.</p></article>
-              <article><strong>Período del informe</strong><p>Cuando el documento declara un período general, este puede usarse solo si la discusión no trae una fecha más específica.</p></article>
-            </div>
-          </div>
-
-          <div class="detail-block">
-            <h3>Extracción y segmentación del texto</h3>
-            <p>
-              Antes de llamar al LLM, el cuaderno hace una limpieza determinística: extrae el texto página por
-              página, agrupa páginas en fragmentos manejables y filtra candidatos con señales mínimas de utilidad
-              técnica. Así el agente no interpreta documentos completos sin control; interpreta unidades
-              pequeñas con página de origen, circuito, período y ventana de comparación.
-            </p>
-            <div class="process-grid">
-              <article><strong>Texto por página</strong><p>Se usa extracción directa del PDF y se advierte cuando una página no tiene texto recuperable.</p></article>
-              <article><strong>Fragmentos</strong><p>Las páginas se agrupan por tamaño de texto, conservando el rango de páginas de origen.</p></article>
-              <article><strong>Filtro inicial</strong><p>Un fragmento entra como candidato si contiene términos técnicos y alguna señal de fecha, circuito o período asociado.</p></article>
-              <article><strong>Trazabilidad</strong><p>Cada fragmento conserva nombre del PDF, páginas, circuito detectado y período general disponible.</p></article>
-            </div>
-          </div>
-
-          <div class="detail-block">
-            <h3>Skill y contrato del extractor</h3>
-            <p>
-              El LLM recibe un fragmento candidato con sus metadatos: ventana solicitada, nombre del PDF,
-              circuito heredado del archivo, páginas de origen, período general del informe y texto del
-              fragmento. La skill funciona como filtro experto: decide si hay discusión técnica suficiente,
-              asigna fechas con una jerarquía definida y produce una fila solo si puede sostenerla con evidencia
-              textual del propio fragmento.
-            </p>
-            <div class="process-grid">
-              <article><strong>PDF discussion extractor</strong><p>Convierte fragmentos útiles en filas documentales; si no hay evidencia suficiente, debe descartar.</p></article>
-              <article><strong>Reglas de fecha</strong><p>Ordenan la decisión temporal: fecha explícita, fecha de tabla/evento, mantenimiento asociado o período general del informe.</p></article>
-              <article><strong>Reglas de circuito</strong><p>Evitan mezclar activos: el circuito sale del nombre del PDF y no de menciones internas inconsistentes.</p></article>
-              <article><strong>Contrato de salida</strong><p>Exige JSON con decisión de incluir o descartar, fechas normalizadas, análisis breve y evidencia textual.</p></article>
-            </div>
-          </div>
-
-          <div class="detail-block">
-            <h3>Validación y generación de la tabla</h3>
-            <p>
-              Cada salida del LLM se parsea como JSON y se valida antes de entrar al Excel. Si no se puede
-              parsear, si falta una columna, si la fecha es inválida o si la discusión no se traslapa con la
-              ventana solicitada, la salida se guarda como inválida y no alimenta la tabla final.
-            </p>
-            <div class="process-grid">
-              <article><strong>Parseo JSON</strong><p>Se extrae el objeto JSON de la respuesta y se descarta cualquier salida que no pueda leerse de forma estructurada.</p></article>
-              <article><strong>Campos obligatorios</strong><p>La fila solo pasa si contiene circuito, fechas, análisis y evidencia.</p></article>
-              <article><strong>Control temporal</strong><p>Las fechas se normalizan y se revisa que estén dentro o se crucen con el rango solicitado.</p></article>
-              <article><strong>Artefactos</strong><p>Se guardan prompts, contextos, salidas crudas y errores para auditar cómo se construyó la tabla.</p></article>
-            </div>
-          </div>
-
-          <div class="detail-block">
-            <h3>Tabla documental generada</h3>
-            <p>
-              El resultado no es un resumen completo de los PDFs. Es una tabla de memoria técnica: conserva
-              solo discusiones validadas, con fecha y evidencia, para que más adelante el flujo pueda comparar
-              análisis histórico, modelo predictivo y evidencia documental sin volver a leer documentos crudos.
-            </p>
-            <div class="table-wrap compact-table">
-              <table>
-                <thead>
-                  <tr>{pdfDiscussionColumns.map((column) => <th>{column}</th>)}</tr>
-                </thead>
-                <tbody>
-                  {pdfDiscussionRows.map((row) => (
-                    <tr>{row.map((value) => <td>{value}</td>)}</tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <a class="back-link bottom" href="#arquitectura">← Volver al simulador multimodal</a>
-        </div>
-      </section>
-
-      <section id="orquestador-mgcecdl" class="detail-panel" aria-labelledby="orquestador-title">
-        <div class="detail-shell">
-          <a class="back-link" href="#arquitectura">← Volver al simulador multimodal</a>
-          <div class="section-heading">
-            <p class="eyebrow">Agente predictivo</p>
-            <h2 id="orquestador-title">Modelo predictivo M-GCECDL</h2>
-            <p>
-              Ejecuta el clasificador M-GCECDL sobre las variables del vano y organiza sus salidas para el
-              reporte: nivel de criticidad, probabilidades, confiabilidad modal, variables relevantes y grafos
-              de apoyo. En esta etapa la variable objetivo UITI_VANO no se usa como predictor.
-            </p>
-          </div>
-
-          <div class="detail-block">
-            <h3>Características del modelo</h3>
-            <div class="process-grid">
-              <article><strong>Dos modos</strong><p>Entrena entradas climáticas/exógenas y estructurales/endógenas por separado antes de fusionarlas.</p></article>
-              <article><strong>70 predictores</strong><p>Usa 50 variables climáticas y 20 variables estructurales; UITI_VANO queda separado como objetivo.</p></article>
-              <article><strong>Clasificación ordinal</strong><p>Convierte UITI_VANO en niveles de criticidad para priorizar el riesgo operativo del vano.</p></article>
-              <article><strong>Salida multimodal</strong><p>Entrega predicción fusionada, salidas por modo y confiabilidad relativa de cada modo.</p></article>
-            </div>
-          </div>
-
-          <div class="detail-block">
-            <h3>Entrenamiento, costo y Optuna</h3>
-            <p>
-              El entrenamiento combina la pérdida de clasificación fusionada con pérdidas auxiliares por modo,
-              acuerdo entre modos, regularización de confiabilidad y componentes de reconstrucción del grafo.
-              Optuna busca una configuración estable en vez de fijar manualmente todos los pesos del modelo.
-            </p>
-            <div class="process-grid">
-              <article><strong>Función de costo</strong><p>Usa Generalized Cross Entropy para la salida fusionada y para las salidas por modo, más penalizaciones de acuerdo, regularización, reconstrucción e información mutua.</p></article>
-              <article><strong>Arquitectura</strong><p>Optuna explora <code>hidden_dim</code> 128/192/256, <code>embed_dim</code> 64/96/128, dropout 0-0,25 y temperatura 0,5-2,0.</p></article>
-              <article><strong>Optimización</strong><p>Explora learning rate 1e-4 a 1e-1, weight decay 1e-6 a 1e-4, batch 256/512/1024 y optimizador Adam, AdamW, SGD o RMSprop.</p></article>
-              <article><strong>Pesos de pérdida</strong><p>Ajusta <code>q</code>, <code>q_d</code>, pesos de supervisión, acuerdo, regularización, reconstrucción e información mutua.</p></article>
-            </div>
-          </div>
-
-          <div class="detail-block">
-            <h3>Rendimiento del modelo</h3>
-            <p>
-              Antes de usar el modelo en reportes, el flujo de rendimiento carga el mejor clasificador,
-              evalúa la clasificación y guarda visuales generales. La matriz de confusión muestra errores por
-              clase; la curva ROC revisa separación entre niveles de criticidad.
-            </p>
-            <div class="visual-grid">
-              <figure>
-                <img src={mgcecdlConfusionMatrix.src} alt="Matriz de confusión del modelo M-GCECDL" />
-                <figcaption>Control de clasificación por nivel de criticidad.</figcaption>
-              </figure>
-              <figure>
-                <img src={mgcecdlRocCurve.src} alt="Curvas ROC multiclase del modelo M-GCECDL" />
-                <figcaption>Validación de separación entre clases.</figcaption>
-              </figure>
-            </div>
-          </div>
-
-          <div class="detail-block">
-            <h3>SHAP, Borda y variables relevantes</h3>
-            <p>
-              En la generación de reportes, el modelo predictivo no entrega una sola explicación global. El
-              flujo arma escenarios para el período completo y para las fechas críticas elegidas por el agente
-              base; en cada ventana compara vanos priorizados por severidad UITI_VANO y por frecuencia de
-              eventos. Para cada escenario calcula Kernel SHAP por evento, conserva el Top-20 de variables y
-              agrega esas posiciones con Borda ponderado por la magnitud SHAP.
-            </p>
-            <div class="formula-box">
-              <p><strong>Función de Borda:</strong> convierte el ranking Top-20 de cada evento en un puntaje acumulable. La posición 1 recibe 20 puntos base, la posición 2 recibe 19 y así hasta la posición 20, que recibe 1.</p>
-              <p><strong>Ejemplo coherente con el flujo:</strong> una variable en puesto 1 con SHAP 0,20 suma 20 × 0,20 = 4,00. Otra en puesto 3 con SHAP 0,12 suma 18 × 0,12 = 2,16.</p>
-              <p>Al sumar muchos eventos, Borda cuantifica persistencia en el ranking y SHAP cuantifica intensidad de atribución. Luego el resultado se normaliza para ordenar variables comparables dentro del escenario.</p>
-              <p>Esta lectura alimenta las skills como priorización predictiva: ayuda a decir qué variables revisó el modelo y con qué recurrencia relativa.</p>
-            </div>
-          </div>
-
-          <div class="detail-block">
-            <h3>Ejemplo visual del escenario predictivo</h3>
-            <p>
-              El LLM recibe, para cada escenario, un paquete estructurado con tres salidas principales:
-              variables Top-20 agregadas por SHAP+Borda, puntajes agregados por modo y ruta del grafo estimado.
-              Ese paquete se genera tanto para el período completo como para las fechas críticas seleccionadas
-              por el agente base. Aquí se muestra un ejemplo del escenario <strong>Top P97 por UITI_VANO —
-              período completo</strong>; los demás escenarios siguen la misma lógica.
-            </p>
-            <div class="visual-grid predictive-visual-grid">
-              <figure>
-                <img src={mgcecdlTopUitiPeriodoBarras.src} alt="Barras SHAP y Borda del escenario Top P97 por UITI_VANO" />
-                <figcaption><strong>Barras SHAP+Borda.</strong> Le entregan a la skill de comportamiento predictivo qué variables de entrada debe discutir primero y cuáles quedan como señales secundarias.</figcaption>
-              </figure>
-              <figure>
-                <img src={mgcecdlTopUitiPeriodoRadar.src} alt="Radar de modos del escenario Top P97 por UITI_VANO" />
-                <figcaption><strong>Radar de modos.</strong> Le indica al agente si la explicación debe centrarse en el modo climático/exógeno, el estructural/endógeno o en una combinación de ambos.</figcaption>
-              </figure>
-              <figure>
-                <iframe class="graph-frame compact-frame" src={grafoTopUitiPeriodoMgcecdl} title="Grafo estimado MGCECDL del escenario Top P97 por UITI_VANO"></iframe>
-                <figcaption><strong>Grafo estimado.</strong> Alimenta la skill de conectividad: permite revisar relaciones relativas entre variables priorizadas.</figcaption>
-              </figure>
-            </div>
-          </div>
-
-          <div class="detail-block">
-            <h3>Skills del agente predictivo</h3>
-            <p>
-              El LLM no recibe solo imágenes. Recibe un contexto estructurado con escenarios, criterios de
-              selección, top variables SHAP+Borda, puntajes por modo, rutas de grafos y metadatos del modelo.
-              Las skills convierten ese paquete en discusión técnica: primero identifican el escenario, luego
-              leen variables priorizadas, después interpretan el balance modal y finalmente usan el grafo como
-              apoyo de conectividad.
-            </p>
-            <div class="process-grid">
-              <article><strong>Circuit scenario interpreter</strong><p>Toma cada escenario del cuaderno y ordena la lectura por período completo, frecuencia, UITI_VANO o puntos críticos.</p></article>
-              <article><strong>UITI_VANO behavior explainer</strong><p>Usa las barras SHAP+Borda y el radar para redactar hipótesis predictivas sobre variables y modos dominantes.</p></article>
-              <article><strong>Graph connectivity guardrails</strong><p>Usa el grafo estimado como soporte de conectividad.</p></article>
-              <article><strong>Inference output contract</strong><p>Define el JSON que debe producir el agente para que el reporte pueda integrar escenarios, hallazgos, grafos y limitaciones.</p></article>
-            </div>
-          </div>
-
-          <div class="detail-block">
-            <h3>Validaciones de salida</h3>
-            <p>
-              La respuesta del agente predictivo se valida antes de mostrarse: debe respetar el esquema,
-              referenciar escenarios existentes, no incluir UITI_VANO como variable predictora priorizada y
-              separar claramente predicción, importancia de variables y lectura operativa.
-            </p>
-            <div class="process-grid">
-              <article><strong>Contrato estructurado</strong><p>La salida debe ser JSON válido con secciones esperadas para el reporte.</p></article>
-              <article><strong>Variables permitidas</strong><p>La priorización se limita a variables que realmente recibe el modelo.</p></article>
-              <article><strong>Escenarios válidos</strong><p>Solo puede hablar de escenarios SHAP, barras, radar y grafos generados por el flujo.</p></article>
-              <article><strong>Control conceptual</strong><p>Debe declarar que SHAP, Borda y grafos explican asociaciones del modelo.</p></article>
-            </div>
-          </div>
-          <a class="back-link bottom" href="#arquitectura">← Volver al simulador multimodal</a>
-        </div>
-      </section>
-
-      <section id="agente-causalidad" class="detail-panel" aria-labelledby="causalidad-title">
-        <div class="detail-shell">
-          <a class="back-link" href="#arquitectura">← Volver al simulador multimodal</a>
-          <div class="section-heading">
-            <p class="eyebrow">Agente de alineación experta</p>
-            <h2 id="causalidad-title">Contraste experto y priorización operativa</h2>
-            <p>
-              Compara tres fuentes ya estructuradas: el análisis histórico del agente base, la interpretación
-              del modelo predictivo y las filas expertas extraídas desde PDFs. Su objetivo no es demostrar
-              causalidad, sino separar coincidencias, diferencias y variables del modelo que merecen revisión
-              operativa.
-            </p>
-          </div>
-
-          <div class="detail-block">
-            <h3>Entradas que recibe el agente</h3>
-            <p>
-              El agente no lee PDFs ni ejecuta búsquedas externas. Recibe una tabla de coincidencias documentales
-              ya filtrada por cercanía temporal, el JSON validado del análisis histórico, el JSON validado del
-              modelo predictivo, las fechas del informe y la lista exacta de variables que el modelo recibe como
-              entrada.
-            </p>
-            <div class="process-grid">
-              <article><strong>Análisis histórico</strong><p>Aporta comportamiento diario, puntos críticos, causas observadas, limitaciones y lectura de datos históricos.</p></article>
-              <article><strong>Modelo predictivo</strong><p>Aporta escenarios, Top-20 SHAP+Borda, modos, grafos estimados y variables relevantes del M-GCECDL.</p></article>
-              <article><strong>Reportes expertos</strong><p>Aportan filas documentales ya extraídas y seleccionadas desde la tabla de discusiones técnicas.</p></article>
-              <article><strong>Variables permitidas</strong><p>Limita la priorización a variables reales del modelo predictivo; UITI_VANO queda como objetivo, no predictor.</p></article>
-            </div>
-          </div>
-
-          <div class="detail-block">
-            <h3>Método de contraste</h3>
-            <p>
-              La comparación distingue soporte temporal, soporte temático y soporte predictivo. Una coincidencia
-              puede surgir porque el histórico, el modelo y los reportes expertos apuntan al mismo fenómeno; una
-              diferencia aparece cuando una fuente explica algo que las otras no respaldan o cuando el modelo
-              prioriza variables que no están documentadas por los reportes expertos.
-            </p>
-            <div class="process-grid">
-              <article><strong>Coincidencias</strong><p>Resume acuerdos ejecutivos entre análisis histórico, modelo predictivo y reportes expertos.</p></article>
-              <article><strong>Diferencias</strong><p>Separa tensiones: señales del modelo sin respaldo documental, o hallazgos expertos no cubiertos por variables del modelo.</p></article>
-              <article><strong>Variables a priorizar</strong><p>Propone hasta cinco variables de entrada del modelo para revisión operacional, con prioridad y validación sugerida.</p></article>
-              <article><strong>Lenguaje cauteloso</strong><p>Usa asociación, consistencia o posible explicación.</p></article>
-            </div>
-          </div>
-
-          <div class="detail-block">
-            <h3>Uso de grafos para priorizar</h3>
-            <p>
-              El agente usa dos niveles de grafo. El grafo general ayuda a entender rutas técnicas entre
-              protección, topología, activos, entorno y clima. El grafo de variables seleccionadas es el que
-              más pesa para priorizar, porque está alineado con las variables que el modelo predictivo recibe.
-              Si un reporte experto habla de vegetación, protección o descargas, el grafo ayuda a traducir ese
-              hallazgo hacia variables priorizables como <code>NR_T</code>, <code>TIPO</code>, <code>DDT</code>
-              o variables climáticas, siempre que existan en el conjunto del modelo.
-            </p>
-            <iframe class="graph-frame compact-frame" src={grafoRedNivel2Seleccionadas} title="Grafo de variables seleccionadas para alineación experta"></iframe>
-          </div>
-
-          <div class="detail-block">
-            <h3>Skills y contrato de salida</h3>
-            <p>
-              Las skills obligan al agente a usar nombres comprensibles para usuarios expertos en redes:
-              agente de análisis histórico, agente del modelo predictivo y reportes expertos. También controlan
-              que coincidencias y diferencias sean hallazgos ejecutivos, y que las variables priorizadas sean
-              identificadores técnicos reales del modelo.
-            </p>
-            <div class="process-grid">
-              <article><strong>PDF report comparison</strong><p>Compara solo las filas expertas entregadas; no lee PDFs ni usa búsqueda semántica.</p></article>
-              <article><strong>Predictive variable prioritization</strong><p>Convierte coincidencias y diferencias en variables revisables del modelo predictivo.</p></article>
-              <article><strong>Graph context for alignment</strong><p>Usa conexiones del grafo para traducir hallazgos técnicos en variables accionables.</p></article>
-              <article><strong>Contrato JSON</strong><p>Exige contexto, coincidencias, diferencias, brechas, variables a priorizar y síntesis final.</p></article>
-            </div>
-          </div>
-
-          <div class="detail-block">
-            <h3>Validaciones</h3>
-            <p>
-              Antes de mostrarse en el reporte, la salida se valida contra el contexto. El sistema rechaza JSON
-              con texto adicional, fechas fuera del informe, evidencias que no provienen de las filas comparadas
-              o variables inexistentes en el modelo.
-            </p>
-            <div class="process-grid">
-              <article><strong>JSON estricto</strong><p>La respuesta debe ser un único objeto JSON con las claves esperadas.</p></article>
-              <article><strong>Evidencia permitida</strong><p>Solo puede citar o usar evidencia presente en las filas expertas comparadas.</p></article>
-              <article><strong>Variables válidas</strong><p>Descarta variables no presentes en el modelo predictivo y excluye UITI_VANO como predictor.</p></article>
-              <article><strong>Consistencia experta</strong><p>Verifica que el indicador de modelo experto disponible coincida con la evidencia real del circuito.</p></article>
-            </div>
-          </div>
-          <a class="back-link bottom" href="#arquitectura">← Volver al simulador multimodal</a>
-        </div>
-      </section>
-
-      <section id="agente-simulacion" class="detail-panel" aria-labelledby="simulacion-title">
-        <div class="detail-shell">
-          <a class="back-link" href="#arquitectura">← Volver al simulador multimodal</a>
-          <div class="section-heading">
-            <p class="eyebrow">Agente automático</p>
-            <h2 id="simulacion-title">Simulación softmax y mapas por vano</h2>
-            <p>
-              El agente automático toma variables priorizadas por los agentes anteriores, recorre valores
-              originales en curvas softmax y elige la primera configuración donde domina la menor clase de
-              riesgo posible: bajo, luego medio, luego alto. Si solo domina muy alto, deja la variable quieta
-              y lo declara en el análisis.
-            </p>
-          </div>
-
-          <div class="detail-block">
-            <h3>Entradas que recibe</h3>
-            <div class="process-grid">
-              <article><strong>Variables priorizadas</strong><p>Provienen del agente de alineación experta o, si no están disponibles, de las variables principales del agente predictivo M-GCECDL.</p></article>
-              <article><strong>Curvas softmax top 4</strong><p>Recorren valores originales de las variables más relevantes para visualizar probabilidades promedio de bajo, medio, alto y muy alto.</p></article>
-              <article><strong>Valores sugeridos</strong><p>Prioriza configuraciones donde la clase dominante sea la de menor riesgo disponible; no exige máxima certeza si ya cumple el criterio de menor clase.</p></article>
-              <article><strong>Predicción por vano</strong><p>Aplica los valores sugeridos a los registros del circuito y promedia probabilidades softmax por <code>FID_VANO</code>.</p></article>
-              <article><strong>Contexto previo</strong><p>Reutiliza circuito, periodo, modos, grafos, inferencia y comparación experta sin inventar resultados nuevos.</p></article>
-            </div>
-          </div>
-
-          <div class="detail-block">
-            <h3>Cómo aparece en el reporte HTML</h3>
-            <p>
-              La segunda pestaña del reporte muestra la tabla de variables priorizadas y, justo después,
-              las curvas softmax del simulador. Luego compara dos mapas: a la izquierda el nivel de riesgo
-              original por UITI_VANO observado, y a la derecha la clase predicha al aplicar los valores
-              sugeridos. Cuando un vano tiene varios registros, se promedian sus probabilidades por
-              <code>FID_VANO</code> y se conserva la clase con mayor promedio.
-            </p>
-            <a class="button primary" href={latestInterpretabilityReport} target="_blank" rel="noreferrer">
-              Abrir último reporte
-            </a>
-          </div>
-          <a class="back-link bottom" href="#arquitectura">← Volver al simulador multimodal</a>
-        </div>
-      </section>
-
-      <section id="costos-items-contratos" class="detail-panel" aria-labelledby="costos-items-title">
-        <div class="detail-shell">
-          <a class="back-link" href="#arquitectura">← Volver al simulador multimodal</a>
-          <div class="section-heading">
-            <p class="eyebrow">Evaluación económica del agente</p>
-            <h2 id="costos-items-title">Costos por ítems de contrato</h2>
-            <p>
-              Esta sección documenta una referencia económica opcional para las variables priorizadas por
-              el simulador y la comparación experta. El archivo <code>data/COSTOS ITEMS CONTRATOS.xlsx</code>
-              se normaliza, se compara contra variables revisables y se entrega como contexto trazable.
-            </p>
-          </div>
-
-          <div class="detail-block">
-            <h3>Cómo funciona</h3>
-            <div class="process-grid">
-              <article><strong>1. Lectura</strong><p>Carga la descripción del ítem y el promedio de <code>UNITCOST</code> desde la hoja de costos.</p></article>
-              <article><strong>2. Normalización</strong><p>Limpia acentos, mayúsculas, separadores y términos comunes para comparar texto técnico.</p></article>
-              <article><strong>3. Cercanía</strong><p>Relaciona variables como <code>CNT_TRF</code>, <code>NR_T</code> o <code>CANTIDAD_TIERRA</code> con palabras de dominio como transformador, poda o puesta a tierra.</p></article>
-              <article><strong>4. Estimación</strong><p>Contrasta el valor de menor riesgo estimado en las curvas softmax con el ítem cercano de menor costo promedio disponible.</p></article>
-              <article><strong>5. Discusión</strong><p>El agente usa los costos solo como referencia; no los convierte en presupuesto ni recomienda intervención automática.</p></article>
-            </div>
-          </div>
-
-          <div class="detail-block">
-            <h3>Apartados económicos conectados</h3>
-            <div class="table-wrap compact-table">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Apartado</th>
-                    <th>Variables cercanas</th>
-                    <th>Ítems usados como referencia</th>
-                    <th>Orden de costo promedio</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {contractCostRows.map(([apartado, variables, items, costo]) => (
-                    <tr>
-                      <td>{apartado}</td>
-                      <td>{variables}</td>
-                      <td>{items}</td>
-                      <td>{costo}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <p class="note-callout">
-              Los valores son referencias observadas en el archivo de costos. La cuantificación final depende
-              de cantidades, alcance de obra, zona, disponibilidad operativa y validación contractual de CHEC.
-            </p>
-          </div>
-
-          <div class="detail-block">
-            <h3>Interacción con los agentes existentes</h3>
-            <p>
-              El agente base identifica puntos críticos, el agente predictivo prioriza variables, el agente de
-              alineación experta selecciona variables revisables y el agente automático calcula curvas
-              softmax, valores sugeridos y mapas comparativos por vano. El componente de costos queda como
-              referencia separada: toma esas variables, coteja valores de menor clase dominante y busca
-              apartados económicos cercanos para orientar el orden de magnitud.
-            </p>
-          </div>
-          <a class="back-link bottom" href="#arquitectura">← Volver al simulador multimodal</a>
-        </div>
-      </section>
-
-      <section id="agente-informes" class="detail-panel" aria-labelledby="informes-title">
-        <div class="detail-shell">
-          <a class="back-link" href="#arquitectura">← Volver al simulador multimodal</a>
-          <div class="section-heading">
-            <p class="eyebrow">Agente 6</p>
-            <h2 id="informes-title">Generación de informes</h2>
-            <p>
-              Integra los apartados anteriores en un HTML técnico: contexto histórico, puntos críticos,
-              inferencia del modelo predictivo, variables priorizadas, grafos, contraste experto y validaciones
-              de salida. El informe final es el artefacto donde el flujo completo queda reunido para revisión.
-            </p>
-          </div>
-          <div class="detail-block">
-            <h3>Cómo integra el flujo</h3>
-            <div class="process-grid">
-              <article><strong>Histórico</strong><p>Incluye la selección del circuito, serie diaria, puntos críticos y explicación del comportamiento observado.</p></article>
-              <article><strong>Predictivo</strong><p>Agrega escenarios M-GCECDL, variables SHAP+Borda, modos, radar y grafos estimados.</p></article>
-              <article><strong>Experto</strong><p>Contrasta análisis histórico y predictivo con la memoria documental extraída de reportes técnicos.</p></article>
-              <article><strong>Validación</strong><p>Solo presenta salidas que cumplen los contratos JSON y las reglas de referencia del contexto.</p></article>
-            </div>
-          </div>
-          <div class="detail-block">
-            <h3>Último reporte generado</h3>
-            <p>
-              Abre el último reporte HTML disponible generado por el flujo. Se muestra en una pestaña nueva
-              para conservar completa su navegación, tablas, grafos y secciones técnicas.
-            </p>
-            <a class="button primary" href={latestInterpretabilityReport} target="_blank" rel="noreferrer">
-              Abrir último reporte
-            </a>
-          </div>
-          <a class="back-link bottom" href="#arquitectura">← Volver al simulador multimodal</a>
-        </div>
-      </section>
-
-      <section id="modelo-mgcecdl" class="detail-panel" aria-labelledby="modelo-title">
-        <div class="detail-shell">
-          <a class="back-link" href="#arquitectura">← Volver al simulador multimodal</a>
-          <div class="section-heading">
-            <p class="eyebrow">Componente 03</p>
-            <h2 id="modelo-title">Modelo M-GCECDL</h2>
-            <p>
-              Modelo multimodal para clasificar criticidad de UITI_VANO usando dos grupos de entrada:
-              variables climáticas/exógenas y variables estructurales/endógenas del vano. Sus salidas
-              alimentan al agente predictivo M-GCECDL y a los agentes que redactan diagnósticos e informes.
-            </p>
-          </div>
-
-          <div class="detail-block">
-            <h3>Qué hace el preprocesamiento</h3>
-            <div class="process-grid model-process">
-              <article><strong>Carga y filtro</strong><p>Lee CSV, Excel o pickle; convierte <code>FECHA</code> y conserva registros con <code>UITI_VANO ≤ 1000</code>.</p></article>
-              <article><strong>Selección</strong><p>Lee el Excel, valida las marcas y expande cada familia climática desde el rezago 0 hasta el 11.</p></article>
-              <article><strong>Imputación</strong><p>Fechas a timestamp; numéricas vacías a <code>-10 × máximo</code>; categóricas vacías a <code>"no aplica"</code>.</p></article>
-              <article><strong>Codificación</strong><p>Aplica <code>LabelEncoder</code> a categorías y convierte la matriz final a <code>float32</code>.</p></article>
-              <article><strong>Objetivo</strong><p>Organiza <code>UITI_VANO</code> en niveles ordinales de criticidad para entrenamiento supervisado.</p></article>
-              <article><strong>Particiones</strong><p>Genera train, validación y test estratificados: 64 %, 16 % y 20 %, con semilla 42.</p></article>
-            </div>
-          </div>
-
-          <div class="detail-block">
-            <h3>Columnas reales usadas por el modelo</h3>
-            <p><strong>{modelFeatures.length} predictores efectivos:</strong> 22 columnas base y 48 columnas climáticas horarias. <code>UITI_VANO</code> se mantiene separado como objetivo.</p>
-            <div class="feature-list">{modelFeatures.map((feature) => <code>{feature}</code>)}</div>
-          </div>
-
-          <div class="detail-block">
-            <h3>Dos modos de entrada</h3>
-            <div class="process-grid">
-              {mgcecdlModes.map(([modo, cantidad, descripcion]) => (
-                <article>
-                  <strong>{modo}</strong>
-                  <span class="mode-count">{cantidad}</span>
-                  <p>{descripcion}</p>
-                </article>
-              ))}
-            </div>
-            <p class="note-callout">
-              La separación por modos permite contrastar la señal ambiental con la señal física y operativa del vano,
-              sin mezclar sus relaciones antes de la fusión del modelo.
-            </p>
-          </div>
-
-          <div class="detail-block">
-            <h3>Componentes M-GCECDL</h3>
-            <div class="process-grid">
-              {mgcecdlComponents.map(([componente, descripcion]) => (
-                <article><strong>{componente}</strong><p>{descripcion}</p></article>
-              ))}
-            </div>
-          </div>
-
-          <div class="detail-block">
-            <h3>Evaluación del rendimiento</h3>
-            <p>
-              El flujo de rendimiento actualiza imágenes generales para la página: matriz de confusión,
-              curvas ROC e importancia por modos. Estas piezas explican cómo se verifica el modelo antes
-              de usarlo como soporte para reportes.
-            </p>
-            <div class="visual-grid">
-              <figure>
-                <img src={mgcecdlConfusionMatrix.src} alt="Matriz de confusión del modelo M-GCECDL" />
-                <figcaption>Control de clasificación por nivel de criticidad.</figcaption>
-              </figure>
-              <figure>
-                <img src={mgcecdlRocCurve.src} alt="Curvas ROC multiclase del modelo M-GCECDL" />
-                <figcaption>Validación de separación entre clases.</figcaption>
-              </figure>
-              <figure>
-                <img src={mgcecdlModeImportance.src} alt="Importancia por modos del modelo M-GCECDL" />
-                <figcaption>Lectura de importancia agregada por modos de entrada.</figcaption>
-              </figure>
-            </div>
-          </div>
-
-          <div class="detail-block">
-            <h3>Salidas usadas por la página</h3>
-            <p>
-              El modelo produce nivel de criticidad, confiabilidad modal y relevancias por variable o modo.
-              El agente predictivo convierte esas señales en insumos para el análisis del modelo, el cotejo
-              causal y la generación del informe técnico.
-            </p>
-          </div>
-
-          <div class="detail-block">
-            <h3>Modelo M-GCECDL para el Agente 6: Informes</h3>
-            <p>
-              El Agente 6 recibe el contexto histórico, las señales del modelo, las comparaciones expertas
-              y las visualizaciones ya validadas. Con esos insumos compone el último reporte técnico HTML.
-              El reporte más reciente se abre como documento independiente para conservar su navegación completa.
-            </p>
-            <a class="button primary" href={latestInterpretabilityReport} target="_blank" rel="noreferrer">
-              Abrir último reporte
-            </a>
-          </div>
-          <a class="back-link bottom" href="#arquitectura">← Volver al simulador multimodal</a>
+        </ol>
+
+        <div class="note-callout">
+          <strong>El cupo de apps manda el orden.</strong> Un workspace admite 3 apps, y una que está en
+          <code>DELETING</code> todavía ocupa su lugar. Por eso el despliegue va por prioridad: primero
+          clima, agrupamiento y simulador; trayectorias de circuitos y de vanos solo si el cupo alcanza.
+          El catálogo de Unity Catalog nunca se asume: se descubre en cada corrida.
         </div>
       </section>
 
       <section id="costos-databricks" class="detail-panel" aria-labelledby="costos-title">
         <div class="detail-shell">
-          <a class="back-link" href="#arquitectura">← Volver al simulador multimodal</a>
+          <a class="back-link" href="#ia-criticidad">← Volver a IA + Criticidad CHEC</a>
           <div class="section-heading">
             <p class="eyebrow">Estimación operativa</p>
             <h2 id="costos-title">Complemento de estimación de costos en Azure Databricks</h2>
@@ -4191,6 +3331,202 @@ I_α(K_x̂, K_g) = H(K_x̂) + H(K_g) − H(K_x̂ ⊙ K_g)`}</pre>
 
     footer p {
       text-align: left;
+    }
+  }
+
+  /* ---------------------------------------------- IA + Criticidad CHEC */
+
+  .sub-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-top: 1.6rem;
+  }
+
+  .sub-nav a {
+    padding: 0.45rem 0.9rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--panel);
+    color: var(--muted);
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition:
+      color 0.15s ease,
+      border-color 0.15s ease;
+  }
+
+  .sub-nav a:hover {
+    color: var(--green);
+    border-color: var(--green);
+  }
+
+  .tablero-card {
+    margin-top: 2.6rem;
+    padding-top: 2.2rem;
+    border-top: 1px solid var(--line);
+  }
+
+  .tablero-card h3 {
+    margin: 0 0 1rem;
+    font-size: 1.35rem;
+    color: var(--green-dark);
+  }
+
+  .tablero-card h4 {
+    margin: 2rem 0 0.6rem;
+    font-size: 1.05rem;
+  }
+
+  .shot {
+    margin: 0 0 1.4rem;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 0.7rem;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+
+  .shot img {
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+  }
+
+  .shot figcaption {
+    margin-top: 0.7rem;
+    padding: 0 0.3rem 0.2rem;
+    color: var(--muted);
+    font-size: 0.88rem;
+    line-height: 1.5;
+  }
+
+  .shot.wide {
+    margin-bottom: 2rem;
+  }
+
+  .func-list {
+    margin: 0;
+    padding-left: 1.15rem;
+    display: grid;
+    gap: 0.75rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .func-list strong {
+    color: var(--ink);
+  }
+
+  .diagram-card {
+    margin: 2.2rem 0;
+    padding: 1.4rem clamp(0.8rem, 2vw, 1.8rem) 1.6rem;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+  }
+
+  .diagram-card h3 {
+    margin: 0 0 1.1rem;
+    font-size: 1.15rem;
+    color: var(--ink);
+  }
+
+  .diagrama {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  .pasos {
+    margin: 0;
+    padding-left: 1.2rem;
+    display: grid;
+    gap: 0.6rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .var-grid {
+    display: grid;
+    gap: 1.2rem;
+    grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+    margin-top: 1.4rem;
+  }
+
+  .var-card {
+    padding: 1.3rem;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-top: 4px solid var(--line);
+    border-radius: 14px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .var-card h4 {
+    margin: 0 0 0.8rem;
+    font-size: 1.05rem;
+    color: var(--ink);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem;
+  }
+
+  .var-card h4 span {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--muted);
+    background: var(--soft);
+    border-radius: 999px;
+    padding: 0.15rem 0.6rem;
+  }
+
+  .var-card.interven {
+    border-top-color: var(--green);
+  }
+
+  .var-card.escenario {
+    border-top-color: var(--gold);
+  }
+
+  .var-card.fijas {
+    border-top-color: var(--muted);
+  }
+
+  .var-card .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin: 0.9rem 0;
+  }
+
+  .var-card .chips code {
+    background: var(--soft);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 0.15rem 0.45rem;
+    font-size: 0.8rem;
+    color: var(--ink);
+  }
+
+  .var-card .por-que {
+    margin: 0.9rem 0 0;
+    padding-top: 0.9rem;
+    border-top: 1px dashed var(--line);
+    font-size: 0.92rem;
+  }
+
+  .note-callout.warn {
+    border-left-color: var(--gold);
+  }
+
+  @media (max-width: 720px) {
+    .sub-nav a {
+      font-size: 0.82rem;
     }
   }
 </style>
