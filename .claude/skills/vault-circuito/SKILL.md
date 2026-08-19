@@ -1,6 +1,6 @@
 ---
 name: vault-circuito
-description: "Trigger: internal step-9 runbook invoked by /report and /reporte-lote after a circuit's report renders. Projects the circuit's 3 validated narrative JSONs into reports/vault/{circuito}.md and chains an isolated /graphify reports/vault --update against reports/vault's own graph (never the project-root graph). Not intended for direct end-user invocation."
+description: "Trigger: internal step-9 runbook invoked by /report and /reporte-lote after a circuit's report renders. Projects the circuit's 3 validated narrative JSONs into reports/vault/{circuito}.md and chains /graphify . --update from the project root, gated by chec_local_interpreter.graphify_guarda. Not intended for direct end-user invocation."
 license: Apache-2.0
 metadata:
   author: chec-local-uiti-vano-interpreter
@@ -17,8 +17,8 @@ metadata:
 `vault-circuito` is step 9 of `/report`'s run sequence: a pure post-render projection that turns a
 circuit's already-validated `historical.out.json`/`inference.out.json`/`expert-alignment.out.json`
 into one upserted Spanish markdown note at `reports/vault/{circuito}.md`, then chains the real
-`/graphify reports/vault --update` slash-command — scoped to an isolated graph rooted at
-`reports/vault/graphify-out/graph.json`, never the project-root `graphify-out/graph.json` a
+`/graphify . --update` slash-command — from the **project root**, against the project's own
+`graphify-out/graph.json`, which is the a
 whole-project `/graphify .` run produces — so the vault stays incrementally indexed without ever
 mixing with or corrupting the unrelated project-wide code/docs graph. It makes NO LLM calls of its
 own — `vault_note_contract.py` performs pure file I/O — and it never touches `report_pipeline.py`'s
@@ -82,20 +82,37 @@ Given `circuito` (already validated/confirmed by the invoking `/report` run's ow
    - `usage_error`/`execution_error` — same alert-and-continue treatment; report the error and stop
      this step.
 
-2. **Chain `/graphify reports/vault --update`, scoped to its own isolated graph.** Only reached when
+2. **Chain `/graphify . --update` from the project root, behind its guard.** Only reached when
    step 1 wrote or overwrote a note. Invoke the real `/graphify` slash-command with the fixed literal
-   arguments `reports/vault --update` (never string-built from `circuito` — no injection surface),
-   with `reports/vault` as graphify's OWN working directory (every bash block in that invocation
-   executes with cwd `reports/vault`, `INPUT_PATH='.'`), so its `graphify-out/` lands at
-   `reports/vault/graphify-out/graph.json` — a dedicated, isolated graph, never the project-root
-   `graphify-out/graph.json` a whole-project `/graphify .` run produces or reads. `--update` stays
-   safe here (unlike a scoped `--update` against a manifest that was ever built from a wider scope,
-   which is a real bug caught and fixed elsewhere — see `informe-gerencial/SKILL.md`'s "Resolved
-   limitation" note): because this isolated graph's own manifest is ALWAYS built and diffed at the
-   same `reports/vault` scope, on every invocation, there is nothing wider for it to misdiagnose as
-   deleted. `--update` is cache-aware/incremental: it re-extracts only new/changed files under
-   `reports/vault/`, so a single circuit's invocation only processes that circuit's just-written note,
-   never a full rebuild — this keeps the frequent, one-circuit-at-a-time cadence of this step cheap.
+   arguments `. --update` (never string-built from `circuito` — no injection surface), with the
+   **repository root** as graphify's working directory.
+
+   **Not scoped to `reports/vault`, and this is the whole point.** An earlier version of this runbook
+   sent `/graphify reports/vault --update` and argued it was safe because that folder would have its
+   own isolated graph at `reports/vault/graphify-out/graph.json`, with its own manifest at the same
+   scope. **That graph never existed** — there is no such folder in the tree, and
+   `tests/test_graphify_guarda.py` pins its absence. So the scoped `--update` fell on the PROJECT's
+   manifest, whose 426 keys are all anchored to the root (`astro.config.mjs`, `data/models/…`,
+   `src/…`). Re-anchored against the narrower scope, every one of them resolves to a path that never
+   existed, and incremental detection reports them as DELETED. Measured on `/report DON23L14`:
+
+       detect_incremental('reports/vault')  ->    1 nuevo,  426 borrados,  0 existen
+       detect_incremental('.')              ->  152 nuevos,  16 borrados,  0 existen
+
+   Continuing would have pruned 426 files from a 6.479-node graph. That is data loss, not cost.
+
+   **Run the guard first**, and route on its verdict — it is a datum, not an exception:
+   ```
+   python -m chec_local_interpreter.graphify_guarda .
+   ```
+   `chec_local_interpreter.graphify_guarda` does not ask whether a reported deletion exists on disk
+   (a genuine deletion does not exist either — that is what deleted means). It asks whether the
+   manifest is **anchored at the same root being scanned**. That is what separates a ghost from a
+   real removal, and it is why the root's own 16 genuine deletions still get through.
+
+   `--update` is cache-aware/incremental: it re-extracts only new or changed files, so a single
+   circuit's invocation processes that circuit's just-written note and little else — which keeps the
+   frequent, one-circuit-at-a-time cadence of this step cheap even from the root.
 
    **Graphify failure isolation (mandatory alert-and-continue).** If this invocation fails for any
    reason, do **not** roll back or delete the vault note written in step 1, do **not** re-raise into
@@ -113,7 +130,7 @@ Given `circuito` (already validated/confirmed by the invoking `/report` run's ow
 |---|---|---|
 | No run found / `historical.out.json` missing or `ok: false` | Step 1 (`vault_note_contract.render` → `skipped_incomplete`) | Alert naming the missing file(s); no note written/modified; step 2 not attempted; the invoking `/report`/`/reporte-lote` run is NOT failed |
 | `inference.out.json` and/or `expert-alignment.out.json` missing | Step 1 (`→ partial`) | Note IS written, with placeholder sections for the missing narrative(s); step 2 still runs |
-| Isolated `/graphify reports/vault --update` fails (including a shrink-guard trip) | Step 2 | Alert naming the failure; the already-written note from step 1 remains untouched on disk; never rolls back, never blocks, never aborts a `/reporte-lote` batch |
+| `/graphify . --update` fails, or its guard aborts (ghost deletions, shrink-guard trip) | Step 2 | Alert naming the failure; the already-written note from step 1 remains untouched on disk; never rolls back, never blocks, never aborts a `/reporte-lote` batch |
 
 None of the rows above turns into a question back to the user — every outcome is either a silent
 success or an alert-and-continue, matching `/reporte-lote`'s own established convention for

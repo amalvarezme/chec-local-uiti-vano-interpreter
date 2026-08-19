@@ -1,5 +1,5 @@
 ---
-description: "Trigger: internal step-9 runbook invoked by /report and /reporte-lote after a circuit's report renders. Projects the circuit's 3 validated narrative JSONs into reports/vault/{circuito}.md and chains an isolated /graphify reports/vault --update against reports/vault's own graph (never the project-root graph). Not intended for direct end-user invocation."
+description: "Trigger: internal step-9 runbook invoked by /report and /reporte-lote after a circuit's report renders. Projects the circuit's 3 validated narrative JSONs into reports/vault/{circuito}.md and chains /graphify . --update from the project root, gated by chec_local_interpreter.graphify_guarda. Not intended for direct end-user invocation."
 argument-hint: "<circuito>"
 agent: agent
 ---

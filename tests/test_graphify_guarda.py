@@ -186,3 +186,50 @@ def test_el_veredicto_es_un_dato_y_no_una_excepcion(tmp_path):
                                 raiz_manifiesto=tmp_path)
 
     assert isinstance(veredicto, Veredicto)
+
+
+# ---------------------------------------------------------------------------
+# Y que el runbook que la usa no diga lo contrario
+# ---------------------------------------------------------------------------
+
+
+def test_el_skill_de_la_boveda_no_manda_acotar_el_update():
+    """La guarda de arriba existe porque un `--update` acotado a `reports/vault` poda
+    el grafo. `vault-circuito/SKILL.md` seguia mandando exactamente eso.
+
+    Decia que el `--update` corre "scoped to its own isolated graph" en
+    `reports/vault/graphify-out/graph.json`, y razonaba que ahi es seguro porque ese
+    grafo aislado tendria su propio manifiesto al mismo alcance. **Ese grafo no
+    existe**: no hay ninguna carpeta `reports/vault/graphify-out/` en el arbol, asi que
+    el `--update` acotado cae sobre el manifiesto del PROYECTO -- 426 claves ancladas a
+    la raiz -- y las reporta todas como borradas.
+
+    Lo dice medido `docs/flujo-detallado.md` y lo fija esta misma suite. Un runbook que
+    contradice a su guarda es peor que no tenerla: la guarda aborta, y quien lea el
+    runbook concluye que la guarda esta equivocada.
+    """
+    skill = (Path(__file__).resolve().parents[1] / ".claude" / "skills"
+             / "vault-circuito" / "SKILL.md").read_text(encoding="utf-8")
+
+    # Se miran los ENCABEZADOS de paso y las filas de la tabla de fallos, no el texto
+    # entero: explicar por que se retiro la forma acotada exige nombrarla, y prohibir
+    # la cadena prohibiria tambien la explicacion.
+    instrucciones = [l for l in skill.splitlines()
+                     if l.lstrip().startswith(("2. **Chain", "|"))]
+    culpables = [l.strip()[:90] for l in instrucciones
+                 if "reports/vault --update" in l]
+    assert not culpables, (
+        f"el skill sigue mandando el `--update` acotado a reports/vault: {culpables}")
+    assert "**Chain `/graphify . --update` from the project root" in skill, (
+        "el paso 2 no manda la forma que si es segura")
+    assert "graphify_guarda" in skill, (
+        "el skill no nombra la guarda que decide si el --update puede correr")
+
+
+def test_no_hay_grafo_aislado_de_la_boveda():
+    """La premisa del texto viejo, comprobada. Si algun dia se crea de verdad, esta
+    prueba se pone roja y hay que releer la decision entera en vez de suponerla."""
+    aislado = Path(__file__).resolve().parents[1] / "reports" / "vault" / "graphify-out"
+    assert not aislado.exists(), (
+        f"existe {aislado}: el grafo aislado de la boveda dejo de ser hipotetico, y el "
+        "razonamiento sobre el alcance del --update hay que rehacerlo")

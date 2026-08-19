@@ -179,11 +179,17 @@ la corrección es frágil y hay que saber qué la sostiene.
 pruebas de aquí. Esa es la fragilidad: hoy están bien porque alguien los encontró en una
 máquina real, no porque nada los vigile.
 
-`PROBAR-EN-WINDOWS.md` propone el guardián que falta —un job de GitHub Actions sobre
-`windows-latest`, que necesita **solo `pytest`** y **ningún dato**, así que no hace falta
-`git lfs pull`—. **No está montado**, y es la recomendación pendiente de esta página. Sus
-cifras (152 pruebas en 0,5 s) son del 2026-08-13 y la suite ha crecido desde entonces:
-tómense como orden de magnitud.
+**Ese guardián ya está montado** (`.github/workflows/windows.yml`, 2026-08-19): un job de
+GitHub Actions sobre `windows-latest` que corre las pruebas de Windows con `pytest`,
+`ipywidgets` y `numpy`, y **ningún dato** —así que el checkout va sin `git lfs pull`—.
+Medido sobre un clon real con punteros de LFS: **187 pasan, 4 se saltan, 3 quedan fuera,
+en 0,55 s**.
+
+Las cifras de la propuesta original (152 pruebas, «solo `pytest`») eran del 2026-08-13 y
+ya no valían: `test_aplicaciones_locales.py` creció hacia el simulador y hoy necesita
+`ipywidgets` y `numpy`. Los tres que quedan fuera piden la pila real (`preparar.py` → la
+derivación → matplotlib y torch) y se nombran uno a uno en el propio workflow; en la suite
+completa de macOS corren enteros.
 
 Un cuarto punto, de criterio y no de fallo: el texto que las aplicaciones escriben en la
 **ventana de terminal** se deja sin tildes, mientras que el que va al **navegador** sí las

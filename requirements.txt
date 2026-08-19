@@ -142,15 +142,22 @@ websocket-client>=1.9
 # `pip install graphify` falla con "No matching distribution found": ese nombre no
 # existe en PyPI.
 #
-# No es opcional y no degrada: `graph_view_builder.py` hace `from graphify.export
-# import to_html` EN EL NIVEL SUPERIOR del modulo, asi que sin el paquete el paso 2.5
-# de `/informe-gerencial` (`python -m chec_local_interpreter.graph_view_builder build`)
-# muere con ImportError antes de leer nada. Es el unico modulo del repositorio que
-# importa graphify; `informe_gerencial_contract.py` consume su HTML ya escrito.
+# **Hoy NINGUN modulo del repositorio lo importa**, y conviene decirlo con esas palabras.
+# Hasta el 2026-08-18 lo importaba `graph_view_builder.py` -- `from graphify.export import
+# to_html`, en el nivel superior -- para el paso 2.5 de `/informe-gerencial`. Ese modulo se
+# borro (commit 3786718) junto con el paso, reemplazado por `intervention_graph`.
 #
-# El comentario anterior de este bloque describia un `graph_extractor.py` que ya no
-# existe, una llamada por subproceso que ya no ocurre y un respaldo en PyVis que nunca
-# se escribio. Se corrige entero en vez de retocarse.
+# Se queda igualmente, y por otra razon: `/graphify` se encadena como HERRAMIENTA en el
+# paso 9 de `/report` (ver `.claude/skills/vault-circuito/SKILL.md`) y en `/graphify` a
+# secas. Ahi se invoca por linea de ordenes, no por `import`, asi que un `grep` de imports
+# lo da por huerfano -- que es justo la quinta forma de esconder un consumidor que
+# `docs/inventario-de-lo-suelto.md` enumera.
+#
+# El comentario anterior describia un `graph_extractor.py` que ya no existe, una llamada
+# por subproceso que ya no ocurre y un respaldo en PyVis que nunca se escribio; el que lo
+# reemplazo se quedo describiendo `graph_view_builder.py` cuatro dias despues de borrarlo.
+# Dos comentarios seguidos desactualizados sobre la misma linea es un patron, no un
+# descuido: esta dependencia no tiene importador que la delate cuando cambia.
 graphifyy>=0.8.41
 
 # === Retirados, y por que ============================================================

@@ -67,17 +67,20 @@ ni los roles LLM. Solo viajan los datos que consumen los cuadernos `01`-`06` y e
 | Área | Propósito |
 |---|---|
 | `src/chec_local_interpreter/` | Pipeline determinista del reporte, contratos, validadores, render, context builders |
-| `src/chec_impacto/` | Código de modelado relacionado con MGCECDL y lógica de soporte |
+| `src/chec_impacto/` | El modelo MIL vano × ventana: bolsas, grafo experto, pérdida, asignación de clase y persistencia |
+| `src/chec_tableros/` | Los cinco tableros, como **módulos que se importan**: los cuatro estáticos y las dos mitades del simulador |
 | `.claude/skills/` | Contratos canónicos de workflow y skills |
 | `.claude/agents/` | Definiciones canónicas de roles para Claude |
+| `.claude/commands/` | Comandos que no son de la familia de reporte: `/instalar-local`, `/subir-a-databricks`, `/app-local-criticidadCHEC`, `/limpiar-corridas` |
 | `.opencode/` | Espejos generados de comandos y roles para OpenCode |
 | `.github/prompts/`, `.github/agents/` | Espejos generados de comandos y roles para VS Code Copilot |
-| `docs/` | Arquitectura, workflow, contrato de runtime, BPMN y documentación de soporte |
-| `.claude/commands/` | Comandos de mantenimiento y despliegue a Databricks (fuera de la familia de skills de reporte) |
+| `.github/workflows/` | `deploy-pages.yml` (el sitio) y `windows.yml` (lo que solo se rompe en Windows) |
+| `scripts/` | Herramientas de línea de ordenes: el diagnóstico local, el generador del cuaderno 05, el empacador de las apps de Databricks, la portabilidad de agentes |
+| `docs/` | Arquitectura, workflow, contrato de runtime, requisitos medidos y documentación de soporte |
 | `reports/` | Artefactos locales de ejecución, reportes generados, insumos PDF, notas de `reports/vault/` |
 | `tests/` | Tests automatizados de contratos, pipelines y render |
-| `notebooks/` | `05`, más `base_apps/` con los cinco tableros `01`-`04` y `06` que alimentan las aplicaciones |
-| `aplicaciones/` | Las cinco aplicaciones locales de escritorio (macOS/Windows) construidas desde los cuadernos `01`, `02`, `03`, `04` y `06`, más `CriticidadCHEC`, el menú que las gobierna |
+| `notebooks/` | `05_mil_vano_ventana.ipynb`, el **único** cuaderno del proyecto. `base_apps/` se vació y ya no existe |
+| `aplicaciones/` | Las cinco aplicaciones locales de escritorio (macOS/Windows), construidas desde `src/chec_tableros/`, más `CriticidadCHEC`, el menú que las gobierna; y `aplicaciones/databricks/`, que es lo que corre en el servidor y no aquí |
 
 > **Para abrir las aplicaciones de escritorio:** entra en
 > `aplicaciones/00_criticidad_chec/` y haz doble clic en **`Iniciar.app`** (macOS) o en
@@ -179,8 +182,8 @@ no cómo se invoca:
 | Extracción de discusiones PDF | rol `pdf-discussion-extraction` | `.claude/agents/pdf-discussion-extraction.md` | `.opencode/agent/pdf-discussion-extraction.md` | `.github/agents/pdf-discussion-extraction.agent.md` |
 | Mantenimiento de runs locales | `/limpiar-corridas` | `.claude/commands/limpiar-corridas.md` | `.opencode/command/limpiar-corridas.md` | `.github/prompts/limpiar-corridas.prompt.md` |
 
-Los comandos `/clima`, `/redaccion-es`, `/subir-a-databricks` y `/app-local-criticidadCHEC`
-tienen espejo en los tres editores por el mismo mecanismo.
+Los comandos `/clima`, `/redaccion-es`, `/instalar-local`, `/subir-a-databricks` y
+`/app-local-criticidadCHEC` tienen espejo en los tres editores por el mismo mecanismo.
 
 ### Comandos de despliegue a Databricks
 
@@ -191,7 +194,7 @@ a Databricks qué hay ya, y solo sube lo que falta:
 |---|---|---|
 | 3 | El Volume, el CSV con su tamaño real y el juego completo de shapefiles | `data/` entero + `site/data/variables.json` |
 | 4 | Que las dos apps existan, estén `ACTIVE`/`RUNNING`/`SUCCEEDED` y sirvan contenido al día | `criticidad-chec` (4 tableros en 4 rutas) y `simulador-vano` (Voila, kernel vivo) |
-| 5 | Que el cuaderno esté en el Workspace y no sea más viejo que su generador | `notebooks/05_mil_vano_ventana.ipynb`, como cuaderno y sin app |
+| 5 | Que el cuaderno esté en el Workspace y corresponda a su generador —regenerando y comparando **contenido**, nunca fechas, que en un clon son todas la del clon— | `notebooks/05_mil_vano_ventana.ipynb` más `src/chec_impacto`, como cuaderno y sin app |
 
 Eran ocho comandos hasta agosto de 2026. Cuatro (`/app-vano-clima`,
 `/app-agrupamiento-vanos-circuitos`, `/app-trayectorias-circuitos`, `/app-trayectorias-vanos`)
@@ -527,13 +530,23 @@ flowchart TB
 
 ### Estado de GitHub Actions
 
-Actualmente este repositorio usa GitHub Actions principalmente para el despliegue de Pages:
+Este repositorio tiene **dos** workflows:
 
-- workflow: `.github/workflows/deploy-pages.yml`
+| Workflow | Qué hace |
+|---|---|
+| `.github/workflows/deploy-pages.yml` | publica el sitio, una vez que su contenido está listo |
+| `.github/workflows/windows.yml` | corre en `windows-latest` lo que **solo se rompe en Windows** |
+
+El de Windows existe porque los tres fallos del 2026-08-13 —`signal.SIGKILL`, que allí no
+existe; `SO_REUSEADDR`, que allí significa lo contrario; y los finales de línea de los
+`.bat`— **no se ven leyendo el código en un Mac**. Las pruebas que los fijan vivían en el
+repositorio desde entonces y solo corrían en macOS, donde comprueban el TEXTO de la rama
+que Windows tomaría. Va sin `git lfs pull`: no lee un solo dato.
 
 Eso implica que:
 
 - el deploy de Pages se automatiza una vez que el contenido del sitio está listo;
+- la mitad de Windows se comprueba en Windows y no por lectura;
 - `pytest -q` y `python evals/run_llm_eval.py` siguen siendo validaciones locales requeridas antes de considerar un cambio como completo.
 
 ## Workflow de la tabla de discusiones PDF
@@ -621,7 +634,12 @@ sha1, de modo que un cambio de centroides falla ruidosamente en vez de derivar e
 y los ocho `base_apps/0{2,3,4,5,6,7,8,9}_*`). Ninguno se ejecutaba ni se importaba: solo los
 nombraban este README, `docs/`, `site/` y algunos comandos. Su rastro vivo son los artefactos que
 dejaron, no su código: el modelo que `06` y el agente `inference` siguen cargando desde
-`data/models/` y el grafo experto bajo `data/graphs/`.
+`data/models/`.
+
+**El grafo experto no es uno de esos artefactos, aunque este README lo dijera.** No hay ni un
+`.npy` bajo `data/graphs/`: el grafo de restricción física **se construye en código**, con
+`construir_matriz_adyacencia_mgcecdl`, y viaja dentro del `.pt`. Lo único que hay en esa carpeta es
+`mgcecdl_feature_order.json`, el orden congelado de las 70 features.
 
 Eso tiene un precio que conviene decir: **esos artefactos ya no se pueden regenerar desde el
 árbol de trabajo.** El código que los produjo sigue en el historial de git — `git log --diff-filter=D
@@ -631,16 +649,10 @@ checkout` de ese commit, no un trabajo de arqueología.
 Con ellos desapareció también la colisión de numeración: `02`-`06` ya significan una sola cosa,
 el grupo `uiti_vano`.
 
-El enriquecimiento climático que hacía el viejo `01_climate.ipynb` ya no vive en un cuaderno: lo hace
-el comando `/clima`, y `01_uiti_vano_clima.ipynb` solo lo visualiza.
-
-El detalle celda por celda de los archivados ya no se documenta: cada cuaderno MGCECDL lleva
-sus propios comentarios y sus salidas guardadas, que es la única descripción que no se
-desactualiza sola.
-
-Sobre `02_uiti_vano_kmeans.ipynb`, que tampoco alimenta `/report`: agrupa vanos por UITI
-acumulado y número de eventos con KMeans en espacio log (4 grupos, preprocesamiento MinMax), con KDE
-por variable y un scatter interactivo en Plotly etiquetado por vano/circuito/grupo.
+El enriquecimiento climático que hacía el viejo `01_climate.ipynb` ya no vive en un cuaderno: lo
+hace el comando `/clima`, y quien lo visualiza es el módulo `chec_tableros.clima`. Los cuadernos
+`01_uiti_vano_clima.ipynb` y `02_uiti_vano_kmeans.ipynb` que este README describía celda por celda
+tampoco existen: su contenido es hoy `chec_tableros.clima` y `chec_tableros.agrupamiento`.
 
 ## Pruebas
 
