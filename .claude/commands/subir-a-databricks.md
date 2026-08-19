@@ -657,45 +657,47 @@ motivo era falso.
 Si la etapa 3 quedo bloqueada de verdad — sin el `.pt` en el Volume — anota que `05` fallara
 al abrirse y marca este paso `degradado`, no `ok`: el cuaderno aterriza, pero no va a correr.
 
-> ### RESTRICCION ABIERTA — `05` todavia no puede correr en el Workspace
->
-> Descubierta el 2026-08-19 leyendo el codigo, **no** en una corrida. Este paso importa el
-> cuaderno y nada mas, y el cuaderno arranca asi:
->
-> ```python
-> def resolve_project_root():
->     for candidate in [cwd, *cwd.parents]:
->         if (candidate / "src" / "chec_impacto").exists() and (candidate / "data").exists():
->             return candidate
->     raise FileNotFoundError(...)
-> ```
->
-> Pide **las dos carpetas hermanas**, y en `/Workspace/.../project_flow` no hay ninguna:
-> `src/chec_impacto` solo se sincroniza dentro del paso **4c**, a la carpeta de la app del
-> simulador, que es otra ruta; y `data/` vive en el **Volume**, que es otro sistema de
-> archivos. O sea que `05` levanta `FileNotFoundError` en su primera celda.
->
-> Dos consecuencias que conviene no confundir:
->
-> 1. El motivo real por el que `05` no corre **no son las bolsas** — no las lee — sino esta
->    resolucion de raiz. Anotar "faltan las bolsas" manda a quien lea la bitacora a buscar
->    donde no es.
-> 2. **Si el paso 4c queda omitido por cupo, ni siquiera hay un `src/chem_impacto` en el
->    workspace.** El desempate de un solo cupo favorece a `criticidad-chec`, asi que este
->    caso es el probable, no el raro.
->
-> Mientras no se cierre: anota este paso `degradado` aunque el cuaderno aterrice bien, con
-> **este** motivo escrito, y registra la restriccion. Cerrarla pide una decision de diseño
-> que no es de este comando — sincronizar `src/chec_impacto` junto al cuaderno y darle a
-> `resolve_project_root` una salida para el layout de Databricks, donde `data/` esta en un
-> Volume — y toca `scripts/generate_notebook_10.py`, que este comando tiene prohibido
-> modificar.
+**El cuaderno no viaja solo: `src/chec_impacto` va con el.** Su primera celda resuelve dos
+cosas por separado — donde esta el CODIGO y donde estan los DATOS — y en el Workspace no son
+el mismo sitio. Hasta el 2026-08-19 pedia las dos como carpetas hermanas y por eso `05`
+moria con `FileNotFoundError` antes de la primera linea util; ni siquiera llegaba a echar de
+menos un dato.
+
+Sincroniza el paquete **junto al cuaderno**, en la misma carpeta, y hazlo aqui y no en el
+paso 4c: alli va a otra ruta y, si el cupo deja al simulador fuera, no va a ninguna.
+
+```
+databricks sync src/chec_impacto \
+  /Workspace/Users/<userName>/databricks-integration/project_flow/src/chec_impacto \
+  --exclude '**/__pycache__/**' --full -p <profile>
+```
+
+`databricks sync` y no `import-dir`: es el unico con exclusion, asi que `__pycache__` no
+llega nunca. El nivel `src/` es funcional — es lo que hace que la busqueda del cuaderno
+encuentre `src/chec_impacto` sin ningun parche.
+
+**Y los datos se apuntan al Volume**, que es el otro sistema de archivos. La primera celda
+del cuaderno lee `CHEC_DATA_DIR`; sin ella busca `<raiz>/data`, que en el Workspace no
+existe. Se fija como variable de entorno del compute, o ejecutando antes que nada:
+
+```python
+import os
+os.environ["CHEC_DATA_DIR"] = "/Volumes/<catalogo>/<esquema>/chec-simulador/data"
+```
+
+Si el montaje FUSE del Volume contesta 403 (contrato D2), esa misma variable apunta al
+directorio local donde el arranque haya bajado los archivos por la Files API. El cuaderno no
+necesita saber cual de los dos es: solo necesita la ruta.
+
+Deja escrito en la bitacora **cual de los dos caminos se uso** y si el cuaderno llego a
+abrirse. Que aterrice no es que corra, y son dos afirmaciones distintas.
 
 ```
 python3 scripts/bitacora_despliegue.py paso --archivo "$RUTA_BITACORA" \
   --id 5 --titulo "Cuaderno mil_vano en el Workspace" --estado <ok|degradado|restriccion|fallo|omitido> \
-  --detalle "<ruta en el Workspace, y si ya estaba o se importo>"
+  --detalle "<ruta en el Workspace, si ya estaba o se importo, y si src/ y CHEC_DATA_DIR quedaron puestos>"
 ```
+
 
 ## 6. Commit and push the bitacora
 

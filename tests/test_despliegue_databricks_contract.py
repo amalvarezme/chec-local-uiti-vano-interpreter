@@ -597,18 +597,27 @@ def test_con_un_solo_cupo_hay_un_desempate_escrito():
         "el desempate no nombra cual de las dos apps entra primero")
 
 
-def test_la_etapa_5_registra_la_restriccion_de_la_raiz_del_proyecto():
-    """`resolve_project_root` del cuaderno 05 exige `src/chec_impacto` y `data/` como
-    carpetas HERMANAS, y en el Workspace no hay ninguna de las dos: `src/` solo se
-    sincroniza en el paso 4c -- a otra ruta -- y `data/` vive en el Volume.
+def test_la_etapa_5_sincroniza_el_paquete_junto_al_cuaderno():
+    """El cuaderno importa `chec_impacto` y en el Workspace no hay `src/` a menos que
+    alguien lo ponga. Estaba solo en el paso 4c, a la carpeta de la app del simulador:
+    otra ruta, y ninguna si el cupo dejaba al simulador fuera.
 
-    Se fija porque el motivo escrito importa: la bitacora del 2026-08-19 decia "faltan
-    las bolsas", que manda a buscar donde no es. Y porque el desempate de un solo cupo
-    favorece a `criticidad-chec`, asi que el caso sin `src/` en el workspace es el
-    probable y no el raro.
+    Va en la etapa 5 y no en la 4 porque es una dependencia del CUADERNO.
     """
     etapa = _etapa("5", "Is the notebook in the Workspace? Import only if not")
-    assert "RESTRICCION ABIERTA" in etapa, (
-        "la etapa 5 no registra que el cuaderno todavia no puede correr en el Workspace")
-    assert "resolve_project_root" in etapa, (
-        "la restriccion no nombra la causa, que es la resolucion de la raiz del proyecto")
+    assert "databricks sync src/chec_impacto" in etapa, (
+        "la etapa 5 no sincroniza el paquete junto al cuaderno")
+    assert "project_flow/src/chec_impacto" in etapa, (
+        "el paquete no se sincroniza en la MISMA carpeta que el cuaderno")
+
+
+def test_la_etapa_5_apunta_los_datos_al_volume():
+    """Codigo y datos no son el mismo sitio en el Workspace, asi que la ruta de los
+    datos hay que decirla. Sin eso el cuaderno busca `<raiz>/data`, que alli no existe.
+    """
+    etapa = _etapa("5", "Is the notebook in the Workspace? Import only if not")
+    assert "CHEC_DATA_DIR" in etapa, (
+        "la etapa 5 no dice como apuntar los datos al Volume")
+    assert "D2" in etapa, (
+        "la etapa 5 no contempla el 403 del montaje FUSE, que es cuando esa misma "
+        "variable tiene que apuntar a un directorio local")

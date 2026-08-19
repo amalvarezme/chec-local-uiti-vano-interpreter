@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import os
 import re
 import subprocess
 import sys
@@ -565,3 +566,74 @@ def test_no_afirma_que_la_cpu_tarda_horas(notebook):
     RAPIDO de los tres medidos."""
     todo = _all_code_source(notebook) + _all_markdown_source(notebook)
     assert "puede tardar horas" not in todo
+
+
+# ---------------------------------------------------------------------------
+# El cuaderno tiene que abrirse en Databricks, donde codigo y datos NO son hermanos
+# ---------------------------------------------------------------------------
+#
+# `resolve_project_root` pedia un directorio con `src/chec_impacto` **y** `data/`
+# dentro. En un checkout esas dos preguntas tienen la misma respuesta y nadie noto
+# que eran dos. En Databricks no: el codigo se sincroniza junto al cuaderno en el
+# Workspace y los datos viven en un Volume, que es otro sistema de archivos. Con una
+# sola pregunta, el cuaderno moria con `FileNotFoundError` en su primera celda.
+
+
+def _celda_bootstrap() -> str:
+    return next(c.source for c in notebook_para_bootstrap() if "Guarda OK" in c.source)
+
+
+def test_el_bootstrap_resuelve_datos_por_separado():
+    """Dos resoluciones, y cada una con su variable de entorno."""
+    fuente = _celda_bootstrap()
+    assert "CHEC_DATA_DIR" in fuente, (
+        "el bootstrap no deja apuntar los datos a otro sitio, que es lo que hace falta "
+        "cuando viven en un Volume y el codigo en el Workspace")
+    assert "CHEC_PROJECT_ROOT" in fuente, (
+        "el bootstrap no deja fijar la raiz del codigo")
+
+
+def test_el_bootstrap_ya_no_exige_que_data_sea_hermana_del_codigo():
+    """La condicion con el `and` era la que ataba las dos preguntas."""
+    fuente = _celda_bootstrap()
+    assert '(candidate / "src" / "chec_impacto").exists() and (candidate / "data").exists()' \
+        not in fuente, (
+            "el bootstrap sigue exigiendo `src/chec_impacto` y `data/` como hermanas")
+
+
+def test_el_bootstrap_corre_con_el_codigo_y_los_datos_separados(tmp_path):
+    """La prueba de verdad: se monta el layout de Databricks y se corre la celda.
+
+    `<tmp>/src` es un enlace al `src/` real -- eso es lo que hace `databricks sync`
+    junto al cuaderno -- y los datos se apuntan al `data/` del repositorio con
+    `CHEC_DATA_DIR`. Si la celda importa PR1-4 y llega a "Guarda OK" desde ahi,
+    el cuaderno se abre en el Workspace.
+    """
+    (tmp_path / "src").symlink_to(REPO_ROOT / "src")
+    entorno = dict(os.environ, CHEC_DATA_DIR=str(REPO_ROOT / "data"))
+    resultado = subprocess.run(
+        [sys.executable, "-c", _celda_bootstrap()],
+        cwd=tmp_path, env=entorno, capture_output=True, text=True)
+    assert resultado.returncode == 0, resultado.stderr
+    assert "Guarda OK" in resultado.stdout
+    assert str(REPO_ROOT / "data") in resultado.stdout, (
+        f"el cuaderno no reporto el DATA_DIR que se le fijo:\n{resultado.stdout}")
+
+
+def test_el_bootstrap_no_muere_si_no_puede_crear_derived(tmp_path):
+    """`DERIVED_DIR.mkdir(...)` sobre un Volume de solo lectura levanta OSError, y el
+    visor no escribe nada ahi: no es motivo para no abrir el cuaderno."""
+    fuente = _celda_bootstrap()
+    bloque = fuente[fuente.index("DERIVED_DIR.mkdir") - 200 : fuente.index("DERIVED_DIR.mkdir") + 120]
+    assert "except OSError" in bloque, (
+        f"crear DERIVED_DIR no esta protegido:\n{bloque}")
+
+
+def test_el_mensaje_de_error_nombra_las_dos_variables():
+    """Quien abra el cuaderno donde nada resuelve tiene que salir del mensaje sabiendo
+    que tocar, no adivinando."""
+    fuente = _celda_bootstrap()
+    inicio = fuente.index("FileNotFoundError")
+    mensaje = fuente[inicio : inicio + 500]
+    assert "CHEC_PROJECT_ROOT" in mensaje, (
+        f"el error no dice como fijar la raiz del codigo:\n{mensaje}")

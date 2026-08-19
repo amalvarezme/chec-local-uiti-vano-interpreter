@@ -981,30 +981,74 @@ ruta completa, igual que en sus propios tests.
 '''
 
 _CODE_BOOTSTRAP = '''\
+import os
 import sys
 from pathlib import Path
 
 
+def _ruta_de_entorno(nombre):
+    valor = os.environ.get(nombre)
+    return Path(valor).expanduser().resolve() if valor else None
+
+
 def resolve_project_root():
+    """Donde esta el CODIGO: el directorio que contiene `src/chec_impacto`.
+
+    Antes esta funcion pedia `src/chec_impacto` Y `data/` en el mismo directorio. En
+    un checkout las dos preguntas tienen la misma respuesta y nadie noto que eran
+    dos. En Databricks no lo son: el codigo se sincroniza junto al cuaderno en el
+    Workspace y los datos viven en un Volume, que es otro sistema de archivos. Con
+    una sola pregunta, este cuaderno moria con FileNotFoundError en su primera celda.
+    """
+    fijada = _ruta_de_entorno("CHEC_PROJECT_ROOT")
+    if fijada is not None:
+        return fijada
     cwd = Path.cwd().resolve()
     for candidate in [cwd, *cwd.parents]:
-        if (candidate / "src" / "chec_impacto").exists() and (candidate / "data").exists():
+        if (candidate / "src" / "chec_impacto").exists():
             return candidate
     raise FileNotFoundError(
-        "No se encontro la raiz del proyecto (se busco un directorio con src/chec_impacto/ "
-        "y data/ subiendo desde el cwd). Ejecuta este cuaderno desde el checkout."
+        "No se encontro la raiz del codigo (se busco un directorio con src/chec_impacto/ "
+        "subiendo desde el cwd). Desde un checkout, abre el cuaderno dentro de el; en "
+        "Databricks, fija CHEC_PROJECT_ROOT a la carpeta donde quedo sincronizado src/ "
+        "y CHEC_DATA_DIR a los datos."
     )
+
+
+def resolve_data_dir(project_root):
+    """Donde estan los DATOS. Junto al codigo por defecto; en otro sitio si se dice.
+
+    `CHEC_DATA_DIR` es la salida para Databricks: apunta al Volume montado, o al
+    directorio local donde el arranque haya bajado los archivos por la Files API
+    cuando el montaje FUSE del Volume no este disponible.
+    """
+    fijada = _ruta_de_entorno("CHEC_DATA_DIR")
+    if fijada is not None:
+        return fijada
+    return project_root / "data"
 
 
 PROJECT_ROOT = resolve_project_root()
 SRC_DIR = PROJECT_ROOT / "src"
-DATA_DIR = PROJECT_ROOT / "data"
+DATA_DIR = resolve_data_dir(PROJECT_ROOT)
 DERIVED_DIR = DATA_DIR / "derived"
+
+if not DATA_DIR.is_dir():
+    raise FileNotFoundError(
+        f"No hay datos en {DATA_DIR}. Desde un checkout deberia ser <raiz>/data; en "
+        "Databricks, fija CHEC_DATA_DIR al Volume o al directorio local donde esten."
+    )
 
 for path_to_add in (PROJECT_ROOT, SRC_DIR):
     if str(path_to_add) not in sys.path:
         sys.path.insert(0, str(path_to_add))
-DERIVED_DIR.mkdir(parents=True, exist_ok=True)
+try:
+    DERIVED_DIR.mkdir(parents=True, exist_ok=True)
+except OSError:
+    # Un Volume montado de solo lectura no deja crearlo, y el modo visor no escribe
+    # nada ahi: no es motivo para no abrir el cuaderno. Al entrenar, que si escribe,
+    # el fallo saldra en la escritura, que es donde se entiende.
+    pass
 
 print("PROJECT_ROOT:", PROJECT_ROOT)
 print("DATA_DIR:    ", DATA_DIR)
