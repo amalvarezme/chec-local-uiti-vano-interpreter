@@ -71,11 +71,11 @@ ni los roles LLM. Solo viajan los datos que consumen los cuadernos `01`-`06` y e
 | `src/chec_tableros/` | Los cinco tableros, como **módulos que se importan**: los cuatro estáticos y las dos mitades del simulador |
 | `.claude/skills/` | Contratos canónicos de workflow y skills |
 | `.claude/agents/` | Definiciones canónicas de roles para Claude |
-| `.claude/commands/` | Comandos que no son de la familia de reporte: `/instalar-local`, `/subir-a-databricks`, `/app-local-criticidadCHEC`, `/limpiar-corridas` |
+| `.claude/commands/` | Comandos que no son de la familia de reporte: `/instalar-local`, `/actualizar`, `/subir-a-databricks`, `/app-local-criticidadCHEC`, `/limpiar-corridas` |
 | `.opencode/` | Espejos generados de comandos y roles para OpenCode |
 | `.github/prompts/`, `.github/agents/` | Espejos generados de comandos y roles para VS Code Copilot |
 | `.github/workflows/` | `deploy-pages.yml` (el sitio) y `windows.yml` (lo que solo se rompe en Windows) |
-| `scripts/` | Herramientas de línea de ordenes: el diagnóstico local, el generador del cuaderno 05, el empacador de las apps de Databricks, la portabilidad de agentes |
+| `scripts/` | Herramientas de línea de ordenes: el diagnóstico local, el estado de actualización y el catálogo de simulación, el generador del cuaderno 05, el empacador de las apps de Databricks, la portabilidad de agentes |
 | `docs/` | Arquitectura, workflow, contrato de runtime, requisitos medidos y documentación de soporte |
 | `reports/` | Artefactos locales de ejecución, reportes generados, insumos PDF, notas de `reports/vault/` |
 | `tests/` | Tests automatizados de contratos, pipelines y render |
@@ -102,6 +102,25 @@ py -3 scripts/diagnostico_local.py       # Windows
 
 Desde un agente, `/instalar-local` lo corre e instala lo que falte, en orden y
 preguntando una sola vez.
+
+### Cuando cambian los datos base
+
+Un segundo diagnóstico contesta la otra pregunta, la que ninguna huella ve: *¿los
+artefactos derivados salieron de las fuentes que hay hoy?*
+
+```bash
+python3 scripts/estado_actualizacion.py
+```
+
+Compara por contenido la base de eventos, el diccionario de variables, el grafo experto
+y el catálogo de simulación contra `data/models/procedencia.json`, y devuelve el plan
+ordenado de lo que falta rehacer. Desde un agente, `/actualizar` lo corre y lo ejecuta.
+
+Distingue lo que obliga a reentrenar de lo que no: editar `data/Variables_simular.xlsx`
+sólo cambia qué ofrece el panel del simulador —y eso se revisa con
+`python3 scripts/catalogo_simulacion.py`, que dice qué control le toca a cada variable—,
+mientras que editar el grafo experto no cambia **nada** hasta que se reentrena, porque
+la adyacencia viaja congelada dentro del `.pt`.
 
 A mano, el entorno de la raíz —el que corre el cuaderno 05 y el que construye los
 paneles que suben a Databricks— es:
@@ -182,8 +201,9 @@ no cómo se invoca:
 | Extracción de discusiones PDF | rol `pdf-discussion-extraction` | `.claude/agents/pdf-discussion-extraction.md` | `.opencode/agent/pdf-discussion-extraction.md` | `.github/agents/pdf-discussion-extraction.agent.md` |
 | Mantenimiento de runs locales | `/limpiar-corridas` | `.claude/commands/limpiar-corridas.md` | `.opencode/command/limpiar-corridas.md` | `.github/prompts/limpiar-corridas.prompt.md` |
 
-Los comandos `/clima`, `/redaccion-es`, `/instalar-local`, `/subir-a-databricks` y
-`/app-local-criticidadCHEC` tienen espejo en los tres editores por el mismo mecanismo.
+Los comandos `/clima`, `/redaccion-es`, `/instalar-local`, `/actualizar`,
+`/subir-a-databricks` y `/app-local-criticidadCHEC` tienen espejo en los tres editores
+por el mismo mecanismo.
 
 ### Comandos de despliegue a Databricks
 

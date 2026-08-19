@@ -7,6 +7,15 @@ La regla corta: **las aplicaciones se dan cuenta solas y se reconstruyen**. Lo q
 pueden hacer es regenerar los artefactos derivados — eso lo tienes que correr tú, y en
 un orden que importa. Todo lo de abajo está medido en este repositorio.
 
+> **El comando `/actualizar` hace todo lo de este documento.** Mide qué se movió,
+> decide si hay que reentrenar o no, y ejecuta el plan en orden. Lo que sigue es lo que
+> ese comando sabe, escrito para leerse: sirve para entenderlo, para hacerlo a mano, y
+> para saber qué está comprobando.
+>
+> ```
+> python3 scripts/estado_actualizacion.py     # sólo el diagnóstico, sin tocar nada
+> ```
+
 ---
 
 ## 1. Los archivos base
@@ -134,6 +143,19 @@ entre sí?»*. El desajuste de esa segunda clase que importa es:
 > — la huella del CSV cambió —, muestra los eventos nuevos, y los puntúa con las bolsas
 > anteriores. Las dos mitades del tablero hablarían de meses distintos.
 
+Y hay un segundo, que ninguna huella ve y que tampoco falla:
+
+> **El grafo experto editado.** `src/chec_impacto/data/graph.py` declara las aristas,
+> pero la adyacencia se congela **dentro del `.pt`** al guardar el modelo y se lee de
+> ahí al cargarlo — nunca se reconstruye del código. Editar el grafo no cambia nada
+> hasta que se reentrena. Mientras tanto las cinco aplicaciones **sí** se reconstruyen,
+> porque vigilan `src/` entero como un solo árbol, y sirven un panel nuevo sobre un
+> modelo del grafo anterior.
+>
+> Eso lo atrapa el sello: `data/models/procedencia.json` guarda el sha256 de las cuatro
+> fuentes con las que se entrenó, y `scripts/estado_actualizacion.py` lo compara. Es la
+> única de las tres filas de la tabla de abajo que no da ningún error por su cuenta.
+
 **Desde ahora eso también falla a gritos.** `construir_paquete` compara las celdas
 `(CIRCUITO, FID_VANO, VENTANA)` de las bolsas contra las de la tabla de eventos antes de
 congelar nada, y aborta nombrando el desajuste con un ejemplo:
@@ -170,6 +192,7 @@ frena, pero quien tiene que arreglarlo eres tú, corriendo el cuaderno 05.
 | modelo ≠ bolsas | falla al arrancar, nombrando cuántas features tiene cada uno |
 | `geometrias_014.json` ≠ modelo | falla al arrancar: *«La geometría del modelo MIL difiere de la de 01.4…»* |
 | CSV ≠ bolsas | **falla al construir**, nombrando la celda que no cuadra |
+| grafo ≠ modelo | **no falla**: lo detecta el sello, y sólo si se le pregunta |
 
 ---
 
@@ -260,6 +283,8 @@ vigilados en el mismo commit**:
 - tableros estáticos → `_DATOS` o `_CODIGO` en `aplicaciones/_comun/construccion.py`
 - simulador → `INSUMOS_POR_CONTENIDO` o `INSUMOS_POR_MARCA` en
   `aplicaciones/06_simulador/preparar.py`
+- y si además decide **cómo se entrenó** el modelo — no sólo qué lee un cuaderno —,
+  `FUENTES` en `scripts/estado_actualizacion.py`, con el motivo escrito al lado
 
 Contenido (sha1) para lo pequeño, marca (bytes + fecha) para lo pesado.
 
