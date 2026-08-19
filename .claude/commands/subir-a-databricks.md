@@ -152,6 +152,7 @@ continues, so the report ends up listing every other wall too, not just the firs
 | 3 | GEO shapefiles **with sidecars** | `databricks fs ls dbfs:/Volumes/.../data/GEO -p <profile>` |
 | 4 | Model artifacts | `databricks fs ls dbfs:/Volumes/.../data/models -p <profile>` |
 | 5 | Cache de bolsas **y su tamaño** | `databricks fs ls dbfs:/Volumes/.../data/derived -p <profile>` |
+| 6 | El **sello** de procedencia | `databricks fs cat dbfs:/Volumes/.../data/models/procedencia.json -p <profile>` |
 
 Check 2 must look at the **size**, not just the name: a `Indicadores_vano_v3.csv` of a few
 hundred bytes is an interrupted upload or a Git-LFS pointer that got mirrored, and it will
@@ -183,8 +184,44 @@ despues dentro del simulador, con un error que no apunta hasta aqui.
 > puntero como si fueran datos es peor que no subir nada: todo lo de abajo falla de una
 > forma que no apunta hasta aqui.
 
+### Estar presente no es estar vigente
+
+Los cinco chequeos de arriba miran **nombre y tamaño**, y eso deja pasar el desajuste
+que mas duele: un `mil_vano_ventana_v1.pt` reentrenado se llama igual y pesa casi lo
+mismo que el anterior. Con la compuerta mirando solo presencia, la etapa daba `ok`, no
+subia nada, y el Volume se quedaba con el modelo de antes — mientras la etapa 4, que
+**si** reconstruye los paneles y el paquete en cada corrida, desplegaba un simulador
+nuevo encima de artefactos viejos. Las dos mitades hablando de entrenamientos distintos,
+sin un solo error a la vista.
+
+Por eso el chequeo 6 compara el **sello**: `data/models/procedencia.json` guarda el
+sha256 de las cuatro fuentes y de los derivados, lo escribe `/actualizar` al sellar, y
+viaja al Volume con el resto de `data/`. Dos archivos de 400 bytes contestan lo que no
+contesta ningun `ls`:
+
+```
+databricks fs cat dbfs:/Volumes/<catalogo>/<esquema>/chec-simulador/data/models/procedencia.json -p <profile> > <scratch>/procedencia.remoto.json
+diff <scratch>/procedencia.remoto.json data/models/procedencia.json
+```
+
+En Windows, `fc` en vez de `diff`. Si el remoto no existe todavia, trata el caso como
+"falta algo" y sube: es un Volume anterior a este sello.
+
+**Antes de comparar, comprueba que lo local esta al dia consigo mismo**:
+
+```
+python3 scripts/estado_actualizacion.py --json
+```
+
+Si su `veredicto` no es `al-dia`, **no subas**: subir un artefacto que el sello local ya
+da por viejo es propagar el desajuste al workspace. Dilo, registra el paso como
+`degradado` nombrando el veredicto, y manda al usuario a `/actualizar`, que es el
+comando que rehace y sella. Si el usuario pide subir igual, hazlo y deja escrito en la
+bitacora que se subio un estado que el sello local no respalda.
+
 **If everything is present**: record the step `ok` naming what was found and its sizes, and
-go to stage 4 without uploading anything.
+go to stage 4 without uploading anything. Con el sello igual, esa
+afirmacion es verificable; sin el, es una suposicion sobre nombres de archivo.
 
 **If anything is missing**: mirror the local tree. Before starting, warn the user that the
 CSV is **566 MB** and dominates a cold run, and confirm the local file is a real LFS
@@ -226,6 +263,7 @@ here creates them. Lo que sube, entero y tal cual:
 | `GEO/*.{shp,shx,dbf,prj}` | los tres shapefiles con sus sidecars | ~180 MB |
 | `models/mil_vano_ventana_v1.pt` | el modelo MIL entrenado | |
 | `graphs/mgcecdl_feature_order.json` | el orden congelado de las 70 features | |
+| `models/procedencia.json` | el sello: de que fuentes salieron los derivados | |
 | `*.xlsx` | variables, variables a simular y costos | |
 | `geometria_kmeans_014_v1.json` | la geometria KMeans, versionada | |
 

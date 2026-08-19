@@ -757,3 +757,44 @@ def test_la_etapa_5_no_decide_la_frescura_por_fechas_de_archivos_versionados():
     assert "clon" in etapa.lower(), (
         "la etapa 5 no advierte que las fechas de dos archivos versionados no se pueden "
         "comparar en un clon recien hecho")
+
+
+# ---------------------------------------------------------------- presente != vigente
+
+def _etapa_de_datos() -> str:
+    texto = _leer(ORQUESTADOR)
+    inicio = texto.index("## 3. Are the data in the Volume?")
+    return texto[inicio:texto.index("\n## ", inicio + 1)]
+
+
+def test_la_etapa_de_datos_distingue_estar_de_estar_vigente():
+    """La compuerta miraba nombre y tamano, y nada mas.
+
+    Un `.pt` reentrenado se llama igual y pesa casi lo mismo que el anterior, asi que
+    "esta presente" daba `ok` y la etapa se saltaba la subida: Databricks se quedaba
+    con el modelo viejo mientras el local ya era otro, y las apps de la etapa 4 --
+    que si se reconstruyen en cada corrida -- servian un panel nuevo sobre artefactos
+    de antes. Es el mismo desajuste que `/actualizar` cierra en local.
+    """
+    etapa = _etapa_de_datos()
+    assert "procedencia.json" in etapa, (
+        "la etapa 3 no compara el sello: sin el, un artefacto reentrenado no se sube "
+        "porque el anterior ya ocupaba su nombre")
+    assert re.search(r"presence|presente|nombre y (el )?tama|size alone", etapa,
+                     re.IGNORECASE), (
+        "la etapa no dice que estar presente no es estar vigente, que es justo lo que "
+        "la hacia saltarse la subida")
+
+
+def test_el_sello_esta_en_el_inventario_de_lo_que_sube():
+    """Un inventario que no nombra algo se lee como que ese algo no sube -- ya paso con
+    `derived/`, que `fs cp -r data` siempre llevo y el inventario no nombraba."""
+    assert "models/procedencia.json" in _etapa_de_datos()
+
+
+def test_la_etapa_de_datos_manda_a_actualizar_cuando_el_sello_local_no_cuadra():
+    """Subir un artefacto que el sello local ya da por viejo es propagar el desajuste."""
+    etapa = _etapa_de_datos()
+    assert "/actualizar" in etapa, (
+        "sin nombrar `/actualizar`, la etapa 3 no tiene a quien mandar el caso en que "
+        "lo local tampoco esta al dia consigo mismo")
