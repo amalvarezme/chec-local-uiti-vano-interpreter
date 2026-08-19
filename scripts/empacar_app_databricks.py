@@ -12,10 +12,11 @@ Lo que sigue siendo del comando es hablar con Databricks: resolver el perfil, cr
 Volume, subir, crear la app, desplegar. Eso necesita un workspace y no se puede probar
 aqui.
 
-## Los dos subcomandos
+## Los tres subcomandos
 
-    paneles   construye los cuatro tableros y los deja listos para subir
-    fuente    copia la fuente de la app, con su ruta de Volume ya sustituida
+    paneles            construye los cuatro tableros y los deja listos para subir
+    fuente             copia la fuente de criticidad-chec, con su Volume ya sustituido
+    fuente-simulador   copia la fuente de simulador-vano, con su Volume ya sustituido
 
 Los dos escriben dentro de un directorio de trabajo que se le pasa, y los dos son
 idempotentes: volver a correrlos sobre el mismo directorio deja el mismo resultado.
@@ -47,6 +48,20 @@ ARCHIVOS_COMPARTIDOS = ("tableros.py", "paleta.py")
 # cada despliegue (contrato C), asi que el valor del repositorio es un DEFECTO y esto
 # lo sustituye por el resuelto.
 MARCA_VOLUMEN = '/Volumes/workspace/default/chec-simulador/paneles'
+
+# La SEGUNDA app: el simulador. Sus tres archivos vivieron dentro de
+# `/app-simulador-vano.md` como bloques de codigo, y al fundir los cuatro comandos de
+# Databricks en uno se perdieron con el `.md` -- la etapa que los sube sobrevivio, lo
+# que los escribia no. Aqui viajan como archivos con pruebas, igual que los de la otra.
+FUENTE_SIMULADOR = RAIZ / "aplicaciones" / "databricks" / "simulador"
+
+# Tres, y ninguno compartido: el simulador no muestra titulos ni colores del menu, sirve
+# un cuaderno. El `06_simulador.ipynb` y los dos paquetes de `src/` no estan aqui porque
+# no son copias -- el cuaderno lo escribe `preparar.escribir_cuaderno(con_cierre=False)`
+# y los paquetes viajan con `databricks sync`.
+ARCHIVOS_SIMULADOR = ("arranque.py", "app.yaml", "requirements.txt")
+
+MARCA_VOLUMEN_PAQUETE = '/Volumes/workspace/default/chec-simulador/paquete_06'
 
 
 def _tableros():
@@ -147,6 +162,39 @@ def preparar_fuente(destino: Path, *, raiz_paneles: str) -> list[str]:
     return copiados
 
 
+def preparar_fuente_simulador(destino: Path, *, volumen_paquete: str) -> list[str]:
+    """Copia la fuente de `simulador-vano` y le sustituye la ruta del Volume.
+
+    Misma forma que `preparar_fuente`, y a proposito: las dos apps se suben con la misma
+    secuencia de `workspace import`, asi que lo que cambia entre ellas es la lista de
+    archivos y cual es la marca a sustituir.
+
+    Lo que se sustituye aqui es `VOLUME_06`, la carpeta del Volume con el paquete
+    precalculado. `PAQUETE_06` no se toca: es una ruta DENTRO del contenedor.
+    """
+    destino.mkdir(parents=True, exist_ok=True)
+    copiados = []
+    for nombre in ARCHIVOS_SIMULADOR:
+        origen = FUENTE_SIMULADOR / nombre
+        if not origen.is_file():
+            raise SystemExit(f"Falta {origen}: la app no se puede subir incompleta.")
+        shutil.copy2(origen, destino / nombre)
+        copiados.append(nombre)
+
+    yaml = destino / "app.yaml"
+    texto = yaml.read_text("utf-8")
+    if texto.count(MARCA_VOLUMEN_PAQUETE) != 1:
+        raise SystemExit(
+            f"`app.yaml` deberia nombrar {MARCA_VOLUMEN_PAQUETE!r} exactamente una vez "
+            f"y lo nombra {texto.count(MARCA_VOLUMEN_PAQUETE)}. Sin la sustitucion, la "
+            "app arranca buscando su paquete en el Volume de otro workspace y el "
+            "sintoma -- 'no encuentra el paquete' -- no apunta hasta aqui."
+        )
+    yaml.write_text(texto.replace(MARCA_VOLUMEN_PAQUETE, volumen_paquete, 1),
+                    encoding="utf-8")
+    return copiados
+
+
 # --------------------------------------------------------------------------------
 def main(argv: list[str] | None = None) -> int:
     analizador = argparse.ArgumentParser(description=__doc__)
@@ -157,10 +205,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--solo", default="",
                    help="claves separadas por coma; por defecto los cuatro")
 
-    f = sub.add_parser("fuente", help="prepara la fuente de la app")
+    f = sub.add_parser("fuente", help="prepara la fuente de criticidad-chec")
     f.add_argument("--destino", required=True, type=Path)
     f.add_argument("--raiz-paneles", required=True,
                    help="ruta del Volume ya resuelta, sin barra final")
+
+    s = sub.add_parser("fuente-simulador", help="prepara la fuente de simulador-vano")
+    s.add_argument("--destino", required=True, type=Path)
+    s.add_argument("--volumen-paquete", required=True,
+                   help="carpeta del Volume con el paquete, ya resuelta, sin barra final")
 
     args = analizador.parse_args(argv)
     if args.orden == "paneles":
@@ -168,6 +221,12 @@ def main(argv: list[str] | None = None) -> int:
         informe = construir_paneles(args.destino, solo=solo)
         print(json.dumps(informe, indent=1, ensure_ascii=False))
         return 0 if all(v["estado"] == "ok" for v in informe.values()) else 1
+
+    if args.orden == "fuente-simulador":
+        copiados = preparar_fuente_simulador(
+            args.destino, volumen_paquete=args.volumen_paquete.rstrip("/"))
+        print(json.dumps({"copiados": copiados}, indent=1))
+        return 0
 
     copiados = preparar_fuente(args.destino, raiz_paneles=args.raiz_paneles.rstrip("/"))
     print(json.dumps({"copiados": copiados}, indent=1))

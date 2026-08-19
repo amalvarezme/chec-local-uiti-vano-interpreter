@@ -1,0 +1,17 @@
+command: ["python", "arranque.py"]
+
+env:
+  # La carpeta del Volume con el paquete precalculado. El catalogo y el esquema se
+  # RESUELVEN en cada despliegue (contrato C): `workspace.default` no existe en todos
+  # los workspaces, y el de CHEC es uno de los que no lo tiene (D1).
+  # `/subir-a-databricks` sustituye este valor por el que resolvio antes de subir.
+  #
+  # Estuvo SIN declarar, y ese era el defecto: `arranque.py` la lee, no la encontraba,
+  # y caia a su valor por defecto -- el Volume de un catalogo que aqui no existe. La
+  # app arrancaba y no encontraba su paquete.
+  - name: VOLUME_06
+    value: "/Volumes/workspace/default/chec-simulador/paquete_06"
+  # Donde se deja la copia local dentro del contenedor. No se sustituye: es una ruta
+  # del contenedor, no del workspace.
+  - name: PAQUETE_06
+    value: "/tmp/paquete_06"

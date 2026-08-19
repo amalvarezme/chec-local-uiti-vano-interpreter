@@ -487,19 +487,39 @@ databricks fs cp <scratch>/paquete -r \
   dbfs:/Volumes/<catalogo>/<esquema>/chec-simulador/paquete_06 --overwrite -p <profile>
 ```
 
-La fuente de la app son cuatro archivos planos mas los dos paquetes del repositorio.
-`arranque.py` baja el paquete del Volume al disco local del contenedor y hace `execvp` a
-Voila — al disco local y no leyendo `/Volumes` directamente, porque el montaje FUSE dentro
-del contenedor no esta garantizado y porque el mapeo en memoria de `X_inst.npy` necesita un
-archivo local de verdad para que el cache de paginas lo comparta entre kernels.  `execvp` y
-no `subprocess.run` para que Voila quede como hijo directo y las senales de la plataforma le
-lleguen. Su `requirements.txt` sale de listar `site-packages` tras importar el conjunto real
-de modulos, no de adivinar: `anywidget` no es opcional (`plotly>=6` levanta `ImportError` en
-`go.FigureWidget` sin el, y el tablero entero es un `FigureWidget`), y `optuna` y
-`matplotlib` entran porque `chec_impacto.models.mil_persistencia` los importa
-transitivamente. Recortar mas alla de eso ya produjo un `ModuleNotFoundError` en produccion.
-**No pases `--base_url`**: Databricks Apps hace proxy en la raiz y ahi un `base_url` deja
-todos los assets en 404.
+La fuente de la app **vive en el repositorio**, en `aplicaciones/databricks/simulador/`, y
+se prepara con el mismo empacador que la otra:
+
+```
+python3 scripts/empacar_app_databricks.py fuente-simulador \
+  --destino <scratch> \
+  --volumen-paquete /Volumes/<catalogo>/<esquema>/chec-simulador/paquete_06
+```
+
+Copia `arranque.py`, `app.yaml` y `requirements.txt`, y sustituye en el `app.yaml` la ruta
+resuelta del Volume — igual que `--raiz-paneles` en 4b, y por el mismo motivo: sin esa
+sustitucion la app arranca buscando su paquete en `workspace.default`, que en CHEC no
+existe (D1), y el sintoma es "no encuentra el paquete", que no apunta hasta aqui.
+
+> **Los tres archivos estuvieron dentro de este `.md`, y por eso se perdieron.** El comando
+> retirado `/app-simulador-vano` los llevaba como bloques de codigo; al consolidar
+> (commit `1c0aa56`) sobrevivieron las lineas que los suben y no lo que los escribia,
+> asi que esta etapa quedo mandando subir tres archivos inexistentes. Hoy son archivos con
+> pruebas (`tests/test_app_simulador_databricks.py`), y una guarda del contrato comprueba
+> que todo `--file <scratch>/X` tenga un productor con nombre.
+
+Que hacen, en una linea cada uno: `arranque.py` baja el paquete del Volume al disco local
+del contenedor y hace `execvp` a Voila — al disco local y no leyendo `/Volumes`
+directamente, porque el montaje FUSE dentro del contenedor no esta garantizado y porque el
+mapeo en memoria de `X_inst.npy` necesita un archivo local de verdad para que el cache de
+paginas lo comparta entre kernels; `execvp` y no `subprocess.run` para que Voila quede como
+hijo directo y las senales de la plataforma le lleguen. Su `requirements.txt` sale de listar
+`site-packages` tras importar el conjunto real de modulos, no de adivinar: `anywidget` no es
+opcional (`plotly>=6` levanta `ImportError` en `go.FigureWidget` sin el, y el tablero entero
+es un `FigureWidget`), y `optuna` y `matplotlib` entran porque
+`chec_impacto.models.mil_persistencia` los importa transitivamente. Recortar mas alla de eso
+ya produjo un `ModuleNotFoundError` en produccion. **No pases `--base_url`**: Databricks
+Apps hace proxy en la raiz y ahi un `base_url` deja todos los assets en 404.
 
 ```
 databricks sync src/chec_local_interpreter <base>/src/chec_local_interpreter --exclude '**/__pycache__/**' --full -p <profile>

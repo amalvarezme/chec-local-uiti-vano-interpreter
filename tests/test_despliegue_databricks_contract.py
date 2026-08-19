@@ -621,3 +621,69 @@ def test_la_etapa_5_apunta_los_datos_al_volume():
     assert "D2" in etapa, (
         "la etapa 5 no contempla el 403 del montaje FUSE, que es cuando esa misma "
         "variable tiene que apuntar a un directorio local")
+
+
+# ---------------------------------------------------------------------------
+# Lo que el comando manda subir tiene que EXISTIR
+# ---------------------------------------------------------------------------
+#
+# La etapa 4c mandaba subir `arranque.py`, `app.yaml` y `requirements.txt` del
+# simulador con `--file <scratch>/...`. Los tres vivian dentro de
+# `/app-simulador-vano.md` como bloques de codigo; al fundir los cuatro comandos en
+# uno (commit `1c0aa56`) se fueron con el `.md` y las lineas que los suben se
+# quedaron. Desde entonces esa etapa no se podia ejecutar, y nada lo decia: un `.md`
+# no tiene quien le pregunte si el archivo que nombra existe.
+
+
+def _archivos_que_el_comando_sube() -> set[str]:
+    """Los nombres CONCRETOS que aparecen tras `--file <scratch>/`, sin ruta.
+
+    Se dejan fuera dos formas que no son un archivo: `$f`, la variable del bucle de la
+    etapa 4b -- sus valores se enumeran en la misma linea y los cubre
+    `tests/test_app_criticidad_chec.py` --, y cualquier marcador de prosa como `X`.
+    Un nombre de archivo aqui es algo con extension y sin metacaracteres de shell.
+    """
+    texto = (CMD_DIR / "subir-a-databricks.md").read_text(encoding="utf-8")
+    crudos = re.findall(r"--file\s+<scratch>/(\S+)", texto)
+    return {Path(c).name for c in crudos
+            if re.fullmatch(r"[A-Za-z0-9._/-]+\.[A-Za-z0-9]+", c)}
+
+
+def test_todo_lo_que_la_etapa_4_sube_lo_escribe_algo_del_repositorio():
+    """Cada `--file <scratch>/X` tiene que tener un productor con nombre.
+
+    Los productores son dos y estan escritos, no adivinados: los subcomandos de
+    `scripts/empacar_app_databricks.py` para la fuente de las dos apps, y
+    `preparar.escribir_cuaderno(con_cierre=False)` para el cuaderno del simulador.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "empacar_para_contrato", PROJECT_ROOT / "scripts" / "empacar_app_databricks.py")
+    empacador = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(empacador)
+
+    producidos = set(empacador.ARCHIVOS_PROPIOS) | set(empacador.ARCHIVOS_COMPARTIDOS) \
+        | set(empacador.ARCHIVOS_SIMULADOR) | {"06_simulador.ipynb"}
+    huerfanos = sorted(_archivos_que_el_comando_sube() - producidos)
+    assert not huerfanos, (
+        f"el comando manda subir {huerfanos} y nada del repositorio los escribe")
+
+
+@pytest.mark.parametrize("nombre", ["arranque.py", "app.yaml", "requirements.txt"])
+def test_la_fuente_del_simulador_existe_como_archivo(nombre: str):
+    """Y en una carpeta, no dentro de un Markdown: es la unica forma de que las
+    pruebas la vean."""
+    assert (PROJECT_ROOT / "aplicaciones" / "databricks" / "simulador" / nombre).is_file()
+
+
+def test_la_etapa_4c_prepara_su_fuente_con_el_empacador():
+    """Y no copiando bloques de codigo desde este mismo archivo, que es como se
+    perdieron."""
+    texto = (CMD_DIR / "subir-a-databricks.md").read_text(encoding="utf-8")
+    etapa = texto[texto.index("### 4c."):texto.index("### 4d.")]
+    assert "empacar_app_databricks.py fuente-simulador" in etapa, (
+        "la etapa 4c no dice de donde sale la fuente de la app del simulador")
+    assert "--volumen-paquete" in etapa, (
+        "la etapa 4c no resuelve la ruta del Volume del paquete; sin eso la app "
+        "arranca buscandolo en `workspace.default`, que en CHEC no existe (D1)")

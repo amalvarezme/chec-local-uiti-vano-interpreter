@@ -1,0 +1,30 @@
+# Sale de importar el conjunto real de modulos de la app y listar lo que quedo en
+# `site-packages`, no de adivinar. Recortar mas alla de esa auditoria ya produjo un
+# `ModuleNotFoundError` en produccion.
+#
+# Sin limites inferiores a proposito: los del repositorio estan medidos contra Python
+# 3.11+ en escritorio, y aqui manda la imagen base de Databricks Apps. Lo que importa
+# es QUE paquetes viajan.
+voila
+jupyter-server
+ipywidgets
+# No es opcional: `plotly>=6` respalda `go.FigureWidget` con anywidget, y sin el levanta
+# `ImportError`. El tablero entero es un `FigureWidget`.
+anywidget
+plotly
+pandas
+numpy
+scipy
+scikit-learn
+torch
+# `optuna` y `matplotlib` entran porque `chec_impacto.models.mil_persistencia` los
+# importa transitivamente, no porque la app los llame.
+optuna
+matplotlib
+joblib
+pyarrow
+openpyxl
+cloudpickle
+# La Files API de Unity Catalog: el Volume NO esta montado por FUSE dentro del
+# contenedor (contrato D2), asi que bajar el paquete pasa por aqui obligatoriamente.
+databricks-sdk
