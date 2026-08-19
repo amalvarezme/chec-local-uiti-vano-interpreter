@@ -1235,6 +1235,41 @@ def fid_de_punto(customdata: Iterable[str] | None, point_inds: Iterable[int]) ->
     return None
 
 
+def vanos_de_grupo(
+    clases_por_fid: Mapping[Any, int],
+    grupo: int,
+    *,
+    datos_ventana: Mapping[str, tuple[float, int]],
+) -> list[str]:
+    """Which vanos the panel's "G. Alto"/"G. Medio-Alto"/"G. Medio"/"G. Bajo" buttons
+    mark: the ones the window's KMeans geometry puts in `grupo`, highest UITI first.
+
+    `clases_por_fid` is what `clases_para(circuito, ventana_i)` returns -- one entry per
+    vano that HAS a cell in that window -- so the group is always read off the active
+    window and never off the whole period. That is the whole point of the buttons: a vano
+    is not "Alto", it is Alto in March.
+
+    An empty list is an ANSWER and not a failure. The panel says so, naming the group and
+    the window's dates, instead of marking the nearest thing: a button that quietly marks
+    the next group down produces a perfectly plausible selection the user only discovers
+    is wrong after simulating it.
+
+    The order is UITI descending, the same one the rest of the dashboard uses. A group can
+    carry eighty vanos and the user reads the first few; those being the worst is what
+    makes that partial reading worth anything. A vano classified but missing from
+    `datos_ventana` -- the two are built separately -- sorts last instead of raising:
+    marking it last is recoverable, an exception inside the click is not.
+
+    Every fid comes back as text, which is how the checkbox selector keys them.
+    """
+    def _uiti(fid: str) -> float:
+        celda = datos_ventana.get(fid)
+        return float(celda[0]) if celda is not None else float("-inf")
+
+    del_grupo = [str(f) for f, c in clases_por_fid.items() if int(c) == int(grupo)]
+    return sorted(del_grupo, key=lambda f: -_uiti(f))
+
+
 def vanos_para_diagnostico(
     datos_ventana: Mapping[str, tuple[float, int]],
     vanos_circuito: Iterable[Any],

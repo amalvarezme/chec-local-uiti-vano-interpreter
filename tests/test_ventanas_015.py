@@ -1732,6 +1732,58 @@ def test_marcar_mas_que_el_tope_deja_los_de_mayor_uiti_de_lo_marcado():
     assert elegidos["restantes"] == 3
 
 
+# --- Que vanos marca cada boton de grupo del panel de seleccion ------------------------
+# La fila de botones pasa de "desmarcar / top de la ventana" a "desmarcar / un boton por
+# grupo de criticidad". QUE marca cada uno es una decision de negocio -- y una que falla
+# en silencio, porque marcar el grupo equivocado produce una seleccion perfectamente
+# plausible --, asi que vive aqui y se prueba con datos, no leyendo el fuente.
+
+
+def test_los_vanos_de_un_grupo_salen_ordenados_por_uiti():
+    """El orden es el mismo que usa todo el resto del tablero. Un grupo puede traer
+    ochenta vanos y el usuario lee los primeros: que sean los de mayor UITI es lo que
+    hace util a esa lectura parcial."""
+    from chec_local_interpreter.ventanas_015 import vanos_de_grupo
+
+    clases = {"V1": 3, "V2": 1, "V3": 3, "V4": 0, "V5": 3}
+
+    assert vanos_de_grupo(clases, 3, datos_ventana=_datos_ventana()) == ["V1", "V3", "V5"]
+    assert vanos_de_grupo(clases, 1, datos_ventana=_datos_ventana()) == ["V2"]
+
+
+def test_un_grupo_sin_vanos_en_la_ventana_devuelve_la_lista_vacia():
+    """El caso que dispara el aviso del panel. Devolver vacio -- y no lo mas parecido, ni
+    el grupo de al lado -- es lo que permite decirle al usuario que en ESA ventana ese
+    grupo no existe, en vez de marcarle otra cosa y que lo descubra al simular."""
+    from chec_local_interpreter.ventanas_015 import vanos_de_grupo
+
+    assert vanos_de_grupo({"V1": 3, "V2": 3}, 0, datos_ventana=_datos_ventana()) == []
+    assert vanos_de_grupo({}, 3, datos_ventana=_datos_ventana()) == []
+
+
+def test_los_vanos_de_un_grupo_se_comparan_como_texto():
+    """Misma trampa que en el diagnostico: `clases_para` esta indexado por texto y el
+    resto del tablero puede traer el fid como numero. Sin la coercion el boton marca
+    nada y no dice por que."""
+    from chec_local_interpreter.ventanas_015 import vanos_de_grupo
+
+    elegidos = vanos_de_grupo({7001: 2, 7002: 2}, 2,
+                              datos_ventana={"7001": (5.0, 2), "7002": (9.0, 1)})
+
+    assert elegidos == ["7002", "7001"]
+
+
+def test_un_vano_clasificado_sin_celda_en_la_ventana_no_hunde_el_orden():
+    """`clases_para` y `DATOS_VENTANA` se construyen por separado. Si alguna vez dejan de
+    coincidir, el que sobra tiene que quedar al final y no tumbar el boton: marcarlo de
+    ultimo es recuperable, una excepcion en el clic no."""
+    from chec_local_interpreter.ventanas_015 import vanos_de_grupo
+
+    elegidos = vanos_de_grupo({"V1": 3, "V9": 3}, 3, datos_ventana=_datos_ventana())
+
+    assert elegidos == ["V1", "V9"]
+
+
 def test_el_diagnostico_compara_los_fid_como_texto():
     """`DATOS_VENTANA` esta indexado por TEXTO y tanto `VANOS_POR_CIRCUITO` como las
     casillas pueden traer el fid como numero. Sin la coercion no coincide ninguno y el

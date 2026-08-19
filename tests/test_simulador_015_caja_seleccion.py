@@ -335,6 +335,53 @@ def test_the_framing_buttons_compute_the_view_at_click_time(fuente):
     assert _tiene(fuente, "COLUMNA_FIGURAS = widgets.VBox(\n    [ENCUADRES, fig]")
 
 
+def test_the_selection_panel_has_one_button_per_criticality_group(fuente):
+    """La fila de botones es Desmarcar + un boton por grupo, en el orden en que se lee la
+    urgencia: Alto primero. El grupo sale de `clases_para`, o sea de la VENTANA ACTIVA:
+    un vano no es Alto, es Alto en marzo, y marcarlo desde el periodo entero seria otra
+    pregunta."""
+    assert "    vanos_de_grupo,\n" in fuente
+    # El rotulo se DERIVA de `NOMBRES_GRUPOS` en vez de escribirse cuatro veces: es lo
+    # que impide que el boton diga "Medio" y marque otra clase al renombrar un grupo.
+    assert "NOMBRES_GRUPOS = ['Bajo', 'Medio', 'Medio-Alto', 'Alto']" in fuente
+    assert _tiene(fuente, "description=f'G. {NOMBRES_GRUPOS[clase]}'")
+    assert _tiene(fuente, "BOTONES_GRUPO = [_boton_de_grupo(c) for c in (3, 2, 1, 0)]")
+    cuerpo = fuente[fuente.index("def _marcar_grupo"):][:2600]
+    assert "clases_para(circuito, ventana_i)" in cuerpo
+    assert "datos_ventana=DATOS_VENTANA[ventana_i]" in cuerpo
+    # El orden de la fila, que es el de la urgencia y no el del enum.
+    assert _tiene(fuente, "widgets.HBox([boton_desmarcar, *BOTONES_GRUPO])")
+
+
+def test_the_window_top_button_is_gone(fuente):
+    """Se retiro con los botones de grupo: la fila enumera lo que hay. La auto-marca del
+    deslizador NO se fue con el -- sigue en `_on_ventana_change` --, y esa es la
+    diferencia entre retirar un atajo y retirar el comportamiento."""
+    assert "boton_top_ventana" not in fuente
+    assert "Top de la ventana" not in fuente
+    assert "_auto_seleccion_ventana(circuito, ventana_i)" in fuente  # la auto-marca sigue
+
+
+def test_an_empty_group_says_so_instead_of_marking_something_else(fuente):
+    """Un boton que marca el grupo de al lado cuando el suyo esta vacio produce una
+    seleccion perfectamente plausible, y el usuario lo descubre al simular. El aviso
+    nombra el grupo Y la ventana con su fecha: 'no hay vanos en grupo Alto' sin decir
+    donde se lee como una propiedad del circuito y no de la ventana."""
+    cuerpo = fuente[fuente.index("def _marcar_grupo"):][:2600]
+    assert "No hay vanos en grupo " in cuerpo
+    assert 'VENTANAS[ventana_i]["periodo"]' in cuerpo
+    # Y la seleccion no se toca: el aviso reemplaza a la marca, no la acompania.
+    assert cuerpo.index("AVISO_GRUPO.value = (") < cuerpo.index("vano_widget.value = tuple(")
+    assert "return" in cuerpo[:cuerpo.index("vano_widget.value = tuple(")]
+
+
+def test_the_empty_group_notice_dies_with_its_window(fuente):
+    """El aviso nombra UNA ventana y UN circuito. Al cambiar cualquiera de los dos deja de
+    corresponder, y dejarlo en pantalla afirma sobre una ventana que ya no es la que se
+    esta mirando."""
+    assert fuente.count("AVISO_GRUPO.value = ''") >= 2
+
+
 def test_the_diagnostic_starts_from_what_the_user_marked(fuente):
     """Lo marcado es LA pregunta del diagnostico: si el usuario ya toco tres vanos en el
     mapa, esos tres son la orden de trabajo que tiene en la mano y el boton contesta por

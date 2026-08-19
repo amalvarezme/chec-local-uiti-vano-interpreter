@@ -120,6 +120,7 @@ from chec_local_interpreter.ventanas_015 import (
     perfil_uiti_por_vano,
     series_temporal_vanos,
     top_vanos_de_ventana,
+    vanos_de_grupo,
     vanos_para_diagnostico,
     ventanas_sin_traslape,
 )
@@ -1955,29 +1956,63 @@ def construir(
                       'asi que no hay vanos que simular. Elige otro circuito.')
 
 
-    # Sigue sin haber "Marcar todos", y ahora por otra razon: sin tope marcaria los cientos de
-    # vanos del circuito, y de esos solo los primeros `MAX_VANOS_SERIE` cabrian dibujados. El
-    # camino que sirve es el contrario -- "Volver al top de la ventana" --, que rehace la
-    # auto-marca despues de haber agregado o quitado vanos a mano.
+    # Sigue sin haber "Marcar todos": sin tope marcaria los cientos de vanos del circuito,
+    # y de esos solo los primeros `MAX_VANOS_SERIE` cabrian dibujados. Lo que si hay es un
+    # boton por GRUPO de criticidad, que es la manera en que se reparte una jornada -- y
+    # cada uno marca un subconjunto acotado por la propia geometria.
     boton_desmarcar = widgets.Button(description='Desmarcar', button_style='')
     boton_desmarcar.on_click(lambda _b: vano_widget.desmarcar_todos())
-    boton_top_ventana = widgets.Button(
-        description='Top de la ventana', button_style='',
-        tooltip=f'Vuelve a marcar los {TOP_VANOS_VENTANA} vanos de mayor UITI en la ventana '
-                'activa, descartando lo que hayas marcado o desmarcado a mano')
+
+    # El renglon que contesta al boton de grupo que no encontro a nadie. Va SEPARADO de
+    # `AVISO_VANOS`: ese describe la seleccion vigente y se reescribe en cada repintado,
+    # asi que un aviso metido ahi lo borraria el primer movimiento del mapa.
+    AVISO_GRUPO = widgets.HTML('')
 
 
-    def _volver_al_top_de_la_ventana(_boton):
-        """Rehace la auto-marca del deslizador sin tener que moverlo y volver.
+    def _marcar_grupo(clase):
+        """Marca los vanos que la ventana activa pone en ese grupo de criticidad.
 
-    `_auto_seleccion_ventana` esta definida mas abajo en esta misma celda, y eso no es
-    un problema: el cuerpo corre en el CLIC, no al registrar el manejador.
+    El grupo sale de `clases_para`, o sea de la VENTANA: un vano no es Alto, es Alto en
+    marzo. Leerlo del periodo entero contestaria otra pregunta -- cual fue el peor del
+    anio -- y ademas no coincidiria con los colores que el mapa acaba de pintar.
+
+    Es un REEMPLAZO, como lo era la auto-marca del deslizador: el grupo es la pregunta
+    entera, y sumarlo a lo que hubiera antes dejaria una seleccion mezclada que ya no
+    corresponde a ningun boton. Para juntar dos grupos estan las casillas.
+
+    Cuando el grupo esta VACIO no se toca la seleccion y se dice por que. Marcar lo mas
+    parecido -- el grupo de al lado, los de mayor UITI -- produce una seleccion
+    perfectamente plausible, y el usuario descubre que no era la que pidio recien al
+    simular. El aviso nombra el grupo Y la fecha de la ventana: "no hay vanos en grupo
+    Alto", a secas, se lee como una propiedad del circuito y no de la ventana.
     """
-        vano_widget.value = tuple(
-            _auto_seleccion_ventana(circuito_widget.value, ventana_widget.value))
+        circuito, ventana_i, _marcados = _seleccion_actual()
+        elegidos = vanos_de_grupo(clases_para(circuito, ventana_i), clase,
+                                  datos_ventana=DATOS_VENTANA[ventana_i])
+        if not elegidos:
+            AVISO_GRUPO.value = (
+                f'<span style="font-size:12px;color:#c62828;">No hay vanos en grupo '
+                f'<b>{NOMBRES_GRUPOS[clase]}</b> en la ventana '
+                f'{VENTANAS[ventana_i]["etiqueta"]} '
+                f'({VENTANAS[ventana_i]["periodo"]}).</span>')
+            return
+        AVISO_GRUPO.value = ''
+        vano_widget.value = tuple(elegidos)
 
 
-    boton_top_ventana.on_click(_volver_al_top_de_la_ventana)
+    def _boton_de_grupo(clase):
+        """Un boton por grupo, construido en bucle para que el rotulo, el tooltip y la
+    clase que marca no puedan separarse al editar uno de los tres."""
+        boton = widgets.Button(
+            description=f'G. {NOMBRES_GRUPOS[clase]}', button_style='',
+            tooltip=f'Marca los vanos que la ventana activa clasifica como '
+                    f'{NOMBRES_GRUPOS[clase]}, reemplazando lo que tengas marcado')
+        boton.on_click(lambda _b, c=clase: _marcar_grupo(c))
+        return boton
+
+
+    # De mayor a menor, que es el orden en que se lee la urgencia y no el del enum.
+    BOTONES_GRUPO = [_boton_de_grupo(c) for c in (3, 2, 1, 0)]
 
 
     def _auto_seleccion_ventana(circuito, ventana_i):
@@ -2034,6 +2069,9 @@ def construir(
     UITI en la ventana nueva, que son los que pasan a describir el mapa, la serie de
     tiempo y el ranking.
     """
+        # El aviso de grupo vacio nombra UNA ventana. Al moverla deja de corresponder, y
+        # dejarlo afirma sobre una ventana que ya no es la que se esta mirando.
+        AVISO_GRUPO.value = ''
         if _REPINTADO_EN_PAUSA:
             # Lo encadeno el cambio de circuito, que fija la seleccion y repinta al final.
             return
@@ -2049,6 +2087,8 @@ def construir(
     def _on_circuito_change(_change):
         nonlocal _REPINTADO_EN_PAUSA
         circuito = circuito_widget.value
+        # Y tampoco corresponde al circuito nuevo: el grupo se lee por circuito y ventana.
+        AVISO_GRUPO.value = ''
         # El deslizador se resuelve ANTES de fijar la seleccion: la auto-marca de la ventana
         # no llega a usarse aqui -- el circuito arranca con su top del periodo --, pero el
         # orden importa igual, porque mover `value` del deslizador dispara su manejador.
@@ -3745,8 +3785,8 @@ def construir(
             _grupo(circuito_widget),
             _grupo(ventana_widget),
             _grupo(vano_widget,
-                   widgets.HBox([boton_desmarcar, boton_top_ventana]),
-                   AVISO_VANOS),
+                   widgets.HBox([boton_desmarcar, *BOTONES_GRUPO]),
+                   AVISO_GRUPO, AVISO_VANOS),
             _grupo(_titulo('Variables del simulador'), knob_selector_widget,
                    AVISO_BLOQUEADOS),
             # Las actividades van DESPUES de las variables y antes de la rejilla, en el
