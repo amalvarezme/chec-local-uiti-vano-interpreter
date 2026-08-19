@@ -209,3 +209,49 @@ def test_la_fuente_del_simulador_falla_si_le_falta_un_archivo(tmp_path, monkeypa
                         (*empacador.ARCHIVOS_SIMULADOR, "no_existe.py"))
     with pytest.raises(SystemExit, match="Falta"):
         empacador.preparar_fuente_simulador(tmp_path, volumen_paquete="/Volumes/x/y/z")
+
+
+# ------------------------------------------------------- el contrato del manifiesto
+
+
+def test_arranque_lee_del_manifiesto_lo_que_preparar_escribe():
+    """El unico contrato entre las dos mitades, y vivia solo en la prosa.
+
+    `aplicaciones/06_simulador/preparar.py` escribe el `manifiesto.json` que viaja al
+    Volume; `arranque.py` lo lee dentro del contenedor para saber que bajar y comprobar
+    que llego entero. Son dos archivos que no se importan entre si y que nadie ejecuta
+    junto, asi que un cambio de forma en el escritor no rompe nada aqui: rompe en
+    Databricks, al arrancar la app, con un `KeyError` dentro de un contenedor.
+
+    Se comparan las CLAVES: las que `arranque.py` pide y las que `preparar.py` pone.
+    """
+    lector = ast.parse((APP / "arranque.py").read_text("utf-8"))
+    pedidas = {n.slice.value for n in ast.walk(lector)
+               if isinstance(n, ast.Subscript) and isinstance(n.value, ast.Name)
+               and n.value.id == "manifiesto" and isinstance(n.slice, ast.Constant)}
+    assert pedidas, "la prueba no encontro ninguna lectura del manifiesto"
+
+    escritor = (RAIZ / "aplicaciones" / "06_simulador" / "preparar.py").read_text("utf-8")
+    arbol = ast.parse(escritor)
+    puestas = set()
+    for nodo in ast.walk(arbol):
+        if (isinstance(nodo, ast.Assign) and len(nodo.targets) == 1
+                and isinstance(nodo.targets[0], ast.Name)
+                and nodo.targets[0].id == "manifiesto"
+                and isinstance(nodo.value, ast.Dict)):
+            puestas = {k.value for k in nodo.value.keys if isinstance(k, ast.Constant)}
+    assert puestas, "no se pudo leer el diccionario del manifiesto en preparar.py"
+
+    faltan = sorted(pedidas - puestas)
+    assert not faltan, (
+        f"`arranque.py` pide {faltan} del manifiesto y `preparar.py` no las escribe: "
+        "la app arrancaria con un KeyError dentro del contenedor")
+
+
+def test_arranque_comprueba_el_tamanio_de_cada_pieza():
+    """Una descarga cortada deja un archivo que EXISTE. Comprobar solo la existencia
+    dejaria pasar un `X_inst.npy` a medias, y eso no falla al bajar: falla dentro del
+    tablero, con un error que no apunta a la descarga."""
+    fuente = (APP / "arranque.py").read_text("utf-8")
+    assert 'meta["bytes"]' in fuente and "st_size" in fuente, (
+        "arranque.py no compara el tamanio de lo que baja contra el manifiesto")

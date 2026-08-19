@@ -879,3 +879,31 @@ def test_el_paquete_del_simulador_comprueba_que_las_bolsas_siguen_al_csv():
     # Y tiene que ABORTAR, no avisar: un paquete congelado con las dos mitades hablando
     # de meses distintos es exactamente lo que esto viene a impedir.
     assert "SystemExit" in cuerpo
+
+
+def test_el_estado_del_menu_no_manda_correr_algo_que_no_existe(capsys):
+    """`estado` sobre CriticidadCHEC decia "artefactos : FALTAN -- corre construir".
+
+    Y `construir` sobre esa misma carpeta muere con "no tiene construir.py", porque el
+    menu no construye nada: lanza a las otras cinco. Es el primer comando que corre
+    quien abre esto por primera vez, y lo mandaba a un callejon.
+
+    `_estado` es generico para las seis a proposito -- una rama por aplicacion seria
+    peor --, asi que lo que hay que reconocer es la propiedad: una aplicacion SIN
+    `construir.py` no tiene artefactos que le falten.
+    """
+    import sys as _sys
+    comun = RAIZ / "aplicaciones" / "_comun"
+    _sys.path.insert(0, str(comun))
+    try:
+        import gestor
+    finally:
+        _sys.path.pop(0)
+
+    menu = RAIZ / "aplicaciones" / "00_criticidad_chec"
+    assert not (menu / "construir.py").exists(), (
+        "esta prueba asume que el menu no construye nada; si ya construye, sobra")
+    gestor._estado(menu)
+    salida = capsys.readouterr().out
+    assert "corre construir" not in salida, (
+        f"el estado del menu manda correr algo que no existe:\n{salida}")

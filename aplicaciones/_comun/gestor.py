@@ -48,6 +48,12 @@ def _estado(app: Path) -> None:
         print(f"tablero    : construido ({marca.stat().st_size / 1024:,.0f} KB de armazon)")
     elif paquete.exists():
         print(f"paquete    : construido ({paquete})")
+    elif not (app / "construir.py").exists():
+        # CriticidadCHEC no construye nada: lanza a las otras cinco. Sin esta rama
+        # reportaba "artefactos : FALTAN -- corre construir", y `construir` sobre esta
+        # misma carpeta muere con "no tiene construir.py". Es el primer comando que
+        # corre quien abre esto por primera vez, y lo mandaba a un callejon.
+        print("artefactos : ninguno que construir -- esta aplicacion lanza a las otras")
     else:
         print("artefactos : FALTAN -- corre construir")
 
