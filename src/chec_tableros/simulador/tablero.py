@@ -286,9 +286,9 @@ TOP_VARIABLES_POR_VANO = 10
 # pasadas de bolsas para toda la seleccion, medidas en 0,2 s.
 PUNTOS_REJILLA_RELEVANCIA = 9
 # El TOPE del diagnostico: cuantos vanos entran como maximo a una corrida. Quince y no
-# diez porque es lo que cabe en una orden de trabajo de una jornada, y porque el
-# diagnostico ya no elige solo -- parte de lo que el usuario marco, y un tope corto le
-# dejaba poco sitio al relleno. Es el MISMO numero que `MAX_VANOS_ANALISIS`: el
+# diez porque es lo que cabe en una orden de trabajo de una jornada. Solo topa al modo
+# sin marcar -- el top por UITI --; cuando el usuario marca, la lista es la suya y este
+# numero solo la recorta si marco de mas. Es el MISMO numero que `MAX_VANOS_ANALISIS`: el
 # diagnostico marca los vanos que identifica, asi que un tope mayor que el del selector
 # se recortaria en silencio al escribirlos.
 TOP_VANOS_CIRCUITO = 15
@@ -2176,19 +2176,20 @@ def construir(
         )
 
     def _diagnostico_del_circuito():
-        """Los vanos que el diagnostico estudia -- lo que el usuario marco, completado con
-    los de mayor UITI de la ventana hasta `TOP_VANOS_CIRCUITO` -- y que variables los
-    bajarian al grupo Bajo.
+        """Los vanos que el diagnostico estudia y que variables los bajarian al grupo Bajo.
 
-    Contesta la pregunta con la que se abre una jornada -- por donde empiezo aqui -- que
-    las demas vistas del tablero no contestan: el mapa exige mirar tramo a tramo y el
+    Sin nada marcado son los de mayor UITI de la ventana hasta `TOP_VANOS_CIRCUITO`, que
+    contesta la pregunta con la que se abre una jornada -- por donde empiezo aqui -- y
+    que las demas vistas del tablero no contestan: el mapa exige mirar tramo a tramo y el
     panel exige haber elegido ya los vanos.
 
-    Lo MARCADO es una entrada y no un estorbo: si el usuario ya toco tres vanos en el
-    mapa, esos tres son la orden de trabajo que tiene en la mano y el diagnostico tiene
-    que hablar de ellos. Lo que hace el boton es completar la lista, no reemplazarla.
-    La regla completa -- y que se cuenta de lo que queda fuera -- vive en
-    `vanos_para_diagnostico`, que se prueba con datos: aqui solo se conecta.
+    Con vanos marcados son ESOS y solo esos. Marcar es como el usuario acota la pregunta
+    -- por casilla o por clic en el mapa --, y rellenar el cupo que sobra le contestaria
+    por vanos que no pidio y ademas hundiria los suyos en una tabla de quince. Lo unico
+    que se cae es un vano marcado sin eventos en la ventana, porque el modelo no lo puede
+    puntuar, y el texto lo nombra. La regla completa -- y que se cuenta de lo que queda
+    fuera -- vive en `vanos_para_diagnostico`, que se prueba con datos: aqui solo se
+    conecta.
 
     El ranking se AGREGA sobre el conjunto y no se da vano por vano: la pregunta es que
     obra programar para el grupo, y quince rankings sueltos son quince decisiones. Se
@@ -2297,7 +2298,21 @@ def construir(
             return ('<span style="font-size:12px;color:#5b4a48;">Presiona <b>Diagnostico</b> '
                     'para estudiar los vanos que hayas marcado.</span>')
         if not diag['vanos']:
-            _marcados_sin = diag['seleccion']['sin_eventos']
+            # Sin relleno, quedarse sin vanos ya no significa una sola cosa, y decirlas
+            # igual miente en una de las dos. Si el circuito SI tiene celdas en la
+            # ventana, el vacio lo produjo la seleccion, no el circuito, y eso tiene
+            # salida: marcar otros vanos o no marcar ninguno.
+            _sel_vacia = diag['seleccion']
+            _marcados_sin = _sel_vacia['sin_eventos']
+            if _sel_vacia['con_eventos']:
+                return ('<span style="font-size:12px;color:#b91c1c;">Los '
+                        f'<b>{len(_marcados_sin)}</b> vanos que marcaste '
+                        f'({", ".join(sorted(_marcados_sin))}) no tienen eventos en '
+                        f'{diag["ventana"]["etiqueta"]}, así que el modelo no los puede '
+                        f'puntuar. {diag["circuito"]} sí tiene '
+                        f'<b>{_sel_vacia["con_eventos"]}</b> vanos con eventos en esta '
+                        'ventana: marca otros, o quita la marca para ver los de mayor '
+                        'UITI.</span>')
             _por_lo_marcado = (
                 f' Los {len(_marcados_sin)} vanos que marcaste tampoco tienen eventos ahí.'
                 if _marcados_sin else '')
@@ -2332,12 +2347,9 @@ def construir(
         # De donde salio la lista. Sin esto, un usuario que marco tres vanos y recibio quince
         # no sabe cuales son los suyos, y la lista se lee como que el boton ignoro su
         # seleccion.
-        _origen = (
-            f'<b>{len(_sel["marcados"])}</b> que marcaste'
-            + (f' + <b>{len(_sel["completados"])}</b> completados por mayor UITI'
-               if _sel['completados'] else '')
-            if _sel['marcados'] else
-            f'los <b>{len(_sel["completados"])}</b> de mayor UITI de la ventana')
+        _origen = (f'los <b>{len(_sel["marcados"])}</b> vanos que marcaste, y solo esos'
+                   if _sel['marcados'] else
+                   f'los <b>{len(_sel["completados"])}</b> de mayor UITI de la ventana')
         # Los avisos NO son decoracion. Sin el primero, una lista de quince sobre un circuito
         # con sesenta vanos con eventos se lee como que el circuito tiene quince; sin el
         # segundo, una lista de cuatro se lee como que hay cuatro criticos, cuando lo que
@@ -2347,12 +2359,9 @@ def construir(
             # El aviso nombra la composicion REAL de la lista. "Los 15 de mayor UITI" sobre
             # una lista que el usuario marco entera es falso: los suyos entran por marcados
             # y pueden ser los de menor UITI de la ventana.
-            _que_quedo = (
-                f'los <b>{len(_sel["marcados"])}</b> que marcaste'
-                + (f' y se completo con los <b>{len(_sel["completados"])}</b> de mayor UITI'
-                   if _sel['completados'] else '')
-                if _sel['marcados'] else
-                f'los <b>{len(_sel["completados"])}</b> de mayor UITI')
+            _que_quedo = (f'los <b>{len(_sel["marcados"])}</b> que marcaste'
+                          if _sel['marcados'] else
+                          f'los <b>{len(_sel["completados"])}</b> de mayor UITI')
             _aviso += (
                 f'<br><span style="color:#b45309;">Se dejaron {_que_quedo}, pero quedan otros '
                 f'<b>{_sel["restantes"]}</b> vanos con eventos en esta ventana. Marca los que '
@@ -3053,8 +3062,8 @@ def construir(
     # no lo cambia, y a esperarlo aunque no se quiera.
     boton_diagnostico = widgets.Button(description='Diagnostico',
                                        button_style='', tooltip='Estudia los vanos que '
-                                       'marcaste y completa con los de mayor UITI de la '
-                                       'ventana hasta el tope')
+                                       'marcaste, o los de mayor UITI de la ventana si no '
+                                       'marcaste ninguno')
     DIAGNOSTICO = widgets.HTML(_texto_del_diagnostico(None))
     # El ultimo diagnostico se guarda porque los botones de aplicar necesitan el valor
     # sugerido para CADA vano, y el texto en pantalla solo lleva el promedio.
@@ -3500,10 +3509,10 @@ def construir(
     vez en el mapa, que es justo el trabajo que el boton venia a ahorrar. Al marcarlos,
     el mapa base los encierra en su recuadro y la rejilla les abre columna.
 
-    Lo que el usuario ya tenia marcado SOBREVIVE: entra al diagnostico como entrada y
-    vuelve marcado, ahora acompaniado del relleno por UITI. Lo unico que puede caerse es
-    un vano marcado sin eventos en la ventana -- el modelo no lo puede puntuar --, y el
-    texto del diagnostico lo nombra en vez de dejarlo desaparecer.
+    Lo que el usuario ya tenia marcado SOBREVIVE y ademas ACOTA: si marco tres vanos, el
+    diagnostico habla de esos tres y de ninguno mas. Lo unico que puede caerse es un vano
+    marcado sin eventos en la ventana -- el modelo no lo puede puntuar --, y el texto del
+    diagnostico lo nombra en vez de dejarlo desaparecer.
 
     Las VARIABLES no se tocan aqui. Que vanos mirar y que moverles son dos decisiones, y
     los dos botones de aplicar son los que responden la segunda.
@@ -3752,9 +3761,9 @@ def construir(
             _grupo(controles_knob_box),
             _grupo(widgets.HTML(
                        '<span style="font-size:12px;color:#5b4a48;"><b>Diagnostico</b> '
-                       'estudia los vanos que hayas marcado arriba y, si no llegan a '
-                       f'{TOP_VANOS_CIRCUITO}, completa con los de mayor UITI de la ventana. '
-                       'Sin nada marcado toma directamente ese top.</span>'),
+                       'estudia EXACTAMENTE los vanos que hayas marcado arriba, y solo '
+                       'esos. Sin nada marcado toma los '
+                       f'{TOP_VANOS_CIRCUITO} de mayor UITI de la ventana.</span>'),
                    widgets.HBox([boton_diagnostico]), DIAGNOSTICO,
                    widgets.HBox([boton_aplicar_intervencion, boton_aplicar_escenario]),
                    AVISO_APLICAR),

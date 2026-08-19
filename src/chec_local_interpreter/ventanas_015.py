@@ -1244,29 +1244,36 @@ def vanos_para_diagnostico(
 ) -> dict[str, Any]:
     """Which vanos notebook 06's "Diagnostico" studies, and what it leaves out.
 
-    The rule, in the order it is applied:
+    Two modes, and marking is what picks between them:
 
-    1. **What the user marked wins** -- by checkbox or by clicking the vano on the
-       base map -- as long as that vano has a cell in the active window. Without a
-       cell the model has nothing to score, so it is named apart instead of padding
-       a list that cannot be answered.
-    2. **The rest of the room is filled by UITI**, highest first, from the vanos of
-       the circuit that do have events in that window and were not already marked.
-       With nothing marked that is exactly the circuit's top, which is the behaviour
-       the button was born with.
-    3. **What did not fit is counted.** A circuit with sixty vanos with events does
-       not fit in a work order, but a list that stops at `maximo` without saying so
-       reads as a circuit with `maximo` vanos with events.
+    1. **Nothing marked -> the circuit's top by UITI**, highest first, up to
+       `maximo`, over the vanos that have a cell in the active window. That is the
+       question the button opens a shift with: where do I start here.
+    2. **Something marked -> exactly that, and nothing else.** Marking is how the
+       user NARROWS the question, so the free room left over is not filled. Padding
+       two marked vanos up to fifteen answers about thirteen vanos nobody asked
+       about, and buries the user's own two in the middle of the table.
+
+    A marked vano without a cell in the window cannot be scored by the model, so it
+    is named apart in `sin_eventos` -- and nobody takes its place. Substituting it
+    for the next one in the top would answer about a vano the user never pointed at.
+    That is also why marking only vanos without events returns an EMPTY list instead
+    of falling back to the circuit's top: no answer, plus the names, beats an answer
+    about somebody else.
+
+    **What did not fit is counted.** A circuit with sixty vanos with events does not
+    fit in a work order, and neither does the fact that the user only marked two
+    mean the other fifty-eight stopped existing: `restantes` is what lets the panel
+    say so instead of reading as a circuit with `len(vanos)` vanos with events.
 
     `datos_ventana` is `DATOS_VENTANA[i]`: `{fid: (uiti_acumulado, eventos)}`, and it
     only carries the cells that EXIST, so being in it is what "has events in this
     window" means. Every fid is compared as text: the window data is keyed by text
     and both the circuit list and the checkboxes can carry numbers.
 
-    Returns `vanos` as `(fid, uiti, eventos)` triples -- the marked ones first, then
-    the fill, each half sorted by descending UITI -- plus the three counts the panel
-    needs to explain itself: `marcados`, `completados`, `sin_eventos`, `restantes`
-    and `con_eventos`.
+    Returns `vanos` as `(fid, uiti, eventos)` triples sorted by descending UITI, plus
+    the counts the panel needs to explain itself: `marcados`, `completados` (empty
+    unless the list came from the top), `sin_eventos`, `restantes` and `con_eventos`.
     """
     con_eventos = [str(f) for f in vanos_circuito if str(f) in datos_ventana]
     del_circuito = set(con_eventos)
@@ -1280,10 +1287,12 @@ def vanos_para_diagnostico(
         return sorted((_fila(f) for f in fids), key=lambda t: -t[1])
 
     elegidos = _por_uiti(f for f in marcados_txt if f in del_circuito)[: int(maximo)]
-    ya = {f for f, _u, _n in elegidos}
-    relleno = _por_uiti(f for f in del_circuito if f not in ya)[
-        : max(int(maximo) - len(elegidos), 0)
-    ]
+    # El relleno solo existe cuando el usuario NO marco nada. Se mira `marcados_txt` y no
+    # `elegidos`: marcar dos vanos sin eventos tambien es acotar la pregunta, y caer de
+    # vuelta al top ahi contestaria por vanos que nadie sennalo, con el agravante de
+    # leerse como si los suyos si hubieran entrado.
+    relleno = ([] if marcados_txt
+               else _por_uiti(del_circuito)[: int(maximo)])
     return {
         "vanos": [*elegidos, *relleno],
         "marcados": [f for f, _u, _n in elegidos],

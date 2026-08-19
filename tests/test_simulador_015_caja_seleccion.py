@@ -289,6 +289,35 @@ def test_the_diagnostic_delegates_which_vanos_it_studies(fuente):
     assert "marcados=marcados, maximo=TOP_VANOS_CIRCUITO" in cuerpo
 
 
+def test_the_diagnostic_only_studies_what_was_marked(fuente):
+    """Marcar vanos ACOTA la pregunta: la celda pide el diagnostico de lo marcado y no
+    lo completa. La regla vive en `vanos_para_diagnostico` y se prueba con datos; lo
+    que se pincha aqui es que la celda no vuelva a hablar de relleno, porque los avisos
+    y el titulo del panel se escriben a partir de esa lectura."""
+    cuerpo = fuente[fuente.index("def _diagnostico_del_circuito"):][:2600]
+    assert "completado con" not in cuerpo
+
+
+def test_the_diagnostic_copy_does_not_still_promise_the_fill(fuente):
+    """La copia visible es la que el usuario lee ANTES de pulsar, asi que una promesa
+    vieja no se corrige sola al cambiar la regla: prometeria completar la lista y
+    entregaria solo lo marcado. El tooltip del boton y su parrafo de ayuda son los dos
+    sitios donde el tablero explica el criterio."""
+    for aguja in ("tooltip='Estudia los vanos que ", "<b>Diagnostico</b> "):
+        copia = fuente[fuente.index(aguja):][:420]
+        assert "completa con los de mayor UITI" not in copia
+
+
+def test_the_diagnostic_tells_an_empty_circuit_from_an_empty_selection(fuente):
+    """Sin relleno hay DOS maneras de quedarse sin vanos, y decirlas igual miente en
+    una de las dos: que el circuito no registro nada en la ventana, o que el circuito si
+    registro pero no en los vanos que el usuario marco. La segunda tiene salida -- marcar
+    otros, o ninguno -- y el texto tiene que darla."""
+    cuerpo = fuente[fuente.index("def _texto_del_diagnostico"):][:2200]
+    assert "_sel_vacia['con_eventos']" in cuerpo
+    assert "vanos que marcaste" in cuerpo
+
+
 def test_the_framing_buttons_compute_the_view_at_click_time(fuente):
     """Un `updatemenu` de plotly lleva argumentos FIJOS calculados al dibujar: entre el
     dibujo y el clic pueden haber cambiado los vanos marcados, y el boton llevaria a
@@ -307,10 +336,11 @@ def test_the_framing_buttons_compute_the_view_at_click_time(fuente):
 
 
 def test_the_diagnostic_starts_from_what_the_user_marked(fuente):
-    """Lo marcado es una ENTRADA del diagnostico y no un estorbo: si el usuario ya toco
-    tres vanos en el mapa, esos tres son la orden de trabajo que tiene en la mano. El
-    boton completa la lista hasta el tope, no la reemplaza, y el tope del selector no
-    puede quedar por debajo del del diagnostico o la escritura se recortaria sola."""
+    """Lo marcado es LA pregunta del diagnostico: si el usuario ya toco tres vanos en el
+    mapa, esos tres son la orden de trabajo que tiene en la mano y el boton contesta por
+    ellos y por ninguno mas. El tope solo gobierna el modo sin marcar, y el tope del
+    selector no puede quedar por debajo del del diagnostico o la escritura se recortaria
+    sola."""
     assert "TOP_VANOS_CIRCUITO = 15" in fuente
     assert "GRUPOS_DIAGNOSTICO" not in fuente  # ya no se filtra por grupo de criticidad
     cuerpo = fuente[fuente.index("def _diagnostico_del_circuito"):][:2600]
@@ -324,12 +354,12 @@ def test_a_capped_diagnostic_says_how_many_vanos_it_left_out(fuente):
     ellos -- marcandolos -- en vez de recortar en silencio."""
     assert "pero quedan otros " in fuente
     assert '<b>{_sel["restantes"]}</b> vanos con eventos en esta ventana' in fuente
-    # Y de donde salio la lista: cuantos puso el usuario y cuantos el relleno. "Los 15
-    # de mayor UITI" sobre una lista que el usuario marco entera seria falso -- los
-    # suyos entran por marcados y pueden ser los de MENOR UITI de la ventana.
-    assert "que marcaste" in fuente
-    assert "completados por mayor UITI" in fuente
-    assert "se completo con los " in fuente
+    # Y de donde salio la lista. Con vanos marcados el aviso importa MAS que antes, no
+    # menos: la lista ya no se completa, asi que "quedan otros N" es lo unico que separa
+    # "marcaste dos" de "el circuito tiene dos". Y "los 15 de mayor UITI" sobre una lista
+    # marcada seria falso -- los suyos pueden ser los de MENOR UITI de la ventana.
+    assert "que marcaste, y solo esos" in fuente
+    assert "de mayor UITI de la ventana" in fuente
 
 
 def test_a_short_diagnostic_says_how_many_it_found(fuente):
