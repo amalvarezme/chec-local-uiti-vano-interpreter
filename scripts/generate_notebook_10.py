@@ -456,7 +456,7 @@ devuelve un mapa creible y falso.
 '''
 
 _CODE_VISOR = '''\
-RUTA_MODELO = PROJECT_ROOT / "data" / "models" / "mil_vano_ventana_v1.pt"
+RUTA_MODELO = DATA_DIR / "models" / "mil_vano_ventana_v1.pt"
 RUTA_OOF = DERIVED_DIR / "oof_mil_full_film_clase1.0.npz"
 
 if ENTRENAR:
@@ -844,7 +844,7 @@ levantar.
 _CODE_GUARDADO = '''\
 if ENTRENAR and PROCEDER_CON_ENTRENAMIENTO_COMPLETO and mode == "full":
     ruta_modelo = guardar_modelo_mil(
-        PROJECT_ROOT / "data" / "models" / "mil_vano_ventana_v1.pt",
+        DATA_DIR / "models" / "mil_vano_ventana_v1.pt",
         modelo=resultado_final["model"],
         features=features_inst,
         modalidades=modality_indices,

@@ -637,3 +637,31 @@ def test_el_mensaje_de_error_nombra_las_dos_variables():
     mensaje = fuente[inicio : inicio + 500]
     assert "CHEC_PROJECT_ROOT" in mensaje, (
         f"el error no dice como fijar la raiz del codigo:\n{mensaje}")
+
+
+def test_ninguna_celda_arma_una_ruta_de_datos_desde_la_raiz_del_codigo(notebook):
+    """`DATA_DIR` es la UNICA puerta a `data/`, y esta prueba la cierra por detras.
+
+    El bootstrap ya resuelve por separado donde esta el codigo y donde estan los datos,
+    pero dos celdas se habian quedado con `PROJECT_ROOT / "data" / ...`: la que CARGA el
+    modelo en modo visor y la que lo GUARDA al entrenar. En un checkout las dos raices
+    coinciden y no se nota nada; con las dos separadas -- que es el Workspace -- fallan
+    ocho celdas, y la primera de ellas viene despues de que el inventario de la celda de
+    insumos haya dicho "presente", porque ese si mira `DATA_DIR`.
+
+    Se comprueba sobre el arbol de sintaxis y no con una busqueda de texto: lo que hace
+    falta prohibir es la EXPRESION `PROJECT_ROOT / "data"`, no la cadena, que aparece
+    legitimamente en comentarios y en mensajes de error.
+    """
+    culpables = []
+    for indice, fuente in enumerate(_code_sources(notebook)):
+        for nodo in ast.walk(ast.parse(fuente)):
+            if not isinstance(nodo, ast.BinOp) or not isinstance(nodo.op, ast.Div):
+                continue
+            izquierda, derecha = nodo.left, nodo.right
+            if (isinstance(izquierda, ast.Name) and izquierda.id == "PROJECT_ROOT"
+                    and isinstance(derecha, ast.Constant) and derecha.value == "data"):
+                culpables.append(f"celda de codigo #{indice}, linea {nodo.lineno}")
+    assert not culpables, (
+        "estas celdas buscan los datos donde esta el codigo, y en Databricks no es el "
+        f"mismo sitio: {culpables}. Usa DATA_DIR / DERIVED_DIR.")
