@@ -96,7 +96,6 @@ from chec_local_interpreter.vano_app_015 import (
 )
 from chec_local_interpreter.vano_controls import expand_knob_overrides
 from chec_local_interpreter.vano_widgets import (
-    MAX_VANOS_ANALISIS,
     VANOS_POR_PAGINA,
     construir_selector_casillas,
     construir_selector_vanos,
@@ -289,9 +288,9 @@ PUNTOS_REJILLA_RELEVANCIA = 9
 # El TOPE del diagnostico: cuantos vanos entran como maximo a una corrida. Quince y no
 # diez porque es lo que cabe en una orden de trabajo de una jornada. Solo topa al modo
 # sin marcar -- el top por UITI --; cuando el usuario marca, la lista es la suya y este
-# numero solo la recorta si marco de mas. Es el MISMO numero que `MAX_VANOS_ANALISIS`: el
-# diagnostico marca los vanos que identifica, asi que un tope mayor que el del selector
-# se recortaria en silencio al escribirlos.
+# numero NO la recorta: acota solo el modo sin marcar. El diagnostico deja marcados los
+# vanos que identifica, y con los botones de grupo esa lista puede ser de cientos; topar
+# ahi desmarcaba en silencio lo que el usuario acababa de marcar.
 TOP_VANOS_CIRCUITO = 15
 # Ya no hay filtro por grupo de criticidad. El diagnostico mira TODOS los vanos con
 # eventos en la ventana y los ordena por UITI, que es lo que ordena la urgencia. El
@@ -386,16 +385,17 @@ TOP_VANOS_PERFIL = 15
 # contestan la misma pregunta sobre distintos periodos y tres topes distintos obligarian a
 # recordar cual manda en cada panel.
 TOP_VANOS_VENTANA = 15
-# Cuantas series de tiempo caben dibujadas a la vez. Es el DOBLE del tope de la
-# auto-marca, y esa holgura es justo lo que hace falta: la ventana marca hasta quince y el
-# usuario puede seguir agregando vanos con la casilla o tocandolos en el mapa, sin que el
-# tope de la auto-marca sea tambien un tope para el. Las trazas se crean vacias al armar
-# la figura, asi que las que sobran no cuestan datos, solo su ranura.
-# Treinta y no ilimitado porque el numero de trazas de un `FigureWidget` se fija al
-# construirlo: crecerlo en vivo obligaria a agregar trazas despues del `display`, que es
-# justo el camino por el que el tablero se queda en blanco. Pasado ese tope el panel lo
-# DICE (ver `_actualizar_aviso_vanos`); lo que no hace es recortar en silencio.
-MAX_VANOS_SERIE = 2 * MAX_VANOS_ANALISIS
+# Cuantas series de tiempo caben dibujadas a la vez YA NO ES UNA CONSTANTE. El numero de
+# trazas de un `FigureWidget` se fija al construirlo -- agregarlas despues del `display` es
+# el camino por el que el tablero se queda en blanco --, asi que el pozo se dimensiona en
+# `construir` con los datos cargados: tantas ranuras como vanos tiene el circuito MAS
+# grande, que es el techo de lo que el usuario puede llegar a marcar.
+#
+# Valia treinta, de cuando la seleccion la ponia una auto-marca de quince. Con un boton por
+# grupo de criticidad un circuito marca cientos -- medido: 407 en DON23L13 con los cuatro
+# grupos --, y de esos el panel dibujaba treinta y los otros 377 desaparecian, que se lee
+# como que no tuvieron eventos. Sale caro en el arranque y no en el uso: las trazas nacen
+# vacias, y el repintado solo toca las ranuras que estan o estuvieron en uso.
 ETIQUETA_TOTAL = 'TOTAL'
 # Un boton "i" por actividad, o solo el detalle al posar el mouse.
 #
@@ -892,6 +892,11 @@ def construir(
     # compartir eje aplastaria una de las dos.
     # `marker.size` es un ARRAY: el punto de la ventana activa va al triple y viaja con el
     # deslizador sin partir la serie en una segunda traza.
+    # El techo de lo que el usuario puede marcar es el circuito mas grande: las casillas
+    # solo ofrecen vanos de UN circuito, y los botones de grupo salen de esa misma lista.
+    # `default=1` para no armar una figura sin una sola ranura si la tabla llegara vacia.
+    MAX_VANOS_SERIE = max((len(v) for v in VANOS_POR_CIRCUITO.values()), default=1)
+
     _VACIO = [None] * len(VENTANAS)
     # El eje x son los INDICES de ventana, pero las marcas llevan la FECHA en que empieza
     # cada una y no su etiqueta "V1", "V2": un rotulo "V7" obliga a ir a buscar a que periodo
@@ -1567,36 +1572,28 @@ def construir(
     --, asi que sirve de fuente sin volver a resolver las bolsas, que es trabajo del
     boton "Simular" y no de un repintado.
 
-    Dice ademas cuando la seleccion pasa de `MAX_VANOS_SERIE`. Ahi el mapa sigue
-    resaltando todos los marcados y el simulador sigue puntuandolos, pero la serie de
-    tiempo solo tiene ranuras para los primeros: el numero de trazas de la figura se fija
-    al construirla. Recortar en silencio es lo unico que no se puede hacer.
+    Ya NO avisa de un exceso sobre las ranuras dibujables. Lo hizo mientras el pozo eran
+    treinta: hoy se dimensiona con el circuito mas grande, asi que no hay seleccion posible
+    que lo desborde y la rama era prosa prometiendo un limite retirado.
     """
         if not marcados:
             AVISO_VANOS.value = ''
             return
         con_datos = {str(f) for f in clases_por_fid}
         cuantos = sum(1 for f in marcados if str(f) in con_datos)
-        sobran = len(marcados) - MAX_VANOS_SERIE
-        exceso = (f' Ademas hay {sobran} mas de los {MAX_VANOS_SERIE} que caben dibujados: '
-                  'el mapa los resalta y el simulador los puntua, pero su serie de tiempo no '
-                  'se dibuja.' if sobran > 0 else '')
         if cuantos == len(marcados):
-            AVISO_VANOS.value = (
-                f'<span style="font-size:12px;color:#5b4a48;">Los {len(marcados)} vanos '
-                f'marcados tienen eventos en la ventana activa.{exceso}</span>'
-                if exceso else '')
+            AVISO_VANOS.value = ''
         elif cuantos:
             AVISO_VANOS.value = (
                 f'<span style="font-size:12px;color:#5b4a48;"><b>{cuantos}</b> de los '
                 f'{len(marcados)} vanos marcados tienen eventos en la ventana '
-                f'activa.{exceso}</span>')
+                'activa.</span>')
         else:
             AVISO_VANOS.value = (
                 '<span style="font-size:12px;color:#c62828;">Ninguno de los '
                 f'{len(marcados)} vanos marcados registra eventos en la ventana activa: '
-                '<b>"Simular" no va a puntuar nada</b>. Mueve la ventana o marca otros '
-                f'vanos.{exceso}</span>')
+                '<b>"Simular" no va a puntuar nada</b>. Mueve la ventana o marca '
+                'otros vanos.</span>')
 
 
     # Cambiar de circuito o mover la ventana mueve DOS cosas -- la lista de vanos marcables y
@@ -1605,6 +1602,9 @@ def construir(
     # final. Repintar el mapa reescribe las once trazas de tramos del circuito, asi que
     # ahorrar dos pasadas por paso del deslizador es lo que separa arrastrarlo de esperarlo.
     _REPINTADO_EN_PAUSA = False
+    # Cuantas ranuras de serie quedaron con datos en el ultimo repintado. Es lo que permite
+    # vaciar exactamente las que sobran sin recorrer el pozo entero.
+    _CUPOS_EN_USO = 0
 
 
     def _redibujar_mapa_historico(*_ignorado):
@@ -1619,7 +1619,7 @@ def construir(
         # marcando: asi marcar y desmarcar no baraja los colores bajo la mano.
         marcados_ordenados = [f for f in GEO_POR_CIRCUITO.get(circuito, {}).get('fids', [])
                               if f in _marcados]
-        marcados_ordenados = list(dict.fromkeys(marcados_ordenados))[:MAX_VANOS_SERIE]
+        marcados_ordenados = list(dict.fromkeys(marcados_ordenados))
         # La serie describe SOLO los vanos elegidos: sin ninguno marcado queda vacia. Es el
         # mismo criterio que los violines de 01.4 -- una serie sobre el circuito entero y una
         # sobre tres vanos se dibujan igual y no miden lo mismo, asi que caer al circuito
@@ -1664,7 +1664,13 @@ def construir(
             # NO como cero: un cero se leeria como "no hubo UITI", y lo que paso es que no
             # hubo medicion. `connectgaps=False` corta la linea ahi.
             _tam_uiti, _tam_eventos = _tamanos_ventana_activa(ventana_i)
-            for _cupo in range(MAX_VANOS_SERIE):
+            # Se tocan las ranuras EN USO mas las que lo estuvieron y hay que vaciar, no
+            # las del pozo entero. Con el pozo dimensionado al circuito mas grande -- 845
+            # ranuras en la base de hoy -- recorrerlo entero cobraba el mismo peaje con
+            # cero vanos marcados que con todos: medido, 189 ms por clic sin nada marcado
+            # contra 64 ms con el pozo de treinta. Asi el costo lo pone la seleccion.
+            nonlocal _CUPOS_EN_USO
+            for _cupo in range(max(len(series), _CUPOS_EN_USO)):
                 _serie = series[_cupo] if _cupo < len(series) else None
                 _t_uiti = fig.data[IDX['serie_uiti'][_cupo]]
                 _t_eventos = fig.data[IDX['serie_eventos'][_cupo]]
@@ -1692,6 +1698,7 @@ def construir(
                 _t_eventos.hovertext = _etiquetas
                 _t_eventos.marker.size = _tam_eventos if _serie else []
                 _t_eventos.marker.color = _colores
+            _CUPOS_EN_USO = len(series)
 
 
     def _alto_del_mapa_px():
@@ -1914,7 +1921,7 @@ def construir(
     # Casillas, no SelectMultiple: es la unica forma de que un clic en el mapa alterne el
     # MISMO control que el usuario ve, y de que marcar un vano no borre los ya marcados.
     #
-    # SIN tope. Lo tuvo -- `maximo=MAX_VANOS_ANALISIS` --, y lo que protegia era la rejilla de
+    # SIN tope. Lo tuvo -- quince vanos --, y lo que protegia era la rejilla de
     # controles de mas abajo, donde cada vano marcado recibe su propia COLUMNA. Eso hoy lo
     # resuelve la paginacion (`VANOS_POR_PAGINA`), y a cambio el tope hacia dos cosas que si
     # estorban: deshabilitaba las casillas sin marcar en cuanto la auto-marca de la ventana
@@ -1956,10 +1963,10 @@ def construir(
                       'asi que no hay vanos que simular. Elige otro circuito.')
 
 
-    # Sigue sin haber "Marcar todos": sin tope marcaria los cientos de vanos del circuito,
-    # y de esos solo los primeros `MAX_VANOS_SERIE` cabrian dibujados. Lo que si hay es un
-    # boton por GRUPO de criticidad, que es la manera en que se reparte una jornada -- y
-    # cada uno marca un subconjunto acotado por la propia geometria.
+    # Sigue sin haber "Marcar todos": marcaria los cientos de vanos del circuito de una vez,
+    # y esa no es una pregunta que nadie haga. Lo que si hay es un boton por GRUPO de
+    # criticidad, que es la manera en que se reparte una jornada -- y cada uno marca un
+    # subconjunto acotado por la propia geometria.
     boton_desmarcar = widgets.Button(description='Desmarcar', button_style='')
     boton_desmarcar.on_click(lambda _b: vano_widget.desmarcar_todos())
 
@@ -3586,8 +3593,9 @@ def construir(
         _GRUPOS_APLICADOS = []
         AVISO_APLICAR.value = ''
         if _ULTIMO_DIAGNOSTICO and _ULTIMO_DIAGNOSTICO['vanos']:
-            vano_widget.value = tuple(
-                f for f, _u, _n in _ULTIMO_DIAGNOSTICO['vanos'][:MAX_VANOS_ANALISIS])
+            # TODOS los que estudio, sin recortar. Devolver quince de un diagnostico de
+            # cuatrocientos desmarca en silencio lo que el usuario acababa de marcar.
+            vano_widget.value = tuple(f for f, _u, _n in _ULTIMO_DIAGNOSTICO['vanos'])
 
 
     def _aplicar_sugerencia(clave, nombre):
@@ -3619,7 +3627,10 @@ def construir(
             AVISO_APLICAR.value = (f'<span style="font-size:12px;color:#b91c1c;">El '
                                    f'diagnostico no trae variables de {nombre}.</span>')
             return
-        fids = [f for f, _u, _n in diag['vanos']][:MAX_VANOS_ANALISIS]
+        # La lista ENTERA del diagnostico. Recortarla aplicaba la obra a quince columnas
+        # de una rejilla de cuatrocientas, y las otras se simulaban con su valor actual:
+        # el resultado se leia como que la intervencion no rindio.
+        fids = [f for f, _u, _n in diag['vanos']]
         if clave not in _GRUPOS_APLICADOS:
             _GRUPOS_APLICADOS.append(clave)
         # El ORDEN es el de los botones y no el de los clics, para que la rejilla no se

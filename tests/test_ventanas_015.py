@@ -1718,18 +1718,23 @@ def test_marcar_solo_vanos_sin_eventos_no_cae_de_vuelta_al_top_del_circuito():
     assert elegidos["restantes"] == 5
 
 
-def test_marcar_mas_que_el_tope_deja_los_de_mayor_uiti_de_lo_marcado():
-    """El selector topa en el mismo numero, asi que este caso solo llega por codigo. Se
-    resuelve como el resto: manda el UITI, y lo que se cae se cuenta."""
+def test_el_tope_gobierna_el_top_pero_no_lo_que_el_usuario_marco():
+    """`maximo` acota el modo SIN marcar -- cuantos vanos propone el boton por su cuenta
+    --, no cuantos acepta. Marcar tres y recibir dos deja al usuario con un diagnostico
+    que no habla del vano que le importaba y sin nada en pantalla que lo diga: los
+    botones de grupo marcan cientos de una vez, y ese recorte se comia la mayoria."""
     from chec_local_interpreter.ventanas_015 import vanos_para_diagnostico
 
-    elegidos = vanos_para_diagnostico(
+    marcado = vanos_para_diagnostico(
         _datos_ventana(), ["V1", "V2", "V3", "V4", "V5"],
         marcados=["V3", "V4", "V5"], maximo=2)
+    assert [f for f, _u, _n in marcado["vanos"]] == ["V3", "V4", "V5"]
+    assert marcado["completados"] == []
+    assert marcado["restantes"] == 2      # V1 y V2, con eventos y sin marcar
 
-    assert [f for f, _u, _n in elegidos["vanos"]] == ["V3", "V4"]
-    assert elegidos["completados"] == []
-    assert elegidos["restantes"] == 3
+    # Y el top sigue topado: ahi el numero lo elige el boton, no el usuario.
+    top = vanos_para_diagnostico(_datos_ventana(), ["V1", "V2", "V3", "V4", "V5"], maximo=2)
+    assert [f for f, _u, _n in top["vanos"]] == ["V1", "V2"]
 
 
 # --- Que vanos marca cada boton de grupo del panel de seleccion ------------------------

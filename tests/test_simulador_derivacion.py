@@ -275,6 +275,83 @@ print('RESULTADO ' + json.dumps(resultado))
 """
 
 
+# La serie de tiempo dibuja UNA traza por vano, y las trazas de un `FigureWidget` se fijan
+# al construirlo: crecerlas en vivo es el camino por el que el tablero se queda en blanco.
+# El pozo tenia treinta ranuras, de cuando la seleccion la ponia una auto-marca de quince;
+# con los botones de grupo un circuito marca cientos, y lo que sobraba del tope se dibujaba
+# como si no existiera. Esto lo mide PULSANDO: cuantos vanos quedan marcados y cuantos
+# aparecen de verdad en el panel.
+_GUION_SERIES = """
+import json, os, sys
+sys.path.insert(0, {src!r})
+os.environ['RUTA_VARIABLES_SIMULAR'] = {simular!r}
+from chec_tableros.simulador import derivacion, tablero
+D = derivacion.cargar({paquete!r})
+
+
+def hojas(w):
+    yield w
+    for h in getattr(w, 'children', ()):
+        yield from hojas(h)
+
+
+APP = tablero.construir(D, costos={costos!r})
+BOTON = {{w.description: w for w in hojas(APP) if type(w).__name__ == 'Button'}}
+SEL = [w for w in hojas(APP) if hasattr(w, 'desmarcar_todos')][0]
+CIRCUITO = [w for w in hojas(APP) if type(w).__name__ == 'Dropdown'][0]
+FIG = max((w for w in hojas(APP) if hasattr(w, 'data')), key=lambda w: len(w.data))
+
+# El circuito con MAS vanos marcables: es donde el tope de ranuras se nota.
+peor = max(D.tabla.groupby(D.tabla['CIRCUITO'].astype(str))['FID_VANO'].nunique().items(),
+           key=lambda kv: kv[1])[0]
+CIRCUITO.value = peor
+BOTON['Desmarcar'].click()
+for g in ('G. Alto', 'G. Medio-Alto', 'G. Medio', 'G. Bajo'):
+    BOTON[g].click()
+
+marcados = [str(f) for f in SEL.value]
+# Una serie "esta dibujada" si su traza lleva su fid en el nombre y algun punto con dato.
+con_datos = {{t.name for t in FIG.data
+              if t.type == 'scatter' and t.name and any(v is not None for v in (t.y or ()))}}
+print('RESULTADO ' + json.dumps({{
+    'circuito': peor,
+    'marcados': len(marcados),
+    'dibujados': sum(1 for f in marcados if 'Vano ' + f in con_datos),
+    # El pozo de ranuras: dos trazas de scatter por vano en la fila de series.
+    'ranuras': sum(1 for t in FIG.data if t.type == 'scatter') // 2,
+}}))
+"""
+
+
+@pytest.mark.skipif(not (PAQUETE / "catalogo.joblib").exists(),
+                    reason="requiere el paquete del simulador construido")
+def test_la_serie_de_tiempo_dibuja_todos_los_vanos_marcados():
+    """El circuito mas grande, con los cuatro grupos marcados, contra el paquete
+    congelado. Se pincha `dibujados == marcados` y no un numero fijo: el tope del pozo se
+    dimensiona con los datos cargados, asi que fijar una cifra aqui la ataria a este
+    paquete. Lo que no puede pasar es que el panel dibuje MENOS de lo que hay marcado y
+    se lea como que esos vanos no tuvieron eventos.
+    """
+    import subprocess
+
+    guion = _GUION_SERIES.format(
+        src=str(RAIZ / "src"), paquete=str(PAQUETE),
+        simular=str(PAQUETE / "Variables_simular.xlsx"),
+        costos=str(PAQUETE / "Actividades_mantenimiento_costos_2026.xlsx"))
+    proceso = subprocess.run([sys.executable, "-c", guion], cwd=RAIZ,
+                             capture_output=True, text=True)
+    assert proceso.returncode == 0, proceso.stderr[-3000:]
+    linea = next(l for l in proceso.stdout.splitlines() if l.startswith("RESULTADO "))
+    r = json.loads(linea[len("RESULTADO "):])
+
+    assert r["marcados"] > 30, (
+        f"{r['circuito']} solo marco {r['marcados']} vanos con los cuatro grupos; por "
+        "debajo del tope viejo esta prueba no distingue el arreglo del defecto")
+    assert r["dibujados"] == r["marcados"], (
+        f"el panel dibuja {r['dibujados']} de {r['marcados']} vanos marcados en "
+        f"{r['circuito']} ({r['ranuras']} ranuras)")
+
+
 @pytest.mark.skipif(not (PAQUETE / "catalogo.joblib").exists(),
                     reason="requiere el paquete del simulador construido")
 def test_los_botones_de_grupo_suman_y_solo_desmarcar_quita():

@@ -390,6 +390,19 @@ def test_the_empty_group_notice_dies_with_its_window(fuente):
     assert fuente.count("AVISO_GRUPO.value = ''") >= 2
 
 
+def test_the_diagnostic_and_its_apply_buttons_cover_every_marked_vano(fuente):
+    """Los tres pasos hablan de la MISMA lista. El diagnostico recortaba a quince al
+    devolver los vanos marcados, y los dos botones de aplicar recortaban otra vez al
+    escribir los valores: con los botones de grupo marcando cientos, el usuario veia un
+    diagnostico de quince sobre una seleccion de cuatrocientos y una intervencion
+    aplicada a quince columnas de una rejilla de cuatrocientas. Ninguno de los dos
+    recortes se anunciaba."""
+    assert "MAX_VANOS_ANALISIS" not in fuente, (
+        "quedo un recorte del diagnostico o de los botones de aplicar")
+    cuerpo = fuente[fuente.index("def _aplicar_sugerencia"):][:3000]
+    assert "fids = [f for f, _u, _n in diag['vanos']]\n" in cuerpo
+
+
 def test_the_diagnostic_starts_from_what_the_user_marked(fuente):
     """Lo marcado es LA pregunta del diagnostico: si el usuario ya toco tres vanos en el
     mapa, esos tres son la orden de trabajo que tiene en la mano y el boton contesta por
@@ -440,17 +453,19 @@ def test_the_apply_buttons_use_each_vano_own_value_and_not_the_average(fuente):
 
 
 def test_the_diagnosis_marks_the_vanos_it_identified(fuente):
-    """Marcarlos es parte de la respuesta y no un paso aparte: el diagnostico nombra
-    hasta quince vanos, y sin marcarlos hay que buscarlos a mano en la lista de
-    casillas y otra vez en el mapa, que es justo el trabajo que el boton venia a
-    ahorrar.
+    """Marcarlos es parte de la respuesta y no un paso aparte: sin marcarlos hay que
+    buscarlos a mano en la lista de casillas y otra vez en el mapa, que es justo el
+    trabajo que el boton venia a ahorrar.
+
+    Los marca TODOS. Devolver una rebanada de lo que acaba de estudiar desmarca en
+    silencio lo que el usuario habia marcado, y con los botones de grupo esa lista es de
+    cientos.
 
     Al marcarlos, `vano_widget.observe(_redibujar_mapa_historico)` encierra cada uno
     en su recuadro sobre el mapa base. Verificado en vivo: 10 vanos marcados y 10
     recuadros."""
     cuerpo = fuente[fuente.index("def _al_pedir_diagnostico"):][:2200]
-    assert "vano_widget.value = tuple(" in cuerpo
-    assert "_ULTIMO_DIAGNOSTICO['vanos'][:MAX_VANOS_ANALISIS]" in cuerpo
+    assert "vano_widget.value = tuple(f for f, _u, _n in _ULTIMO_DIAGNOSTICO['vanos'])" in cuerpo
     # Las VARIABLES no se tocan aqui: que vanos mirar y que moverles son dos
     # decisiones, y los botones de aplicar responden la segunda.
     assert "knob_selector_widget.value" not in cuerpo

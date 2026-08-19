@@ -1289,6 +1289,10 @@ def vanos_para_diagnostico(
        two marked vanos up to fifteen answers about thirteen vanos nobody asked
        about, and buries the user's own two in the middle of the table.
 
+    `maximo` bounds mode 1 only. It is how many vanos the button proposes on its own,
+    not how many it accepts: the panel's group buttons mark hundreds at a time, and
+    capping the marked list dropped most of them with nothing on screen saying so.
+
     A marked vano without a cell in the window cannot be scored by the model, so it
     is named apart in `sin_eventos` -- and nobody takes its place. Substituting it
     for the next one in the top would answer about a vano the user never pointed at.
@@ -1321,7 +1325,7 @@ def vanos_para_diagnostico(
     def _por_uiti(fids: Iterable[str]) -> list[tuple[str, float, int]]:
         return sorted((_fila(f) for f in fids), key=lambda t: -t[1])
 
-    elegidos = _por_uiti(f for f in marcados_txt if f in del_circuito)[: int(maximo)]
+    elegidos = _por_uiti(f for f in marcados_txt if f in del_circuito)
     # El relleno solo existe cuando el usuario NO marco nada. Se mira `marcados_txt` y no
     # `elegidos`: marcar dos vanos sin eventos tambien es acotar la pregunta, y caer de
     # vuelta al top ahi contestaria por vanos que nadie sennalo, con el agravante de

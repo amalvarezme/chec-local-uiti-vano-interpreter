@@ -163,24 +163,43 @@ def test_a_map_click_adds_beyond_the_autoselection(fuente):
     assert "vano_widget.alternar(fid)" in cuerpo
 
 
-def test_the_time_series_pool_is_bigger_than_the_autoselection(fuente):
-    """La auto-marca pone hasta quince y el usuario puede seguir agregando. Si el
-    pozo de series midiera lo mismo que la auto-marca, el primer vano agregado a
-    mano no tendria donde dibujarse."""
-    assert "MAX_VANOS_SERIE = 2 * MAX_VANOS_ANALISIS" in fuente
-    assert "for _cupo in range(MAX_VANOS_SERIE):" in fuente
-    assert "[:MAX_VANOS_SERIE]" in fuente
-    assert "2 * MAX_VANOS_SERIE" in fuente  # la asercion del inventario de trazas
+def test_the_time_series_pool_is_sized_from_the_data(fuente):
+    """El pozo ya no es una constante: son tantas ranuras como vanos tiene el
+    circuito MAS grande, que es el techo de lo que el usuario puede llegar a marcar
+    -- las casillas solo ofrecen vanos de un circuito.
+
+    Un numero fijo no podia servir. Valia treinta, de cuando la seleccion la ponia
+    una auto-marca de quince; con un boton por grupo de criticidad un circuito marca
+    cientos, y de esos el panel dibujaba treinta. Que de verdad los dibuje TODOS lo
+    prueba pulsando
+    `test_simulador_derivacion.py::test_la_serie_de_tiempo_dibuja_todos_los_vanos_marcados`;
+    aqui se pincha el mecanismo, que es lo que el fuente si puede decir."""
+    assert "MAX_VANOS_SERIE = max((len(v) for v in VANOS_POR_CIRCUITO.values())" in fuente
+    assert "[:MAX_VANOS_SERIE]" not in fuente     # el recorte de la serie se retiro
+    assert "2 * MAX_VANOS_SERIE" in fuente        # la asercion del inventario de trazas
 
 
-def test_the_overflow_is_announced_and_never_silent(fuente):
-    """Pasado `MAX_VANOS_SERIE` el mapa sigue resaltando y el simulador sigue
-    puntuando, pero la serie no tiene ranuras. Recortar en silencio es lo unico
-    que no se puede hacer."""
+def test_the_repaint_only_touches_the_slots_in_use(fuente):
+    """Con el pozo dimensionado al circuito mas grande, recorrerlo entero en cada
+    repintado cobraba el mismo peaje con cero vanos marcados que con todos: medido,
+    189 ms por clic sin nada marcado contra 64 ms con el pozo viejo de treinta. Se
+    recorren las ranuras en uso mas las que hay que vaciar, asi que el costo lo pone
+    la seleccion y no el tamanio del pozo."""
+    cuerpo = fuente[fuente.index("_tam_uiti, _tam_eventos = _tamanos_ventana_activa"):][:3000]
+    assert "for _cupo in range(max(len(series), _CUPOS_EN_USO)):" in cuerpo
+    assert "_CUPOS_EN_USO = len(series)" in cuerpo
+
+
+def test_the_overflow_notice_is_gone_because_overflow_is_impossible(fuente):
+    """El aviso de 'su serie de tiempo no se dibuja' describia un limite retirado.
+    Dejarlo era prosa prometiendo un recorte que ya no ocurre, que es peor que no
+    decir nada: el usuario buscaria en el panel unos vanos que si estan."""
     cuerpo = fuente[fuente.index("def _actualizar_aviso_vanos("):]
     cuerpo = cuerpo[: cuerpo.index("# Cambiar de circuito o mover la ventana")]
-    assert "sobran = len(marcados) - MAX_VANOS_SERIE" in cuerpo
-    assert "su serie de tiempo no " in cuerpo
+    assert "sobran" not in cuerpo
+    assert "su serie de tiempo no " not in cuerpo
+    # Lo que SI sigue diciendo: cuantos de los marcados tienen celda en la ventana.
+    assert "tienen eventos en la ventana" in cuerpo
 
 
 # ------------------------------------------------ el encuadre sigue a la ventana
