@@ -179,6 +179,28 @@ def test_el_simulador_no_se_apaga_con_os_kill_en_windows():
     assert cuerpo.index("if ES_WINDOWS:") < cuerpo.index("os.kill(pid, signal.SIGTERM)")
 
 
+def test_el_boton_del_propio_simulador_tampoco_apaga_con_os_kill():
+    """El mismo defecto, en el camino que la prueba de arriba no mira.
+
+    La de arriba comprueba `menu.py`, o sea el apagado que ordena CriticidadCHEC. Pero
+    el boton "Cerrar" que el simulador dibuja dentro de su propio tablero
+    (`06_simulador/cierre.py`) manda el suyo por su cuenta, y su comentario dice que es
+    "el UNICO cuando el simulador se abre solo, sin menu" -- que es justamente el doble
+    clic en `iniciar.bat`.
+
+    Ahi seguia el `os.kill(pid, signal.SIGTERM)` pelado: en Windows eso es
+    `TerminateProcess` sobre ese pid y nada mas, asi que Voila muere sin cerrar sus
+    kernels y cada uno queda como un `python.exe` de ~780 MB huerfano. El puerto SI
+    queda libre, o sea que desde fuera el apagado parece limpio.
+    """
+    fuente = (RAIZ / "aplicaciones" / "06_simulador" / "cierre.py").read_text(
+        encoding="utf-8")
+    assert '"taskkill", "/PID", str(pid), "/T", "/F"' in fuente, (
+        "el boton del simulador no recorre el arbol de procesos en Windows")
+    assert fuente.index("os.name") < fuente.index("os.kill(pid, signal.SIGTERM)"), (
+        "el `os.kill` no esta detras de la rama que Windows no ejecuta")
+
+
 def test_el_pid_escrito_se_comprueba_tambien_en_windows():
     """Devolver el pid del archivo sin mirar nada era un agujero doble.
 

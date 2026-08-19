@@ -26,10 +26,17 @@ ES_WINDOWS = os.name == "nt"
 SUBCARPETA_BIN = "Scripts" if ES_WINDOWS else "bin"
 NOMBRE_PYTHON = "python.exe" if ES_WINDOWS else "python"
 
-# El repositorio corre sobre 3.11. Se admite desde 3.10 porque nada de estas
-# aplicaciones usa sintaxis mas nueva, y se rechaza 3.9 y anteriores explicitamente:
-# `list[str]` en anotaciones evaluadas y `zoneinfo` fallan ahi de formas poco claras.
-PYTHON_MINIMO = (3, 10)
+# 3.11, y no por la sintaxis: por las RUEDAS. Estuvo en 3.10 con el argumento de que
+# nada de estas aplicaciones usa sintaxis mas nueva, que es cierto y no es lo que manda.
+# Consultado a PyPI el 2026-08-19, la version mas vieja que satisface cada linea de los
+# `requirements.txt` publica su propio piso: `numpy>=2.4` -> 2.4.2 pide `>=3.11`;
+# `pandas>=3.0` -> 3.0.0 pide `>=3.11`; `scikit-learn>=1.9` -> 1.9.0 pide `>=3.11`.
+#
+# Con el piso en 3.10 esta guarda hacia lo contrario de lo que existe para hacer: dejaba
+# pasar, y el fallo llegaba despues como un `Could not find a version that satisfies the
+# requirement numpy>=2.4` en mitad de la instalacion. Lo fija
+# `tests/test_piso_de_python.py`, con la tabla medida.
+PYTHON_MINIMO = (3, 11)
 
 
 def ruta_venv(app: Path) -> Path:

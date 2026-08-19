@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import os
 import signal
+import subprocess
 import threading
 
 import ipywidgets as widgets
@@ -38,6 +39,34 @@ setTimeout(function () {
     "iniciar.bat (Windows).</span></div>";
 }, 400);
 """
+
+def apagar(pid: int) -> None:
+    """Apaga el proceso de Voila, y en Windows tambien a sus kernels.
+
+    `os.kill(pid, SIGTERM)` NO es lo mismo en los dos sistemas. En Windows CPython lo
+    implementa como `TerminateProcess`, que mata a Voila en seco sin darle ocasion de
+    cerrar sus kernels: cada uno es un `python.exe` de ~780 MB que queda huerfano. Y el
+    puerto SI queda libre, asi que desde fuera el apagado parece limpio -- se ve todo
+    bien y quedan siete procesos vivos detras.
+
+    `taskkill /T` recorre el arbol, que es donde viven esos kernels. Es forzoso igual
+    (en Windows no hay un apagado suave que Voila atienda), pero no deja nada atras.
+
+    Esto ya estaba resuelto en `_comun/menu.py`, para el apagado que ordena
+    CriticidadCHEC. Aqui no, y este es el UNICO camino cuando el simulador se abre solo
+    --- el doble clic en `iniciar.bat` ---, que es justo el caso de Windows.
+    """
+    try:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                           capture_output=True, timeout=10)
+        else:
+            os.kill(pid, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError, OSError, subprocess.SubprocessError):
+        # Que no se pueda matar no es motivo para dejar la pestania colgada: el aviso de
+        # cerrado ya salio y la alternativa es una traza dentro del kernel.
+        pass
+
 
 # Cuanto se espera antes de mandar el SIGTERM. El mensaje que cierra la pestania sale
 # por el socket del kernel, y SIGTERM a Voila se lleva por delante a ESE kernel --
@@ -329,7 +358,7 @@ def barra(*, js: str | None = None) -> widgets.HBox:
                        "<b>Cerrando el simulador...</b></div>")
         with salida:
             display(Javascript(js or JS_CERRAR))
-        threading.Timer(ESPERA_ANTES_DE_APAGAR, os.kill, (pid, signal.SIGTERM)).start()
+        threading.Timer(ESPERA_ANTES_DE_APAGAR, apagar, (pid,)).start()
 
     # El camino del kernel se queda: es el UNICO cuando el simulador se abre solo, sin
     # menu, y es el que manda el SIGTERM al pid de Voila.

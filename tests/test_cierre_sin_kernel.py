@@ -129,3 +129,51 @@ def test_el_guion_se_muestra_por_un_output():
     fuente = _fuente()
     assert re.search(r"with salida:\s*\n\s*display\(Javascript\(JS_ENGANCHE", fuente), (
         "el guion de enganche no se muestra por el `Output`")
+
+
+# ---------------------------------------------------------------------------
+# Y que de verdad apague, no solo que lo diga
+# ---------------------------------------------------------------------------
+
+
+def test_apagar_mata_el_proceso_de_verdad():
+    """Lo de arriba fija la FORMA del apagado; esto comprueba el efecto.
+
+    Se levanta un proceso que no se iria solo, se le pasa su pid a `apagar()` y se
+    comprueba que muere. Es la unica de estas pruebas que no puede pasar leyendo el
+    archivo, y por eso vale: una rama de Windows mal escrita --- un `taskkill` con los
+    argumentos cambiados de sitio --- pasaria las de texto sin apagar nada.
+    """
+    import subprocess
+    import sys as _sys
+    import time
+
+    sys.path.insert(0, str(RAIZ / "aplicaciones" / "06_simulador"))
+    try:
+        import cierre
+    finally:
+        sys.path.pop(0)
+
+    proceso = subprocess.Popen([_sys.executable, "-c", "import time; time.sleep(60)"])
+    try:
+        cierre.apagar(proceso.pid)
+        for _ in range(50):
+            if proceso.poll() is not None:
+                break
+            time.sleep(0.1)
+        assert proceso.poll() is not None, "el proceso sigue vivo tras apagar()"
+    finally:
+        if proceso.poll() is None:
+            proceso.kill()
+            proceso.wait()
+
+
+def test_apagar_no_revienta_con_un_pid_que_ya_no_existe():
+    """El pid del archivo se queda rancio con facilidad. Levantar una traza dentro del
+    kernel por eso dejaria la pestania sobre un tablero muerto y sin aviso."""
+    sys.path.insert(0, str(RAIZ / "aplicaciones" / "06_simulador"))
+    try:
+        import cierre
+    finally:
+        sys.path.pop(0)
+    cierre.apagar(999_999)

@@ -86,7 +86,7 @@ menos de un segundo.
 
 ### Requisitos
 
-- **Python 3.10 o superior** en la máquina. macOS: `brew install python@3.11`.
+- **Python 3.11 o superior** en la máquina. macOS: `brew install python@3.11`.
   Windows: <https://www.python.org/downloads/> marcando *Add Python to PATH*.
 - El repositorio completo, con `data/` descargado (`git lfs pull`). Las cinco
   aplicaciones **construyen** desde los datos del repositorio; solo la 06 los sigue
