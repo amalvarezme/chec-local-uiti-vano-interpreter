@@ -776,3 +776,108 @@ def test_el_hover_no_parte_palabras():
 
     for linea in hover.split("<br>"):
         assert not linea.startswith("abra"), "corto una palabra por la mitad"
+
+
+# ---------------------------------------------------------------------------
+# The `.resumen.json` sidecar the managerial report reads back to NAME concepts
+# ---------------------------------------------------------------------------
+
+
+class TestResumenSidecar:
+    """The sidecar is what lets the report's prose name what the figure draws.
+
+    It had NO coverage, and that is exactly how it shipped empty: the filter
+    tested each concept's raw identity (`Inspección en campo · NR_T`) against
+    the set of drawn LABELS, which for a strategy is the glossary-expanded
+    `Inspección en campo · Riesgo por vegetación cercana al vano (NR_T)`.
+    Causes were unaffected because a cause's label IS its concept, so the bug
+    stayed invisible in the one half that happened to work.
+    """
+
+    @staticmethod
+    def _runs_con_estrategia_compartida(runs_root: Path) -> None:
+        for circuito in ("AAA23L11", "BBB23L12"):
+            _write_run(
+                runs_root,
+                circuito,
+                cause_note="rafagas de viento elevadas",
+                variables=[_variable("NR_T")],
+            )
+
+    def test_el_resumen_nombra_las_estrategias_que_la_figura_dibuja(
+        self, runs_root: Path, tmp_path: Path
+    ) -> None:
+        self._runs_con_estrategia_compartida(runs_root)
+        destino = tmp_path / "grafo.html"
+
+        outcome = ig.build_intervention_graph(
+            ["AAA23L11", "BBB23L12"], destino, runs_root=runs_root
+        )
+        resumen = json.loads(
+            (tmp_path / "grafo.html.resumen.json").read_text(encoding="utf-8")
+        )
+
+        assert outcome.estrategia_count > 0
+        assert len(resumen["estrategias"]) == outcome.estrategia_count
+
+    def test_una_estrategia_cuya_etiqueta_expande_el_codigo_sigue_en_el_resumen(
+        self, runs_root: Path, tmp_path: Path
+    ) -> None:
+        """`NR_T` IS in the glossary, so its drawn label differs from its
+        concept. That difference must not decide whether it is named.
+        """
+        self._runs_con_estrategia_compartida(runs_root)
+        destino = tmp_path / "grafo.html"
+
+        ig.build_intervention_graph(["AAA23L11", "BBB23L12"], destino, runs_root=runs_root)
+        resumen = json.loads(
+            (tmp_path / "grafo.html.resumen.json").read_text(encoding="utf-8")
+        )
+
+        conceptos = [item["concepto"] for item in resumen["estrategias"]]
+        assert any(c.endswith("· NR_T") for c in conceptos), conceptos
+
+    def test_el_resumen_conserva_la_identidad_cruda_no_la_etiqueta(
+        self, runs_root: Path, tmp_path: Path
+    ) -> None:
+        """The concept is the key that groups strategies across circuits; the
+        sidecar must carry it verbatim, never the expanded label.
+        """
+        self._runs_con_estrategia_compartida(runs_root)
+        destino = tmp_path / "grafo.html"
+
+        ig.build_intervention_graph(["AAA23L11", "BBB23L12"], destino, runs_root=runs_root)
+        resumen = json.loads(
+            (tmp_path / "grafo.html.resumen.json").read_text(encoding="utf-8")
+        )
+
+        for item in resumen["estrategias"]:
+            assert "(" not in item["concepto"], item["concepto"]
+
+    def test_una_estrategia_que_la_figura_no_dibuja_no_se_nombra(
+        self, runs_root: Path, tmp_path: Path
+    ) -> None:
+        """The sidecar's whole purpose: never name what the figure omits.
+
+        `max_estrategias` truncates what gets drawn (note that 0 means *no
+        limit*, not "draw none" -- the guard is `> 0`), so the sidecar must
+        follow the truncation rather than report the full model.
+        """
+        for circuito in ("AAA23L11", "BBB23L12"):
+            _write_run(
+                runs_root,
+                circuito,
+                cause_note="rafagas de viento elevadas",
+                variables=[_variable("NR_T"), _variable("CNT_TRF")],
+            )
+        destino = tmp_path / "grafo.html"
+
+        outcome = ig.build_intervention_graph(
+            ["AAA23L11", "BBB23L12"], destino, runs_root=runs_root, max_estrategias=1
+        )
+        resumen = json.loads(
+            (tmp_path / "grafo.html.resumen.json").read_text(encoding="utf-8")
+        )
+
+        assert outcome.estrategia_count == 1
+        assert len(resumen["estrategias"]) == 1

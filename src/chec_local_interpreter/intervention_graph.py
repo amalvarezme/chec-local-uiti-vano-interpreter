@@ -1109,7 +1109,11 @@ def _summary_json_text(model: dict[str, Any], nodes: Sequence[dict[str, Any]]) -
     so the text next to the figure can never name a cause or a strategy the
     figure does not show.
     """
-    drawn = {node["label"] for node in nodes}
+    # Match on the node ID, never on its label: a strategy is DRAWN with the
+    # glossary-expanded `etiqueta_de_estrategia(...)` while its concept stays
+    # the raw `<family> · <CODE>` identity, so a label-keyed test can never
+    # match one and the sidecar ships with `estrategias: []` every time.
+    drawn = {node["id"] for node in nodes}
     payload = {
         "schema_version": SCHEMA_VERSION,
         "causas": [
@@ -1119,7 +1123,7 @@ def _summary_json_text(model: dict[str, Any], nodes: Sequence[dict[str, Any]]) -
                 "circuitos": item["circuitos"],
             }
             for item in model["causas"]
-            if item["concepto"] in drawn
+            if f"causa::{item['concepto']}" in drawn
         ],
         "estrategias": [
             {
@@ -1129,7 +1133,7 @@ def _summary_json_text(model: dict[str, Any], nodes: Sequence[dict[str, Any]]) -
                 "circuitos": item["circuitos"],
             }
             for item in model["estrategias"]
-            if item["concepto"] in drawn
+            if f"estrategia::{item['concepto']}" in drawn
         ],
         "circuitos_sin_corrida": list(model["circuitos_sin_corrida"]),
     }
