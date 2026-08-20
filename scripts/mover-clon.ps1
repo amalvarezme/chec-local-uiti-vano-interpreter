@@ -30,6 +30,12 @@
     Mueve aunque VS Code este abierto. Solo si sabes que NO lo tiene abierto sobre este
     clon: no hay forma de comprobarlo desde fuera. Ver la nota del freno.
 
+.PARAMETER Asistido
+    El modo del doble clic, para quien no va a leer nada de esto. Mide la ruta y, si ya
+    cabe, lo dice y sale sin tocar nada. Si no cabe, ensenia la cuenta, propone el
+    destino y pide una confirmacion escrita antes de mover. Lo usa
+    `mover-a-ruta-corta.bat`.
+
 .PARAMETER YaFuera
     Uso interno. Marca la copia que corre desde `%TEMP%`; no se pasa a mano.
 
@@ -45,6 +51,7 @@ param(
     [string]$Origen,
     [switch]$AunConEntornos,
     [switch]$AunConVSCode,
+    [switch]$Asistido,
     [switch]$YaFuera
 )
 
@@ -68,6 +75,48 @@ if (-not (Test-Path (Join-Path $Origen 'scripts\diagnostico_local.py'))) {
     exit 1
 }
 
+# --------------------------------------------------- la cuenta, leida de quien la declara
+#
+# Los dos numeros no se escriben aqui: los declara y los mide `scripts/diagnostico_local.py`
+# y de alli se leen. Una segunda copia seria una segunda verdad.
+#
+# Se hace ANTES de nada porque en modo asistido decide si hay algo que hacer, y porque
+# despues el script corre desde %TEMP% y el clon ya esta en otro sitio. Que no se pueda
+# calcular no tumba la mudanza -- mover a una ruta mas corta nunca empeora --, pero sin la
+# cuenta no se puede avisar de un destino que tampoco cabe.
+
+$limite = 0
+$cola = 0
+if (-not $YaFuera) {
+    try {
+        $py = 'py'
+        if (-not (Get-Command py -ErrorAction SilentlyContinue)) { $py = 'python' }
+        Push-Location $Origen
+        $salida = & $py -3 -c "from scripts.diagnostico_local import LIMITE_DE_DIRECTORIO, COLA_MAS_LARGA; print(LIMITE_DE_DIRECTORIO, COLA_MAS_LARGA)"
+        Pop-Location
+        $partes = ($salida | Out-String).Trim() -split '\s+'
+        $limite = [int]$partes[0]
+        $cola = [int]$partes[1]
+    } catch {
+        Pop-Location -ErrorAction SilentlyContinue
+        Di "AVISO: no se pudo leer la cuenta de scripts\diagnostico_local.py; sigo sin ella." 'Yellow'
+    }
+}
+
+# El modo asistido se para aqui cuando no hay nada que arreglar. Es la respuesta mas
+# frecuente y tiene que ser la mas tranquila: quien hace doble clic en esto no sabe si le
+# hace falta, y descubrir que no es un resultado, no un no-evento.
+if ($Asistido -and $limite -gt 0 -and ($Origen.Length + $cola) -le $limite) {
+    Di "No hace falta mover nada." 'Green'
+    Write-Host ""
+    Di "  El clon esta en  $Origen" 'Gray'
+    Di "  $($Origen.Length) caracteres; torch llegara a $($Origen.Length + $cola), y el corte esta en $limite." 'Gray'
+    Di "  Sobran $($limite - $Origen.Length - $cola) caracteres." 'Gray'
+    Write-Host ""
+    Di "Puedes seguir con la instalacion." 'Cyan'
+    exit 0
+}
+
 if (-not $Destino) { $Destino = Join-Path 'C:\CHEC' (Split-Path -Leaf $Origen) }
 $Destino = $Destino.TrimEnd('\')
 
@@ -81,12 +130,6 @@ if (Test-Path $Destino) {
     exit 1
 }
 
-# --------------------------------------------------- la cuenta, leida de quien la declara
-#
-# Se hace ANTES de mover: despues el script corre desde %TEMP% y el clon esta en otro
-# sitio. Que no se pueda calcular no tumba la mudanza -- mover a una ruta mas corta nunca
-# empeora --, pero sin la cuenta no se puede avisar de un destino que tampoco cabe.
-
 # Los entornos que ya hay dentro. Se calcula siempre, porque el mensaje final tambien lo
 # necesita. Se miran los dos sitios donde el proyecto los pone -- la raiz y cada aplicacion
 # -- y no con `-Recurse`: un recorrido recursivo desciende DENTRO de los propios entornos,
@@ -96,25 +139,10 @@ if (Test-Path $Destino) {
 $entornos = @(Get-Item -Path (Join-Path $Origen '.venv') -ErrorAction SilentlyContinue) +
             @(Get-Item -Path (Join-Path $Origen 'aplicaciones\*\.venv') -ErrorAction SilentlyContinue)
 
-# Todo lo que sigue -- la cuenta, los frenos y el salto a %TEMP% -- lo hace SOLO la primera
-# invocacion. La copia que corre desde %TEMP% ya llega con el permiso dado y va derecha a
-# mover: repetirlo alli imprimiria el informe entero dos veces.
-$limite = 0
-$cola = 0
+# Todo lo que sigue -- el informe, los frenos y el salto a %TEMP% -- lo hace SOLO la
+# primera invocacion. La copia que corre desde %TEMP% ya llega con el permiso dado y va
+# derecha a mover: repetirlo alli imprimiria el informe entero dos veces.
 if (-not $YaFuera) {
-try {
-    $py = 'py'
-    if (-not (Get-Command py -ErrorAction SilentlyContinue)) { $py = 'python' }
-    Push-Location $Origen
-    $salida = & $py -3 -c "from scripts.diagnostico_local import LIMITE_DE_DIRECTORIO, COLA_MAS_LARGA; print(LIMITE_DE_DIRECTORIO, COLA_MAS_LARGA)"
-    Pop-Location
-    $partes = ($salida | Out-String).Trim() -split '\s+'
-    $limite = [int]$partes[0]
-    $cola = [int]$partes[1]
-} catch {
-    Pop-Location -ErrorAction SilentlyContinue
-    Di "AVISO: no se pudo leer la cuenta de scripts\diagnostico_local.py; sigo sin ella." 'Yellow'
-}
 
 if ($limite -gt 0) {
     $hondoAntes = $Origen.Length + $cola
@@ -195,6 +223,24 @@ if ($entornos.Count -gt 0 -and -not $AunConEntornos) {
 # un worktree -- se llaman igual en el ultimo tramo, y sin la huella escribirian el MISMO
 # archivo temporal: gana el ultimo, y el otro se muda a donde no era.
 
+    # La confirmacion va aqui, la ultima, y no al principio: preguntar antes de haber
+    # pasado los frenos seria pedir permiso para algo que a lo mejor no se puede hacer.
+    # Se pide escribir la palabra y no una tecla porque mover un repositorio no es una
+    # accion de la que se vuelva con Ctrl+Z.
+    if ($Asistido) {
+        Write-Host ""
+        Di "Se va a MOVER el clon:" 'Yellow'
+        Di "  de   $Origen" 'Gray'
+        Di "  a    $Destino" 'Gray'
+        Write-Host ""
+        $respuesta = Read-Host "Escribe SI para continuar (cualquier otra cosa cancela)"
+        if ($respuesta.Trim().ToUpperInvariant() -ne 'SI') {
+            Di "Cancelado. No se movio nada." 'Yellow'
+            exit 0
+        }
+        Write-Host ""
+    }
+
     $aqui = (Get-Location).Path.TrimEnd('\')
     if ($aqui -eq $Origen -or $aqui.StartsWith("$Origen\", 'OrdinalIgnoreCase')) {
         Di "Tu consola esta DENTRO del clon ($aqui)." 'Yellow'
@@ -213,6 +259,9 @@ if ($entornos.Count -gt 0 -and -not $AunConEntornos) {
 
     $argumentos = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $copia,
                     '-Origen', $Origen, '-Destino', $Destino, '-YaFuera')
+    # `-Asistido` NO se reenvia, y es deliberado: la medida, los frenos y la
+    # confirmacion ya ocurrieron aqui arriba. La copia de %TEMP% solo mueve. Pasarselo
+    # volveria a preguntar, esta vez sin nadie mirando la respuesta.
     if ($AunConEntornos) { $argumentos += '-AunConEntornos' }
     if ($AunConVSCode) { $argumentos += '-AunConVSCode' }
 

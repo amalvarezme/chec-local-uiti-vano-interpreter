@@ -82,14 +82,21 @@ def app_falsa(tmp_path):
 
 
 def test_un_puerto_libre_deja_seguir(monkeypatch, app_falsa):
-    monkeypatch.setattr(servidor, "puerto_tomado", lambda *_a, **_k: False)
+    # Se parchea `estado_del_puerto`, que es lo que `revisar_puerto` consulta, y no
+    # `puerto_tomado`. Los dos surten efecto -- `estado_del_puerto` llama al segundo --,
+    # pero `puerto_tomado` cubre solo el PRIMERO de los dos sondeos: cuando dice que no
+    # hay nadie escuchando, `estado_del_puerto` intenta ademas un `bind` DE VERDAD sobre
+    # el 8801. Con el tablero de clima levantado, ese bind falla y el puerto sale
+    # `TOMADO` con el parche puesto. La prueba pasaba a pasar o fallar segun lo que
+    # estuviera corriendo en la maquina.
+    monkeypatch.setattr(servidor, "estado_del_puerto", lambda *_a, **_k: servidor.LIBRE)
     assert servidor.revisar_puerto(app_falsa, 8801, abrir=True, titulo="x") is None
 
 
 def test_su_propio_puerto_ocupado_abre_la_que_ya_esta_y_sale_bien(monkeypatch, app_falsa):
     """Codigo 0 a proposito: es lo que cierra sola la ventana que acaba de abrirse."""
     abiertas = []
-    monkeypatch.setattr(servidor, "puerto_tomado", lambda *_a, **_k: True)
+    monkeypatch.setattr(servidor, "estado_del_puerto", lambda *_a, **_k: servidor.TOMADO)
     monkeypatch.setattr(servidor, "pid_de", lambda _c: 4321)
     monkeypatch.setattr(servidor, "abrir_navegador", lambda url: abiertas.append(url) or True)
 
@@ -99,7 +106,7 @@ def test_su_propio_puerto_ocupado_abre_la_que_ya_esta_y_sale_bien(monkeypatch, a
 
 def test_no_abre_el_navegador_si_no_se_lo_pidieron(monkeypatch, app_falsa):
     abiertas = []
-    monkeypatch.setattr(servidor, "puerto_tomado", lambda *_a, **_k: True)
+    monkeypatch.setattr(servidor, "estado_del_puerto", lambda *_a, **_k: servidor.TOMADO)
     monkeypatch.setattr(servidor, "pid_de", lambda _c: 4321)
     monkeypatch.setattr(servidor, "abrir_navegador", lambda url: abiertas.append(url) or True)
 
@@ -110,7 +117,7 @@ def test_no_abre_el_navegador_si_no_se_lo_pidieron(monkeypatch, app_falsa):
 def test_un_puerto_ajeno_sale_con_error(monkeypatch, app_falsa, capsys):
     """Aqui si hay algo que decidir, asi que el codigo distinto de cero es lo que
     deja el mensaje en pantalla: la ventana no se cierra sobre el."""
-    monkeypatch.setattr(servidor, "puerto_tomado", lambda *_a, **_k: True)
+    monkeypatch.setattr(servidor, "estado_del_puerto", lambda *_a, **_k: servidor.TOMADO)
     monkeypatch.setattr(servidor, "pid_de", lambda _c: None)
 
     codigo = servidor.revisar_puerto(app_falsa, 8801, abrir=True, titulo="Clima")
@@ -136,6 +143,15 @@ def test_un_pid_que_ya_no_existe_no_cuenta(app_falsa):
     assert servidor.pid_de(app_falsa) is None
 
 
+@pytest.mark.xfail(
+    os.name == "nt", strict=True,
+    reason="en Windows `pid_de` solo compara el NOMBRE DE IMAGEN: `tasklist` no da la "
+           "linea de ordenes, asi que otro python cualquiera pasa el filtro. Esta "
+           "escrito como limitacion aceptada en el propio `servidor.pid_de`, que la "
+           "prefiere a la alternativa -- PowerShell, medio segundo por llamada, cada "
+           "2,5 s por aplicacion. Y esta prueba lanza precisamente otro python. "
+           "`strict` a proposito: si algun dia se refuerza, esto avisa en vez de "
+           "quedarse callado")
 def test_un_pid_de_otro_proceso_no_cuenta(app_falsa):
     """Vivo pero no es esta aplicacion: la linea de ordenes no la nombra."""
     ajeno = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
@@ -163,6 +179,28 @@ raise SystemExit(servidor.servir(
     pathlib.Path(sys.argv[1]), app=pathlib.Path(sys.argv[2]),
     abrir=False, puerto=int(sys.argv[3])) or 0)
 """
+
+
+# Las dos pruebas que levantan un tablero DE VERDAD se quedan en POSIX, y por tres
+# motivos distintos que se acumulan -- ninguno de ellos un defecto del producto:
+#
+#   1. La limpieza del fixture manda `os.killpg(os.getpgid(...))`, y en Windows no
+#      existe ninguna de las dos: no hay grupos de procesos que senalar. Sin limpieza,
+#      cada corrida dejaria servidores vivos.
+#   2. La comprobacion de que el segundo arranque no se quedo con otro puerto usa
+#      `lsof`, que alli no esta.
+#   3. Y `pid_de(carpeta) == proceso.pid` no se sostiene: `.venv\\Scripts\\python.exe`
+#      es un REDIRECTOR, y el interprete de verdad corre como hijo suyo. Medido el
+#      2026-08-20: `Popen.pid` 2832, `os.getpid()` dentro 4900. El archivo de pid trae
+#      el correcto -- el del interprete --, asi que quien esta mal es la comparacion.
+#      El menu no se ve afectado porque mata con `taskkill /T`, que recorre el arbol.
+#
+# Lo que estas dos fijan -- el segundo arranque se rinde, el pid se escribe y se borra
+# -- lo cubre en Windows el camino de `revisar_puerto`, que si se prueba arriba.
+solo_posix = pytest.mark.skipif(
+    os.name == "nt",
+    reason="levanta servidores de verdad y los limpia con os.killpg/lsof, que en "
+           "Windows no existen; y Popen.pid alli es el shim del venv, no el interprete")
 
 
 @pytest.fixture
@@ -198,6 +236,7 @@ def visor(tmp_path):
             pass
 
 
+@solo_posix
 def test_el_segundo_arranque_no_levanta_una_segunda_copia(visor):
     """El defecto medido: el segundo doble clic servia el mismo tablero en un puerto
     al azar. Ahora se rinde y deja al primero en el suyo."""
@@ -218,6 +257,7 @@ def test_el_segundo_arranque_no_levanta_una_segunda_copia(visor):
     assert primero.poll() is None, "el primero se murio, y era el que habia que dejar vivo"
 
 
+@solo_posix
 def test_servir_deja_su_pid_y_lo_borra_al_salir(visor):
     """El archivo es lo que permite reconocer una segunda apertura como propia. Que se
     borre al salir importa igual: uno olvidado apunta tarde o temprano a otro proceso."""

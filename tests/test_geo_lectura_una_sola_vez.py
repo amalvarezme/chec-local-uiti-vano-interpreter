@@ -22,6 +22,8 @@ que duele -- once mapas del MISMO circuito -- solo por casualidad.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from chec_local_interpreter import plotting
@@ -48,7 +50,11 @@ def geo_contadas(monkeypatch):
     )
 
     def _falso(ruta, *a, **k):
-        nombre = str(ruta).rsplit("/", 1)[-1]
+        # `Path.name` y no `rsplit("/")`: lo que llega es una ruta del sistema, y en
+        # Windows separa con barra invertida -- alli el corte por "/" devolvia la ruta
+        # entera, con lo que ni el registro de lecturas ni el reparto de abajo entre
+        # lineas y puntos acertaban una.
+        nombre = Path(ruta).name
         lecturas.append(nombre)
         return lineas.copy() if nombre == "MVLINSEC.shp" else puntos.copy()
 

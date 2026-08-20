@@ -181,6 +181,20 @@ Esta segunda depende de **dónde clonaste**: la raíz tiene que caber en 61 cara
 Clonar más arriba es la alternativa si no hay administrador a mano. El diagnóstico da la
 cuenta, no sólo el veredicto.
 
+> **Recién clonado en Windows, antes de instalar nada: doble clic en
+> `mover-a-ruta-corta.bat`**, en la raíz del clon. Mide dónde quedó y, si cabe —que es lo
+> normal—, no toca nada y te lo dice. Si no cabe, propone `C:\CHEC\<carpeta>` y mueve el
+> clon después de que escribas `SI`.
+>
+> Es la salida que **no depende de que haya administrador**: acortar la ruta consigue
+> contra `MAX_PATH` lo mismo que `LongPathsEnabled`, y no pide permisos a nadie.
+>
+> Hacerlo **antes** de instalar no es un detalle de orden. Los entornos virtuales llevan
+> su ruta absoluta dentro —`pip.exe` empieza por `#!C:\...\.venv\Scripts\python.exe`,
+> `activate.bat` fija `VIRTUAL_ENV=`—, así que mover un clon ya instalado los deja
+> apuntando a un intérprete que no está ahí. El script lo comprueba y se frena; rehacerlos
+> son ~6 GB de descarga que se ahorran moviendo primero.
+
 ## Configuración
 
 ```bash

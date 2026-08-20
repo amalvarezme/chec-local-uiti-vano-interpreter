@@ -107,6 +107,27 @@ de seis y los otros dos no salen en absoluto.
 Asi que avisale que mire la pantalla y lanza el runtime tu mismo. Es el que bloquea los
 tres destinos, y es el unico de los cinco de esta tabla que puedes empujar sin esperar.
 
+**Y `rutas_largas` tiene una segunda salida que no pasa por el administrador: acortar la
+ruta del clon.** Contra `MAX_PATH` consigue lo mismo que el registro -- lo que desborda es
+`len(raiz) + 187`, y los 187 no se pueden tocar --, y no pide permisos a nadie. El clon
+tiene que caber en 61 caracteres.
+
+Si `rutas_largas` salio en `falta`, ofrece esto ANTES de pedir el registro, porque se
+resuelve en el acto y la elevacion puede tardar dias:
+
+```
+mover-a-ruta-corta.bat        # doble clic, en la raiz del clon
+```
+
+Mide donde quedo y, si cabe, no toca nada y lo dice. Si no cabe, propone `C:\CHEC\<carpeta>`
+y mueve cuando el usuario escriba `SI`. El `.bat` existe porque un `.ps1` no se ejecuta con
+doble clic, porque el directorio actual no puede estar dentro de lo que se mueve, y porque
+sin `pause` la ventana se cierra encima del resultado; las tres las resuelve el.
+
+**Tiene que ser antes de instalar.** Los `.venv` llevan su ruta absoluta dentro, asi que
+mover un clon ya instalado los rompe -- el script lo comprueba y se frena. Despues de
+instalar, mover cuesta rehacer los seis entornos: ~6 GB.
+
 **Solo `06_simulador` trae `torch`** -- miralo en su `requirements.txt` si dudas --, y la
 cola de 187 caracteres que desborda `MAX_PATH` son las licencias de terceros de `kineto`,
 que las pone `torch` y nadie mas. De ahi salen las dos cosas que SI puedes adelantar

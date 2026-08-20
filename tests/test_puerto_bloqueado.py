@@ -66,14 +66,46 @@ def _modulo(nombre: str):
 servidor = _modulo("servidor")
 
 
-# Un puerto privilegiado es la unica forma PORTABLE de provocar el bloqueo de verdad,
-# sin parchear nada: el sistema se niega a darlo a un proceso sin privilegios, con el
-# mismo error con el que Windows niega un puerto de un rango reservado. Corriendo como
-# root no se niega, y entonces la prueba no puede montar su escenario.
-PUERTO_PRIVILEGIADO = 1
-_ES_ROOT = hasattr(os, "geteuid") and os.geteuid() == 0
+def _puerto_que_el_sistema_niega() -> int | None:
+    """Un puerto que ESTA maquina se niega a dar, o `None` si no hay ninguno.
+
+    Provocar el bloqueo de verdad, sin parchear nada, es lo que hace que estas pruebas
+    valgan. Pero como se consigue no es lo mismo en los dos sistemas:
+
+      * En POSIX, un puerto privilegiado. El sistema se lo niega a un proceso sin
+        privilegios con `EACCES`. Corriendo como root no se lo niega, y ahi no hay
+        escenario que montar.
+      * En Windows NO hay puertos privilegiados -- medido el 2026-08-20: un proceso sin
+        elevar se ata al puerto 1 sin protestar --, asi que el `1` no sirve. Lo que si
+        niega Windows son los RANGOS EXCLUIDOS que reservan Hyper-V, WSL o Docker, con
+        `WSAEACCES`. Y ese es exactamente el caso por el que existe este fichero, asi
+        que se busca uno de verdad en vez de darlo por imposible: donde haya rangos
+        reservados, estas pruebas corren y comprueban el camino de Windows entero.
+
+    Una maquina Windows sin ningun rango excluido no puede montar el escenario, y
+    entonces se salta -- que es informacion honesta, y distinta de "aqui no pasa".
+    """
+    if os.name != "nt":
+        es_root = hasattr(os, "geteuid") and os.geteuid() == 0
+        return None if es_root else 1
+    # El listado sale de `servidor._salida_de_netsh`, que es quien ya sabe pedirselo al
+    # sistema; aqui solo se coge el principio del primer rango que aparezca.
+    for linea in servidor._salida_de_netsh().splitlines():
+        partes = linea.split()
+        if len(partes) < 2:
+            continue
+        try:
+            return int(partes[0])
+        except ValueError:
+            continue
+    return None
+
+
+PUERTO_NEGADO = _puerto_que_el_sistema_niega()
 sin_privilegios = pytest.mark.skipif(
-    _ES_ROOT, reason="como root no hay ningun puerto que el sistema niegue")
+    PUERTO_NEGADO is None,
+    reason="esta maquina no niega ningun puerto: como root en POSIX, o en Windows sin "
+           "ningun rango excluido de los que reservan Hyper-V, WSL o Docker")
 
 
 @pytest.fixture()
@@ -113,7 +145,7 @@ def test_un_puerto_que_el_sistema_niega_esta_bloqueado():
     Hasta ahora este caso se contestaba igual que `LIBRE` -- nadie escucha, la conexion
     se rechaza -- y por eso la aplicacion seguia adelante hasta reventar en el `bind`.
     """
-    assert servidor.estado_del_puerto(PUERTO_PRIVILEGIADO) == servidor.BLOQUEADO
+    assert servidor.estado_del_puerto(PUERTO_NEGADO) == servidor.BLOQUEADO
 
 
 def test_bloqueado_y_tomado_no_son_el_mismo_estado(puerto_escuchando: int):
@@ -167,8 +199,8 @@ def test_el_puerto_preferido_bloqueado_no_cae_a_uno_al_azar():
     Se prefiere fallar y decir por que. Ese es el sentido de tener los puertos fijos.
     """
     with pytest.raises(SystemExit) as fallo:
-        servidor.puerto_libre(PUERTO_PRIVILEGIADO)
-    assert str(PUERTO_PRIVILEGIADO) in str(fallo.value), (
+        servidor.puerto_libre(PUERTO_NEGADO)
+    assert str(PUERTO_NEGADO) in str(fallo.value), (
         f"el aviso no nombra el puerto: {fallo.value}")
 
 
@@ -195,12 +227,12 @@ def test_revisar_puerto_sale_con_su_propio_codigo_cuando_esta_bloqueado(tmp_path
     cerrar la ventana --, pero no son el mismo problema y el lanzador tiene que poder
     distinguirlos sin leer el texto.
     """
-    codigo = servidor.revisar_puerto(tmp_path, PUERTO_PRIVILEGIADO, abrir=False,
+    codigo = servidor.revisar_puerto(tmp_path, PUERTO_NEGADO, abrir=False,
                                      titulo="Clima")
     assert codigo == servidor.SALIDA_PUERTO_BLOQUEADO
     assert codigo != servidor.SALIDA_PUERTO_AJENO
     dicho = capsys.readouterr().out
-    assert str(PUERTO_PRIVILEGIADO) in dicho, f"el aviso no nombra el puerto: {dicho}"
+    assert str(PUERTO_NEGADO) in dicho, f"el aviso no nombra el puerto: {dicho}"
     assert "bloquea" in dicho.lower(), f"el aviso no dice que esta bloqueado: {dicho}"
 
 
@@ -269,6 +301,15 @@ def test_el_menu_no_lanza_nada_con_el_puerto_bloqueado(monkeypatch):
     app = control.apps["clima"]
     monkeypatch.setattr(menu._servidor, "estado_del_puerto",
                         lambda _p: menu._servidor.BLOQUEADO)
+    # El rango se fija en vez de preguntarselo al sistema, por dos razones. La primera
+    # es que asi el detalle no depende de que ESTA maquina tenga rangos excluidos. La
+    # segunda es que el `subprocess.run` de abajo se parchea sobre el MODULO, que es el
+    # mismo objeto para todo el proceso: en Windows `rango_reservado` consulta `netsh`
+    # por ahi, se comia el parche y la tarjeta acababa mostrando el mensaje del propio
+    # centinela -- una prueba que fallaba diciendo que se habia lanzado la aplicacion
+    # cuando lo unico que habia corrido era la consulta que redacta el aviso. En macOS
+    # no se veia: alli esa rama devuelve "" sin llamar a nadie.
+    monkeypatch.setattr(menu._servidor, "rango_reservado", lambda _p: None)
 
     def _no_se_lanza(*_a, **_k):
         raise AssertionError("se lanzo la aplicacion con el puerto bloqueado")

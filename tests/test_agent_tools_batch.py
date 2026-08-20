@@ -944,6 +944,11 @@ def test_no_other_source_module_hardcodes_the_flat_published_path():
     offenders = [
         str(path)
         for path in src_root.rglob("*.py")
-        if path.name not in allowed_names and "reports/reportescircuitos/published" in path.read_text()
+        # `encoding="utf-8"` explicito: sin el, `read_text` usa la codificacion de la
+        # plataforma -- cp1252 en Windows -- y este barrido, que abre TODOS los .py de
+        # `src`, muere con `UnicodeDecodeError` en el primero que traiga un byte fuera
+        # de esa tabla. Los fuentes de Python son utf-8 por definicion (PEP 3120).
+        if path.name not in allowed_names
+        and "reports/reportescircuitos/published" in path.read_text(encoding="utf-8")
     ]
     assert offenders == []

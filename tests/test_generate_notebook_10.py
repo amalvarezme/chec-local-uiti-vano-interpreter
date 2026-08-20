@@ -601,6 +601,24 @@ def test_el_bootstrap_ya_no_exige_que_data_sea_hermana_del_codigo():
             "el bootstrap sigue exigiendo `src/chec_impacto` y `data/` como hermanas")
 
 
+def _enlazar_directorio(enlace: Path, destino: Path) -> None:
+    """Un `src/` que apunta al del repositorio, sin copiar los archivos.
+
+    `symlink_to` es lo natural, y en Windows pide el privilegio
+    `SeCreateSymbolicLinkPrivilege`: sin consola elevada ni el Modo desarrollador
+    activado falla con `OSError: [WinError 1314]`. Una UNION de directorio hace el mismo
+    trabajo para este caso -- que `<tmp>/src` resuelva al `src/` real -- y no pide
+    ninguno, asi que la prueba se conserva en vez de saltarse.
+    """
+    try:
+        enlace.symlink_to(destino, target_is_directory=True)
+    except OSError:
+        if os.name != "nt":
+            raise
+        subprocess.run(["cmd", "/c", "mklink", "/J", str(enlace), str(destino)],
+                       check=True, capture_output=True)
+
+
 def test_el_bootstrap_corre_con_el_codigo_y_los_datos_separados(tmp_path):
     """La prueba de verdad: se monta el layout de Databricks y se corre la celda.
 
@@ -609,7 +627,7 @@ def test_el_bootstrap_corre_con_el_codigo_y_los_datos_separados(tmp_path):
     `CHEC_DATA_DIR`. Si la celda importa PR1-4 y llega a "Guarda OK" desde ahi,
     el cuaderno se abre en el Workspace.
     """
-    (tmp_path / "src").symlink_to(REPO_ROOT / "src")
+    _enlazar_directorio(tmp_path / "src", REPO_ROOT / "src")
     entorno = dict(os.environ, CHEC_DATA_DIR=str(REPO_ROOT / "data"))
     resultado = subprocess.run(
         [sys.executable, "-c", _celda_bootstrap()],
