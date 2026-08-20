@@ -107,8 +107,20 @@ distinta.
 | **Import por nombre pelado** tras manipular `sys.path` | `aplicaciones/_comun/{servidor,terminal,huellas,paleta,raiz,tableros,entorno,empaquetar}.py` | Los seis `app.py` hacen `import servidor`, no `from aplicaciones._comun import servidor`. El nombre del módulo en el grafo nunca coincide |
 | **Import escrito por código generado** | `aplicaciones/06_simulador/cierre.py` | `preparar.py:337` emite el literal `"import cierre\n"` dentro de una celda del cuaderno que construye |
 | **Punto de entrada declarado en YAML** | `aplicaciones/databricks/criticidad_chec/{app,catalogo,pagina}.py` | `app.yaml` dice `uvicorn app:app`. No hay ningún `import` en ningún `.py` |
-| **Import perezoso por cadena (PEP 562)** | `chec_impacto/interpretability/mgcecdl.py`, `chec_impacto/models/mgcecdl_graph_search.py`, `chec_impacto/data/preprocessing.py` | Los `__init__.py` guardan `_ORIGEN = {"nombre": "submodulo"}` y resuelven en `__getattr__`. El destino es un *string*, no un `import` |
+| **Import perezoso por cadena (PEP 562)** | `chec_impacto/data/preprocessing.py` ⁽*⁾ | Los `__init__.py` guardan `_ORIGEN = {"nombre": "submodulo"}` y resuelven en `__getattr__`. El destino es un *string*, no un `import` |
 | **Consumidor fuera del árbol de código** | los 15 símbolos de `clima_engine.py` | Quien los llama es `.claude/skills/clima/assets/runbook.py`, que no está en `src/` ni en `tests/` |
+
+> ⁽*⁾ **Esta fila tenía dos módulos más, y era un error de este documento.** Decía que
+> `chec_impacto/interpretability/mgcecdl.py` y `chec_impacto/models/mgcecdl_graph_search.py`
+> eran falsos positivos por estar en `_ORIGEN`. Estar en `_ORIGEN` es ser **alcanzable**, no
+> ser **usado**: el 2026-08-19 se midió que los seis símbolos del primero no aparecían en un
+> solo archivo del árbol, y que el único consumidor del segundo era su propia prueba. Los dos
+> se borraron, y `optuna` con ellos —era su único importador—. La guarda del retiro es
+> `tests/test_mgcecdl_clasificacion_retirada.py`.
+>
+> Y este documento fue, otra vez, la única razón por la que sobrevivieron al barrido
+> anterior: el analizador perdona a todo módulo citado en un `.md`. Es la misma trampa que
+> la sección E denuncia, reproducida por la sección que la denuncia.
 
 El grupo de los imports perezosos es el más traicionero: se introdujo **a propósito** para que
 tocar cualquier submódulo de `chec_impacto` no arrastrara `torch` (1,49 s → 0,03 s de arranque), y

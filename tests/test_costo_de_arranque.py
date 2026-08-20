@@ -9,7 +9,7 @@ escriben un JSON de pocos bytes -- `record-usage`, `record-duration`, `verify-us
 `criticality_assignment` importa torch PEREZOSAMENTE y su propio docstring dice por
 que: "this module is imported by notebook and reporting code paths that have no
 reason to pay for torch". Esa intencion la anulaba el `__init__` del PAQUETE, que
-importaba `mgcecdl`, `mgcecdl_graph` y `mgcecdl_graph_search` de entrada. Tocar
+importaba de entrada los submodulos que lo arrastran. Tocar
 cualquier submodulo -- aunque no necesitara nada de eso -- ejecutaba el `__init__`
 y con el, torch.
 

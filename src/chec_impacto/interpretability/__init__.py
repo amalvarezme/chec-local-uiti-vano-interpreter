@@ -21,12 +21,6 @@ from typing import Any
 #: Nombre exportado -> submodulo del que sale. La MISMA informacion que tenian los
 #: `from .x import (...)` de antes, en la forma que permite resolverla tarde.
 _ORIGEN: dict[str, str] = {
-    "build_classification_expected_class_outputs": "mgcecdl",
-    "build_classification_modality_outputs_per_sample": "mgcecdl",
-    "plot_classification_modality_expected_classes": "mgcecdl",
-    "plot_classification_modality_radar": "mgcecdl",
-    "summarize_classification_modality_support": "mgcecdl",
-    "summarize_modality_reliability_by_class": "mgcecdl",
     "agregar_borda": "borda",
     "construir_modos_interpretabilidad": "circuit_analysis",
     "radar_atribucion_degradado": "circuit_analysis",

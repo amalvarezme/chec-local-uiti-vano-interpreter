@@ -51,26 +51,26 @@ joblib>=1.5
 torch>=2.6
 
 # === Busqueda de hiperparametros =====================================================
-# **Se queda, y se reviso a proposito.** Al retirar el clasificador MGCECDL (2cf942b)
-# desaparecio casi toda la maquinaria de Optuna del proyecto -- las funciones de
-# `training/mgcecdl.py` y hasta la carpeta `data/optuna/` con sus estudios --, asi que
-# la pregunta "¿sigue haciendo falta?" era legitima. La respuesta es si, y por un solo
-# consumidor: `src/chec_impacto/models/mgcecdl_graph_search.py`.
+# **Se retiro el 2026-08-19, y este bloque es el registro de por que.** `optuna` estuvo
+# aqui por un unico importador en todo el arbol,
+# `src/chec_impacto/models/mgcecdl_graph_search.py` -- la busqueda de hiperparametros
+# del autocodificador de compuertas --, cuyo unico consumidor a su vez era su propia
+# prueba. Al borrar ese modulo se cumplio la condicion que este mismo archivo dejo
+# escrita en el commit `6ba8c82`: *"si algun dia ese modulo se retira, optuna se queda
+# sin ningun consumidor y sale de aqui con el"*.
 #
-# Son dos cosas distintas y conviene no confundirlas. Lo que se fue era la busqueda del
-# CLASIFICADOR. Lo que queda es la busqueda del autocodificador de compuertas por arista
-# (`mgcecdl_graph`), que esta muy vivo: de el cuelgan `mgcecdl_mil`, `mil_persistencia`,
-# `mil_vano_ventana` y el simulador.
+# El clasificador MGCECDL, que se llevo el resto de la maquinaria de Optuna, ya se
+# habia retirado en `2cf942b`. Lo que sigue vivo es `mgcecdl_graph` -- de el cuelgan
+# `mgcecdl_mil`, `mil_persistencia`, `mil_vano_ventana` y el simulador --, y ese no
+# necesita Optuna para NADA: la busqueda era de fuera de linea, no un camino de
+# entrenamiento.
 #
-# Es una herramienta de fuera de linea: ningun camino de informe, tablero ni cuaderno la
-# invoca; se corre a mano cuando hay que re-ajustar. Si algun dia ese modulo se retira,
-# optuna se queda sin ningun consumidor y sale de aqui con el.
+# Y nunca entro por `mil_persistencia`, aunque este archivo lo afirmo durante meses:
+# medido el 2026-08-17 y otra vez el 2026-08-19 importando `chec_tableros.simulador.
+# tablero` y `mil_persistencia`, `optuna` no aparece en `sys.modules`.
 #
-# **No** entra por `mil_persistencia`, aunque este archivo lo afirmo durante meses:
-# medido el 2026-08-17 construyendo el tablero del simulador, `optuna` no aparece en
-# `sys.modules`. Por esa afirmacion falsa el entorno del simulador lo instalaba, y ya
-# no lo hace.
-optuna>=4.9
+# La guarda que impide que vuelva por inercia:
+# `tests/test_mgcecdl_clasificacion_retirada.py`.
 
 # === Visualizacion ===================================================================
 # Las cuatro aplicaciones estaticas FIJAN `plotly==6.9.0` porque comparten el

@@ -1,7 +1,7 @@
 """Model exports, resueltas cuando se piden y no cuando se importa el paquete.
 
-Los tres submodulos que exportan estos nombres -- `mgcecdl`, `mgcecdl_graph` y
-`mgcecdl_graph_search` -- arrastran torch. Importarlos aqui de entrada hacia que
+Los dos submodulos que exportan estos nombres -- `mgcecdl` y `mgcecdl_graph` --
+arrastran torch. Importarlos aqui de entrada hacia que
 TOCAR cualquier submodulo del paquete pagara ese arranque, aunque no necesitara nada
 de eso. El caso que duele es `criticality_assignment`, cuyo propio docstring dice por
 que importa torch perezosamente: "this module is imported by notebook and reporting
@@ -44,13 +44,6 @@ _ORIGEN: dict[str, str] = {
     "entrenar_gated_autoencoder": "mgcecdl_graph",
     "guardar_modelo_gated": "mgcecdl_graph",
     "reinyectar_target_como_feature": "mgcecdl_graph",
-    "LAMBDA_DEV_CHOICES": "mgcecdl_graph_search",
-    "LAMBDA_MI_CHOICES": "mgcecdl_graph_search",
-    "OPTIMIZER_CHOICES": "mgcecdl_graph_search",
-    "construir_objetivo_gated": "mgcecdl_graph_search",
-    "mean_pairwise_ari": "mgcecdl_graph_search",
-    "resumen_barrido_lambda_dev": "mgcecdl_graph_search",
-    "resumen_barrido_lambda_mi": "mgcecdl_graph_search",
 }
 
 __all__ = list(_ORIGEN)

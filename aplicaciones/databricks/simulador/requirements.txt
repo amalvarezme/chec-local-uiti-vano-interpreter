@@ -17,9 +17,14 @@ numpy
 scipy
 scikit-learn
 torch
-# `optuna` y `matplotlib` entran porque `chec_impacto.models.mil_persistencia` los
-# importa transitivamente, no porque la app los llame.
-optuna
+# `matplotlib` entra porque el arbol de importaciones del tablero lo carga, no porque
+# la app lo llame: medido el 2026-08-19 importando `chec_tableros.simulador.tablero`,
+# aparece en `sys.modules`.
+#
+# `optuna` estuvo aqui al lado por la misma justificacion, y era FALSA: el mismo
+# experimento lo deja fuera de `sys.modules`. Su unico importador del arbol,
+# `mgcecdl_graph_search.py`, se borro el 2026-08-19. La guarda que impide que vuelva es
+# `tests/test_mgcecdl_clasificacion_retirada.py`.
 matplotlib
 joblib
 pyarrow
