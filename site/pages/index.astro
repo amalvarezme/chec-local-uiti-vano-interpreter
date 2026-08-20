@@ -649,10 +649,11 @@ const cronograma = [
               </table>
             </div>
             <p class="note-callout">
-              <strong>80 columnas, no 70.</strong> El modelo corre sobre una matriz que incluye la frecuencia
-              de <code>COD_CAUSA</code> y sus 9 indicadores. Pasarle las 70 crudas <em>no lanza error</em>:
-              puntúa columnas distintas y devuelve un mapa creíble y falso. Por eso el cargador verifica los
-              nombres de las columnas y rechaza la matriz que no corresponde.
+              <strong>80 variables de entrada.</strong> El modelo corre sobre una matriz de 80 columnas por
+              evento, repartidas en las dos modalidades que él mismo distingue: <strong>30 estructurales</strong>
+              — vano, transformador, topología y las 10 columnas de <code>COD_CAUSA</code> (su frecuencia
+              relativa y 9 indicadores) — y <strong>50 climáticas</strong> — <code>NR_T</code>, <code>DDT</code>
+              y cuatro series meteorológicas con 12 rezagos cada una.
             </p>
           </div>
 
