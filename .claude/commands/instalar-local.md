@@ -38,6 +38,18 @@ y la que se desactualiza es siempre la copia.
 
 Muestrale al usuario el informe legible (el mismo script sin `--json`) antes de seguir.
 
+**Y si `runtime_vc` o `rutas_largas` salieron en `falta`, pidelas AQUI, antes de la
+pregunta del paso 1.** Las dos necesitan a quien administre la maquina, que puede tardar
+en aparecer, y ninguna depende de la respuesta: `runtime_vc` bloquea los tres destinos, y
+`rutas_largas` bloquea `06_simulador` se elija lo que se elija. El gate del paso 1 detiene
+las INSTALACIONES, que son gigabytes; no detiene una peticion que no descarga nada y que
+conviene tener en marcha mientras se decide el resto. Los comandos exactos, en el paso 2.
+
+**Pero no las pidas antes de diagnosticar.** El redistribuible de Visual C++ ya viene
+puesto en buena parte de las maquinas Windows -- lo instala medio catalogo de software --,
+y pedir una elevacion a ciegas gasta el favor del administrador en la mayoria que no la
+necesita. El diagnostico cuesta segundos y contesta por ESTA maquina.
+
 ## 1. Pregunta, una sola vez
 
 Con los tres veredictos a la vista, pregunta **para cual de los tres destinos** hay que
@@ -51,6 +63,9 @@ Por defecto, los tres. Si un destino ya sale `listo`, dilo y no preguntes por el
 
 Y **para. Espera la respuesta.** Los pasos de abajo instalan gigabytes: no se empiezan
 por suposicion.
+
+El gate es para lo que descarga. Las dos peticiones de administrador ya salieron al final
+del paso 0 y no esperan aqui.
 
 ## 2. Lo que no puedes instalar tu
 
@@ -75,6 +90,22 @@ CREADO y a medias, que es justo el estado que un diagnostico perezoso da por bue
 Las dos son de quien administra la maquina, no tuyas ni del usuario, y conviene decirlo
 al pedirlas: si no hay administrador a mano, el destino `aplicaciones` se queda en cinco
 de seis y los otros dos no salen en absoluto.
+
+**Pero las dos no se piden igual, y la diferencia la decide quien dispara el UAC.**
+
+- **El runtime de Visual C++ LANZALO TU.** `winget install Microsoft.VCRedist.2015+.x64
+  --accept-package-agreements` arranca sin elevacion: es el instalador el que pide el
+  UAC por su cuenta -- dice `El instalador solicitara que se ejecute como administrador.
+  Espere una indicacion.` --, asi que basta con que haya alguien delante para aprobar el
+  dialogo. El usuario no escribe nada; solo mira la pantalla. Medido el 2026-08-20:
+  salio 0, y `runtime_vc` y `entorno_raiz` pasaron los dos a `listo` de una vez y sin
+  descargar un byte del `requirements.txt`.
+- **`LongPathsEnabled` NO.** Escribir en `HKLM` desde una consola sin elevar falla con
+  `Acceso denegado al Registro solicitado` y **no abre ningun dialogo**: no hay nada que
+  aprobar. Esa si tiene que correrla una consola que YA este elevada, o no corre.
+
+Asi que avisale que mire la pantalla y lanza el runtime tu mismo. Es el que bloquea los
+tres destinos, y es el unico de los cinco de esta tabla que puedes empujar sin esperar.
 
 **Solo `06_simulador` trae `torch`** -- miralo en su `requirements.txt` si dudas --, y la
 cola de 187 caracteres que desborda `MAX_PATH` son las licencias de terceros de `kineto`,
