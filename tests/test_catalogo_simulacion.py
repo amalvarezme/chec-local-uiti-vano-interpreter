@@ -129,6 +129,51 @@ def test_sin_desajustes_las_tres_listas_quedan_vacias():
     assert not revision.sin_control
 
 
+# ------------------------------------------------ un selector sobre una variable numerica
+
+def test_una_opcion_numerica_fuera_del_rango_del_modelo_se_nombra():
+    """El hueco que abrio `CAPACIDAD_NOMINAL` al pasar de `numeric` a selector.
+
+    `incoherencias_del_catalogo` solo mira los knobs CATEGORICOS: compara la lista del
+    archivo contra las categorias que el codificador conoce. Una variable que el modelo
+    ve como NUMERO -- kVA, metros, fases -- no tiene categorias que comparar, asi que su
+    lista de valores no se contrastaba contra nada. Pedirle al modelo un valor que nunca
+    vio en el entrenamiento es extrapolar, y el panel no lo diria.
+    """
+    revision = cat.revisar(
+        [_knob("CAPACIDAD_NOMINAL", kind="numeric", bounds=(0.0, 400.0))],
+        {"CAPACIDAD_NOMINAL": _entrada("CAPACIDAD_NOMINAL", tipo="categorical",
+                                       opciones=("50", "300", "630"))})
+    assert revision.fuera_de_rango, "630 kVA esta fuera de lo que el modelo vio"
+    aviso = revision.fuera_de_rango[0]
+    assert "CAPACIDAD_NOMINAL" in aviso and "630" in aviso
+    assert "400" in aviso, "el aviso tiene que decir contra que rango se juzgo"
+
+
+def test_las_opciones_dentro_del_rango_no_avisan():
+    revision = cat.revisar(
+        [_knob("CAPACIDAD_NOMINAL", kind="numeric", bounds=(0.0, 400.0))],
+        {"CAPACIDAD_NOMINAL": _entrada("CAPACIDAD_NOMINAL", tipo="categorical",
+                                       opciones=("0.5", "50", "300"))})
+    assert revision.fuera_de_rango == []
+
+
+def test_un_selector_de_texto_no_se_juzga_por_rango():
+    """`CONDUCTOR` es categorico de verdad: sus opciones no son numeros y el rango no
+    significa nada. Lo suyo lo mira `incoherencias`."""
+    revision = cat.revisar(
+        [_knob("CONDUCTOR", kind="categorical", categories=("ACSR", "AAAC"))],
+        {"CONDUCTOR": _entrada("CONDUCTOR", tipo="categorical",
+                               opciones=("ACSR", "AAAC"))})
+    assert revision.fuera_de_rango == []
+
+
+def test_una_opcion_fuera_de_rango_sale_distinto_de_cero():
+    con_falla = cat.Revision(filas=[], incoherencias=[], sin_veredicto=[],
+                             sin_control=[], fuera_de_rango=["algo"])
+    assert cat.codigo_de_salida(con_falla) == 1
+
+
 # ------------------------------------------------------------------ lo que se imprime
 
 def test_el_informe_nombra_cada_control_y_su_veredicto():

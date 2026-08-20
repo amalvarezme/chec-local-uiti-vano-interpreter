@@ -189,14 +189,20 @@ def test_el_archivo_real_no_ofrece_ningun_deslizador_continuo_sobre_una_variable
         assert not catalogo[nombre].opciones, nombre
 
     # Con lista: selector, sea la lista de numeros o de texto.
+    #
+    # `CAPACIDAD_NOMINAL` entro aqui el 2026-08-19, y era una continua. El deslizador
+    # iba de 0 a 400 kVA y el diagnostico recomendaba **400,0 kVA ocho veces**: el tope
+    # del rango, que no es una capacidad de transformador que exista. Con la lista de
+    # las 16 capacidades reales pasa a recomendar 300 kVA, que si se puede pedir. Misma
+    # familia que "2,37 fases" y "media puesta a tierra".
     con_lista = ("ALTURA", "CANTIDAD_TIERRA", "CNT_FASES", "NG_RED", "LONG_CRUCETA",
-                 "CONDUCTOR", "TIPO", "TIPO_TAX", "CALIBRE_NEUTRO")
+                 "CONDUCTOR", "TIPO", "TIPO_TAX", "CALIBRE_NEUTRO", "CAPACIDAD_NOMINAL")
     for nombre in con_lista:
         assert catalogo[nombre].opciones, nombre
         assert catalogo[nombre].control == "selector", nombre
 
     # Continuas de verdad: el dato tiene decimales y no hay lista que lo cierre.
-    for nombre in ("CAPACIDAD_NOMINAL", "DDT", "LONGITUD", "PROMEDIO_KWH_VANO"):
+    for nombre in ("DDT", "LONGITUD", "PROMEDIO_KWH_VANO"):
         assert catalogo[nombre].control == "deslizador", nombre
 
 
@@ -557,10 +563,20 @@ def test_los_candidatos_del_diagnostico_salen_del_panel_y_no_del_dato_crudo():
     assert all(float(v).is_integer() for v in nr_t), nr_t
     assert min(nr_t) == 0.0 and max(nr_t) == 116.0
 
-    # Continua de verdad: rejilla sobre el rango del ARCHIVO.
+    # Continua de verdad: rejilla sobre el rango del ARCHIVO, no sobre el observado.
+    ddt = candidatos_del_panel(_knob("DDT", "numeric", bounds=(0.0, 9999.0)),
+                               catalogo["DDT"])
+    assert max(ddt) == pytest.approx(float(catalogo["DDT"].vmax)), (
+        "uso el rango observado y no el declarado")
+
+    # Numerica con lista cerrada: EXACTAMENTE la lista, no una rejilla sobre su rango.
+    # `CAPACIDAD_NOMINAL` era continua hasta el 2026-08-19 y el diagnostico proponia
+    # 400 kVA -- el tope del deslizador, un transformador que no existe.
     cap = candidatos_del_panel(_knob("CAPACIDAD_NOMINAL", "numeric", bounds=(0.0, 999.0)),
                               catalogo["CAPACIDAD_NOMINAL"])
-    assert max(cap) == pytest.approx(400.0), "uso el rango observado y no el declarado"
+    assert cap == list(catalogo["CAPACIDAD_NOMINAL"].valores_numericos), (
+        "un selector numerico tiene que proponer sus valores, no una rejilla")
+    assert 400.0 not in cap, "400 kVA no es una capacidad de transformador"
 
 
 def test_una_categorica_se_limita_a_lo_que_el_modelo_sabe_codificar():

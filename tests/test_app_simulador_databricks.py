@@ -255,3 +255,48 @@ def test_arranque_comprueba_el_tamanio_de_cada_pieza():
     fuente = (APP / "arranque.py").read_text("utf-8")
     assert 'meta["bytes"]' in fuente and "st_size" in fuente, (
         "arranque.py no compara el tamanio de lo que baja contra el manifiesto")
+
+
+# --------------------------------------------- el catalogo que la app lee en cada arranque
+
+def test_el_arranque_apunta_al_catalogo_de_simulacion_del_paquete():
+    """`Variables_simular.xlsx` NO se congela dentro del paquete como los demas objetos.
+
+    `preparar.py` lo copia como archivo suelto justo porque el tablero lo lee en CADA
+    arranque -- asi editarlo se nota sin reconstruir nada --, y quien tiene que decirle
+    donde esta es el lanzador, por la variable de entorno `RUTA_VARIABLES_SIMULAR`.
+
+    Sin ponerla, `ruta_variables_simular()` devuelve la ruta RELATIVA
+    `data/Variables_simular.xlsx`, que se resuelve contra el directorio de trabajo del
+    proceso. En el contenedor de Databricks ahi no hay ningun `data/`, asi que
+    `catalogo_simulacion()` levanta "el panel no sabe que ofrecer" apuntando a una ruta
+    que en ese contenedor no significa nada. La aplicacion local lo pone
+    (`06_simulador/app.py`); esta no lo ponia.
+    """
+    fuente = (RAIZ / "aplicaciones" / "databricks" / "simulador" / "arranque.py").read_text(
+        encoding="utf-8")
+    assert "RUTA_VARIABLES_SIMULAR" in fuente, (
+        "el lanzador de Databricks no apunta al catalogo de simulacion: el panel "
+        "arrancaria sin saber que variables ofrecer")
+    arbol = ast.parse(fuente)
+    asignaciones = [n for n in ast.walk(arbol)
+                    if isinstance(n, ast.Subscript)
+                    and isinstance(n.value, ast.Attribute)
+                    and n.value.attr == "environ"]
+    assert asignaciones, (
+        "`RUTA_VARIABLES_SIMULAR` se nombra pero no se escribe en `os.environ`; "
+        "`execvp` hereda el entorno del proceso, asi que ponerla ahi es lo que la hace "
+        "llegar a Voila")
+
+
+def test_el_catalogo_viaja_dentro_del_paquete_que_baja_la_app():
+    """La ruta que declara el lanzador tiene que ser la del paquete, no la del Volume:
+    `arranque.py` baja el paquete al disco local del contenedor precisamente porque el
+    montaje FUSE de `/Volumes` no esta garantizado (contrato D2)."""
+    fuente = (RAIZ / "aplicaciones" / "databricks" / "simulador" / "arranque.py").read_text(
+        encoding="utf-8")
+    linea = next((l for l in fuente.splitlines() if "RUTA_VARIABLES_SIMULAR" in l
+                  and "environ" in l), "")
+    assert "DESTINO" in linea, (
+        "la ruta del catalogo tiene que colgar de DESTINO -- la copia local del paquete "
+        f"--, no de VOLUMEN. Linea encontrada: {linea.strip()!r}")

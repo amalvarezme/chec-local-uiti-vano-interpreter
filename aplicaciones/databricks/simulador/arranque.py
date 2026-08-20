@@ -62,6 +62,26 @@ _megas = sum(m["bytes"] for m in manifiesto["archivos"].values()) / 1024 / 1024
 print(f"paquete listo en {time.perf_counter() - t0:.1f} s ({_megas:.1f} MB) "
       f"| construido {manifiesto['construido_en']}", flush=True)
 
+# El catalogo de variables simulables NO viaja congelado dentro del paquete como los
+# demas objetos: `preparar.py` lo copia como archivo suelto, justo para que editarlo se
+# note sin reconstruir nada. El precio de esa decision es que alguien tiene que decirle
+# al tablero DONDE quedo, y ese alguien es el lanzador.
+#
+# Sin esta linea, `ruta_variables_simular()` devuelve la ruta relativa
+# `data/Variables_simular.xlsx`, que se resuelve contra el directorio de trabajo del
+# proceso. En este contenedor no hay ningun `data/`: el panel arranca sin saber que
+# variables ofrecer y el error apunta a una ruta que aqui no significa nada. La
+# aplicacion local lo pone desde siempre (`aplicaciones/06_simulador/app.py`); esta se
+# quedo sin ponerlo.
+#
+# Cuelga de `DESTINO` -- la copia local del paquete -- y no del Volume, por lo mismo que
+# el resto: el montaje FUSE de `/Volumes` dentro del contenedor no esta garantizado
+# (contrato D2).
+#
+# `execvp` hereda el entorno del proceso, asi que escribirlo aqui es lo que lo hace
+# llegar a Voila y de ahi al kernel del tablero.
+os.environ["RUTA_VARIABLES_SIMULAR"] = str(DESTINO / "Variables_simular.xlsx")
+
 # `os.execvp` y no `subprocess.run`: Voila tiene que quedar como hijo DIRECTO del
 # proceso de la plataforma para que sus senales le lleguen, y un lanzador que se queda
 # vivo detras se las come y ademas deja una copia residente de si mismo.

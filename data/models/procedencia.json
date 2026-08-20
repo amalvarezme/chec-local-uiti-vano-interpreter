@@ -4,7 +4,7 @@
     "data/Indicadores_vano_v3.csv": "7d4efade8c78a6d364ed68e0228439693a533626bde8a247c5e6e0b4ab89d354",
     "data/Variables_seleccion.xlsx": "6f33abd0670eab6ba48690f225e3b87284c4aa19d235460d1c9cbc48692ff5a1",
     "src/chec_impacto/data/graph.py": "66df867f2232639a00661647969afa3cae6311b0276115d5b264c3a6a16c480d",
-    "data/Variables_simular.xlsx": "205617838434025abb8c19eb57dbbf1b2a001f6f41566f284e3c22481e56564d"
+    "data/Variables_simular.xlsx": "2c342136183e85ea0b6216ba9ff3b4723ca9f342003a7611388b7f23c255d7cf"
   },
   "derivados": {
     "data/derived/bolsas_mil_full.joblib": "8ed30a047793eb58fcfc8561d787cddcd088b6e4eaa87f90d9ac64de201c5156",

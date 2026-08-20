@@ -64,6 +64,7 @@ class Revision:
     incoherencias: list[str] = field(default_factory=list)
     sin_veredicto: list[str] = field(default_factory=list)
     sin_control: list[str] = field(default_factory=list)
+    fuera_de_rango: list[str] = field(default_factory=list)
 
     def como_dict(self) -> dict:
         return {
@@ -71,6 +72,7 @@ class Revision:
             "incoherencias": list(self.incoherencias),
             "sin_veredicto": list(self.sin_veredicto),
             "sin_control": list(self.sin_control),
+            "fuera_de_rango": list(self.fuera_de_rango),
         }
 
 
@@ -109,6 +111,28 @@ def revisar(knobs: Iterable[Any], catalogo: Mapping[str, Any]) -> Revision:
     # archivo la nombra justamente para dejar escrito que no se simula. Medido sobre
     # el archivo real: ocho filas caen ahi, y marcarlas serian ocho falsas alarmas
     # permanentes.
+    # Un selector sobre una variable que el modelo ve como NUMERO no tiene categorias
+    # que comparar, asi que `incoherencias_del_catalogo` lo deja pasar entero. Lo que si
+    # se puede juzgar es el rango: pedirle al modelo un valor que nunca vio es
+    # extrapolar, y el panel lo ofreceria sin decir nada. El hueco se abrio el
+    # 2026-08-19, cuando `CAPACIDAD_NOMINAL` paso de deslizador continuo a selector de
+    # 16 capacidades reales de transformador -- un cambio bueno, que nadie estaba
+    # comprobando.
+    for knob in knobs:
+        entrada = catalogo.get(knob.id)
+        if (entrada is None or knob.kind == "categorical" or not entrada.opciones
+                or not entrada.opciones_numericas or not knob.bounds):
+            continue
+        minimo, maximo = float(knob.bounds[0]), float(knob.bounds[1])
+        fuera = [v for v in entrada.valores_numericos if not minimo <= v <= maximo]
+        if fuera:
+            revision.fuera_de_rango.append(
+                f"{knob.id}: {len(fuera)} de {len(entrada.valores_numericos)} opciones "
+                f"caen fuera de lo que el modelo vio en el entrenamiento "
+                f"[{minimo:g}, {maximo:g}] -- {[f'{v:g}' for v in fuera[:4]]}"
+                f"{' ...' if len(fuera) > 4 else ''}. Simular ahi es extrapolar."
+            )
+
     conocidos = {knob.id for knob in knobs}
     revision.sin_control = [k for k, e in catalogo.items()
                             if k not in conocidos and e.veredicto in VEREDICTOS_OFRECIDOS]
@@ -136,6 +160,11 @@ def informe(revision: Revision) -> str:
         lineas.append(f"    {'':<24} {fila.veredicto}")
     lineas.append("")
 
+    if revision.fuera_de_rango:
+        lineas.append("  Opciones fuera del rango que el modelo vio -- simular ahi "
+                      "es extrapolar")
+        lineas += [f"    {aviso}" for aviso in revision.fuera_de_rango]
+        lineas.append("")
     if revision.incoherencias:
         lineas.append("  Opciones que el modelo NO sabe codificar -- no se ofrecen")
         lineas += [f"    {aviso}" for aviso in revision.incoherencias]
@@ -150,19 +179,24 @@ def informe(revision: Revision) -> str:
                       "modelo -- sobran o el modelo ya no las tiene")
         lineas += [f"    {knob_id}" for knob_id in revision.sin_control]
         lineas.append("")
-    if not (revision.incoherencias or revision.sin_veredicto or revision.sin_control):
+    if not (revision.incoherencias or revision.sin_veredicto or revision.sin_control
+            or revision.fuera_de_rango):
         lineas.append("  El archivo y el modelo se entienden: ningun desajuste.")
         lineas.append("")
     return "\n".join(lineas)
 
 
 def codigo_de_salida(revision: Revision) -> int:
-    """Solo las incoherencias son un fallo.
+    """Fallan los dos desajustes que producen un numero equivocado, no una ausencia.
+
+    Una opcion que el modelo no sabe codificar se cae de la lista en silencio; una que
+    cae fuera del rango entrenado se ofrece y se simula extrapolando. Los dos devuelven
+    un resultado que parece bueno y no lo es.
 
     Un knob sin veredicto y una fila de mas se reportan pero no rompen: el panel sigue
     funcionando sin ellos, y quien mantiene el archivo decide si sobran o faltan.
     """
-    return 1 if revision.incoherencias else 0
+    return 1 if (revision.incoherencias or revision.fuera_de_rango) else 0
 
 
 def main(argv: list[str] | None = None) -> int:
