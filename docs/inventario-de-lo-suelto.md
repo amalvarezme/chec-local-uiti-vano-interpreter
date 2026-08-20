@@ -90,7 +90,7 @@ confunda con el flujo ni los borre por error.
 | `public/` | 1 | 4 KB | Solo `.nojekyll` |
 | `Informe_Impacto_CHEC/` | 2 | 6 MB | El informe técnico en LaTeX y su PDF |
 | `evals/` | 8 | 88 KB | Arnés de evaluación de los agentes. `AGENTS.md:103` y `README.md:495` lo exigen antes de dar un cambio por terminado |
-| `graphify-out/` | 0 |  43 MB | El grafo de conocimiento. Ignorado por git a propósito |
+| `graphify-out/` | 293 | 48 MB | El grafo de conocimiento. **Se versiona desde el 2026-08-19**, y no entero: viajan el grafo (11 MB, que comprimen a 0,8) y la extracción semántica; se quedan fuera el caché de AST —12 MB que se rehacen en 30 s— y los respaldos fechados. Guarda: `tests/test_grafo_versionado.py` |
 
 `site/`, `dist/`, `lib/`, `public/` y `node_modules/` son **un solo plano**, no cinco cosas
 sueltas: la página web. Tiene su propio CI y su propio ciclo de vida. `flujo-detallado.md` la deja

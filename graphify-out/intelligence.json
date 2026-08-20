@@ -1,0 +1,36 @@
+{
+  "hotspots": [
+    {
+      "label": "render_llm_analysis()",
+      "risk": 0.83,
+      "type": "FUNCTION"
+    },
+    {
+      "label": "call_llm()",
+      "risk": 0.427,
+      "type": "FUNCTION"
+    },
+    {
+      "label": "plot_interactive_circuit_clustering()",
+      "risk": 0.422,
+      "type": "FUNCTION"
+    },
+    {
+      "label": "plot_interactive_uiti_vano_sums()",
+      "risk": 0.335,
+      "type": "FUNCTION"
+    },
+    {
+      "label": "plot_interactive_circuit_events()",
+      "risk": 0.332,
+      "type": "FUNCTION"
+    }
+  ],
+  "blast_radius": {
+    "MGCECDLRegressor": 41,
+    "MGCECDLClassifier": 41,
+    "resolve_column()": 12,
+    "crear_modelo_tabnet()": 11,
+    "resolve_training_device()": 10
+  }
+}

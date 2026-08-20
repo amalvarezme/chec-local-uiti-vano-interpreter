@@ -64,8 +64,29 @@ lib/
 .DS_Store
 **/.DS_Store
 
-# graphify knowledge graph outputs
-graphify-out/
+# graphify: el grafo de conocimiento SI se versiona, y no entero.
+#
+# Se versiona porque su mitad cara no se puede rehacer barata: la extraccion semantica
+# de los documentos, PDF e imagenes costo ~1.000.000 de tokens de LLM y vive en 36
+# archivos de `cache/` que suman 1,1 MB. Un clon nuevo sin ellos la pagaria otra vez.
+# El grafo construido pesa 11 MB pero COMPRIME a 0,8 MB -- medido, 14:1, porque es JSON
+# con las mismas claves repetidas --, asi que va por git normal y no por LFS: LFS le
+# cobraria cuota a un archivo que el pack resuelve solo.
+#
+# Lo que NO se versiona son las tres piezas que son puro ruido. Ojo: git NO admite
+# comentarios al final de una linea de patron, asi que cada uno va en la suya.
+#
+# 12 MB de cache de AST: se rehace en 30 s con `graphify update .` y cambia entero con
+# cada version del paquete.
+graphify-out/cache/ast/
+# Respaldos fechados que graphify escribe solo antes de cada reconstruccion.
+graphify-out/20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]/
+# Temporales de una corrida, y dos que ademas son de ESTA maquina: `.graphify_python`
+# guarda la ruta absoluta del interprete y `.graphify_root` la del arbol.
+graphify-out/.graphify_*
+# Los nombres de las comunidades si son estado del grafo, no un temporal.
+!graphify-out/.graphify_labels.json
+!graphify-out/.graphify_labels.json.sig
 outputs/graphify_workspace/
 
 # Claude Code local config and memory (agent, skill, and command definitions are tracked)

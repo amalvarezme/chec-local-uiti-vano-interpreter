@@ -1,0 +1,117 @@
+{
+  "projectName": "chec-local-uiti-vano-interpreter",
+  "communityLabels": {
+    "0": "Graph Explainers",
+    "1": "TabNet Model Management",
+    "2": "Community 2",
+    "3": "Community 3",
+    "4": "Community 4",
+    "5": "Community 5",
+    "6": "Community 6",
+    "7": "Community 7",
+    "8": "Community 8",
+    "9": "Community 9",
+    "10": "Community 10",
+    "11": "Community 11",
+    "12": "Community 12",
+    "13": "Community 13",
+    "14": "Model Training",
+    "15": "Community 15",
+    "16": "Community 16",
+    "17": "Community 17",
+    "18": "unknown"
+  },
+  "communitySummaries": {
+    "0": "Constructs directed weighted graphs of feature interactions, preserves connectivity, supports UI-based interpretability and comparative analysis in models such as TabNet and feature importance methods.",
+    "1": "This domain handles TabNet model creation, training, optimization, inference, and evaluation for tabular classification and regression tasks.",
+    "2": "",
+    "3": "",
+    "4": "",
+    "5": "",
+    "6": "",
+    "7": "",
+    "8": "",
+    "9": "",
+    "10": "",
+    "11": "",
+    "12": "",
+    "13": "",
+    "14": "Handles building, hyperparameter tuning, and saving/loading an M-GCECDL classification model.",
+    "15": "",
+    "16": "",
+    "17": "",
+    "18": "Unable to determine domain due to missing code entities."
+  },
+  "communityLinks": {
+    "4": {
+      "3": 1,
+      "8": 2
+    },
+    "3": {
+      "4": 2
+    },
+    "8": {
+      "3": 1,
+      "9": 1
+    },
+    "6": {
+      "1": 1,
+      "10": 7,
+      "11": 10,
+      "7": 9,
+      "13": 8,
+      "14": 9,
+      "16": 4,
+      "5": 1
+    },
+    "1": {
+      "12": 2,
+      "0": 2
+    },
+    "12": {},
+    "10": {
+      "11": 8,
+      "14": 6
+    },
+    "11": {
+      "7": 1,
+      "14": 6,
+      "5": 2
+    },
+    "7": {
+      "10": 5,
+      "14": 6,
+      "11": 6
+    },
+    "13": {
+      "16": 1,
+      "14": 4,
+      "11": 4,
+      "7": 4
+    },
+    "14": {
+      "11": 4,
+      "5": 2
+    },
+    "16": {
+      "13": 2,
+      "14": 4,
+      "11": 4
+    },
+    "5": {
+      "14": 3,
+      "11": 3,
+      "1": 1
+    },
+    "0": {
+      "12": 1,
+      "2": 1
+    },
+    "2": {
+      "4": 1,
+      "15": 1
+    },
+    "15": {},
+    "9": {}
+  }
+}
