@@ -25,7 +25,7 @@ Ese script corre con el **Python del sistema** y solo la biblioteca estandar, a
 proposito: es lo primero que se ejecuta en una maquina recien clonada, donde todavia no
 existe ningun entorno. Devuelve tres cosas:
 
-- `revisiones`: catorce comprobaciones con `estado` (`listo` / `falta` / `aviso`),
+- `revisiones`: dieciseis comprobaciones con `estado` (`listo` / `falta` / `aviso`),
   `detalle` y `arreglo` **para el sistema de esta maquina**;
 - `destinos`: un veredicto por cada uno de los tres, con lo que le falta a cada uno;
 - `sistema`: `macos`, `windows` u `otro`.
@@ -37,6 +37,18 @@ clon los declara el propio script — que es tambien de donde los lee
 y la que se desactualiza es siempre la copia.
 
 Muestrale al usuario el informe legible (el mismo script sin `--json`) antes de seguir.
+
+**Y si `runtime_vc` o `rutas_largas` salieron en `falta`, pidelas AQUI, antes de la
+pregunta del paso 1.** Las dos necesitan a quien administre la maquina, que puede tardar
+en aparecer, y ninguna depende de la respuesta: `runtime_vc` bloquea los tres destinos, y
+`rutas_largas` bloquea `06_simulador` se elija lo que se elija. El gate del paso 1 detiene
+las INSTALACIONES, que son gigabytes; no detiene una peticion que no descarga nada y que
+conviene tener en marcha mientras se decide el resto. Los comandos exactos, en el paso 2.
+
+**Pero no las pidas antes de diagnosticar.** El redistribuible de Visual C++ ya viene
+puesto en buena parte de las maquinas Windows -- lo instala medio catalogo de software --,
+y pedir una elevacion a ciegas gasta el favor del administrador en la mayoria que no la
+necesita. El diagnostico cuesta segundos y contesta por ESTA maquina.
 
 ## 1. Pregunta, una sola vez
 
@@ -52,16 +64,62 @@ Por defecto, los tres. Si un destino ya sale `listo`, dilo y no preguntes por el
 Y **para. Espera la respuesta.** Los pasos de abajo instalan gigabytes: no se empiezan
 por suposicion.
 
+El gate es para lo que descarga. Las dos peticiones de administrador ya salieron al final
+del paso 0 y no esperan aqui.
+
 ## 2. Lo que no puedes instalar tu
 
-Tres cosas necesitan a la persona delante, y las tres se piden con el prefijo `!` para
-que corran en esta sesion:
+Cinco cosas necesitan a la persona delante, y las cinco se piden con el prefijo `!`
+para que corran en esta sesion:
 
 | Que | Por que no puedes tu |
 |---|---|
 | **Python** por debajo del piso | instalarlo pide permisos de administrador y, en Windows, marcar *Add python.exe to PATH* en el instalador |
 | **`databricks auth login`** | abre el navegador y pide credenciales |
 | **Un puerto BLOQUEADO** | lo reserva el sistema (Hyper-V, WSL, Docker); lo levanta quien administra la maquina |
+| **El runtime de Visual C++** (solo Windows) | pide elevacion; sin el, `import torch` muere con `WinError 126` sobre `c10.dll` y pip no tiene nada que arreglar |
+| **`LongPathsEnabled`** (solo Windows) | escribe en `HKLM`, asi que pide elevacion; sin el, la instalacion del simulador aborta con `WinError 206` |
+
+Las dos ultimas son de Windows y NO son paquetes de pip, y las dos se disfrazan de otra
+cosa -- por eso las mira el diagnostico y no el ojo. Sin el runtime de Visual C++,
+`pip check` sale limpio, los paquetes estan todos y `torch` sigue sin cargar: reinstalar
+`requirements.txt` son 1,9 GB que dejan la maquina exactamente igual. Y con
+`LongPathsEnabled` en 0, la instalacion del simulador aborta a mitad y deja el `.venv`
+CREADO y a medias, que es justo el estado que un diagnostico perezoso da por bueno.
+
+Las dos son de quien administra la maquina, no tuyas ni del usuario, y conviene decirlo
+al pedirlas: si no hay administrador a mano, el destino `aplicaciones` se queda en cinco
+de seis y los otros dos no salen en absoluto.
+
+**Pero las dos no se piden igual, y la diferencia la decide quien dispara el UAC.**
+
+- **El runtime de Visual C++ LANZALO TU.** `winget install Microsoft.VCRedist.2015+.x64
+  --accept-package-agreements` arranca sin elevacion: es el instalador el que pide el
+  UAC por su cuenta -- dice `El instalador solicitara que se ejecute como administrador.
+  Espere una indicacion.` --, asi que basta con que haya alguien delante para aprobar el
+  dialogo. El usuario no escribe nada; solo mira la pantalla. Medido el 2026-08-20:
+  salio 0, y `runtime_vc` y `entorno_raiz` pasaron los dos a `listo` de una vez y sin
+  descargar un byte del `requirements.txt`.
+- **`LongPathsEnabled` NO.** Escribir en `HKLM` desde una consola sin elevar falla con
+  `Acceso denegado al Registro solicitado` y **no abre ningun dialogo**: no hay nada que
+  aprobar. Esa si tiene que correrla una consola que YA este elevada, o no corre.
+
+Asi que avisale que mire la pantalla y lanza el runtime tu mismo. Es el que bloquea los
+tres destinos, y es el unico de los cinco de esta tabla que puedes empujar sin esperar.
+
+**Solo `06_simulador` trae `torch`** -- miralo en su `requirements.txt` si dudas --, y la
+cola de 187 caracteres que desborda `MAX_PATH` son las licencias de terceros de `kineto`,
+que las pone `torch` y nadie mas. De ahi salen las dos cosas que SI puedes adelantar
+mientras se consigue al administrador:
+
+- los **cinco visores** no dependen de ninguna de las dos correcciones;
+- el **entorno de la raiz** tampoco depende de `LongPathsEnabled`: su cola es 26
+  caracteres mas corta -- los 26 de `aplicaciones\06_simulador\` --, y por eso
+  `METAS` en el diagnostico no lista `rutas_largas` bajo `cuaderno`.
+
+Asi que no te quedes esperando: pide las dos correcciones y, mientras llegan, instala el
+entorno de la raiz y los cinco visores. Lo unico que queda de verdad detenido es el
+simulador.
 
 Para cada una, dale el comando exacto del campo `arreglo`, que ya viene resuelto para su
 sistema, y explica en una linea que va a pasar. **Un puerto bloqueado no es un puerto
@@ -113,6 +171,16 @@ Si el diagnostico marco `red` en `falta`, **esto no va a funcionar y no va a fal
 rapido**: pip se queda reintentando. Pon primero la variable de proxy que dice el
 `arreglo`, y recuerda que en Windows hay que abrir una consola NUEVA despues de `setx`.
 
+**Dos `falta` distintos, dos respuestas distintas.** El `arreglo` que da el diagnostico es
+el mismo para los dos, asi que lee el `detalle` antes de aplicarlo:
+
+- *no existe* -- instalalo con el comando de arriba;
+- *existe pero no importa `torch`* -- **no reinstales**. Los paquetes estan todos y
+  correctos; lo que falta es el runtime de Visual C++, que es del sistema y no de pip. Esa
+  revision pasa sola en cuanto entre el redistribuible, sin bajar nada. Reinstalar aqui
+  son 1,9 GB que dejan la maquina exactamente igual -- el desperdicio que advierte el
+  paso 2.
+
 ## 5. Los seis entornos de las aplicaciones
 
 Uno por aplicacion, y es a proposito: el visor de tableros no necesita `torch` y el
@@ -124,10 +192,44 @@ Se hace con el lanzador de cada aplicacion, que es lo mismo que hara el usuario 
 - **macOS**: doble clic en `aplicaciones/<app>/instalar-en-terminal.command`
 - **Windows**: doble clic en `aplicaciones/<app>/instalar.bat`
 
-Desde la terminal, para las seis de una:
+**Si `rutas_largas` salio en `falta`, instala CINCO y deja `06_simulador` para despues.**
+Es la unica que trae `torch`, asi que es la unica que desborda `MAX_PATH`: lanzarla ahora
+aborta con `WinError 206` y deja su `.venv` creado y a medias -- exactamente el estado que
+advierte el paso 2. Los cinco visores entran sin tocar el registro. Vuelve por el
+simulador cuando el administrador ponga `LongPathsEnabled` y se reinicie la sesion.
+
+Desde la terminal, una por una y con su codigo de salida a la vista -- quita
+`06_simulador` de la lista si todavia falta `rutas_largas`:
+
 ```
-for d in aplicaciones/0*/; do python3 aplicaciones/_comun/gestor.py instalar --app "$d"; done
+# macOS; en Windows, lo mismo con `py -3` desde git-bash
+for d in 00_criticidad_chec 01_clima 02_agrupamiento_vanos 03_trayectorias_circuitos 04_trayectorias_vanos 06_simulador; do
+  python3 aplicaciones/_comun/gestor.py instalar --app "aplicaciones/$d"
+  echo "===== $d SALIO CON $? ====="
+done
 ```
+
+```
+# Windows, desde PowerShell
+foreach ($d in '00_criticidad_chec','01_clima','02_agrupamiento_vanos','03_trayectorias_circuitos','04_trayectorias_vanos') {
+  py -3 aplicaciones\_comun\gestor.py instalar --app "aplicaciones\$d"
+  "===== $d SALIO CON $LASTEXITCODE ====="
+}
+```
+
+Despues, un `grep "SALIO CON"` sobre la salida da una linea por aplicacion y te ahorra
+leer las miles de pip. **No uses `for d in aplicaciones/0*/` a secas**: no para cuando una
+falla, su codigo de salida es solo el de la ultima, y el mensaje de la que aborto se va
+scroll arriba. Y ni con los codigos en 0 des las seis por buenas sin volver a
+diagnosticar, que ahora comprueba el `requirements.txt` de cada aplicacion y no solo que
+la carpeta exista.
+
+**Si una quedo a medias, no la reinstales encima: rehazla.** `gestor.py instalar --recrear
+--app <carpeta>` borra el entorno y lo vuelve a crear desde cero. Correr `instalar` a
+secas sobre un `.venv` a medias suele bastar -- pip completa lo que falte --, pero si lo
+que quedo corto fue el entorno mismo, que es el caso del `WinError 206`, pip no tiene
+donde instalar y el fallo se repite identico. Ante la duda, `--recrear`: cuesta una
+descarga que ya esta en la cache de pip.
 
 `gestor.py` tambien corre con el Python del sistema — es quien CREA los entornos, asi que
 no puede vivir dentro de uno. Antes de lanzar pip comprueba que haya salida a PyPI, para
@@ -147,6 +249,10 @@ El diagnostico no se conforma con que exista: comprueba que
 `databricks apps create --help` acepte `--compute-size`. Una CLI vieja llega hasta la
 etapa 4 de `/subir-a-databricks` y muere ahi con un error de argumentos.
 
+**En Windows `winget` la deja en el PATH de USUARIO, y la consola actual no lo relee.**
+Hasta abrir una consola nueva el diagnostico no la encuentra, y el paso 7 reportaria como
+ausente lo que se acaba de instalar. Es la misma trampa que el `setx` del paso 4.
+
 La sesion la abre el usuario, con el prefijo `!`:
 ```
 databricks auth login --host <URL del workspace>
@@ -165,6 +271,9 @@ Un perfil con `valid: false` es un token vencido, no una configuracion rota: el 
 python3 scripts/diagnostico_local.py
 ```
 
+**Desde una consola nueva** si acabas de instalar algo con `winget` o `brew`, o leeras un
+PATH viejo y te creeras un `falta` que ya no existe.
+
 Sale **0** si los tres destinos quedaron listos, **1** si a alguno le falta algo. Reporta:
 
 - que se instalo y que ya estaba;
@@ -173,6 +282,10 @@ Sale **0** si los tres destinos quedaron listos, **1** si a alguno le falta algo
   quien administra la maquina (un puerto reservado);
 - los avisos, que no tumban nada pero conviene leer: RAM justa, disco justo, un puerto
   ocupado por algo que ya esta abierto.
+
+**`falta` no es lo mismo que roto.** Un `.venv` que existe y solo falla el `import torch`
+esta completo: lo que falta es el runtime de Visual C++. Dilo asi al reportar, porque la
+diferencia es si al usuario le quedan cinco minutos de administrador o 1,9 GB de descarga.
 
 **Que el diagnostico salga 0 no es lo mismo que haber abierto un tablero.** Si el destino
 era las aplicaciones, cierra sugiriendo el doble clic en

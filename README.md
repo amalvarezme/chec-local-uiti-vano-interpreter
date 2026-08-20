@@ -148,6 +148,39 @@ Y antes de nada, `git lfs pull`: sin él, el CSV de 566 MB y las bolsas de 199 M
 como punteros de 134 bytes que **existen** y no sirven. El diagnóstico lo comprueba por
 contenido, no por presencia.
 
+### En Windows, dos cosas del sistema que no son paquetes de pip
+
+Las dos piden permisos de administrador, las dos se disfrazan de un problema de pip, y
+por eso las mira el diagnóstico y no el ojo. Si te toca pedirlas prestadas, pídelas al
+empezar: llegan tarde más veces que rápido, y mientras tanto el resto sí avanza.
+
+**El runtime de Visual C++.** `torch` lo carga al importar. Sin él, `import torch` muere
+con `WinError 126` sobre `c10.dll` en un entorno donde `pip check` sale limpio y los
+paquetes están **todos**. Reinstalar `requirements.txt` ahí son 1,9 GB que dejan la
+máquina exactamente igual:
+
+```powershell
+winget install Microsoft.VCRedist.2015+.x64 --accept-package-agreements
+```
+
+**`LongPathsEnabled`.** Windows no deja *crear* un directorio que pase de `MAX_PATH` − 12
+= 248 caracteres. La instalación de `06_simulador` —la única de las seis que trae
+`torch`— llega a `len(raíz) + 187`, donde los 187 son las licencias de terceros de
+`kineto` que `torch` anida nueve niveles. Si no cabe, aborta con `WinError 206` y deja el
+`.venv` **creado y a medias**, que es justo el estado que un diagnóstico perezoso da por
+bueno:
+
+```powershell
+# como administrador; después, reiniciar la sesión
+Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name LongPathsEnabled -Value 1 -Type DWord
+```
+
+Esta segunda depende de **dónde clonaste**: la raíz tiene que caber en 61 caracteres.
+`C:\CHEC\chec-local-uiti-vano-interpreter` deja 21 de holgura y no necesita el registro;
+`C:\Users\<usuario>\Desktop\CHEC\chec-local-uiti-vano-interpreter` se pasa por cuatro.
+Clonar más arriba es la alternativa si no hay administrador a mano. El diagnóstico da la
+cuenta, no sólo el veredicto.
+
 ## Configuración
 
 ```bash
