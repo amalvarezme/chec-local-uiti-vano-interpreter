@@ -174,8 +174,8 @@
     "semantic_hash": "e4c956f8207a4c4f2aac26576d4562bb"
   },
   "src/chec_impacto/interpretability/__init__.py": {
-    "mtime": 1787185584.23487,
-    "seen": 1787186112.963917,
+    "mtime": 1787186249.873771,
+    "seen": 1787190410.861844,
     "ast_hash": "f5aa2db75a90c93830cca3cd8f52ee67",
     "semantic_hash": ""
   },
@@ -186,8 +186,8 @@
     "semantic_hash": "54ea90cbdfd30048f91f22b526422a05"
   },
   "src/chec_impacto/models/__init__.py": {
-    "mtime": 1787185584.2351885,
-    "seen": 1787186112.964003,
+    "mtime": 1787186249.873875,
+    "seen": 1787190410.861923,
     "ast_hash": "c3f9dba659b16dd453a35454ddf3fad5",
     "semantic_hash": ""
   },
@@ -960,8 +960,8 @@
     "semantic_hash": "65a18d75632fe6646168e947d7a5a121"
   },
   "requirements.txt": {
-    "mtime": 1787185597.9300947,
-    "seen": 1787186112.970387,
+    "mtime": 1787186249.8736553,
+    "seen": 1787190410.8681002,
     "ast_hash": "68a2d2839f338000af99a353405bc4a2",
     "semantic_hash": ""
   },
@@ -2136,10 +2136,10 @@
     "semantic_hash": "946348e3433752e3475bbe0565e24c67"
   },
   "tests/test_variables_simular.py": {
-    "mtime": 1787009988.8150284,
-    "seen": 1787172642.339115,
-    "ast_hash": "f9a0b4392f1d8dcd2f6db985ccd6650b",
-    "semantic_hash": "f9a0b4392f1d8dcd2f6db985ccd6650b"
+    "mtime": 1787190404.0274076,
+    "seen": 1787190410.865702,
+    "ast_hash": "95f6353ad3ea90e064af815118cba6e7",
+    "semantic_hash": ""
   },
   "tests/test_ventanas_015.py": {
     "mtime": 1787105830.4365149,
@@ -2418,8 +2418,8 @@
     "semantic_hash": "458bd6a9440397ef8306c0e27c89038d"
   },
   "tests/test_costo_de_arranque.py": {
-    "mtime": 1787185643.052766,
-    "seen": 1787186112.9658859,
+    "mtime": 1787186249.8740375,
+    "seen": 1787190410.8637319,
     "ast_hash": "122385bcb8b8faf86af0ea0e4cf4b011",
     "semantic_hash": ""
   },
@@ -2682,10 +2682,10 @@
     "semantic_hash": "9f7fb520174ddf35eaffffe5a6479676"
   },
   "aplicaciones/databricks/simulador/arranque.py": {
-    "mtime": 1787170141.1865232,
-    "seen": 1787172642.339015,
-    "ast_hash": "19641c31b070abe95853c969436a4fe8",
-    "semantic_hash": "19641c31b070abe95853c969436a4fe8"
+    "mtime": 1787190404.0257223,
+    "seen": 1787190410.8612852,
+    "ast_hash": "8b2232c389497cb386ecc976528d20f7",
+    "semantic_hash": ""
   },
   "opencode.json": {
     "mtime": 1787105674.5561936,
@@ -2706,10 +2706,10 @@
     "semantic_hash": ""
   },
   "tests/test_app_simulador_databricks.py": {
-    "mtime": 1787170141.1879063,
-    "seen": 1787172642.3390641,
-    "ast_hash": "43d0b8230fa06a2356b3c46da8270296",
-    "semantic_hash": "43d0b8230fa06a2356b3c46da8270296"
+    "mtime": 1787190404.0268574,
+    "seen": 1787190410.8634398,
+    "ast_hash": "0087ea349b3160cc1ee5f37ebc18e10c",
+    "semantic_hash": ""
   },
   "tests/test_clon_limpio.py": {
     "mtime": 1787173161.7884078,
@@ -3000,15 +3000,15 @@
     "semantic_hash": "e92a3fb8d0ed0e851aa55b5543f8ece4"
   },
   "aplicaciones/databricks/simulador/requirements.txt": {
-    "mtime": 1787185610.064395,
-    "seen": 1787186112.9699252,
+    "mtime": 1787186249.8733692,
+    "seen": 1787190410.867671,
     "ast_hash": "31b61038f2c7687e50a06b514b71262b",
     "semantic_hash": ""
   },
   "docs/inventario-de-lo-suelto.md": {
-    "mtime": 1787185889.7398458,
-    "seen": 1787186112.9700449,
-    "ast_hash": "2b954bc3da1768e7cca02ada4d878835",
+    "mtime": 1787186788.3258312,
+    "seen": 1787190410.8677819,
+    "ast_hash": "114c48be03f6ebad1ccbac01dbb52d89",
     "semantic_hash": ""
   },
   "docs/portabilidad-agentes.md": {
@@ -3060,9 +3060,9 @@
     "semantic_hash": "bd01d71b0c0d816b4a3e89fec9434bdd"
   },
   "scripts/catalogo_simulacion.py": {
-    "mtime": 1787183677.3283079,
-    "seen": 1787183747.988727,
-    "ast_hash": "c3e2bbcd7dfeac92b935acfb9cdf5c11",
+    "mtime": 1787190404.026462,
+    "seen": 1787190410.861391,
+    "ast_hash": "8a125324440efcce18c3609cb23f220d",
     "semantic_hash": ""
   },
   "scripts/estado_actualizacion.py": {
@@ -3078,9 +3078,9 @@
     "semantic_hash": ""
   },
   "tests/test_catalogo_simulacion.py": {
-    "mtime": 1787183677.3289256,
-    "seen": 1787183747.990908,
-    "ast_hash": "dd545ac6e0c1069fa8c51be5ce7d82ed",
+    "mtime": 1787190404.0271108,
+    "seen": 1787190410.863554,
+    "ast_hash": "a1d94af57c8e519c1aa051ac898b622a",
     "semantic_hash": ""
   },
   "tests/test_estado_actualizacion.py": {
@@ -3108,9 +3108,15 @@
     "semantic_hash": ""
   },
   "tests/test_mgcecdl_clasificacion_retirada.py": {
-    "mtime": 1787185853.109317,
-    "seen": 1787186112.966597,
+    "mtime": 1787186249.874178,
+    "seen": 1787190410.8644311,
     "ast_hash": "2d236bc910fad9fbc49b03c526011206",
+    "semantic_hash": ""
+  },
+  "tests/test_grafo_versionado.py": {
+    "mtime": 1787186788.3639379,
+    "seen": 1787190410.864105,
+    "ast_hash": "a6f009fb2eb4c0c19226ff799c422944",
     "semantic_hash": ""
   }
 }

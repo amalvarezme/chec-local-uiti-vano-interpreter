@@ -1,16 +1,16 @@
 # Graph Report - chec-local-uiti-vano-interpreter  (2026-08-19)
 
 ## Corpus Check
-- 458 files · ~1,673,718 words
+- 459 files · ~1,675,396 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 9951 nodes · 16983 edges · 758 communities (430 shown, 328 thin omitted)
+- 9975 nodes · 17013 edges · 754 communities (416 shown, 338 thin omitted)
 - Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 619 edges (avg confidence: 0.88)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `e69ff226`
+- Built from commit: `3c9cde7c`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -20,29 +20,29 @@
 - ReportPipelineError
 - intervention_graph.py
 - Path
-- codificar_cod_causa
+- test_mil_bags.py
 - test_mgcecdl_graph_gates.py
 - test_project_flow_web_panels.py
 - test_simulador_variables.py
 - test_mil_simulador_015.py
 - test_ortografia.py
 - catalogo_simulacion
-- _sample_payload
+- test_agent_tools_batch.py
 - vano_controls.py
-- test_mgcecdl_graph_interpretability.py
+- test_mil_inferencia.py
 - informe_gerencial_contract.py
 - Captura: resultados del Simulador ¿Que pasa si...?
 - test_plotting_inference_layout.py
 - test_relevancias_015.py
-- tablero.py
+- desajuste_bolsas_vs_tabla
 - test_ventanas_015.py
 - test_app_simulador_databricks.py
 - exportar_geometria
-- test_simulador_por_vano.py
-- load_dataset
-- test_criticality_assignment.py
-- test_portabilidad_agentes.py
 - mil_simulador_015.py
+- load_dataset
+- Geometria
+- test_portabilidad_agentes.py
+- test_mil_contraste_u.py
 - test_menu_diagrama_y_titulo.py
 - test_report_pipeline.py
 - test_generate_notebook_10.py
@@ -53,21 +53,21 @@
 - test_relevancia_hacia_bajo.py
 - test_vano_app_015.py
 - test_mil_validation.py
-- _resolve_token_usage
+- vault_note_contract.py
 - test_mgcecdl_mil.py
 - mil_inferencia.py
-- simulador_variables.py
+- top_vanos_de_ventana
 - test_estado_actualizacion.py
-- simulator.py
-- assemble_skill_bundle
+- ValueError
+- config.py
 - test_despliegue_databricks_contract.py
-- test_mil_inferencia.py
+- _recursos
 - test_puerto_bloqueado.py
 - base_bundle.md
 - base_render_prompt.md
 - historical_build_context_basic.md
 - historical_build_context_gaps.md
-- build_context
+- inference.py
 - report_pipeline.py
 - test_glosario_en_prosa.py
 - test_informe_gerencial_contract.py
@@ -86,18 +86,18 @@
 - construir_selector_casillas
 - construir_selector_vanos
 - test_agent_tools_expert_alignment.py
-- construir_ventanas
+- test_context_builder.py
 - revisar_anclaje
 - test_barras_uiti.py
 - test_app_criticidad_chec.py
 - test_terminal_nueva.py
 - test_mil_fusion_film.py
 - 06 — Simulador de riesgo por vano
-- dispatch
+- agent_tools/expert_alignment.py
 - Dos poblaciones de vanos: los que más fallan no son los que más impacto aportan
 - test_gerencial_por_ventana.py
 - test_clima_mapa_y_violines.py
-- test_tableros_dos_columnas.py
+- fuente_de_tablero
 - 04 - Reglas de Conectividad de Grafos
 - Modelo MIL por bolsas del cuaderno 05 (111.233 bolsas, 288.632 instancias, 80 variables)
 - cargar_modelo_mil
@@ -108,27 +108,27 @@
 - batch_report_contract.py
 - validar_provenance_expert_alignment
 - test_simulador_rejilla_paneles.py
-- rotulo_en_barra
+- catalogo_de_controles
 - test_diagnostico_local.py
 - test_mil_fusion_modalidades.py
 - test_relevancia_por_vano.py
 - construccion.py
-- Aplicacion
+- menu.py
 - AST
-- historical.py
+- test_agent_tools_historical.py
 - llm_validation.py
 - test_windows_aplicaciones.py
-- interpretability/mgcecdl_graph.py
+- test_mgcecdl_graph_interpretability.py
 - test_llm_validation.py
 - test_agrupamiento_disposicion.py
 - test_bitacora_despliegue.py
 - test_instalar_local_contract.py
-- training/mgcecdl.py
+- test_grafo_versionado.py
 - test_cerrar_todo_sin_rastro.py
 - test_salida_para_pip.py
 - 01 · DATOS — Datos de entrada
-- construir_ranking_borda
-- Any
+- mil_vano_ventana.py
+- main
 - pdf_discussion_pipeline.py
 - Navegador
 - _etapa
@@ -142,10 +142,10 @@
 - test_trayectorias_vanos_panel.py
 - La arquitectura de 4 capas (L1 Python / L2 CLI / L3 agente / L4 lote)
 - Agents Guide
-- catalogo_simulacion.py
-- circuit_identity.py
+- ConfigAPI
+- canonical_circuit_identity
 - costos_de_intervencion
-- vano_widgets.py
+- test_figura_relayout.py
 - test_menu_apagado.py
 - test_menu_portada.py
 - _render_con_mapas
@@ -158,40 +158,40 @@
 - test_catalogo_controles.py
 - terminal.py
 - flujo-detallado.md
-- record_stage_timing
+- assemble_discussion_xlsx
 - models/mgcecdl.py
 - sample_representatives
-- derivacion.py
+- construir_ventanas
 - _comun
 - parametrize
 - test_mgcecdl_regression_loss.py
 - test_tableros_migrados.py
 - entorno.py
 - Funcion de costo de seis terminos
-- is_candidate_section
+- test_pdf_discussion_pipeline.py
 - plotting.py
 - properties
 - test_simulador_aviso_sin_kernel.py
 - test_simulador_dos_columnas.py
 - test_simulador_grafo_abajo.py
 - Flujo detallado del proyecto — CHEC UITI_VANO Interpreter
-- RSA23L12
+- NR_T — riesgo por vegetación cercana al vano
 - Rendimiento y requisitos de las aplicaciones
 - CHA23L14
 - circuit_analysis.py
-- data/__init__.py
+- _celda_del_dispositivo
 - test_plotting.py
 - test_aplicaciones_locales.py
 - test_vano_widgets.py
-- ndarray
-- test_agent_tools_batch.py
+- MarkdownSection
+- layout_clima_b
 - test_prompt_relocation_characterization.py
 - 05 - Validador de Salida del LLM CHEC
 - LimitadorPersistente
 - package.json
-- bags.py
+- crear_cliente
 - circuit_clustering_contract.py
-- test_mil_bags.py
+- _no_real_mgcecdl_model_by_default
 - seleccionar_reporte_previo_mas_reciente
 - test_trayectorias_circuitos_apilado.py
 - parametrize
@@ -199,9 +199,9 @@
 - test_costo_de_arranque.py
 - test_costos_items.py
 - test_provenance_characterization.py
-- agent_tools/expert_alignment.py
+- hay_con_que_correr
 - Agent Rules — Invariants
-- ValueError
+- empaquetar.py
 - 03 - Explicador del Comportamiento de `UITI_VANO`
 - Analizador de AST del grafo de importaciones
 - scripts/portabilidad_agentes.py (generar / verificar)
@@ -211,9 +211,9 @@
 - Captura del tablero Trayectorias de circuitos
 - Tablero Trayectorias de vanos (captura)
 - desglose_por_clase
-- _valid_response
+- test_la_etapa_4c_prepara_su_fuente_con_el_empacador
 - test_expert_alignment.py
-- inference.py
+- inference_validation.py
 - properties
 - 05 - Validador de Salida del LLM CHEC
 - 05 - Validador de Salida del LLM CHEC
@@ -231,7 +231,7 @@
 - datos_grafo_radial
 - pdf_to_markdown
 - properties
-- DataFrame
+- test_selector_vanos_exposes_a_value_trait_and_one_checkbox_per_vano
 - 05 - Validador de Salida del LLM CHEC
 - commands/actualizar.md
 - required
@@ -246,15 +246,15 @@
 - leer_catalogo_costos
 - mil_figuras.py
 - resumen_variables_por_grupo
-- test_inference_validation.py
-- fuente_de_tablero
+- test_selector_stops_accepting_ticks_once_the_cap_is_reached
+- _arbol
 - test_informe_estilo_compartido.py
 - test_menu_no_espera_a_un_muerto.py
 - test_sin_shap.py
 - test_trayectorias_circuitos_encuadre.py
 - CHEC Local UITI_VANO Interpreter
 - preparar.py
-- menu_pagina.py
+- paleta.py
 - criticidad_chec/app.py
 - es_codigo
 - HER23L16
@@ -264,7 +264,7 @@
 - tabla_variables
 - test_mgcecdl_regressor.py
 - Related artifacts
-- test_pdf_discussion_pipeline.py
+- prepare_pdf_discussion_batch
 - type
 - enum
 - test_tableros_tras_inactividad.py
@@ -274,10 +274,10 @@
 - 2. Agrupación Lógica: Modos de las Variables de Entrada
 - /report (orquestador de un circuito, nueve pasos)
 - split_markdown_sections
-- grafo_reconstruido_por_grupo
-- _invalid_response
+- test_without_a_cap_nothing_changes_for_the_other_notebooks
+- test_repopulating_clears_the_selection_and_re_enables_every_checkbox
 - contexto
-- test_batch_pipeline_integration_prepare_validate_assemble
+- test_the_flat_option_list_keeps_working_for_the_vano_selector
 - circuit_characterization
 - required
 - test_mgcecdl_clasificacion_retirada.py
@@ -302,11 +302,11 @@
 - 02 — Agrupamiento de vanos por UITI acumulado
 - huellas.py
 - inference/SKILL.md
-- main
+- historical.py
 - Diccionario operativo de nodos
 - afinidad_entre_grafos
 - _etapa_de_datos
-- estabilidad_por_submuestreo
+- test_a_manual_tick_after_setting_value_does_not_wipe_the_selection
 - 04 - Reglas de Conectividad de Grafos
 - 04 - Reglas de Conectividad de Grafos
 - 04 - Reglas de Conectividad de Grafos
@@ -328,8 +328,8 @@
 - Agente de IA (asistente que redacta bajo validación)
 - empacar_app_databricks.py
 - app-local-criticidadCHEC -- VS Code Copilot mirror
-- informe_estilo.py
-- config.py
+- nombre_con_codigo
+- test_setting_value_drops_keys_the_selector_does_not_have
 - compactar_grafo_del_escenario
 - expert-alignment -- VS Code Copilot mirror
 - historical -- VS Code Copilot mirror
@@ -339,7 +339,7 @@
 - 03 — Trayectoria y agrupamiento de circuitos
 - app-local-criticidadCHEC.md
 - 02 - Intérprete de Escenarios por Ventana
-- anidamiento_entre_particiones
+- test_clearing_value_unticks_everything
 - instalar-local -- VS Code Copilot mirror
 - CatalogoCostos
 - actualizar -- OpenCode mirror
@@ -359,7 +359,7 @@
 - 01 - Constructor de Contexto Estructurado CHEC
 - Reglas de redacción en español para este repositorio
 - Aristas expertas principales
-- split_cronologico_p70
+- test_the_checkbox_list_hangs_a_tooltip_on_each_key_that_has_one
 - expert-alignment -- VS Code Copilot mirror
 - pdf-discussion-extraction -- VS Code Copilot mirror
 - type
@@ -389,7 +389,7 @@
 - inference_build_context_multi_scenario.md
 - 01 - Constructor de Contexto Estructurado CHEC
 - 01 - Constructor de Contexto Estructurado CHEC
-- TestCompactPdfMatchesCarriesProvenance
+- _compact_pdf_matches
 - catalogo_falso
 - reparar_texto
 - properties
@@ -402,19 +402,19 @@
 - clima/SKILL.md
 - pdf-discussion-extraction/SKILL.md
 - Resumen histórico
+- ENE23L15
 - Resumen histórico
-- Resumen histórico
-- Resumen histórico
+- INS23L13
 - VBO23L15
 - export_latest_interpretability_report
 - test_errores_de_tilde_ignora_las_CLAVES_solo_mira_los_valores
 - Simulador
 - inference_bundle.md
-- test_artifacts_isolation.py
+- test_without_info_the_list_keeps_its_plain_checkbox_layout
 - _archivos_que_el_comando_sube
-- _html_con_justificaciones
+- test_repopulating_closes_the_widgets_it_replaces
 - test_los_tres_validadores_rechazan_la_prosa_sin_tilde
-- menu.py
+- menu_pagina.py
 - agents-guide.md
 - test_selector_vanos_exposes_its_inner_box_as_a_public_attribute
 - Inference/MIL Agent Role
@@ -442,7 +442,6 @@
 - test_agent_tools_restricted.py
 - _ids
 - 02_agrupamiento_vanos/Iniciar.app/Contents/Resources/ventana
-- TestCompactPdfMatchesScoreBasedTruncation
 - Despacho paralelo obligatorio de historical e inference
 - `aplicaciones/databricks/` — lo que corre en el servidor, no aquí
 - Explicador del Comportamiento de `UITI_VANO`
@@ -510,7 +509,6 @@
 - test_the_empty_group_notice_dies_with_its_window
 - test_the_diagnostic_and_its_apply_buttons_cover_every_marked_vano
 - test_a_capped_diagnostic_says_how_many_vanos_it_left_out
-- test_setting_value_ticks_the_checkboxes
 - test_a_new_diagnosis_forgets_which_halves_were_applied
 - test_the_figure_survives_dragging_a_map
 - test_the_window_slider_opens_on_the_most_recent_window
@@ -521,10 +519,8 @@
 - test_no_axis_of_the_dashboard_is_logarithmic
 - test_the_circular_graph_keeps_its_aspect_at_any_screen_width
 - test_the_node_labels_are_rotated_annotations_and_not_trace_text
-- test_repopulating_without_conservar_keeps_dropping_the_selection
 - test_the_bars_headline_carries_the_models_own_offset
 - test_setting_value_follows_the_option_order_and_not_the_given_order
-- test_repopulating_while_keeping_the_selection_emits_one_value_event_at_most
 - Allowed Citable Universe (dates, cp-ids, features, ventanas)
 - The Unit Is The Bag, Not The Row
 - build-context verb (inference CLI)
@@ -750,7 +746,7 @@
 - El destino se pregunta en CADA corrida, no se deduce del perfil con sesión vigente
 - plotly>=6.8 (las apps estáticas FIJAN 6.9.0)
 - pyarrow>=24.0 — lectura por bloques del CSV de 540 MB
-- test_agent_tools_atomic_io.py
+- atomic_write_text
 - TabNetClassifier
 - TabNetRegressor
 - Playbook 01_structured_context_builder (base)
@@ -782,16 +778,16 @@
 10. `prepare_expert_alignment()` - 34 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `Anclaje del manifiesto de graphify (encadenar desde la raiz del proyecto)` --semantically_similar_to--> `CSV nuevo con bolsas viejas`  [INFERRED] [semantically similar]
-  docs/flujo-detallado.md → aplicaciones/DATOS-Y-ACTUALIZACIONES.md
 - `Ocho paquetes retirados, nombrados para que nadie los reponga por reflejo` --semantically_similar_to--> `Analizador de AST del grafo de importaciones`  [INFERRED] [semantically similar]
   requirements.txt → docs/inventario-de-lo-suelto.md
+- `Anclaje del manifiesto de graphify (encadenar desde la raiz del proyecto)` --semantically_similar_to--> `CSV nuevo con bolsas viejas`  [INFERRED] [semantically similar]
+  docs/flujo-detallado.md → aplicaciones/DATOS-Y-ACTUALIZACIONES.md
 - `pdf-discussion-extraction (OpenCode command mirror)` --semantically_similar_to--> `pdf-discussion-extraction (VS Code Copilot prompt mirror)`  [INFERRED] [semantically similar]
   .opencode/command/pdf-discussion-extraction.md → .github/prompts/pdf-discussion-extraction.prompt.md
-- `test_cada_regla_del_dominio_se_nombra_en_castellano()` --calls--> `domain_context_payload()`  [INFERRED]
-  tests/test_glosario_variables.py → src/chec_local_interpreter/domain_context.py
 - `test_sin_ventanas_la_seccion_no_aparece()` --calls--> `_ventanas_html()`  [INFERRED]
   tests/test_gerencial_por_ventana.py → src/chec_local_interpreter/informe_gerencial_contract.py
+- `test_knob_is_frozen_dataclass_instance()` --uses--> `Knob`  [INFERRED]
+  tests/test_vano_controls.py → src/chec_local_interpreter/vano_controls.py
 
 ## Import Cycles
 - None detected.
@@ -814,47 +810,47 @@
 - **Measurement honesty: name what ran, never infer a default or let a skip read as a pass** — _github_prompts_report_prompt_measured_usage, _github_prompts_report_prompt_model_attribution, _github_workflows_windows_deselects_nombrados [INFERRED 0.75]
 - **La estructura compartida de las 14 notas de bóveda por circuito** — reports_vault_aza23l15_percentil_97, reports_vault_aza23l15_traslape_de_ventanas, reports_vault_aza23l15_modelo_mil_por_bolsas, reports_vault_aza23l15_agente_descriptor, reports_vault_aza23l15_agente_predictivo, reports_vault_aza23l15_nr_t, reports_vault_aza23l15_ddt [INFERRED 0.95]
 
-## Communities (758 total, 328 thin omitted)
+## Communities (754 total, 338 thin omitted)
 
 ### Community 0 - "resolve"
 Cohesion: 0.06
-Nodes (48): _build_parser(), detect_missing_runs(), InformeGerencialOutcome, InformeGerencialRequest, main(), normalize_request(), ArgumentParser, Namespace (+40 more)
+Nodes (50): _build_parser(), detect_missing_runs(), InformeGerencialOutcome, InformeGerencialRequest, main(), normalize_request(), ArgumentParser, Namespace (+42 more)
 
 ### Community 1 - "test_vault_note_contract.py"
-Cohesion: 0.08
-Nodes (62): _build_parser(), find_latest_run(), _format_evidence_bullets(), _load_ok_data(), load_run_narratives(), main(), Any, ArgumentParser (+54 more)
+Cohesion: 0.11
+Nodes (41): find_latest_run(), _load_ok_data(), load_run_narratives(), main(), Path, Load the 3 per-run narrative JSONs from `run_dir`. `historical.out.json` (with…, Upsert-write `markdown` to `reports/vault/{canonical circuito}.md`. Threat-…, End-to-end projection for `circuito`: find latest run, load its 3 narrative… (+33 more)
 
 ### Community 2 - "ReportPipelineError"
 Cohesion: 0.07
 Nodes (60): Shared helper for loading validated per-agent run artifacts. Extracted out of…, Raised when the report pipeline cannot proceed for a given circuit or run_dir.…, ReportPipelineError, awaiting_confirmation(), _build_parser(), main(), normalize_request(), preflight_report() (+52 more)
 
 ### Community 3 - "intervention_graph.py"
-Cohesion: 0.04
-Nodes (88): load_validated_agent_output(), Any, Path, Read `{agent_name}.out.json` and require the combined L1 `validate()` success…, atomic_write_text(), Path, Shared atomic-write helper for `agent_tools` (hoisted out of `batch.py` and…, Write `content` to `path` atomically. Writes to a temp file in the same… (+80 more)
+Cohesion: 0.05
+Nodes (74): load_validated_agent_output(), Any, Path, Read `{agent_name}.out.json` and require the combined L1 `validate()` success…, cause_themes(), find_latest_run(), _hypothesis_clauses(), Bucket a free-text cause hypothesis into the shared `CAUSE_THEME_KEYWORDS`… (+66 more)
 
 ### Community 4 - "Path"
 Cohesion: 0.06
 Nodes (31): CaptureFixture, _modelo_de_prueba(), _por_tipo(), fixture, parametrize, Path, Tests for `intervention_graph`: the radial causes/intervention-strategies meta-…, La mitad derecha se lee de dentro hacia fuera igual que la cadena circuito ->… (+23 more)
 
-### Community 5 - "codificar_cod_causa"
-Cohesion: 0.18
-Nodes (21): codificar_cod_causa(), construir_matriz_instancias(), Any, Replace the raw `columna` code with its relative frequency (kept under the same…, Append `encoding`'s COD_CAUSA frequency + indicator columns to `resultado["X"]`…, _df_causa_sintetico(), _frozen_features(), _matriz_base_no_degenerada() (+13 more)
+### Community 5 - "test_mil_bags.py"
+Cohesion: 0.06
+Nodes (66): BagIndex, cachear_bolsas(), cargar_bolsas(), CodCausaEncoding, codificar_cod_causa(), construir_indice_bolsas(), construir_matriz_instancias(), Any (+58 more)
 
 ### Community 6 - "test_mgcecdl_graph_gates.py"
-Cohesion: 0.06
-Nodes (68): cargar_modelo_gated(), construir_edge_index(), entrenar_gated_autoencoder(), GatedSelfSupervisedLoss, GraphEdgeIndex, GraphGatedMGCECDLRegressor, guardar_modelo_gated(), PerSampleEdgeGateDecoder (+60 more)
+Cohesion: 0.07
+Nodes (61): cargar_modelo_gated(), entrenar_gated_autoencoder(), GatedSelfSupervisedLoss, GraphGatedMGCECDLRegressor, guardar_modelo_gated(), PerSampleEdgeGateDecoder, Any, device (+53 more)
 
 ### Community 7 - "test_project_flow_web_panels.py"
 Cohesion: 0.04
 Nodes (74): _constant(), _constant_list(), _fuente_de_codigo_del_cuaderno(), _notebook_source(), fixture, parametrize, Contract tests for the four dashboard notebooks (01-04). These notebooks are…, The ceiling guards the degenerate case; it must not quietly re-freeze the zoom.… (+66 more)
 
 ### Community 8 - "test_simulador_variables.py"
-Cohesion: 0.04
-Nodes (78): definicion_de_knob(), DataFrame, Que ES esta variable, en una linea, para el tooltip de su casilla. El panel del…, La tabla de variables del cuaderno 06: una fila por control que el panel puede…, tabla_variables_simulables(), _catalogo(), _knob(), parametrize (+70 more)
+Cohesion: 0.02
+Nodes (187): abreviatura(), alto_renglon_px(), ancho_px(), candidatos_del_panel(), columnas_panel(), definicion_de_knob(), definiciones_de_knobs(), descripciones_de_variables() (+179 more)
 
 ### Community 9 - "test_mil_simulador_015.py"
 Cohesion: 0.04
-Nodes (98): aplicar_overrides_instancias(), construir_relevance_cache_mil(), Write each override's value into its feature column, broadcast across every…, Two bag forward passes -- base and simulated -- over `seleccion`, and the…, Min/max sensitivity sweep at BAG grain, one row per numeric knob. Same shape as…, The bags of `circuito` inside window `ventana` (its 01.4 label, `"V1"` ...…, Session-scoped LRU over `sensibilidad_minmax_bolsas`, keyed by `(circuito,…, Circular layout for the reconstructed graph, ready to drop into three Plotly… (+90 more)
+Nodes (88): The bags of `circuito` inside window `ventana` (its 01.4 label, `"V1"` ...…, Circular layout for the reconstructed graph, ready to drop into three Plotly…, seleccionar_bolsas(), trazas_grafo(), _bag_index(), _BagIndexFalso, _EdgeIndexFalso, _geometria() (+80 more)
 
 ### Community 10 - "test_ortografia.py"
 Cohesion: 0.12
@@ -864,21 +860,21 @@ Nodes (16): La guarda de tildes que los validadores de los tres agentes comparte
 Cohesion: 0.06
 Nodes (58): catalogo_simulacion(), `knob_id -> VariableSimulable`, leido de `Variables_simular.xlsx`., El control de `knob`, segun lo que declare `Variables_simular.xlsx`. La forma…, widget_for_knob(), Contra el archivo de verdad, no contra un doble. Las dos que llegan al panel…, test_el_archivo_real_no_deja_ni_una_columna_entera_con_deslizador_continuo(), _catalogo_de(), _escribir() (+50 more)
 
-### Community 12 - "_sample_payload"
-Cohesion: 0.09
-Nodes (22): Running the same circuito twice in one batch must not silently overwrite the…, `DON23L13` and `don23l13` are the same circuit per the codebase's own…, Confirm the smarter dedup key does not over-match: two circuits whose…, Build an already-built expert-alignment context — the real payload shape…, `DON23L13` and `don23l13` are the same circuit for dedup purposes…, `--circuits` accepts a single JSON file containing a list of payloads (the…, A genuine programming bug (e.g. a bare KeyError raised from inside…, The whole point of role-namespacing (spec: agent-namespaced-reports): two… (+14 more)
+### Community 12 - "test_agent_tools_batch.py"
+Cohesion: 0.06
+Nodes (60): _FakeCompletedProcess, _invalid_response(), Headless per-circuit batch runner (design's Failure handling section / WU4).…, A hard subprocess failure (auth error, crash, non-zero exit) must be reported…, Running the same circuito twice in one batch must not silently overwrite the…, Two distinct raw `circuito` values that both sanitize to the same on-disk…, `DON23L13` and `don23l13` are the same circuit per the codebase's own…, Confirm the smarter dedup key does not over-match: two circuits whose… (+52 more)
 
 ### Community 13 - "vano_controls.py"
 Cohesion: 0.07
 Nodes (58): _build_climate_knob(), build_knobs(), _build_static_knob(), categorical_values_for_variable(), climate_family(), expand_knob_overrides(), group_climate_features(), is_categorical_variable() (+50 more)
 
-### Community 14 - "test_mgcecdl_graph_interpretability.py"
-Cohesion: 0.08
-Nodes (42): asignar_nombres_de_riesgo(), asociacion_criticidad(), perfil_por_cluster(), Re-label groups by ASCENDING group `estadistico` of `valores` (per-vano…, Test whether per-vano `values` (the FUTURE accumulated criticality target)…, Out-of-fold classifier separability of a cluster partition.…, Per-cluster vs population profile with standardized effect size.…, separabilidad_fuera_de_pliegue() (+34 more)
+### Community 14 - "test_mil_inferencia.py"
+Cohesion: 0.10
+Nodes (26): Las ventanas que el informe estudia: la ultima, mas las de mayor influencia. La…, seleccionar_ventanas_reporte(), _BagIndexFalso, _geometria(), _knob(), _PredictorFalso, RED/GREEN tests for `mil_inferencia`: the report's predictive layer on the MIL…, Un circuito con cinco ventanas de actividad muy distinta. Las clases salen del… (+18 more)
 
 ### Community 15 - "informe_gerencial_contract.py"
-Cohesion: 0.06
-Nodes (69): Counter, nombre_con_codigo(), `Nombre natural (CODIGO)`, o solo el codigo cuando no hay nombre que anteponer.…, _aggregate_risk(), _annex_html(), _annex_per_circuit(), _annex_summary_lines(), _cause_hypothesis_from_note() (+61 more)
+Cohesion: 0.05
+Nodes (70): _escape(), escudo_chec_html(), logo_html(), pie_agentes_html(), La identidad visual que comparten los dos informes, en UN solo sitio. El…, Quien PRODUJO el informe, abajo a la derecha. Separado del escudo a proposito:…, Un logo del proyecto, embebido como `data:` URI. DENTRO del HTML y no como…, El escudo de quien OPERA la red: es el destinatario del informe. (+62 more)
 
 ### Community 16 - "Captura: resultados del Simulador ¿Que pasa si...?"
 Cohesion: 0.05
@@ -886,59 +882,59 @@ Nodes (57): Ranking de circuitos por vanos Medio-Alto y Alto (208 circuitos), Ba
 
 ### Community 17 - "test_plotting_inference_layout.py"
 Cohesion: 0.07
-Nodes (58): DataFrame, Renders the structured JSON output from the LLM into a beautiful HTML format…, render_llm_analysis(), _extract_header_h1(), _minimal_raw_df(), Un artefacto sin `u_observado` deja al informe sin la mitad medida. Se cae a la…, Bajar de Alto a Medio-Alto es una mejora real. Medido sobre DON23L14: en V9, 91…, La seccion de figuras del modelo se renderizaba VACIA en todos los informes.… (+50 more)
+Nodes (65): DataFrame, Renders the structured JSON output from the LLM into a beautiful HTML format…, render_llm_analysis(), _extract_header_h1(), _html_con_justificaciones(), _minimal_raw_df(), Un artefacto sin `u_observado` deja al informe sin la mitad medida. Se cae a la…, Bajar de Alto a Medio-Alto es una mejora real. Medido sobre DON23L14: en V9, 91… (+57 more)
 
 ### Community 18 - "test_relevancias_015.py"
 Cohesion: 0.06
 Nodes (55): _cargar_cache_disco(), _construir_evento_mask_cache(), construir_relevance_cache(), _filas_desde_tabla(), fingerprint(), _guardar_cache_disco(), marked_key(), normalizar_softmax() (+47 more)
 
-### Community 19 - "tablero.py"
-Cohesion: 0.03
-Nodes (116): abreviatura(), alto_renglon_px(), definiciones_de_knobs(), `(textangle, xanchor)` so a circular graph's node label runs ALONG its own…, El alto del renglon al tamanio que se pida, escalado desde el medido. Es lo que…, El nombre corto de la variable, o el suyo propio si no tiene uno declarado., El codigo de columna y DONDE va: `('NR_T', 'inside')` o `('NR_T', 'outside')`.…, `knob_id -> definicion`, tal como lo consume el selector de casillas. (+108 more)
+### Community 19 - "desajuste_bolsas_vs_tabla"
+Cohesion: 0.21
+Nodes (17): desajuste_bolsas_vs_tabla(), Por que el cache de bolsas y la tabla de eventos no hablan del mismo CSV. Es el…, _bolsas_de(), Un `BagIndex` minimo a partir de (circuito, fid, ventana, uiti, eventos)., El caso real: llega un mes nuevo al CSV, nadie vuelve a correr el 05, y el…, Al reves NO es sintoma, y confundirlo seria un falso positivo permanente.…, El caso que la comparacion de celdas sola no ve: el CSV cambia DENTRO de los…, `construir_tabla_vano_ventana` redondea a 3 decimales y las bolsas no, asi que… (+9 more)
 
 ### Community 20 - "test_ventanas_015.py"
 Cohesion: 0.02
-Nodes (151): nube_seleccion(), The highlighted points over `nube_fondo`: the cells of the marked vanos inside…, _bolsas_de(), _clases_falsas(), _datos_ventana(), _geometria_tamperada(), _lados(), Path (+143 more)
+Nodes (218): _agregar_tramo(), cajas_por_cambio_de_grupo(), cajas_seleccion(), cajas_seleccion_por_clase(), _capa_vacia(), capas_mapa_historico(), cargar_clases_criticidad(), centro_y_zoom() (+210 more)
 
 ### Community 21 - "test_app_simulador_databricks.py"
-Cohesion: 0.08
-Nodes (28): _empacador(), _llamada_a_execvp(), Call, parametrize, La fuente de `simulador-vano`, la segunda Databricks App del proyecto. ## Por…, Misma guarda que en `criticidad_chec`: un import que no viaja es un contenedor…, No es opcional y no es evidente: `plotly>=6` levanta `ImportError` en…, `os.execvp` y no `subprocess.run`: las senales de la plataforma tienen que… (+20 more)
+Cohesion: 0.07
+Nodes (32): _empacador(), _llamada_a_execvp(), Call, parametrize, La fuente de `simulador-vano`, la segunda Databricks App del proyecto. ## Por…, Misma guarda que en `criticidad_chec`: un import que no viaja es un contenedor…, No es opcional y no es evidente: `plotly>=6` levanta `ImportError` en…, `os.execvp` y no `subprocess.run`: las senales de la plataforma tienen que… (+24 more)
 
 ### Community 22 - "exportar_geometria"
 Cohesion: 0.05
 Nodes (47): ajustar_geometria(), exportar_geometria(), leer_eventos(), main(), _normalizar_fid(), DataFrame, Path, Series (+39 more)
 
-### Community 23 - "test_simulador_por_vano.py"
-Cohesion: 0.06
-Nodes (49): aplicar_overrides_por_vano(), Where each vano's controls should START: that vano's OWN value in the active…, `aplicar_overrides_instancias`, but each vano gets its OWN value, written only…, valores_actuales_por_vano(), test_aplicar_overrides_encodes_a_categorical_through_its_label_encoder(), _Encoder, _knob(), _PredictorFalso (+41 more)
+### Community 23 - "mil_simulador_015.py"
+Cohesion: 0.04
+Nodes (97): grafo_por_grupo_si_no_colapsado(), A4: `estadistico_colapso` (reused UNCHANGED) runs first; a collapsed gate…, asignar_clase(), Nearest-centroid class assignment (hard argmin). Returns `(clase, n_clamped)`;…, aplicar_overrides_instancias(), aplicar_overrides_por_vano(), candidatos_de_knob(), clase_base_de_bolsas() (+89 more)
 
 ### Community 24 - "load_dataset"
-Cohesion: 0.08
-Nodes (50): available_circuits(), circuit_date_range(), column_lookup(), columnas_declaradas(), _dtype_texto(), filter_events(), load_dataset(), normalize_id_columns() (+42 more)
-
-### Community 25 - "test_criticality_assignment.py"
 Cohesion: 0.07
-Nodes (40): cargar_geometria_014(), Path, Read the `geometrias_sha1` field written into `path` (by…, Load a `Geometria` from the tracked geometry artifact's JSON…, verificar_sha1_geometrias(), cargar_clases_criticidad(), Path, Assign historical criticality classes for `(n_obs, u)` pairs, reusing 01.4's… (+32 more)
+Nodes (53): available_circuits(), circuit_date_range(), column_lookup(), columnas_declaradas(), _dtype_texto(), filter_events(), load_dataset(), normalize_id_columns() (+45 more)
+
+### Community 25 - "Geometria"
+Cohesion: 0.08
+Nodes (46): cargar_geometria_014(), _distancias_cuadradas(), distribucion_suave(), _estandarizar(), Geometria, ndarray, Path, Criticality assignment from 01.4's own KMeans geometry (design D6). The… (+38 more)
 
 ### Community 26 - "test_portabilidad_agentes.py"
 Cohesion: 0.08
 Nodes (40): Kind, build_mirrors(), discover_units(), _frontmatter_description(), generar(), _header(), main(), _managed_paths() (+32 more)
 
-### Community 27 - "mil_simulador_015.py"
-Cohesion: 0.05
-Nodes (79): baseline_estructural(), contraste_u(), grafo_por_grupo_si_no_colapsado(), predecir_u_estructural(), Validation harness for the bag-level MIL regressor over 01.4's vano x window…, Structural-only / no-climate baseline: `RandomForestRegressor` on the bag's…, The structural baseline's `û`, before it becomes a class. Extracted so the…, Compare arms in `u` space instead of class space. Reported in `log1p` -- the… (+71 more)
+### Community 27 - "test_mil_contraste_u.py"
+Cohesion: 0.13
+Nodes (22): baseline_estructural(), contraste_u(), predecir_u_estructural(), Structural-only / no-climate baseline: `RandomForestRegressor` on the bag's…, The structural baseline's `û`, before it becomes a class. Extracted so the…, Compare arms in `u` space instead of class space. Reported in `log1p` -- the…, _datos(), _geometria() (+14 more)
 
 ### Community 28 - "test_menu_diagrama_y_titulo.py"
 Cohesion: 0.06
 Nodes (48): _comun(), _pagina(), El menu: fuentes un punto mas chicas, titulo en el panel, y un diagrama que se…, `.db` y `.fp` sobreviven a los recortes sin que ningun elemento las lleve. Una…, Solo las del panel IZQUIERDO. Las tres que no bajan tienen su motivo cada una.…, Se queda en 7 px y sale de la escala del panel. Bajo cuatro veces con el resto…, Tres tamanios se quedan donde estaban, y ninguno por descuido. * `body` y…, El SVG va al reves que el panel izquierdo: +1 donde el otro lleva -2. No es una… (+40 more)
 
 ### Community 29 - "test_report_pipeline.py"
-Cohesion: 0.08
-Nodes (73): prepare(), prepare_expert_alignment(), Read all three validated outputs from `run_dir` and render the final HTML…, Load/filter data for `circuito`, detect critical points, and write the…, Build `expert-alignment.bc.json` from the historical and inference agents'…, render(), _canned_inference_ok(), _canned_ok() (+65 more)
+Cohesion: 0.07
+Nodes (83): prepare(), prepare_expert_alignment(), Read all three validated outputs from `run_dir` and render the final HTML…, Load/filter data for `circuito`, detect critical points, and write the…, Build `expert-alignment.bc.json` from the historical and inference agents'…, Resolve `(tokens_input, tokens_output, tokens_total, token_source,…, render(), _resolve_token_usage() (+75 more)
 
 ### Community 30 - "test_generate_notebook_10.py"
-Cohesion: 0.06
-Nodes (47): _all_code_source(), _all_markdown_source(), _celda_del_dispositivo(), _code_sources(), _extract_balanced_calls(), _markdown_sources(), Tests for `scripts/generate_notebook_10.py` -- the committed notebook-10…, Extract each `call_prefix(...)` call's full source, matching parens to… (+39 more)
+Cohesion: 0.07
+Nodes (41): _all_code_source(), _all_markdown_source(), _code_sources(), _extract_balanced_calls(), _markdown_sources(), Tests for `scripts/generate_notebook_10.py` -- the committed notebook-10…, Extract each `call_prefix(...)` call's full source, matching parens to…, El cuaderno entrena y guarda; no explica el modelo. Aqui se afirmaba que el… (+33 more)
 
 ### Community 31 - "report (VS Code Copilot prompt mirror)"
 Cohesion: 0.07
@@ -953,56 +949,56 @@ Cohesion: 0.11
 Nodes (42): _build_parser(), CleanupCategory, _count_items(), delete_targets(), DeletionResult, discover_targets(), format_summary(), _human_size() (+34 more)
 
 ### Community 34 - "chec_local_interpreter/expert_alignment.py"
-Cohesion: 0.08
-Nodes (49): _allowed_dates(), _allowed_evidences(), _allowed_pdf_row_indexes(), _allowed_variables(), _allowed_variables_strict(), _compact_llm1_analysis(), _compact_llm2_analysis(), _compact_pdf_matches() (+41 more)
+Cohesion: 0.12
+Nodes (37): _allowed_dates(), _allowed_evidences(), _allowed_pdf_row_indexes(), _allowed_variables(), _allowed_variables_strict(), _date_text(), _date_value(), _evidence_is_supported() (+29 more)
 
 ### Community 35 - "test_relevancia_hacia_bajo.py"
 Cohesion: 0.10
-Nodes (40): Que variables pueden llevar a CADA vano a su UITI minimo, y cuanto lo bajan.…, relevancia_hacia_uiti_minimo(), _clase(), _geometria(), _knob(), _Predictor, RED/GREEN tests for the relevance ranking that aims AT the low criticality…, Es el numero que convierte el ranking en una instruccion: sin el, "baja el UITI… (+32 more)
+Nodes (42): Que variables pueden llevar a CADA vano a su UITI minimo, y cuanto lo bajan.…, relevancia_hacia_uiti_minimo(), _clase(), _geometria(), _knob(), _Predictor, RED/GREEN tests for the relevance ranking that aims AT the low criticality…, Es el numero que convierte el ranking en una instruccion: sin el, "baja el UITI… (+34 more)
 
 ### Community 36 - "test_vano_app_015.py"
 Cohesion: 0.08
 Nodes (44): aplicar_si_vigente(), bin_delta_riesgo(), clases_por_fid_desde_resultado(), clases_por_fid_para_estado(), construir_evento_mask_cache(), debe_degradar_a_manual(), etiqueta_capa_sin_dato(), Any (+36 more)
 
 ### Community 37 - "test_mil_validation.py"
-Cohesion: 0.11
-Nodes (28): evaluar_arms(), Out-of-fold macro-F1 for every arm in `predicciones`, on `mask`'s subset. When…, _geometria_fixture(), RED/GREEN tests for the MIL validation harness…, `linea_base_sin_grafo` emits KMeans cluster ids, not criticality classes, and…, Model beats every baseline (including the strongest, `persistencia`) by more…, The exact hole this change closes: model clears persistence by a wide margin…, Model beats every baseline by more than the bar -> A1 passes, and the positive… (+20 more)
+Cohesion: 0.05
+Nodes (68): agrupar_por_claves(), BagPredictor, baseline_mayoritaria(), baseline_persistencia(), construir_folds_agrupados(), desglose_por_circuito(), evaluar_arms(), evaluar_diagnostico_temporal() (+60 more)
 
-### Community 38 - "_resolve_token_usage"
-Cohesion: 0.17
-Nodes (18): Resolve a per-stage `{stage, tokens_total, token_source, duration_seconds,…, Resolve `(tokens_input, tokens_output, tokens_total, token_source,…, _resolve_stage_breakdown(), _resolve_token_usage(), test_resolve_stage_breakdown_all_stages_measured_tokens_and_duration(), test_resolve_stage_breakdown_no_stage_files_returns_empty_list(), test_resolve_stage_breakdown_stage_missing_from_token_sidecar_falls_back_to_char4_estimate(), test_resolve_stage_breakdown_stage_missing_stage_timing_duration_is_absent_not_estimated() (+10 more)
+### Community 38 - "vault_note_contract.py"
+Cohesion: 0.16
+Nodes (21): _build_parser(), _format_evidence_bullets(), Any, ArgumentParser, Pure per-circuit vault-note projection contract. Sibling of…, Fecha, ventana y variable delante del resumen, separados por `·`. Aqui se leia…, Render the full vault note markdown for `circuito` from `narratives`.…, _render_bullet_list() (+13 more)
 
 ### Community 39 - "test_mgcecdl_mil.py"
-Cohesion: 0.13
-Nodes (42): entrenar_mil(), _formatear_mmss(), device, Render a duration in `mm:ss`, rounded to the nearest whole second., Fit `model` bag-supervised (D5) over a `BagIndex`'s CSR layout.…, _bag_index_sintetica_de_prueba(), _entrenar_mil_run(), ndarray (+34 more)
+Cohesion: 0.14
+Nodes (40): entrenar_mil(), device, Fit `model` bag-supervised (D5) over a `BagIndex`'s CSR layout.…, _bag_index_sintetica_de_prueba(), _entrenar_mil_run(), ndarray, Tensor, RED/GREEN tests for the bag-level MIL regressor… (+32 more)
 
 ### Community 40 - "mil_inferencia.py"
-Cohesion: 0.07
-Nodes (58): aplicar_catalogo(), _aristas_del_modelo(), cargar_recursos_mil(), catalogo_de_controles(), CatalogoControles, _clases_observadas(), _clave_catalogo(), con_clase_observada() (+50 more)
+Cohesion: 0.10
+Nodes (41): _aristas_del_modelo(), cargar_recursos_mil(), _clases_observadas(), con_clase_observada(), construir_contexto_inferencia_mil(), diagnostico_de_circuito(), escenarios_de_circuito(), _grafo_diferencia_de() (+33 more)
 
-### Community 41 - "simulador_variables.py"
-Cohesion: 0.07
-Nodes (44): candidatos_del_panel(), columnas_panel(), descripciones_de_variables(), _es_numero(), _fila(), __getattr__(), grupo_por_knob(), incoherencias_del_catalogo() (+36 more)
+### Community 41 - "top_vanos_de_ventana"
+Cohesion: 0.15
+Nodes (16): Los vanos de ESE circuito con eventos en ESA ventana, de mayor a menor UITI…, top_vanos_de_ventana(), Dos circuitos, dos ventanas y UITI deliberadamente desordenado respecto del…, De mayor a menor UITI EN ESA VENTANA. Es lo que decide a quien se le marca la…, VB acumula 40 en la ventana 1 y 9 en la 0. Preguntar por la 0 no puede traer el…, Mas de quince vanos con eventos en la ventana se recortan a los quince de mayor…, Dos vanos con el mismo UITI tienen que salir SIEMPRE en el mismo orden. Sin…, Una ventana sin un solo evento no auto-marca nada. Devolver `None` o fallar… (+8 more)
 
 ### Community 42 - "test_estado_actualizacion.py"
 Cohesion: 0.05
 Nodes (51): Derivado, Estado, Fuente, huella(), huella_registrada_del_modelo(), informe(), _leer_json(), leer_manifiesto() (+43 more)
 
-### Community 43 - "simulator.py"
-Cohesion: 0.12
-Nodes (38): predict_fn(), Simulator contract (`chec_local_interpreter/simulator.py:182-193`):…, _aggregate_probs_by_vano(), _base_original_value(), _class_label(), _coerce_original_value_for_model(), _direction(), _effect_observation() (+30 more)
+### Community 43 - "ValueError"
+Cohesion: 0.11
+Nodes (42): assert_fecha_excluded_from_features(), Raise if `"FECHA"` is present among model features (leakage guard)., predict_fn(), Simulator contract (`chec_local_interpreter/simulator.py:182-193`):…, _aggregate_probs_by_vano(), _base_original_value(), _class_label(), _coerce_original_value_for_model() (+34 more)
 
-### Community 44 - "assemble_skill_bundle"
-Cohesion: 0.19
-Nodes (19): assemble_skill_bundle(), list_available_skills(), load_skill_markdown(), Path, _required_skills(), skills_dir(), verify_required_skills(), Golden-snapshot characterization test pinning the `expert_alignment` skill… (+11 more)
+### Community 44 - "config.py"
+Cohesion: 0.13
+Nodes (23): agent_prompt_dir(), project_root(), Path, Repo-root-relative home for a migrated agent's playbook prompts., assemble_skill_bundle(), list_available_skills(), load_skill_markdown(), Path (+15 more)
 
 ### Community 45 - "test_despliegue_databricks_contract.py"
 Cohesion: 0.07
 Nodes (40): _leer(), Static contract tests for the Databricks deployment command. These pin the…, La regla sin su motivo es una regla que alguien optimiza el dia que estorba., El contrato y el CLI no pueden divergir en el vocabulario de estados., Una corrida que abre dos apps no puede dejar tres reportes parciales., `/subir-notebooks-databricks` se retiro, y su procedimiento no podia irse con…, `/subir-datos-databricks` se retiro el 2026-08-17. Lo que sabia y que un `fs cp…, `/app-criticidad-chec` y `/app-simulador-vano` se retiraron el 2026-08-17. Lo… (+32 more)
 
-### Community 46 - "test_mil_inferencia.py"
-Cohesion: 0.04
-Nodes (67): _BagIndexFalso, _geometria(), _knob(), _PredictorFalso, RED/GREEN tests for `mil_inferencia`: the report's predictive layer on the MIL…, Un circuito con cinco ventanas de actividad muy distinta. Las clases salen del…, El informe no recorre las once ventanas: estudia tres. La ultima SIEMPRE entra…, El orden de lectura del informe es el del tiempo. Devolverlas por criticidad… (+59 more)
+### Community 46 - "_recursos"
+Cohesion: 0.05
+Nodes (41): El modelo predice UITI acumulado. El conteo de eventos es un eje del espacio…, Un circuito sin bolsas en la ventana es un caso normal -- hay circuitos con una…, Los vanos criticos ya no salen de un percentil de UITI promedio sino del…, Lo que el informe imprime sobre el modelo tiene que decir en que unidad…, Sin vanos en Alto ni Medio-Alto la respuesta correcta es "ninguno", no los…, El barrido recorre los CONTROLES; sin catalogo devuelve vanos con la lista de…, Con MGCECDL un escenario era un percentil de filas; con el MIL la unidad es la…, Un circuito tranquilo puede no tener bolsas en media parte del ano. Ofrecer… (+33 more)
 
 ### Community 47 - "test_puerto_bloqueado.py"
 Cohesion: 0.06
@@ -1024,13 +1020,13 @@ Nodes (44): Alcance, Claves Requeridas, Como se nombran las cosas en el informe,
 Cohesion: 0.04
 Nodes (44): Alcance, Claves Requeridas, Como se nombran las cosas en el informe, Constructor de Contexto Estructurado, Contexto de reparación, Contrato de Salida Base, Diagnóstico Requerido, Dos escalas de criticidad, y no se mezclan (+36 more)
 
-### Community 52 - "build_context"
+### Community 52 - "inference.py"
 Cohesion: 0.12
-Nodes (32): build_context(), _build_context_handler(), _circuito_from_context(), Any, Run the `validate` verb: gate a candidate response through the two-stage L1…, Derive the publish/artifact identity from the inference context's own…, Build the `build-context` envelope from the already-built context JSON.…, validate() (+24 more)
+Nodes (34): construir_prompt_inferencia(), Render the MGCECDL inference prompt from context plus loaded skills., build_context(), _build_context_handler(), _circuito_from_context(), _errores_de_ortografia(), Any, Path (+26 more)
 
 ### Community 53 - "report_pipeline.py"
-Cohesion: 0.08
-Nodes (39): _build_inference_results(), _contexto_inferencia_vacio(), _detect_llm_runtime(), _fechas_de_ventana(), _new_run_dir(), Any, Path, Pure-Python orchestrator for the `/report` pipeline. Splits the end-to-end… (+31 more)
+Cohesion: 0.06
+Nodes (53): _build_inference_results(), _contexto_inferencia_vacio(), _detect_llm_runtime(), _fechas_de_ventana(), _new_run_dir(), Any, Path, Pure-Python orchestrator for the `/report` pipeline. Splits the end-to-end… (+45 more)
 
 ### Community 54 - "test_glosario_en_prosa.py"
 Cohesion: 0.07
@@ -1038,11 +1034,11 @@ Nodes (36): nombrar_en_prosa(), nombrar_prosa_en_datos(), nombre_natural(), Las 
 
 ### Community 55 - "test_informe_gerencial_contract.py"
 Cohesion: 0.04
-Nodes (87): Assemble the cross-circuit synthesis sections (spec: "Report structure") from…, Resuelve un slug de banda (o `todos`) a su universo de circuitos, con el…, Build a report filename from allowlisted, format-validated inputs only --…, resolve_group_dataframe(), _safe_report_filename(), synthesize(), _html_del_informe(), _hypothesis_entry() (+79 more)
+Nodes (88): perfil_de_banda(), Assemble the cross-circuit synthesis sections (spec: "Report structure") from…, Cuantos vanos tiene la banda, como se reparten entre los cuatro grupos de VANO,…, Resuelve un slug de banda (o `todos`) a su universo de circuitos, con el…, Build a report filename from allowlisted, format-validated inputs only --…, resolve_group_dataframe(), _safe_report_filename(), synthesize() (+80 more)
 
 ### Community 56 - "test_catalogo_simulacion.py"
-Cohesion: 0.22
-Nodes (19): _entrada(), _knob(), _por_id(), Que ofrecera el panel despues de editar `Variables_simular.xlsx`, sin abrirlo.…, Medido sobre el archivo real: ocho filas -- CNT_VN, LONGITUD, X2, Y2, TIPO_TAX,…, `ALTURA` es `categorical` con `12|16|18`: existen apoyos de esas tres alturas y…, `numeric-entero` es el nombre anterior. La aplicacion empaquetada sirve SU…, test_el_informe_nombra_cada_control_y_su_veredicto() (+11 more)
+Cohesion: 0.10
+Nodes (37): cargar(), codigo_de_salida(), Fila, informe(), main(), Any, Que ofrecera el panel del simulador despues de editar `Variables_simular.xlsx`.…, Los knobs del modelo que hay y el catalogo del archivo que hay. (+29 more)
 
 ### Community 57 - "test_huellas_aplicaciones.py"
 Cohesion: 0.06
@@ -1061,8 +1057,8 @@ Cohesion: 0.15
 Nodes (36): distancias_cuadradas_torch(), Differentiable mirror of `_distancias_cuadradas`, returning `(n, K)`. Exists so…, MILBagLoss, Bag-grain supervised loss + instance-grain reconstruction/MI + bag-grain gate…, _adjacency(), _batch(), _geometria(), _loss_kwargs() (+28 more)
 
 ### Community 61 - "clima_engine.py"
-Cohesion: 0.08
-Nodes (46): Client, datetime, actualizar_v3(), buscar_salidas_previas(), calcular_origen_id(), columnas_clima_v3(), _combinar(), concatenar_salidas() (+38 more)
+Cohesion: 0.10
+Nodes (39): datetime, actualizar_v3(), buscar_salidas_previas(), calcular_origen_id(), columnas_clima_v3(), _combinar(), concatenar_salidas(), consultar_puntos() (+31 more)
 
 ### Community 62 - "Intérprete local de UITI_VANO"
 Cohesion: 0.06
@@ -1070,7 +1066,7 @@ Nodes (31): 1. Pipeline local determinista, 2. Contratos canónicos de agentes, 
 
 ### Community 63 - "test_glosario_variables.py"
 Cohesion: 0.06
-Nodes (31): parametrize, El glosario que pone las variables del dataset en castellano. El informe…, El agente recibe los codigos; si no le llega tambien el nombre, no puede…, `VARIABLE_GROUPS` escribe `PREP_i` y `TEMP_i`, con la `i` literal: es como la…, El repositorio escribe sin tildes a proposito, pero esa regla vale para el…, Proteccion" y "Topologia" salían tal cual en el informe: son las CLAVES de…, Estas SÍ son prosa: no las usa nadie como clave, y se imprimen., El codigo no se pierde: es lo que hay que buscar en el dataset o en el tablero. (+23 more)
+Nodes (34): domain_context_payload(), El contexto de dominio que reciben los agentes del informe. Las reglas se…, El contexto de dominio, con cada variable y cada grupo tambien en castellano.…, parametrize, El glosario que pone las variables del dataset en castellano. El informe…, El agente recibe los codigos; si no le llega tambien el nombre, no puede…, `VARIABLE_GROUPS` escribe `PREP_i` y `TEMP_i`, con la `i` literal: es como la…, El repositorio escribe sin tildes a proposito, pero esa regla vale para el… (+26 more)
 
 ### Community 64 - "expert_alignment_bundle.md"
 Cohesion: 0.06
@@ -1082,7 +1078,7 @@ Nodes (35): fuente(), fixture, Contract tests: la lista de vanos del cuaderno 06
 
 ### Community 66 - "test_skill_redaccion_es.py"
 Cohesion: 0.08
-Nodes (35): _clases(), El verificador de la skill `redaccion-es`. Una skill que solo diga "revisa la…, Sin este filtro, cada identificador del repositorio seria un hallazgo., `periodo`/`período`, `solo`, `este`, `aun`, `calculo`/`cálculo`. Corregirlas…, Los cinco estan bien escritos. Si el detector los marcara, sobraria., El `?` de una expresion regular o de una URL no es una pregunta sin abrir., `que` atono es la palabra mas comun del idioma: un falso positivo aqui inunda…, `que` atono es la palabra mas comun del idioma. Ninguna heuristica sin analisis… (+27 more)
+Nodes (37): _clases(), El verificador de la skill `redaccion-es`. Una skill que solo diga "revisa la…, Sin este filtro, cada identificador del repositorio seria un hallazgo., `periodo`/`período`, `solo`, `este`, `aun`, `calculo`/`cálculo`. Corregirlas…, Los cinco estan bien escritos. Si el detector los marcara, sobraria., El `?` de una expresion regular o de una URL no es una pregunta sin abrir., `que` atono es la palabra mas comun del idioma: un falso positivo aqui inunda…, `que` atono es la palabra mas comun del idioma. Ninguna heuristica sin analisis… (+29 more)
 
 ### Community 67 - "servidor.py"
 Cohesion: 0.10
@@ -1090,19 +1086,19 @@ Nodes (33): abrir_navegador(), aviso_de_bloqueo(), borrar_pid(), _catalogo(), _c
 
 ### Community 68 - "construir_selector_casillas"
 Cohesion: 0.06
-Nodes (36): construir_selector_casillas(), Builds a checkbox list from `opciones`, each either a scalar (it labels itself)…, El selector de variables del simulador necesita rotulo != clave: la casilla…, Es la razon de ser del cambio: con un `SelectMultiple` marcar una variable sin…, Dieciocho casillas en una lista corrida obligan a recordar el veredicto de cada…, El orden importa: es el que usan la rejilla de controles y el resumen, y si…, Cuatro huecos fijos. Una columna que aparece y desaparece corre a las demas de…, El panel del 06 ofrece 26 variables como casillas y en la casilla solo cabe el… (+28 more)
+Nodes (31): _clase_selector(), construir_selector_casillas(), Builds a checkbox list from `opciones`, each either a scalar (it labels itself)…, El selector de variables del simulador necesita rotulo != clave: la casilla…, Es la razon de ser del cambio: con un `SelectMultiple` marcar una variable sin…, Dieciocho casillas en una lista corrida obligan a recordar el veredicto de cada…, El orden importa: es el que usan la rejilla de controles y el resumen, y si…, Cuatro huecos fijos. Una columna que aparece y desaparece corre a las demas de… (+23 more)
 
 ### Community 69 - "construir_selector_vanos"
-Cohesion: 0.06
-Nodes (33): construir_selector_vanos(), The vano selector (01.4 parity: checkbox OR map click, one shared state) --…, Alternar la casilla y alternar por clic en el mapa tienen que llegar al MISMO…, Cambiar de circuito cambia el universo de vanos: conservar la seleccion…, Un clic puede caer sobre un tramo cuyo fid no esta en la lista (el mapa dibuja…, El cuaderno 06 simula hasta 5 vanos: cada uno recibe su propia columna de…, `marcar_todos` sigue existiendo para los cuadernos sin tope. Con tope no puede…, 01.4 y sus hermanos marcan cientos de vanos a la vez y no pueden heredar un… (+25 more)
+Cohesion: 0.07
+Nodes (29): construir_selector_vanos(), The vano selector (01.4 parity: checkbox OR map click, one shared state) --…, Alternar la casilla y alternar por clic en el mapa tienen que llegar al MISMO…, Cambiar de circuito cambia el universo de vanos: conservar la seleccion…, Un clic puede caer sobre un tramo cuyo fid no esta en la lista (el mapa dibuja…, `marcar_todos` sigue existiendo para los cuadernos sin tope. Con tope no puede…, El diagnostico del cuaderno 06 marca sus vanos asignando `value`. Sin…, El tope existe porque cada vano marcado recibe su columna de controles.… (+21 more)
 
 ### Community 70 - "test_agent_tools_expert_alignment.py"
-Cohesion: 0.12
-Nodes (37): build_context(), Build the `build-context` envelope from the already-built context JSON.…, CompletedProcess, Path, `fechas_informe` truncates to the top 20 entries in the compacted context that…, A response that otherwise passes the base validator must still fail the gate…, Responses predating the provenance contract (no provenance keys at all) must…, A malicious `circuito` must never let the failure-artifact write escape… (+29 more)
+Cohesion: 0.13
+Nodes (35): build_context(), Build the `build-context` envelope from the already-built context JSON.…, CompletedProcess, Path, `fechas_informe` truncates to the top 20 entries in the compacted context that…, A response that otherwise passes the base validator must still fail the gate…, Responses predating the provenance contract (no provenance keys at all) must…, A malicious `circuito` must never let the failure-artifact write escape… (+27 more)
 
-### Community 71 - "construir_ventanas"
-Cohesion: 0.03
-Nodes (94): Hashable, build_context_package(), _compute_circuit_characterization(), _date_text(), _json_seguro(), Any, DataFrame, Path (+86 more)
+### Community 71 - "test_context_builder.py"
+Cohesion: 0.06
+Nodes (58): build_context_package(), _compute_circuit_characterization(), _date_text(), _json_seguro(), Any, DataFrame, Path, Una serie por vano identificado, sobre la secuencia COMPLETA de ventanas. El… (+50 more)
 
 ### Community 72 - "revisar_anclaje"
 Cohesion: 0.08
@@ -1128,9 +1124,9 @@ Nodes (32): MILBagRegressor, Pool -> per-bag gate -> edge-wise propagate onto in
 Cohesion: 0.06
 Nodes (31): 06 — Simulador de riesgo por vano, 1. El arranque se congela en un paquete, 1. Las bolsas de la seleccion, 2. La matriz de instancias se mapea, no se carga, 2. La prediccion de clase de cada vano, 3. Que variables bajan el UITI de cada vano, 3. Voila, no una reescritura, 4. El grafo inferido (+23 more)
 
-### Community 78 - "dispatch"
-Cohesion: 0.11
-Nodes (32): Exception, Handler, dispatch(), load_stdin_object(), MalformedRequestError, Any, Shared L2 CLI stdin/stdout dispatch contract, agent-agnostic. Every L2 tool-…, Raised when the stdin payload is not valid JSON or misses a required field. (+24 more)
+### Community 78 - "agent_tools/expert_alignment.py"
+Cohesion: 0.08
+Nodes (42): Exception, Handler, dispatch(), load_stdin_object(), MalformedRequestError, Any, Shared L2 CLI stdin/stdout dispatch contract, agent-agnostic. Every L2 tool-…, Raised when the stdin payload is not valid JSON or misses a required field. (+34 more)
 
 ### Community 79 - "Dos poblaciones de vanos: los que más fallan no son los que más impacto aportan"
 Cohesion: 0.07
@@ -1144,21 +1140,21 @@ Nodes (31): figura_por_ventana(), _orden_ventana(), `V10` va DESPUES de `V9`, no
 Cohesion: 0.11
 Nodes (31): _celda_de_la_figura(), _celdas(), La figura del clima: el mapa en una fila junto a la serie, y los violines de a…, Como en el simulador: alli cada mapa lleva su boton justo arriba, donde…, `cl-centrar`. Cambiarlo deja el boton dibujado y sin efecto, sin dar ningun…, Su relleno izquierdo es el margen de la figura, y por el MISMO nombre. El…, El simulador usa un `widgets.Button` sin `button_style`, o sea el gris de…, El reparto entre las dos filas sale de la FORMA del mapa. Con dos tercios el… (+23 more)
 
-### Community 82 - "test_tableros_dos_columnas.py"
-Cohesion: 0.11
-Nodes (32): _css(), _fuente(), parametrize, Los visores en dos columnas: controles al 30% a la izquierda, figuras al 70%.…, `[class^="panel-"]` y no `.panel-clima`. Las clases son distintas, asi que…, En porcentaje -- estos tableros se ven de 1.280 a 1.900 px -- y por variable.…, `flex: 1 1 0` y no un 70% escrito. Un porcentaje fijo en la columna de figuras…, `min-width: 0`, que es lo que apaga el `min-width: auto` de todo hijo de flex.… (+24 more)
+### Community 82 - "fuente_de_tablero"
+Cohesion: 0.06
+Nodes (58): _clave(), cuerpo_de_funcion(), esta_migrado(), fuente_de_tablero(), fuente_del_cuaderno(), De donde se lee la fuente de un tablero mientras dura la migracion. Los cinco…, El codigo de un tablero, venga de donde venga. `nombre` acepta con o sin…, El texto del `.ipynb`, SIEMPRE, este migrado o no. No es lo mismo que… (+50 more)
 
 ### Community 83 - "04 - Reglas de Conectividad de Grafos"
 Cohesion: 0.07
 Nodes (30): 04 - Reglas de Conectividad de Grafos, Activos: apoyo final y transformador, Activos, apoyo y transformador, Aristas expertas principales, Caracteristicas fisicas y electricas del vano, Como se nombran las cosas en el informe, Conectividad preservada, Cuando Falta Información (+22 more)
 
 ### Community 84 - "Modelo MIL por bolsas del cuaderno 05 (111.233 bolsas, 288.632 instancias, 80 variables)"
-Cohesion: 0.07
-Nodes (30): El modelo ordena bien pero su nivel corre alto (~34%), Modelo estadístico del impacto por vano, Ventana de tiempo, Guarda de retiro (prueba que cubre el archivo y la prosa), relevancia_lote.py (borrado), Una suite verde no distingue entre código que funciona y código que hace falta, Celda vano-ventana (la bolsa: unidad de análisis del modelo), Clase de grupo del espacio KMeans (no es una salida del modelo) (+22 more)
+Cohesion: 0.16
+Nodes (15): El modelo ordena bien pero su nivel corre alto (~34%), Modelo estadístico del impacto por vano, Ventana de tiempo, Guarda de retiro (prueba que cubre el archivo y la prosa), relevancia_lote.py (borrado), Una suite verde no distingue entre código que funciona y código que hace falta, Celda vano-ventana (la bolsa: unidad de análisis del modelo), Clase de grupo del espacio KMeans (no es una salida del modelo) (+7 more)
 
 ### Community 85 - "cargar_modelo_mil"
-Cohesion: 0.16
-Nodes (24): cargar_modelo_mil(), guardar_modelo_mil(), Any, ndarray, Path, Write everything needed to rebuild `modelo` byte-for-byte. The graph is stored…, Rebuild the fitted model and wrap it in a `BagPredictor`. `features_esperadas`…, _adjacency() (+16 more)
+Cohesion: 0.14
+Nodes (27): construir_edge_index(), Build a `GraphEdgeIndex` from `preserved_edges`, aligning strictly by NAME. `A`…, cargar_modelo_mil(), guardar_modelo_mil(), Any, ndarray, Path, Persist and reload a fitted `MILBagRegressor` for the 01.5 simulator. Notebook… (+19 more)
 
 ### Community 86 - "_intervention_graph_html"
 Cohesion: 0.08
@@ -1188,9 +1184,9 @@ Nodes (28): Additively validate per-claim `provenance` objects, when present. Pr
 Cohesion: 0.12
 Nodes (24): _ambito_por_nodo(), _arbol(), _funcion(), _llamadas_a_ejes(), _llamadas_a_los_ejes_del_grafo(), _llamadas_al_panel(), _make_subplots(), Call (+16 more)
 
-### Community 93 - "rotulo_en_barra"
-Cohesion: 0.06
-Nodes (38): ancho_px(), iniciales(), Cuanto mide `texto` escrito dentro de una barra, al tamanio de fuente que se…, La ultima parada antes de no escribir nada: las iniciales del RESUMEN. Del…, Que escribir dentro de una barra de `largo_px` de largo: el resumen, sus…, El rotulo y DONDE va: `('kWh trafo', 'inside')`, `('KT', 'outside')` o `('',…, rotulo_en_barra(), rotulo_y_posicion() (+30 more)
+### Community 93 - "catalogo_de_controles"
+Cohesion: 0.16
+Nodes (15): aplicar_catalogo(), catalogo_de_controles(), CatalogoControles, _clave_catalogo(), _construir_catalogo_controles(), knobs_desde_datos(), Path, El catalogo de controles del informe, heredado del panel del cuaderno 06.… (+7 more)
 
 ### Community 94 - "test_diagnostico_local.py"
 Cohesion: 0.07
@@ -1208,33 +1204,33 @@ Nodes (30): El top `top` de variables mas relevantes PARA CADA VANO de la selecc
 Cohesion: 0.08
 Nodes (16): Levanta el tablero de 01_clima en el navegador, desde el servidor local. Si el…, Construye el tablero de 01_clima: ejecuta el cuaderno y empaqueta su salida. Se…, Levanta el tablero de 02_agrupamiento_vanos en el navegador, desde el servidor…, Construye el tablero de 02_agrupamiento_vanos: ejecuta el cuaderno y empaqueta…, Levanta el tablero de 03_trayectorias_circuitos en el navegador, desde el…, Construye el tablero de 03_trayectorias_circuitos: ejecuta el cuaderno y…, Levanta el tablero de 04_trayectorias_vanos en el navegador, desde el servidor…, Construye el tablero de 04_trayectorias_vanos: llama a su modulo y empaqueta su… (+8 more)
 
-### Community 98 - "Aplicacion"
-Cohesion: 0.09
-Nodes (19): _anotar_apagado(), _apagar_aplicacion(), Aplicacion, catalogo(), Control, _esperar_a_que_suelte(), _lanzar(), Una de las cinco aplicaciones gobernadas, y el proceso que la sirve. (+11 more)
+### Community 98 - "menu.py"
+Cohesion: 0.06
+Nodes (36): CriticidadCHEC: el menu desde el que se abren y se cierran las otras cinco. No…, _anotar_apagado(), _apagar_aplicacion(), Aplicacion, catalogo(), Control, es_un_menu(), _esperar() (+28 more)
 
 ### Community 99 - "AST"
 Cohesion: 0.10
 Nodes (27): AST, _agent_tools_modules(), _imports_training_package(), _iter_governance_markdown_files(), Path, Frozen-model invariant guard (design section 4 / WU3). Layered, cheap, code-…, Defense in depth: no agent_tools source should even name the model artifact. Se…, Yield agent-role / Claude Code Skill markdown files under the governance roots.… (+19 more)
 
-### Community 100 - "historical.py"
+### Community 100 - "test_agent_tools_historical.py"
 Cohesion: 0.10
-Nodes (39): build_context(), _build_context_handler(), _circuito_from_context(), _errores_de_ortografia(), Any, Path, L2 tool-adapter CLI for the historical/base descriptive agent. This module is a…, Write the raw response + validation errors under `ARTIFACTS_ROOT/{identity}/`.… (+31 more)
+Nodes (39): build_context(), _build_context_handler(), _circuito_from_context(), Any, Run the `validate` verb: gate a candidate response through the two-stage L1…, Derive the publish/artifact identity from a base context's…, Build the `build-context` envelope from the already-built context JSON.…, validate() (+31 more)
 
 ### Community 101 - "llm_validation.py"
-Cohesion: 0.13
-Nodes (28): allowed_dates(), _allowed_variable_tokens(), allowed_ventanas(), _context_dates(), _flatten_strings(), _guardrail_errors(), _iso_fecha(), _overlaps() (+20 more)
+Cohesion: 0.12
+Nodes (30): allowed_dates(), _allowed_variable_tokens(), allowed_ventanas(), _context_dates(), _flatten_strings(), _guardrail_errors(), _iso_fecha(), _overlaps() (+22 more)
 
 ### Community 102 - "test_windows_aplicaciones.py"
 Cohesion: 0.07
 Nodes (34): locales(), Path, Que carpetas de `aplicaciones/` son aplicaciones LOCALES de escritorio. Cuatro…, Las aplicaciones de escritorio, en orden. Incluye el menu., Las que abren un tablero: todas menos el menu., visores(), _fuera_de_condicional(), parametrize (+26 more)
 
-### Community 103 - "interpretability/mgcecdl_graph.py"
-Cohesion: 0.06
-Nodes (53): _agregar(), agrupar_gates_por_vano(), _climate_family_of(), _como_escalar_python(), control_permutacion_grados(), diagnostico_persistencia(), _edge_index_from_adjacency(), ejecutar_control_permutacion_grados() (+45 more)
+### Community 103 - "test_mgcecdl_graph_interpretability.py"
+Cohesion: 0.03
+Nodes (134): datetime64, _agregar(), agrupar_gates_por_vano(), anidamiento_entre_particiones(), _ari_sobre_filas_compartidas(), asignar_nombres_de_riesgo(), asociacion_criticidad(), _climate_family_of() (+126 more)
 
 ### Community 104 - "test_llm_validation.py"
-Cohesion: 0.18
-Nodes (27): load_output_schema(), validate_llm_response(), ValidationResult, _base_context(), _context(), _domain_context(), _finding_with_provenance(), El universo de ventanas citables es el que el contexto declara. Sin esta guarda… (+19 more)
+Cohesion: 0.20
+Nodes (25): load_output_schema(), validate_llm_response(), _base_context(), _context(), _domain_context(), _finding_with_provenance(), El universo de ventanas citables es el que el contexto declara. Sin esta guarda…, Backward compatible: a key_finding without a provenance key is never flagged. (+17 more)
 
 ### Community 105 - "test_agrupamiento_disposicion.py"
 Cohesion: 0.11
@@ -1248,9 +1244,9 @@ Nodes (28): bitacora(), fixture, Path, Behaviour tests for `scripts/bitacora_des
 Cohesion: 0.08
 Nodes (26): parametrize, El contrato de `/instalar-local`: lo que el Markdown no puede perder en la…, Dar solo la de macOS es el error concreto: se copia, no funciona, y quien lo…, Las dos mitades tienen que decir lo mismo. El diagnostico da el `arreglo`…, Tres cosas piden permisos de administrador, un navegador o a quien administra…, En esta sesion, lo interactivo lo corre el usuario con `!`. Sin decirlo, el…, Son distintos y se arreglan distinto: ocupado es que hay algo escuchando;…, ~900 MB de LFS y ~1,9 GB de entorno raiz. Empezar sin decirlo deja al usuario… (+18 more)
 
-### Community 108 - "training/mgcecdl.py"
-Cohesion: 0.14
-Nodes (21): calcular_estadisticas_reconstruccion_mgcecdl(), _coerce_device(), construir_modalidades_mgcecdl(), es_variable_exogena_mgcecdl(), escalar_features_minmax_mgcecdl(), _feature_base_name(), _probe_cuda_device(), Any (+13 more)
+### Community 108 - "test_grafo_versionado.py"
+Cohesion: 0.15
+Nodes (12): parametrize, Que del grafo de graphify viaja a GitHub, y que se queda en esta maquina.…, Es la unica parte que un `graphify update .` NO puede rehacer., 12 MB que `graphify update .` rehace en 30 s, y que cambian con cada version., graphify escribe uno antes de cada reconstruccion; son copias del mismo grafo., Comprime 14:1; LFS le cobraria cuota a lo que el pack resuelve gratis., test_el_cache_de_ast_no_viaja(), test_el_grafo_no_entra_por_lfs() (+4 more)
 
 ### Community 109 - "test_cerrar_todo_sin_rastro.py"
 Cohesion: 0.05
@@ -1264,29 +1260,29 @@ Nodes (23): fixture, Path, La primera apertura en una maquina corporativa se cue
 Cohesion: 0.12
 Nodes (26): Agente auto-simulator (opcional, se omite sin bc.json), Agente historical — diagnóstico base UITI_VANO, Agente inference — MGCECDL / SHAP, bc.json — insumo que habilita el auto-simulator, Menor clase de riesgo posible (clase simulada por vano), Clima + geo (API), /report — 1 circuito, 9 pasos, /reporte-lote + /informe-gerencial — síntesis multi-circuito (+18 more)
 
-### Community 112 - "construir_ranking_borda"
-Cohesion: 0.10
-Nodes (27): agregar_borda(), El conteo Borda, en un modulo que no depende de nada mas que pandas. Vivia…, Suma de puntos Borda por variable dentro de cada grupo., agrupar_por_vano(), Aggregate by FID_VANO, optionally adding Borda RELEVANCIA_VARS., construir_ranking_borda(), nota_exposicion_severidad(), Empty string for actionable variables, the standing caveat otherwise. (+19 more)
+### Community 112 - "mil_vano_ventana.py"
+Cohesion: 0.11
+Nodes (27): agregar_borda(), El conteo Borda, en un modulo que no depende de nada mas que pandas. Vivia…, Suma de puntos Borda por variable dentro de cada grupo., construir_ranking_borda(), formatear_desglose_por_clase(), nota_exposicion_severidad(), Validation harness for the bag-level MIL regressor over 01.4's vano x window…, Empty string for actionable variables, the standing caveat otherwise. (+19 more)
 
-### Community 113 - "Any"
-Cohesion: 0.10
-Nodes (21): baseline_persistencia(), construir_folds_agrupados(), desglose_por_circuito(), formatear_desglose_por_clase(), Any, Boolean mask (n_bags,), True for bags of vanos with >=2 windows whose OBSERVED…, Primary CV (D8): `StratifiedGroupKFold(groups=bag_index.group)`.…, Persistence baseline: for each TEST bag of vano `v`, the modal OBSERVED class… (+13 more)
+### Community 113 - "main"
+Cohesion: 0.27
+Nodes (11): _assert_prompt_contents(), _load_json(), main(), Path, Synthetic, offline historical/base agent response: the 10 required base keys…, Synthetic, offline inference response: the 9 required keys of…, Synthetic, offline expert-alignment pilot response: 7 required keys plus a…, _valid_expert_alignment_output() (+3 more)
 
 ### Community 114 - "pdf_discussion_pipeline.py"
-Cohesion: 0.13
-Nodes (20): assemble_discussion_xlsx(), assemble_discussion_xlsx_from_run(), detect_report_period(), _iso_fecha(), _parse_fecha(), _period_to_text(), Any, DataFrame (+12 more)
+Cohesion: 0.15
+Nodes (15): detect_report_period(), _iso_fecha(), _parse_fecha(), _period_to_text(), Timestamp, Deterministic PDF-discussion batch pipeline (design D5). This module owns every…, Normalize a date-ish value to `YYYY-MM-DD`, or `None` if unparseable (ported…, Detect a report's overall `(start, end)` period from every date mentioned in… (+7 more)
 
 ### Community 115 - "Navegador"
-Cohesion: 0.11
-Nodes (34): avisos(), congelar(), espiar_consola(), Navegador, Conducir un tablero con Chrome de verdad, y hacerle lo que le hace el usuario.…, Congela la pestania como hace Chrome con la que queda de fondo, y la despierta.…, Deja la pestania sin red el rato que se le diga, y despues espera la vuelta., Engancha `console.warn` y `console.error`. Hay que repetirlo tras cada recarga.… (+26 more)
+Cohesion: 0.13
+Nodes (30): avisos(), congelar(), espiar_consola(), Navegador, Conducir un tablero con Chrome de verdad, y hacerle lo que le hace el usuario.…, Congela la pestania como hace Chrome con la que queda de fondo, y la despierta.…, Deja la pestania sin red el rato que se le diga, y despues espera la vuelta., Engancha `console.warn` y `console.error`. Hay que repetirlo tras cada recarga.… (+22 more)
 
 ### Community 116 - "_etapa"
 Cohesion: 0.08
 Nodes (26): _etapa(), El texto de una etapa, de su encabezado al de la siguiente., El inventario decia "el CSV, los sidecars, graphs/, models/ y los dos .xlsx" y…, Con el mismo criterio que el CSV: un joblib truncado no falla al subir, falla…, El cache de bolsas se versiono el 2026-08-19 -- la subida se hace clonando este…, El cuaderno 05 no nombra `bolsas_mil_full` ni una vez: las produce al entrenar…, No hay corrida en la que desplegar las apps sea opcional. En la corrida del…, La familia retirada dejo apps con y sin el prefijo `app-`, segun el comando que… (+18 more)
 
 ### Community 117 - "runbook.py"
-Cohesion: 0.12
-Nodes (29): a_ejecutar(), a_gate1(), a_gate3_necesarios(), b_calcular(), b_gate1(), b_gate3_necesarios(), b_guardar(), b_previas() (+21 more)
+Cohesion: 0.19
+Nodes (24): a_ejecutar(), a_gate1(), a_gate3_necesarios(), b_calcular(), b_gate1(), b_gate3_necesarios(), b_guardar(), b_previas() (+16 more)
 
 ### Community 118 - "revisar.py"
 Cohesion: 0.16
@@ -1301,16 +1297,16 @@ Cohesion: 0.16
 Nodes (24): _color_de_grupo(), _disposicion(), _estilo_de_cupo(), _figura(), figura_grafo_relaciones(), figura_series_por_ventana(), figura_top_variables(), figura_uiti_medido_vs_simulado() (+16 more)
 
 ### Community 121 - "ranking_circuitos"
-Cohesion: 0.08
-Nodes (45): perfil_de_banda(), Cuantos vanos tiene la banda, como se reparten entre los cuatro grupos de VANO,…, _espacio(), geometria_vanos(), grupo_de_vanos(), _mas_cercano(), _normalizar_fid(), _percentil() (+37 more)
+Cohesion: 0.09
+Nodes (42): _espacio(), geometria_vanos(), grupo_de_vanos(), _mas_cercano(), _normalizar_fid(), _percentil(), _por_vano(), Any (+34 more)
 
 ### Community 122 - "test_mil_figuras.py"
 Cohesion: 0.16
 Nodes (17): _escenario(), RED/GREEN tests for `mil_figuras`: the four panels the report shows per…, El informe ya rotula la figura en su propio encabezado HTML. Un `set_title`…, El color de la barra es el mismo semaforo del agrupamiento. Antes las dos…, Un artefacto viejo puede traer una clase que la paleta de cuatro no cubre.…, El PNG es el respaldo del panel interactivo y decia lo mismo que el otro decia…, El grafo se anula por diseño bajo tres vanos. Dibujar un panel vacio se lee…, Un circuito sin vanos criticos no tiene barras de UITI ni grafo, pero si serie… (+9 more)
 
 ### Community 123 - "test_agent_tools_pdf_discussion.py"
-Cohesion: 0.10
-Nodes (36): build_context(), _build_context_handler(), main(), Any, Path, L2 tool-adapter CLI for the pdf-discussion-extraction agent (batch contract,…, Write the raw response plus rejected rows and agent-reported `descartes` under…, Run the `validate` verb: gate a candidate BATCH response, row by row.… (+28 more)
+Cohesion: 0.07
+Nodes (41): build_context(), _build_context_handler(), main(), Any, Path, L2 tool-adapter CLI for the pdf-discussion-extraction agent (batch contract,…, Write the raw response plus rejected rows and agent-reported `descartes` under…, Run the `validate` verb: gate a candidate BATCH response, row by row.… (+33 more)
 
 ### Community 124 - "test_trayectorias_vanos_panel.py"
 Cohesion: 0.15
@@ -1324,21 +1320,21 @@ Nodes (24): /reporte-lote (espejo OpenCode), pytest -q + evals/run_llm_eval.py a
 Cohesion: 0.14
 Nodes (14): Agent roles, Agents Guide, Exit codes from `validate`, Follow-on (out of this slice), Historical provenance (additive, optional per `key_finding`), How to run headless, Known Limitations (Pilot Slice), Manifest `status` values (+6 more)
 
-### Community 127 - "catalogo_simulacion.py"
-Cohesion: 0.22
-Nodes (13): cargar(), codigo_de_salida(), Fila, informe(), main(), Any, Que ofrecera el panel del simulador despues de editar `Variables_simular.xlsx`.…, Los knobs del modelo que hay y el catalogo del archivo que hay. (+5 more)
+### Community 127 - "ConfigAPI"
+Cohesion: 0.20
+Nodes (5): config_gratuita(), config_paga(), La apikey la escribe el usuario (interactiva). cap_mes por defecto =…, ConfigAPI, Elige API gratuita o paga y sus limites. En modo paga la apikey la escribe el…
 
-### Community 128 - "circuit_identity.py"
-Cohesion: 0.16
-Nodes (18): normalizar_circuito(), Any, Single, agent-agnostic home for circuit-identity canonicalization. Every code…, Normalize circuit ids for strict, case-insensitive equality checks., Reduce an untrusted `circuito` value to a single, safe directory name. Strips…, sanitize_circuito_dirname(), Pin the behavior of the shared, agent-agnostic circuit-identity helpers. These…, test_canonical_circuit_identity_composes_sanitize_then_normalize() (+10 more)
+### Community 128 - "canonical_circuit_identity"
+Cohesion: 0.12
+Nodes (25): Public re-export of the shared `circuit_identity.sanitize_circuito_dirname`.…, sanitize_circuito_dirname(), canonical_circuit_identity(), normalizar_circuito(), Any, Single, agent-agnostic home for circuit-identity canonicalization. Every code…, Normalize circuit ids for strict, case-insensitive equality checks., Reduce an untrusted `circuito` value to a single, safe directory name. Strips… (+17 more)
 
 ### Community 129 - "costos_de_intervencion"
 Cohesion: 0.11
 Nodes (25): costos_de_intervencion(), Any, El costo de la intervencion: por vano y en total. `items_por_vano` es `{fid:…, _catalogo(), parametrize, Costo unitario por repeticiones, sumado. Es toda la aritmetica, y por eso mismo…, El costo total de la intervencion es el de la orden de trabajo completa, no el…, El total contesta cuanto; el detalle contesta por que. Sin el, un vano caro… (+17 more)
 
-### Community 130 - "vano_widgets.py"
-Cohesion: 0.11
-Nodes (20): _clase_selector(), _pares_de_opciones(), Widget constructor for notebook 01.5's risk simulator (PR2a). The only place…, `(etiqueta, clave)` per option. A 2-tuple is taken as the pair itself; anything…, El payload de relayout del navegador, sin las claves que plotly se manda a si…, sin_claves_derivadas(), _figura(), RED/GREEN tests for the relayout guard of notebook 06's map panel. Panning or… (+12 more)
+### Community 130 - "test_figura_relayout.py"
+Cohesion: 0.15
+Nodes (16): El payload de relayout del navegador, sin las claves que plotly se manda a si…, sin_claves_derivadas(), _figura(), RED/GREEN tests for the relayout guard of notebook 06's map panel. Panning or…, Al soltar el arrastre el navegador manda a veces SOLO `_derived`. Vaciado, el…, `map._derived` es lo que MapLibre CALCULO, no lo que el usuario pidio.…, Se mira el ULTIMO tramo de la ruta y no la cadena entera: `map2._derived` tiene…, El caso normal no se toca: si el guardia recortara de mas, arrastrar el mapa… (+8 more)
 
 ### Community 131 - "test_menu_apagado.py"
 Cohesion: 0.09
@@ -1388,21 +1384,21 @@ Nodes (29): _abrir_mac(), abrir_ventana(), _abrir_windows(), _ascendencia(), _ca
 Cohesion: 0.18
 Nodes (9): A1. One log per run, even when commands delegate, A. The run log (bitacora) — mandatory, B. Never abort on a restriction, C0. The workspace URL is ASKED, every run, C1. The Unity Catalog target is DISCOVERED, C. Resolving the destination — ask the workspace, discover the catalog, E1. CLI profile, E2. SQL warehouse (+1 more)
 
-### Community 143 - "record_stage_timing"
-Cohesion: 0.22
-Nodes (12): Record `stage`'s wall-clock duration (seconds) into the optional…, record_stage_timing(), _validate_duration_measurement(), parametrize, test_record_accepts_int_duration_and_stores_as_float(), test_record_accepts_zero_duration(), test_record_preserves_legacy_entries_and_replaces_one_stage(), test_record_rejects_invalid_durations() (+4 more)
+### Community 143 - "assemble_discussion_xlsx"
+Cohesion: 0.38
+Nodes (7): assemble_discussion_xlsx(), assemble_discussion_xlsx_from_run(), Any, DataFrame, Path, Assemble accepted rows into the final `COLUMNAS_FINALES`-shaped table and write…, Collect every `{stem}.rows.json` file under `run_dir` (each a JSON list of…
 
 ### Community 144 - "models/mgcecdl.py"
-Cohesion: 0.08
-Nodes (23): _BaseMGCECDL, _elementwise_regression_loss(), _FeatureAttentionGate, MGCECDLRegressionLoss, _ModalityDecoder, _ModalityEncoder, Any, ndarray (+15 more)
+Cohesion: 0.05
+Nodes (46): _BaseMGCECDL, _elementwise_regression_loss(), _FeatureAttentionGate, MGCECDLRegressionLoss, _formatear_mmss(), Bag-level multiple-instance regressor over 01.4's vano x window bags. Bags are…, Render a duration in `mm:ss`, rounded to the nearest whole second., _ModalityDecoder (+38 more)
 
 ### Community 145 - "sample_representatives"
-Cohesion: 0.11
-Nodes (23): _cuota_por_banda(), DataFrame, Los peores de cada banda segun `CUOTA_TODOS`, concatenados en ese mismo orden.…, Los `limit` circuitos PEORES de la banda: mayor conteo de vanos en Medio-Alto +…, sample_representatives(), _df_coords(), _marco_de_bandas(), El criterio deja de ser `centroid_distance` -- que el ranking no tiene -- y… (+15 more)
+Cohesion: 0.13
+Nodes (20): Los `limit` circuitos PEORES de la banda: mayor conteo de vanos en Medio-Alto +…, sample_representatives(), _df_coords(), _marco_de_bandas(), El criterio deja de ser `centroid_distance` -- que el ranking no tiene -- y…, Un marco de circuitos ya clasificado, con `vanos_criticos` decreciente por…, `todos` no es "los 12 peores de la flota". Con el criterio anterior -- los 12…, Si Riesgo Alto trae 3 circuitos, entran 3 y la muestra queda en 10, no en 12.… (+12 more)
 
-### Community 146 - "derivacion.py"
-Cohesion: 0.15
-Nodes (21): cargar(), congelar(), Derivado, derivar(), _equipo(), _geometria_de_vanos(), _geometria_verificada(), _norm_id() (+13 more)
+### Community 146 - "construir_ventanas"
+Cohesion: 0.06
+Nodes (46): construir_tabla_vano_ventana(), construir_ventanas(), Series, 01.4's own window cut list (cell 2), reproduced verbatim: each calendar month…, 01.4's own per-(vano, ventana) aggregation (cell 3), reproduced verbatim: one…, cargar(), congelar(), Derivado (+38 more)
 
 ### Community 147 - "_comun"
 Cohesion: 0.09
@@ -1413,8 +1409,8 @@ Cohesion: 0.08
 Nodes (24): parametrize, El destino se PREGUNTA; el perfil se DERIVA de el. Equivocarse de workspace no…, La regla B existe justamente para que el reporte no se corte en el primer muro., `workspace.default` sigue apareciendo en las rutas de ejemplo, pero el comando…, La compuerta esta en el TITULO del paso y no enterrada en su prosa. Sin ella el…, Una compuerta que solo dice que hacer cuando falta algo se lee como una orden…, El pedido entero de este comando es un reporte que diga, etapa por etapa, si…, Se busca la DELEGACION, no la mencion. La prosa explica que estos comandos… (+16 more)
 
 ### Community 149 - "test_mgcecdl_regression_loss.py"
-Cohesion: 0.14
-Nodes (27): KernelDensityWeightedMSELoss, MSE re-weighted by inverse target density, so sparse/tail target values (e.g.…, Fit a Gaussian KDE on `targets` and build the interpolation grid., _build_loss(), _build_model(), _inputs_forcing_raw_reconstruction_above_one(), _modality_feature_indices(), Tensor (+19 more)
+Cohesion: 0.12
+Nodes (28): KernelDensityWeightedMSELoss, ndarray, MSE re-weighted by inverse target density, so sparse/tail target values (e.g.…, Fit a Gaussian KDE on `targets` and build the interpolation grid., _build_loss(), _build_model(), _inputs_forcing_raw_reconstruction_above_one(), _modality_feature_indices() (+20 more)
 
 ### Community 150 - "test_tableros_migrados.py"
 Cohesion: 0.11
@@ -1428,17 +1424,17 @@ Nodes (20): _alcanzable(), asegurar(), aviso_sin_salida(), _correr(), crear(), e
 Cohesion: 0.10
 Nodes (21): Calificacion de simulabilidad (si-por-intervencion / si-por-escenario / limitado / no), Funcion de costo de seis terminos, Geometria K-medias congelada y verificada por firma, Grafo estimado por bolsa o grupo (media de compuertas), Grafo estimado por muestra o escenario (RBF sobre reconstruidas), Grafo experto declarado (156 aristas dirigidas), El grafo es fijo: memoria intermedia, no parametro, Invarianza de cardinalidad (+13 more)
 
-### Community 153 - "is_candidate_section"
-Cohesion: 0.21
-Nodes (14): _batch_candidate_sections(), is_candidate_section(), MarkdownSection, Same heuristic as the notebook's `is_candidate_fragment`: include a section…, One chunked Markdown section of a single PDF, ready for candidate evaluation…, Greedily pack `candidates` (1-based global index preserved) into the minimum…, _section(), test_is_candidate_section_excludes_date_or_circuit_without_technical_term() (+6 more)
+### Community 153 - "test_pdf_discussion_pipeline.py"
+Cohesion: 0.22
+Nodes (17): is_candidate_section(), Same heuristic as the notebook's `is_candidate_fragment`: include a section…, _FakeTable, Not used directly -- pdfplumber's `extract_tables()` returns…, _row(), _section(), test_assemble_discussion_xlsx_dedupes_identical_rows(), test_assemble_discussion_xlsx_from_run_collects_every_rows_json() (+9 more)
 
 ### Community 154 - "plotting.py"
-Cohesion: 0.16
-Nodes (20): _add_folium_equipment_legend(), _add_folium_point_layer(), _folium_popup_html(), _format_elapsed_seconds(), _format_geo_value(), _geo_points_for_folium(), leer_geo_crudo(), _load_geo_points_for_circuit() (+12 more)
+Cohesion: 0.13
+Nodes (25): Hashable, count_unique_event_dates(), event_date_key(), DataFrame, Series, Count events as distinct FECHA values inside each group., Return parsed event-date keys; invalid dates stay unique per source row., _add_folium_equipment_legend() (+17 more)
 
 ### Community 155 - "properties"
 Cohesion: 0.10
-Nodes (21): minLength, type, items, minItems, type, minLength, type, minLength (+13 more)
+Nodes (21): minLength, type, minLength, type, items, minItems, type, minLength (+13 more)
 
 ### Community 156 - "test_simulador_aviso_sin_kernel.py"
 Cohesion: 0.15
@@ -1456,9 +1452,9 @@ Nodes (20): _comun(), El grafo vuelve a la figura, en una fila propia bajo el co
 Cohesion: 0.10
 Nodes (20): 1. Panorama, 2.1 Qué aprende, 2.2 Cómo se corre, 2. El modelo MIL (cuaderno `05_mil_vano_ventana`), 3. Los agentes, 4.1 Los comandos, 4.2 Las nueve etapas de `/report`, 4.3 Qué distingue una predicción de una medición (+12 more)
 
-### Community 160 - "RSA23L12"
-Cohesion: 0.12
-Nodes (16): Las ventanas se traslapan quince días y su UITI_VANO no es aditivo, La meseta de diciembre se lee como un solo episodio porque V3 y V4 se traslapan (ENE23L15), Acciones recomendadas, Alineación con experto, Caracterización, V4 y V5 describen un único episodio solapado y no deben sumarse (RSA23L12), Hallazgos clave, Hipótesis de causa (+8 more)
+### Community 160 - "NR_T — riesgo por vegetación cercana al vano"
+Cohesion: 0.13
+Nodes (14): NR_T — riesgo por vegetación cercana al vano, Acciones recomendadas, Alineación con experto, Caracterización, Hallazgos clave, Hipótesis de causa, Interpretación inferencial, Resumen histórico (+6 more)
 
 ### Community 161 - "Rendimiento y requisitos de las aplicaciones"
 Cohesion: 0.04
@@ -1469,32 +1465,32 @@ Cohesion: 0.10
 Nodes (19): CNT_TRF — transformadores comprometidos, DURACION — duración de la interrupción, Severidad por registro: el impacto no lo explica el conteo de registros, TOT_USUS — usuarios afectados, Acciones recomendadas, Alineación con experto, Caracterización, CHA23L14 (+11 more)
 
 ### Community 163 - "circuit_analysis.py"
-Cohesion: 0.15
-Nodes (17): _calcular_radar(), _compactar_contexto_inferencia_para_prompt(), construir_contexto_inferencia(), construir_grafo_interactivo_muestras(), construir_prompt_inferencia(), _dibujar_radar(), mostrar_grafo_interactivo_muestras(), normalizar_minmax() (+9 more)
+Cohesion: 0.11
+Nodes (22): agrupar_por_vano(), _calcular_radar(), _compactar_contexto_inferencia_para_prompt(), construir_contexto_inferencia(), construir_grafo_interactivo_muestras(), _dibujar_radar(), mostrar_grafo_interactivo_muestras(), normalizar_minmax() (+14 more)
 
-### Community 164 - "data/__init__.py"
-Cohesion: 0.14
-Nodes (18): construir_aristas_grafo_chec(), construir_aristas_preservadas(), construir_matriz_adyacencia_mgcecdl(), ndarray, Expert graph helpers aligned with the processed CHEC feature matrix., Preserve directed connectivity through nodes removed by feature selection., Return a directed adjacency matrix aligned exactly with ``features`` order., Build the directed weighted expert graph used by the CHEC graph notebook. (+10 more)
+### Community 164 - "_celda_del_dispositivo"
+Cohesion: 0.33
+Nodes (6): _celda_del_dispositivo(), La celda de importaciones, que es donde se resuelve `DEVICE`., MPS es el peor camino para ESTE modelo, y esta medido: 19,63 s por epoca y…, El guardia descarta MPS, no toda GPU. CUDA no se midio aqui -- una NVIDIA de…, test_cuda_se_respeta_si_la_hay(), test_el_cuaderno_nunca_entrena_en_mps()
 
 ### Community 165 - "test_plotting.py"
-Cohesion: 0.16
-Nodes (23): plot_interactive_circuit_clustering(), La nube de K-Means. Ya NO la usa `render_clustering` -- ver…, compute_circuit_criticality_groups(), plot_interactive_circuit_clustering(), Plots an interactive scatter map of events frequency vs UITI_VANO sums…, Compute per-circuit event-frequency / UITI_VANO-sum coordinates, K-Means…, _four_tier_raw_df(), DataFrame (+15 more)
+Cohesion: 0.14
+Nodes (25): plot_interactive_circuit_clustering(), La nube de K-Means. Ya NO la usa `render_clustering` -- ver…, compute_circuit_criticality_groups(), plot_interactive_circuit_clustering(), Plots an interactive scatter map of events frequency vs UITI_VANO sums…, Custom NumPy K-Means implementation., Compute per-circuit event-frequency / UITI_VANO-sum coordinates, K-Means…, run_kmeans() (+17 more)
 
 ### Community 166 - "test_aplicaciones_locales.py"
 Cohesion: 0.10
 Nodes (19): Contrato de las aplicaciones locales de `aplicaciones/`. Las seis aplicaciones…, Al reves que la de arriba, y por eso va aparte: si algun dia el menu apareciera…, Es su rasgo de diseno, no un descuido. El menu lanza a las otras como procesos…, Los cuatro visores estaticos empaquetan el plotly.js que trae plotly.py, con el…, Los dos extremos viven en archivos distintos y solo coinciden porque…, El fallo tiene que ser ruidoso. Un documento sin `</body>` que se empaquetara…, El invariante que evita que este hueco vuelva a abrirse. `_verificar_insumos`…, El simulador local NO precalienta kernel, y es una decision medida.… (+11 more)
 
 ### Community 167 - "test_vano_widgets.py"
-Cohesion: 0.13
-Nodes (19): _categorical_knob(), _constant_knob(), _numeric_knob(), RED/GREEN tests for PR2a of notebook 01.5 (widget constructor). Covers…, 01.4 marca vanos con CASILLAS, no con una lista de seleccion multiple. El…, Los vanos siguen siendo una lista corrida con scroll: son cientos y no tienen…, El diagnostico estudia hasta quince vanos -- los que el usuario marco, mas los…, Lo que el tope de cinco protegia era la REJILLA, no la seleccion: diez columnas… (+11 more)
+Cohesion: 0.20
+Nodes (13): _categorical_knob(), _constant_knob(), _numeric_knob(), RED/GREEN tests for PR2a of notebook 01.5 (widget constructor). Covers…, El diagnostico estudia hasta quince vanos -- los que el usuario marco, mas los…, Lo que el tope de cinco protegia era la REJILLA, no la seleccion: diez columnas…, test_the_analysis_cap_leaves_room_for_the_whole_circuit_diagnostic(), test_the_grid_pages_at_fewer_vanos_than_the_cap() (+5 more)
 
-### Community 168 - "ndarray"
-Cohesion: 0.24
-Nodes (9): BagPredictor, baseline_mayoritaria(), ndarray, Majority baseline: the training fold's modal class, broadcast., Adapts a fitted `MILBagRegressor` to bag-level u-hat / class / proba, and to…, u-hat per bag. When `instance_bag` is None, every row is its own singleton bag…, Hard nearest-centroid class over `(OBSERVED n_obs, predicted u-hat)` -- `n_obs`…, `(n_bags, 2)`: `[1 - P(Alto), P(Alto)]`, nunca la matriz de 4 clases. La forma… (+1 more)
+### Community 168 - "MarkdownSection"
+Cohesion: 0.40
+Nodes (5): _batch_candidate_sections(), MarkdownSection, One chunked Markdown section of a single PDF, ready for candidate evaluation…, Greedily pack `candidates` (1-based global index preserved) into the minimum…, test_markdown_section_is_a_frozen_dataclass_with_expected_fields()
 
-### Community 169 - "test_agent_tools_batch.py"
-Cohesion: 0.12
-Nodes (17): Headless per-circuit batch runner (design's Failure handling section / WU4).…, A hard subprocess failure (auth error, crash, non-zero exit) must be reported…, Two distinct raw `circuito` values that both sanitize to the same on-disk…, A batch with one bad circuit (missing periodo_informe) and one good circuit…, A crash mid-write must never leave a truncated/corrupt published report: the…, End-to-end using the REAL `HISTORICAL_AGENT` spec (not a synthetic stand-in):…, Phase 4 (Slice A, PR3): the inference agent's `AgentSpec` must be registered in…, Only agent_tools/batch.py may reference the published-reports root for… (+9 more)
+### Community 169 - "layout_clima_b"
+Cohesion: 0.50
+Nodes (4): _horas_locales(), layout_clima_b(), Timestamp, Devuelve (sufijos, etiquetas_utc, columnas_clima). Los sufijos son la hora…
 
 ### Community 170 - "test_prompt_relocation_characterization.py"
 Cohesion: 0.21
@@ -1505,24 +1501,24 @@ Cohesion: 0.11
 Nodes (18): 05 - Validador de Salida del LLM CHEC, Checklist final, Claves Requeridas, Esquema JSON recomendado, Fechas de interes, Formato obligatorio en este notebook, Frecuencia en fechas de interes, inferencia (+10 more)
 
 ### Community 172 - "LimitadorPersistente"
-Cohesion: 0.39
-Nodes (3): LimitadorPersistente, Contabiliza ubicaciones consultadas y espera cuando haria falta. En gratuita…, Presupuesto restante para el Gate 3: diario (gratuita) o mensual (paga).
+Cohesion: 0.29
+Nodes (5): LimitadorPersistente, PresupuestoDiarioAgotado, PresupuestoMensualAgotado, Contabiliza ubicaciones consultadas y espera cuando haria falta. En gratuita…, Presupuesto restante para el Gate 3: diario (gratuita) o mensual (paga).
 
 ### Community 173 - "package.json"
 Cohesion: 0.10
 Nodes (19): astro, bugs, url, dependencies, astro, devDependencies, homepage, name (+11 more)
 
-### Community 174 - "bags.py"
-Cohesion: 0.21
-Nodes (12): cachear_bolsas(), cargar_bolsas(), CodCausaEncoding, ndarray, Path, MIL bag construction over 01.4's vano x window cells. Bags are `(CIRCUITO,…, D4. `nombre_frecuencia` is the graph-carrying column and MUST stay exactly…, Persist a bag build under gitignored `data/derived/` (`.gitignore:8` `data/*`).… (+4 more)
+### Community 174 - "crear_cliente"
+Cohesion: 0.67
+Nodes (3): Client, crear_cliente(), Cliente Open-Meteo con cache HTTP local + reintentos (igual que el cuaderno).
 
 ### Community 175 - "circuit_clustering_contract.py"
 Cohesion: 0.12
 Nodes (28): _build_parser(), ClusteringOutcome, ClusteringRequest, _default_output_path(), main(), normalize_request(), plot_ranking_circuitos(), preflight_clustering() (+20 more)
 
-### Community 176 - "test_mil_bags.py"
-Cohesion: 0.18
-Nodes (14): BagIndex, construir_indice_bolsas(), DataFrame, CSR-style flat instance layout: `(n_inst, p)` features + a segment index into…, Build one bag per `(circuito, vano, ventana)` cell with events. `ventanas` is a…, _eventos_sinteticos(), DataFrame, Unit tests for MIL bag construction (PR1 of notebook-10-mil-vano-ventana). Bags… (+6 more)
+### Community 176 - "_no_real_mgcecdl_model_by_default"
+Cohesion: 0.67
+Nodes (3): _no_real_mgcecdl_model_by_default(), fixture, Most tests in this file use a small synthetic fixture dataset (C1/C2) that is…
 
 ### Community 177 - "seleccionar_reporte_previo_mas_reciente"
 Cohesion: 0.22
@@ -1552,17 +1548,13 @@ Nodes (24): fuente(), _libro_2026(), fixture, RED/GREEN tests for `costos_items`
 Cohesion: 0.17
 Nodes (34): Additively validate per-`key_finding` `provenance` objects, when present.…, validar_provenance_base(), _base_context(), _base_domain_context(), _base_finding(), _ea_context(), _ea_data(), _ea_item() (+26 more)
 
-### Community 184 - "agent_tools/expert_alignment.py"
-Cohesion: 0.19
-Nodes (12): _build_context_handler(), _errores_de_ortografia(), Any, Path, L2 tool-adapter CLI for the expert-alignment pilot agent. This module is a thin…, Public re-export of the shared `circuit_identity.sanitize_circuito_dirname`.…, Write the raw response + validation errors under `ARTIFACTS_ROOT/{identity}/`.…, La guarda de tildes, como TERCERA etapa del validador. Va aqui y no en el… (+4 more)
-
 ### Community 185 - "Agent Rules — Invariants"
 Cohesion: 0.17
 Nodes (17): Agent Rules — Invariants, informe_gerencial_contract.cause_themes (bucketing de temas causales), Checkpoint unico de confirmacion (missing-run gate), circuit_clustering_contract.py (paso 1.5, grafica previa), Paso 2.5 y su seccion cross-circuito retirados (graphify fuera del flujo), /informe-gerencial Skill, intervention_graph.py (grafo radial causas/estrategias, paso 2.6), vault_note_contract.py (proyeccion de nota de boveda) (+9 more)
 
-### Community 186 - "ValueError"
-Cohesion: 0.12
-Nodes (21): _ajustar_titulo(), empaquetar(), _escribir(), _extraer_ctx(), _extraer_plotly(), _hash_corto(), _inyectar_boton_cerrar(), Paquete (+13 more)
+### Community 186 - "empaquetar.py"
+Cohesion: 0.17
+Nodes (14): _ajustar_titulo(), empaquetar(), _escribir(), _extraer_ctx(), _extraer_plotly(), _hash_corto(), _inyectar_boton_cerrar(), Paquete (+6 more)
 
 ### Community 187 - "03 - Explicador del Comportamiento de `UITI_VANO`"
 Cohesion: 0.11
@@ -1582,7 +1574,7 @@ Nodes (17): requiere_datos, skipif, El arranque caro del simulador: que produce,
 
 ### Community 191 - "RuntimeError"
 Cohesion: 0.15
-Nodes (9): RuntimeError, PresupuestoDiarioAgotado, PresupuestoMensualAgotado, Path, cargar(), El `POST /apagar` del boton de cerrar del propio tablero., Navega al tablero y espera a que su figura este montada. Devuelve los segundos., El tablero servido en un puerto propio. Nunca el del contrato. El del contrato… (+1 more)
+Nodes (9): RuntimeError, Path, cargar(), El `POST /apagar` del boton de cerrar del propio tablero., Navega al tablero y espera a que su figura este montada. Devuelve los segundos., El tablero servido en un puerto propio. Nunca el del contrato. El del contrato…, Servido, abrir() (+1 more)
 
 ### Community 192 - "Mapa UITI diario con cortes por circuito"
 Cohesion: 0.17
@@ -1600,17 +1592,13 @@ Nodes (18): Controles del tablero: deslizador de ventana, Centrar mapa y Cerrar,
 Cohesion: 0.20
 Nodes (17): desglose_por_clase(), Confusion matrix + per-class precision/recall/F1 + accuracy, per arm. macro-F1…, _obs(), ndarray, RED/GREEN tests for the per-class breakdown (confusion matrix + per-class F1).…, The exact failure mode macro-F1 hides and accuracy rewards., Orientation is not a detail: reading it transposed inverts the diagnosis., Even if an arm never predicts a tier, the matrix keeps its 4x4 shape. (+9 more)
 
-### Community 196 - "_valid_response"
-Cohesion: 0.19
-Nodes (13): _FakeCompletedProcess, `timeout` must be wired through with a sane, non-None default so a hung `claude…, `build_context` no longer parses a raw `periodo_inicio` (that assembly now…, test_cli_agent_flag_selects_the_registered_agent_spec(), test_cli_main_exit_code_zero_when_all_circuits_ok(), test_manifest_tool_version_comes_from_the_agent_spec_not_a_hardcoded_constant(), test_run_batch_passes_timeout_through_to_run_circuit(), test_run_circuit_applies_default_timeout_when_omitted() (+5 more)
-
 ### Community 197 - "test_expert_alignment.py"
-Cohesion: 0.15
-Nodes (14): construir_contexto_expert_alignment(), construir_prompt_expert_alignment(), filtrar_discussiones_por_circuito(), _predictive_model_variables(), Return only rows explicitly associated with the evaluated circuit., test_context_builder_drops_pdf_matches_from_other_circuits(), test_expert_alignment_rejects_expert_findings_without_pdf_matches(), test_expert_alignment_runs_with_available_agents_when_no_pdf_matches() (+6 more)
+Cohesion: 0.12
+Nodes (12): construir_contexto_expert_alignment(), construir_prompt_expert_alignment(), test_context_builder_drops_pdf_matches_from_other_circuits(), test_context_includes_predictive_model_signals_for_priorities(), test_expert_alignment_rejects_expert_findings_without_pdf_matches(), test_expert_alignment_runs_with_available_agents_when_no_pdf_matches(), test_validar_respuesta_expert_alignment_checks_evidence_dates_and_variables(), TestConstruirContextoAvailabilitySplit (+4 more)
 
-### Community 198 - "inference.py"
-Cohesion: 0.14
-Nodes (24): _errores_de_ortografia(), Path, L2 tool-adapter CLI for the inference/MGCECDL agent (Slice A, Phase 3). This…, Write the raw response + validation errors under `ARTIFACTS_ROOT/{identity}/`.…, La guarda de tildes, como TERCERA etapa del validador. Va aqui y no en el…, _write_failure_artifact(), allowed_dates(), allowed_scenario_names() (+16 more)
+### Community 198 - "inference_validation.py"
+Cohesion: 0.13
+Nodes (25): allowed_dates(), allowed_scenario_names(), allowed_variables(), allowed_ventanas(), errores_de_metrica(), _flatten_strings(), _guardrail_errors(), _load_schema() (+17 more)
 
 ### Community 199 - "properties"
 Cohesion: 0.10
@@ -1673,16 +1661,12 @@ Cohesion: 0.14
 Nodes (17): datos_grafo_radial(), La disposicion del anillo, o el motivo por el que no hay grafo que dibujar.…, _grafo_con_familias_de_rezagos(), Se comparten `plegar_rezagos` y `trazas_grafo`: quien lea el informe y despues…, test_el_grafo_es_el_MISMO_anillo_que_el_del_tablero(), Cuatro variables, dos de ellas familias de rezagos climaticos., Sin plegar, los doce rezagos de cada variable de clima son 48 de los 66 nodos.…, Radial, no barras. Un nodo fuera del anillo delata otra disposicion. (+9 more)
 
 ### Community 214 - "pdf_to_markdown"
-Cohesion: 0.16
-Nodes (14): pdf_to_markdown(), Render one `pdfplumber` `extract_tables()` table as a GFM pipe-table. `table`…, Convert a PDF into per-page Markdown (design D5, step 1). Emits, per page, a…, _table_to_markdown(), _FakePage, _FakePDF, _patch_pdfplumber_open(), MonkeyPatch (+6 more)
+Cohesion: 0.19
+Nodes (12): pdf_to_markdown(), Convert a PDF into per-page Markdown (design D5, step 1). Emits, per page, a…, _FakePage, _FakePDF, _patch_pdfplumber_open(), MonkeyPatch, skipif, test_pdf_to_markdown_emits_page_heading_and_text() (+4 more)
 
 ### Community 215 - "properties"
 Cohesion: 0.16
 Nodes (16): items, minItems, type, additionalProperties, properties, items, minItems, type (+8 more)
-
-### Community 216 - "DataFrame"
-Cohesion: 0.17
-Nodes (12): agrupar_por_claves(), evaluar_diagnostico_temporal(), guardia_proxy_univariante_mil(), particion_bloque_temporal(), DataFrame, A3: wires `guardia_proxy_univariante` (reused UNCHANGED) with the observed 01.4…, A6, secondary robustness diagnostic: bags whose `VENTANA` is in…, A6: scores the SAME arms on the temporal-block test subset via `evaluar_arms`,… (+4 more)
 
 ### Community 217 - "05 - Validador de Salida del LLM CHEC"
 Cohesion: 0.17
@@ -1717,12 +1701,12 @@ Cohesion: 0.12
 Nodes (15): 1. Qué hay hoy, 2. Acople a 06, 3. Mejoras pendientes, por prioridad, 4. Hipótesis ya falseadas — no reintentar sin evidencia nueva, 5. Trampas de medición confirmadas en esta máquina, Desempeño por grupo, MIL vano x ventana: estado, acople a 06 y mejoras pendientes, P0 — Determinismo. Bloquea todo lo demás (+7 more)
 
 ### Community 225 - "AZA23L15"
-Cohesion: 0.07
-Nodes (29): Banda de riesgo, /clima, Criticidad, /informe-gerencial, /limpiar-corridas, Los circuitos del informe gerencial son los peores de su banda, no los típicos, Pilar 2 — Los comandos, /report (+21 more)
+Cohesion: 0.12
+Nodes (15): Acciones recomendadas, Alineación con experto, AZA23L15, AZA23L15 -- ventana V10, AZA23L15 -- ventana V11, AZA23L15 -- ventana V4, Caracterización, Hallazgos clave (+7 more)
 
 ### Community 226 - "normalizar_reporte_previo_como_matches"
-Cohesion: 0.21
-Nodes (10): cargar_discussiones_pdf_excel(), normalizar_reporte_previo_como_matches(), DataFrame, Path, Normalize a prior run's own `expert-alignment.out.json` synthesis into records…, Load the already-extracted expert PDF discussion Excel table. The function…, Path, Phase 3 (PR 2): prior-report records must be marked as lower-trust continuity… (+2 more)
+Cohesion: 0.14
+Nodes (17): cargar_discussiones_pdf_excel(), filtrar_discussiones_por_circuito(), _interval_overlap_and_distance(), normalizar_reporte_previo_como_matches(), DataFrame, Path, Return only rows explicitly associated with the evaluated circuit., Normalize a prior run's own `expert-alignment.out.json` synthesis into records… (+9 more)
 
 ### Community 227 - "errores_de_tilde"
 Cohesion: 0.18
@@ -1737,16 +1721,12 @@ Cohesion: 0.33
 Nodes (15): _color_de_grupo(), colores_de_barras_uiti(), figuras_de_escenario(), _guardar(), _lienzo(), _panel_grafo(), _panel_relevancia(), _panel_serie() (+7 more)
 
 ### Community 230 - "resumen_variables_por_grupo"
-Cohesion: 0.18
-Nodes (14): _mediana(), Que variables ayudan mas a bajar de grupo, separadas en obra y escenario. Dos…, resumen_variables_por_grupo(), Tres vanos, tres palancas: una de obra que sirve, una de obra que no alcanza y…, El informe sustenta una ORDEN DE TRABAJO. Presentar la racha de viento junto a…, La pregunta del informe no es 'que baja mas el UITI' sino 'que cambia de grupo…, V3 ya esta en el grupo mas bajo: ninguna variable lo lleva ahi, porque no hay…, Sube ALTURA' no es una orden de trabajo; 'lleva ALTURA a 18 m' si. El valor que… (+6 more)
+Cohesion: 0.15
+Nodes (16): _mediana(), Que variables ayudan mas a bajar de grupo, separadas en obra y escenario. Dos…, El valor que consigue el minimo en MAS vanos, para que la fila se lea como una…, resumen_variables_por_grupo(), _valor_mas_repetido(), Tres vanos, tres palancas: una de obra que sirve, una de obra que no alcanza y…, El informe sustenta una ORDEN DE TRABAJO. Presentar la racha de viento junto a…, La pregunta del informe no es 'que baja mas el UITI' sino 'que cambia de grupo… (+8 more)
 
-### Community 231 - "test_inference_validation.py"
-Cohesion: 0.24
-Nodes (10): Validate a JSON inference-agent response with lightweight scenario checks., validar_respuesta_inferencia(), _contexto_mil(), El MIL predice UITI acumulado. El conteo de eventos es un EJE del espacio…, La frecuencia sigue siendo un dato del caso. Lo prohibido es colgarsela al…, El escenario ahora ES una ventana. Sin declararlas, el agente no puede nombrar…, test_describing_event_counts_as_observed_data_is_allowed(), test_inference_validation_accepts_graph_discussion_dict_and_normalizes() (+2 more)
-
-### Community 232 - "fuente_de_tablero"
-Cohesion: 0.09
-Nodes (29): _clave(), cuerpo_de_funcion(), esta_migrado(), fuente_de_tablero(), fuente_del_cuaderno(), De donde se lee la fuente de un tablero mientras dura la migracion. Los cinco…, El codigo de un tablero, venga de donde venga. `nombre` acepta con o sin…, El texto del `.ipynb`, SIEMPRE, este migrado o no. No es lo mismo que… (+21 more)
+### Community 232 - "_arbol"
+Cohesion: 0.67
+Nodes (3): _arbol(), Module, El arbol sintactico del tablero, solo con su CODIGO. Sirve para acotar un…
 
 ### Community 233 - "test_informe_estilo_compartido.py"
 Cohesion: 0.16
@@ -1772,13 +1752,13 @@ Nodes (14): Agent-native architecture, Arquitectura agent-native de dos verbos (
 Cohesion: 0.16
 Nodes (14): Construye el simulador: congela su arranque y escribe el cuaderno que lo sirve.…, _barrer_lo_que_sobra(), celda(), construir_paquete(), escribir_cuaderno(), huellas_actuales(), Path, Congela el arranque del simulador y escribe el cuaderno delgado que lo sirve.… (+6 more)
 
-### Community 239 - "menu_pagina.py"
-Cohesion: 0.15
-Nodes (12): _diagrama(), _logo(), pagina(), La pagina del menu de CriticidadCHEC. Un solo documento, sin dependencias. Va…, El diagrama de la portada, centrado en el simulador "Que pasa si?". Cinco…, El logo como `data:` URI, o cadena vacia si no esta. Embebido y no enlazado…, aplicar(), La paleta de los tableros, en un solo sitio. Los cinco cuadernos emiten su… (+4 more)
+### Community 239 - "paleta.py"
+Cohesion: 0.25
+Nodes (6): aplicar(), La paleta de los tableros, en un solo sitio. Los cinco cuadernos emiten su…, Resuelve los marcadores `__TOKEN__` de un fragmento de HTML o de JavaScript.…, portada(), La portada de la app consolidada: cuatro tarjetas y nada mas. ## Por que no…, El documento completo. Sin dependencias externas y sin JavaScript. Sin JS a…
 
 ### Community 240 - "criticidad_chec/app.py"
-Cohesion: 0.09
-Nodes (20): Que tableros hay, como se llaman y de que modulo salen. Una sola lista. Estaba…, Un tablero del proyecto, descrito sin decir donde se sirve. `clave` es el…, Tablero, _descargar(), raiz(), CriticidadCHEC en Databricks: los cuatro tableros estaticos bajo un solo…, Una pieza del panel, en gzip si el navegador lo acepta. El `.gz` se sube ya…, A proposito NO toca el Volume. Separa "la app esta rota" de "falta el permiso… (+12 more)
+Cohesion: 0.12
+Nodes (17): _descargar(), raiz(), CriticidadCHEC en Databricks: los cuatro tableros estaticos bajo un solo…, Una pieza del panel, en gzip si el navegador lo acepta. El `.gz` se sube ya…, A proposito NO toca el Volume. Separa "la app esta rota" de "falta el permiso…, Que hay publicado, en JSON. Util para comprobar un despliegue sin abrir nada., Le cuelga a un tablero sus dos rutas: la del documento y la de sus piezas. Se…, Los bytes de una pieza, del cache o del Volume. Los dos modos de fallo se… (+9 more)
 
 ### Community 241 - "es_codigo"
 Cohesion: 0.50
@@ -1812,13 +1792,13 @@ Nodes (13): __dir__(), __getattr__(), Any, Model exports, resueltas cuando se pi
 Cohesion: 0.20
 Nodes (10): expert-alignment, historical, inference, Pi compatibility mirrors for Claude-native entry points, Related artifacts, Report orchestrator (multi-runtime adapters), Role mirror equivalence, Shared (+2 more)
 
-### Community 249 - "test_pdf_discussion_pipeline.py"
-Cohesion: 0.22
-Nodes (22): circuito_from_pdf_name(), prepare_pdf_discussion_batch(), Build the batch payload files for every candidate-bearing PDF in `pdf_dir`…, Extract the circuit code from a PDF's filename stem (ported verbatim from the…, _fake_pdf_to_markdown(), _FakeTable, Path, Not used directly -- pdfplumber's `extract_tables()` returns… (+14 more)
+### Community 249 - "prepare_pdf_discussion_batch"
+Cohesion: 0.31
+Nodes (14): circuito_from_pdf_name(), prepare_pdf_discussion_batch(), Build the batch payload files for every candidate-bearing PDF in `pdf_dir`…, Extract the circuit code from a PDF's filename stem (ported verbatim from the…, _fake_pdf_to_markdown(), Path, test_circuito_from_pdf_name_extracts_circuit_code(), test_circuito_from_pdf_name_returns_none_without_circuit_code() (+6 more)
 
 ### Community 250 - "type"
 Cohesion: 0.13
-Nodes (15): items, type, type, items, minItems, type, description, items (+7 more)
+Nodes (15): items, type, items, minItems, type, type, description, items (+7 more)
 
 ### Community 251 - "enum"
 Cohesion: 0.20
@@ -1852,21 +1832,9 @@ Nodes (14): /informe-gerencial, /report (orquestador de un circuito, nueve pasos
 Cohesion: 0.32
 Nodes (8): Split a `pdf_to_markdown` output back into `(page_number, block)` pairs, one…, Chunk a whole-PDF Markdown string into `MarkdownSection`s on `## Página`…, _split_into_pages(), split_markdown_sections(), _page_block(), test_split_markdown_sections_applies_overlap_between_consecutive_chunks(), test_split_markdown_sections_chunks_on_page_boundaries_over_max_chars(), test_split_markdown_sections_single_small_page_yields_one_section()
 
-### Community 259 - "grafo_reconstruido_por_grupo"
-Cohesion: 0.24
-Nodes (11): grafo_reconstruido_por_grupo(), Rebuild each group's mean expert graph from its per-vano edge gates. A group's…, A group holding exactly one vano must reproduce that vano's gate vector…, `matrix` must be filled through `edge_index.pairs`, never by assuming edge `i`…, Reversing the feature order moves every cell -- if the matrix were built…, test_degree_zero_features_reported_ungatable(), test_grafo_reconstruido_coloca_pesos_en_las_posiciones_del_edge_index(), test_grafo_reconstruido_grupo_de_un_vano_reproduce_sus_gates() (+3 more)
-
-### Community 260 - "_invalid_response"
-Cohesion: 0.25
-Nodes (8): _invalid_response(), A falsy-but-non-empty `circuito` (None here) must resolve to the SAME canonical…, A `circuito` value with an embedded null byte must never propagate an uncaught…, test_cli_main_exit_code_reflects_batch_failure(), test_run_batch_continues_after_one_circuit_fails(), test_run_circuit_canonicalizes_falsy_circuito_consistently_across_context_and_manifest(), test_run_circuit_null_byte_circuito_does_not_crash_and_is_failed(), test_run_circuit_retries_then_fails_and_never_publishes_invalid_output()
-
 ### Community 261 - "contexto"
 Cohesion: 0.29
 Nodes (7): circuito, modelo, periodo, additionalProperties, required, type, contexto
-
-### Community 262 - "test_batch_pipeline_integration_prepare_validate_assemble"
-Cohesion: 0.20
-Nodes (5): _FakePage, _FakePDF, MonkeyPatch, 2-page synthetic PDF -> prepare_pdf_discussion_batch -> canned agent response…, test_batch_pipeline_integration_prepare_validate_assemble()
 
 ### Community 263 - "circuit_characterization"
 Cohesion: 0.29
@@ -1964,9 +1932,9 @@ Nodes (11): huella_de_arbol(), huella_de_archivo(), huellas_de_insumos(), motivo
 Cohesion: 0.17
 Nodes (11): Circuit scenario interpretation (ported from `02_circuit_scenario_interpreter.md`), Graph connectivity guardrails (ported from `04_graph_connectivity_guardrails.md`), Inference output contract (ported from `06_inference_output_contract.md`), Language register, Output validation (ported from `05_llm_output_validator.md`), Overview, Predictive-model behavior explanation (ported from `03_uiti_vano_behavior_explainer.md`), Provenance contract (+3 more)
 
-### Community 287 - "main"
+### Community 287 - "historical.py"
 Cohesion: 0.13
-Nodes (22): _assert_prompt_contents(), _load_json(), main(), Path, Synthetic, offline historical/base agent response: the 10 required base keys…, Synthetic, offline inference response: the 9 required keys of…, Synthetic, offline expert-alignment pilot response: 7 required keys plus a…, _valid_expert_alignment_output() (+14 more)
+Nodes (19): _errores_de_ortografia(), Path, L2 tool-adapter CLI for the historical/base descriptive agent. This module is a…, Write the raw response + validation errors under `ARTIFACTS_ROOT/{identity}/`.…, La guarda de tildes, como TERCERA etapa del validador. Va aqui y no en el…, _write_failure_artifact(), prompt_assets_dir(), Package-relative home for shared prompt templates/schemas. Survives install and… (+11 more)
 
 ### Community 288 - "Diccionario operativo de nodos"
 Cohesion: 0.29
@@ -1977,12 +1945,8 @@ Cohesion: 0.29
 Nodes (10): afinidad_entre_grafos(), Square symmetric affinity between every reconstructed graph and the fixed…, _grafos_anticorrelados(), parametrize, Two groups whose gates deviate from 1 in OPPOSITE directions over expert…, The design note this function exists to honour, pinned as a test. Every…, test_afinidad_diagonal_exacta_y_simetrica(), test_afinidad_metrica_desconocida() (+2 more)
 
 ### Community 290 - "_etapa_de_datos"
-Cohesion: 0.19
-Nodes (9): _etapa_de_datos(), Y no copiando bloques de codigo desde este mismo archivo, que es como se…, La compuerta miraba nombre y tamano, y nada mas. Un `.pt` reentrenado se llama…, Un inventario que no nombra algo se lee como que ese algo no sube -- ya paso…, Subir un artefacto que el sello local ya da por viejo es propagar el desajuste., test_el_sello_esta_en_el_inventario_de_lo_que_sube(), test_la_etapa_4c_prepara_su_fuente_con_el_empacador(), test_la_etapa_de_datos_distingue_estar_de_estar_vigente() (+1 more)
-
-### Community 291 - "estabilidad_por_submuestreo"
-Cohesion: 0.20
-Nodes (10): _ari_sobre_filas_compartidas(), estabilidad_por_submuestreo(), ARI between `labels_a`/`labels_b` restricted to the GLOBAL row indices present…, Ben-Hur-style cluster-stability protocol. For each `K` in `k_values` and each…, Regression guard for the exact bug the launch contract warns against: a naive…, test_ari_sobre_filas_compartidas_reports_zero_overlap(), test_ari_sobre_filas_compartidas_uses_global_identity_not_position(), test_estabilidad_por_submuestreo_shape_and_keys_are_stable() (+2 more)
+Cohesion: 0.29
+Nodes (7): _etapa_de_datos(), La compuerta miraba nombre y tamano, y nada mas. Un `.pt` reentrenado se llama…, Un inventario que no nombra algo se lee como que ese algo no sube -- ya paso…, Subir un artefacto que el sello local ya da por viejo es propagar el desajuste., test_el_sello_esta_en_el_inventario_de_lo_que_sube(), test_la_etapa_de_datos_distingue_estar_de_estar_vigente(), test_la_etapa_de_datos_manda_a_actualizar_cuando_el_sello_local_no_cuadra()
 
 ### Community 292 - "04 - Reglas de Conectividad de Grafos"
 Cohesion: 0.15
@@ -2057,8 +2021,8 @@ Cohesion: 0.18
 Nodes (10): 06 - Contrato de Salida de Inferencia, Claves requeridas, Discusión de Grafos, Escenarios, Forma exacta, Hipótesis del Modelo Predictivo, Inferencias predictivas, Presentación Esperada en el Reporte (+2 more)
 
 ### Community 310 - "Agente de IA (asistente que redacta bajo validación)"
-Cohesion: 0.40
-Nodes (6): Agente de IA (asistente que redacta bajo validación), evals/ — arnés de evaluación de los agentes, Agente Descriptor (lectura histórica/descriptiva), Agente predictivo (interpretación del modelo MIL), jsonschema>=4.23 — validación de las respuestas de los agentes, pdfplumber>=0.11 — extracción de los PDF de expertos
+Cohesion: 0.12
+Nodes (20): Agente de IA (asistente que redacta bajo validación), Banda de riesgo, /clima, Criticidad, /informe-gerencial, /limpiar-corridas, Los circuitos del informe gerencial son los peores de su banda, no los típicos, Pilar 2 — Los comandos (+12 more)
 
 ### Community 311 - "empacar_app_databricks.py"
 Cohesion: 0.29
@@ -2068,13 +2032,9 @@ Nodes (10): construir_paneles(), main(), preparar_fuente(), preparar_fuente_simu
 Cohesion: 0.33
 Nodes (5): app-local-criticidadCHEC -- VS Code Copilot mirror, Boundaries, Invocation, Read this first, Runtime notes
 
-### Community 313 - "informe_estilo.py"
-Cohesion: 0.19
-Nodes (13): _escape(), escudo_chec_html(), logo_html(), pie_agentes_html(), La identidad visual que comparten los dos informes, en UN solo sitio. El…, Quien PRODUJO el informe, abajo a la derecha. Separado del escudo a proposito:…, Un logo del proyecto, embebido como `data:` URI. DENTRO del HTML y no como…, El escudo de quien OPERA la red: es el destinatario del informe. (+5 more)
-
-### Community 314 - "config.py"
-Cohesion: 0.27
-Nodes (6): agent_prompt_dir(), project_root(), prompt_assets_dir(), Path, Package-relative home for shared prompt templates/schemas. Survives install and…, Repo-root-relative home for a migrated agent's playbook prompts.
+### Community 313 - "nombre_con_codigo"
+Cohesion: 0.12
+Nodes (22): Counter, nombre_con_codigo(), `Nombre natural (CODIGO)`, o solo el codigo cuando no hay nombre que anteponer.…, _annex_summary_lines(), _cause_theme_counter(), _common_patterns(), _executive_summary(), Tally, once per circuit, which variables its own expert-alignment output… (+14 more)
 
 ### Community 315 - "compactar_grafo_del_escenario"
 Cohesion: 0.20
@@ -2111,10 +2071,6 @@ Nodes (9): A. Fixed port per app — never pick a free one, B. If it is already 
 ### Community 323 - "02 - Intérprete de Escenarios por Ventana"
 Cohesion: 0.20
 Nodes (9): 02 - Intérprete de Escenarios por Ventana, Cómo leer el grafo diferencia, Cómo leer el ranking de variables, Cómo leer la simulación, Forma recomendada de respuesta, Intervención contra Escenario, Qué trae cada escenario, Si falta contexto (+1 more)
-
-### Community 324 - "anidamiento_entre_particiones"
-Cohesion: 0.25
-Nodes (8): anidamiento_entre_particiones(), Does the FINE partition nest inside the coarse one? Reported PER FINE FAMILY,…, The real shape this function exists to describe honestly. Three fine families…, Guard against the regression this function replaces: a single MIN-purity…, test_anidamiento_no_devuelve_veredicto_booleano_global(), test_anidamiento_particion_perfectamente_anidada(), test_anidamiento_tres_familias_puras_y_una_que_cruza(), test_anidamiento_umbral_configurable()
 
 ### Community 325 - "instalar-local -- VS Code Copilot mirror"
 Cohesion: 0.33
@@ -2191,10 +2147,6 @@ Nodes (8): Ancho de los rótulos, Concisión, Dialecto y registro, Lo que NO se 
 ### Community 343 - "Aristas expertas principales"
 Cohesion: 0.33
 Nodes (6): Activos, apoyo y transformador, Aristas expertas principales, Entorno, riesgo y causa, Proteccion y maniobra, Topologia y configuracion espacial, Usuarios, carga e impacto
-
-### Community 344 - "split_cronologico_p70"
-Cohesion: 0.40
-Nodes (5): datetime64, Chronological 70th-percentile split: `past_mask, future_mask, cut`. `cut` is…, split_cronologico_p70(), The cut must be COMPUTED as the p70 quantile of `fechas`, never a hardcoded…, test_split_cronologico_p70_derives_cut_not_literal()
 
 ### Community 345 - "expert-alignment -- VS Code Copilot mirror"
 Cohesion: 0.40
@@ -2308,9 +2260,9 @@ Nodes (8): 01 - Constructor de Contexto Estructurado CHEC, Chequeos minimos ante
 Cohesion: 0.25
 Nodes (8): 01 - Constructor de Contexto Estructurado CHEC, Chequeos minimos antes de interpretar, Contexto minimo de variables y modos, Cómo interpretar el contexto, Flujo conceptual del cuaderno, Invariantes que no se deben romper, Qué va a recibir el agente, Salida esperada del contexto
 
-### Community 374 - "TestCompactPdfMatchesCarriesProvenance"
-Cohesion: 0.25
-Nodes (4): Regression guard: PDF-only records (no `source_kind`) must not gain new keys --…, Judgment Day Round 1 WARNING(real) fix: a prior-report row was never read from…, Regression guard: real PDF rows keep their `archivo_pdf` value., TestCompactPdfMatchesCarriesProvenance
+### Community 374 - "_compact_pdf_matches"
+Cohesion: 0.14
+Nodes (14): _compact_llm1_analysis(), _compact_llm2_analysis(), _compact_pdf_matches(), _compact_strings(), compactar_contexto_expert_alignment_para_prompt(), Reduce prompt size without changing the deterministic context artifact., _truncate_text(), Regression guard: PDF-only records (no `source_kind`) must not gain new keys --… (+6 more)
 
 ### Community 375 - "catalogo_falso"
 Cohesion: 0.40
@@ -2356,17 +2308,17 @@ Nodes (6): Output contract, Overview, Related artifacts, Role and source rules, 
 Cohesion: 0.29
 Nodes (7): Acciones recomendadas, Caracterización, Hallazgos clave, Hipótesis de causa, Resumen histórico, Síntesis del período, Vacíos de datos
 
-### Community 387 - "Resumen histórico"
-Cohesion: 0.29
-Nodes (7): Acciones recomendadas, Caracterización, Hallazgos clave, Hipótesis de causa, Resumen histórico, Síntesis del período, Vacíos de datos
+### Community 387 - "ENE23L15"
+Cohesion: 0.12
+Nodes (16): Las ventanas se traslapan quince días y su UITI_VANO no es aditivo, Acciones recomendadas, Alineación con experto, Caracterización, ENE23L15, ENE23L15 -- ventana V11, ENE23L15 -- ventana V3, ENE23L15 -- ventana V4 (+8 more)
 
 ### Community 388 - "Resumen histórico"
 Cohesion: 0.29
 Nodes (7): Acciones recomendadas, Caracterización, Hallazgos clave, Hipótesis de causa, Resumen histórico, Síntesis del período, Vacíos de datos
 
-### Community 389 - "Resumen histórico"
-Cohesion: 0.29
-Nodes (7): Acciones recomendadas, Caracterización, Hallazgos clave, Hipótesis de causa, Resumen histórico, Síntesis del período, Vacíos de datos
+### Community 389 - "INS23L13"
+Cohesion: 0.12
+Nodes (15): wind_gust_spd — ráfaga de viento (palanca de escenario dominante), Acciones recomendadas, Alineación con experto, El estrés se concentra en la transición de noviembre a diciembre (INS23L13), Caracterización, Hallazgos clave, Hipótesis de causa, INS23L13 (+7 more)
 
 ### Community 390 - "VBO23L15"
 Cohesion: 0.13
@@ -2384,25 +2336,17 @@ Nodes (3): El simulador servido por Voila, en su propio puerto. Se levanta con `
 Cohesion: 0.29
 Nodes (6): Skill: 01_structured_context_builder.md, Skill: 02_window_scenario_interpreter.md, Skill: 03_uiti_vano_behavior_explainer.md, Skill: 04_graph_connectivity_guardrails.md, Skill: 05_llm_output_validator.md, Skill: 06_inference_output_contract.md
 
-### Community 395 - "test_artifacts_isolation.py"
-Cohesion: 0.43
-Nodes (6): _invalid_payload(), Regression guard: pytest MUST NOT write into the tracked…, Documents the invariant the fixture guarantees; the real end-to-end proof is…, test_full_suite_leaves_tracked_artifacts_tree_unchanged(), test_historical_validate_failure_writes_under_tmp_not_tracked_tree(), test_inference_validate_failure_writes_under_tmp_not_tracked_tree()
-
 ### Community 396 - "_archivos_que_el_comando_sube"
 Cohesion: 0.29
 Nodes (7): _archivos_que_el_comando_sube(), Path, El dashboard Lakeview y el job de tablas se retiraron por completo., Los nombres CONCRETOS que aparecen tras `--file <scratch>/`, sin ruta. Se dejan…, Cada `--file <scratch>/X` tiene que tener un productor con nombre. Los…, test_el_stack_lakeview_quedo_borrado(), test_todo_lo_que_la_etapa_4_sube_lo_escribe_algo_del_repositorio()
-
-### Community 397 - "_html_con_justificaciones"
-Cohesion: 0.29
-Nodes (7): _html_con_justificaciones(), En el informe de DON23L14 se leia `Modo Entorno/Riesgo (NR_T, DDT):`. Quien lo…, `temp_3` es la temperatura tres horas antes; perder el `_3` borra justo lo que…, Sin repetirse: `X (X)` se lee como un fallo del informe., test_las_variables_asociadas_se_escriben_en_castellano_con_su_codigo(), test_una_variable_climatica_conserva_su_rezago_al_traducirse(), test_una_variable_fuera_del_glosario_se_muestra_tal_cual()
 
 ### Community 398 - "test_los_tres_validadores_rechazan_la_prosa_sin_tilde"
 Cohesion: 0.67
 Nodes (3): parametrize, Mientras fue una recomendacion del prompt, los agentes la ignoraron y…, test_los_tres_validadores_rechazan_la_prosa_sin_tilde()
 
-### Community 399 - "menu.py"
-Cohesion: 0.10
-Nodes (19): CriticidadCHEC: el menu desde el que se abren y se cierran las otras cinco. No…, es_un_menu(), _esperar(), _Manejador, _parametro(), _pedir_por_su_puerta(), _pid_escrito(), Path (+11 more)
+### Community 399 - "menu_pagina.py"
+Cohesion: 0.15
+Nodes (11): _Manejador, _diagrama(), _logo(), pagina(), La pagina del menu de CriticidadCHEC. Un solo documento, sin dependencias. Va…, El diagrama de la portada, centrado en el simulador "Que pasa si?". Cinco…, El logo como `data:` URI, o cadena vacia si no esta. Embebido y no enlazado…, _parametro() (+3 more)
 
 ### Community 400 - "agents-guide.md"
 Cohesion: 0.10
@@ -2480,10 +2424,6 @@ Nodes (5): _declared_tools(), parametrize, Path, Guards the restricted-Bash inva
 Cohesion: 0.40
 Nodes (5): _ids(), Una aplicacion nueva que no entre al catalogo existe pero es invisible desde el…, Fija la lista. Sin esto, las pruebas parametrizadas de abajo pasarian…, test_el_menu_gobierna_a_todos_los_visores_y_solo_a_ellos(), test_estan_las_seis_aplicaciones()
 
-### Community 428 - "TestCompactPdfMatchesScoreBasedTruncation"
-Cohesion: 0.40
-Nodes (3): Judgment Day Round 1 CRITICAL fix: truncation to `limit` must be score-based…, A PDF-only list already in descending `temporal_score` order (as produced by…, TestCompactPdfMatchesScoreBasedTruncation
-
 ### Community 429 - "Despacho paralelo obligatorio de historical e inference"
 Cohesion: 0.50
 Nodes (4): Evitar colisiones de archivos scratch (prefijo circuito+rol+PID, relectura), Despacho paralelo obligatorio de historical e inference, Role-dispatch safety contract (un rol, un envelope, un output), Un rol explicito por invocacion de subagente (nunca workers identicos que adivinen)
@@ -2512,17 +2452,15 @@ Nodes (3): instructions, $schema, .claude/agents/rules/invariants.md
 Cohesion: 0.50
 Nodes (4): _css_de_los_cuadernos(), El CSS de los tableros, esten en un cuaderno o ya en `src/chec_tableros/`. El…, Los cuadernos son la FUENTE de la paleta; `_comun/paleta.py` solo la copia para…, test_cada_color_de_la_paleta_sale_de_los_cuadernos()
 
-### Community 764 - "test_agent_tools_atomic_io.py"
-Cohesion: 0.22
-Nodes (5): Shared atomic-write helper (`agent_tools/_atomic_io.py`), hoisted out of…, `tempfile.mkstemp()` always creates the temp file at mode `0600`, and…, A hardcoded `0o644` silently overrides a hardened host's umask policy (e.g.…, test_atomic_write_text_does_not_force_owner_only_permissions(), test_atomic_write_text_respects_a_restrictive_process_umask()
+### Community 764 - "atomic_write_text"
+Cohesion: 0.12
+Nodes (15): atomic_write_text(), Path, Shared atomic-write helper for `agent_tools` (hoisted out of `batch.py` and…, Write `content` to `path` atomically. Writes to a temp file in the same…, Shared atomic-write helper (`agent_tools/_atomic_io.py`), hoisted out of…, `tempfile.mkstemp()` always creates the temp file at mode `0600`, and…, A hardcoded `0o644` silently overrides a hardened host's umask policy (e.g.…, test_atomic_write_text_does_not_force_owner_only_permissions() (+7 more)
 
 ## Ambiguous Edges - Review These
 - `/subir-a-databricks command` → `Rule 4 — Prohibited Components (RAG, vector store, Databricks, Dash, FastAPI)`  [AMBIGUOUS]
   .claude/agents/rules/invariants.md · relation: conceptually_related_to
 - `bc.json — insumo que habilita el auto-simulator` → `02 · PREPARE() — Preparación determinista`  [AMBIGUOUS]
   site/assets/site/results/metodologia_actual.svg · relation: shares_data_with
-- `graphify aislado contra el grafo de reports/vault` → `Anclaje del manifiesto de graphify (encadenar desde la raiz del proyecto)`  [AMBIGUOUS]
-  .opencode/command/vault-circuito.md · relation: conceptually_related_to
 - `Funcion de costo de seis terminos` → `Perdida de informacion mutua cuadratica de Renyi`  [AMBIGUOUS]
   Informe_Impacto_CHEC/informe_tecnico.pdf · relation: conceptually_related_to
 - `Clasificacion de criticidad por vano derivada de UITI_VANO` → `Ranking de circuitos por vanos Medio-Alto y Alto (208 circuitos)`  [AMBIGUOUS]
@@ -2545,11 +2483,13 @@ Nodes (5): Shared atomic-write helper (`agent_tools/_atomic_io.py`), hoisted out
   site/assets/site/results/tablero-agrupamiento.png · relation: conceptually_related_to
 - `Paso 2.6 de /informe-gerencial (reemplaza el retirado 2.5)` → `graphifyy>=0.8.41 (el paquete no se llama como el módulo)`  [AMBIGUOUS]
   requirements.txt · relation: conceptually_related_to
+- `graphify aislado contra el grafo de reports/vault` → `Anclaje del manifiesto de graphify (encadenar desde la raiz del proyecto)`  [AMBIGUOUS]
+  .opencode/command/vault-circuito.md · relation: conceptually_related_to
 
 ## Knowledge Gaps
 - **1461 isolated node(s):** `Ruta`, `$schema`, `.claude/agents/rules/invariants.md`, `name`, `version` (+1456 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **328 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **338 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
@@ -2558,8 +2498,6 @@ _Questions this graph is uniquely positioned to answer:_
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
 - **What is the exact relationship between `bc.json — insumo que habilita el auto-simulator` and `02 · PREPARE() — Preparación determinista`?**
   _Edge tagged AMBIGUOUS (relation: shares_data_with) - confidence is low._
-- **What is the exact relationship between `graphify aislado contra el grafo de reports/vault` and `Anclaje del manifiesto de graphify (encadenar desde la raiz del proyecto)`?**
-  _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
 - **What is the exact relationship between `Funcion de costo de seis terminos` and `Perdida de informacion mutua cuadratica de Renyi`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
 - **What is the exact relationship between `Clasificacion de criticidad por vano derivada de UITI_VANO` and `Ranking de circuitos por vanos Medio-Alto y Alto (208 circuitos)`?**
@@ -2568,3 +2506,5 @@ _Questions this graph is uniquely positioned to answer:_
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
 - **What is the exact relationship between `Dos columnas de controles en paralelo (escenario A vs escenario B)` and `Panel de variables por vano (CNT_FASES, CONDUCTOR, ALTURA, NR_T, LONG_CR)`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
+- **What is the exact relationship between `Cortes de UITI: Bajo, Medio, Medio-Alto, Alto` and `Escala de la nube de la variable activa`?**
+  _Edge tagged AMBIGUOUS (relation: semantically_similar_to) - confidence is low._
