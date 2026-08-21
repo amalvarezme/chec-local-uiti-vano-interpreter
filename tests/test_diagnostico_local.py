@@ -157,10 +157,17 @@ def test_toda_revision_que_puede_faltar_toma_su_arreglo_de_la_tabla():
     ("entornos_apps", "instalar.bat"),
     ("puertos", "netsh"),
     ("red", "setx"),
+    ("runtime_vc", "winget"),
+    ("rutas_largas", "LongPathsEnabled"),
 ])
 def test_el_arreglo_de_windows_no_es_el_de_macos(clave: str, marca_windows: str):
-    """Siete cosas que se instalan o se miran distinto. Copiar el `brew install`, el
-    `export` o el `.command` a Windows es el error concreto que esto impide."""
+    """Nueve cosas que se instalan o se miran distinto. Copiar el `brew install`, el
+    `export` o el `.command` a Windows es el error concreto que esto impide.
+
+    Las dos ultimas son de Windows y de nadie mas -- el runtime de Visual C++ y
+    `LongPathsEnabled` --, y aun asi pasan por aqui: en macOS su revision sale
+    `listo` sin mirar nada, asi que su `arreglo` es justo el tipo de texto que se
+    pudre sin que nadie lo note."""
     windows = diag.ARREGLOS[clave]["windows"]
     assert marca_windows in windows, f"{clave}: el arreglo de Windows no nombra {marca_windows!r}"
     for de_mac in ("brew ", "xcode-select", "export ", ".command", "lsof"):

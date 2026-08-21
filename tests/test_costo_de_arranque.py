@@ -29,6 +29,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import ayudas_subproceso
+
 RAIZ = Path(__file__).resolve().parents[1]
 SRC = str(RAIZ / "src")
 
@@ -37,7 +39,9 @@ def _en_subproceso(codigo: str) -> str:
     resultado = subprocess.run(
         [sys.executable, "-c", codigo],
         capture_output=True, text=True, cwd=RAIZ,
-        env={"PATH": "/usr/bin:/bin", "PYTHONPATH": SRC, "HOME": str(Path.home())},
+        # Pelado a proposito -- si algo necesitara una variable al importar, aqui se ve
+        # --, pero no tanto que el interprete no arranque. Ver `ayudas_subproceso`.
+        env=ayudas_subproceso.entorno_minimo(PYTHONPATH=SRC),
     )
     assert resultado.returncode == 0, resultado.stderr
     return resultado.stdout.strip()

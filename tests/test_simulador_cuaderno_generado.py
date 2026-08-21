@@ -29,6 +29,7 @@ import json
 import sys
 from pathlib import Path
 
+import ayudas_subproceso
 import pytest
 
 RAIZ = Path(__file__).resolve().parents[1]
@@ -174,7 +175,9 @@ def test_el_tablero_se_importa_sin_tocar_ningun_dato():
          " print(tablero.construir.__name__)"],
         cwd=RAIZ, capture_output=True, text=True,
         # Sin la variable de entorno: si algo la necesitara al importar, aqui falla.
-        env={"PATH": "/usr/bin:/bin", "HOME": str(Path.home())},
+        # Lo que el SISTEMA pide para arrancar es otra cosa, y va aparte: ver
+        # `ayudas_subproceso`.
+        env=ayudas_subproceso.entorno_minimo(),
     )
     assert resultado.returncode == 0, resultado.stderr[-2000:]
     assert resultado.stdout.strip() == "construir"

@@ -42,9 +42,10 @@ camino del repositorio vuelva a dejarle la decision al sistema.
 
 from __future__ import annotations
 
+import os
 import re
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 
@@ -140,7 +141,12 @@ def test_el_doble_clic_de_cada_app_es_el_bundle(carpeta):
     """
     bundle = carpeta / "Iniciar.app" / "Contents" / "MacOS" / "iniciar"
     assert bundle.exists(), f"{carpeta.name} se quedo sin lanzador de doble clic"
-    assert bundle.stat().st_mode & 0o111, f"{bundle} no es ejecutable"
+    # El bit de ejecucion solo existe donde hay permisos POSIX. En Windows, NTFS no lo
+    # tiene y `st_mode` sale siempre `0o666`: la comprobacion no fallaria por un bundle
+    # sin permisos, sino por el sistema de archivos. Que el bundle ESTE si se comprueba
+    # en los dos, que es la mitad que puede perderse en un commit.
+    if os.name != "nt":
+        assert bundle.stat().st_mode & 0o111, f"{bundle} no es ejecutable"
 
 
 # ------------------------------------------------- el modulo que abre las ventanas
@@ -166,9 +172,13 @@ def test_el_trampolin_lleva_el_entorno_dentro():
     otro proceso, que ya estaba corriendo con el suyo. Sin esto el tablero arranca sin
     `MENU_CRITICIDAD` y su boton "Volver al menu" no sabe a donde volver.
     """
+    # `PurePosixPath` y no `Path`: el guion que se genera aqui es de shell y su `cd` se
+    # escribe con `str(directorio)`. Un `Path("/tmp")` en Windows se rinde como `\tmp`,
+    # con lo que la prueba fallaba por como escribe rutas la plataforma que la corre y
+    # no por lo que hace el trampolin. El destino es POSIX siempre: se dice asi.
     guion = _terminal._guion_posix(["/bin/echo", "hola"],
                                    {"MENU_CRITICIDAD": "http://127.0.0.1:8800/"},
-                                   Path("/tmp"))
+                                   PurePosixPath("/tmp"))
     # Sin comillas alrededor de la URL, y esta bien: `shlex.quote` solo las pone cuando
     # hacen falta. Se comprueba el EXPORT y su valor, no como quedo citado.
     assert "export MENU_CRITICIDAD=http://127.0.0.1:8800/" in guion

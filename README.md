@@ -148,6 +148,53 @@ Y antes de nada, `git lfs pull`: sin él, el CSV de 566 MB y las bolsas de 199 M
 como punteros de 134 bytes que **existen** y no sirven. El diagnóstico lo comprueba por
 contenido, no por presencia.
 
+### En Windows, dos cosas del sistema que no son paquetes de pip
+
+Las dos piden permisos de administrador, las dos se disfrazan de un problema de pip, y
+por eso las mira el diagnóstico y no el ojo. Si te toca pedirlas prestadas, pídelas al
+empezar: llegan tarde más veces que rápido, y mientras tanto el resto sí avanza.
+
+**El runtime de Visual C++.** `torch` lo carga al importar. Sin él, `import torch` muere
+con `WinError 126` sobre `c10.dll` en un entorno donde `pip check` sale limpio y los
+paquetes están **todos**. Reinstalar `requirements.txt` ahí son 1,9 GB que dejan la
+máquina exactamente igual:
+
+```powershell
+winget install Microsoft.VCRedist.2015+.x64 --accept-package-agreements
+```
+
+**`LongPathsEnabled`.** Windows no deja *crear* un directorio que pase de `MAX_PATH` − 12
+= 248 caracteres. La instalación de `06_simulador` —la única de las seis que trae
+`torch`— llega a `len(raíz) + 187`, donde los 187 son las licencias de terceros de
+`kineto` que `torch` anida nueve niveles. Si no cabe, aborta con `WinError 206` y deja el
+`.venv` **creado y a medias**, que es justo el estado que un diagnóstico perezoso da por
+bueno:
+
+```powershell
+# como administrador; después, reiniciar la sesión
+Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name LongPathsEnabled -Value 1 -Type DWord
+```
+
+Esta segunda depende de **dónde clonaste**: la raíz tiene que caber en 61 caracteres.
+`C:\CHEC\chec-local-uiti-vano-interpreter` deja 21 de holgura y no necesita el registro;
+`C:\Users\<usuario>\Desktop\CHEC\chec-local-uiti-vano-interpreter` se pasa por cuatro.
+Clonar más arriba es la alternativa si no hay administrador a mano. El diagnóstico da la
+cuenta, no sólo el veredicto.
+
+> **Recién clonado en Windows, antes de instalar nada: doble clic en
+> `mover-a-ruta-corta.bat`**, en la raíz del clon. Mide dónde quedó y, si cabe —que es lo
+> normal—, no toca nada y te lo dice. Si no cabe, propone `C:\CHEC\<carpeta>` y mueve el
+> clon después de que escribas `SI`.
+>
+> Es la salida que **no depende de que haya administrador**: acortar la ruta consigue
+> contra `MAX_PATH` lo mismo que `LongPathsEnabled`, y no pide permisos a nadie.
+>
+> Hacerlo **antes** de instalar no es un detalle de orden. Los entornos virtuales llevan
+> su ruta absoluta dentro —`pip.exe` empieza por `#!C:\...\.venv\Scripts\python.exe`,
+> `activate.bat` fija `VIRTUAL_ENV=`—, así que mover un clon ya instalado los deja
+> apuntando a un intérprete que no está ahí. El script lo comprueba y se frena; rehacerlos
+> son ~6 GB de descarga que se ahorran moviendo primero.
+
 ## Configuración
 
 ```bash

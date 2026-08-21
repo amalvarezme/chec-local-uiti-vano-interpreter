@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -300,7 +301,10 @@ def test_write_manifest_writes_expected_path_and_shape(tmp_path):
     assert result["status"] == "success"
     manifest_path = result["manifest_path"]
     assert manifest_path.startswith(str(tmp_path))
-    filename = manifest_path.rsplit("/", 1)[-1]
+    # `Path.name` y no `rsplit("/")`: `write_manifest` devuelve `str(Path)`, que en
+    # Windows separa con barra invertida -- alli el corte por "/" no encontraba nada y
+    # dejaba `filename` con la ruta entera.
+    filename = Path(manifest_path).name
     assert filename.startswith("reporte-lote__alto__2026-01-01__2026-01-31__")
     assert filename.endswith(".json")
 
@@ -330,7 +334,7 @@ def test_write_manifest_preserves_mixed_success_and_failure_entries(tmp_path):
         runs_root=tmp_path,
     )
 
-    payload = json.loads((tmp_path / result["manifest_path"].rsplit("/", 1)[-1]).read_text(encoding="utf-8"))
+    payload = json.loads((tmp_path / Path(result["manifest_path"]).name).read_text(encoding="utf-8"))
     assert len(payload["circuits"]) == 3
     statuses = [entry["status"] for entry in payload["circuits"]]
     assert statuses == ["failure", "success", "failure"]
