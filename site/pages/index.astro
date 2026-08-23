@@ -1087,6 +1087,19 @@ const cronograma = [
           </p>
         </div>
 
+        <div class="note-callout">
+          <strong>La CLI de Databricks es la estrategia central.</strong> No es un detalle de
+          implementación: es lo que hace posible que un agente de código conduzca el despliegue completo
+          desde la terminal, sin pasar por la interfaz web del workspace. El comando
+          <code>/subir-a-databricks</code> habla con Databricks únicamente a través de la CLI
+          —51 invocaciones de <code>databricks</code>—: <code>auth login</code> abre la sesión OAuth,
+          <code>catalogs list</code> y <code>volumes list</code> descubren el destino,
+          <code>fs cp</code> y <code>workspace import</code> suben los artefactos, y
+          <code>apps create</code> y <code>apps deploy</code> publican las aplicaciones. De ahí que el
+          usuario solo aporte la URL del workspace: el perfil se deriva de esa URL y todo lo demás se
+          resuelve en tiempo de ejecución.
+        </div>
+
         <div class="table-wrap compact-table">
           <table>
             <thead><tr><th>#</th><th>Artefacto</th><th>Dónde queda</th><th>Qué lleva</th></tr></thead>
