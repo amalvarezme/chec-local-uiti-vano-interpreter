@@ -798,3 +798,106 @@ def test_la_etapa_de_datos_manda_a_actualizar_cuando_el_sello_local_no_cuadra():
     assert "/actualizar" in etapa, (
         "sin nombrar `/actualizar`, la etapa 3 no tiene a quien mandar el caso en que "
         "lo local tampoco esta al dia consigo mismo")
+
+
+# ------------------------------------------------- reentrenar SOBRE Databricks
+
+def _etapa_de_apps() -> str:
+    texto = _leer(ORQUESTADOR)
+    inicio = texto.index("## 4. Are the apps deployed and serving?")
+    return texto[inicio:texto.index("\n## ", inicio + 1)]
+
+
+def test_el_comando_contempla_que_el_reentrenamiento_ocurra_en_databricks():
+    """Las dos compuertas de vigencia miraban SOLO archivos locales.
+
+    El cuaderno 05 con `ENTRENAR = True` corre en Databricks y escribe el `.pt` en
+    `CHEC_DATA_DIR`, o sea dentro del Volume. Nada local cambia. La etapa 3 compara
+    sellos -- y `procedencia.json` guarda las huellas de las ENTRADAS del modelo, no
+    del modelo, asi que reentrenar sobre los mismos insumos lo deja identico -- y la
+    etapa 4 compara contra la fecha del `.pt` LOCAL, que tampoco se movio. Las dos
+    dicen `ok` y el simulador desplegado sigue sirviendo el modelo anterior.
+    """
+    texto = _leer(ORQUESTADOR)
+    assert re.search(r"reentren\w+ (en|sobre) Databricks", texto, re.IGNORECASE), (
+        "el comando no nombra el caso de reentrenar SOBRE Databricks; sin nombrarlo, "
+        "las dos compuertas de vigencia solo miran la maquina que despliega")
+
+
+def test_la_etapa_de_apps_compara_el_modelo_del_volume_contra_el_del_paquete():
+    """La comparacion exacta ya es posible y es barata.
+
+    `manifiesto.json` del paquete guarda, bajo `insumos`, el `sha1` del
+    `mil_vano_ventana_v1.pt` con el que se construyo. Contrastarlo contra el `.pt`
+    que vive en `data/models` del Volume responde justo la pregunta que ninguna
+    compuerta hacia: el paquete desplegado, se armo con ESTE modelo?
+    """
+    etapa = _etapa_de_apps()
+    assert "insumos" in etapa and "sha1" in etapa, (
+        "la etapa 4 no compara la huella del modelo: el manifiesto del paquete ya "
+        "trae `insumos[mil_vano_ventana_v1.pt][sha1]` y nadie lo mira")
+    assert "data/models/mil_vano_ventana_v1.pt" in etapa, (
+        "la etapa 4 no nombra el `.pt` del Volume, que es el lado que cambia cuando "
+        "el reentrenamiento ocurre en Databricks")
+
+
+def test_la_etapa_de_apps_dice_como_reparar_un_paquete_armado_con_otro_modelo():
+    """Detectar sin decir que hacer deja al operador con un rojo y sin salida.
+
+    El paquete se construye en la maquina que despliega (`06_simulador/construir.py`),
+    asi que la reparacion tiene UN orden: bajar el `.pt` reentrenado del Volume,
+    reconstruir con el, y volver a subir el paquete.
+    """
+    etapa = _etapa_de_apps()
+    # La direccion importa: `fs cp` aparece ya varias veces en la etapa, siempre
+    # SUBIENDO. Lo que falta es la bajada, y por eso se exige el origen `dbfs:` con
+    # el `.pt` en el mismo comando.
+    assert re.search(r"(files download|fs cp)\s+dbfs:[^\n]*mil_vano_ventana_v1\.pt",
+                     etapa), (
+        "la etapa 4 no dice como traer el `.pt` reentrenado del Volume a local; los "
+        "`fs cp` que ya tiene van todos en la direccion contraria")
+    assert "06_simulador/construir.py" in etapa, (
+        "la etapa 4 no manda reconstruir el paquete con el modelo reentrenado")
+
+
+def test_la_subida_de_datos_no_pisa_un_modelo_reentrenado_en_databricks():
+    """`fs cp -r data --overwrite` va en la direccion contraria y no pregunta.
+
+    Si alguien reentreno en Databricks y ademas movio un insumo local, el sello
+    difiere, la etapa 3 sube `data/` entera y el `.pt` local -- mas viejo -- pisa al
+    reentrenado. Se pierde el entrenamiento, y ninguna compuerta lo nota.
+    """
+    etapa = _etapa_de_datos()
+    assert re.search(r"pisa|sobrescrib|clobber|piso", etapa, re.IGNORECASE), (
+        "la etapa 3 no advierte que su `fs cp -r data --overwrite` puede pisar un "
+        "modelo reentrenado en Databricks")
+
+
+def test_el_chequeo_del_sello_compara_tambien_la_huella_del_modelo():
+    """El sello son DOS archivos y la etapa 3 solo comparaba uno.
+
+    `procedencia.json` guarda el sha256 de las FUENTES y los derivados;
+    `manifest.sha256.json` guarda el del `.pt` mismo -- `estado_actualizacion.py` los
+    lee por separado, `huella_registrada_del_modelo()` contra `CLAVE_MODELO`. El
+    chequeo 6 decia "dos archivos de 400 bytes" y hacia `diff` de uno solo, asi que la
+    unica huella que habria delatado un reentrenamiento hecho SOBRE Databricks era
+    justo la que no se miraba.
+    """
+    etapa = _etapa_de_datos()
+    assert "manifest.sha256.json" in etapa, (
+        "el chequeo del sello ignora `manifest.sha256.json`, que es el unico de los "
+        "dos que guarda la huella del modelo")
+
+
+def test_la_etapa_de_apps_avisa_que_los_dos_sellos_usan_algoritmos_distintos():
+    """El mismo `.pt` tiene dos huellas legitimas y distintas, y cruzarlas no cuadra nunca.
+
+    `estado_actualizacion.huella()` es **sha256** y sella `manifest.sha256.json`;
+    `huellas.py` del paquete es **sha1** y llena `insumos` del `manifiesto.json`.
+    Comparar uno contra otro da "difieren" siempre, para cualquier modelo, y ese falso
+    rojo manda a reconstruir un paquete que estaba bien.
+    """
+    etapa = _etapa_de_apps()
+    assert re.search(r"sha1.*sha256|sha256.*sha1", etapa, re.DOTALL), (
+        "la etapa 4 no avisa que el sello es sha256 y el manifiesto del paquete sha1; "
+        "cruzarlos produce un falso 'difieren' para cualquier modelo")

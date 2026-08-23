@@ -202,7 +202,29 @@ contesta ningun `ls`:
 ```
 databricks fs cat dbfs:/Volumes/<catalogo>/<esquema>/chec-simulador/data/models/procedencia.json -p <profile> > <scratch>/procedencia.remoto.json
 diff <scratch>/procedencia.remoto.json data/models/procedencia.json
+databricks fs cat dbfs:/Volumes/<catalogo>/<esquema>/chec-simulador/data/models/manifest.sha256.json -p <profile> > <scratch>/manifest.remoto.json
+diff <scratch>/manifest.remoto.json data/models/manifest.sha256.json
 ```
+
+**Los dos `diff`, no uno.** El sello son dos archivos y guardan cosas distintas:
+`procedencia.json` lleva el sha256 de las cuatro fuentes y de los derivados, y
+`manifest.sha256.json` lleva el del `.pt` **mismo** — `estado_actualizacion.py` los lee
+por separado, con `huella_registrada_del_modelo()`. Comparar solo el primero deja fuera
+la unica huella que delata un reentrenamiento: reentrenar sobre los mismos insumos no
+mueve `procedencia.json` ni un byte, porque describe las ENTRADAS del modelo y no el
+modelo.
+
+**Y compara el sello del modelo contra el `.pt` que hay de verdad en el Volume**, no
+solo contra el local. Si el `manifest.sha256.json` del Volume no describe al `.pt` que
+esta a su lado, alguien reentreno **sobre Databricks** y no volvio a sellar:
+
+```
+databricks fs cp dbfs:/Volumes/<catalogo>/<esquema>/chec-simulador/data/models/mil_vano_ventana_v1.pt \
+  <scratch>/mil_remoto.pt -p <profile>
+python3 -c "import hashlib,pathlib; print(hashlib.sha256(pathlib.Path('<scratch>/mil_remoto.pt').read_bytes()).hexdigest())"
+```
+Contra el valor de `<scratch>/manifest.remoto.json`. Si no cuadran, no subas nada
+todavia: ve al paso 4.0, que es el que decide cual de los dos modelos se conserva.
 
 En Windows, `fc` en vez de `diff`. Si el remoto no existe todavia, trata el caso como
 "falta algo" y sube: es un Volume anterior a este sello.
@@ -235,6 +257,23 @@ upload, because everything downstream then fails in a way that does not point ba
 ```
 databricks fs cp -r data dbfs:/Volumes/<catalogo>/<esquema>/chec-simulador/data --overwrite -p <profile>
 ```
+
+**Antes de correrlo: este `--overwrite` puede pisar un modelo reentrenado en Databricks.**
+El cuaderno `05` con `ENTRENAR = True` escribe `data/models/mil_vano_ventana_v1.pt`
+DENTRO del Volume. Ese caso no llega aqui por el sello — `procedencia.json` guarda las
+huellas de las entradas del modelo, no del modelo, asi que reentrenar sobre los mismos
+insumos lo deja identico —, pero si alguien ademas movio un insumo local, el sello si
+difiere, esta copia sube `data/` entera y el `.pt` local **pisa** al reentrenado. Se
+pierde el entrenamiento y ninguna compuerta lo nota.
+
+Asi que compara los dos `.pt` antes de copiar, y si diferen pregunta cual se conserva:
+```
+databricks fs cp dbfs:/Volumes/<catalogo>/<esquema>/chec-simulador/data/models/mil_vano_ventana_v1.pt \
+  <scratch>/mil_remoto.pt -p <profile>
+python3 -c "import hashlib,pathlib as P; f=lambda r: hashlib.sha1(P.Path(r).read_bytes()).hexdigest(); print(f('<scratch>/mil_remoto.pt')); print(f('data/models/mil_vano_ventana_v1.pt'))"
+```
+Si el del Volume es el que se conserva, sacalo de la copia — sube `data/` y despues
+restauralo — y sigue por el paso 4.0, que es el que arregla el paquete del simulador.
 
 `databricks fs cp -r` has **no exclude/filter flag** (confirmed empirically), so
 `.DS_Store`, `.gitkeep` and `.openmeteo_cache.sqlite` (a regenerable HTTP cache, not source
@@ -352,6 +391,77 @@ caida. Compara antes de decidir:
 |---|---|
 | paneles de `criticidad-chec` | `manifiesto.json` de cada panel en el Volume contra el que produce una construccion local |
 | paquete del simulador | `construido_en` de `manifiesto.json` en el Volume contra la fecha del CSV y del `.pt` locales |
+| **modelo del simulador** | `insumos["mil_vano_ventana_v1.pt"]["sha1"]` del `manifiesto.json` del paquete contra el `.pt` que hay HOY en `data/models` del Volume |
+
+### 4.0 Si alguien reentreno en Databricks
+
+Las dos primeras filas de esa tabla miran archivos **locales**, y por eso las dos son
+ciegas al caso que mas cuesta. El cuaderno `05` con `ENTRENAR = True` corre **sobre
+Databricks**, lee `CHEC_DATA_DIR` y escribe el modelo dentro del Volume, en
+`data/models/mil_vano_ventana_v1.pt`. En la maquina que despliega no se mueve nada:
+
+- la etapa 3 compara **sellos**, y `procedencia.json` guarda las huellas de las
+  ENTRADAS del modelo — el CSV, `Variables_seleccion.xlsx`, `graph.py`,
+  `Variables_simular.xlsx` — no del modelo. Reentrenar sobre los mismos insumos lo deja
+  byte a byte identico, asi que el sello cuadra;
+- la etapa 4 compara `construido_en` contra la **fecha del `.pt` local**, que tampoco
+  cambio.
+
+Las dos dicen `ok`, y el simulador desplegado sigue sirviendo el modelo anterior. Sin un
+solo error.
+
+**Por que el paquete no se entera solo.** La app no lee `data/models`: `arranque.py` baja
+`paquete_06/` del Volume y `derivacion.cargar()` abre la **copia** del `.pt` que vive
+dentro de ese paquete. Son dos rutas distintas del mismo Volume, y nada las sincroniza.
+Solo el simulador depende del modelo — los cuatro paneles de `criticidad-chec` no lo
+tocan —, asi que este caso mueve **una** app.
+
+**La comprobacion, que es exacta y barata.** `preparar.py` ya deja en el manifiesto la
+huella de contenido del modelo con el que armo el paquete, asi que no hay que adivinar
+por fecha ni por tamano — el mismo error que la etapa 3 ya pago:
+
+```
+databricks fs cat dbfs:/Volumes/<catalogo>/<esquema>/chec-simulador/paquete_06/manifiesto.json -p <profile> \
+  | python3 -c "import json,sys; print(json.load(sys.stdin)['insumos']['mil_vano_ventana_v1.pt']['sha1'])"
+databricks fs cp dbfs:/Volumes/<catalogo>/<esquema>/chec-simulador/data/models/mil_vano_ventana_v1.pt \
+  <scratch>/mil_remoto.pt -p <profile>
+python3 -c "import hashlib,pathlib; print(hashlib.sha1(pathlib.Path('<scratch>/mil_remoto.pt').read_bytes()).hexdigest())"
+```
+
+**Ojo con el algoritmo: aqui es `sha1`, y en el sello de la etapa 3 es `sha256`.** El
+mismo `.pt` tiene dos huellas legitimas y distintas — `huellas.py` del paquete usa sha1,
+`estado_actualizacion.huella()` usa sha256 — porque responden a preguntas distintas y
+nacieron aparte. Cruzarlas da "difieren" **siempre**, para cualquier modelo, y ese falso
+rojo manda a reconstruir un paquete que estaba bien. Compara sha1 con sha1.
+
+Si los dos `sha1` coinciden, el paquete desplegado se armo con el modelo que hoy vive en
+el Volume: no hay nada que hacer. Si difieren, el simulador esta sirviendo **otro**
+modelo, y hay que decir cual de los dos es el bueno.
+
+**La reparacion.** El paquete se construye en la maquina que despliega, nunca con un job
+—`arranque.py` explica por que—, asi que el orden es bajar, reconstruir y volver a subir:
+
+1. **Pregunta antes de pisar nada.** Si el `.pt` del Volume es un reentrenamiento que se
+   quiere conservar, el local es el que sobra; si el reentrenamiento fue un ensayo, el
+   bueno es el local. Son dos respuestas opuestas y ninguna se puede adivinar desde aqui.
+2. Con el del Volume como bueno, traelo al repositorio y reconstruye con el:
+   ```
+   databricks fs cp dbfs:/Volumes/<catalogo>/<esquema>/chec-simulador/data/models/mil_vano_ventana_v1.pt \
+     data/models/mil_vano_ventana_v1.pt --overwrite -p <profile>
+   python3 aplicaciones/06_simulador/construir.py
+   ```
+   Deja el arbol de trabajo **sucio a proposito**: `data/models/mil_vano_ventana_v1.pt`
+   esta versionado, asi que el modelo entrenado en Databricks queda a la vista de `git
+   status` para que alguien decida si se comitea. Avisalo en la bitacora; no lo comitees
+   tu.
+3. Sube el paquete reconstruido con el mismo procedimiento de 4c y **redespliega**
+   `simulador-vano`: bajar el paquete solo ocurre al arrancar el contenedor.
+4. Con el local como bueno, no bajes nada: reconstruye y sube igual, y anota que el
+   `.pt` del Volume se reemplaza.
+
+En los dos casos anota el paso como `degradado` si no llegaste a redesplegar, nunca `ok`:
+un paquete nuevo en el Volume con la app vieja en memoria sigue sirviendo el modelo de
+antes.
 
 **If everything is present**: las dos apps sanas y sirviendo contenido al dia. Anota el paso
 `ok` con el nombre, la URL y el estado de cada una, y pasa a la etapa 5 sin desplegar nada.
