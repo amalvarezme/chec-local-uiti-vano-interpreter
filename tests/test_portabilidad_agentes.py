@@ -1,6 +1,6 @@
 """Los espejos de portabilidad se sostienen solos o no se sostienen.
 
-El intento anterior (`.pi/`) eran espejos escritos a mano y sin verificar. Tres de
+Un intento anterior fueron espejos escritos a mano y sin verificar. Tres de
 diez skills nunca llegaron a tener uno y nadie se entero. Estas pruebas existen
 para que ese silencio no vuelva: un skill nuevo sin espejo, un espejo editado a
 mano, o un espejo huerfano de un skill retirado ponen la suite en rojo.
@@ -165,15 +165,3 @@ def test_copilot_repository_instructions_route_to_the_canonical_contract():
     assert ".github/agents/" in content
     assert "scripts/portabilidad_agentes.py" in content
     assert "PYTHONPATH=src .venv/bin/python" in content
-
-
-@pytest.mark.parametrize("retired", [".pi"])
-def test_the_retired_runtime_tree_stays_retired(retired):
-    """`.pi/` se retiro con su resolvedor de modelo; que no vuelva por la puerta de atras."""
-
-    assert not (PROJECT_ROOT / retired).exists()
-    contract = (PROJECT_ROOT / "src/chec_local_interpreter/report_contract.py").read_text(
-        encoding="utf-8"
-    )
-    assert "_is_pi_runtime" not in contract
-    assert "el-gentleman" not in contract

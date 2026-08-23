@@ -8,7 +8,6 @@ import pandas as pd
 import pytest
 
 from chec_local_interpreter.context_builder import _compute_circuit_characterization, build_context_package, save_json_artifact, vano_series_records, window_series_records
-from chec_local_interpreter.plotting import CRITICALITY_GROUP_LABELS
 from chec_local_interpreter.ventanas_015 import construir_ventanas
 
 
@@ -122,8 +121,16 @@ def test_un_marco_sin_vanos_se_queda_sin_banda_en_vez_de_inventarla():
         # lo que NO depende del ranking sigue estando
         assert row["eventos"] > 0
         assert row["uiti_vano_total"] > 0
-    # y ninguna etiqueta del vocabulario que la barra no puede mostrar
-    assert all(r["criticidad"] not in CRITICALITY_GROUP_LABELS for r in results)
+    # y ninguna etiqueta del vocabulario que la barra no puede mostrar. Se escriben
+    # LITERALES a proposito: el agrupamiento K-Means de circuito que las definia se
+    # retiro el 2026-08-23, y la afirmacion tiene que sobrevivir a su borrado -- si
+    # alguien reintroduce esas palabras por otro camino, esto sigue siendo lo que las
+    # atrapa. Ver `tests/test_agrupamiento_kmeans_de_circuito_retirado.py`.
+    ETIQUETAS_RETIRADAS = (
+        "Riesgo Muy Alto", "Riesgo Alto", "Riesgo Medio-Alto",
+        "Riesgo Medio-Bajo", "Riesgo Bajo",
+    )
+    assert all(r["criticidad"] not in ETIQUETAS_RETIRADAS for r in results)
 
 
 # --- La serie del historiador va por VENTANAS, no por dias -------------------------------

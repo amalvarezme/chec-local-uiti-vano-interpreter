@@ -106,23 +106,13 @@ def usage_error(message: str, request: ClusteringRequest | None = None) -> Clust
     return ClusteringOutcome(status="usage_error", request=request, errors=[message])
 
 
-def plot_interactive_circuit_clustering(*args, **kwargs):
-    """La nube de K-Means. Ya NO la usa `render_clustering` -- ver `plot_ranking_circuitos`
-    aqui abajo --, pero el envoltorio se conserva porque es el punto de intercepcion que las
-    pruebas del contrato monkeypatchean, y porque `plotting` sigue exponiendola para quien
-    la quiera directamente."""
-    from chec_local_interpreter.plotting import (
-        plot_interactive_circuit_clustering as _plot_interactive_circuit_clustering,
-    )
-
-    return _plot_interactive_circuit_clustering(*args, **kwargs)
-
-
 def plot_ranking_circuitos(*args, **kwargs):
     """El ranking del cuaderno 02: los circuitos por su conteo de vanos en Medio-Alto +
     Alto, con los cortes P50/P75/P97 que definen las cuatro bandas de riesgo.
 
-    Sustituye a la nube de K-Means en `render_clustering`. Los dos comandos que invocan
+    Sustituyo a la nube de K-Means, retirada el 2026-08-23 junto con
+    `compute_circuit_criticality_groups` (ver
+    `tests/test_agrupamiento_kmeans_de_circuito_retirado.py`). Los dos comandos que invocan
     este paso -- `/reporte-lote` y `/informe-gerencial` -- agrupan por esas cuatro bandas,
     asi que la grafica de apertura mostraba cinco clases (`Riesgo Muy Alto`,
     `Riesgo Medio-Bajo`) que ninguno de los dos podia nombrar, sobre otro eje: la nube situa

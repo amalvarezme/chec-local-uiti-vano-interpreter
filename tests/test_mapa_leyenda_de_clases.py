@@ -110,32 +110,32 @@ def _colores_de_linea(html):
     return set(re.findall(r'"color": "(#[0-9a-fA-F]{6})"', html))
 
 
-def test_un_vano_sin_clase_no_toma_un_color_del_semaforo(dibujar):
+def test_un_vano_sin_eventos_no_toma_un_color_del_semaforo(dibujar):
     html = dibujar(
         {"V1": "Bajo", "V2": "Alto"},
         fids=("V1", "V2", "V3"),
         eventos_por_vano={"V1": 1, "V2": 1, "V3": 6},
     )
-    assert "Sin clase" in html, "el vano sin clase deberia quedar marcado como tal"
+    assert "Sin eventos" in html, "el vano sin eventos en la ventana deberia quedar marcado"
 
     # Solo pueden aparecer los colores del semaforo realmente usados (Bajo y Alto),
     # el gris de los vanos sin evento y el color propio de `Sin clase`.
     colores = _colores_de_linea(html)
     inesperados = {c for c in colores if c in SEMAFORO} - {"#1a9641", "#c62828"}
     assert not inesperados, f"colores del semaforo sin grupo detras: {inesperados}"
-    assert "#7a0402" not in colores, "el vano sin clase sigue en la escala continua"
+    assert "#7a0402" not in colores, "el vano sin eventos sigue en la escala continua"
 
 
-def test_sin_clase_se_nombra_en_la_leyenda_solo_cuando_ocurre(dibujar):
+def test_sin_eventos_se_nombra_en_la_leyenda_solo_cuando_ocurre(dibujar):
     con_sin_clase = dibujar(
         {"V1": "Bajo", "V2": "Alto"},
         fids=("V1", "V2", "V3"),
         eventos_por_vano={"V1": 1, "V2": 1, "V3": 6},
     )
-    assert ">Sin clase</div>" in con_sin_clase
+    assert ">Sin eventos</div>" in con_sin_clase
 
     todos_con_clase = dibujar({"V1": "Bajo", "V2": "Alto"})
-    assert ">Sin clase</div>" not in todos_con_clase
+    assert ">Sin eventos</div>" not in todos_con_clase
 
 
 # ---------------------------------------------------------------------------
@@ -154,10 +154,10 @@ def test_el_mapa_cierra_su_vocabulario_contra_el_agrupamiento():
     assert tuple(plotting.COLORES_CLASE_VANO) == NOMBRES_GRUPOS_VANO
 
 
-def test_sin_clase_no_es_un_grupo_del_semaforo():
+def test_sin_eventos_no_es_un_grupo_del_semaforo():
     """La ausencia de dato no puede compartir color con un grupo real."""
-    assert plotting.ETIQUETA_SIN_CLASE not in plotting.COLORES_CLASE_VANO
-    assert plotting.COLOR_SIN_CLASE not in plotting.COLORES_CLASE_VANO.values()
+    assert plotting.ETIQUETA_SIN_EVENTOS not in plotting.COLORES_CLASE_VANO
+    assert plotting.COLOR_SIN_EVENTOS not in plotting.COLORES_CLASE_VANO.values()
 
 
 # ---------------------------------------------------------------------------
@@ -179,7 +179,7 @@ def test_todas_las_figuras_del_informe_usan_los_mismos_cuatro_grupos():
     assert tuple(plotting.COLORES_CLASE_VANO.values()) == tuple(mil_figuras.COLORES_GRUPOS)
     # El gris de "sin grupo" tambien tiene que ser el mismo en el mapa y en las
     # figuras del MIL: dos grises distintos se leen como dos cosas distintas.
-    assert plotting.COLOR_SIN_CLASE == mil_figuras.COLOR_SIN_GRUPO
+    assert plotting.COLOR_SIN_EVENTOS == mil_figuras.COLOR_SIN_GRUPO
 
 
 def test_las_bandas_de_circuito_y_sus_slugs_no_se_pueden_separar():
@@ -192,3 +192,38 @@ def test_las_bandas_de_circuito_y_sus_slugs_no_se_pueden_separar():
     from chec_local_interpreter.ranking_circuitos import NOMBRES_GRUPOS_VANO
 
     assert NOMBRES_RANGO == tuple(f"Riesgo {g}" for g in NOMBRES_GRUPOS_VANO)
+
+
+def test_un_solo_gris_para_todo_lo_que_no_tuvo_eventos(dibujar):
+    """El vano sin eventos EN LA VENTANA y el que no los tuvo en todo el periodo.
+
+    Los dos son "sin eventos" desde la ventana que el mapa dibuja, y la leyenda
+    tiene una sola entrada. Con dos grises distintos -- `#9ca3af` y `#94a3b8`,
+    indistinguibles a simple vista -- esa entrada rotulaba uno y callaba el otro,
+    que es el mismo defecto de `Muy alto` al reves: un color en el mapa que la
+    leyenda no explica.
+    """
+    html = dibujar(
+        {"V1": "Bajo", "V2": "Alto"},
+        # V4 no aparece en el marco de eventos: no tuvo ninguno en el periodo.
+        fids=("V1", "V2", "V3", "V4"),
+        eventos_por_vano={"V1": 1, "V2": 1, "V3": 6},
+    )
+    colores = _colores_de_linea(html)
+    assert "#9ca3af" not in colores, "quedan dos grises distintos para la misma ausencia"
+    assert plotting.COLOR_SIN_EVENTOS in colores
+
+
+def test_la_leyenda_nombra_el_gris_tambien_cuando_solo_hay_vanos_sin_eventos(dibujar):
+    """Todos los vanos con eventos tienen grupo, pero el circuito tiene mas vanos.
+
+    La condicion miraba solo la columna de clase de los vanos CON evento, asi que
+    este mapa dibujaba lineas grises y no las nombraba.
+    """
+    html = dibujar(
+        {"V1": "Bajo", "V2": "Alto"},
+        fids=("V1", "V2", "V3"),
+        eventos_por_vano={"V1": 1, "V2": 1},
+    )
+    assert plotting.COLOR_SIN_EVENTOS in _colores_de_linea(html)
+    assert ">Sin eventos</div>" in html

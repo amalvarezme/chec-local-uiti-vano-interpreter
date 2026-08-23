@@ -58,7 +58,7 @@ bajo demanda, de los activos locales hacia un workspace Databricks, vía 3 coman
 etapas —datos, aplicaciones y cuaderno— viven dentro de él, cada una verificando antes de
 subir). Se apoya en
 [`_contrato-despliegue-databricks.md`](.claude/commands/_contrato-despliegue-databricks.md).
-Es un árbol de comandos aislado, sin equivalente en Pi, que nunca modifica `report_pipeline.py`
+Es un árbol de comandos aislado que nunca modifica `report_pipeline.py`
 ni los roles LLM. Solo viajan los datos que consumen los cuadernos `01`-`06` y el comando
 `/report`: **no se crea ninguna tabla Delta, vista ni dashboard**. Detalle completo en [`docs/flujo-detallado.md`](docs/flujo-detallado.md#6-la-subida-a-databricks).
 
@@ -293,7 +293,7 @@ La compatibilidad con los otros dos editores es deliberadamente delgada:
   - `src/chec_local_interpreter/*`
 
 Ver [`docs/portabilidad-agentes.md`](docs/portabilidad-agentes.md) para el detalle, incluido
-por qué el intento anterior (`.pi/`, espejos a mano) se murió sin que nadie lo notara.
+por qué los espejos escritos a mano se mueren sin que nadie lo note.
 
 ## Reglas de argumentos para comandos tipo reporte
 

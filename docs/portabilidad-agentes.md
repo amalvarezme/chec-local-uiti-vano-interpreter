@@ -42,11 +42,10 @@ de obligar a decidir como se invoca desde los otros dos editores.
 
 ## Por que hay un generador y no once archivos escritos a mano
 
-Porque ya se intento a mano. `.pi/` fue el espejo del runtime Pi / el Gentleman: se
-escribio a mano en julio de 2026 y se murio sin que nadie lo notara. De diez skills
-canonicos llego a tener siete; `clima`, `redaccion-es` y `vault-circuito` nunca tuvieron
-espejo. No habia nada que lo revisara, asi que la unica forma de enterarse era abrir la
-carpeta y contar.
+Porque ya se intento a mano. Hubo un arbol de espejos escritos a mano en julio de 2026 y
+se murio sin que nadie lo notara. De diez skills canonicos llego a tener siete; `clima`,
+`redaccion-es` y `vault-circuito` nunca tuvieron espejo. No habia nada que lo revisara,
+asi que la unica forma de enterarse era abrir la carpeta y contar.
 
 Un espejo escrito a mano es una promesa. `scripts/portabilidad_agentes.py` mas
 `tests/test_portabilidad_agentes.py` son un mecanismo: un skill nuevo sin espejo, un
@@ -59,11 +58,11 @@ El informe dice con que modelo se genero. El contrato compartido lo resuelve en 
 orden: banderas explicitas, luego `CHEC_LLM_PROVIDER` / `CHEC_LLM_MODEL`, luego
 `Desconocido`.
 
-No hay lectura de sesiones por runtime. El adaptador de Pi tenia una: leia el historial
-de sesiones de Pi y su `settings.json`. Funcionaba, y aun asi era la forma equivocada
-—cada runtime nuevo habria necesitado su propio lector, cada uno adivinando el formato
-privado en disco de otra herramienta. El adaptador sabe con que modelo esta corriendo,
-asi que el adaptador lo dice:
+No hay lectura de sesiones por runtime. Un adaptador anterior si la tenia: leia el
+historial de sesiones de su runtime y su `settings.json`. Funcionaba, y aun asi era la
+forma equivocada —cada runtime nuevo habria necesitado su propio lector, cada uno
+adivinando el formato privado en disco de otra herramienta. El adaptador sabe con que
+modelo esta corriendo, asi que el adaptador lo dice:
 
 ```bash
 PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.report_contract render \

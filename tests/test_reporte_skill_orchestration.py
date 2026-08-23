@@ -85,6 +85,8 @@ def test_skill_forbids_ambiguous_generic_worker_dispatch():
 def test_skill_requires_measured_subagent_totals_when_runtime_exposes_them():
     body = _run_sequence_text()
 
-    assert "Pi's subagent runner" in body
+    # Antes se afirmaba aqui el nombre de un runtime concreto. El contrato es que el
+    # total MEDIDO se use cuando el runtime lo expone, sea cual sea el runtime.
+    assert "an equivalent runtime" in body or "Claude Code's `Agent` tool" in body
     assert "This is mandatory whenever the runtime exposes that" in body
     assert "do not show a `chars // 4` artifact estimate" in body

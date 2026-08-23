@@ -8,7 +8,7 @@ roles. Cada runtime de agente los descubre en una ruta propia y con un frontmatt
 propio, asi que para que el proyecto se pueda manejar desde otro editor hay que
 publicar los mismos nombres en `.opencode/` y en `.github/`.
 
-El intento anterior fue `.pi/`: espejos escritos a mano. Se cayo sola. De diez
+El intento anterior fueron espejos escritos a mano. Se cayo solo. De diez
 skills canonicos solo siete llegaron a tener espejo, `clima`, `redaccion-es` y
 `vault-circuito` nunca lo tuvieron, y nadie se entero porque nada lo revisaba.
 Un espejo a mano es una promesa; esto es un mecanismo.
@@ -448,7 +448,7 @@ def generar() -> int:
             written += 1
 
     # Un skill retirado deja su espejo huerfano. Se borra aqui, no en la proxima
-    # sesion que lo note: el caso `.pi` fue justamente el inverso, espejos que
+    # sesion que lo note: el intento a mano fue justamente el inverso, espejos que
     # nadie sincronizaba en ninguna direccion.
     removed = 0
     for path in set(_managed_paths()) - expected:

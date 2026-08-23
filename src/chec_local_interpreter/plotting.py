@@ -22,343 +22,10 @@ from chec_local_interpreter.informe_estilo import (
     escudo_chec_html,
     pie_agentes_html,
 )
-
-
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 
-import numpy as np
-import pandas as pd
-import plotly.graph_objects as go
-
-
-def run_kmeans(data, n_clusters=5, max_iters=100, random_state=42):
-    """Custom NumPy K-Means implementation."""
-    np.random.seed(random_state)
-    # Ensure we don't ask for more clusters than available data points
-    n_clusters = min(n_clusters, data.shape[0])
-
-    centroids = data[np.random.choice(data.shape[0], n_clusters, replace=False)]
-
-    for _ in range(max_iters):
-        distances = np.linalg.norm(data[:, np.newaxis] - centroids, axis=2)
-        labels = np.argmin(distances, axis=1)
-        new_centroids = np.array([
-            data[labels == k].mean(axis=0) if np.any(labels == k) else centroids[k]
-            for k in range(n_clusters)
-        ])
-        if np.allclose(centroids, new_centroids):
-            break
-        centroids = new_centroids
-
-    return labels
-
-
-# Single source of truth for the circuit-criticality tiers shared by the
-# clustering chart (`plot_interactive_circuit_clustering`) and the LLM-facing
-# context builder (`context_builder._compute_circuit_characterization`), so
-# the chart legend and the report narrative never drift out of sync.
-CRITICALITY_GROUP_LABELS: tuple[str, ...] = (
-    "Riesgo Muy Alto", "Riesgo Alto", "Riesgo Medio-Alto", "Riesgo Medio-Bajo", "Riesgo Bajo"
-)
-CRITICALITY_GROUP_COLORS: tuple[str, ...] = ("#ef4444", "#f97316", "#eab308", "#84cc16", "#22c55e")
-
-
-def compute_circuit_criticality_groups(raw_df, start_date=None, end_date=None, group_labels=None):
-    """
-    Compute per-circuit event-frequency / UITI_VANO-sum coordinates, K-Means
-    cluster assignment, and ranked criticality label.
-
-    Shared by `plot_interactive_circuit_clustering` (chart) and
-    `context_builder._compute_circuit_characterization` (LLM context) so both
-    call sites derive `criticidad` from a single source of truth.
-
-    Parameters:
-    - raw_df (pd.DataFrame): The main dataset containing 'CIRCUITO', 'UITI_VANO', and 'FECHA'.
-    - start_date (str, optional): Start date string (e.g. '2023-01-01').
-    - end_date (str, optional): End date string.
-    - group_labels (sequence[str], optional): Tier labels ordered from most to
-      least critical, overriding `CRITICALITY_GROUP_LABELS`. Its length sets
-      the number of K-Means clusters. All callers (standalone agrupamiento
-      chart, batch reports, informe-gerencial, context builder) share the
-      same 5-tier default.
-
-    Returns:
-    - pd.DataFrame indexed by CIRCUITO with columns `event_count`,
-      `uiti_vano_sum`, `cluster` (raw K-Means id), `criticidad` (ranked label
-      from `group_labels`). Empty (same columns) if no data survives
-      filtering.
-    """
-    group_labels = list(group_labels) if group_labels is not None else list(CRITICALITY_GROUP_LABELS)
-    empty_columns = ["event_count", "uiti_vano_sum", "cluster", "criticidad", "centroid_distance"]
-
-    df = raw_df.copy()
-
-    # 1. Check if we need to filter by date and ensure FECHA is parsed safely
-    if start_date is not None or end_date is not None:
-        if 'FECHA' in df.columns:
-            if not pd.api.types.is_datetime64_any_dtype(df['FECHA']):
-                df['FECHA'] = pd.to_datetime(df['FECHA'], errors='coerce')
-
-            fecha_dia = df['FECHA'].dt.floor("D")
-            if start_date is not None:
-                df = df[fecha_dia >= pd.to_datetime(start_date).floor("D")]
-            if end_date is not None:
-                df = df[fecha_dia <= pd.to_datetime(end_date).floor("D")]
-        else:
-            print("Warning: 'FECHA' column not found in dataframe. Showing all data without date filtering.")
-
-    # 2. Data Preparation
-    if 'UITI_VANO' in df.columns:
-        df['UITI_VANO'] = pd.to_numeric(df['UITI_VANO'], errors='coerce').fillna(0.0)
-
-    # Calculate metrics per circuit. Frequency counts distinct FECHA values.
-    counts = count_unique_event_dates(df, "CIRCUITO") if not df.empty else pd.Series(dtype=float)
-    sums = df.groupby('CIRCUITO')['UITI_VANO'].sum() if not df.empty else pd.Series(dtype=float)
-
-    # Merge into a coordinate dataframe
-    df_coords = pd.DataFrame({
-        'event_count': counts,
-        'uiti_vano_sum': sums
-    }).dropna()
-
-    # Handle empty dataframe edge case
-    if df_coords.empty:
-        df_coords['cluster'] = pd.Series(dtype=float)
-        df_coords['criticidad'] = pd.Series(dtype=object)
-        df_coords['centroid_distance'] = pd.Series(dtype=float)
-        df_coords.index.name = "CIRCUITO"
-        return df_coords[empty_columns]
-
-    df_coords.index.name = "CIRCUITO"
-
-    # Explicitly cast to float before converting to NumPy values. K-Means
-    # clusters in the ORIGINAL (non-log) event_count/uiti_vano_sum space,
-    # min-max scaled; the chart itself renders both axes log-scaled, so the
-    # visualized space and the clustering space intentionally differ here.
-    X_raw = df_coords[['event_count', 'uiti_vano_sum']].astype(float).values
-    X = X_raw
-
-    # 3. Scaling (Min-Max normalization to [0, 1])
-    X_min = X.min(axis=0)
-    X_range = X.max(axis=0) - X_min
-    # Add a small epsilon to the range to avoid division by zero
-    X_range = np.where(X_range == 0, 1e-9, X_range)
-    X_scaled = (X - X_min) / X_range
-
-    # Execute clustering. `run_kmeans(random_state=...)` seeds the numpy
-    # GLOBAL RNG (`np.random.seed`), a process-wide side effect. Save/restore
-    # the global state around the call so this function never silently
-    # resets or correlates unrelated randomness for other code sharing the
-    # process afterward (e.g. the simulator in report_pipeline.py).
-    n_clusters = min(len(group_labels), len(df_coords))
-    rng_state = np.random.get_state()
-    try:
-        df_coords['cluster'] = run_kmeans(X_scaled, n_clusters=n_clusters, random_state=42)
-    finally:
-        np.random.set_state(rng_state)
-
-    # Rank clusters based on the mean of their scaled coordinates (higher means more critical)
-    cluster_scores = {}
-    for cluster_id in range(n_clusters):
-        cluster_mask = df_coords['cluster'] == cluster_id
-        cluster_scores[cluster_id] = X_scaled[cluster_mask].mean()
-
-    sorted_clusters = sorted(cluster_scores.keys(), key=lambda c: cluster_scores[c], reverse=True)
-
-    df_coords['criticidad'] = df_coords['cluster'].apply(
-        lambda cluster_id: group_labels[sorted_clusters.index(cluster_id)]
-    )
-
-    # Post-hoc centroid recompute (informe-gerencial, additive): does NOT
-    # change `run_kmeans`'s signature/return value. Centroids are the mean
-    # of each cluster's `X_scaled` points; `centroid_distance` is each
-    # circuit's Euclidean distance to its OWN cluster's centroid (most
-    # representative circuits have the smallest value).
-    cluster_labels = df_coords['cluster'].values
-    centroids = np.array([
-        X_scaled[cluster_labels == k].mean(axis=0) for k in range(n_clusters)
-    ])
-    df_coords['centroid_distance'] = np.linalg.norm(X_scaled - centroids[cluster_labels], axis=1)
-
-    return df_coords[empty_columns]
-
-
-def plot_interactive_circuit_clustering(
-    raw_df, start_date=None, end_date=None, highlighted_circuits=None, group_labels=None, group_colors=None
-):
-    """
-    Plots an interactive scatter map of events frequency vs UITI_VANO sums
-    clustered via K-Means.
-
-    Parameters:
-    - raw_df (pd.DataFrame): The main dataset containing 'CIRCUITO', 'UITI_VANO', and 'FECHA'.
-    - start_date (str, optional): Start date string (e.g. '2023-01-01').
-    - end_date (str, optional): End date string.
-    - highlighted_circuits (list): List of circuit names to highlight with an 'X'.
-    - group_labels (sequence[str], optional): Overrides `CRITICALITY_GROUP_LABELS`;
-      forwarded to `compute_circuit_criticality_groups`. All callers share the
-      same 5-tier default unless explicitly overridden.
-    - group_colors (sequence[str], optional): Overrides `CRITICALITY_GROUP_COLORS`;
-      must be at least as long as `group_labels` when both are provided.
-    """
-    if highlighted_circuits is None:
-        highlighted_circuits = []
-
-    group_labels = list(group_labels) if group_labels is not None else list(CRITICALITY_GROUP_LABELS)
-    group_colors = list(group_colors) if group_colors is not None else list(CRITICALITY_GROUP_COLORS)
-
-    df_coords = compute_circuit_criticality_groups(raw_df, start_date, end_date, group_labels=group_labels)
-
-    # Handle empty dataframe edge case
-    if df_coords.empty:
-        print("No data available for the given date range.")
-        return go.Figure()
-
-    # 4. Plotting Setup
-    fig = go.Figure()
-
-    # Plot clusters (Combining both normal and highlighted logic inside the same loop)
-    for rank, label in enumerate(group_labels):
-        cluster_data = df_coords[df_coords['criticidad'] == label]
-        if cluster_data.empty:
-            continue
-
-        color = group_colors[rank]
-
-        # Split into normal vs highlighted for this specific cluster
-        normal_data = cluster_data[~cluster_data.index.isin(highlighted_circuits)]
-        highlighted_data = cluster_data[cluster_data.index.isin(highlighted_circuits)]
-
-        # We assign them to the same legendgroup so they toggle together
-        legend_group_name = f'group_{rank}'
-        legend_name = f'{label} (n={len(cluster_data)})'
-
-        # 4a. Plot normal points (Circles)
-        if not normal_data.empty:
-            fig.add_trace(go.Scatter(
-                x=normal_data['event_count'],
-                y=normal_data['uiti_vano_sum'],
-                mode='markers+text',
-                marker=dict(
-                    color=color,
-                    symbol='circle',
-                    size=7,
-                    line=dict(color='#0f172a', width=1),
-                    opacity=0.5
-                ),
-                text=normal_data.index,
-                textposition="top right",
-                textfont=dict(size=7, color="#64748b"), # Lighter slate for normal text
-                name=legend_name,
-                legendgroup=legend_group_name,
-                showlegend=True if highlighted_data.empty else True, # Main legend toggle
-                hovertemplate=f'<b>%{{text}}</b><br>Grupo: {label}<br>Eventos: %{{x:,.0f}}<br>Suma UITI_VANO: %{{y:,.2f}}<extra></extra>'
-            ))
-
-        # 4b. Plot highlighted points (Crosses 'X') retaining cluster color
-        if not highlighted_data.empty:
-            fig.add_trace(go.Scatter(
-                x=highlighted_data['event_count'],
-                y=highlighted_data['uiti_vano_sum'],
-                mode='markers+text',
-                marker=dict(
-                    color=color,
-                    symbol='x',
-                    size=12,
-                    line=dict(color='#0f172a', width=2),
-                    opacity=1.0 # Make them fully opaque to stand out
-                ),
-                text=highlighted_data.index,
-                textposition="top right",
-                textfont=dict(size=10, color="#dc2626", weight="bold"), # Red bold text to stand out
-                name=legend_name,
-                legendgroup=legend_group_name,
-                showlegend=False if not normal_data.empty else True, # Hide legend duplicate if normal points exist
-                hovertemplate=f'<b>%{{text}}</b><br>Grupo: {label}<br>Eventos: %{{x:,.0f}}<br>Suma UITI_VANO: %{{y:,.2f}}<br><i>DESTACADO</i><extra></extra>'
-            ))
-
-    # Expand axes limits by 10%
-    max_x = df_coords['event_count'].max()
-    max_y = df_coords['uiti_vano_sum'].max()
-    if pd.notna(max_x) and pd.notna(max_y):
-        fig.add_trace(go.Scatter(
-            x=[max_x * 1.1],
-            y=[max_y * 1.1],
-            mode='markers',
-            marker=dict(color='rgba(0,0,0,0)', size=1),
-            showlegend=False,
-            hoverinfo='none'
-        ))
-
-    # Dynamic Title. K reflects the actual number of clusters K-Means produced
-    # for this data (min(len(CRITICALITY_GROUP_LABELS), len(df_coords)) inside
-    # compute_circuit_criticality_groups), not a hardcoded constant.
-    n_clusters_used = df_coords['cluster'].nunique()
-    title_text = f'Agrupamiento de Circuitos: Frecuencia de Eventos vs Suma de UITI_VANO (K={n_clusters_used})'
-    if start_date and end_date:
-        title_text += f'<br><sup>Periodo: {start_date} a {end_date}</sup>'
-    elif start_date:
-        title_text += f'<br><sup>Periodo: Desde {start_date}</sup>'
-    elif end_date:
-        title_text += f'<br><sup>Periodo: Hasta {end_date}</sup>'
-    else:
-        # Extract the minimum and maximum dates available dynamically from FECHA
-        if 'FECHA' in raw_df.columns:
-            fechas_dt = pd.to_datetime(raw_df['FECHA'], errors='coerce').dropna()
-            if not fechas_dt.empty:
-                min_date = fechas_dt.min()#.strftime('%Y-%m-%d')
-                max_date = fechas_dt.max()#.strftime('%Y-%m-%d')
-                title_text += f'<br><sup>Periodo: {min_date} a {max_date}</sup>'
-            else:
-                title_text += f'<br><sup>Periodo: Datos sin Fechas Válidas</sup>'
-        else:
-            title_text += f'<br><sup>Periodo: Datos sin Fechas</sup>'
-
-    # Formatting axes
-    fig.update_layout(
-        title=dict(
-            text=title_text,
-            font=dict(size=16, family="Arial, sans-serif")
-        ),
-        xaxis_title='Número de Eventos por Circuito',
-        yaxis_title='Suma de UITI_VANO',
-        plot_bgcolor='#f8fafc',
-        paper_bgcolor='#ffffff',
-        xaxis=dict(
-            type='log',
-            showgrid=True,
-            gridcolor='#e2e8f0',
-            gridwidth=1,
-            griddash='dot',
-        ),
-        yaxis=dict(
-            type='log',
-            showgrid=True,
-            gridcolor='#e2e8f0',
-            gridwidth=1,
-            griddash='dot',
-        ),
-        legend=dict(
-            title='Grupos Criticidad',
-            bgcolor='rgba(255, 255, 255, 0.95)',
-            bordercolor='#e2e8f0',
-            borderwidth=1,
-            x=0.75, # Bottom Right roughly
-            y=0.02
-        ),
-        height=750,
-        margin=dict(l=60, r=50, t=90, b=80),
-        hovermode="closest"
-    )
-
-    return fig
-
-import pandas as pd
-import numpy as np
-import plotly.graph_objects as go
-import plotly.express as px
 
 def plot_ranking_circuitos(raw_df, circuito_destacado, start_date=None, end_date=None):
     """El ranking de circuitos por vanos criticos, con la barra del circuito resaltada.
@@ -668,12 +335,15 @@ COLORES_CLASE_VANO: dict[str, str] = {
     "Alto": "#c62828",
 }
 
-# Un vano puede llegar CON evento y SIN grupo: `metric_by_vano` se calcula sobre el
-# periodo y `metric_class_by_vano` sobre una ventana, asi que el que tuvo eventos en el
-# periodo pero no en la ventana dibujada no tiene grupo que mostrar. No es un quinto
-# grupo -- es ausencia de dato -- y por eso su color queda FUERA del semaforo.
-ETIQUETA_SIN_CLASE = "Sin clase"
-COLOR_SIN_CLASE = "#94a3b8"
+# El vano que no tiene grupo en la ventana dibujada. `metric_by_vano` se calcula sobre
+# el PERIODO y `metric_class_by_vano` sobre UNA ventana, y las bolsas salen de
+# `ventanas_015.construir_tabla_vano_ventana`, que descarta las celdas con UITI cero:
+# no tener grupo en la ventana equivale exactamente a no tener eventos en ella, y por
+# eso el rotulo dice lo que le pasa al vano y no lo que le falta al dato.
+#
+# No es un quinto grupo -- es ausencia -- y por eso su color queda FUERA del semaforo.
+ETIQUETA_SIN_EVENTOS = "Sin eventos"
+COLOR_SIN_EVENTOS = "#94a3b8"
 
 
 def plot_circuit_map_folium(
@@ -755,7 +425,7 @@ def plot_circuit_map_folium(
             class_metric.index = _norm_map_id(pd.Series(class_metric.index, dtype="object"))
             metric_class_column = metric_class_column or "clase_riesgo"
             geo_plot = geo_plot.merge(class_metric, left_on="FID_VANO_GEO", right_index=True, how="left")
-            geo_plot[metric_class_column] = geo_plot["metric_class"].fillna("Sin clase")
+            geo_plot[metric_class_column] = geo_plot["metric_class"].fillna(ETIQUETA_SIN_EVENTOS)
     else:
         geo_plot = gpd.GeoDataFrame(geometry=[], crs="EPSG:4326")
 
@@ -816,16 +486,21 @@ def plot_circuit_map_folium(
                 return {"color": class_colors[class_value], "weight": grosor,
                         "opacity": 1.0 if resaltado else 0.88}
             if metric_class_column:
-                # En modo grupo el color SIGNIFICA el grupo. El vano sin grupo iba antes
-                # a la escala continua `turbo`, que pisa el semaforo: medido, salia
-                # `#7a0402` -- un rojo mas oscuro que el `#c62828` de `Alto` y a su lado
-                # en el mapa --, asi que se contaba como Alto sin serlo.
-                return {"color": COLOR_SIN_CLASE, "weight": grosor,
+                # En modo grupo el color SIGNIFICA el grupo. El vano sin eventos en esta
+                # ventana iba antes a la escala continua `turbo`, que pisa el semaforo:
+                # medido, salia `#7a0402` -- un rojo mas oscuro que el `#c62828` de
+                # `Alto` y a su lado en el mapa --, asi que se contaba como Alto sin
+                # serlo.
+                return {"color": COLOR_SIN_EVENTOS, "weight": grosor,
                         "opacity": 1.0 if resaltado else 0.7}
             rgba = mapper.to_rgba(min(float(value or 0), vmax_robust), bytes=True)
             return {"color": f"#{rgba[0]:02x}{rgba[1]:02x}{rgba[2]:02x}", "weight": grosor,
                     "opacity": 1.0 if resaltado else 0.85}
-        return {"color": "#9ca3af", "weight": 2, "opacity": 0.45}
+        # Sin eventos en el periodo: la misma ausencia y por tanto el MISMO gris que el
+        # vano sin eventos en esta ventana, con trazo fino porque aqui es red de fondo.
+        # Con dos grises distintos la unica entrada "Sin eventos" de la leyenda rotulaba
+        # uno y callaba el otro.
+        return {"color": COLOR_SIN_EVENTOS, "weight": 2, "opacity": 0.45}
 
     if not geo_plot.empty:
         tooltip_fields = [col for col in ["FID_VANO_GEO", "CODIGO", "CIRCUITO", metric_column] if col in geo_plot.columns]
@@ -839,17 +514,23 @@ def plot_circuit_map_folium(
         ).add_to(fmap)
         if metric_class_column:
             # Los cuatro grupos SIEMPRE -- la escala existe aunque este circuito no use
-            # algun grupo en esta ventana --, y `Sin clase` solo si de verdad hay algun
+            # algun grupo en esta ventana --, y `Sin eventos` solo si de verdad hay algun
             # vano asi: anunciar un color que no esta en el mapa es el mismo error que
             # `Muy alto`, al reves.
             entradas = list(class_colors.items())
+            con_evento = geo_plot["has_v3_event"]
             clases_dibujadas = (
-                set(geo_plot.loc[geo_plot["has_v3_event"], metric_class_column].dropna())
+                set(geo_plot.loc[con_evento, metric_class_column].dropna())
                 if metric_class_column in geo_plot.columns
                 else set()
             )
-            if clases_dibujadas - set(class_colors):
-                entradas.append((ETIQUETA_SIN_CLASE, COLOR_SIN_CLASE))
+            # Hay gris en el mapa por DOS caminos, y los dos cuentan: el vano con
+            # eventos en el periodo pero sin grupo en esta ventana, y el vano que no
+            # tuvo eventos en todo el periodo. Mirar solo el primero dejaba mapas con
+            # lineas grises que la leyenda no nombraba.
+            hay_gris = bool(clases_dibujadas - set(class_colors)) or bool((~con_evento).any())
+            if hay_gris:
+                entradas.append((ETIQUETA_SIN_EVENTOS, COLOR_SIN_EVENTOS))
             legend_items = "".join(
                 f"<div><span style='display:inline-block;width:11px;height:11px;background:{color};"
                 f"margin-right:6px;border-radius:2px;'></span>{label}</div>"

@@ -364,10 +364,10 @@ final local HTML report.
 float}`) are two independent, optional sidecars written into `run_dir` by the `record-usage` and
 `record-duration` CLI verbs (`report_contract.py`), respectively. `record-usage` captures the
 sub-agent's own reported token total (Claude Code's `Agent` tool completion notification's
-`subagent_tokens` field, or Pi's `subagent_run` result's `usage` field); `record-duration` captures
-the orchestrating Skill's own wall-clock delta around each stage's dispatch — a source that does not
-depend on any field the sub-agent returns, so it is available identically on both Claude Code and
-Pi. Both verbs are additive and never gate run success: a stage missing either sidecar entry
+`subagent_tokens` field, or the equivalent `usage` field of another runtime's sub-agent result);
+`record-duration` captures the orchestrating Skill's own wall-clock delta around each stage's
+dispatch — a source that does not depend on any field the sub-agent returns, so it is available
+identically on every runtime. Both verbs are additive and never gate run success: a stage missing either sidecar entry
 degrades to an estimate (tokens: `chars // 4`) or `N/D` (duration), never an error. There is
 deliberately no `verify-duration` counterpart to `verify-usage` — duration never participates in
 the strict fail-closed token-verification path. At render time, `report_pipeline.render()` resolves
@@ -381,7 +381,7 @@ unchanged, not replaced. Both sidecars are optional and backward-compatible: the
 ### Standalone circuit-clustering chart (no longer a command)
 
 The circuit-clustering chart had its own `/agrupamiento-circuitos` entry point (plus a
-`/skill:agrupamiento-circuitos` adapter for Pi) until 2026-08-17. Both were retired: the chart is
+`/skill:agrupamiento-circuitos` adapter) until 2026-08-17. Both were retired: the chart is
 never asked for on its own in practice, it is always a step inside a batch or a managerial report.
 
 **The contract module stayed, and it is not optional.** `/reporte-lote` (step 1.5) and
@@ -406,9 +406,9 @@ introduce no business logic: every mirror names the canonical `.claude/` file to
 anything, plus the invocation shape and the boundaries for that runtime.
 
 `scripts/portabilidad_agentes.py generar` writes them from the canonical frontmatter and
-`tests/test_portabilidad_agentes.py` fails when one is missing, stale or orphaned. The previous
-attempt at this (`.pi/`, hand-written mirrors for the Pi / el Gentleman runtime) was retired: three
-of the ten canonical skills never got a mirror and nothing ever noticed.
+`tests/test_portabilidad_agentes.py` fails when one is missing, stale or orphaned. A previous
+attempt using hand-written mirrors was abandoned: three of the ten canonical skills never got a
+mirror and nothing ever noticed.
 
 #### Skill command equivalence
 

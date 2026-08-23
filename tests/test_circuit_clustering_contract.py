@@ -55,7 +55,7 @@ def test_preflight_returns_execution_error_when_window_has_no_events(monkeypatch
     monkeypatch.setattr(clustering_contract, "load_dataset", lambda path: frame)
 
     outcome = preflight_clustering(
-        normalize_request("2026-02-01", "2026-02-02", runtime="pi"),
+        normalize_request("2026-02-01", "2026-02-02", runtime="opencode"),
         data_path="data.csv",
     )
 
@@ -90,7 +90,7 @@ def test_render_clustering_reusa_el_ranking_y_escribe_html_determinista(monkeypa
     monkeypatch.setattr(clustering_contract, "plot_ranking_circuitos", fake_plot)
 
     outcome = render_clustering(
-        normalize_request(runtime="pi"),
+        normalize_request(runtime="opencode"),
         data_path="data.csv",
         output_root=tmp_path,
     )
@@ -126,12 +126,12 @@ def test_outcome_json_hides_output_path_until_success():
 
 
 def test_cli_parse_outputs_json(capsys):
-    exit_code = clustering_contract.main(["parse", "--runtime", "pi"])
+    exit_code = clustering_contract.main(["parse", "--runtime", "opencode"])
 
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "awaiting_confirmation"
-    assert payload["request"]["runtime"]["runtime"] == "pi"
+    assert payload["request"]["runtime"]["runtime"] == "opencode"
 
 
 def test_la_grafica_del_paso_1_5_dibuja_el_RANKING_y_no_la_nube_kmeans(monkeypatch, tmp_path):
@@ -149,10 +149,11 @@ def test_la_grafica_del_paso_1_5_dibuja_el_RANKING_y_no_la_nube_kmeans(monkeypat
         "UITI_VANO": [1.0, 2.0, 3.0, 4.0] * 2,
     })
     monkeypatch.setattr(cc, "load_dataset", lambda path: frame)
-    monkeypatch.setattr(
-        cc, "plot_interactive_circuit_clustering",
-        lambda *a, **k: pytest.fail("el paso 1.5 ya no dibuja la nube de K-Means"),
-    )
+    # La nube de K-Means se retiro entera el 2026-08-23; antes esto la interceptaba
+    # con un monkeypatch que fallaba si alguien la llamaba. Ya no hay que interceptar
+    # nada: el simbolo no existe, y eso lo fija
+    # `tests/test_agrupamiento_kmeans_de_circuito_retirado.py`.
+    assert not hasattr(cc, "plot_interactive_circuit_clustering")
 
     outcome = cc.render_clustering(
         cc.normalize_request("2026-01-01", "2026-01-02"),

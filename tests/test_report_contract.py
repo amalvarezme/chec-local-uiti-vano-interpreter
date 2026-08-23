@@ -253,9 +253,9 @@ def test_render_report_delegates_to_canonical_pipeline_and_passes_runtime_metada
 def test_render_report_resolves_model_from_environment_when_adapter_omits_it(monkeypatch, tmp_path):
     """Env overrides are the portable evidence channel every runtime adapter shares.
 
-    Pi had a bespoke resolver that read its own session history. Nothing else does:
-    OpenCode and Copilot report the orchestrating model through the flags or through
-    `CHEC_LLM_PROVIDER` / `CHEC_LLM_MODEL`, so that is the only channel left.
+    A retired adapter had a bespoke resolver that read its own session history. Nothing
+    else does: OpenCode and Copilot report the orchestrating model through the flags or
+    through `CHEC_LLM_PROVIDER` / `CHEC_LLM_MODEL`, so that is the only channel left.
     """
 
     report_path = tmp_path / "report.html"

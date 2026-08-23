@@ -390,7 +390,7 @@ already completed — dispatch it alone, immediately once both are done, without
    PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.report_contract render <circuito> --run-dir <run_dir> --runtime <runtime> [--provider <provider>] [--model <model>]
    ```
 
-   Direct Python callers may instead run `report_pipeline.render(run_dir, llm_provider="<provider>", llm_model="<model>")`. The report must label the model that actually orchestrated *this* run, not a static markdown frontmatter default. Resolution priority is: explicit flags/kwargs, `CHEC_LLM_PROVIDER` / `CHEC_LLM_MODEL`, runtime session/configuration, then `"Desconocido"`. For Pi / el Gentleman, the contract reads Pi session history and falls back to `~/.pi/agent/settings.json`, so changing Pi's active model updates the report label without editing this runbook. Getting this wrong (or skipping all runtime evidence)
+   Direct Python callers may instead run `report_pipeline.render(run_dir, llm_provider="<provider>", llm_model="<model>")`. The report must label the model that actually orchestrated *this* run, not a static markdown frontmatter default. Resolution priority is: explicit flags/kwargs, `CHEC_LLM_PROVIDER` / `CHEC_LLM_MODEL`, then `"Desconocido"`. The contract reads no runtime's private on-disk session files: the adapter knows which model it is running, so the adapter states it. Getting this wrong (or skipping all runtime evidence)
    silently degrades the report header, it never raises. The report header then shows
    `"<Provider> (<model>)"`, e.g. `"Claude Code (claude-sonnet-5)"`, plus an input/output token line
    whose source is labeled `medidos` (measured), `medidos/estimados` (mixed), or `aproximados`
@@ -415,7 +415,7 @@ already completed — dispatch it alone, immediately once both are done, without
    degrades to the estimate exactly as before, no error either way.
 
    **When a stage runs as a real sub-agent (`{"total": int}` shape).** If a stage was dispatched via
-   a runtime's real sub-agent tool — e.g. Claude Code's `Agent` tool or Pi's subagent runner — its
+   a runtime's real sub-agent tool — e.g. Claude Code's `Agent` tool — its
    completion notification may report a single combined usage figure with no input/output split.
    In that case, write that stage's `token_usage.json` entry as `{"total": <measured_subagent_tokens>}`
    instead of the `{"input", "output"}` shape. This is mandatory whenever the runtime exposes that

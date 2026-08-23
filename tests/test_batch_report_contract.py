@@ -370,13 +370,13 @@ def test_write_manifest_rejects_malformed_dates(tmp_path):
 
 
 def test_cli_parse_outputs_json(capsys):
-    exit_code = batch_contract.main(["parse", "alto", "--runtime", "pi"])
+    exit_code = batch_contract.main(["parse", "alto", "--runtime", "opencode"])
 
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "awaiting_confirmation"
     assert payload["request"]["grupo"] == "alto"
-    assert payload["request"]["runtime"]["runtime"] == "pi"
+    assert payload["request"]["runtime"]["runtime"] == "opencode"
 
 
 def test_cli_parse_rejects_unknown_grupo(capsys):

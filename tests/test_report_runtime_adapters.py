@@ -80,8 +80,8 @@ def test_runtime_contract_documents_model_resolution_without_session_sniffing():
     assert "CHEC_LLM_PROVIDER" in docs and "CHEC_LLM_MODEL" in docs
     assert "Desconocido" in docs
     assert "frontmatter" in docs
-    # El resolvedor especifico de Pi se retiro; el documento tiene que explicar por
-    # que, no dejar el hueco para que alguien reintroduzca un lector por runtime.
+    # El resolvedor especifico por runtime se retiro; el documento tiene que explicar
+    # por que, no dejar el hueco para que alguien reintroduzca un lector por runtime.
     assert "no per-runtime session sniffing" in docs
 
 

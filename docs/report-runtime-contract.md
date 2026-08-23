@@ -57,7 +57,7 @@ python -m chec_local_interpreter.report_contract render <circuito> --run-dir <ru
 
 When explicit metadata is absent, the shared contract resolves the effective model in this order: explicit flags, `CHEC_LLM_PROVIDER` / `CHEC_LLM_MODEL`, then `Desconocido`. It must not treat adapter markdown frontmatter as execution authority.
 
-There is deliberately no per-runtime session sniffing left. The retired Pi adapter had a resolver that read Pi's own session-history files and its `settings.json`; it worked, and it was still the wrong shape — every new runtime would have needed its own reader, each one guessing at another tool's private on-disk format. The adapter knows which model it is running as, so the adapter says so. A report labelled `Desconocido` is an honest report; a report labelled with a default nobody verified is not.
+There is deliberately no per-runtime session sniffing left. A retired adapter had a resolver that read its own runtime's session-history files and its `settings.json`; it worked, and it was still the wrong shape — every new runtime would have needed its own reader, each one guessing at another tool's private on-disk format. The adapter knows which model it is running as, so the adapter says so. A report labelled `Desconocido` is an honest report; a report labelled with a default nobody verified is not.
 
 ## Boundaries
 
