@@ -658,6 +658,24 @@ def _add_folium_equipment_legend(fmap) -> None:
     fmap.get_root().html.add_child(folium.Element(legend_html))
 
 
+# Los cuatro grupos del agrupamiento de vanos, con el semaforo de los cuadernos. Es el
+# MISMO vocabulario que `ranking_circuitos.NOMBRES_GRUPOS_VANO` y que
+# `mil_figuras.NOMBRES_GRUPOS`; aqui vive el color porque el mapa es quien lo pinta.
+COLORES_CLASE_VANO: dict[str, str] = {
+    "Bajo": "#1a9641",
+    "Medio": "#f2c200",
+    "Medio-Alto": "#ef6c00",
+    "Alto": "#c62828",
+}
+
+# Un vano puede llegar CON evento y SIN grupo: `metric_by_vano` se calcula sobre el
+# periodo y `metric_class_by_vano` sobre una ventana, asi que el que tuvo eventos en el
+# periodo pero no en la ventana dibujada no tiene grupo que mostrar. No es un quinto
+# grupo -- es ausencia de dato -- y por eso su color queda FUERA del semaforo.
+ETIQUETA_SIN_CLASE = "Sin clase"
+COLOR_SIN_CLASE = "#94a3b8"
+
+
 def plot_circuit_map_folium(
     df,
     circuito_name,
@@ -769,17 +787,14 @@ def plot_circuit_map_folium(
                 vmax_robust = vmin + 1
     norm = mcolors.Normalize(vmin=vmin, vmax=vmax_robust)
     mapper = cm.ScalarMappable(norm=norm, cmap=cm.turbo)
-    # El semaforo de criticidad de los cuadernos: los cuatro grupos que devuelve
-    # `asignar_clase` (0=Bajo..3=Alto). `Muy alto` se conserva por los caminos antiguos
-    # que rotulaban con esa cuarta palabra; sin `Medio-Alto` los vanos de ese grupo
-    # caian a "Sin clase" y el mapa los pintaba de gris sin decir por que.
-    class_colors = {
-        "Bajo": "#1a9641",
-        "Medio": "#f2c200",
-        "Medio-Alto": "#ef6c00",
-        "Alto": "#c62828",
-        "Muy alto": "#c62828",
-    }
+    # El semaforo de criticidad de los cuadernos: los CUATRO grupos que devuelve
+    # `asignar_clase` (0=Bajo..3=Alto), los mismos que nombran el tablero de
+    # agrupamiento, el ranking de circuitos y la prosa del informe. Ni uno mas: hasta
+    # 2026-08-23 habia una quinta entrada, `Muy alto`, "por los caminos antiguos". Nada
+    # en el repositorio la produce, pero la leyenda se construye recorriendo este mismo
+    # diccionario, asi que salia dibujada en TODOS los mapas -- vacia y repitiendo el
+    # rojo de `Alto`.
+    class_colors = dict(COLORES_CLASE_VANO)
 
     # Los vanos a destacar, con el mismo normalizador de id que usa el resto del mapa:
     # `FID_VANO` llega con sufijo `.0` inconsistente y sin normalizar el conjunto no
@@ -800,6 +815,13 @@ def plot_circuit_map_folium(
             if class_value in class_colors:
                 return {"color": class_colors[class_value], "weight": grosor,
                         "opacity": 1.0 if resaltado else 0.88}
+            if metric_class_column:
+                # En modo grupo el color SIGNIFICA el grupo. El vano sin grupo iba antes
+                # a la escala continua `turbo`, que pisa el semaforo: medido, salia
+                # `#7a0402` -- un rojo mas oscuro que el `#c62828` de `Alto` y a su lado
+                # en el mapa --, asi que se contaba como Alto sin serlo.
+                return {"color": COLOR_SIN_CLASE, "weight": grosor,
+                        "opacity": 1.0 if resaltado else 0.7}
             rgba = mapper.to_rgba(min(float(value or 0), vmax_robust), bytes=True)
             return {"color": f"#{rgba[0]:02x}{rgba[1]:02x}{rgba[2]:02x}", "weight": grosor,
                     "opacity": 1.0 if resaltado else 0.85}
@@ -816,10 +838,22 @@ def plot_circuit_map_folium(
             tooltip=folium.GeoJsonTooltip(fields=tooltip_fields),
         ).add_to(fmap)
         if metric_class_column:
+            # Los cuatro grupos SIEMPRE -- la escala existe aunque este circuito no use
+            # algun grupo en esta ventana --, y `Sin clase` solo si de verdad hay algun
+            # vano asi: anunciar un color que no esta en el mapa es el mismo error que
+            # `Muy alto`, al reves.
+            entradas = list(class_colors.items())
+            clases_dibujadas = (
+                set(geo_plot.loc[geo_plot["has_v3_event"], metric_class_column].dropna())
+                if metric_class_column in geo_plot.columns
+                else set()
+            )
+            if clases_dibujadas - set(class_colors):
+                entradas.append((ETIQUETA_SIN_CLASE, COLOR_SIN_CLASE))
             legend_items = "".join(
                 f"<div><span style='display:inline-block;width:11px;height:11px;background:{color};"
                 f"margin-right:6px;border-radius:2px;'></span>{label}</div>"
-                for label, color in class_colors.items()
+                for label, color in entradas
             )
             legend_html = (
                 "<div style='position: fixed; bottom: 22px; left: 50px; z-index: 9999; "
@@ -1504,7 +1538,11 @@ def render_llm_analysis(
         vanos = [v for v in ((simulacion or {}).get("vanos") or []) if isinstance(v, dict)]
         if not vanos:
             return ""
-        grupos = ("Bajo", "Medio", "Medio-Alto", "Alto")
+        # Los nombres NO se reescriben aqui: son los del agrupamiento de vanos, y una
+        # copia local es justo como se cuelan los vocabularios paralelos.
+        from chec_local_interpreter.ranking_circuitos import NOMBRES_GRUPOS_VANO
+
+        grupos = NOMBRES_GRUPOS_VANO
 
         def _grupo(indice):
             try:
