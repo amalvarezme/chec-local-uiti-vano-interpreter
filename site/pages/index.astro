@@ -17,22 +17,22 @@ import variables from "../data/variables.json";
 
 
 const databricksArtefactos = [
-  ["1", "data/", "Archivos en el Volume de Unity Catalog", "~945 MB: el CSV de eventos (566), el cache de bolsas (199), los tres shapefiles con sidecars (180), el modelo MIL, el grafo y los .xlsx"],
-  ["2", "Dos aplicaciones", "Databricks Apps, cada una en su compute", "Criticidad CHEC sirve los cuatro tableros en cuatro rutas; el Simulador necesita un interprete de Python vivo"],
+  ["1", "data/", "Archivos en el Volume de Unity Catalog", "~945 MB: el CSV de eventos (566), la caché de bolsas (199), los tres shapefiles con sidecars (180), el modelo MIL, el grafo y los .xlsx"],
+  ["2", "Dos aplicaciones", "Databricks Apps, cada una en su compute", "Criticidad CHEC sirve los cuatro tableros en cuatro rutas; el Simulador necesita un intérprete de Python activo"],
   ["3", "notebooks/05_mil_vano_ventana.ipynb", "Cuaderno en el Workspace", "El registro legible del modelo MIL; sin outputs, por el tope de 10 MB del importador"]
 ];
 
 
 
 const databricksMigrationSteps = [
-  ["0", "Preguntar la URL del workspace", "Es el unico dato que se pide, y se pide en cada corrida: nunca se deduce de un perfil que resulte tener sesion abierta."],
+  ["0", "Preguntar la URL del workspace", "Es el único dato que se solicita, y se solicita en cada ejecución: nunca se deduce de un perfil que tenga sesión abierta."],
   ["1", "Resolver perfil CLI e identidad", "Se derivan de esa URL, una sola vez."],
-  ["2", "Resolver el destino en Unity Catalog", "El catalogo se descubre en tiempo de ejecucion, nunca se asume."],
-  ["3", "Compuerta: los datos en el Volume", "Pregunta primero que hay, con tamanios. Solo sube lo que falta: mover 566 MB que ya estaban es la corrida mas cara que existe."],
-  ["4", "Compuerta: las dos apps en compute", "Sana es `ACTIVE` + `RUNNING` + ultimo deploy `SUCCEEDED`, las tres a la vez. Una app sana y al dia no se toca."],
-  ["5", "Compuerta: el cuaderno en el Workspace", "Se importa sin outputs ni execution_count. Si la etapa 3 quedo bloqueada, el cuaderno aterriza pero no correra: eso se anota `degradado`, no `ok`."],
-  ["6", "Commit y push de la bitacora", "En una rama, nunca sobre main."],
-  ["7", "Reportar al usuario", "Una fila por etapa, la ruta de la bitacora y cada restriccion con quien la desbloquea."]
+  ["2", "Resolver el destino en Unity Catalog", "El catálogo se descubre en tiempo de ejecución, nunca se asume."],
+  ["3", "Compuerta: los datos en el Volume", "Pregunta primero qué hay, con sus tamaños. Solo sube lo que falta: mover 566 MB que ya estaban es la ejecución más costosa que existe."],
+  ["4", "Compuerta: las dos aplicaciones en compute", "Operativa es `ACTIVE` + `RUNNING` + último despliegue `SUCCEEDED`, las tres condiciones a la vez. Una aplicación que se encuentra operativa y actualizada no requiere un nuevo despliegue."],
+  ["5", "Compuerta: el cuaderno en el Workspace", "Se importa sin outputs ni execution_count. Si la etapa 3 quedó bloqueada, el cuaderno queda disponible pero no podrá ejecutarse: eso se registra como `degradado`, no como `ok`."],
+  ["6", "Commit y push de la bitácora", "En una rama, nunca sobre main."],
+  ["7", "Reportar al usuario", "Una fila por etapa, la ruta de la bitácora y cada restricción con quién la desbloquea."]
 ];
 
 
@@ -44,10 +44,25 @@ const databricksMigrationSteps = [
 
 
 
+const codigoEnLinea = (texto) =>
+  texto
+    .split("`")
+    .map((parte, i) =>
+      i % 2 === 1
+        ? `<code>${parte}</code>`
+        : parte.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    )
+    .join("");
+
+const siteOrigin = (Astro.site ?? new URL("https://amalvarezme.github.io")).origin;
+const canonicalUrl = new URL(import.meta.env.BASE_URL, siteOrigin).href;
+const ogImageUrl = new URL(simuladorMapas.src, siteOrigin).href;
+const faviconUrl = logoLab.src;
+
 const etapas = [
   ["Entradas de información", "Consolidación de fuentes técnicas, históricas y económicas para alimentar el simulador."],
-  ["Actualización Prototipo 1", "Ajuste de librerías, base de datos 2025, RAG, normativa y chatbot inteligente."],
-  ["Simulación contrafactual", "Escenarios tipo que pasa si para reposición, mantenimiento y eventos extremos."],
+  ["Actualización del prototipo 1", "Ajuste de librerías, base de datos 2025, RAG, normativa y chatbot inteligente."],
+  ["Simulación contrafactual", "Escenarios de tipo «¿qué pasa si…?» para reposición, mantenimiento y eventos extremos."],
   ["Evaluación económica", "Integración de costos de mantenimiento, reposición y retorno de inversión."],
   ["Resultados del simulador", "Visualización tabular y georreferenciada de impactos esperados."],
   ["Soporte a decisiones", "Comparación entre estado actual e intervenciones priorizadas."]
@@ -58,7 +73,7 @@ const cronograma = [
   ["Ajustes módulo M-GCECDL y agentes", "Actualización de contexto técnico, normativa y documentación", "Mes 1 - Mes 2"],
   ["Simulación contrafactual", "Diseño de arquitectura del simulador", "Mes 1"],
   ["Simulación contrafactual", "Modelado probabilístico con restricciones físicas", "Mes 2 - Mes 3"],
-  ["Simulación contrafactual", "Escenarios que pasa si, UiTi por vano y clima extremo", "Mes 2 - Mes 4"],
+  ["Simulación contrafactual", "Escenarios «¿qué pasa si…?», UITI por vano y clima extremo", "Mes 2 - Mes 4"],
   ["Evaluación económica dinámica", "Costos, retorno de inversión y ranking de intervenciones", "Mes 2 - Mes 4"],
   ["Visualización y despliegue", "Resultados georreferenciados/tabulares e infraestructura local/nube CHEC", "Mes 1 - Mes 4"],
   ["Validación final", "Pruebas técnicas y ajuste fino", "Mes 4"]
@@ -72,9 +87,35 @@ const cronograma = [
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Resultados de avance del proyecto Simulador de criticidad CHEC - UNAL."
+      content="Resultados de avance del Simulador de criticidad CHEC: agrupamiento de vanos, modelo MIL predictivo, simulador de escenarios «¿Qué pasa si…?» e informes automáticos, desarrollados por la Universidad Nacional de Colombia, Sede Manizales."
     />
-    <title>Simulador Criticidad CHEC | Lab IA UNAL</title>
+    <title>Simulador de criticidad CHEC | Universidad Nacional de Colombia</title>
+
+    <link rel="canonical" href={canonicalUrl} />
+    <link rel="icon" type="image/png" href={faviconUrl} />
+    <link rel="apple-touch-icon" href={faviconUrl} />
+
+    <meta property="og:title" content="Simulador de criticidad CHEC | Universidad Nacional de Colombia" />
+    <meta
+      property="og:description"
+      content="Agrupamiento de vanos, modelo MIL predictivo, simulador de escenarios «¿Qué pasa si…?» e informes automáticos para el análisis de criticidad en redes de nivel de tensión 2."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="es_CO" />
+    <meta property="og:site_name" content="Simulador de criticidad CHEC" />
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:image" content={ogImageUrl} />
+    <meta
+      property="og:image:alt"
+      content="Simulador de criticidad CHEC: mapas de criticidad original y simulada de un circuito."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Simulador de criticidad CHEC | Universidad Nacional de Colombia" />
+    <meta
+      name="twitter:description"
+      content="Agrupamiento de vanos, modelo MIL predictivo, simulador de escenarios «¿Qué pasa si…?» e informes automáticos para el análisis de criticidad en redes de nivel de tensión 2."
+    />
+    <meta name="twitter:image" content={ogImageUrl} />
   </head>
   <body>
     <header class="site-header">
@@ -100,7 +141,6 @@ const cronograma = [
           </p>
         </div>
         <aside class="hero-panel" aria-label="Datos principales del proyecto">
-          <img class="panel-logo" src={logoLab.src} alt="Laboratorio IA UNAL" />
           <dl>
             <div>
               <dt>Contrato</dt>
@@ -141,7 +181,7 @@ const cronograma = [
           <article>
             <span>01</span>
             <h3>Abreviaturas</h3>
-            <p>CHEC: Central Hidroeléctrica de Caldas S.A. E.S.P. UNAL: Universidad Nacional de Colombia sede Manizales.</p>
+            <p>CHEC: Central Hidroeléctrica de Caldas S.A. E.S.P. UNAL: Universidad Nacional de Colombia, Sede Manizales.</p>
           </article>
           <article>
             <span>02</span>
@@ -151,7 +191,7 @@ const cronograma = [
           <article>
             <span>03</span>
             <h3>Alcance</h3>
-            <p>Simulación contrafactual para reposición y mantenimiento, estimando UiTi por vano y costos con incertidumbre y sensibilidad.</p>
+            <p>Simulación contrafactual para reposición y mantenimiento, estimando el UITI por vano y los costos con incertidumbre y sensibilidad.</p>
           </article>
           <article>
             <span>04</span>
@@ -202,7 +242,7 @@ const cronograma = [
             <tbody>
               <tr>
                 <td>Gustavo Agredo Cardona</td>
-                <td>Representante legal del contratista - UNAL</td>
+                <td>Representante legal del contratista (UNAL)</td>
               </tr>
               <tr>
                 <td>Juan Carlos Álvarez Barreto</td>
@@ -307,7 +347,7 @@ const cronograma = [
           <a href="#tableros">Tableros</a>
           <a href="#agrupamiento-temporal">Agrupamiento y análisis temporal</a>
           <a href="#modelo-mil">Modelo IA predictiva</a>
-          <a href="#simulador">Simulador ¿Qué pasa si…?</a>
+          <a href="#simulador">Simulador «¿Qué pasa si…?»</a>
           <a href="#agentes-informes">Agentes e informes</a>
           <a href="#migracion-databricks">Migración Databricks</a>
         </nav>
@@ -319,9 +359,10 @@ const cronograma = [
           <h2>Tableros</h2>
           <p>
             Cuatro visores y un simulador, cada uno con su propio entorno y su puerto fijo, gobernados
-            por el menú <strong>CriticidadCHEC</strong>. Los cuatro visores se congelan en HTML estático
-            y abren en menos de un segundo; el simulador necesita un intérprete vivo. Los pantallazos de
-            abajo son capturas reales de cada tablero servido, con sus gráficas cargadas.
+            por el menú <strong>CriticidadCHEC</strong>. Los cuatro visores se publican como HTML estático
+            y abren en menos de un segundo; el simulador necesita un intérprete de Python activo. Las
+            imágenes siguientes son capturas de pantalla reales de cada tablero servido, con sus gráficas
+            cargadas.
           </p>
         </div>
 
@@ -330,11 +371,11 @@ const cronograma = [
             <thead><tr><th>Tablero</th><th>Puerto</th><th>Cómo corre</th></tr></thead>
             <tbody>
               <tr><td>CriticidadCHEC (menú)</td><td><code>8800</code></td><td>Servidor de control; abre y apaga a los demás</td></tr>
-              <tr><td>Nube por vano y clima</td><td><code>8801</code></td><td>HTML congelado</td></tr>
-              <tr><td>Agrupamiento de vanos</td><td><code>8802</code></td><td>HTML congelado</td></tr>
-              <tr><td>Trayectorias de circuitos</td><td><code>8803</code></td><td>HTML congelado</td></tr>
-              <tr><td>Trayectorias de vanos</td><td><code>8804</code></td><td>HTML congelado</td></tr>
-              <tr><td>Simulador ¿Qué pasa si…?</td><td><code>8866</code></td><td>Voila + kernel de Python vivo</td></tr>
+              <tr><td>Nube por vano y clima</td><td><code>8801</code></td><td>HTML estático</td></tr>
+              <tr><td>Agrupamiento de vanos</td><td><code>8802</code></td><td>HTML estático</td></tr>
+              <tr><td>Trayectorias de circuitos</td><td><code>8803</code></td><td>HTML estático</td></tr>
+              <tr><td>Trayectorias de vanos</td><td><code>8804</code></td><td>HTML estático</td></tr>
+              <tr><td>Simulador «¿Qué pasa si…?»</td><td><code>8866</code></td><td>Voilà + kernel de Python activo</td></tr>
             </tbody>
           </table>
         </div>
@@ -343,7 +384,7 @@ const cronograma = [
           <h3>Nube por vano y clima</h3>
           <figure class="shot">
             <img src={tableroClima.src} alt="Tablero de nube por vano y clima, con el mapa del circuito DON23L13 y las gráficas cargadas" loading="lazy" />
-            <figcaption>Circuito DON23L13 — 79 días con eventos entre 2025-11-01 y 2026-04-30.</figcaption>
+            <figcaption>Captura del tablero interactivo. Circuito DON23L13: 79 días con eventos entre 2025-11-01 y 2026-04-30.</figcaption>
           </figure>
           <ul class="func-list">
             <li><strong>Mapa del circuito con el UITI diario por vano</strong>, con cortes de criticidad fijos e iguales para todos los circuitos (Bajo, Medio, Medio-Alto, Alto), más transformadores e interruptores.</li>
@@ -355,9 +396,10 @@ const cronograma = [
 
           <h4>Capturar datos nuevos de clima</h4>
           <p>
-            El clima no se descarga solo: se pide con el comando <code>/clima</code>, que consulta
-            Open-Meteo y tiene <strong>tres compuertas bloqueantes</strong> antes de gastar cuota. La API key
-            del modo pago la escribe el usuario, vive solo en memoria y nunca se guarda.
+            El clima no se descarga automáticamente: se solicita con el comando <code>/clima</code>, que
+            consulta Open-Meteo y tiene <strong>tres compuertas bloqueantes</strong> antes de consumir cuota.
+            La clave de API (API key) de la modalidad de pago la escribe el usuario, permanece solo en
+            memoria y nunca se guarda.
           </p>
           <div class="table-wrap compact-table">
             <table>
@@ -365,10 +407,10 @@ const cronograma = [
               <tbody>
                 <tr><td><strong>Modo</strong></td><td>A o B</td><td><strong>A</strong> reescribe <code>data/Indicadores_vano_v3.csv</code> con coordenadas <code>X1</code>/<code>Y1</code>. <strong>B</strong> toma cualquier tabla de <code>data/</code>, con <code>XPOS1_RED_BASE</code>/<code>YPOS1_RED_AFECTA</code>, y deja un CSV nuevo.</td></tr>
                 <tr><td><strong>Compuerta 1</strong></td><td>Ubicaciones</td><td>Va primero y es bloqueante: sin coordenadas válidas no se sigue. Se resuelve con <code>a_gate1()</code> o <code>b_gate1(archivo)</code>.</td></tr>
-                <tr><td><strong>Compuerta 2</strong></td><td>API gratuita o paga</td><td>La gratuita no pide nada. La paga pide la <code>apikey</code> al usuario, en el momento; no se persiste ni se registra en ningún log.</td></tr>
+                <tr><td><strong>Compuerta 2</strong></td><td>API gratuita o paga</td><td>La gratuita no requiere credenciales. La modalidad de pago solicita la clave de API (<code>apikey</code>) al usuario en el momento; no se persiste ni se registra en ningún log.</td></tr>
                 <tr><td><strong>Compuerta 3</strong></td><td>Límites de cuota</td><td>Compara las llamadas necesarias contra el presupuesto disponible <em>antes</em> de empezar. Si no alcanza, se detiene y lo dice.</td></tr>
                 <tr><td><strong>Salida</strong></td><td>Dónde queda</td><td>Modo A: el mismo v3. Modo B: <code>data/clima_&lt;fuente&gt;_&lt;ini&gt;_a_&lt;fin&gt;.csv</code>. El registro de consumo va aparte, a <code>.clima_cache/</code>.</td></tr>
-                <tr><td><strong>Unificar</strong></td><td>Concatenar corridas</td><td>Solo entre archivos con el <strong>mismo</strong> <code>origen_id</code>: mezclar orígenes distintos produce una tabla que parece válida y no lo es.</td></tr>
+                <tr><td><strong>Unificar</strong></td><td>Concatenar ejecuciones</td><td>Solo entre archivos con el <strong>mismo</strong> <code>origen_id</code>: mezclar orígenes distintos produce una tabla que parece válida y no lo es.</td></tr>
               </tbody>
             </table>
           </div>
@@ -378,13 +420,13 @@ const cronograma = [
           <h3>Agrupamiento de vanos</h3>
           <figure class="shot">
             <img src={tableroAgrupamiento.src} alt="Tablero de agrupamiento de vanos con los cuatro grupos de criticidad y el ranking de circuitos" loading="lazy" />
-            <figcaption>27.390 vanos con eventos entre 2025-11 y 2026-04; K-Means con k=4.</figcaption>
+            <figcaption>27.390 vanos con eventos entre 2025-11 y 2026-04; k-means (k = 4).</figcaption>
           </figure>
           <ul class="func-list">
-            <li><strong>K-Means (k=4) sobre el par (UITI acumulado, número de eventos)</strong> de cada vano. Los grupos se <em>nombran</em> por el ranking de la mediana del UITI —Bajo, Medio, Medio-Alto, Alto—, nunca por el índice que devuelve el algoritmo.</li>
+            <li><strong>k-means (k = 4) sobre el par (UITI acumulado, número de eventos)</strong> de cada vano. Los grupos se <em>nombran</em> por el ranking de la mediana del UITI —Bajo, Medio, Medio-Alto, Alto—, nunca por el índice que devuelve el algoritmo.</li>
             <li><strong>Rango de fechas ajustable</strong>, redondeado a meses completos, con descarga de las etiquetas resultantes a Excel.</li>
             <li><strong>Reparto por grupo y distribución del UITI</strong>: 4.189 Bajo (15,3 %), 11.449 Medio (41,8 %), 10.314 Medio-Alto (37,7 %) y 1.438 Alto (5,3 %).</li>
-            <li><strong>Top 10 de circuitos</strong> por porcentaje de vanos en Medio-Alto + Alto.</li>
+            <li><strong>10 circuitos con mayor porcentaje de vanos</strong> en Medio-Alto + Alto.</li>
             <li><strong>Ranking de los 208 circuitos</strong> por número de vanos Medio-Alto + Alto — el que define el grupo de criticidad del circuito, y el insumo del modelo predictivo.</li>
           </ul>
         </article>
@@ -393,7 +435,7 @@ const cronograma = [
           <h3>Trayectorias de circuitos</h3>
           <figure class="shot">
             <img src={tableroTrayCircuitos.src} alt="Tablero de trayectorias de circuitos con ventana deslizante y mapa" loading="lazy" />
-            <figcaption>Circuito AGU23L12 — 6 de 11 ventanas con eventos.</figcaption>
+            <figcaption>Captura del tablero interactivo. Circuito AGU23L12: 6 de 11 ventanas con eventos.</figcaption>
           </figure>
           <ul class="func-list">
             <li><strong>Cada punto es un par circuito × ventana</strong>, no un circuito: el mismo circuito aparece tantas veces como ventanas tenga, y así se ve por dónde se mueve en el tiempo.</li>
@@ -408,10 +450,14 @@ const cronograma = [
           <h3>Trayectorias de vanos</h3>
           <figure class="shot">
             <img src={tableroTrayVanos.src} alt="Tablero de trayectorias de vanos con la selección por casillas y el perfil del circuito" loading="lazy" />
-            <figcaption>Circuito AGU23L12 — 15 de 47 vanos marcados, que concentran el 88,3 % del UITI.</figcaption>
+            <figcaption>
+            Captura del tablero interactivo. Circuito AGU23L12: 15 de 47 vanos marcados, que concentran el
+            88,3 % del UITI. A la izquierda, el panel de selección; a la derecha, el perfil del circuito y
+            la evolución por vano.
+          </figcaption>
           </figure>
           <ul class="func-list">
-            <li><strong>Cada punto es un par vano × ventana</strong>, con el K-Means ajustado <em>una sola vez</em> sobre todas las celdas: los cortes no se recalculan al cambiar de circuito, así que dos circuitos son comparables.</li>
+            <li><strong>Cada punto es un par vano × ventana</strong>, con el k-means ajustado <em>una sola vez</em> sobre todas las celdas: los cortes no se recalculan al cambiar de circuito, así que dos circuitos son comparables.</li>
             <li><strong>Selección de vanos por casillas</strong>, con <em>Marcar todos</em> y <em>Desmarcar</em>; lo marcado manda en todos los paneles a la vez.</li>
             <li><strong>Perfil del circuito</strong>: cuánto del UITI del periodo concentran los vanos marcados —en el ejemplo, 15 de 47 vanos explican el 88,3 %—.</li>
             <li><strong>Evolución por vano</strong> con UITI y número de eventos superpuestos, ventana a ventana.</li>
@@ -425,20 +471,33 @@ const cronograma = [
           <p class="eyebrow">IA + Criticidad CHEC · 2 de 6</p>
           <h2>Agrupamiento de vanos y análisis temporal</h2>
           <p>
-            De dónde sale la etiqueta de criticidad. No es un umbral escrito a mano: sale de agrupar los
+            De dónde sale la etiqueta de criticidad. No es un umbral definido manualmente: sale de agrupar los
             vanos por su comportamiento observado, y de ordenar después los circuitos por cuántos vanos
             críticos acumulan. Esa etiqueta es lo que el modelo predictivo aprende a anticipar.
           </p>
         </div>
 
         <figure class="shot wide">
-          <img src={rankingCircuitos.src} alt="Ranking de los 208 circuitos por número de vanos en clase Medio-Alto y Alto, con los cortes de las cuatro bandas" loading="lazy" />
-          <figcaption>El paso 4 visto en el tablero: los 208 circuitos ordenados por vanos Medio-Alto + Alto, con los cortes de las cuatro bandas.</figcaption>
+          <img src={rankingCircuitos.src} alt="Ranking de los 208 circuitos por número de vanos en clase Medio-Alto y Alto, con los cortes de las cuatro bandas de riesgo" loading="lazy" />
+          <figcaption>
+            Captura del tablero de agrupamiento: los 208 circuitos ordenados por número de vanos
+            Medio-Alto + Alto, con los cortes de las cuatro bandas de riesgo. Las etiquetas del eje
+            horizontal son los códigos de circuito; a esta escala sirven de referencia de densidad, y el
+            valor de cada circuito se consulta en el tablero interactivo.
+          </figcaption>
         </figure>
 
-        <div class="diagram-card">
+        <ul class="banda-legend">
+          <li><span class="banda-key">Bajo</span> 104 circuitos</li>
+          <li><span class="banda-key">Medio</span> 53 circuitos</li>
+          <li><span class="banda-key">Medio-Alto</span> 44 circuitos</li>
+          <li><span class="banda-key">Alto</span> 7 circuitos</li>
+          <li><span class="banda-key">Sin vanos críticos</span> 24 circuitos, sin ningún vano Medio-Alto ni Alto</li>
+        </ul>
+
+        <div class="diagram-card" tabindex="0">
           <h3>De vano a grupo de circuito, en cuatro pasos</h3>
-          <svg viewBox="0 0 960 250" role="img" aria-label="Cadena: vanos, K-Means, nombrado por mediana, ranking de circuitos" class="diagrama">
+          <svg viewBox="0 0 960 250" role="img" aria-label="Cadena: vanos, k-means, nombrado por mediana, ranking de circuitos" class="diagrama">
             <defs>
               <marker id="fl" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
                 <path d="M0,0 L9,4.5 L0,9 z" fill="#5f6f77" />
@@ -454,7 +513,7 @@ const cronograma = [
               <line x1="212" y1="119" x2="244" y2="119" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fl)" />
 
               <rect x="250" y="60" width="200" height="118" rx="12" fill="#ffffff" stroke="#dce7e4" />
-              <text x="350" y="88" text-anchor="middle" font-weight="700" fill="#102129">2 · K-Means, k = 4</text>
+              <text x="350" y="88" text-anchor="middle" font-weight="700" fill="#102129">2 · k-means, k = 4</text>
               <text x="350" y="112" text-anchor="middle" fill="#5f6f77">Sobre ese plano de dos ejes</text>
               <text x="350" y="132" text-anchor="middle" fill="#5f6f77">Devuelve 4 etiquetas</text>
               <text x="350" y="152" text-anchor="middle" fill="#b8860b">sin orden propio</text>
@@ -486,7 +545,7 @@ const cronograma = [
           <article>
             <strong>Por qué el nombre no lo pone el algoritmo</strong>
             <p>
-              K-Means numera sus grupos por un orden que cambia entre corridas. El nombre lo pone
+              k-means numera sus grupos por un orden que cambia entre ejecuciones. El nombre lo asigna
               después la mediana del UITI: eso sí es estable.
             </p>
           </article>
@@ -527,7 +586,7 @@ const cronograma = [
           </p>
         </div>
 
-        <div class="diagram-card">
+        <div class="diagram-card" tabindex="0">
           <h3>Principio del modelo: entrenamiento e inferencia</h3>
           <svg viewBox="0 0 980 620" role="img" aria-label="Diagrama del modelo MIL: insumos, bolsas, codificador, fusión FiLM, atención, cabeza de bolsa, asignación de clase, grafo de restricción física y función de costo" class="diagrama">
             <defs>
@@ -583,7 +642,7 @@ const cronograma = [
 
               <rect x="506" y="234" width="180" height="42" rx="9" fill="#ffffff" stroke="#dce7e4" />
               <text x="596" y="253" text-anchor="middle" fill="#102129">Atención sobre instancias</text>
-              <text x="596" y="269" text-anchor="middle" fill="#5f6f77" font-size="10.5">agrega la bolsa y dice qué pesó</text>
+              <text x="596" y="269" text-anchor="middle" fill="#5f6f77" font-size="10.5">agrega la bolsa y dice qué tuvo peso</text>
 
               <line x1="596" y1="280" x2="596" y2="296" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fm)" />
 
@@ -595,7 +654,7 @@ const cronograma = [
               <rect x="732" y="284" width="232" height="78" rx="10" fill="#f3f8f6" stroke="#007a53" />
               <text x="848" y="308" text-anchor="middle" font-weight="700" fill="#005c45" font-size="12">asignar_clase(n_obs, û, geometría)</text>
               <text x="848" y="329" text-anchor="middle" fill="#5f6f77">La clase NO sale de la red: sale de</text>
-              <text x="848" y="347" text-anchor="middle" fill="#5f6f77" font-size="11">caer en la geometría K-Means congelada</text>
+              <text x="848" y="347" text-anchor="middle" fill="#5f6f77" font-size="11">caer en la geometría k-means congelada</text>
 
               <rect x="732" y="374" width="232" height="52" rx="10" fill="#ffffff" stroke="#dce7e4" />
               <text x="848" y="396" text-anchor="middle" font-weight="700" fill="#102129">Bajo · Medio · Medio-Alto · Alto</text>
@@ -661,10 +720,10 @@ const cronograma = [
             <h3>Cómo se usa en datos nuevos</h3>
             <ol class="pasos">
               <li>Se arma la matriz de instancias con el <em>mismo</em> codificador de <code>COD_CAUSA</code> del entrenamiento.</li>
-              <li>Se carga el <code>.pt</code>, que trae los pesos, el grafo físico y la geometría K-Means congelada.</li>
-              <li>Cada fila entra como <strong>bolsa unitaria con <code>n_obs = 1</code></strong>, que es lo correcto al puntuar eventos individuales.</li>
-              <li>La red devuelve û; la clase la decide después <code>asignar_clase</code> cayendo en la geometría.</li>
-              <li>La atención deja además, por bolsa, <strong>qué variables pesaron</strong> — eso es lo que alimenta el diagnóstico del simulador.</li>
+              <li>Se carga el <code>.pt</code>, que trae los pesos, el grafo físico y la geometría k-means congelada.</li>
+              <li>Cada fila entra como <strong>bolsa unitaria con <code>n_obs = 1</code></strong>, que es lo correcto al evaluar eventos individuales.</li>
+              <li>La red devuelve û; posteriormente, <code>asignar_clase</code> determina la clase a partir de la geometría de agrupamiento.</li>
+              <li>La atención deja además, por bolsa, <strong>qué variables tuvieron mayor peso</strong>: eso es lo que alimenta el diagnóstico del simulador.</li>
             </ol>
           </div>
         </div>
@@ -673,45 +732,50 @@ const cronograma = [
       <section id="simulador" class="section">
         <div class="section-heading">
           <p class="eyebrow">IA + Criticidad CHEC · 4 de 6</p>
-          <h2>Simulador ¿Qué pasa si…?</h2>
+          <h2>Simulador «¿Qué pasa si…?»</h2>
           <p>
-            El único tablero con un intérprete vivo detrás, porque cada simulación vuelve a llamar al
-            modelo. Se elige un circuito y una ventana, se marcan vanos, se pregunta qué hacer, se mueve
-            lo que se quiera mover y se compara la criticidad observada contra la simulada — con el costo
-            de la intervención al lado.
+            El único tablero con un intérprete de Python activo detrás, porque cada simulación vuelve a
+            llamar al modelo. Se elige un circuito y una ventana, se marcan vanos, se consulta qué hacer,
+            se modifican las variables seleccionadas y se compara la criticidad observada contra la
+            simulada, con el costo de la intervención al lado.
           </p>
         </div>
 
         <figure class="shot wide">
           <img src={simuladorMapas.src} alt="Simulador: panel de control, mapas de criticidad original y simulada, perfil del circuito y serie de UITI por ventana" loading="lazy" />
           <figcaption>
-            <strong>Arriba.</strong> Circuito INS23L13, ventana V11 (2026-04-01 a 2026-04-30): el panel de
-            control, los mapas de criticidad original y simulada, el perfil del circuito y la serie de UITI
-            acumulado y eventos por ventana.
+            <strong>Arriba.</strong> Captura del tablero interactivo. Circuito INS23L13, ventana V11
+            (2026-04-01 a 2026-04-30): el panel de control, los mapas de criticidad original y simulada, el
+            perfil del circuito y la serie de UITI acumulado y eventos por ventana. Los dos mapas comparten
+            circuito, ventana y escala de criticidad, y <strong>la topología de la red es la misma en
+            ambos</strong>: lo que cambia es el color de criticidad de los vanos simulados. El encuadre sí
+            difiere a propósito: el mapa de la izquierda conserva la vista del circuito completo como
+            referencia, mientras que el de la derecha se acerca a los vanos marcados. Cada mapa tiene su
+            propio botón de centrado para volver a la vista del circuito.
           </figcaption>
         </figure>
 
         <ol class="func-list numbered">
           <li><strong>Marcar los vanos de tres maneras, y todas suman.</strong> Un botón por grupo de criticidad —<em>G. Alto</em>, <em>G. Medio-Alto</em>, <em>G. Medio</em>, <em>G. Bajo</em>— marca los de ese grupo <em>en la ventana fijada</em>; también se marca casilla por casilla, o pulsando el vano sobre el mapa. Pulsar un grupo y luego otro no desmarca nada: el único botón que quita es <em>Desmarcar</em>. Debajo siempre queda dicho cuántos vanos hay en ese grupo y esa ventana, con la fecha.</li>
-          <li><strong>El diagnóstico estudia exactamente lo marcado, y solo eso.</strong> Sin nada marcado toma los 15 de mayor UITI de la ventana. Marcar acota la pregunta, no la siembra — y si quedan vanos con eventos fuera de la selección, lo dice y ofrece incluirlos.</li>
-          <li><strong>Devuelve dos listas ordenadas por caída media del UITI.</strong> <em>Intervención — qué HACER</em> y <em>Escenario — bajo qué CONDICIONES</em>, cada renglón con el valor sugerido y cuánto baja el UITI en promedio. Cuando una sola variable basta para cambiar de grupo en algún vano, lo señala.</li>
-          <li><strong>Aplicar lo sugerido abre los controles ya puestos.</strong> Un botón por mitad: se puede simular solo la intervención, solo el escenario, o las dos. En el ejemplo, 34 vanos abrieron 374 controles en su valor sugerido.</li>
-          <li><strong>Y todo se puede mover a mano.</strong> Cada vano marcado tiene su panel con sus variables; cada control abre en el valor actual de ese vano en la ventana activa —mediana de sus instancias, moda si es categórica—, no en un valor genérico.</li>
-          <li><strong>Los costos se asocian a mano, actividad por actividad.</strong> El catálogo del contrato trae 142 actividades con su costo unitario. Lo que se marque aparece como una fila bajo <em>cada</em> vano marcado, con su cantidad; el tablero multiplica y acumula, pero <strong>no decide</strong> qué actividad corresponde a qué cambio de variable.</li>
-          <li><strong>Simular vuelve a llamar al modelo y compara.</strong> Dos mapas lado a lado —<em>Criticidad Original</em> y <em>Criticidad Simulada</em>—, el UITI medido contra el simulado por vano y para todo el circuito, el top 10 de lo que baja el UITI en cada vano, el costo por vano y el costo acumulado.</li>
-          <li><strong>Sin tope.</strong> Diagnóstico, aplicación e informes cubren <em>todos</em> los vanos marcados, sean 3 o sean 407. El caso más grande medido —circuito DON23L13, 407 vanos— marca en 4,0 s, diagnostica en 2,8 s y aplica en 5,8 s abriendo 4.477 controles.</li>
+          <li><strong>El diagnóstico estudia exactamente lo marcado, y solo eso.</strong> Sin nada marcado toma los 15 de mayor UITI de la ventana. La selección delimita los vanos incluidos en el diagnóstico; si quedan vanos con eventos fuera de la selección, el tablero lo advierte y ofrece incluirlos.</li>
+          <li><strong>Devuelve dos listas ordenadas por caída media del UITI.</strong> <em>Intervención — qué HACER</em> y <em>Escenario — bajo qué CONDICIONES</em>, cada fila con el valor sugerido y cuánto reduce el UITI en promedio. Cuando una sola variable basta para cambiar de grupo en algún vano, lo señala.</li>
+          <li><strong>Aplicar lo sugerido abre los controles ya puestos.</strong> Un botón por mitad: se puede simular solo la intervención, solo el escenario, o las dos. En el ejemplo, para 34 vanos se habilitaron 374 controles en su valor sugerido.</li>
+          <li><strong>Y todo se puede ajustar manualmente.</strong> Cada vano marcado tiene su panel con sus variables; cada control abre en el valor actual de ese vano en la ventana activa —mediana de sus instancias, moda si es categórica—, no en un valor genérico.</li>
+          <li><strong>Los costos se asignan manualmente, actividad por actividad.</strong> El catálogo del contrato trae 142 actividades con su costo unitario. Lo que se marque aparece como una fila bajo <em>cada</em> vano marcado, con su cantidad; el tablero multiplica y acumula, pero <strong>no decide</strong> qué actividad corresponde a qué cambio de variable.</li>
+          <li><strong>Simular vuelve a llamar al modelo y compara.</strong> Dos mapas lado a lado —<em>Criticidad Original</em> y <em>Criticidad Simulada</em>—, el UITI medido contra el simulado por vano y para todo el circuito, las 10 variables que más reducen el UITI en cada vano, el costo por vano y el costo acumulado.</li>
+          <li><strong>Sin límite de número de vanos.</strong> Diagnóstico, aplicación e informes cubren <em>todos</em> los vanos marcados, sean 3 o sean 407. El caso de mayor tamaño evaluado —circuito DON23L13, 407 vanos— marca en 4,0 s, diagnostica en 2,8 s y aplica en 5,8 s, habilitando 4.477 controles.</li>
         </ol>
 
         <figure class="shot wide">
           <img src={simuladorResultados.src} alt="Resultados del simulador: caída de UITI por variable, medido contra simulado, costo de la intervención y grafo de relaciones" loading="lazy" />
           <figcaption>
-            <strong>Abajo, la misma corrida.</strong> La caída de UITI que produce cada variable en cada
-            vano, el UITI medido contra el simulado, el costo por vano y el acumulado (369.703.635 COP), y
-            el grafo de relaciones relevantes de esta simulación.
+            <strong>Abajo, la misma ejecución.</strong> La reducción del UITI que produce cada variable en
+            cada vano, el UITI medido contra el simulado, el costo por vano y el acumulado
+            (369.703.635 COP), y el grafo de relaciones relevantes de esta simulación.
           </figcaption>
         </figure>
 
-        <div class="diagram-card">
+        <div class="diagram-card" tabindex="0">
           <h3>Cómo se usa el MIL entrenado para simular: grafo de diferencias y sensibilidad</h3>
           <svg viewBox="0 0 980 400" role="img" aria-label="Diagrama de simulación: estado observado y contrafactual pasan por el mismo modelo, la diferencia produce el grafo de diferencias y el análisis de sensibilidad" class="diagrama">
             <defs>
@@ -771,7 +835,7 @@ const cronograma = [
           </svg>
         </div>
 
-        <div class="diagram-card">
+        <div class="diagram-card" tabindex="0">
           <h3>Cómo entran los costos por actividad</h3>
           <svg viewBox="0 0 980 176" role="img" aria-label="Diagrama de costos: catálogo de actividades, asignación manual por vano, cantidad, costo por vano y costo acumulado" class="diagrama">
             <defs>
@@ -879,14 +943,14 @@ const cronograma = [
           <h2>Agentes e informes automáticos</h2>
           <p>
             El simulador es donde una persona <em>explora</em>; los agentes son donde eso queda
-            <em>escrito</em>. Comparten motor: el diagnóstico que el simulador muestra en pantalla —qué
-            variable baja cuánto el UITI en cada vano— es exactamente el que el agente <code>inference</code>
+            <em>escrito</em>. Comparten motor: el diagnóstico que el simulador muestra en pantalla —cuánto
+            reduce el UITI cada variable en cada vano— es exactamente el que el agente <code>inference</code>
             recibe y redacta. Lo que los agentes agregan es el contexto que no cabe en un tablero: la serie
             histórica, la discusión experta de los informes en PDF y la comparación entre ambas.
           </p>
         </div>
 
-        <div class="diagram-card">
+        <div class="diagram-card" tabindex="0">
           <h3>Informe por circuito — <code>/report</code></h3>
           <svg viewBox="0 0 980 430" role="img" aria-label="Flujo del comando report: preparación determinista, tres agentes, render y nota de bóveda" class="diagrama">
             <defs>
@@ -934,7 +998,7 @@ const cronograma = [
 
               <rect x="716" y="124" width="250" height="52" rx="10" fill="#f3f8f6" stroke="#007a53" />
               <text x="841" y="146" text-anchor="middle" font-weight="700" fill="#005c45">nota de bóveda + grafo</text>
-              <text x="841" y="165" text-anchor="middle" fill="#5f6f77">Alimenta la próxima corrida</text>
+              <text x="841" y="165" text-anchor="middle" fill="#5f6f77">Alimenta la próxima ejecución</text>
               <path d="M841,180 C841,268 316,268 316,158" fill="none" stroke="#007a53" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#fa)" />
 
               <rect x="14" y="252" width="952" height="76" rx="10" fill="#ffffff" stroke="#f4b23a" />
@@ -950,7 +1014,7 @@ const cronograma = [
           </svg>
         </div>
 
-        <div class="diagram-card">
+        <div class="diagram-card" tabindex="0">
           <h3>Informe gerencial — <code>/informe-gerencial</code></h3>
           <svg viewBox="0 0 980 244" role="img" aria-label="Flujo del informe gerencial: banda de riesgo, muestreo de 12 circuitos, report por circuito, síntesis y barras de flota" class="diagrama">
             <defs>
@@ -976,7 +1040,7 @@ const cronograma = [
 
               <rect x="478" y="54" width="188" height="86" rx="10" fill="#f3f8f6" stroke="#007a53" />
               <text x="572" y="80" text-anchor="middle" font-weight="700" fill="#005c45">/report por circuito</text>
-              <text x="572" y="102" text-anchor="middle" fill="#5f6f77">Reutiliza la corrida si ya</text>
+              <text x="572" y="102" text-anchor="middle" fill="#5f6f77">Reutiliza la ejecución si ya</text>
               <text x="572" y="120" text-anchor="middle" fill="#5f6f77">existe; si falta, la pide</text>
 
               <line x1="670" y1="97" x2="704" y2="97" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fg2)" />
@@ -1004,7 +1068,7 @@ const cronograma = [
               <tr><td><code>/reporte-lote</code></td><td>Encadena <code>/report</code> sobre una lista de circuitos</td><td>Varios circuitos</td></tr>
               <tr><td><code>/informe-gerencial</code></td><td>Síntesis por banda de riesgo, con barras de la flota entera y grafo radial</td><td>Hasta 12 circuitos de una banda</td></tr>
               <tr><td><code>/clima</code></td><td>Enriquece los datos con Open-Meteo, con tres compuertas de cuota</td><td>Toda la tabla elegida</td></tr>
-              <tr><td><code>/graphify</code></td><td>Convierte las notas de bóveda en un grafo de conocimiento navegable</td><td>Acumulativo entre corridas</td></tr>
+              <tr><td><code>/graphify</code></td><td>Convierte las notas de bóveda en un grafo de conocimiento navegable</td><td>Acumulativo entre ejecuciones</td></tr>
             </tbody>
           </table>
         </div>
@@ -1015,9 +1079,10 @@ const cronograma = [
           <p class="eyebrow">IA + Criticidad CHEC · 6 de 6</p>
           <h2>Migración a Databricks</h2>
           <p>
-            Databricks es una <strong>copia independiente</strong>, no un espejo en vivo: lo que corre allá
-            es la misma cadena, con sus propios datos subidos y sus propias apps desplegadas. La mueve
-            <strong>un solo comando</strong>, <code>/subir-a-databricks</code>, que sube tres artefactos y
+            El despliegue en Databricks es <strong>independiente</strong> y no mantiene sincronización en
+            tiempo real con el entorno local: allí se ejecuta la misma cadena, con sus propios datos
+            cargados y sus propias aplicaciones desplegadas. La migración se ejecuta mediante
+            <strong>un único comando</strong>, <code>/subir-a-databricks</code>, que sube tres artefactos y
             nada más.
           </p>
         </div>
@@ -1035,10 +1100,11 @@ const cronograma = [
 
         <div class="note-callout">
           <strong>Eran ocho comandos hasta agosto de 2026.</strong> Cuatro publicaban un tablero cada uno
-          parcheando su cuaderno, y murieron cuando ese código se mudó a <code>src/chec_tableros/</code>.
-          Los otros cuatro seguían siendo correctos y se absorbieron el 2026-08-17 por una razón distinta:
-          un despliegue partido en cuatro invocaciones deja cuatro reportes parciales y obliga al usuario a
-          acordarse del orden. Su procedimiento no se perdió — vive en las etapas 3, 4 y 5.
+          actualizando individualmente sus cuadernos, y quedaron obsoletos cuando ese código se trasladó a
+          <code>src/chec_tableros/</code>. Los otros cuatro seguían siendo correctos y se absorbieron el
+          2026-08-17 por una razón distinta: un despliegue repartido en cuatro invocaciones deja cuatro
+          reportes parciales y obliga al usuario a recordar el orden. Su procedimiento no se perdió: se
+          conserva en las etapas 3, 4 y 5.
         </div>
 
         <div class="connection-intro">
@@ -1055,18 +1121,19 @@ const cronograma = [
               <span class="step-num">{numero}</span>
               <div>
                 <strong>{titulo}</strong>
-                <p>{detalle}</p>
+                <p set:html={codigoEnLinea(detalle)} />
               </div>
             </li>
           ))}
         </ol>
 
         <div class="note-callout">
-          <strong>Las dos apps se despliegan siempre.</strong> No es una elección por corrida: lo único que
-          puede impedirlo es el cupo del workspace —3 apps, y una en <code>DELETING</code> todavía ocupa su
-          lugar— o que la app ya esté sana y sirviendo contenido al día. Con un solo cupo libre entra
-          <strong>Criticidad CHEC</strong>, que publica cuatro tableros en vez de uno y arranca en segundos;
-          el Simulador espera turno. Desplegar una es siempre mejor que no desplegar ninguna.
+          <strong>Las dos aplicaciones se despliegan siempre.</strong> No es una elección por ejecución: lo
+          único que puede impedirlo es el cupo del workspace —3 aplicaciones, y una en <code>DELETING</code>
+          todavía ocupa su lugar— o que la aplicación ya se encuentre operativa y sirviendo contenido
+          actualizado. Con un solo cupo libre se prioriza el despliegue de <strong>Criticidad CHEC</strong>,
+          que publica cuatro tableros en vez de uno y arranca en segundos; el Simulador se despliega cuando
+          exista capacidad disponible. Desplegar una es siempre mejor que no desplegar ninguna.
         </div>
       </section>
 
@@ -1076,6 +1143,25 @@ const cronograma = [
           <div class="section-heading">
             <p class="eyebrow">Estimación operativa</p>
             <h2 id="costos-title">Complemento de estimación de costos en Azure Databricks</h2>
+          </div>
+
+          <div class="metrics-grid" role="list" aria-label="Síntesis ejecutiva de costos">
+            <article role="listitem">
+              <strong>USD 5–8</strong>
+              <span>Ajuste inicial, por ejecución</span>
+            </article>
+            <article role="listitem">
+              <strong>USD 4–6</strong>
+              <span>Producción, por ejecución</span>
+            </article>
+            <article role="listitem">
+              <strong>&lt; USD 0,30</strong>
+              <span>LLM por API o FMS: impacto marginal frente al costo de GPU</span>
+            </article>
+            <article role="listitem">
+              <strong>USD 4,5–8/h</strong>
+              <span>LLM local 32B+: requiere A100 y se evalúa como escenario separado</span>
+            </article>
           </div>
 
           <div class="detail-block">
@@ -1110,24 +1196,24 @@ const cronograma = [
                   </tr>
                 </thead>
                 <tbody>
-                  <tr><td><code>01_climate.ipynb</code></td><td>36.5 min</td></tr>
-                  <tr><td><code>02_mgcecdl_optuna_classification_search.ipynb</code></td><td>2 h para 20 trials</td></tr>
+                  <tr><td><code>01_climate.ipynb</code></td><td>36,5 min</td></tr>
+                  <tr><td><code>02_mgcecdl_optuna_classification_search.ipynb</code></td><td>2 h para 20 ensayos (trials)</td></tr>
                   <tr><td><code>03_mgcecdl_training.ipynb</code></td><td>10 min para 100 épocas</td></tr>
                   <tr><td><code>04_mgcecdl_performance.ipynb</code></td><td>1 min</td></tr>
                   <tr><td><code>05_mgcecdl_circuit_analysis.ipynb</code></td><td>5 min</td></tr>
                   <tr><td><code>06_mgcecdl_document_replication.ipynb</code></td><td>2 h 30 min</td></tr>
-                  <tr><td><strong>Total aproximado</strong></td><td><strong>5.38 h</strong></td></tr>
+                  <tr><td><strong>Total aproximado</strong></td><td><strong>5,38 h</strong></td></tr>
                 </tbody>
               </table>
             </div>
             <p class="note-callout">
               El cambio fuerte está en <code>06_mgcecdl_document_replication.ipynb</code>, porque agrega
-              <strong>2.5 h de T4</strong> al flujo completo.
+              <strong>2,5 h de T4</strong> al flujo completo.
             </p>
             <div class="process-grid">
               <article>
                 <strong>07_graph_preserved_connections_uiti_vano.ipynb</strong>
-                <p>Cache opcional para <code>03</code>, no bloqueante. Sin GPU: construye el grafo experto a mano desde Excel, sin entrenar ningún modelo.</p>
+                <p>Cache opcional para <code>03</code>, no bloqueante. Sin GPU: construye el grafo experto manualmente desde Excel, sin entrenar ningún modelo.</p>
               </article>
               <article>
                 <strong>08_geo_network_exploration.ipynb</strong>
@@ -1150,8 +1236,8 @@ const cronograma = [
             <p>
               La familia Azure <code>NCasT4_v3</code> usa NVIDIA Tesla T4 con 16 GB de memoria por GPU.
               Microsoft documenta que esta familia puede tener hasta 4 T4, cada una con 16 GB de memoria.
-              Como referencia, <code>NC4as_T4_v3</code> aparece alrededor de <strong>USD 0.526/h</strong>
-              on-demand.
+              Como referencia, <code>NC4as_T4_v3</code> aparece alrededor de <strong>USD 0,526/h</strong>
+              bajo demanda (on-demand).
             </p>
 
             <h4>Supuesto de costo por hora</h4>
@@ -1159,10 +1245,10 @@ const cronograma = [
               <table>
                 <thead><tr><th>Componente</th><th>Supuesto</th></tr></thead>
                 <tbody>
-                  <tr><td>VM Azure T4 <code>NC4as_T4_v3</code></td><td>~USD 0.526/h</td></tr>
-                  <tr><td>DBU All-Purpose</td><td>USD 0.40–0.55/DBU</td></tr>
-                  <tr><td>Reserva aproximada DBU</td><td>1.0–1.5 DBU/h</td></tr>
-                  <tr><td><strong>Costo total All-Purpose T4 estimado</strong></td><td><strong>USD 0.93–1.35/h</strong></td></tr>
+                  <tr><td>VM Azure T4 <code>NC4as_T4_v3</code></td><td>~USD 0,526/h</td></tr>
+                  <tr><td>DBU All-Purpose</td><td>USD 0,40–0,55/DBU</td></tr>
+                  <tr><td>Reserva aproximada DBU</td><td>1,0–1,5 DBU/h</td></tr>
+                  <tr><td><strong>Costo total All-Purpose T4 estimado</strong></td><td><strong>USD 0,93–1,35/h</strong></td></tr>
                 </tbody>
               </table>
             </div>
@@ -1176,44 +1262,44 @@ const cronograma = [
               <table>
                 <thead><tr><th>Caso</th><th>Horas cobradas</th><th>Costo aprox.</th></tr></thead>
                 <tbody>
-                  <tr><td>Sin idle</td><td>5.49 h</td><td><strong>USD 5.11–7.41</strong></td></tr>
-                  <tr><td>Idle +15 min</td><td>5.74 h</td><td><strong>USD 5.34–7.75</strong></td></tr>
-                  <tr><td>Idle +30 min</td><td>5.99 h</td><td><strong>USD 5.57–8.09</strong></td></tr>
-                  <tr><td>Idle +1 h</td><td>6.49 h</td><td><strong>USD 6.04–8.76</strong></td></tr>
+                  <tr><td>Sin tiempo de inactividad (idle)</td><td>5,49 h</td><td><strong>USD 5,11–7,41</strong></td></tr>
+                  <tr><td>Inactividad +15 min</td><td>5,74 h</td><td><strong>USD 5,34–7,75</strong></td></tr>
+                  <tr><td>Inactividad +30 min</td><td>5,99 h</td><td><strong>USD 5,57–8,09</strong></td></tr>
+                  <tr><td>Inactividad +1 h</td><td>6,49 h</td><td><strong>USD 6,04–8,76</strong></td></tr>
                 </tbody>
               </table>
             </div>
             <p>
-              <strong>Idle</strong> significa que el clúster queda prendido sin ejecutar trabajo útil.
-              Por ejemplo, <code>idle +15 min</code> significa que el flujo terminó, pero el clúster
-              siguió encendido 15 minutos adicionales. Esto importa sobre todo en All-Purpose, porque
-              no se apaga automáticamente al terminar un notebook; depende de auto-termination por
-              inactividad. Databricks documenta que Jobs Compute termina al finalizar la ejecución,
+              El <strong>tiempo de inactividad (idle)</strong> es el periodo en que el clúster queda
+              encendido sin ejecutar trabajo útil. Por ejemplo, <code>idle +15 min</code> significa que el
+              flujo terminó, pero el clúster siguió encendido 15 minutos adicionales. Esto importa sobre
+              todo en All-Purpose, porque no se apaga automáticamente al terminar un notebook: depende de
+              la terminación automática (auto-termination) por inactividad. Databricks documenta que Jobs Compute termina al finalizar la ejecución,
               mientras que All-Purpose depende del comportamiento del clúster interactivo.
             </p>
             <p class="note-callout">
-              <strong>Estimación ejecutiva:</strong> Una ejecución completa en modo interactivo con T4
-              para todo costaría aproximadamente <strong>USD 5–8</strong> si se apaga rápido, y
-              <strong>USD 6–9</strong> si queda algo de idle.
+              <strong>Estimación ejecutiva:</strong> una ejecución completa en modo interactivo con T4
+              para todo costaría aproximadamente <strong>USD 5–8</strong> si el clúster se apaga
+              inmediatamente, y <strong>USD 6–9</strong> si queda tiempo de inactividad.
             </p>
 
-            <h4>Costo de Optuna por trial</h4>
-            <p>La búsqueda actual de Optuna está estimada en <strong>20 trials</strong> y tarda aproximadamente <strong>2 h</strong>.</p>
+            <h4>Costo de Optuna por ensayo</h4>
+            <p>La búsqueda actual de Optuna está estimada en <strong>20 ensayos</strong> y tarda aproximadamente <strong>2 h</strong>.</p>
             <div class="table-wrap compact-table">
               <table>
                 <thead><tr><th>Concepto</th><th>Valor</th></tr></thead>
                 <tbody>
                   <tr><td>Tiempo total Optuna</td><td>2 h</td></tr>
-                  <tr><td>Trials</td><td>20</td></tr>
-                  <tr><td>Costo All-Purpose T4 para 2 h</td><td>USD 1.85–2.70</td></tr>
-                  <tr><td><strong>Costo aproximado por trial</strong></td><td><strong>USD 0.09–0.14/trial</strong></td></tr>
+                  <tr><td>Ensayos</td><td>20</td></tr>
+                  <tr><td>Costo All-Purpose T4 para 2 h</td><td>USD 1,85–2,70</td></tr>
+                  <tr><td><strong>Costo aproximado por ensayo</strong></td><td><strong>USD 0,09–0,14 por ensayo</strong></td></tr>
                 </tbody>
               </table>
             </div>
             <blockquote>
-              La búsqueda actual no es una búsqueda masiva; son 20 trials. En All-Purpose T4, esa búsqueda
-              costaría aproximadamente USD 1.85–2.70, equivalente a USD 0.09–0.14 por trial. No incluye
-              repeticiones adicionales de Optuna durante afinamiento.
+              La búsqueda actual no es una búsqueda masiva: son 20 ensayos. En All-Purpose T4, esa
+              búsqueda costaría aproximadamente USD 1,85–2,70, equivalente a USD 0,09–0,14 por ensayo. No
+              incluye repeticiones adicionales de Optuna durante el afinamiento.
             </blockquote>
 
             <h4>Costo de entrenamiento</h4>
@@ -1221,7 +1307,7 @@ const cronograma = [
               <table>
                 <thead><tr><th>Entrenamiento</th><th>Tiempo</th><th>Costo aprox.</th></tr></thead>
                 <tbody>
-                  <tr><td>100 épocas con T4</td><td>10 min</td><td><strong>USD 0.15–0.23</strong></td></tr>
+                  <tr><td>100 épocas con T4</td><td>10 min</td><td><strong>USD 0,15–0,23</strong></td></tr>
                 </tbody>
               </table>
             </div>
@@ -1231,7 +1317,7 @@ const cronograma = [
               <table>
                 <thead><tr><th>Notebook</th><th>Tiempo</th><th>Costo aprox.</th></tr></thead>
                 <tbody>
-                  <tr><td><code>06_mgcecdl_document_replication.ipynb</code></td><td>2.5 h</td><td><strong>USD 2.33–3.38</strong></td></tr>
+                  <tr><td><code>06_mgcecdl_document_replication.ipynb</code></td><td>2,5 h</td><td><strong>USD 2,33–3,38</strong></td></tr>
                 </tbody>
               </table>
             </div>
@@ -1254,26 +1340,27 @@ const cronograma = [
             <h4>2.1 Google Gemini API</h4>
             <p>
               Google publica precios por millón de tokens. Para Gemini 2.5 Flash-Lite, el costo estándar
-              es <strong>USD 0.10/M input</strong> y <strong>USD 0.40/M output</strong>; para Gemini 2.5
-              Flash es <strong>USD 0.30/M input</strong> y <strong>USD 2.50/M output</strong>; para Gemini
-              2.5 Pro, en contexto menor o igual a 200k tokens, es <strong>USD 1.25/M input</strong> y
-              <strong>USD 10/M output</strong>.
+              es <strong>USD 0,10/M input</strong> y <strong>USD 0,40/M output</strong>; para Gemini 2.5
+              Flash es <strong>USD 0,30/M input</strong> y <strong>USD 2,50/M output</strong>; para Gemini
+              2.5 Pro, en contexto menor o igual a 200k tokens, es <strong>USD 1,25/M input</strong> y
+              <strong>USD 10/M output</strong>. Las modalidades de procesamiento por lotes (batch) y
+              flexible (flex) que aparecen en la tabla corresponden a la mitad de la tarifa estándar.
             </p>
             <div class="table-wrap compact-table">
               <table>
                 <thead><tr><th>Modelo Google</th><th>Modo</th><th>Input USD/M</th><th>Output USD/M</th><th>Costo aprox. por ciclo</th></tr></thead>
                 <tbody>
-                  <tr><td>Gemini 2.5 Flash-Lite</td><td>Standard</td><td>0.10</td><td>0.40</td><td><strong>USD 0.019</strong></td></tr>
-                  <tr><td>Gemini 2.5 Flash-Lite</td><td>Batch / Flex</td><td>0.05</td><td>0.20</td><td><strong>USD 0.010</strong></td></tr>
-                  <tr><td>Gemini 2.5 Flash</td><td>Standard</td><td>0.30</td><td>2.50</td><td><strong>USD 0.066</strong></td></tr>
-                  <tr><td>Gemini 2.5 Flash</td><td>Batch / Flex</td><td>0.15</td><td>1.25</td><td><strong>USD 0.033</strong></td></tr>
-                  <tr><td>Gemini 2.5 Pro</td><td>Standard, ≤200k tokens</td><td>1.25</td><td>10.00</td><td><strong>USD 0.272</strong></td></tr>
-                  <tr><td>Gemini 2.5 Pro</td><td>Batch / Flex, ≤200k tokens</td><td>0.625</td><td>5.00</td><td><strong>USD 0.136</strong></td></tr>
-                  <tr><td>Gemini 3.1 Flash-Lite</td><td>Standard</td><td>0.25</td><td>1.50</td><td><strong>USD 0.051</strong></td></tr>
-                  <tr><td>Gemini 3.1 Flash-Lite</td><td>Batch / Flex</td><td>0.125</td><td>0.75</td><td><strong>USD 0.026</strong></td></tr>
-                  <tr><td>Gemini 3.1 Flash</td><td>Standard</td><td>0.50</td><td>3.00</td><td><strong>USD 0.103</strong></td></tr>
-                  <tr><td>Gemini 3.1 Flash</td><td>Batch / Flex</td><td>0.25</td><td>1.50</td><td><strong>USD 0.051</strong></td></tr>
-                  <tr><td>Gemini 3.1 Pro Preview</td><td>Standard</td><td>0.90</td><td>5.40</td><td><strong>USD 0.185</strong></td></tr>
+                  <tr><td>Gemini 2.5 Flash-Lite</td><td>Standard</td><td>0,10</td><td>0,40</td><td><strong>USD 0,019</strong></td></tr>
+                  <tr><td>Gemini 2.5 Flash-Lite</td><td>Batch / Flex</td><td>0,05</td><td>0,20</td><td><strong>USD 0,010</strong></td></tr>
+                  <tr><td>Gemini 2.5 Flash</td><td>Standard</td><td>0,30</td><td>2,50</td><td><strong>USD 0,066</strong></td></tr>
+                  <tr><td>Gemini 2.5 Flash</td><td>Batch / Flex</td><td>0,15</td><td>1,25</td><td><strong>USD 0,033</strong></td></tr>
+                  <tr><td>Gemini 2.5 Pro</td><td>Standard, ≤200k tokens</td><td>1,25</td><td>10,00</td><td><strong>USD 0,272</strong></td></tr>
+                  <tr><td>Gemini 2.5 Pro</td><td>Batch / Flex, ≤200k tokens</td><td>0,625</td><td>5,00</td><td><strong>USD 0,136</strong></td></tr>
+                  <tr><td>Gemini 3.1 Flash-Lite</td><td>Standard</td><td>0,25</td><td>1,50</td><td><strong>USD 0,051</strong></td></tr>
+                  <tr><td>Gemini 3.1 Flash-Lite</td><td>Batch / Flex</td><td>0,125</td><td>0,75</td><td><strong>USD 0,026</strong></td></tr>
+                  <tr><td>Gemini 3.1 Flash</td><td>Standard</td><td>0,50</td><td>3,00</td><td><strong>USD 0,103</strong></td></tr>
+                  <tr><td>Gemini 3.1 Flash</td><td>Batch / Flex</td><td>0,25</td><td>1,50</td><td><strong>USD 0,051</strong></td></tr>
+                  <tr><td>Gemini 3.1 Pro Preview</td><td>Standard</td><td>0,90</td><td>5,40</td><td><strong>USD 0,185</strong></td></tr>
                 </tbody>
               </table>
             </div>
@@ -1290,32 +1377,32 @@ const cronograma = [
             <h4>2.2 OpenAI / GPT API</h4>
             <p>
               OpenAI publica precios por millón de tokens. En pricing estándar, <code>gpt-5.4-nano</code>
-              aparece en <strong>USD 0.20/M input</strong> y <strong>USD 1.25/M output</strong>;
-              <code>gpt-5.4-mini</code> en <strong>USD 0.75/M input</strong> y
-              <strong>USD 4.50/M output</strong>; <code>gpt-5.4</code> en
-              <strong>USD 2.50/M input</strong> y <strong>USD 15/M output</strong>; y
+              aparece en <strong>USD 0,20/M input</strong> y <strong>USD 1,25/M output</strong>;
+              <code>gpt-5.4-mini</code> en <strong>USD 0,75/M input</strong> y
+              <strong>USD 4,50/M output</strong>; <code>gpt-5.4</code> en
+              <strong>USD 2,50/M input</strong> y <strong>USD 15/M output</strong>; y
               <code>gpt-5.5</code> en <strong>USD 5/M input</strong> y <strong>USD 30/M output</strong>.
             </p>
             <div class="table-wrap compact-table">
               <table>
                 <thead><tr><th>Modelo GPT</th><th>Modo</th><th>Input USD/M</th><th>Output USD/M</th><th>Costo aprox. por ciclo</th></tr></thead>
                 <tbody>
-                  <tr><td>GPT-5.4 nano</td><td>Standard</td><td>0.20</td><td>1.25</td><td><strong>USD 0.041</strong></td></tr>
-                  <tr><td>GPT-5.4 mini</td><td>Standard</td><td>0.75</td><td>4.50</td><td><strong>USD 0.154</strong></td></tr>
-                  <tr><td>GPT-5.4</td><td>Standard</td><td>2.50</td><td>15.00</td><td><strong>USD 0.513</strong></td></tr>
-                  <tr><td>GPT-5.5</td><td>Standard</td><td>5.00</td><td>30.00</td><td><strong>USD 1.026</strong></td></tr>
-                  <tr><td>GPT-5.4 Pro</td><td>Standard</td><td>30.00</td><td>180.00</td><td><strong>USD 6.156</strong></td></tr>
-                  <tr><td>GPT-5.5 Pro</td><td>Standard</td><td>30.00</td><td>180.00</td><td><strong>USD 6.156</strong></td></tr>
-                  <tr><td>GPT-5.4 nano</td><td>Flex</td><td>0.10</td><td>0.625</td><td><strong>USD 0.021</strong></td></tr>
-                  <tr><td>GPT-5.4 mini</td><td>Flex</td><td>0.375</td><td>2.25</td><td><strong>USD 0.077</strong></td></tr>
-                  <tr><td>GPT-5.4</td><td>Flex</td><td>1.25</td><td>7.50</td><td><strong>USD 0.257</strong></td></tr>
-                  <tr><td>GPT-5.5</td><td>Flex</td><td>2.50</td><td>15.00</td><td><strong>USD 0.513</strong></td></tr>
+                  <tr><td>GPT-5.4 nano</td><td>Standard</td><td>0,20</td><td>1,25</td><td><strong>USD 0,041</strong></td></tr>
+                  <tr><td>GPT-5.4 mini</td><td>Standard</td><td>0,75</td><td>4,50</td><td><strong>USD 0,154</strong></td></tr>
+                  <tr><td>GPT-5.4</td><td>Standard</td><td>2,50</td><td>15,00</td><td><strong>USD 0,513</strong></td></tr>
+                  <tr><td>GPT-5.5</td><td>Standard</td><td>5,00</td><td>30,00</td><td><strong>USD 1,026</strong></td></tr>
+                  <tr><td>GPT-5.4 Pro</td><td>Standard</td><td>30,00</td><td>180,00</td><td><strong>USD 6,156</strong></td></tr>
+                  <tr><td>GPT-5.5 Pro</td><td>Standard</td><td>30,00</td><td>180,00</td><td><strong>USD 6,156</strong></td></tr>
+                  <tr><td>GPT-5.4 nano</td><td>Flex</td><td>0,10</td><td>0,625</td><td><strong>USD 0,021</strong></td></tr>
+                  <tr><td>GPT-5.4 mini</td><td>Flex</td><td>0,375</td><td>2,25</td><td><strong>USD 0,077</strong></td></tr>
+                  <tr><td>GPT-5.4</td><td>Flex</td><td>1,25</td><td>7,50</td><td><strong>USD 0,257</strong></td></tr>
+                  <tr><td>GPT-5.5</td><td>Flex</td><td>2,50</td><td>15,00</td><td><strong>USD 0,513</strong></td></tr>
                 </tbody>
               </table>
             </div>
             <p>
               OpenAI también indica que los endpoints con procesamiento regional pueden tener un recargo de
-              10% para modelos elegibles publicados después de marzo de 2026.
+              10 % para modelos elegibles publicados después de marzo de 2026.
             </p>
             <p class="note-callout">
               <strong>Lectura:</strong> Para este proyecto, si se usa OpenAI, el punto de entrada razonable
@@ -1346,14 +1433,14 @@ const cronograma = [
               <table>
                 <thead><tr><th>Modelo FMS</th><th>DBU/M input</th><th>DBU/M output</th><th>DBU por ciclo</th><th>USD aprox. por ciclo</th></tr></thead>
                 <tbody>
-                  <tr><td>GPT OSS 20B</td><td>1.000</td><td>4.286</td><td>0.195</td><td><strong>USD 0.014</strong></td></tr>
-                  <tr><td>Llama 3.1 8B</td><td>2.143</td><td>6.429</td><td>0.400</td><td><strong>USD 0.028</strong></td></tr>
-                  <tr><td>Gemma 3 12B</td><td>2.143</td><td>7.143</td><td>0.404</td><td><strong>USD 0.028</strong></td></tr>
-                  <tr><td>GPT OSS 120B</td><td>2.143</td><td>8.571</td><td>0.413</td><td><strong>USD 0.029</strong></td></tr>
-                  <tr><td>Qwen 3 Next 80B</td><td>2.143</td><td>17.143</td><td>0.466</td><td><strong>USD 0.033</strong></td></tr>
-                  <tr><td>Qwen 3.5 122B</td><td>3.143</td><td>31.429</td><td>0.723</td><td><strong>USD 0.051</strong></td></tr>
-                  <tr><td>Llama 4 Maverick</td><td>7.143</td><td>21.429</td><td>1.333</td><td><strong>USD 0.093</strong></td></tr>
-                  <tr><td>Llama 3.3 70B</td><td>7.143</td><td>21.429</td><td>1.333</td><td><strong>USD 0.093</strong></td></tr>
+                  <tr><td>GPT OSS 20B</td><td>1,000</td><td>4,286</td><td>0,195</td><td><strong>USD 0,014</strong></td></tr>
+                  <tr><td>Llama 3.1 8B</td><td>2,143</td><td>6,429</td><td>0,400</td><td><strong>USD 0,028</strong></td></tr>
+                  <tr><td>Gemma 3 12B</td><td>2,143</td><td>7,143</td><td>0,404</td><td><strong>USD 0,028</strong></td></tr>
+                  <tr><td>GPT OSS 120B</td><td>2,143</td><td>8,571</td><td>0,413</td><td><strong>USD 0,029</strong></td></tr>
+                  <tr><td>Qwen 3 Next 80B</td><td>2,143</td><td>17,143</td><td>0,466</td><td><strong>USD 0,033</strong></td></tr>
+                  <tr><td>Qwen 3.5 122B</td><td>3,143</td><td>31,429</td><td>0,723</td><td><strong>USD 0,051</strong></td></tr>
+                  <tr><td>Llama 4 Maverick</td><td>7,143</td><td>21,429</td><td>1,333</td><td><strong>USD 0,093</strong></td></tr>
+                  <tr><td>Llama 3.3 70B</td><td>7,143</td><td>21,429</td><td>1,333</td><td><strong>USD 0,093</strong></td></tr>
                 </tbody>
               </table>
             </div>
@@ -1374,16 +1461,16 @@ const cronograma = [
               <table>
                 <thead><tr><th>Modelo propietario vía Databricks</th><th>DBU/M input</th><th>DBU/M output</th><th>DBU por ciclo</th><th>USD aprox. por ciclo</th></tr></thead>
                 <tbody>
-                  <tr><td>Gemini 2.5 Flash-Lite</td><td>1.786</td><td>7.143</td><td>0.344</td><td><strong>USD 0.024</strong></td></tr>
-                  <tr><td>Gemini 2.5 Flash</td><td>5.357</td><td>44.643</td><td>1.177</td><td><strong>USD 0.082</strong></td></tr>
-                  <tr><td>Gemini 3.1 Flash-Lite</td><td>4.464</td><td>26.786</td><td>0.916</td><td><strong>USD 0.064</strong></td></tr>
-                  <tr><td>Gemini 3.0 Flash</td><td>8.929</td><td>53.571</td><td>1.832</td><td><strong>USD 0.128</strong></td></tr>
-                  <tr><td>Gemini 2.5 Pro, short context</td><td>22.321</td><td>178.571</td><td>4.857</td><td><strong>USD 0.340</strong></td></tr>
-                  <tr><td>Gemini 3.0/3.1 Pro, short context</td><td>35.714</td><td>214.286</td><td>7.329</td><td><strong>USD 0.513</strong></td></tr>
-                  <tr><td>OpenAI GPT-5.4 nano</td><td>2.857</td><td>17.857</td><td>0.591</td><td><strong>USD 0.041</strong></td></tr>
-                  <tr><td>OpenAI GPT-5.4 mini</td><td>10.714</td><td>64.286</td><td>2.199</td><td><strong>USD 0.154</strong></td></tr>
-                  <tr><td>OpenAI GPT-5.4</td><td>35.714</td><td>214.286</td><td>7.329</td><td><strong>USD 0.513</strong></td></tr>
-                  <tr><td>OpenAI GPT-5.5</td><td>71.429</td><td>428.571</td><td>14.657</td><td><strong>USD 1.026</strong></td></tr>
+                  <tr><td>Gemini 2.5 Flash-Lite</td><td>1,786</td><td>7,143</td><td>0,344</td><td><strong>USD 0,024</strong></td></tr>
+                  <tr><td>Gemini 2.5 Flash</td><td>5,357</td><td>44,643</td><td>1,177</td><td><strong>USD 0,082</strong></td></tr>
+                  <tr><td>Gemini 3.1 Flash-Lite</td><td>4,464</td><td>26,786</td><td>0,916</td><td><strong>USD 0,064</strong></td></tr>
+                  <tr><td>Gemini 3.0 Flash</td><td>8,929</td><td>53,571</td><td>1,832</td><td><strong>USD 0,128</strong></td></tr>
+                  <tr><td>Gemini 2.5 Pro, short context</td><td>22,321</td><td>178,571</td><td>4,857</td><td><strong>USD 0,340</strong></td></tr>
+                  <tr><td>Gemini 3.0/3.1 Pro, short context</td><td>35,714</td><td>214,286</td><td>7,329</td><td><strong>USD 0,513</strong></td></tr>
+                  <tr><td>OpenAI GPT-5.4 nano</td><td>2,857</td><td>17,857</td><td>0,591</td><td><strong>USD 0,041</strong></td></tr>
+                  <tr><td>OpenAI GPT-5.4 mini</td><td>10,714</td><td>64,286</td><td>2,199</td><td><strong>USD 0,154</strong></td></tr>
+                  <tr><td>OpenAI GPT-5.4</td><td>35,714</td><td>214,286</td><td>7,329</td><td><strong>USD 0,513</strong></td></tr>
+                  <tr><td>OpenAI GPT-5.5</td><td>71,429</td><td>428,571</td><td>14,657</td><td><strong>USD 1,026</strong></td></tr>
                 </tbody>
               </table>
             </div>
@@ -1429,8 +1516,8 @@ const cronograma = [
               <table>
                 <thead><tr><th>Recurso</th><th>Costo/h estimado</th></tr></thead>
                 <tbody>
-                  <tr><td>CPU Job</td><td>USD 0.25–0.47/h</td></tr>
-                  <tr><td>GPU T4 Job</td><td>USD 0.68–0.98/h</td></tr>
+                  <tr><td>CPU Job</td><td>USD 0,25–0,47/h</td></tr>
+                  <tr><td>GPU T4 Job</td><td>USD 0,68–0,98/h</td></tr>
                 </tbody>
               </table>
             </div>
@@ -1440,11 +1527,11 @@ const cronograma = [
               <table>
                 <thead><tr><th>Parte</th><th>Tiempo</th><th>Recurso</th><th>Costo aprox.</th></tr></thead>
                 <tbody>
-                  <tr><td>CPU notebooks: clima + PDF</td><td>~0.64 h</td><td>Jobs CPU</td><td>USD 0.16–0.30</td></tr>
-                  <tr><td>GPU notebooks: interpretabilidad + Optuna + training + performance + 05 + 06</td><td>~4.85 h</td><td>Jobs GPU T4</td><td>USD 3.30–4.75</td></tr>
-                  <tr><td>LLM Gemini 2.5 Flash-Lite API</td><td>—</td><td>tokens</td><td>USD 0.019</td></tr>
-                  <tr><td>LLM FMS GPT OSS 20B</td><td>—</td><td>tokens/DBU</td><td>USD 0.014</td></tr>
-                  <tr><td>LLM FMS Llama 3.3 70B</td><td>—</td><td>tokens/DBU</td><td>USD 0.093</td></tr>
+                  <tr><td>CPU notebooks: clima + PDF</td><td>~0,64 h</td><td>Jobs CPU</td><td>USD 0,16–0,30</td></tr>
+                  <tr><td>GPU notebooks: interpretabilidad + Optuna + training + performance + 05 + 06</td><td>~4,85 h</td><td>Jobs GPU T4</td><td>USD 3,30–4,75</td></tr>
+                  <tr><td>LLM Gemini 2.5 Flash-Lite API</td><td>—</td><td>tokens</td><td>USD 0,019</td></tr>
+                  <tr><td>LLM FMS GPT OSS 20B</td><td>—</td><td>tokens/DBU</td><td>USD 0,014</td></tr>
+                  <tr><td>LLM FMS Llama 3.3 70B</td><td>—</td><td>tokens/DBU</td><td>USD 0,093</td></tr>
                 </tbody>
               </table>
             </div>
@@ -1452,10 +1539,10 @@ const cronograma = [
               <table>
                 <thead><tr><th>Escenario productivo</th><th>Total aproximado</th></tr></thead>
                 <tbody>
-                  <tr><td>Jobs Compute + Gemini API</td><td><strong>USD 3.48–5.07</strong></td></tr>
-                  <tr><td>Jobs Compute + GPT-5.4 mini API</td><td><strong>USD 3.61–5.20</strong></td></tr>
-                  <tr><td>Jobs Compute + FMS abierto económico</td><td><strong>USD 3.47–5.07</strong></td></tr>
-                  <tr><td>Jobs Compute + FMS Llama 3.3 70B</td><td><strong>USD 3.55–5.14</strong></td></tr>
+                  <tr><td>Jobs Compute + Gemini API</td><td><strong>USD 3,48–5,07</strong></td></tr>
+                  <tr><td>Jobs Compute + GPT-5.4 mini API</td><td><strong>USD 3,61–5,20</strong></td></tr>
+                  <tr><td>Jobs Compute + FMS abierto económico</td><td><strong>USD 3,47–5,07</strong></td></tr>
+                  <tr><td>Jobs Compute + FMS Llama 3.3 70B</td><td><strong>USD 3,55–5,14</strong></td></tr>
                 </tbody>
               </table>
             </div>
@@ -1506,7 +1593,7 @@ const cronograma = [
             <p>
               Azure tiene la serie NC A100 v4 con GPUs NVIDIA A100 de 80 GB; Microsoft documenta que estas
               VMs tienen hasta 4 A100 PCIe de 80 GB. Como referencia, <code>NC24ads_A100_v4</code> aparece
-              alrededor de <strong>USD 3.673/h</strong> on-demand antes de sumar DBU.
+              alrededor de <strong>USD 3,673/h</strong> bajo demanda antes de sumar DBU.
             </p>
 
             <h4>Costo estimado para LLM local 32B+</h4>
@@ -1514,7 +1601,7 @@ const cronograma = [
               <table>
                 <thead><tr><th>Caso</th><th>Recurso</th><th>Tiempo</th><th>Costo adicional aproximado</th></tr></thead>
                 <tbody>
-                  <tr><td>Prueba corta 32B</td><td>A100 80 GB en Azure Databricks</td><td>1 h</td><td><strong>USD 4.5–8/h</strong></td></tr>
+                  <tr><td>Prueba corta 32B</td><td>A100 80 GB en Azure Databricks</td><td>1 h</td><td><strong>USD 4,5–8/h</strong></td></tr>
                   <tr><td>Batch 32B</td><td>A100 80 GB</td><td>5 h</td><td><strong>USD 22–40</strong></td></tr>
                   <tr><td>32B 24/7</td><td>A100 80 GB activo todo el mes</td><td>730 h</td><td><strong>USD 3.300–5.800+/mes</strong></td></tr>
                   <tr><td>70B local</td><td>A100 80 GB o multi-GPU</td><td>1 h</td><td><strong>USD 5–15+/h</strong></td></tr>
@@ -1543,14 +1630,14 @@ const cronograma = [
                 <thead><tr><th>Escenario</th><th>Tipo</th><th>LLM</th><th>Costo aprox. por ejecución</th></tr></thead>
                 <tbody>
                   <tr><td>Ajuste interactivo</td><td>All-Purpose T4 para todo</td><td>Gemini API</td><td><strong>USD 5–8</strong></td></tr>
-                  <tr><td>Ajuste interactivo</td><td>All-Purpose T4 para todo</td><td>GPT-5.4 nano / mini API</td><td><strong>USD 5.1–8.2</strong></td></tr>
-                  <tr><td>Ajuste interactivo</td><td>All-Purpose T4 para todo</td><td>FMS Databricks</td><td><strong>USD 5.1–8.2</strong></td></tr>
-                  <tr><td>Ajuste interactivo con idle</td><td>All-Purpose T4 para todo + idle 30–60 min</td><td>cualquiera</td><td><strong>USD 6–9</strong></td></tr>
+                  <tr><td>Ajuste interactivo</td><td>All-Purpose T4 para todo</td><td>GPT-5.4 nano / mini API</td><td><strong>USD 5,1–8,2</strong></td></tr>
+                  <tr><td>Ajuste interactivo</td><td>All-Purpose T4 para todo</td><td>FMS Databricks</td><td><strong>USD 5,1–8,2</strong></td></tr>
+                  <tr><td>Ajuste interactivo con inactividad</td><td>All-Purpose T4 para todo + inactividad 30–60 min</td><td>cualquiera</td><td><strong>USD 6–9</strong></td></tr>
                   <tr><td>Producción</td><td>Jobs CPU + Jobs T4</td><td>Gemini API</td><td><strong>USD 4–6</strong></td></tr>
                   <tr><td>Producción</td><td>Jobs CPU + Jobs T4</td><td>GPT-5.4 nano / mini API</td><td><strong>USD 4–6</strong></td></tr>
                   <tr><td>Producción</td><td>Jobs CPU + Jobs T4</td><td>FMS Databricks</td><td><strong>USD 4–6</strong></td></tr>
-                  <tr><td>Producción con idle</td><td>All-Purpose mal apagado</td><td>cualquiera</td><td><strong>USD 8–15+</strong></td></tr>
-                  <tr><td>LLM local 32B+ batch</td><td>A100 80 GB en Azure Databricks</td><td>sin API externa</td><td><strong>USD 4.5–8/h adicional</strong></td></tr>
+                  <tr><td>Producción con inactividad</td><td>All-Purpose mal apagado</td><td>cualquiera</td><td><strong>USD 8–15+</strong></td></tr>
+                  <tr><td>LLM local 32B+ batch</td><td>A100 80 GB en Azure Databricks</td><td>sin API externa</td><td><strong>USD 4,5–8/h adicional</strong></td></tr>
                   <tr><td>LLM local 32B+ 5 h</td><td>A100 80 GB en Azure Databricks</td><td>sin API externa</td><td><strong>USD 22–40 adicionales</strong></td></tr>
                   <tr><td>LLM local 70B+</td><td>A100 80 GB o multi-GPU</td><td>sin API externa</td><td><strong>USD 5–15+/h adicional</strong></td></tr>
                   <tr><td>LLM local 120B+</td><td>multi-GPU</td><td>sin API externa</td><td><strong>USD 15–40+/h adicional</strong></td></tr>
@@ -1562,9 +1649,9 @@ const cronograma = [
             <h4>Lectura final</h4>
             <p>
               Con los nuevos tiempos, la ejecución completa del flujo en Azure Databricks sube porque
-              <code>06_mgcecdl_document_replication.ipynb</code> agrega 2.5 horas de T4. Para ajuste inicial,
+              <code>06_mgcecdl_document_replication.ipynb</code> agrega 2,5 horas de T4. Para ajuste inicial,
               el escenario All-Purpose T4 para todo queda alrededor de <strong>USD 5–8 por ejecución completa</strong>,
-              o <strong>USD 6–9</strong> si hay idle moderado. Para producción, separando CPU y GPU mediante
+              o <strong>USD 6–9</strong> si hay tiempo de inactividad moderado. Para producción, separando CPU y GPU mediante
               Jobs Compute, el flujo completo queda alrededor de <strong>USD 4–6 por ejecución</strong>.
             </p>
             <p>
@@ -1575,17 +1662,70 @@ const cronograma = [
             <p>
               Los modelos locales tipo <code>deepseek-r1:32b</code>, QwQ-32B, Qwen3-32B o superiores deben
               tratarse como escenario separado: requieren A100 80 GB o multi-GPU, y agregan aproximadamente
-              <strong>USD 4.5–8 por hora</strong> como mínimo razonable dentro de Azure Databricks.
+              <strong>USD 4,5–8 por hora</strong> como mínimo razonable dentro de Azure Databricks.
             </p>
           </div>
         </div>
       </section>
     </main>
 
+    <dialog id="lightbox" aria-label="Vista ampliada de la figura">
+      <button type="button" class="lightbox-close" data-lightbox-close aria-label="Cerrar la vista ampliada">
+        Cerrar ✕
+      </button>
+      <img id="lightbox-img" src="" alt="" />
+      <p id="lightbox-caption"></p>
+    </dialog>
+
     <footer>
       <img src={logoLab.src} alt="Laboratorio IA UNAL" />
-      <p>Simulador de criticidad CHEC - Universidad Nacional de Colombia, sede Manizales.</p>
+      <p>Simulador de criticidad CHEC — Universidad Nacional de Colombia, Sede Manizales.</p>
     </footer>
+
+    <script>
+      // Ampliar las capturas. Sin JavaScript la pagina queda exactamente como
+      // estaba: las figuras siguen visibles en su tamano normal.
+      const dialogo = document.getElementById("lightbox");
+      const imagen = document.getElementById("lightbox-img");
+      const pie = document.getElementById("lightbox-caption");
+
+      if (dialogo && imagen && pie && typeof dialogo.showModal === "function") {
+        let disparador = null;
+
+        const abrir = (img) => {
+          const figura = img.closest("figure");
+          const texto = figura?.querySelector("figcaption")?.textContent?.trim() ?? "";
+          imagen.src = img.currentSrc || img.src;
+          imagen.alt = img.alt;
+          pie.textContent = texto;
+          pie.hidden = texto === "";
+          disparador = img.closest("button") ?? img;
+          dialogo.showModal();
+          dialogo.querySelector("[data-lightbox-close]")?.focus();
+        };
+
+        document.querySelectorAll(".shot img").forEach((img) => {
+          const boton = document.createElement("button");
+          boton.type = "button";
+          boton.className = "shot-zoom";
+          boton.setAttribute("aria-label", `Ampliar la figura: ${img.alt}`);
+          img.parentNode.insertBefore(boton, img);
+          boton.appendChild(img);
+          boton.addEventListener("click", () => abrir(img));
+        });
+
+        dialogo.addEventListener("click", (evento) => {
+          // Clic en el fondo (fuera del contenido) tambien cierra.
+          if (evento.target === dialogo) dialogo.close();
+        });
+        dialogo.querySelector("[data-lightbox-close]")?.addEventListener("click", () => dialogo.close());
+        // El dialogo nativo ya cierra con Esc; aqui solo se devuelve el foco.
+        dialogo.addEventListener("close", () => {
+          imagen.removeAttribute("src");
+          disparador?.focus();
+        });
+      }
+    </script>
   </body>
 </html>
 
@@ -1762,10 +1902,6 @@ const cronograma = [
     box-shadow: var(--shadow);
   }
 
-  .panel-logo {
-    width: min(260px, 100%);
-    margin-bottom: 1.5rem;
-  }
 
   dl {
     display: grid;
@@ -3420,9 +3556,14 @@ const cronograma = [
     color: var(--ink);
   }
 
+  .diagram-card {
+    overflow-x: auto;
+  }
+
   .diagrama {
     display: block;
     width: 100%;
+    min-width: 60rem;
     height: auto;
   }
 
@@ -3510,9 +3651,156 @@ const cronograma = [
     border-left-color: var(--gold);
   }
 
+  /* ------------------------------------- Bandas de riesgo, en texto */
+
+  .banda-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.4rem;
+    margin: -0.6rem 0 2rem;
+    padding: 0;
+    list-style: none;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  .banda-key {
+    display: inline-block;
+    margin-right: 0.4rem;
+    padding: 0.1rem 0.55rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--panel);
+    color: var(--ink);
+    font-weight: 700;
+  }
+
+  /* --------------------------------------------------- Accesibilidad */
+
+  /* Foco visible para navegacion con teclado. */
+  a:focus-visible,
+  button:focus-visible,
+  summary:focus-visible,
+  [tabindex]:focus-visible,
+  dialog:focus-visible {
+    outline: 3px solid var(--gold);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  /* El encabezado es sticky: los titulos no deben quedar debajo al saltar
+     por un enlace de ancla. */
+  section[id],
+  article[id] {
+    scroll-margin-top: 7rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :root {
+      scroll-behavior: auto;
+    }
+  }
+
+  /* ------------------------------------------- Ampliar las capturas */
+
+  .shot-zoom {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: zoom-in;
+    font: inherit;
+    color: inherit;
+  }
+
+  .shot img {
+    cursor: zoom-in;
+  }
+
+  #lightbox {
+    width: min(96vw, 1400px);
+    max-width: 96vw;
+    max-height: 94vh;
+    padding: 1rem;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--panel);
+    color: var(--ink);
+    overflow: auto;
+  }
+
+  #lightbox::backdrop {
+    background: rgb(16 33 41 / 72%);
+  }
+
+  #lightbox img {
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+  }
+
+  #lightbox p {
+    margin: 0.8rem 0 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.55;
+  }
+
+  #lightbox p[hidden] {
+    display: none;
+  }
+
+  .lightbox-close {
+    display: block;
+    margin: 0 0 0.8rem auto;
+    padding: 0.45rem 0.9rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--soft);
+    color: var(--ink);
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .lightbox-close:hover {
+    border-color: var(--green);
+    color: var(--green);
+  }
+
+  /* --------------------------------------------------- Responsive */
+
   @media (max-width: 720px) {
     .sub-nav a {
       font-size: 0.82rem;
+    }
+
+  }
+
+  @media (max-width: 560px) {
+    /* La navegacion principal no cabe en una linea: se desplaza en
+       horizontal en vez de romper el encabezado. */
+    .site-header nav {
+      overflow-x: auto;
+      justify-content: flex-start;
+      white-space: nowrap;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+    }
+
+    .site-header nav a {
+      flex: 0 0 auto;
+    }
+
+    section[id],
+    article[id] {
+      scroll-margin-top: 9rem;
+    }
+
+    .banda-legend {
+      flex-direction: column;
+      gap: 0.35rem;
     }
   }
 </style>
