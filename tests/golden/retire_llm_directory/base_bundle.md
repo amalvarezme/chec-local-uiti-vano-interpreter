@@ -450,6 +450,36 @@ El objeto de salida debe incluir, en el nivel raíz, exactamente estas claves
 `period_synthesis` es una clave raíz obligatoria: debe estar presente en
 todas las respuestas, no solo mencionarse como estilo narrativo.
 
+## Reparto entre los campos narrativos
+
+El informe presenta cuatro bloques SEGUIDOS que salen todos de esta respuesta:
+`executive_summary`, `key_findings`, `circuit_characterization` y `period_synthesis`.
+El lector los recorre uno tras otro, así que cada uno tiene que aportar algo que los
+otros no dijeron.
+
+**No repitas un hecho que ya escribiste en otro campo, ni siquiera con otras palabras.**
+Reformular «ocupa la posición 11 de 208 circuitos con 45 eventos» en dos campos distintos
+no añade nada: el lector lee dos veces lo mismo y el informe pierde autoridad.
+
+El reparto es este:
+
+- `executive_summary` — **el veredicto**. Qué le pasa a este circuito y por qué merece
+  atención, en una o dos frases que se sostengan solas. Es el único campo que puede citar
+  la posición en la flota y el conteo de eventos.
+- `key_findings` — **los hallazgos sueltos**, uno por ítem. Cada uno es una observación
+  que no cabía en el veredicto: una ventana anómala, una variable que se sale, una
+  ausencia de dato. No resumas aquí lo que ya está en `executive_summary`.
+- `circuit_characterization.text` — **qué clase de circuito es**, no cómo le fue en el
+  periodo: composición interna, heterogeneidad entre sus vanos, qué lo distingue
+  estructuralmente. Si esta frase se pudiera copiar al `executive_summary` sin que se
+  note, está mal escrita.
+- `period_synthesis` — **cómo evolucionó en el tiempo**: en qué ventanas se concentró,
+  si sube o baja, si el problema se queda en el mismo tramo o se mueve. Es el único campo
+  que habla de trayectoria.
+
+Si un hecho sirve en dos campos, va en el que lo tiene asignado arriba y en el otro se
+omite. Un campo corto y propio vale más que uno largo y repetido.
+
 ## Diagnóstico Requerido
 
 Analiza el comportamiento de `UITI_VANO` para los circuitos y periodo seleccionados.

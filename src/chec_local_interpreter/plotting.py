@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import html as _html_items
 import os
+import re as _re_items
 import tempfile
 from functools import lru_cache
 from pathlib import Path
@@ -687,7 +689,10 @@ def render_expert_alignment_tab(expert_alignment_validation_data):
                 else:
                     text = str(item)
                 if str(text).strip():
-                    body.append(f"<li>{_escape(text)}{details}</li>")
+                    # Misma regla que en los demas items del informe: la primera letra
+                    # en mayuscula, salvo que el item arranque con un codigo.
+                    body.append(
+                        f"<li>{_escape(_mayuscula_inicial(str(text)))}{details}</li>")
         content = f"<ul class='report-list'>{''.join(body)}</ul>" if body else _empty_message()
         return (
             "<div class='content-box'>"
@@ -852,6 +857,80 @@ def _token_source_label(token_source: str | None) -> tuple[str, str]:
     return label, prefix
 
 
+# --------------------------------------------------------------------------- items
+# Los agentes entregan PROSA y el informe la presenta en items. Partirla y darle forma
+# es trabajo de esta capa, no del modelo de lenguaje: pedirselo al agente lo deja a que
+# se acuerde, y medido sobre 12 informes reales no se acordaba.
+
+#: Un `_` o un digito delatan un CODIGO del dataset -- `uiti_acumulado`, `n_obs`, `NR_T` --.
+#: Es la misma regla mecanica que usa `ortografia.py` para no acentuar nombres de columna,
+#: y por el mismo motivo: capitalizarlos escribiria un identificador que no existe.
+_ARRANQUE_DE_CODIGO = _re_items.compile(r"[_0-9]")
+
+
+def _mayuscula_inicial(texto: str) -> str:
+    """La primera letra de un item, en mayuscula. Un codigo se deja como esta.
+
+    Solo actua cuando el primer caracter es una LETRA MINUSCULA. Un numero, una comilla
+    angular o un signo de apertura se dejan intactos: ahi la mayuscula no va al principio
+    y adivinar donde va es peor que no tocarlo.
+    """
+    if not texto or not texto[0].islower():
+        return texto
+    primera = texto.split(maxsplit=1)[0]
+    if _ARRANQUE_DE_CODIGO.search(primera):
+        return texto
+    return texto[0].upper() + texto[1:]
+
+
+def _texto_a_items(text: str, *, max_items: int | None = None) -> str:
+    """Parte un parrafo en items de unas dos lineas.
+
+    Corta en `.`, `!` y `?`, NUNCA en `;`: un punto y coma une dos clausulas de la misma
+    idea, y cortar ahi dejaba trozos que empezaban por `y en los grupos...`. Medido: 99
+    de 1.153 items terminaban en `;` antes de este cambio.
+    """
+    raw = ("" if text is None else str(text)).strip()
+    if not raw:
+        return ""
+    frases = [s.strip() for s in _re_items.split(r"(?<=[.!?])\s+", raw) if s.strip()]
+    if not frases:
+        frases = [raw]
+    MAX_CHARS = 150  # ~2 lineas en un contenedor de 700 px
+    items, actual, largo = [], [], 0
+    for frase in frases:
+        if actual and largo + len(frase) + 1 > MAX_CHARS:
+            items.append(" ".join(actual))
+            actual, largo = [frase], len(frase)
+        else:
+            actual.append(frase)
+            largo += len(frase) + 1
+    if actual:
+        items.append(" ".join(actual))
+    if max_items is not None:
+        items = items[:max_items]
+    return _envolver_items(items)
+
+
+def _lista_a_items(items, *, max_items: int | None = None) -> str:
+    """Los items que el agente ya entrego separados."""
+    limpios = [str(item).strip() for item in (items or []) if str(item).strip()]
+    if max_items is not None:
+        limpios = limpios[:max_items]
+    return _envolver_items(limpios)
+
+
+def _envolver_items(items: list[str]) -> str:
+    if not items:
+        return ""
+    lis = "".join(f"<li>{_escapar_html(_mayuscula_inicial(i))}</li>" for i in items)
+    return f"<ul class='report-list'>{lis}</ul>"
+
+
+def _escapar_html(texto: object) -> str:
+    return _html_items.escape("" if texto is None else str(texto))
+
+
 def render_llm_analysis(
     validation_data: dict,
     raw_df: pd.DataFrame,
@@ -935,40 +1014,10 @@ def render_llm_analysis(
             f"loading='lazy' style='width:100%;height:{height}px;border:0;background:#ffffff;'></iframe>"
         )
 
-    def _text_to_items(text: str, *, max_items: int | None = None) -> str:
-        """Split a prose paragraph into <ul><li> items of at most ~2 visual lines."""
-        import re as _re
-        raw = ("" if text is None else str(text)).strip()
-        if not raw:
-            return ""
-        # Split on sentence-terminating punctuation followed by whitespace.
-        sentences = [s.strip() for s in _re.split(r'(?<=[.!?;])\s+', raw) if s.strip()]
-        if not sentences:
-            return f"<ul class='report-list'><li>{_escape(raw)}</li></ul>"
-        MAX_CHARS = 150  # ~2 lines at 700 px container width
-        items, current, cur_len = [], [], 0
-        for s in sentences:
-            if current and cur_len + len(s) + 1 > MAX_CHARS:
-                items.append(" ".join(current))
-                current, cur_len = [s], len(s)
-            else:
-                current.append(s)
-                cur_len += len(s) + 1
-        if current:
-            items.append(" ".join(current))
-        if max_items is not None:
-            items = items[:max_items]
-        lis = "".join(f"<li>{_escape(item)}</li>" for item in items)
-        return f"<ul class='report-list'>{lis}</ul>"
-
-    def _list_to_items(items, *, max_items: int | None = None) -> str:
-        clean_items = [str(item).strip() for item in (items or []) if str(item).strip()]
-        if max_items is not None:
-            clean_items = clean_items[:max_items]
-        if not clean_items:
-            return ""
-        lis = "".join(f"<li>{_escape(item)}</li>" for item in clean_items)
-        return f"<ul class='report-list'>{lis}</ul>"
+    # `_texto_a_items` y `_lista_a_items` viven a nivel de modulo (ver arriba): eran
+    # closures y no habia forma de probarlas sin renderizar un informe entero.
+    _text_to_items = _texto_a_items
+    _list_to_items = _lista_a_items
 
     def _figure_html(fig, title=None, show_title=False):
         if not fig:
