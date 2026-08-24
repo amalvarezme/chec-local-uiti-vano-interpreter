@@ -1723,15 +1723,7 @@ const cronograma = [
         ├── site/                                                   <span class="c"># esta página · Astro</span>
         └── requirements.txt · package.json · astro.config.mjs</code></pre>
 
-        <div class="process-grid">
-          <article>
-            <strong>Por qué el código de los tableros no vive en los cuadernos</strong>
-            <p>
-              Cada tablero es un módulo de <code>src/chec_tableros/</code>. Mientras vivió dentro de
-              un <code>.ipynb</code>, publicarlo exigía parchear el cuaderno, y las pruebas pasaban a
-              través de celdas rotas sin ponerse rojas.
-            </p>
-          </article>
+        <div class="process-grid tres">
           <article>
             <strong>Un solo cuaderno versionado</strong>
             <p>
@@ -1796,6 +1788,183 @@ const cronograma = [
         <div class="diagram-card" tabindex="0">
         <h3>5 · Migración a Databricks — /subir-a-databricks</h3>
         <svg viewBox="0 0 1180 680" role="img" aria-label="Diagrama BPMN de subir a Databricks: el usuario solo indica la URL del workspace, y el agente resuelve el perfil, descubre el catalogo y pasa por las tres compuertas de datos, aplicaciones y cuaderno, siempre a traves de la CLI de Databricks" class="diagrama"><defs><marker id="bf" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#5f6f77" /></marker><marker id="bfg" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#007a53" /></marker></defs><g font-family="Inter, sans-serif"><rect x="8" y="34" width="1164" height="100" rx="10" fill="#f8fbfa" stroke="#dce7e4" /><rect x="8" y="34" width="30" height="100" rx="10" fill="#eef5f3" stroke="#dce7e4" /><text x="23" y="84.0" text-anchor="middle" font-size="11.5" font-weight="700" fill="#005c45" transform="rotate(-90 23 84.0)">Usuario</text><rect x="8" y="142" width="1164" height="358" rx="10" fill="#f8fbfa" stroke="#dce7e4" /><rect x="8" y="142" width="30" height="358" rx="10" fill="#eef5f3" stroke="#dce7e4" /><text x="23" y="321.0" text-anchor="middle" font-size="11.5" font-weight="700" fill="#005c45" transform="rotate(-90 23 321.0)">Agente + CLI de Databricks</text><rect x="8" y="508" width="1164" height="152" rx="10" fill="#f8fbfa" stroke="#dce7e4" /><rect x="8" y="508" width="30" height="152" rx="10" fill="#eef5f3" stroke="#dce7e4" /><text x="23" y="584.0" text-anchor="middle" font-size="11.5" font-weight="700" fill="#005c45" transform="rotate(-90 23 584.0)">Workspace de Databricks</text><circle cx="80" cy="84" r="17" fill="#f3f8f6" stroke="#007a53" stroke-width="1.6" /><text x="80" y="57" text-anchor="middle" font-size="10.5" fill="#5f6f77">Se pide desplegar</text><rect x="140" y="52" width="240" height="64" rx="10" fill="#ffffff" stroke="#dce7e4" /><text x="260.0" y="73.0" text-anchor="middle" font-size="12" font-weight="700" fill="#102129">Indicar la URL del workspace</text><text x="260.0" y="90.0" text-anchor="middle" font-size="10.8" fill="#5f6f77">El único dato que se pregunta,</text><text x="260.0" y="105.0" text-anchor="middle" font-size="10.8" fill="#5f6f77">y se pregunta en cada ejecución</text><polyline points="97,84 140,84" fill="none" stroke="#5f6f77" stroke-width="1.5" marker-end="url(#bf)" /><circle cx="1090" cy="84" r="17" fill="#ffffff" stroke="#005c45" stroke-width="3.2" /><text x="1090" y="116" text-anchor="middle" font-size="10.5" fill="#5f6f77">Reporte por etapa</text><rect x="60" y="164" width="210" height="64" rx="10" fill="#ffffff" stroke="#dce7e4" /><text x="165.0" y="192.5" text-anchor="middle" font-size="12" font-weight="700" fill="#102129" font-family="SFMono-Regular, Consolas, monospace">databricks auth profiles</text><text x="165.0" y="209.5" text-anchor="middle" font-size="10.8" fill="#5f6f77">Deriva el perfil desde la URL</text><polyline points="260,116 260,150 165,150 165,164" fill="none" stroke="#5f6f77" stroke-width="1.5" marker-end="url(#bf)" /><path d="M330,171 L355,196 L330,221 L305,196 Z" fill="#fdf6e6" stroke="#f4b23a" stroke-width="1.4" /><path d="M321.5,187.5 L338.5,204.5 M338.5,187.5 L321.5,204.5" stroke="#8a6212" stroke-width="2" fill="none" /><text x="330" y="160" text-anchor="middle" font-size="10.5" fill="#8a6212" font-weight="600">¿Hay perfil para esa URL?</text><polyline points="270,196 305,196" fill="none" stroke="#5f6f77" stroke-width="1.5" marker-end="url(#bf)" /><rect x="60" y="240" width="230" height="52" rx="10" fill="#fdf6e6" stroke="#f4b23a" /><text x="175.0" y="262.5" text-anchor="middle" font-size="12" font-weight="700" fill="#8a6212" font-family="SFMono-Regular, Consolas, monospace">databricks auth login</text><text x="175.0" y="279.5" text-anchor="middle" font-size="10.8" fill="#5f6f77">Interactivo: lo corre el usuario</text><polyline points="330,221 330,266 290,266" fill="none" stroke="#5f6f77" stroke-width="1.5" marker-end="url(#bf)" /><text x="344.0" y="257.5" text-anchor="middle" font-size="10" font-weight="700" fill="#5f6f77">no</text><polyline points="60,266 46,266 46,196 60,196" fill="none" stroke="#5f6f77" stroke-width="1.5" marker-end="url(#bf)" /><rect x="700" y="164" width="250" height="64" rx="10" fill="#ffffff" stroke="#dce7e4" /><text x="825.0" y="185.0" text-anchor="middle" font-size="12" font-weight="700" fill="#102129" font-family="SFMono-Regular, Consolas, monospace">catalogs list · volumes list</text><text x="825.0" y="202.0" text-anchor="middle" font-size="10.8" fill="#5f6f77">Descubre catálogo y Volume:</text><text x="825.0" y="217.0" text-anchor="middle" font-size="10.8" fill="#5f6f77">nunca se asumen</text><polyline points="355,196 700,196" fill="none" stroke="#5f6f77" stroke-width="1.5" marker-end="url(#bf)" /><text x="367.5" y="190.0" text-anchor="middle" font-size="10" font-weight="700" fill="#5f6f77">sí</text><polyline points="825,228 825,268 46,268 46,345 65,345" fill="none" stroke="#5f6f77" stroke-width="1.5" marker-end="url(#bf)" /><path d="M90,320 L115,345 L90,370 L65,345 Z" fill="#fdf6e6" stroke="#f4b23a" stroke-width="1.4" /><path d="M81.5,336.5 L98.5,353.5 M98.5,336.5 L81.5,353.5" stroke="#8a6212" stroke-width="2" fill="none" /><text x="90" y="296" text-anchor="middle" font-size="10.5" fill="#8a6212" font-weight="600">Etapa 3</text><text x="90" y="309" text-anchor="middle" font-size="10.5" fill="#8a6212" font-weight="600">¿Faltan datos?</text><rect x="170" y="313" width="210" height="64" rx="10" fill="#ffffff" stroke="#dce7e4" /><text x="275.0" y="334.0" text-anchor="middle" font-size="12" font-weight="700" fill="#102129" font-family="SFMono-Regular, Consolas, monospace">databricks fs cp</text><text x="275.0" y="351.0" text-anchor="middle" font-size="10.8" fill="#5f6f77">Solo lo que falta: mover 566 MB</text><text x="275.0" y="366.0" text-anchor="middle" font-size="10.8" fill="#5f6f77">que ya estaban es lo más caro</text><polyline points="115,345 170,345" fill="none" stroke="#5f6f77" stroke-width="1.5" marker-end="url(#bf)" /><text x="142.5" y="339.0" text-anchor="middle" font-size="10" font-weight="700" fill="#5f6f77">sí</text><path d="M450,320 L475,345 L450,370 L425,345 Z" fill="#fdf6e6" stroke="#f4b23a" stroke-width="1.4" /><path d="M441.5,336.5 L458.5,353.5 M458.5,336.5 L441.5,353.5" stroke="#8a6212" stroke-width="2" fill="none" /><text x="450" y="296" text-anchor="middle" font-size="10.5" fill="#8a6212" font-weight="600">Etapa 4</text><text x="450" y="309" text-anchor="middle" font-size="10.5" fill="#8a6212" font-weight="600">¿Apps operativas?</text><polyline points="380,345 425,345" fill="none" stroke="#5f6f77" stroke-width="1.5" marker-end="url(#bf)" /><rect x="530" y="313" width="230" height="64" rx="10" fill="#ffffff" stroke="#dce7e4" /><text x="645.0" y="334.0" text-anchor="middle" font-size="12" font-weight="700" fill="#102129" font-family="SFMono-Regular, Consolas, monospace">apps create · apps deploy</text><text x="645.0" y="351.0" text-anchor="middle" font-size="10.8" fill="#5f6f77">Operativa = ACTIVE + RUNNING</text><text x="645.0" y="366.0" text-anchor="middle" font-size="10.8" fill="#5f6f77">+ último despliegue SUCCEEDED</text><polyline points="475,345 530,345" fill="none" stroke="#5f6f77" stroke-width="1.5" marker-end="url(#bf)" /><text x="502.5" y="339.0" text-anchor="middle" font-size="10" font-weight="700" fill="#5f6f77">no</text><path d="M830,320 L855,345 L830,370 L805,345 Z" fill="#fdf6e6" stroke="#f4b23a" stroke-width="1.4" /><path d="M821.5,336.5 L838.5,353.5 M838.5,336.5 L821.5,353.5" stroke="#8a6212" stroke-width="2" fill="none" /><text x="830" y="296" text-anchor="middle" font-size="10.5" fill="#8a6212" font-weight="600">Etapa 5</text><text x="830" y="309" text-anchor="middle" font-size="10.5" fill="#8a6212" font-weight="600">¿Cuaderno al día?</text><polyline points="760,345 805,345" fill="none" stroke="#5f6f77" stroke-width="1.5" marker-end="url(#bf)" /><rect x="910" y="313" width="240" height="64" rx="10" fill="#ffffff" stroke="#dce7e4" /><text x="1030.0" y="341.5" text-anchor="middle" font-size="12" font-weight="700" fill="#102129" font-family="SFMono-Regular, Consolas, monospace">databricks workspace import</text><text x="1030.0" y="358.5" text-anchor="middle" font-size="10.8" fill="#5f6f77">Sin outputs ni execution_count</text><polyline points="855,345 910,345" fill="none" stroke="#5f6f77" stroke-width="1.5" marker-end="url(#bf)" /><text x="882.5" y="339.0" text-anchor="middle" font-size="10" font-weight="700" fill="#5f6f77">no</text><polyline points="90,370 90,424 425,424 425,345" fill="none" stroke="#5f6f77" stroke-width="1.5" marker-end="url(#bf)" /><text x="104.0" y="411.0" text-anchor="middle" font-size="10" font-weight="700" fill="#5f6f77">no</text><polyline points="450,370 450,424 805,424 805,345" fill="none" stroke="#5f6f77" stroke-width="1.5" marker-end="url(#bf)" /><text x="464.0" y="411.0" text-anchor="middle" font-size="10" font-weight="700" fill="#5f6f77">sí</text><polyline points="830,370 830,424 1105,424 1105,440" fill="none" stroke="#5f6f77" stroke-width="1.5" marker-end="url(#bf)" /><text x="844.0" y="411.0" text-anchor="middle" font-size="10" font-weight="700" fill="#5f6f77">sí</text><rect x="880" y="440" width="270" height="52" rx="10" fill="#f3f8f6" stroke="#007a53" /><text x="1015.0" y="462.5" text-anchor="middle" font-size="12" font-weight="700" fill="#005c45">Bitácora + commit en rama</text><text x="1015.0" y="479.5" text-anchor="middle" font-size="10.8" fill="#5f6f77">En una rama, nunca sobre main</text><polyline points="1030,377 1030,440" fill="none" stroke="#5f6f77" stroke-width="1.5" marker-end="url(#bf)" /><polyline points="1150,466 1160,466 1160,84 1111,84" fill="none" stroke="#007a53" stroke-width="1.5" marker-end="url(#bfg)" /><path d="M90,532 L356,532 L370,546 L370,612 L90,612 Z" fill="#ffffff" stroke="#0b5f8a" /><path d="M356,532 L356,546 L370,546" fill="none" stroke="#0b5f8a" /><text x="230.0" y="556" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0b5f8a">Volume de Unity Catalog</text><text x="230.0" y="573" text-anchor="middle" font-size="10.5" fill="#5f6f77">Los datos y el artefacto .pt</text><text x="230.0" y="587" text-anchor="middle" font-size="10.5" fill="#5f6f77">que leen las dos aplicaciones</text><path d="M430,532 L696,532 L710,546 L710,612 L430,612 Z" fill="#ffffff" stroke="#0b5f8a" /><path d="M696,532 L696,546 L710,546" fill="none" stroke="#0b5f8a" /><text x="570.0" y="556" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0b5f8a">Databricks Apps</text><text x="570.0" y="573" text-anchor="middle" font-size="10.5" fill="#5f6f77">Criticidad CHEC y el Simulador</text><text x="570.0" y="587" text-anchor="middle" font-size="10.5" fill="#5f6f77">tope de 3 apps por workspace</text><path d="M770,532 L1036,532 L1050,546 L1050,612 L770,612 Z" fill="#ffffff" stroke="#0b5f8a" /><path d="M1036,532 L1036,546 L1050,546" fill="none" stroke="#0b5f8a" /><text x="910.0" y="556" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0b5f8a">Workspace</text><text x="910.0" y="573" text-anchor="middle" font-size="10.5" fill="#5f6f77">El cuaderno 05, importado</text><text x="910.0" y="587" text-anchor="middle" font-size="10.5" fill="#5f6f77">sin salidas guardadas</text><polyline points="275,377 275,532" fill="none" stroke="#5f6f77" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#bf)" /><polyline points="645,377 645,532" fill="none" stroke="#5f6f77" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#bf)" /><polyline points="945,377 945,396 850,396 850,532" fill="none" stroke="#5f6f77" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#bf)" /></g></svg>
+        </div>
+        <div class="connection-intro">
+          <h3>Grafo del proyecto</h3>
+          <p>
+            El grafo de conocimiento del repositorio, construido con <code>graphify</code> sobre el
+            código y la documentación. El grafo completo tiene <strong>9.976 nodos</strong> y
+            <strong>17.025 aristas</strong>: demasiados para leerlos de una vez, así que lo que se
+            publica aquí es su vista agregada — <strong>754 comunidades</strong> y las
+            <strong>877</strong> relaciones entre ellas. Cada punto es un grupo de símbolos que el
+            algoritmo encontró unidos, y el número a su derecha dice cuántos contiene.
+          </p>
+          <p>
+            Es interactivo: busca un símbolo por su nombre, pulsa un nodo para ver qué contiene, o
+            usa las casillas de la derecha para dejar visible solo la comunidad que te interese.
+          </p>
+        </div>
+
+        <div class="diagram-card grafo-proyecto">
+          <iframe
+            src={`${import.meta.env.BASE_URL}grafo_proyecto.html`}
+            title="Grafo de conocimiento del proyecto, con sus 754 comunidades"
+            loading="lazy"
+          ></iframe>
+          <p class="pie-grafo">
+            ¿Se te queda pequeño?
+            <a href={`${import.meta.env.BASE_URL}grafo_proyecto.html`} target="_blank" rel="noopener"
+            >Ábrelo en una pestaña propia</a>.
+          </p>
+        </div>
+
+        <div class="process-grid">
+          <article>
+            <strong>Por qué comunidades y no los 9.976 nodos</strong>
+            <p>
+              Un grafo de diez mil nodos en un navegador es una nube gris: se dibuja, pero no se lee.
+              La vista agregada conserva la estructura —qué se relaciona con qué— y la hace navegable.
+            </p>
+          </article>
+          <article>
+            <strong>Los nombres los pone un modelo</strong>
+            <p>
+              Las comunidades salen de un algoritmo y no traen nombre. El que ves —
+              <code>intervention_graph.py</code>, <code>load_dataset</code>— lo asigna después una
+              pasada de etiquetado sobre el contenido de cada grupo.
+            </p>
+          </article>
+          <article>
+            <strong>Se versiona con el código</strong>
+            <p>
+              El grafo vive en <code>graphify-out/</code> y se rastrea en git, así que cada
+              reconstrucción queda como un cambio revisable y no como un archivo que aparece y
+              desaparece.
+            </p>
+          </article>
+          <article>
+            <strong>Para qué se usa de verdad</strong>
+            <p>
+              Para responder «quién llama a esto» y «qué se rompe si lo toco» antes de cambiar nada,
+              y para encontrar código sin consumidores — de ahí salieron varias retiradas.
+            </p>
+          </article>
+        </div>
+
+        <div class="connection-intro">
+          <h3>Instalar</h3>
+          <p>
+            Las dependencias viven en <strong>cuatro listas separadas</strong>, y el aislamiento es
+            deliberado: el menú de CriticidadCHEC pesa 15 MB porque no importa a nadie; si importara
+            lo de sus cinco tableros necesitaría <code>torch</code> solo para abrir un menú.
+          </p>
+          <p>
+            <strong>Python 3.11 o superior es un piso real, no una preferencia</strong>:
+            <code>pandas&gt;=3.0</code> y <code>numpy&gt;=2.4</code> no publican ruedas por debajo de
+            3.11. El rango está ejercitado en los dos extremos —el entorno raíz corre en 3.11.15 y
+            los seis de <code>aplicaciones/</code> en 3.14.6—, no supuesto. Ninguna dependencia pide
+            compilador: las ruedas grandes (<code>torch</code>, <code>geopandas</code>,
+            <code>pyarrow</code>, <code>scipy</code>) existen para macOS y para Windows.
+          </p>
+        </div>
+
+        <div class="table-wrap compact-table">
+          <table>
+            <thead>
+              <tr><th>Para qué</th><th>Lista</th><th>Qué instala</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Los cuatro tableros estáticos</strong><br />8801 a 8804</td>
+                <td><code>aplicaciones/&lt;app&gt;/requirements.txt</code><br />una por tablero</td>
+                <td><code>pandas</code> · <code>numpy</code> · <code>scipy</code> ·
+                    <code>scikit-learn</code> · <code>plotly</code> · <code>pyarrow</code> ·
+                    <code>geopandas</code> · <code>shapely</code> · <code>ipython</code></td>
+              </tr>
+              <tr>
+                <td><strong>El simulador</strong><br />8866, el único con Python vivo</td>
+                <td><code>aplicaciones/06_simulador/requirements.txt</code></td>
+                <td>lo anterior más <code>torch</code> · <code>voila</code> ·
+                    <code>jupyter-server</code> · <code>ipykernel</code> · <code>ipywidgets</code> ·
+                    <code>anywidget</code> · <code>joblib</code> · <code>cloudpickle</code> ·
+                    <code>openpyxl</code> · <code>pyogrio</code> · <code>matplotlib</code></td>
+              </tr>
+              <tr>
+                <td><strong>El cuaderno <code>mil_vano</code> en local</strong><br />entrenar y reentrenar</td>
+                <td><code>requirements.txt</code><br />la raíz</td>
+                <td><code>torch</code> · <code>networkx</code> · <code>jupyter</code> ·
+                    <code>ipykernel</code> · <code>papermill</code> · <code>nbformat</code> ·
+                    <code>pyproj</code> · <code>folium</code> más todo lo numérico y geográfico</td>
+              </tr>
+              <tr>
+                <td><strong>Los informes</strong><br /><code>/report</code>,
+                    <code>/reporte-lote</code>, <code>/informe-gerencial</code></td>
+                <td><code>requirements.txt</code><br />la misma raíz</td>
+                <td>lo del cuaderno más <code>pdfplumber</code> · <code>jsonschema</code> ·
+                    <code>xlsxwriter</code> · <code>graphifyy</code> · <code>openmeteo-requests</code> ·
+                    <code>requests-cache</code> · <code>retry-requests</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="note-callout">
+          <strong>Los informes piden cuota, no máquina.</strong> Es la única parte que necesita algo
+          que no se instala: una suscripción de <strong>Claude Code</strong> y salida a la red de
+          forma permanente. Un informe por circuito consume del orden de
+          <strong>318.760 tokens</strong>. Todo lo demás corre sin conexión una vez instalado.
+        </div>
+
+        <div class="connection-intro">
+          <h3>Los comandos que hacen la instalación por ti</h3>
+          <p>
+            No hace falta seguir las tablas de arriba a mano. Tres comandos cubren el ciclo completo,
+            y cada uno diagnostica antes de tocar nada.
+          </p>
+        </div>
+
+        <div class="table-wrap compact-table">
+          <table>
+            <thead><tr><th>Comando</th><th>Qué hace</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><code>/instalar-local</code></td>
+                <td>Revisa la máquina y la deja lista para las tres cosas que el proyecto hace en
+                    local: correr el cuaderno <code>mil_vano</code>, abrir CriticidadCHEC con sus
+                    cinco tableros, y subirlo todo a Databricks. Diagnostica primero —Python,
+                    <code>git-lfs</code>, insumos, entornos, puertos, salida a PyPI y la CLI de
+                    Databricks— y <strong>solo instala lo que falta</strong>. Distingue macOS de
+                    Windows en cada paso y pregunta una sola cosa: para cuál de los tres destinos.</td>
+              </tr>
+              <tr>
+                <td><code>/app-local-criticidadCHEC</code></td>
+                <td>Abre CriticidadCHEC, el menú desde el que se lanzan, se vigilan y se cierran los
+                    cinco tableros. Crea el entorno de cada aplicación la primera vez que hace falta.</td>
+              </tr>
+              <tr>
+                <td><code>/actualizar</code></td>
+                <td>Mira si cambió algo de lo que el modelo aprendió —la base de eventos, el
+                    diccionario de variables o el grafo experto— y rehace <strong>en orden</strong> lo
+                    que haya que rehacer: reentrenar, la geometría, y los paquetes de las
+                    aplicaciones. Si nada se movió, no hace nada.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="note-callout">
+          <strong>Para <code>/subir-a-databricks</code> hace falta una instalación más: la CLI de
+          Databricks.</strong> No es un detalle de configuración — como se explica arriba, la CLI
+          <em>es</em> la estrategia de migración, y sin ella el comando no tiene por dónde hablarle al
+          workspace. Se instala una vez:
+          <br /><br />
+          <code>brew tap databricks/tap &amp;&amp; brew install databricks</code> en macOS ·
+          <code>winget install Databricks.DatabricksCLI</code> en Windows.
+          <br /><br />
+          Que esté <strong>al día</strong> importa: una CLI vieja llega hasta el despliegue y falla
+          ahí, cuando <code>databricks apps create</code> no reconoce sus opciones.
+          <code>/instalar-local</code> comprueba las dos cosas —que exista y que sirva— y deja la
+          sesión abierta.
         </div>
       </section>
     </main>
@@ -3151,6 +3320,34 @@ const cronograma = [
 
   .arbol .c {
     color: #79c9ab;
+  }
+
+  .grafo-proyecto {
+    padding-bottom: 1rem;
+    overflow-x: visible;
+  }
+
+  .grafo-proyecto iframe {
+    display: block;
+    width: 100%;
+    height: min(78vh, 760px);
+    min-height: 460px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #16161f;
+  }
+
+  /* Esta rejilla se quedo con TRES tarjetas y la compartida reparte en cuatro: sin esto
+     el ultimo cuarto queda vacio a la derecha. Modificador y no cambio de la clase, que
+     la usan otras seis secciones con cuatro. */
+  .process-grid.tres {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .pie-grafo {
+    margin: 0.8rem 0 0;
+    color: var(--muted);
+    font-size: 0.9rem;
   }
 
   .note-callout {
