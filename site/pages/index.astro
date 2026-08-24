@@ -729,6 +729,102 @@ const cronograma = [
             </ol>
           </div>
         </div>
+
+        <div class="connection-intro">
+          <h3>Grafo con restricciones físicas</h3>
+          <p>
+            El modelo no aprende con qué se relaciona cada variable: <strong>se lo damos fijado de
+            antemano</strong>. Ese grafo lo escribe el proyecto en código —
+            <code>construir_aristas_grafo_chec</code>— y viaja congelado dentro del
+            <code>.pt</code>, así que es el mismo en cada ejecución, en el simulador y en los informes.
+          </p>
+          <p>
+            Son <strong>156 relaciones dirigidas sobre 156 variables</strong>, y forma un grafo
+            acíclico: todo camino avanza hacia <code>UITI_VANO</code>, que es el único destino final.
+            De esas 156 relaciones, <strong>108 son las cadenas de rezago del clima</strong> —nueve
+            familias por doce horas—, por eso el visor las muestra plegadas y trae un interruptor para
+            desplegarlas.
+          </p>
+          <p>
+            Pulsa cualquier nodo para ver de dónde recibe, a dónde apunta y con qué peso; usa la lista
+            de la derecha para dejar visible solo un modo.
+          </p>
+        </div>
+
+        <div class="diagram-card grafo-proyecto grafo-fijo">
+          <iframe
+            src={`${import.meta.env.BASE_URL}grafo_fijo_mil.html`}
+            title="Grafo fijo de restricciones físicas del modelo MIL, con sus 156 relaciones"
+            loading="lazy"
+          ></iframe>
+          <p class="pie-grafo">
+            ¿Se te queda pequeño?
+            <a href={`${import.meta.env.BASE_URL}grafo_fijo_mil.html`} target="_blank" rel="noopener"
+            >Ábrelo en una pestaña propia</a>.
+          </p>
+        </div>
+
+        <div class="connection-intro">
+          <h3>Qué busca cada modo dentro del grafo</h3>
+          <p>
+            Las variables se agrupan en <strong>seis modos</strong>, y el grafo fija qué modo puede
+            hablarle a cuál. La tercera columna no es interpretación libre: es lo que el análisis de
+            criticidad del proyecto declara que se busca en cada relación, y es también el marco con el
+            que los agentes leen el modelo. Ninguna variable del grafo se quedó sin modo.
+          </p>
+        </div>
+
+        <div class="table-wrap compact-table tabla-modos">
+          <table>
+            <thead>
+              <tr>
+                <th>Modo de variable</th>
+                <th>Conexiones fijadas en el grafo</th>
+                <th>Qué relaciones y posibles causas se buscan</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Entorno / Riesgo</strong><br /><span class="celda-menor">Riesgo vegetal, descargas y series climáticas como estresores ambientales.</span></td>
+                <td><strong>→ Entorno / Riesgo</strong> (100): <code>prep_11</code>&#8202;→&#8202;<code>prep_10</code>, <code>prep_10</code>&#8202;→&#8202;<code>prep_9</code> …<br /><strong>→ Evento / Impacto</strong> (11): <code>prep_0</code>&#8202;→&#8202;<code>COD_CAUSA</code>, <code>temp_0</code>&#8202;→&#8202;<code>COD_CAUSA</code> …</td>
+                <td><p>Cómo se acumula el estrés en las doce horas anteriores al evento: cada rezago apunta al siguiente, así que la cadena representa la condición previa y no el instante.</p> <p>Si la vegetación cercana, las descargas o la ventana climática previa acompañan a la etiqueta de causa del evento. Es la vía por la que el modelo puede sostener una hipótesis ambiental, nunca afirmarla.</p></td>
+              </tr>
+              <tr>
+                <td><strong>Físicas / Eléctricas</strong><br /><span class="celda-menor">Características técnico-constructivas que describen susceptibilidad.</span></td>
+                <td><strong>→ Físicas / Eléctricas</strong> (3): <code>PROMEDIO_KWH_VANO</code>&#8202;→&#8202;<code>CNT_FASES</code>, <code>CALIBRE_NEUTRO</code>&#8202;→&#8202;<code>CONDUCTOR</code> …<br /><strong>→ Evento / Impacto</strong> (2): <code>LONGITUD</code>&#8202;→&#8202;<code>COD_CAUSA</code>, <code>CONDUCTOR</code>&#8202;→&#8202;<code>COD_CAUSA</code><br /><strong>→ Entorno / Riesgo</strong> (1): <code>NG_RED</code>&#8202;→&#8202;<code>DDT</code><br /><strong>→ Topología</strong> (1): <code>TIPO_TAX</code>&#8202;→&#8202;<code>FID_VANO</code></td>
+                <td><p>Qué características constructivas se explican entre sí: el calibre del neutro y la fecha de operación condicionan el conductor.</p> <p>Qué construcción del vano lo hace más susceptible — conductor, longitud, calibre del neutro. Describe susceptibilidad, no causa.</p> <p>Si la ausencia de cable de guarda o neutro deja al tramo más expuesto a las descargas.</p> <p>Cómo la taxonomía del tramo lo ubica dentro del circuito.</p></td>
+              </tr>
+              <tr>
+                <td><strong>Activos</strong><br /><span class="celda-menor">Apoyos y transformadores asociados al vano.</span></td>
+                <td><strong>→ Activos</strong> (11): <code>CLASE</code>&#8202;→&#8202;<code>VAL_CRIT_APOYO</code>, <code>NORMA</code>&#8202;→&#8202;<code>VAL_CRIT_APOYO</code> …<br /><strong>→ Entorno / Riesgo</strong> (3): <code>CANTIDAD_TIERRA</code>&#8202;→&#8202;<code>DDT</code>, <code>ALTURA</code>&#8202;→&#8202;<code>NR_T</code> …<br /><strong>→ Evento / Impacto</strong> (1): <code>CNT_USUS</code>&#8202;→&#8202;<code>TOT_USUS</code></td>
+                <td><p>Cómo se encadenan apoyo, transformador y sus atributos para identificar el activo afectado.</p> <p>Si el estado del apoyo — su altura, su criticidad, su puesta a tierra — lo hace más vulnerable al entorno.</p> <p>Cuánta carga servida hay detrás: usuarios, transformadores y capacidad explican la MAGNITUD del impacto, no su frecuencia.</p></td>
+              </tr>
+              <tr>
+                <td><strong>Topología</strong><br /><span class="celda-menor">Circuito, vano, coordenadas, distancia y aporte del tramo.</span></td>
+                <td><strong>→ Topología</strong> (6): <code>X1</code>&#8202;→&#8202;<code>FID_VANO</code>, <code>Y1</code>&#8202;→&#8202;<code>FID_VANO</code> …<br /><strong>→ Protección</strong> (3): <code>LVSW</code>&#8202;→&#8202;<code>COD_EQ_PROTEGE</code>, <code>CNT_VN</code>&#8202;→&#8202;<code>COD_EQ_PROTEGE</code> …<br /><strong>→ Evento / Impacto</strong> (1): <code>PORC_APORTE_VANO</code>&#8202;→&#8202;<code>UITI_VANO</code></td>
+                <td><p>Dónde está el tramo: las coordenadas dan trazabilidad espacial al vano.</p> <p>Hasta dónde llega el equipo que protege ese tramo: cuántos vanos cubre y a qué distancia está. Es lo que fija el alcance de una interrupción.</p> <p>Qué fracción del impacto del circuito le corresponde a este vano.</p></td>
+              </tr>
+              <tr>
+                <td><strong>Protección</strong><br /><span class="celda-menor">Equipos que detectan, despejan y aíslan fallas.</span></td>
+                <td><strong>→ Protección</strong> (4): <code>COD_EQ_PROTEGE</code>&#8202;→&#8202;<code>FID_SW</code>, <code>FID_SW</code>&#8202;→&#8202;<code>TIPO</code> …<br /><strong>→ Evento / Impacto</strong> (2): <code>TIPO</code>&#8202;→&#8202;<code>DURACION</code>, <code>T_USUS_EQ_PROT</code>&#8202;→&#8202;<code>TOT_USUS</code></td>
+                <td><p>Qué equipo protege a qué: la cadena que va del vano al interruptor y a su tipo.</p> <p>Cómo el tipo de equipo fija la duración de la interrupción y cuántos usuarios quedan aguas abajo.</p></td>
+              </tr>
+              <tr>
+                <td><strong>Evento / Impacto</strong><br /><span class="celda-menor">Fecha, duración, usuarios, transformadores, causas e indicadores de impacto.</span></td>
+                <td><strong>→ Evento / Impacto</strong> (7): <code>CNT_TRF</code>&#8202;→&#8202;<code>TOT_USUS</code>, <code>COD_CAUSA</code>&#8202;→&#8202;<code>DESC_CAUSA</code> …</td>
+                <td><p>Cómo se compone el UITI: duración por usuarios afectados, y de ahí al aporte del vano.</p></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="note-callout">
+          <strong>El grafo restringe, no decide.</strong> Una relación fijada dice que el modelo
+          <em>puede</em> mirar por ahí, no que el fenómeno ocurra: la vía de
+          <code>NR_T</code> a <code>COD_CAUSA</code> existe para que la vegetación pueda sostener una
+          hipótesis de causa, y sigue haciendo falta que los datos de la ventana la acompañen. Por eso
+          los informes hablan de lo que «es compatible con» y no de lo que «causó».
+        </div>
       </section>
 
       <section id="simulador" class="section">
@@ -3367,6 +3463,39 @@ const cronograma = [
     margin: 0.8rem 0 0;
     color: var(--muted);
     font-size: 0.9rem;
+  }
+
+  /* El grafo fijo es mas bajo que el de graphify: son 57 nodos en vista plegada y no 754,
+     asi que no necesita la misma altura para leerse. */
+  .grafo-fijo iframe {
+    height: min(62vh, 620px);
+    min-height: 420px;
+  }
+
+  /* `.compact-table` tope la altura en 520 px, que le sirve a las tablas de una linea por
+     fila. Esta tiene seis filas de parrafo y se cortaba a mitad de la tercera, con el
+     recuadro pegado debajo: parecia que la tabla terminaba ahi. Se le quita el tope a
+     ESTA, no a la clase, que la usan otras veintitantas. */
+  .tabla-modos {
+    max-height: none;
+  }
+
+  .tabla-modos td {
+    vertical-align: top;
+    line-height: 1.5;
+  }
+
+  .tabla-modos td p {
+    margin: 0 0 0.5rem;
+  }
+
+  .tabla-modos td p:last-child {
+    margin-bottom: 0;
+  }
+
+  .celda-menor {
+    color: var(--muted);
+    font-size: 0.86em;
   }
 
   /* El grafo tiene 754 nodos. En un telefono, dentro de un marco de 350 px, no se puede
