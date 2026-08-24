@@ -9,7 +9,7 @@ metadata:
   rules: .claude/agents/rules/invariants.md
   ported_from:
     - .claude/skills/inference/prompt/01_structured_context_builder.md
-    - .claude/skills/inference/prompt/02_circuit_scenario_interpreter.md
+    - .claude/skills/inference/prompt/02_window_scenario_interpreter.md
     - .claude/skills/inference/prompt/03_uiti_vano_behavior_explainer.md
     - .claude/skills/inference/prompt/04_graph_connectivity_guardrails.md
     - .claude/skills/inference/prompt/05_llm_output_validator.md
@@ -65,7 +65,7 @@ Rules this agent must honor about the context it receives:
 - If a required piece (circuit, period, `features`, an initialized explainer) is missing, describe
   the gap — never fabricate criticality conclusions from an incomplete context.
 
-## Circuit scenario interpretation (ported from `02_circuit_scenario_interpreter.md`)
+## Window scenario interpretation (ported from `02_window_scenario_interpreter.md`)
 
 The operative unit is `FID_VANO` within the selected circuit. Four scenario types may appear in
 the context, each with its own selection criterion — never reorder or reinterpret one as another:
@@ -182,7 +182,8 @@ JSON object, every array and the root object fully closed.
   language for the analyzed period, never presented as an operational forecast (Rule 5's
   no-forecasting-outside-this-flow boundary is what this key IS the validated exception for; it
   still must never assert a definitive future outcome).
-- `hipotesis_modelo_predictivo`: `{periodo_completo, puntos_criticos}`, each a list capped at 5
+- `hipotesis_modelo_predictivo`: `{ventanas_estudiadas, plan_de_intervencion}` -- the exact
+  sub-keys `inference.output_schema.json` marks `required`; each a list capped at 5
   items, synthesizing (not repeating) the corresponding findings/scenarios/graph discussion in the
   same executive style as the historical agent's own hypothesis note — cautious language only
   ("el modelo sugiere", "es consistente con", "podría estar asociado", "requiere validación").
@@ -211,7 +212,7 @@ to a specific source, per `.claude/agents/rules/invariants.md` Rule 6:
 - `agent` must always be the literal string `"inference"`.
 - `rule` must be one of the six playbook ids ported into this Skill (`ported_from` above, stripped
   of their `NN_` prefix and `.md` suffix): `01_structured_context_builder`,
-  `02_circuit_scenario_interpreter`, `03_uiti_vano_behavior_explainer`,
+  `02_window_scenario_interpreter`, `03_uiti_vano_behavior_explainer`,
   `04_graph_connectivity_guardrails`, `05_llm_output_validator`, `06_inference_output_contract` —
   the exact set `INFERENCE_PROVENANCE_RULES` (`inference_validation.py`) enforces.
 - Omitting `provenance` on an `escenarios`/`discusion_grafos` item never fails validation — it is
@@ -237,7 +238,7 @@ validator and `.claude/agents/rules/invariants.md` Rule 7 enforce):
 - Ported-from playbooks (the machine-fed source, loaded by
   `assemble_skill_bundle(profile="inferencia")`):
   `.claude/skills/inference/prompt/01_structured_context_builder.md`,
-  `.claude/skills/inference/prompt/02_circuit_scenario_interpreter.md`,
+  `.claude/skills/inference/prompt/02_window_scenario_interpreter.md`,
   `.claude/skills/inference/prompt/03_uiti_vano_behavior_explainer.md`,
   `.claude/skills/inference/prompt/04_graph_connectivity_guardrails.md`,
   `.claude/skills/inference/prompt/05_llm_output_validator.md`,
