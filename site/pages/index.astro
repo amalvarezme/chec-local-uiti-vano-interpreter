@@ -127,6 +127,7 @@ const cronograma = [
         <a href="#cronograma">Cronograma</a>
         <a href="#ia-criticidad">IA + Criticidad CHEC</a>
         <a href="#implementacion">Implementación</a>
+        <a href="#instalacion">Instalación</a>
         <a href="#costos-databricks">Costos Databricks</a>
       </nav>
     </header>
@@ -1851,8 +1852,20 @@ const cronograma = [
           </article>
         </div>
 
+      </section>
+      <section id="instalacion" class="section">
+        <div class="section-heading">
+          <p class="eyebrow">Poner esto a funcionar</p>
+          <h2>Instalación</h2>
+          <p>
+            Qué hace falta instalar, según lo que quieras usar. Nada de esto se escribió de memoria:
+            las versiones y los paquetes salen de los archivos de dependencias del repositorio y de
+            <code>docs/REQUISITOS-MINIMOS.md</code>, donde están medidos.
+          </p>
+        </div>
+
         <div class="connection-intro">
-          <h3>Instalar</h3>
+          <h3>Las cuatro listas de dependencias</h3>
           <p>
             Las dependencias viven en <strong>cuatro listas separadas</strong>, y el aislamiento es
             deliberado: el menú de CriticidadCHEC pesa 15 MB porque no importa a nadie; si importara
@@ -1965,8 +1978,7 @@ const cronograma = [
           ahí, cuando <code>databricks apps create</code> no reconoce sus opciones.
           <code>/instalar-local</code> comprueba las dos cosas —que exista y que sirva— y deja la
           sesión abierta.
-        </div>
-      </section>
+        </div>      </section>
     </main>
 
     <dialog id="lightbox" aria-label="Vista ampliada de la figura">
@@ -3339,15 +3351,39 @@ const cronograma = [
 
   /* Esta rejilla se quedo con TRES tarjetas y la compartida reparte en cuatro: sin esto
      el ultimo cuarto queda vacio a la derecha. Modificador y no cambio de la clase, que
-     la usan otras seis secciones con cuatro. */
-  .process-grid.tres {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+     la usan otras seis secciones con cuatro.
+
+     Va DENTRO de `min-width: 861px` a proposito. Suelto, `.process-grid.tres` tiene mas
+     especificidad que el `.process-grid` de las media queries de 860 y 560, asi que
+     GANABA y la rejilla se quedaba en tres columnas en un movil. Acotarlo por arriba es
+     lo que deja que las de abajo hagan su trabajo. */
+  @media (min-width: 861px) {
+    .process-grid.tres {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
   }
 
   .pie-grafo {
     margin: 0.8rem 0 0;
     color: var(--muted);
     font-size: 0.9rem;
+  }
+
+  /* El grafo tiene 754 nodos. En un telefono, dentro de un marco de 350 px, no se puede
+     ni leer una etiqueta ni acertarle a un nodo, y ademas se come el gesto de
+     desplazamiento vertical de la pagina. Se baja de altura y el enlace a la pestana
+     propia -- que ahi si es util -- pasa a ser lo destacado. */
+  @media (max-width: 720px) {
+    .grafo-proyecto iframe {
+      height: 58vh;
+      min-height: 320px;
+    }
+
+    .pie-grafo {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--ink);
+    }
   }
 
   .note-callout {
