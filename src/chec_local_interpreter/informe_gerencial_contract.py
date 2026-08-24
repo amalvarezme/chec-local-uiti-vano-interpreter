@@ -65,6 +65,7 @@ from chec_local_interpreter.informe_estilo import (
 from chec_local_interpreter.config import DEFAULT_DATA_PATH, PROJECT_ROOT
 from chec_local_interpreter.data_loader import filter_events, load_dataset
 from chec_local_interpreter.plotting import plot_ranking_circuitos
+from chec_local_interpreter.plotting import _mayuscula_inicial
 from chec_local_interpreter.ranking_circuitos import ranking_circuitos
 
 SCHEMA_VERSION = "informe-gerencial-contract/v1"
@@ -1304,6 +1305,12 @@ def _hypothesis_clauses(text: str) -> list[str]:
     """
     collapsed = " ".join(text.split())
     clauses = [c.strip() for c in _CLAUSE_SPLIT_RE.split(collapsed) if c.strip()]
+    # NO se capitalizan ni se les quita el `;`. Son clausulas de UNA frase, partidas para
+    # que se lean; el modulo garantiza -- y una prueba lo exige -- que reunirlas reproduce
+    # el original exacto. Capitalizarlas rompe esa garantia y ademas escribe peor
+    # castellano: la clausula real «y (2) una exposicion topologica...» quedaba como
+    # «Y (2) una exposicion...». La mayuscula va donde empieza una frase, no donde
+    # continua una enumeracion.
     return clauses or [collapsed]
 
 
@@ -1535,7 +1542,8 @@ def _iframe_srcdoc(html: str, *, height: int = 620) -> str:
 def _list_html(items: Sequence[str]) -> str:
     if not items:
         return "<p class='muted'>Sin hallazgos.</p>"
-    return "<ul>" + "".join(f"<li>{_escape(item)}</li>" for item in items) + "</ul>"
+    return ("<ul>" + "".join(f"<li>{_escape(_mayuscula_inicial(str(item)))}</li>"
+                             for item in items) + "</ul>")
 
 
 def _outliers_html(outliers: Sequence[dict[str, str]]) -> str:
@@ -1654,7 +1662,7 @@ def _intervention_graph_html(
         estrategias = summary.get("estrategias") or []
         if causas:
             filas = "".join(
-                f"<li><strong>{_escape(item.get('concepto'))}</strong> &mdash; "
+                f"<li><strong>{_escape(_mayuscula_inicial(str(item.get('concepto') or '')))}</strong> &mdash; "
                 f"{_escape(item.get('soporte'))} de {n_sampled} circuitos</li>"
                 for item in causas
             )
@@ -1695,9 +1703,10 @@ def _resumen_item_html(item: str | dict[str, Any]) -> str:
     """
     if isinstance(item, dict):
         label = _escape(item.get("label"))
+        # Subvinetas = clausulas de `_hypothesis_clauses`: van verbatim, ver alli.
         sub_items = "".join(f"<li>{_escape(sub)}</li>" for sub in item.get("items") or [])
         return f"<li>{label}<ul class='annex-subitems'>{sub_items}</ul></li>"
-    return f"<li>{_escape(item)}</li>"
+    return f"<li>{_escape(_mayuscula_inicial(str(item)))}</li>"
 
 
 def _annex_html(annex: Sequence[dict[str, Any]]) -> str:

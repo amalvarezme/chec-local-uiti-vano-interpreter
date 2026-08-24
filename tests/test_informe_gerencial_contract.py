@@ -1104,7 +1104,9 @@ def test_la_seccion_de_intervencion_nombra_las_causas_y_las_estrategias():
     html = informe_contract._intervention_graph_html(_RADIAL_HTML, _RESUMEN, n_sampled=2)
 
     assert "Causas y estrategias de intervención" in html
-    assert "clima/atmosférico" in html
+    # El rotulo se capitaliza al DIBUJARSE; la clave de agrupacion sigue en
+    # minuscula (es la identidad que junta la causa entre circuitos).
+    assert "Clima/atmosférico" in html
     assert "(CNT_TRF)" in html
     assert "prioridad alta" in html
     assert 'class="grafo-conceptos"' in html
