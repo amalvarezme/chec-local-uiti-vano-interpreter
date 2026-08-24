@@ -795,7 +795,7 @@ def render_expert_alignment_tab(expert_alignment_validation_data):
     synthesis_html = (
         "<div class='summary-box'>"
         "<h3 style='margin-top:0;'>Síntesis final</h3>"
-        f"<ul class='report-list'><li>{_escape(synthesis)}</li></ul>"
+        f"<ul class='report-list'><li>{_escape(_mayuscula_inicial(str(synthesis)))}</li></ul>"
         "</div>"
         if synthesis else
         "<div class='summary-box'><h3 style='margin-top:0;'>Síntesis final</h3><p class='muted'>No se entregó síntesis final.</p></div>"
@@ -1564,7 +1564,7 @@ def render_llm_analysis(
                         ana = j.get('analisis_causas', '')
                         char_html += f"<li style='margin-bottom: 8px;'><strong>Modo {NOMBRE_LEGIBLE_GRUPO.get(modo, modo)} ({vars_assoc}):</strong> {just_fis}<br><span style='font-size: 0.95em; color: #475569;'><em>Análisis:</em> {ana}</span></li>"
                     else:
-                        char_html += f"<li>{j}</li>"
+                        char_html += f"<li>{_mayuscula_inicial(str(j))}</li>"
                 char_html += "</ul>"
         else:
             char_html = str(char_data)
@@ -1594,7 +1594,11 @@ def render_llm_analysis(
                 r = inf.get('riesgo', '')
                 h = inf.get('horizonte', '')
                 j = inf.get('justificacion_modelo', '')
-                findings_html += f"<li><b>{_escape(h)}:</b> {_escape(r)} &mdash; <i>{_escape(j)}</i></li>"
+                findings_html += (
+                    f"<li><b>{_escape(_mayuscula_inicial(str(h)))}:</b> "
+                    f"{_escape(_mayuscula_inicial(str(r)))} &mdash; "
+                    f"<i>{_escape(_mayuscula_inicial(str(j)))}</i></li>"
+                )
             findings_html += "</ul></div>"
 
         llm_sections_html = f"""

@@ -153,3 +153,43 @@ class TestElContratoRepartElTrabajo:
         reparto = texto.split("## Reparto entre los campos narrativos", 1)[-1]
         reparto = reparto.split("\n## ", 1)[0].lower()
         assert "no repitas" in reparto or "no vuelvas a" in reparto
+
+
+# ---------------------------------------------------------------------------
+# La guarda: ningun `<li>` nuevo con texto de agente sin capitalizar
+#
+# El primer arreglo cubrio `_texto_a_items` y `_lista_a_items`, y quedaron TRES sitios
+# que construyen su `<li>` a mano con prosa del agente. Se vio en el primer informe
+# renderizado despues del arreglo: los `horizonte` de `inferencias_predictivas` seguian
+# saliendo como «ventana V6 (...)» en minuscula, porque ese `<li>` es un f-string suelto.
+#
+# Enumerar los sitios permitidos es lo unico que impide que el cuarto aparezca sin que
+# nadie lo note. Los `<li>` de ROTULO FIJO -- `<li><strong>Circuito:</strong> ...` -- no
+# necesitan nada: su primera palabra la escribe el repositorio, no el agente.
+# ---------------------------------------------------------------------------
+
+import re as _re_guarda
+
+PLOTTING = (Path(__file__).resolve().parents[1]
+            / "src" / "chec_local_interpreter" / "plotting.py")
+
+
+def _lineas_con_li() -> list[str]:
+    return [l.strip() for l in PLOTTING.read_text(encoding="utf-8").splitlines()
+            if "<li>" in l or "<li><b" in l]
+
+
+class TestNingunItemNuevoSeEscapa:
+    def test_toda_linea_que_interpola_prosa_de_agente_capitaliza(self):
+        sospechosas = []
+        for linea in _lineas_con_li():
+            interpola = bool(_re_guarda.search(r"\{[^}]+\}", linea))
+            rotulo_fijo = "<strong>" in linea          # `<li><strong>Circuito:</strong> ...`
+            texto_literal = not interpola              # `<li>Es un solo mapa: ...`
+            if texto_literal or rotulo_fijo:
+                continue
+            if "_mayuscula_inicial" not in linea:
+                sospechosas.append(linea[:100])
+        assert not sospechosas, (
+            "hay `<li>` con prosa de agente sin `_mayuscula_inicial`:\n  "
+            + "\n  ".join(sospechosas))
