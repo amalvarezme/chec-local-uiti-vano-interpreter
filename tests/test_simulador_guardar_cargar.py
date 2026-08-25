@@ -290,3 +290,26 @@ def test_el_titulo_del_panel_no_publica_una_bajada_negativa():
     assert "abs(" in cuerpo, "el titulo sigue publicando el numero con su signo"
     assert "'sube'" in cuerpo or '"sube"' in cuerpo, (
         "el titulo no tiene verbo para el caso en que la simulacion empeora")
+
+
+# --------------------------------------------- la ruta del almacen, siempre a la vista
+
+
+def test_el_panel_publica_la_carpeta_de_guardado_desde_que_abre(tablero, carpeta):
+    """SIEMPRE, y no solo despues de guardar.
+
+    Antes la ruta solo aparecia en el aviso que sigue a un guardado, y ese aviso lo
+    borra `Limpiar` y lo pisa cualquier otro mensaje. O sea: la unica forma de saber
+    donde iba a quedar el trabajo era guardarlo primero. En Databricks eso es peor que
+    incomodo -- la ruta es un Volume que hay que ir a buscar por otra interfaz --, pero
+    tambien en local ahorra el viaje de abrir una carpeta a ver si esta.
+    """
+    assert str(carpeta) in tablero.avisos()
+
+
+def test_la_ruta_sigue_ahi_despues_de_limpiar(tablero, carpeta):
+    """`Limpiar` suelta lo que describe la CORRIDA. La carpeta de guardado describe la
+    sesion, no la corrida, y vaciarla dejaria al panel sin decir donde escribe."""
+    _pulsar(tablero.botones["Limpiar"])
+    _correr_pendientes()
+    assert str(carpeta) in tablero.avisos()

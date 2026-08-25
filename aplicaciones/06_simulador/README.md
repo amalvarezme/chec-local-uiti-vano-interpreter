@@ -284,8 +284,12 @@ internet.
 `C:\Users\<tu-usuario>\CriticidadCHEC\simulaciones` en Windows. Cuelgan de tu
 carpeta personal y **no** de esta aplicacion a proposito: la aplicacion se
 reconstruye sola cuando cambian los datos, y en Windows hay un `.bat` que la
-traslada a una ruta corta. El panel escribe la ruta completa despues de guardar,
-asi que no hay que recordarla.
+traslada a una ruta corta.
+
+No hay que recordarla: el panel la publica **siempre**, en el renglon que va justo
+debajo de la lista desplegable, desde que el tablero abre y aunque no se haya
+guardado nada todavia. Al guardar, debajo aparecen los nombres de los dos archivos
+que acaba de escribir.
 
 ### Por que el registro pesa kilobytes y no megabytes
 

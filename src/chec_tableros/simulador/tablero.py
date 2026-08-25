@@ -59,6 +59,7 @@ from chec_local_interpreter.costos_items import (
     leer_catalogo_costos,
 )
 from chec_local_interpreter.simulaciones_guardadas import (
+    EXTENSION as EXTENSION_SIMULACION,
     GRANO_CIRCUITO,
     actividades_por_vano,
     deserializar,
@@ -3241,6 +3242,25 @@ def construir(
     # de Unity Catalog por la Files API cuando la app lo declara. Ver
     # `chec_local_interpreter/almacen_simulaciones.py`; desde aqui no se sabe cual toco.
     ALMACEN = almacen_por_defecto()
+    # La carpeta de guardado, SIEMPRE en pantalla y no solo despues de guardar.
+    #
+    # Estaba solo dentro del aviso que sigue a un guardado, y ese aviso lo borra
+    # "Limpiar" y lo pisa cualquier otro mensaje: la unica forma de saber donde iba a
+    # quedar el trabajo era guardarlo primero y leer la respuesta. En Databricks eso es
+    # peor que incomodo -- la ruta es un Volume que hay que ir a buscar por otra
+    # interfaz --, y en local ahorra abrir una carpeta a ver si esta.
+    #
+    # Widget PROPIO y no una linea de `AVISO_ARCHIVO`: describe la SESION y no la
+    # corrida, asi que no puede compartir el sitio con lo que "Limpiar" vacia.
+    #
+    # Se escribe una sola vez, al construir: el almacen se resuelve en el arranque y no
+    # cambia mientras el tablero vive.
+    RUTA_ALMACEN = widgets.HTML(
+        '<span style="font-size:11px;color:#5b4a48;">Se guarda en '
+        f'<code style="font-size:11px;">{ALMACEN.donde()}</code> &mdash; el informe '
+        f'<code style="font-size:11px;">.html</code> y su registro '
+        f'<code style="font-size:11px;">{EXTENSION_SIMULACION}</code>, con el mismo '
+        f'nombre. {ALMACEN.pista()}</span>')
     # La descripcion de cada actividad, para la tabla del informe. Sale del MISMO
     # objeto que el precio: el informe se archiva, y una descripcion tomada de otra
     # lectura del libro podria describir una fila que ya no es la que se coste.
@@ -3263,6 +3283,25 @@ def construir(
 
     def _mensaje(texto, color='#5b4a48'):
         return f'<span style="font-size:12px;color:{color};">{texto}</span>'
+
+
+    def _solo_nombre(ruta):
+        """El nombre del archivo dentro de la ruta que devolvio el almacen.
+
+    Se parte por los DOS separadores y no por el del sistema: el almacen local devuelve
+    rutas del sistema -- con `\\` en Windows -- y el del Volume devuelve siempre rutas
+    de Unity Catalog con `/`, y el mismo tablero puede estar corriendo en cualquiera de
+    los dos.
+    """
+        return str(ruta).replace('\\', '/').rsplit('/', 1)[-1]
+
+
+    def _esc_html(texto):
+        """El nombre de archivo se compone con el circuito, que viene del dato. Escapar
+        es barato y evita que un `<` en un identificador rompa el renglon del panel."""
+        import html as _html
+
+        return _html.escape(str(texto))
 
 
     def _actualizar_botones_de_archivo():
@@ -4005,8 +4044,10 @@ def construir(
         except Exception as exc:  # noqa: BLE001 -- el motivo real viaja al usuario
             selector_guardadas.options = []
             boton_cargar.disabled = True
+            # La RUTA no se repite aqui: la publica `RUTA_ALMACEN` justo encima. Lo
+            # que este renglon aporta es el motivo.
             AVISO_ARCHIVO.value = _mensaje(
-                f'No se pudo leer {ALMACEN.donde()}: {exc}', '#b91c1c')
+                f'No se pudo leer esa carpeta: {exc}', '#b91c1c')
             return
         elegida = selector_guardadas.value
         selector_guardadas.options = [(_rotulo_de_guardada(e), e['clave'])
@@ -4014,7 +4055,7 @@ def construir(
         boton_cargar.disabled = not entradas
         if not entradas:
             AVISO_ARCHIVO.value = _mensaje(
-                f'Todavía no hay simulaciones guardadas en {ALMACEN.donde()}.')
+                'Todavía no hay ninguna simulación guardada.')
             return
         # `value` se fija A MANO, y no es defensa preventiva: ipywidgets 8.1.8 NO
         # selecciona la primera opcion cuando la lista pasa de VACIA a poblada --
@@ -4051,16 +4092,19 @@ def construir(
             )
         except Exception as exc:  # noqa: BLE001 -- el motivo real viaja al usuario
             AVISO_ARCHIVO.value = _mensaje(
-                f'No se pudo guardar en {ALMACEN.donde()}: {exc}', '#b91c1c')
+                f'No se pudo guardar en esa carpeta: {exc}', '#b91c1c')
             _actualizar_botones_de_archivo()
             return
         _actualizar_botones_de_archivo()
+        # Solo los NOMBRES. La carpeta la publica `RUTA_ALMACEN` justo encima, y
+        # repetirla en las dos rutas completas la dejaba escrita tres veces en el mismo
+        # rincon del panel -- con la ruta de Databricks, tres renglones de `/Volumes/...`
+        # que empujan fuera de la vista lo unico que cambia, que es el nombre.
         AVISO_ARCHIVO.value = _mensaje(
-            'Guardado.<br><b>Informe:</b> ' + destino['informe']
-            + '<br><b>Para volver a cargarla:</b> ' + destino['registro']
-            # Como se LLEGA a el, que no es lo mismo que donde esta: en Databricks el
-            # archivo esta en un Volume y esta pagina no puede ofrecer la descarga.
-            + '<br>' + ALMACEN.pista(), '#15803d')
+            'Guardado en esa carpeta, con dos archivos:<br><b>'
+            + _esc_html(_solo_nombre(destino['informe'])) + '</b> (el informe)<br><b>'
+            + _esc_html(_solo_nombre(destino['registro']))
+            + '</b> (para volver a cargarla)', '#15803d')
         _refrescar_guardadas()
 
 
@@ -4340,6 +4384,10 @@ def construir(
             _grupo(_titulo('Guardar y cargar simulaciones'),
                    widgets.HBox([boton_guardar, boton_cargar]),
                    widgets.HBox([selector_guardadas, boton_refrescar]),
+                   # La ruta va DEBAJO del desplegable y encima del aviso: describe la
+                   # sesion, asi que se lee una vez y se queda; el aviso de abajo
+                   # cambia con cada guardado y cada carga.
+                   RUTA_ALMACEN,
                    AVISO_ARCHIVO),
             _grupo(STATUS),
         ],
