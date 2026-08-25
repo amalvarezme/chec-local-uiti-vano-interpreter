@@ -2515,10 +2515,15 @@ const cronograma = [
      del laboratorio empequenece a los otros dos. */
   .hero-logos {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: center;
     gap: 1.15rem;
-    padding: 0.75rem 1.25rem;
+    padding: 1.25rem;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
   }
 
   /* El ancho manda y el alto es el tope. Los tres logos tienen proporciones muy
@@ -2533,18 +2538,18 @@ const cronograma = [
   }
 
   .hero-logos img:nth-child(1) {
-    max-width: 42%;
-    max-height: 40px;
+    max-width: 84%;
+    max-height: 80px;
   }
 
   .hero-logos img:nth-child(2) {
-    max-width: 30%;
-    max-height: 54px;
+    max-width: 60%;
+    max-height: 108px;
   }
 
   .hero-logos img:nth-child(3) {
-    max-width: 14%;
-    max-height: 60px;
+    max-width: 28%;
+    max-height: 120px;
   }
 
   .section {
