@@ -38,16 +38,9 @@ regularizado por restricciones físicas y por un autoencoder del vector de carac
 construido desde el análisis temporal de eventos sobre vanos mediante una representación
 por bolsas y múltiples instancias.
 
-Es el nombre del **módulo** en el acta de trabajo (*«Ajustes módulo M-GCECDL y agentes»*).
-Su implementación vigente es el MIL por bolsas vano × ventana del cuaderno
-`05_mil_vano_ventana.ipynb`, cuyo artefacto entrenado es
+Se implementa como MIL por bolsas vano × ventana en el cuaderno
+`05_mil_vano_ventana.ipynb`, y su artefacto entrenado es
 `data/models/mil_vano_ventana_v1.pt`.
-
-> **No confundir con el clasificador `MGCECDLClassifier`.** Ese era un artefacto de código
-> concreto —una implementación anterior del mismo módulo— y se retiró del árbol junto con
-> su pipeline en agosto de 2026. Las menciones a ese retiro que aparecen más abajo, en el
-> diagrama del workflow y en la sección de cuadernos, hablan del artefacto retirado, no del
-> módulo, que sigue vigente.
 
 ## Alcance y no objetivos
 
@@ -73,7 +66,7 @@ Su implementación vigente es el MIL por bolsas vano × ventana del cuaderno
 
 **Excepción sancionada — despliegue a Databricks:** el proyecto sí incluye una migración manual,
 bajo demanda, de los activos locales hacia un workspace Databricks, vía 3 comandos de Claude Code
-(`/subir-a-databricks`, el único que habla con Databricks desde el 2026-08-17: las tres
+(`/subir-a-databricks`, el único que habla con Databricks: las tres
 etapas —datos, aplicaciones y cuaderno— viven dentro de él, cada una verificando antes de
 subir). Se apoya en
 [`_contrato-despliegue-databricks.md`](.claude/commands/_contrato-despliegue-databricks.md).
@@ -98,7 +91,7 @@ ni los roles LLM. Solo viajan los datos que consumen los cuadernos `01`-`06` y e
 | `docs/` | Arquitectura, workflow, contrato de runtime, requisitos medidos y documentación de soporte |
 | `reports/` | Artefactos locales de ejecución, reportes generados, insumos PDF, notas de `reports/vault/` |
 | `tests/` | Tests automatizados de contratos, pipelines y render |
-| `notebooks/` | `05_mil_vano_ventana.ipynb`, el **único** cuaderno del proyecto. `base_apps/` se vació y ya no existe |
+| `notebooks/` | `05_mil_vano_ventana.ipynb`, el **único** cuaderno del proyecto |
 | `aplicaciones/` | Las cinco aplicaciones locales de escritorio (macOS/Windows), construidas desde `src/chec_tableros/`, más `CriticidadCHEC`, el menú que las gobierna; y `aplicaciones/databricks/`, que es lo que corre en el servidor y no aquí |
 
 > **Para abrir las aplicaciones de escritorio:** entra en
@@ -239,6 +232,35 @@ componente que necesita un servicio externo no incluido en la instalación local
 de agente con cuota de modelo y salida a la red. Un informe por circuito consume del orden
 de **318.760 tokens**. Todo lo demás se ejecuta sin conexión una vez instalado y con los
 insumos disponibles.
+
+### Los 15 comandos en los tres editores
+
+Se teclean **igual** en los tres. Lo que cambia es dónde busca cada editor el archivo, no
+cómo se invoca: `/report DON23L14` es la misma línea en Claude Code, en VS Code Copilot y
+en OpenCode. La columna de Claude Code es la **fuente del contrato**; las otras dos son
+espejos generados por `scripts/portabilidad_agentes.py`.
+
+| Comando | Qué hace | Claude Code (fuente)<br>`.claude/` | VS Code Copilot<br>`.github/prompts/` | OpenCode<br>`.opencode/command/` |
+|---|---|---|---|---|
+| `/actualizar` | Reconstruye lo afectado cuando cambian los insumos | `commands/actualizar.md` | `actualizar.prompt.md` | `actualizar.md` |
+| `/app-local-criticidadCHEC` | Abre el menú CriticidadCHEC y sus cinco tableros | `commands/app-local-criticidadCHEC.md` | `app-local-criticidadCHEC.prompt.md` | `app-local-criticidadCHEC.md` |
+| `/clima` | Enriquece los datos con Open-Meteo | `skills/clima/SKILL.md` | `clima.prompt.md` | `clima.md` |
+| `/expert-alignment` | Rol de agente: cotejo contra la discusión experta | `skills/expert-alignment/SKILL.md` | `expert-alignment.prompt.md` | `expert-alignment.md` |
+| `/historical` | Rol de agente: diagnóstico descriptivo de la serie | `skills/historical/SKILL.md` | `historical.prompt.md` | `historical.md` |
+| `/inference` | Rol de agente: lectura del modelo MIL | `skills/inference/SKILL.md` | `inference.prompt.md` | `inference.md` |
+| `/informe-gerencial` | Síntesis por banda, con barras y grafo radial | `skills/informe-gerencial/SKILL.md` | `informe-gerencial.prompt.md` | `informe-gerencial.md` |
+| `/instalar-local` | Diagnostica la máquina e instala lo que falta | `commands/instalar-local.md` | `instalar-local.prompt.md` | `instalar-local.md` |
+| `/limpiar-corridas` | Mantenimiento de artefactos de corrida | `commands/limpiar-corridas.md` | `limpiar-corridas.prompt.md` | `limpiar-corridas.md` |
+| `/pdf-discussion-extraction` | Rol de agente: tabla de discusiones desde PDFs | `skills/pdf-discussion-extraction/SKILL.md` | `pdf-discussion-extraction.prompt.md` | `pdf-discussion-extraction.md` |
+| `/redaccion-es` | Revisión de tildes y redacción de la prosa generada | `skills/redaccion-es/SKILL.md` | `redaccion-es.prompt.md` | `redaccion-es.md` |
+| `/report` | Informe HTML de un circuito | `skills/report/SKILL.md` | `report.prompt.md` | `report.md` |
+| `/reporte-lote` | Encadena `/report` sobre una banda de riesgo | `skills/reporte-lote/SKILL.md` | `reporte-lote.prompt.md` | `reporte-lote.md` |
+| `/subir-a-databricks` | Despliegue a Databricks, en tres etapas | `commands/subir-a-databricks.md` | `subir-a-databricks.prompt.md` | `subir-a-databricks.md` |
+| `/vault-circuito` | Proyecta el circuito a `reports/vault/` y encadena `graphify` | `skills/vault-circuito/SKILL.md` | `vault-circuito.prompt.md` | `vault-circuito.md` |
+
+Los cuatro últimos son los **roles de agente**, que además de invocarse por su nombre los
+usa `/report` internamente. Sus definiciones canónicas viven en `.claude/agents/<rol>.md`,
+con espejo en `.github/agents/<rol>.agent.md` y `.opencode/agent/<rol>.md`.
 
 ### En Windows, dos cosas del sistema que no son paquetes de pip
 
@@ -395,12 +417,6 @@ a Databricks qué hay ya, y solo sube lo que falta:
 | 4 | Que las dos apps existan, estén `ACTIVE`/`RUNNING`/`SUCCEEDED` y sirvan contenido al día | `criticidad-chec` (4 tableros en 4 rutas) y `simulador-vano` (Voila, kernel vivo) |
 | 5 | Que el cuaderno esté en el Workspace y corresponda a su generador —regenerando y comparando **contenido**, nunca fechas, que en un clon son todas la del clon— | `notebooks/05_mil_vano_ventana.ipynb` más `src/chec_impacto`, como cuaderno y sin app |
 
-Eran ocho comandos hasta agosto de 2026. Cuatro (`/app-vano-clima`,
-`/app-agrupamiento-vanos-circuitos`, `/app-trayectorias-circuitos`, `/app-trayectorias-vanos`)
-publicaban un tablero cada uno parcheando un `.ipynb` que ya no existe. Los otros cuatro
-(`/subir-datos-databricks`, `/subir-notebooks-databricks`, `/app-criticidad-chec`,
-`/app-simulador-vano`) seguían siendo correctos y se absorbieron el 2026-08-17: repartidos en
-cuatro invocaciones dejaban cuatro reportes parciales y obligaban a recordar el orden.
 
 Cada corrida deja una bitácora en `reports/despliegues/` con los pasos, los errores y las
 restricciones encontradas; una restricción de permisos no aborta la corrida, se registra y
@@ -561,8 +577,8 @@ Estos adaptadores traducen la sintaxis del runtime al contrato local compartido 
 
 ### Guías de flujo (punto de entrada recomendado)
 
-Antes de los diagramas fuente de abajo, dos documentos narrativos actualizados 2026-07-24 —
-ambos cubren el pipeline local de reportes **y** el despliegue a Databricks:
+Antes de los diagramas fuente de abajo, dos documentos narrativos que cubren el pipeline
+local de reportes **y** el despliegue a Databricks:
 
 - **[`docs/flujo-detallado.md`](docs/flujo-detallado.md)** (o su versión HTML,
   [`docs/flujo-detallado.html`](docs/flujo-detallado.html)) — flujo técnico completo: el modelo MIL,
@@ -590,7 +606,7 @@ flowchart TD
         CSV --> P1
     end
 
-    subgraph LANE2["Modelado ML (histórico: el clasificador M-GCECDL y su artefacto se retiraron el 2026-08-17)"]
+    subgraph LANE2["Modelado ML"]
         VARS[(variables.json /<br/>Variables_seleccion.xlsx)] --> P7[Construcción de grafo experto]
         P7 --> ADJ[(matriz de adyacencia + edges)]
         P1 --> P3["Entrenamiento MIL por bolsas<br/>05_mil_vano_ventana.ipynb"]
@@ -653,9 +669,8 @@ que vive bajo `site/` por historia, no porque el sitio lo produzca.
 Los cuatro comandos que operan sobre el pipeline de reportes — `/report`, `/reporte-lote`,
 `/informe-gerencial` y `/limpiar-corridas` — se reparten el trabajo así:
 `report` es el único orquestador de un circuito; `reporte-lote` e `informe-gerencial` lo invocan
-**por referencia** (nunca copian su lógica) y además llaman directamente al contrato de clustering,
-que tuvo su propio comando `/agrupamiento-circuitos` hasta el 2026-08-17 y sobrevivió a su retiro
-porque estos dos siempre invocaron el módulo, nunca el skill; `limpiar-corridas` es el único que no
+**por referencia** (nunca copian su lógica) y además llaman directamente al contrato de
+clustering; `limpiar-corridas` es el único que no
 invoca ningún agente ni skill — solo hace mantenimiento sobre los artefactos que los otros producen.
 
 | Comando | Tipo | Invoca | Contrato L1 |
@@ -750,7 +765,6 @@ flowchart TB
 - repositorio público: `amalvarezme/chec-local-uiti-vano-interpreter`
 - sitio público: https://amalvarezme.github.io/chec-local-uiti-vano-interpreter/
 - `main` es la única rama del proyecto: rama por defecto, publicada para el sitio y de desarrollo activo
-  (consolidada 2026-07-25; la antigua rama de trabajo `sdd-claude-agents` se fusionó a `main` y se eliminó)
 
 ### Comportamiento de GitHub Pages
 
@@ -768,11 +782,11 @@ Este repositorio tiene **dos** workflows:
 | `.github/workflows/deploy-pages.yml` | publica el sitio, una vez que su contenido está listo |
 | `.github/workflows/windows.yml` | corre en `windows-latest` lo que **solo se rompe en Windows** |
 
-El de Windows existe porque los tres fallos del 2026-08-13 —`signal.SIGKILL`, que allí no
-existe; `SO_REUSEADDR`, que allí significa lo contrario; y los finales de línea de los
-`.bat`— **no se ven leyendo el código en un Mac**. Las pruebas que los fijan vivían en el
-repositorio desde entonces y solo corrían en macOS, donde comprueban el TEXTO de la rama
-que Windows tomaría. Va sin `git lfs pull`: no lee un solo dato.
+El de Windows existe porque hay tres diferencias del sistema que **no se ven leyendo el
+código en un Mac**: `signal.SIGKILL`, que allí no existe; `SO_REUSEADDR`, que allí significa
+lo contrario; y los finales de línea de los `.bat`. En macOS las pruebas que las fijan solo
+pueden comprobar el TEXTO de la rama que Windows tomaría. Va sin `git lfs pull`: no lee un
+solo dato.
 
 Eso implica que:
 
@@ -830,8 +844,7 @@ Las salidas LLM inválidas se guardan por separado con sus errores de validació
 
 ## Notebooks
 
-La carpeta se reorganizó el 2026-08-13: `project_flow/` desapareció y su contenido subió a
-`notebooks/`. Ninguno de los dos grupos es el punto de entrada canónico del flujo de reporte.
+El cuaderno no es el punto de entrada del flujo de reporte: ese es `/report`.
 
 **En `notebooks/`** — lo que se ejecuta como cuaderno:
 
@@ -839,11 +852,9 @@ La carpeta se reorganizó el 2026-08-13: `project_flow/` desapareció y su conte
 |---|---|
 | `05_mil_vano_ventana.ipynb` | Aprendizaje de instancias múltiples sobre bolsas vano × ventana |
 
-**En `src/chec_tableros/`** — los cinco tableros de las aplicaciones de escritorio. Vivían
-dentro de un `.ipynb` que cada aplicación ejecutaba con `exec()`; desde agosto de 2026 son
-módulos que se **importan**. `notebooks/base_apps/` se vació y ya no existe, y con ella el
-ejecutor `aplicaciones/_comun/cuaderno.py`. `notebooks/05_mil_vano_ventana.ipynb` es el
-único cuaderno del proyecto, y se ejecuta **como cuaderno**: entrena el modelo MIL.
+**En `src/chec_tableros/`** — los cinco tableros de las aplicaciones de escritorio, como
+módulos que se **importan**. `notebooks/05_mil_vano_ventana.ipynb` es el único cuaderno del
+proyecto, y se ejecuta **como cuaderno**: entrena el modelo MIL.
 
 | Módulo | Qué hace | Lo consume |
 |---|---|---|
@@ -854,36 +865,20 @@ ejecutor `aplicaciones/_comun/cuaderno.py`. `notebooks/05_mil_vano_ventana.ipynb
 | `chec_tableros.simulador.derivacion` | El arranque caro del simulador: CSV, shapefiles y bolsas → un `Derivado` que se congela | `aplicaciones/06_simulador` |
 | `chec_tableros.simulador.tablero` | El tablero vivo de `ipywidgets` que ese `Derivado` alimenta (requiere kernel) | `aplicaciones/06_simulador` |
 
-La geometría KMeans **dejó de ser una dependencia entre cuadernos** el 2026-08-15. Antes `05` y
-`06` la extraían de la salida guardada de `04`, lo que ataba tres cuadernos entre sí y hacía que
-un checkout limpio no pudiera asignar clases. Ahora vive en `data/geometria_kmeans_014_v1.json`,
-versionada en git y reproducible con `scripts/exportar_geometria.py`, que la reajusta desde el
-CSV. `chec_local_interpreter.ventanas_015.cargar_clases_criticidad` la lee de ahí y verifica su
+**La geometría KMeans es un artefacto versionado, no una dependencia entre cuadernos.** Vive
+en `data/geometria_kmeans_014_v1.json`, se versiona en git y se reproduce con
+`scripts/exportar_geometria.py`, que la reajusta desde el CSV.
+`chec_local_interpreter.ventanas_015.cargar_clases_criticidad` la lee de ahí y verifica su
 sha1, de modo que un cambio de centroides falla ruidosamente en vez de derivar en silencio.
 
-**El pipeline MGCECDL original se borró del árbol el 2026-08-14** (`07_relevancia_lote_por_vano`
-y los ocho `base_apps/0{2,3,4,5,6,7,8,9}_*`). Ninguno se ejecutaba ni se importaba: solo los
-nombraban este README, `docs/`, `site/` y algunos comandos. Su rastro vivo son los artefactos que
-dejaron, no su código: el modelo que `06` y el agente `inference` siguen cargando desde
-`data/models/`.
+**El grafo de restricción física se construye en código**, con
+`construir_aristas_grafo_chec` y `construir_matriz_adyacencia_mgcecdl`, y viaja dentro del
+`.pt`. No hay ningún `.npy` bajo `data/graphs/`: lo único que hay en esa carpeta es
+`mgcecdl_feature_order.json`, el orden congelado de las 70 features. Editar el grafo no cambia
+nada hasta que se reentrena, porque la adyacencia viaja congelada dentro del artefacto.
 
-**El grafo experto no es uno de esos artefactos, aunque este README lo dijera.** No hay ni un
-`.npy` bajo `data/graphs/`: el grafo de restricción física **se construye en código**, con
-`construir_matriz_adyacencia_mgcecdl`, y viaja dentro del `.pt`. Lo único que hay en esa carpeta es
-`mgcecdl_feature_order.json`, el orden congelado de las 70 features.
-
-Eso tiene un precio que conviene decir: **esos artefactos ya no se pueden regenerar desde el
-árbol de trabajo.** El código que los produjo sigue en el historial de git — `git log --diff-filter=D
---follow -- 'notebooks/old_version/*mgcecdl*'` lo encuentra — así que recuperarlo es un `git
-checkout` de ese commit, no un trabajo de arqueología.
-
-Con ellos desapareció también la colisión de numeración: `02`-`06` ya significan una sola cosa,
-el grupo `uiti_vano`.
-
-El enriquecimiento climático que hacía el viejo `01_climate.ipynb` ya no vive en un cuaderno: lo
-hace el comando `/clima`, y quien lo visualiza es el módulo `chec_tableros.clima`. Los cuadernos
-`01_uiti_vano_clima.ipynb` y `02_uiti_vano_kmeans.ipynb` que este README describía celda por celda
-tampoco existen: su contenido es hoy `chec_tableros.clima` y `chec_tableros.agrupamiento`.
+**El enriquecimiento climático no vive en un cuaderno**: lo hace el comando `/clima`, y quien
+lo visualiza es el módulo `chec_tableros.clima`.
 
 ## Pruebas
 

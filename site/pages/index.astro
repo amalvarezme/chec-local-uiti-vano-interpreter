@@ -16,6 +16,24 @@ import variables from "../data/variables.json";
 
 
 
+const comandosPorEditor = [
+  ["/actualizar", "Reconstruye lo afectado cuando cambian los insumos", "commands/actualizar.md", "actualizar.prompt.md", "actualizar.md"],
+  ["/app-local-criticidadCHEC", "Abre el menú CriticidadCHEC y sus cinco tableros", "commands/app-local-criticidadCHEC.md", "app-local-criticidadCHEC.prompt.md", "app-local-criticidadCHEC.md"],
+  ["/clima", "Enriquece los datos con Open-Meteo", "skills/clima/SKILL.md", "clima.prompt.md", "clima.md"],
+  ["/expert-alignment", "Rol de agente: cotejo contra la discusión experta", "skills/expert-alignment/SKILL.md", "expert-alignment.prompt.md", "expert-alignment.md"],
+  ["/historical", "Rol de agente: diagnóstico descriptivo de la serie", "skills/historical/SKILL.md", "historical.prompt.md", "historical.md"],
+  ["/inference", "Rol de agente: lectura del modelo MIL", "skills/inference/SKILL.md", "inference.prompt.md", "inference.md"],
+  ["/informe-gerencial", "Síntesis por banda, con barras y grafo radial", "skills/informe-gerencial/SKILL.md", "informe-gerencial.prompt.md", "informe-gerencial.md"],
+  ["/instalar-local", "Diagnostica la máquina e instala lo que falta", "commands/instalar-local.md", "instalar-local.prompt.md", "instalar-local.md"],
+  ["/limpiar-corridas", "Mantenimiento de artefactos de corrida", "commands/limpiar-corridas.md", "limpiar-corridas.prompt.md", "limpiar-corridas.md"],
+  ["/pdf-discussion-extraction", "Rol de agente: tabla de discusiones desde PDFs", "skills/pdf-discussion-extraction/SKILL.md", "pdf-discussion-extraction.prompt.md", "pdf-discussion-extraction.md"],
+  ["/redaccion-es", "Revisión de tildes y redacción de la prosa generada", "skills/redaccion-es/SKILL.md", "redaccion-es.prompt.md", "redaccion-es.md"],
+  ["/report", "Informe HTML de un circuito", "skills/report/SKILL.md", "report.prompt.md", "report.md"],
+  ["/reporte-lote", "Encadena /report sobre una banda de riesgo", "skills/reporte-lote/SKILL.md", "reporte-lote.prompt.md", "reporte-lote.md"],
+  ["/subir-a-databricks", "Despliegue a Databricks, en tres etapas", "commands/subir-a-databricks.md", "subir-a-databricks.prompt.md", "subir-a-databricks.md"],
+  ["/vault-circuito", "Proyecta el circuito a reports/vault/ y encadena graphify", "skills/vault-circuito/SKILL.md", "vault-circuito.prompt.md", "vault-circuito.md"],
+];
+
 const databricksArtefactos = [
   ["1", "data/", "Archivos en el Volume de Unity Catalog", "~945 MB: el CSV de eventos (566), la caché de bolsas (199), los tres shapefiles con sidecars (180), el modelo MIL, el grafo y los .xlsx"],
   ["2", "Dos aplicaciones", "Databricks Apps, cada una en su recurso de cómputo", "Criticidad CHEC sirve los cuatro tableros en cuatro rutas; el Simulador requiere un intérprete de Python en ejecución"],
@@ -1605,6 +1623,40 @@ const cronograma = [
           </table>
         </div>
 
+        <div class="connection-intro">
+          <h3>Los 15 comandos en los tres editores</h3>
+          <p>
+            Se teclean igual en los tres: <code>/report DON23L14</code> es la misma línea en Claude Code,
+            en VS Code Copilot y en OpenCode. La columna de Claude Code es la fuente del contrato; las
+            otras dos son espejos generados.
+          </p>
+        </div>
+
+        <div class="table-wrap compact-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Comando</th>
+                <th>Función</th>
+                <th>Claude Code (fuente)<br /><span class="celda-menor"><code>.claude/</code></span></th>
+                <th>VS Code Copilot<br /><span class="celda-menor"><code>.github/prompts/</code></span></th>
+                <th>OpenCode<br /><span class="celda-menor"><code>.opencode/command/</code></span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {comandosPorEditor.map(([comando, que, claude, copilot, opencode]) => (
+                <tr>
+                  <td><code>{comando}</code></td>
+                  <td>{que}</td>
+                  <td><code>{claude}</code></td>
+                  <td><code>{copilot}</code></td>
+                  <td><code>{opencode}</code></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
         <div class="process-grid tres">
           <article>
             <strong>Captura de datos de clima</strong>
@@ -1725,7 +1777,7 @@ const cronograma = [
           </p>
 
           <div class="detail-block">
-            <h3>Alcance actualizado</h3>
+            <h3>Alcance de la estimación</h3>
             <p>
               Esta estimación asume <strong>una ejecución completa del flujo ya estabilizado</strong>.
               No incluye iteraciones adicionales para afinar la migración, depurar errores, ajustar rutas,
@@ -1747,7 +1799,7 @@ const cronograma = [
           </div>
 
           <div class="detail-block">
-            <h3>Tiempos actualizados del flujo</h3>
+            <h3>Tiempos del flujo</h3>
             <p>
               Tabla acotada a los 6 cuadernos (notebooks) de la cadena secuencial con GPU:
               <code>01 → 02 → 03</code>, que a su vez alimenta a <code>04</code>, <code>05</code> y
@@ -1775,8 +1827,8 @@ const cronograma = [
               </table>
             </div>
             <p class="note-callout">
-              El cambio fuerte está en <code>06_mgcecdl_document_replication.ipynb</code>, porque agrega
-              <strong>2,5 h de T4</strong> al flujo completo.
+              El componente de mayor peso es <code>06_mgcecdl_document_replication.ipynb</code>, que
+              aporta <strong>2,5 h de T4</strong> al flujo completo.
             </p>
             <div class="process-grid">
               <article>
@@ -1890,7 +1942,7 @@ const cronograma = [
                 </tbody>
               </table>
             </div>
-            <p>Este cuaderno pasa a ser, junto con Optuna, uno de los principales componentes de costo.</p>
+            <p>Este cuaderno es, junto con Optuna, uno de los principales componentes de costo.</p>
           </details>
 
           <details class="detail-block">
@@ -2058,11 +2110,10 @@ const cronograma = [
           </details>
 
           <details class="detail-block">
-            <summary><h3>4. Escenario productivo actualizado: Jobs Compute</h3></summary>
+            <summary><h3>4. Escenario productivo: Jobs Compute</h3></summary>
             <p>
-              Tras la fase interactiva, se recomienda ejecutar el flujo mediante Jobs Compute. Con los
-              tiempos actualizados no es posible mantener la estimación anterior de USD 2–4 si se incluye
-              <code>06</code> completo, por lo que el costo productivo se incrementa.
+              Tras la fase interactiva, se recomienda ejecutar el flujo mediante Jobs Compute. El costo
+              productivo incluye <code>06</code> completo, que es el componente de mayor peso del flujo.
             </p>
 
             <h4>Arquitectura recomendada</h4>
@@ -2093,7 +2144,7 @@ const cronograma = [
               </table>
             </div>
 
-            <h4>Costo productivo actualizado</h4>
+            <h4>Costo productivo</h4>
             <div class="table-wrap compact-table">
               <table>
                 <thead><tr><th>Parte</th><th>Tiempo</th><th>Recurso</th><th>Costo aprox.</th></tr></thead>
@@ -2117,7 +2168,7 @@ const cronograma = [
                 </tbody>
               </table>
             </div>
-            <blockquote><strong>Jobs Compute para flujo completo actualizado: USD 4–6 por ejecución completa.</strong></blockquote>
+            <blockquote><strong>Jobs Compute para el flujo completo: USD 4–6 por ejecución completa.</strong></blockquote>
           </details>
 
           <details class="detail-block">
@@ -2191,7 +2242,7 @@ const cronograma = [
           </details>
 
           <div class="detail-block">
-            <h3>6. Comparación resumida actualizada</h3>
+            <h3>6. Comparación resumida</h3>
             <p>
               Estos valores asumen <strong>una ejecución completa del flujo una sola vez</strong>, con
               <code>05</code> y <code>06</code> incluidos. No incluyen iteraciones necesarias para afinar,
@@ -2220,8 +2271,8 @@ const cronograma = [
 
             <h4>Síntesis final</h4>
             <p>
-              Con los nuevos tiempos, la ejecución completa del flujo en Azure Databricks sube porque
-              <code>06_mgcecdl_document_replication.ipynb</code> agrega 2,5 horas de T4. Para ajuste inicial,
+              En la ejecución completa del flujo en Azure Databricks,
+              <code>06_mgcecdl_document_replication.ipynb</code> aporta 2,5 horas de T4. Para ajuste inicial,
               el escenario All-Purpose T4 para todo queda alrededor de <strong>USD 5–8 por ejecución completa</strong>,
               o <strong>USD 6–9</strong> si hay tiempo de inactividad moderado. Para producción, separando CPU y GPU mediante
               Jobs Compute, el flujo completo queda alrededor de <strong>USD 4–6 por ejecución</strong>.
