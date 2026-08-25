@@ -42,6 +42,41 @@ const databricksArtefactos = [
 
 
 
+// Los seis pasos de la puesta en marcha, en el orden en que se ejecutan. Viajan como
+// HTML ya escrito y se pintan con `set:html`, no con `codigoEnLinea`: ese helper escapa
+// `<` fuera de las comillas invertidas, asi que un `<strong>` saldria como texto. Todo
+// `<` que sea literal -- los marcadores de posicion tipo `<URL>` -- va como `&lt;`.
+// Los seis pasos de la puesta en marcha, en el orden en que se ejecutan. Viajan como
+// HTML ya escrito y se pintan con `set:html`, no con `codigoEnLinea`: ese helper escapa
+// `<` fuera de las comillas invertidas, asi que un `<strong>` saldria como texto. Todo
+// `<` que sea literal -- los marcadores de posicion tipo `<URL>` -- va como `&lt;`.
+const puestaEnMarchaPasos = [
+  [
+    "Clonar el repositorio",
+    "Con <code>git lfs</code> instalado <strong>antes</strong> de clonar: <code>git lfs install</code>, luego <code>git clone</code> del repositorio y, dentro de la carpeta, <code>git lfs pull</code>. Este último paso no es opcional: sin él, la base de eventos de 566 MB y la caché de bolsas de 199 MB se descargan como punteros de 134 bytes que existen en el sistema de archivos y no contienen datos, de modo que el fallo se manifiesta mucho después y sin referencia a esta causa. En Windows, la ruta del clon debe caber en 61 caracteres; <code>mover-a-ruta-corta.bat</code> lo resuelve sin requerir permisos administrativos."
+  ],
+  [
+    "Abrir el agente de código",
+    "Todo lo que sigue se ejecuta desde un agente. El repositorio publica sus quince comandos para los tres entornos &mdash; <strong>Claude Code</strong> (<code>.claude/</code>, la fuente del contrato), <strong>OpenCode</strong> (<code>.opencode/command/</code>) y <strong>VS Code Copilot</strong> (<code>.github/prompts/</code>) &mdash; y la invocación es idéntica en los tres. Se abre el agente de preferencia en la carpeta del clon."
+  ],
+  [
+    "Instalar dependencias con <code>/instalar-local</code>",
+    "El comando ejecuta primero un diagnóstico con el intérprete de Python del sistema y solo la biblioteca estándar, dado que debe funcionar en un clon donde aún no existe ningún entorno: devuelve dieciséis comprobaciones con el comando de corrección correspondiente al sistema operativo detectado. A continuación solicita <strong>un único dato</strong> &mdash; cuál de los tres destinos debe quedar operativo: el cuaderno <code>mil_vano</code>, las aplicaciones locales o el despliegue en Databricks &mdash; y solo entonces instala, en el orden de dependencia: los datos de LFS, el entorno raíz, los seis entornos de <code>aplicaciones/</code> y la CLI de Databricks. <strong>Los componentes ya presentes no se modifican.</strong>"
+  ],
+  [
+    "Verificar que los tableros y el simulador operan",
+    "Un diagnóstico satisfactorio no equivale a haber iniciado un tablero. La comprobación se realiza con <code>/app-local-criticidadCHEC</code> &mdash; o doble clic en <code>aplicaciones/00_criticidad_chec/</code> &mdash;: el menú abre en el puerto 8800 y desde él se inician los cuatro tableros estáticos (8801 a 8804) y el simulador (8866). <strong>El simulador constituye la verificación determinante</strong>, por ser el único componente que requiere un intérprete de Python en ejecución: marcar un vano y pulsar <em>Simular</em> confirma simultáneamente que el entorno está completo, que el modelo carga y que el navegador mantiene la comunicación con el kernel."
+  ],
+  [
+    "Instalar la CLI de Databricks, solo para el despliegue",
+    "Al seleccionar el destino de Databricks, <code>/instalar-local</code> instala la CLI y verifica su compatibilidad: no se limita a comprobar su presencia, sino que valida que <code>databricks apps create --help</code> acepte <code>--compute-size</code>, dado que una versión antigua completa las etapas iniciales y falla durante el despliegue de aplicaciones. La sesión la abre el usuario con <code>databricks auth login --host &lt;URL del workspace&gt;</code>, por requerir el navegador. <code>/instalar-local</code> <strong>no establece comunicación con Databricks</strong>: deja la CLI instalada y la sesión activa."
+  ],
+  [
+    "Desplegar con <code>/subir-a-databricks</code>",
+    "Es el único comando que se comunica con el workspace. Solicita <strong>un solo dato: la URL del workspace de destino</strong> &mdash; del tipo <code>https://adb-xxxxxxxxxxxx.0.azuredatabricks.net</code> &mdash;, y la solicita <strong>en cada ejecución</strong>: no se toma del perfil que tenga sesión activa ni de la bitácora de la ejecución anterior, dado que un destino incorrecto no produce ningún error observable. De esa URL deriva el perfil de la CLI y confirma la identidad con una llamada real antes de transferir datos. Si el token está vencido, la ejecución se detiene y solicita <code>databricks auth login --profile &lt;perfil&gt;</code>. No solicita ningún otro dato: los nombres de aplicación, el tamaño de cómputo y la creación de los recursos faltantes son responsabilidad del propio comando. Las ocho etapas que recorre después se detallan en la sección de migración a Databricks."
+  ]
+];
+
 const databricksMigrationSteps = [
   ["Solicitud de la URL del workspace", "Es el único dato que se solicita, y se solicita en cada ejecución: nunca se deduce de un perfil que tenga sesión abierta."],
   ["Resolución del perfil de CLI y de la identidad", "Se derivan de esa URL, una sola vez."],
@@ -1498,11 +1533,24 @@ const cronograma = [
           <p class="eyebrow">Puesta en marcha</p>
           <h2>Instalación</h2>
           <p>
-            Requisitos de instalación según el componente requerido. Las versiones y dependencias
-            indicadas se derivan de los archivos de dependencias del repositorio y de
+            La puesta en marcha se compone de seis pasos, de los cuales los dos últimos aplican
+            únicamente si el proyecto se despliega en Databricks. A continuación se detallan las
+            dependencias por componente, derivadas de los archivos de dependencias del repositorio y de
             <code>docs/REQUISITOS-MINIMOS.md</code>, donde se documentan los requisitos verificados.
           </p>
         </div>
+
+        <ol class="migration-steps">
+          {puestaEnMarchaPasos.map(([titulo, detalle], indice) => (
+            <li>
+              <span class="step-num">{indice + 1}</span>
+              <div>
+                <strong set:html={titulo} />
+                <p set:html={detalle} />
+              </div>
+            </li>
+          ))}
+        </ol>
 
         <div class="connection-intro">
           <h3>Las cuatro listas de dependencias</h3>
@@ -1685,9 +1733,10 @@ const cronograma = [
         <div class="connection-intro">
           <h3>Comandos de instalación y mantenimiento</h3>
           <p>
-            No es necesario instalar manualmente cada dependencia indicada en las tablas anteriores. Tres
-            comandos cubren el ciclo principal y ejecutan un diagnóstico previo antes de realizar cambios
-            en el entorno.
+            No es necesario instalar manualmente cada dependencia indicada en las tablas anteriores. Los
+            tres comandos siguientes cubren el ciclo completo del entorno y ejecutan un diagnóstico previo
+            antes de realizar cambios. Los dos primeros corresponden a los pasos 3 y 4 anteriores; el
+            tercero mantiene el entorno cuando cambian los insumos.
           </p>
         </div>
 
@@ -1723,19 +1772,15 @@ const cronograma = [
         </div>
 
         <div class="note-callout">
-          <strong>Para <code>/subir-a-databricks</code> se requiere una instalación adicional: la CLI de
-          Databricks.</strong> La CLI constituye el mecanismo de comunicación utilizado por el proceso de
-          migración; sin ella, el comando no puede interactuar con el workspace de Databricks. Se instala
-          una sola vez:
+          <strong>La CLI de Databricks del paso 5, si se instala por fuera del comando</strong>, se
+          instala una sola vez:
           <br /><br />
           <code>brew tap databricks/tap &amp;&amp; brew install databricks</code> en macOS ·
           <code>winget install Databricks.DatabricksCLI</code> en Windows.
           <br /><br />
-          Se requiere una <strong>versión actualizada</strong> de la CLI. Las versiones antiguas pueden
-          completar las etapas iniciales y fallar durante el despliegue, cuando
-          <code>databricks apps create</code> no reconoce las opciones requeridas.
-          <code>/instalar-local</code> verifica la presencia y compatibilidad de la CLI y mantiene
-          autenticada la sesión necesaria para las operaciones posteriores.
+          En Windows, <code>winget</code> la registra en el <code>PATH</code> de <strong>usuario</strong>
+          y la consola en ejecución no lo relee: hasta abrir una consola nueva, el diagnóstico reporta
+          como ausente un componente recién instalado.
         </div>      </section>
 
       <section id="costos-databricks" class="detail-panel" aria-labelledby="costos-title">

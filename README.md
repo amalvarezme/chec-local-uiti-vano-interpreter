@@ -8,11 +8,18 @@ Este proyecto carga un dataset estructurado ancho, filtra por circuitos y fechas
 
 ## Ruta rápida
 
-1. Crear el entorno.
-2. Colocar el dataset en `data/` o configurar `DATA_PATH`.
-3. Ejecutar el comando nativo del runtime que estés usando.
-4. Revisar el HTML local generado en `reports/reportescircuitos/html/`.
-5. Publicar por separado solo si querés llevar el resultado a GitHub Pages.
+1. `git lfs install` y clonar el repositorio; después, `git lfs pull`.
+2. Abrir el agente de código de tu preferencia —Claude Code, OpenCode o VS Code
+   Copilot— en la carpeta del clon.
+3. `/instalar-local`: diagnostica la máquina e instala sólo lo que falte.
+4. Comprobar que abre de verdad: `/app-local-criticidadCHEC`, y en el simulador
+   marcar un vano y pulsar *Simular*.
+5. `/report <CIRCUITO>` para un informe; el HTML queda en
+   `reports/reportescircuitos/html/`.
+6. `/subir-a-databricks` si hay que llevarlo al workspace. Pregunta una sola cosa: la
+   URL del workspace destino.
+
+El detalle de cada paso está en [Instalación](#instalación).
 
 ## Qué hace este proyecto
 
@@ -183,18 +190,164 @@ calcule una huella de sus insumos y se reconstruya sola cuando alguno cambia.
 
 ## Instalación
 
-**Empezá por el diagnóstico.** Corre con el Python del sistema, antes de que exista
-ningún entorno, y dice qué le falta a *esta* máquina para cada una de las tres cosas que
-el proyecto hace en local —el cuaderno `mil_vano`, las aplicaciones y la subida a
-Databricks— con el comando exacto para arreglarlo en el sistema en el que estés:
+### 1. Clonar el repositorio
+
+Con **`git lfs` instalado antes de clonar**: la base de eventos son 566 MB y la caché de
+bolsas 199 MB, y las dos viajan por Git LFS.
+
+```bash
+git lfs install
+git clone https://github.com/amalvarezme/chec-local-uiti-vano-interpreter.git
+cd chec-local-uiti-vano-interpreter
+git lfs pull
+```
+
+`git lfs pull` no es opcional ni se puede posponer. Sin él esos dos archivos llegan como
+**punteros de 134 bytes** que *existen* —así que un `ls` los da por buenos— y revientan
+mucho más abajo, con un error de parseo que no apunta hasta aquí. El diagnóstico del paso
+3 los comprueba por contenido, no por presencia.
+
+En Windows, además, **el clon tiene que caber en 61 caracteres de ruta**. Lo que desborda
+`MAX_PATH` es `len(raíz) + 187`, y esos 187 no se pueden tocar; si ya clonaste en una ruta
+larga, `mover-a-ruta-corta.bat` en la raíz lo resuelve con doble clic y sin pedirle
+permisos a nadie.
+
+### 2. Abrir el agente de código
+
+Todo lo que sigue se hace desde un agente. El proyecto trae sus **15 comandos publicados
+para los tres**, y se teclean igual en cualquiera de ellos:
+
+| Agente | Dónde lee los comandos |
+|---|---|
+| **Claude Code** | `.claude/commands/` y `.claude/skills/` — la **fuente del contrato** |
+| **OpenCode** | `.opencode/command/` |
+| **VS Code Copilot** | `.github/prompts/` |
+
+Abre el de tu preferencia **en la carpeta del clon**. Los dos últimos son espejos
+generados desde el primero por `scripts/portabilidad_agentes.py`, así que ninguno se
+queda atrás: `/instalar-local` es la misma línea en los tres.
+
+### 3. `/instalar-local` — deja la máquina lista
+
+```
+/instalar-local
+```
+
+Empieza **diagnosticando**, antes de tocar nada: corre con el Python del sistema y sólo
+la biblioteca estándar —tiene que funcionar en un clon recién hecho, donde todavía no
+existe ningún entorno— y devuelve dieciséis comprobaciones con el comando exacto para
+arreglar cada una **en el sistema en el que estés**.
+
+Después pregunta **una sola cosa, y espera**: para cuál de los tres destinos hay que
+dejar la máquina lista —el cuaderno `mil_vano`, las aplicaciones locales, o subir a
+Databricks—. Por defecto, los tres. Y sólo entonces instala, en el orden en que las cosas
+dependen unas de otras: los datos de LFS, el entorno de la raíz, los seis entornos de las
+aplicaciones y la CLI de Databricks. **Lo que ya está no se toca.**
+
+Los seis entornos de `aplicaciones/` son deliberadamente independientes: el menú
+CriticidadCHEC se mantiene en ~15 MB porque no carga las dependencias de sus cinco
+tableros. Sin esa separación haría falta `torch` sólo para abrir un menú.
+
+Hay cinco cosas que el agente **no puede** instalar por ti, y las pide con el prefijo `!`
+para que corran en tu sesión: Python por debajo del piso, `databricks auth login` —abre el
+navegador—, un puerto reservado por el sistema, y en Windows el runtime de Visual C++ y
+`LongPathsEnabled`, que piden elevación. El comando te dice cuál depende de ti y cuál de
+quien administre la máquina.
+
+**Sin agente**, el mismo diagnóstico se corre a mano y no instala nada:
 
 ```bash
 python3 scripts/diagnostico_local.py     # macOS
 py -3 scripts/diagnostico_local.py       # Windows
 ```
 
-Desde un agente, `/instalar-local` lo corre e instala lo que falte, en orden y
-preguntando una sola vez.
+Requiere **Python 3.11 o superior**, y es un piso real: `pandas>=3.0`, `numpy>=2.4` y
+`scikit-learn>=1.9` no publican rueda por debajo.
+
+### 4. Comprobar que los tableros y el simulador abren de verdad
+
+Que el diagnóstico salga en verde **no es lo mismo que haber abierto un tablero**, y la
+comprobación cuesta segundos. Doble clic en `aplicaciones/00_criticidad_chec/` —
+`Iniciar.app` en macOS, `iniciar.bat` en Windows —, o desde el agente:
+
+```
+/app-local-criticidadCHEC
+```
+
+El menú abre en `http://127.0.0.1:8800/` y desde su página se lanzan los cinco tableros,
+cada uno en su puerto:
+
+| Tablero | Puerto | Qué comprobar |
+|---|---|---|
+| `01_clima` | 8801 | el mapa dibuja y la nube por vano responde |
+| `02_agrupamiento_vanos` | 8802 | los grupos se pintan |
+| `03_trayectorias_circuitos` | 8803 | la trayectoria del circuito se ve |
+| `04_trayectorias_vanos` | 8804 | la evolución por vano se ve |
+| `06_simulador` | 8866 | **marcar un vano y pulsar *Simular*** |
+
+El simulador es la prueba que de verdad importa, porque es el único que necesita un
+**kernel de Python vivo**: los otros cuatro son HTML estático. Que *Simular* conteste en
+unos segundos y llene el mapa de la derecha prueba, de una vez, que el entorno está
+completo, que el modelo carga y que el navegador habla con el kernel. La primera apertura
+construye el paquete y tarda; las siguientes son inmediatas.
+
+### 5. Si además vas a subir a Databricks
+
+`/instalar-local` ya deja puesto lo que hace falta cuando eliges ese destino: la **CLI de
+Databricks** y una **sesión abierta**. No se conforma con que la CLI exista —comprueba que
+`databricks apps create --help` acepte `--compute-size`, porque una CLI vieja llega hasta
+la etapa 4 del despliegue y muere ahí con un error de argumentos—.
+
+La sesión la abres tú, con el prefijo `!`, porque abre el navegador:
+
+```
+databricks auth login --host <URL de tu workspace>
+```
+
+> En Windows, `winget` deja la CLI en el PATH de **usuario** y la consola actual no lo
+> relee: hay que abrir una consola nueva o el diagnóstico reporta como ausente lo que
+> acabas de instalar.
+
+`/instalar-local` **no habla con Databricks**. Deja la CLI y la sesión; subir es otro
+comando.
+
+### 6. `/subir-a-databricks` — el único que habla con el workspace
+
+```
+/subir-a-databricks
+```
+
+**Te pregunta una sola cosa: la URL del workspace destino**, del estilo
+`https://adb-xxxxxxxxxxxx.0.azuredatabricks.net`. La pregunta **en cada corrida**, y eso
+es a propósito: no la toma del perfil que tenga sesión viva ni de la bitácora de la
+corrida anterior, porque eso es evidencia de a dónde fue antes y no un valor por defecto
+de a dónde va ahora. Equivocarse de workspace es invisible hasta que alguien abre el que
+no era.
+
+De esa URL **deriva el perfil solo**, y confirma la identidad con una llamada real antes
+de mover un byte. Si el token está vencido, para y te pide que corras
+`databricks auth login --profile <perfil>` con el prefijo `!` — es una de las tres únicas
+cosas que detienen la corrida.
+
+No te pregunta nada más: ni nombres de app, ni tamaño de compute, ni si crear lo que
+falta. Crear lo que falta **es su trabajo**.
+
+Después recorre tres etapas, y cada una **verifica antes de subir** —lo que ya está no se
+vuelve a subir—:
+
+1. **Los datos en el Volume** de Unity Catalog. Compara el *sello* de procedencia, no
+   sólo los nombres: un modelo reentrenado se llama igual y pesa casi lo mismo.
+2. **Las dos aplicaciones** en compute — el visor de tableros y el simulador con Voila.
+3. **El cuaderno `mil_vano`** en el Workspace.
+
+Y **sigue hasta el final aunque tope con un muro**: si le falta un permiso, lo anota y
+continúa, de modo que el informe acaba listando todas las paredes y no sólo la primera.
+Deja una **bitácora en Markdown** con lo que logró cada etapa, los permisos que le
+faltaron y los errores exactos.
+
+Al terminar te da las URLs de las dos aplicaciones y te pide que las abras: hay cosas que
+sólo se comprueban con la pantalla delante —que el panel dibuje, que hacer clic en un vano
+del mapa marque su casilla, y que *Simular* y *Guardar* respondan—.
 
 ### Cuando cambian los datos base
 
@@ -215,8 +368,10 @@ sólo cambia qué ofrece el panel del simulador —y eso se revisa con
 mientras que editar el grafo experto no cambia **nada** hasta que se reentrena, porque
 la adyacencia viaja congelada dentro del `.pt`.
 
-A mano, el entorno de la raíz —el que corre el cuaderno 05 y el que construye los
-paneles que suben a Databricks— es:
+### Instalar a mano, sin agente
+
+El entorno de la raíz —el que corre el cuaderno 05 y el que construye los paneles que
+suben a Databricks— es:
 
 ```bash
 # macOS
@@ -227,19 +382,11 @@ py -3 -m venv .venv && .venv\Scripts\pip install -r requirements.txt
 ```
 
 Los seis entornos de `aplicaciones/` son aparte y se instalan con el lanzador de cada
-una (`instalar-en-terminal.command` en macOS, `instalar.bat` en Windows): cada
-aplicación instala **sólo** sus dependencias, porque el visor de tableros no necesita
-`torch` y el simulador no necesita `scikit-learn` en tiempo de ejecución.
+una (`instalar-en-terminal.command` en macOS, `instalar.bat` en Windows).
 
-Requiere **Python 3.11 o superior**, y es un piso real: `pandas>=3.0`, `numpy>=2.4` y
-`scikit-learn>=1.9` no publican rueda por debajo. Qué máquina hace falta —RAM, CPU,
-disco y las diferencias entre macOS y Windows, desglosado por aplicaciones,
-reentrenamiento del cuaderno `mil_vano` y generación de informes— está medido en
-[`docs/REQUISITOS-MINIMOS.md`](docs/REQUISITOS-MINIMOS.md).
-
-Y antes de nada, `git lfs pull`: sin él, el CSV de 566 MB y las bolsas de 199 MB llegan
-como punteros de 134 bytes que **existen** y no sirven. El diagnóstico lo comprueba por
-contenido, no por presencia.
+Qué máquina hace falta —RAM, CPU, disco y las diferencias entre macOS y Windows,
+desglosado por aplicaciones, reentrenamiento del cuaderno `mil_vano` y generación de
+informes— está medido en [`docs/REQUISITOS-MINIMOS.md`](docs/REQUISITOS-MINIMOS.md).
 
 ### Librerías requeridas
 
