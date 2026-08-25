@@ -30,6 +30,25 @@ El repositorio cubre el flujo completo de interpretabilidad local para el análi
 - render del reporte HTML local completo;
 - exportación manual opcional al sitio estático.
 
+### El modelo: M-GCECDL
+
+**M-GCECDL** —*Multimodal-Graph Connectivity Enhanced and Conditioned Deep Learning*— es
+el modelo de inteligencia artificial predictiva para la estimación de criticidad,
+regularizado por restricciones físicas y por un autoencoder del vector de características,
+construido desde el análisis temporal de eventos sobre vanos mediante una representación
+por bolsas y múltiples instancias.
+
+Es el nombre del **módulo** en el acta de trabajo (*«Ajustes módulo M-GCECDL y agentes»*).
+Su implementación vigente es el MIL por bolsas vano × ventana del cuaderno
+`05_mil_vano_ventana.ipynb`, cuyo artefacto entrenado es
+`data/models/mil_vano_ventana_v1.pt`.
+
+> **No confundir con el clasificador `MGCECDLClassifier`.** Ese era un artefacto de código
+> concreto —una implementación anterior del mismo módulo— y se retiró del árbol junto con
+> su pipeline en agosto de 2026. Las menciones a ese retiro que aparecen más abajo, en el
+> diagrama del workflow y en la sección de cuadernos, hablan del artefacto retirado, no del
+> módulo, que sigue vigente.
+
 ## Alcance y no objetivos
 
 ### En alcance
@@ -597,8 +616,6 @@ flowchart TD
             A2 --> G1
             G1 -- "no, reintentos agotados" --> STOP1([Detener la ejecución de este circuito])
             G1 -- sí --> JOIN{{join}}
-            G3 -- sí --> JOIN
-            SKIP3 --> JOIN
             JOIN --> RP1["prepare_expert_alignment()"]
             XLSX --> RP1
             RP1 --> A3[Agente: expert-alignment]
