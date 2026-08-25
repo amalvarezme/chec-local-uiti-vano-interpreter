@@ -901,3 +901,96 @@ def test_la_etapa_de_apps_avisa_que_los_dos_sellos_usan_algoritmos_distintos():
     assert re.search(r"sha1.*sha256|sha256.*sha1", etapa, re.DOTALL), (
         "la etapa 4 no avisa que el sello es sha256 y el manifiesto del paquete sha1; "
         "cruzarlos produce un falso 'difieren' para cualquier modelo")
+
+
+# ------------------- el inventario de donde quedo cada cosa en el workspace
+
+
+def _orquestador() -> str:
+    return ORQUESTADOR.read_text(encoding="utf-8")
+
+
+def test_cada_etapa_registra_donde_quedo_lo_que_subio():
+    """Las rutas del workspace NO son adivinables: el catalogo y el esquema se
+    resuelven en cada corrida (contrato C), asi que quien lea la bitacora un mes
+    despues no puede reconstruirlas. Sin el inventario hay que leer los comandos del
+    detalle por paso y rearmar las rutas a mano.
+
+    Se exige una `ubicacion` por cada pieza que el despliegue deja en el workspace, y
+    no una sola llamada suelta: dejar fuera la del cuaderno o la del paquete produce
+    un inventario que parece completo y no lo esta.
+    """
+    texto = _orquestador()
+    faltan = [clave for clave in ("datos", "paquete", "simulaciones",
+                                  "app-tableros", "app-simulador", "cuaderno")
+              if f"--clave {clave} " not in texto]
+    assert not faltan, (
+        f"el comando no registra la ubicacion de {faltan}: esas piezas quedan en el "
+        "workspace sin que la bitacora diga donde")
+
+
+def test_las_apps_publican_su_url_ademas_de_su_ruta_del_workspace():
+    """Son DOS direcciones y no son intercambiables: la URL por la que entra quien la
+    usa, y la carpeta desde la que se desplego, que es donde se mira cuando no
+    arranca. Un inventario con una sola sirve para una sola de las dos preguntas."""
+    texto = _orquestador()
+    for clave in ("app-tableros", "app-simulador"):
+        bloque = texto[texto.index(f"--clave {clave} "):][:600]
+        assert "--url" in bloque, f"la ubicacion de {clave} no publica su URL"
+        assert "--ruta" in bloque, f"la ubicacion de {clave} no publica su ruta"
+
+
+def test_la_url_de_una_app_se_toma_literal_del_cli():
+    """Componerla a mano a partir del nombre de la app produce una URL con la forma
+    correcta que no resuelve, y eso es peor que no darla: se reporta como exito."""
+    texto = _orquestador()
+    bloque = texto[texto.index("--clave app-tableros "):][:600]
+    assert "literal" in bloque.lower()
+
+
+def test_lo_que_no_se_logro_subir_sigue_en_el_inventario():
+    """Es la fila mas util de todas. Borrarla deja al lector creyendo que esa pieza no
+    formaba parte del despliegue, en vez de que falto."""
+    # Sin los asteriscos del Markdown: la frase lleva un `**no**` en negrita, y un
+    # patron que los exigiera medirìa el formato en vez de la afirmacion -- se pondria
+    # roja el dia que alguien quite la negrita sin cambiar lo que dice.
+    texto = re.sub(r"[*_`]", "", _orquestador())
+    assert re.search(r"no se logr[oó].{0,200}inventario", texto, re.S | re.I), (
+        "el comando no dice que una pieza que fallo se registra igual")
+
+
+def test_cada_paso_que_no_salio_bien_declara_su_causa():
+    """La causa va en la MISMA fila que el paso. Vivia en otra seccion, a varias
+    pantallas, asi que saber por que no esta lo que no esta obligaba a cruzar dos
+    tablas a mano."""
+    texto = _orquestador()
+    pasos = re.findall(r"bitacora_despliegue\.py paso .*?```", texto, re.S)
+    assert len(pasos) >= 3, "faltan registros de paso en el comando"
+    # Solo los que PUEDEN no salir bien, o sea los que dejan el estado como hueco a
+    # rellenar. El paso 2 escribe `--estado ok` literal -- su unico desenlace posible
+    # en ese punto del comando es haber resuelto el destino -- y exigirle una causa
+    # seria pedir el motivo de un fallo que no puede ocurrir.
+    pueden_fallar = [p for p in pasos if "--estado <" in p]
+    assert len(pueden_fallar) >= 3, (
+        "las tres etapas tienen que poder registrar un estado distinto de `ok`")
+    sin_causa = [p for p in pueden_fallar if "--causa" not in p]
+    assert not sin_causa, (
+        f"{len(sin_causa)} registros de paso no ofrecen `--causa`: sus filas dicen "
+        "que algo fallo sin decir por que")
+
+
+def test_el_reporte_final_lleva_la_tabla_de_ubicaciones():
+    """La bitacora es un archivo; el reporte es lo que el usuario lee en pantalla al
+    terminar. Un inventario que solo viva en el archivo obliga a abrirlo para saber
+    donde quedo lo que se acaba de subir."""
+    reporte = _orquestador()
+    reporte = reporte[reporte.index("## 7. Report back"):]
+    assert "Ruta en Databricks" in reporte
+    assert "Como se llega" in reporte
+
+
+def test_la_columna_de_causa_esta_en_la_tabla_del_reporte_final():
+    reporte = _orquestador()
+    reporte = reporte[reporte.index("## 7. Report back"):]
+    assert "| Causa |" in reporte
+    assert "sin causa registrada" in reporte

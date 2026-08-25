@@ -353,12 +353,29 @@ databricks fs cp site/data/variables.json dbfs:/Volumes/.../data/variables.json 
 This is a plain data-file upload, not a `site/` mirror. Nothing else under `site/` is ever
 touched, and nothing is ever written into the Volume under a `site`-named path.
 
-Record the outcome, whichever it was:
+Record the outcome, whichever it was. `--causa` solo cuando el estado **no** sea `ok`:
+va en la misma fila de la tabla de pasos, que es donde se lee, y sin ella esa fila dice
+que algo falló sin decir por qué.
 ```
 python3 scripts/bitacora_despliegue.py paso --archivo "$RUTA_BITACORA" \
   --id 3 --titulo "Datos en el Volume" --estado <ok|degradado|restriccion|fallo|omitido> \
-  --detalle "<que estaba ya, que se subio, que falto>"
+  --detalle "<que estaba ya, que se subio, que falto>" \
+  --causa "<por que no salio bien; omitir si salio ok>"
 ```
+
+**Y registra dónde quedaron**, que es la pregunta que ninguna otra sección contesta —
+las rutas no son adivinables, porque el catálogo y el esquema se resuelven en cada
+corrida (contrato C):
+```
+python3 scripts/bitacora_despliegue.py ubicacion --archivo "$RUTA_BITACORA" \
+  --clave datos --titulo "Datos del proyecto" \
+  --ruta "/Volumes/<catalogo>/<esquema>/chec-simulador/data" \
+  --como "Catalog > Volumes > chec-simulador > data" \
+  --estado <ok|degradado|fallo> --detalle "<tamaños o lo que faltó>"
+```
+Una pieza que **no** se logró subir se registra igual, con su estado: borrarla del
+inventario deja al lector creyendo que no formaba parte del despliegue, en vez de que
+faltó.
 
 If the upload is refused on privileges, record it `bloqueante` with
 `bitacora_despliegue.py restriccion --quien-desbloquea "<dueño del catalogo>"` and
@@ -841,7 +858,38 @@ Anota el resultado de la etapa completa:
 ```
 python3 scripts/bitacora_despliegue.py paso --archivo "$RUTA_BITACORA" \
   --id 4 --titulo "Aplicaciones en compute" --estado <ok|degradado|restriccion|fallo|omitido> \
-  --detalle "<una linea por app: nombre, URL, estado, y si se desplegó o ya estaba>"
+  --detalle "<una linea por app: nombre, URL, estado, y si se desplegó o ya estaba>" \
+  --causa "<por que no salio bien; omitir si salio ok>"
+```
+
+Y **una ubicación por app**, más la del paquete y la carpeta de simulaciones. Una app
+tiene **dos direcciones y no son intercambiables**: la URL por la que entra quien la usa,
+y la carpeta del Workspace desde la que se desplegó, que es donde se mira cuando no
+arranca. Las dos, o el inventario sirve para una sola de las dos preguntas.
+```
+python3 scripts/bitacora_despliegue.py ubicacion --archivo "$RUTA_BITACORA" \
+  --clave app-tableros --titulo "App: tableros de criticidad" \
+  --ruta "<base del Workspace desde la que se desplegó>" \
+  --url "<la URL literal que devolvió el CLI, nunca inventada>" \
+  --como "Compute > Apps > criticidad-chec" --estado <ok|degradado|fallo>
+
+python3 scripts/bitacora_despliegue.py ubicacion --archivo "$RUTA_BITACORA" \
+  --clave app-simulador --titulo "App: simulador de vano" \
+  --ruta "<base del Workspace>" --url "<URL literal del CLI>" \
+  --como "Compute > Apps > simulador-vano" --estado <ok|degradado|fallo> \
+  --detalle "<tamaño de compute; y si le faltó WRITE VOLUME, dilo aquí>"
+
+python3 scripts/bitacora_despliegue.py ubicacion --archivo "$RUTA_BITACORA" \
+  --clave paquete --titulo "Paquete del simulador" \
+  --ruta "/Volumes/<catalogo>/<esquema>/chec-simulador/paquete_06" \
+  --como "Catalog > Volumes > chec-simulador > paquete_06" --estado <ok|fallo>
+
+python3 scripts/bitacora_despliegue.py ubicacion --archivo "$RUTA_BITACORA" \
+  --clave simulaciones --titulo "Simulaciones guardadas desde el tablero" \
+  --ruta "/Volumes/<catalogo>/<esquema>/chec-simulador/simulaciones" \
+  --como "Catalog > Volumes > chec-simulador > simulaciones" \
+  --estado <ok|degradado|fallo> \
+  --detalle "aquí caen el informe .html y su registro .simchec.json.gz de cada corrida"
 ```
 
 ## 5. Is the notebook in the Workspace? Import only if not
@@ -960,7 +1008,14 @@ abrirse. Que aterrice no es que corra, y son dos afirmaciones distintas.
 ```
 python3 scripts/bitacora_despliegue.py paso --archivo "$RUTA_BITACORA" \
   --id 5 --titulo "Cuaderno mil_vano en el Workspace" --estado <ok|degradado|restriccion|fallo|omitido> \
-  --detalle "<ruta en el Workspace, si ya estaba o se importo, y si src/ y CHEC_DATA_DIR quedaron puestos>"
+  --detalle "<ruta en el Workspace, si ya estaba o se importo, y si src/ y CHEC_DATA_DIR quedaron puestos>" \
+  --causa "<por que no salio bien; omitir si salio ok>"
+
+python3 scripts/bitacora_despliegue.py ubicacion --archivo "$RUTA_BITACORA" \
+  --clave cuaderno --titulo "Cuaderno mil_vano (05)" \
+  --ruta "<la ruta literal del Workspace donde quedo>" \
+  --como "Workspace > Users > <usuario> > <carpeta>" --estado <ok|degradado|fallo> \
+  --detalle "importado sin outputs; no tiene app a proposito"
 ```
 
 
@@ -1003,11 +1058,33 @@ Tell the user, in their language:
   las tres, incluso las que no hicieron falta o quedaron bloqueadas. Sin esto, una etapa
   omitida desaparece del reporte y se lee como si hubiera salido bien:
 
-  | Etapa | Ya estaba | Se subio | Estado | Que lo bloqueo |
+  | Etapa | Ya estaba | Se subio | Estado | Causa |
   |---|---|---|---|---|
   | 3. Datos en el Volume | | | | |
   | 4. Aplicaciones en compute | | | | |
   | 5. Cuaderno en el Workspace | | | | |
+
+  La columna **Causa** solo la llenan las etapas que no salieron `ok`, y dice *por qué*
+  —no *qué*, que ya lo dicen las otras columnas—. Una etapa que no salió bien y no
+  declara causa se reporta como «sin causa registrada»: una celda vacía al lado de un
+  fallo se lee como que falló sin motivo, y eso es otra afirmación.
+
+- **La tabla de dónde quedó cada cosa**, que es lo que se busca cuando el despliegue
+  salió bien. Reproduce la sección `Donde quedo cada cosa` de la bitácora — la imprime
+  también `bitacora_despliegue.py resumen`, así que no hay que rearmarla:
+
+  | Que | Ruta en Databricks | URL | Como se llega | Estado |
+  |---|---|---|---|---|
+  | Datos del proyecto | `/Volumes/…/data` | | Catalog > Volumes | |
+  | Paquete del simulador | `/Volumes/…/paquete_06` | | Catalog > Volumes | |
+  | Simulaciones guardadas | `/Volumes/…/simulaciones` | | Catalog > Volumes | |
+  | App: tableros de criticidad | `/Workspace/…` | https://… | Compute > Apps | |
+  | App: simulador de vano | `/Workspace/…` | https://… | Compute > Apps | |
+  | Cuaderno mil_vano (05) | `/Workspace/…/05_mil_vano_ventana.ipynb` | | Workspace > Users | |
+
+  Las rutas **no son adivinables**: el catálogo y el esquema se resuelven en cada corrida
+  (contrato C), así que sin esta tabla hay que reconstruirlas leyendo los comandos del
+  detalle por paso. Las URL van **literales del CLI**, nunca compuestas a mano.
 
 - **Every restriction recorded, with who unblocks each one** — reproduce the `resumen`
   output. A run that ended INCOMPLETO reports what is still blocking, not just what worked.

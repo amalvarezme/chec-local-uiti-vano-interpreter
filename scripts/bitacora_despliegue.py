@@ -111,6 +111,52 @@ def _celda(texto: str | None) -> str:
     return texto.replace("|", "\\|").replace("\n", " ").strip() or "--"
 
 
+def _celda_opcional(texto: str | None) -> str:
+    """Como `_celda`, pero VACIA cuando no hay nada que decir.
+
+    La columna de causa la lleva toda la tabla y solo la llenan las filas que no
+    salieron bien. Con `--` en las demas, la vista se llena de guiones que compiten
+    por la atencion con las tres o cuatro celdas que si tienen algo escrito.
+    """
+    if not texto:
+        return ""
+    return texto.replace("|", "\\|").replace("\n", " ").strip()
+
+
+ESTADOS_QUE_NO_SALIERON_BIEN = ("fallo", "omitido", "restriccion", "degradado")
+
+
+def _causa_del_paso(paso: dict, restricciones: list[dict]) -> str:
+    """Por que ese paso no salio bien, en su propia fila.
+
+    Tres fuentes, en orden de preferencia:
+
+    1. la `--causa` que el comando declaro al registrar el paso;
+    2. la restriccion que quedo LIGADA a ese paso, por su `--paso`. Se toma de ahi en
+       vez de obligar a escribirla dos veces, que es la forma segura de que un dia
+       digan cosas distintas;
+    3. nada de lo anterior -- y entonces se DICE. Una celda vacia al lado de un
+       `fallo` se lee como que fallo sin motivo; "sin causa registrada" dice otra
+       cosa: que el comando la dejo fuera, y eso tambien hay que poder verlo.
+
+    Un paso `ok` u `omitido`... no: `omitido` cuenta. Solo un `ok` limpio se queda con
+    la celda vacia, porque no hay causa que explicar.
+    """
+    if paso["estado"] not in ESTADOS_QUE_NO_SALIERON_BIEN:
+        return ""
+    if paso.get("causa"):
+        return paso["causa"]
+    ligadas = [r for r in restricciones
+               if str(r.get("paso") or "") == str(paso["id"])]
+    if ligadas:
+        return "; ".join(
+            f"`{r['id']}` {r['titulo']}"
+            + (f" -- {r['impacto']}" if r.get("impacto") else "")
+            for r in ligadas
+        )
+    return "sin causa registrada"
+
+
 # ------------------------------------------------------------------- render
 
 
@@ -211,18 +257,61 @@ def _render_restricciones(datos: dict) -> list[str]:
     return lineas
 
 
+def _render_ubicaciones(datos: dict) -> list[str]:
+    """Donde quedo cada cosa dentro del workspace.
+
+    Es la pregunta que ninguna otra seccion contesta: acabo el despliegue, y ahora
+    donde esta lo que subi. Antes habia que leer los comandos del detalle por paso y
+    reconstruir las rutas a mano -- y las rutas no son adivinables, porque el catalogo
+    y el esquema se RESUELVEN en cada corrida (contrato C).
+
+    Una app tiene DOS direcciones y no son intercambiables: la URL por la que entra
+    quien la usa, y la carpeta del Workspace desde la que se desplego, que es donde se
+    mira cuando no arranca. Por eso son dos columnas.
+
+    Lo que NO se logro se queda en la tabla, con su estado. Es la fila mas util de
+    todas: borrarla deja al lector creyendo que eso no formaba parte del despliegue,
+    en vez de que falto.
+
+    Sin ubicaciones registradas la seccion no aparece. Una tabla vacia con encabezados
+    afirma que se miro y no habia nada, y lo que pasa es que el comando no las
+    registro.
+    """
+    if not datos.get("ubicaciones"):
+        return []
+    lineas = [
+        "", "## Donde quedo cada cosa", "",
+        "| Que | Ruta en Databricks | URL | Como se llega | Estado | Detalle |",
+        "|---|---|---|---|---|---|",
+    ]
+    for u in datos["ubicaciones"]:
+        url = u.get("url")
+        lineas.append(
+            f"| {_celda(u['titulo'])} | `{_celda(u.get('ruta'))}` "
+            f"| {url if url else ''} | {_celda_opcional(u.get('como'))} "
+            f"| `{_ETIQUETA_ESTADO[u['estado']]}` | {_celda_opcional(u.get('detalle'))} |"
+        )
+    return lineas
+
+
 def _render_pasos(datos: dict) -> list[str]:
     lineas = ["", "## Pasos", ""]
     if not datos["pasos"]:
         lineas.append("Todavia no se registro ningun paso.")
         return lineas
 
-    lineas.append("| # | Paso | Estado | Detalle |")
-    lineas.append("|---|---|---|---|")
+    # La CAUSA va en la misma fila que el paso, y no solo en la seccion de
+    # restricciones. Estaban separadas por varias pantallas, asi que saber por que no
+    # esta lo que no esta obligaba a cruzar dos tablas a mano. La seccion de abajo
+    # sigue existiendo: alli va la evidencia y quien lo desbloquea, que no caben en
+    # una celda.
+    lineas.append("| # | Paso | Estado | Detalle | Causa |")
+    lineas.append("|---|---|---|---|---|")
     for p in datos["pasos"]:
         lineas.append(
             f"| {p['id']} | {_celda(p['titulo'])} | `{_ETIQUETA_ESTADO[p['estado']]}` "
-            f"| {_celda(p.get('detalle'))} |"
+            f"| {_celda(p.get('detalle'))} "
+            f"| {_celda_opcional(_causa_del_paso(p, datos['restricciones']))} |"
         )
 
     con_evidencia = [p for p in datos["pasos"] if p.get("comando") or p.get("salida")]
@@ -242,6 +331,10 @@ def _render(datos: dict) -> str:
     lineas: list[str] = []
     lineas += _render_encabezado(datos)
     lineas += _render_resumen(datos)
+    # El inventario va ARRIBA de las restricciones y de los pasos: es lo que se busca
+    # cuando el despliegue salio bien, que es la mayoria de las veces. El detalle de
+    # lo que fallo se lee despues, y quien lo necesita lo busca.
+    lineas += _render_ubicaciones(datos)
     lineas += _render_restricciones(datos)
     lineas += _render_pasos(datos)
     if datos.get("nota_cierre"):
@@ -275,6 +368,7 @@ def cmd_init(a: argparse.Namespace) -> int:
         "nota_cierre": None,
         "pasos": [],
         "restricciones": [],
+        "ubicaciones": [],
     }
     _guardar(archivo, datos)
     print(archivo)
@@ -289,6 +383,9 @@ def cmd_paso(a: argparse.Namespace) -> int:
         "titulo": a.titulo,
         "estado": a.estado,
         "detalle": a.detalle,
+        # Se sanea como la salida y no como el detalle: una causa suele venir copiada
+        # del mensaje de error de la CLI, que es exactamente donde aparecen los tokens.
+        "causa": sanear(a.causa),
         "comando": a.comando,
         "salida": sanear(a.salida),
         "momento": _ahora(),
@@ -328,6 +425,37 @@ def cmd_restriccion(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_ubicacion(a: argparse.Namespace) -> int:
+    """Registra donde quedo una pieza del despliegue dentro del workspace.
+
+    La CLAVE es lo que identifica la fila, no el titulo: el titulo se redacta y puede
+    cambiar entre corridas, y una segunda llamada con el titulo retocado dejaria dos
+    filas describiendo el mismo sitio.
+    """
+    archivo = Path(a.archivo)
+    datos = _cargar(archivo)
+    # Las bitacoras abiertas antes de que existiera esta seccion no traen la lista.
+    datos.setdefault("ubicaciones", [])
+    registro = {
+        "clave": a.clave,
+        "titulo": a.titulo,
+        "ruta": a.ruta,
+        "url": a.url,
+        "como": a.como,
+        "estado": a.estado,
+        "detalle": sanear(a.detalle),
+        "momento": _ahora(),
+    }
+    for i, previo in enumerate(datos["ubicaciones"]):
+        if previo["clave"] == a.clave:
+            datos["ubicaciones"][i] = registro
+            break
+    else:
+        datos["ubicaciones"].append(registro)
+    _guardar(archivo, datos)
+    return 0
+
+
 def cmd_cerrar(a: argparse.Namespace) -> int:
     archivo = Path(a.archivo)
     datos = _cargar(archivo)
@@ -343,6 +471,17 @@ def cmd_resumen(a: argparse.Namespace) -> int:
     datos = _cargar(Path(a.archivo))
     print(f"Estado: {_estado_final(datos)}")
     print("\n".join(_render_resumen(datos)).strip())
+    # El inventario tambien por aqui: `resumen` es lo que el comando lee para
+    # reportarle al usuario en pantalla, y una tabla que solo viviera en el Markdown
+    # obligaria a abrir el archivo para saber donde quedo lo que se acaba de subir.
+    if datos.get("ubicaciones"):
+        print("\nDonde quedo cada cosa:")
+        for u in datos["ubicaciones"]:
+            print(f"  [{u['estado']}] {u['titulo']}: {u.get('ruta') or '--'}")
+            if u.get("url"):
+                print(f"      url: {u['url']}")
+            if u.get("como"):
+                print(f"      como se llega: {u['como']}")
     for r in datos["restricciones"]:
         print(f"\n{r['id']} [{r['severidad']}] {r['titulo']}")
         print(f"  impacto: {r.get('impacto') or '--'}")
@@ -375,6 +514,9 @@ def construir_parser() -> argparse.ArgumentParser:
     s.add_argument("--titulo", required=True)
     s.add_argument("--estado", required=True, choices=ESTADOS_PASO)
     s.add_argument("--detalle")
+    s.add_argument("--causa",
+                   help="por que no salio bien; se ignora en un paso `ok`. Sin esto se "
+                        "toma de la restriccion ligada a este paso por su --paso")
     s.add_argument("--comando")
     s.add_argument("--salida")
     s.set_defaults(func=cmd_paso)
@@ -391,6 +533,19 @@ def construir_parser() -> argparse.ArgumentParser:
     r.add_argument("--quien-desbloquea", dest="quien_desbloquea")
     r.add_argument("--resuelta", action="store_true")
     r.set_defaults(func=cmd_restriccion)
+
+    u = sub.add_parser("ubicacion",
+                       help="registra donde quedo una pieza dentro del workspace")
+    u.add_argument("--archivo", required=True)
+    u.add_argument("--clave", required=True,
+                   help="identifica la fila; el titulo se redacta y puede cambiar")
+    u.add_argument("--titulo", required=True)
+    u.add_argument("--ruta", help="ruta en el Volume o en el Workspace")
+    u.add_argument("--url", help="solo las apps; es otra direccion, no la misma")
+    u.add_argument("--como", help="por donde se llega en la interfaz del workspace")
+    u.add_argument("--estado", default="ok", choices=ESTADOS_PASO)
+    u.add_argument("--detalle")
+    u.set_defaults(func=cmd_ubicacion)
 
     c = sub.add_parser("cerrar", help="cierra la bitacora y calcula el estado final")
     c.add_argument("--archivo", required=True)
