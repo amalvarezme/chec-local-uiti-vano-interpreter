@@ -654,7 +654,7 @@ const cronograma = [
               <text x="370" y="136" text-anchor="middle" font-weight="700" fill="#005c45">Bolsa = vano × ventana</text>
               <text x="370" y="158" text-anchor="middle" fill="#5f6f77">n instancias observadas</text>
               <text x="370" y="176" text-anchor="middle" fill="#5f6f77">Etiqueta: UITI acumulado</text>
-              <text x="370" y="196" text-anchor="middle" fill="#5f6f77" font-size="11">62.114 bolsas en la CV agrupada</text>
+              <text x="370" y="196" text-anchor="middle" fill="#5f6f77" font-size="11">62.114 bolsas en CV agrupada</text>
 
               <line x1="462" y1="162" x2="500" y2="162" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fm)" />
 
@@ -671,7 +671,7 @@ const cronograma = [
 
               <rect x="506" y="234" width="180" height="42" rx="9" fill="#ffffff" stroke="#dce7e4" />
               <text x="596" y="253" text-anchor="middle" fill="#102129">Atención sobre instancias</text>
-              <text x="596" y="269" text-anchor="middle" fill="#5f6f77" font-size="10.5">agrega la bolsa y pondera variables</text>
+              <text x="596" y="269" text-anchor="middle" fill="#5f6f77" font-size="10.5">agrega y pondera las variables</text>
 
               <line x1="596" y1="280" x2="596" y2="296" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fm)" />
 
@@ -695,7 +695,7 @@ const cronograma = [
               <text x="848" y="106" text-anchor="middle" fill="#5f6f77">Nodos: las variables del vano</text>
               <text x="848" y="124" text-anchor="middle" fill="#5f6f77" font-size="11.5">Aristas: relación físico-eléctrica</text>
               <text x="848" y="142" text-anchor="middle" fill="#5f6f77" font-size="11.5">conocida (no aprendida de los datos)</text>
-              <text x="848" y="166" text-anchor="middle" fill="#102129">Se construye en código y se almacena</text>
+              <text x="848" y="166" text-anchor="middle" fill="#102129">Se define en código y se almacena</text>
               <text x="848" y="184" text-anchor="middle" fill="#102129">dentro del <tspan font-family="monospace">.pt</tspan></text>
 
               <path d="M846,204 C846,244 712,248 692,198" fill="none" stroke="#0b5f8a" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#fmg)" />
@@ -953,8 +953,8 @@ const cronograma = [
 
               <rect x="724" y="180" width="244" height="106" rx="10" fill="#ffffff" stroke="#dce7e4" />
               <text x="846" y="206" text-anchor="middle" font-weight="700" fill="#102129">Análisis de sensibilidad</text>
-              <text x="846" y="228" text-anchor="middle" fill="#5f6f77">Cada variable se modifica sola y se</text>
-              <text x="846" y="246" text-anchor="middle" fill="#5f6f77">mide su caída media del UITI</text>
+              <text x="846" y="228" text-anchor="middle" fill="#5f6f77">Cada variable se modifica por</text>
+              <text x="846" y="246" text-anchor="middle" fill="#5f6f77">separado y se mide su caída del UITI</text>
               <text x="846" y="264" text-anchor="middle" fill="#5f6f77">→ el orden del diagnóstico</text>
               <text x="846" y="280" text-anchor="middle" fill="#0b5f8a" font-size="11">y el «basta por sí sola en N de M vanos»</text>
 
@@ -1163,7 +1163,7 @@ const cronograma = [
             <g font-family="Inter, sans-serif" font-size="12.5">
               <rect x="14" y="54" width="180" height="86" rx="10" fill="#ffffff" stroke="#dce7e4" />
               <text x="104" y="80" text-anchor="middle" font-weight="700" fill="#102129">Banda de riesgo</text>
-              <text x="104" y="102" text-anchor="middle" fill="#5f6f77">De la clasificación de circuitos</text>
+              <text x="104" y="102" text-anchor="middle" fill="#5f6f77">Según la clasificación</text>
               <text x="104" y="120" text-anchor="middle" fill="#5f6f77" font-size="11">(Bajo · Medio · Medio-Alto · Alto)</text>
 
               <line x1="198" y1="97" x2="232" y2="97" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fg2)" />
@@ -1171,7 +1171,7 @@ const cronograma = [
               <rect x="238" y="42" width="196" height="110" rx="10" fill="#fdf6e6" stroke="#f4b23a" />
               <text x="336" y="68" text-anchor="middle" font-weight="700" fill="#8a6212">Muestreo a 12</text>
               <text x="336" y="90" text-anchor="middle" fill="#5f6f77">Si la banda tiene más de 12,</text>
-              <text x="336" y="108" text-anchor="middle" fill="#5f6f77">se toman los 12 de mayor criticidad</text>
+              <text x="336" y="108" text-anchor="middle" fill="#5f6f77">se toman los 12 más críticos</text>
               <text x="336" y="132" text-anchor="middle" fill="#8a6212" font-size="10.5">el informe describe la cola, no el típico</text>
 
               <line x1="438" y1="97" x2="472" y2="97" stroke="#5f6f77" stroke-width="1.6" marker-end="url(#fg2)" />
@@ -1543,10 +1543,86 @@ const cronograma = [
         <div class="note-callout">
           <strong>La generación de informes depende principalmente de la disponibilidad del servicio LLM
           y de la conectividad de red, más que de recursos locales de cómputo.</strong> Es el único
-          componente que requiere un servicio externo no incluido en la instalación local: una suscripción
-          de <strong>Claude Code</strong> y salida a la red de forma permanente. Un informe por circuito
+          componente que requiere un servicio externo no incluido en la instalación local: un entorno de
+          agente con cuota de modelo y salida a la red de forma permanente. Un informe por circuito
           consume del orden de <strong>318.760 tokens</strong>. El resto de los componentes puede
           ejecutarse sin conexión una vez completada la instalación y disponibles los insumos requeridos.
+        </div>
+
+        <div class="connection-intro">
+          <h3>Compatibilidad con otros modelos y agentes de IA</h3>
+          <p>
+            La instalación no está atada a un proveedor de modelo ni a un editor. Los comandos son
+            contratos en texto —persona, invariantes, secuencia de ejecución y forma de la salida—, de modo
+            que pueden ejecutarse con distintos modelos de lenguaje según la cuota y la política de datos
+            de la organización.
+          </p>
+          <p>
+            El repositorio publica los mismos comandos para <strong>tres entornos de agente</strong>:
+            Claude Code, <strong>OpenCode</strong> y <strong>VS Code Copilot</strong>. La fuente única es
+            <code>.claude/</code>; los espejos de <code>.opencode/</code> y <code>.github/</code> se
+            generan con <code>scripts/portabilidad_agentes.py</code>, de forma que un comando renombrado o
+            retirado se propaga en una sola ejecución. La invocación es idéntica en los tres:
+            <code>/report DON23L14</code>.
+          </p>
+        </div>
+
+        <div class="table-wrap compact-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Entorno de agente</th>
+                <th>Comandos</th>
+                <th>Roles</th>
+                <th>Reglas del proyecto</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Claude Code</strong><br />fuente del contrato</td>
+                <td><code>.claude/skills/*/SKILL.md</code><br /><code>.claude/commands/*.md</code></td>
+                <td><code>.claude/agents/*.md</code></td>
+                <td><code>.claude/agents/rules/invariants.md</code></td>
+              </tr>
+              <tr>
+                <td><strong>OpenCode</strong><br />espejo generado</td>
+                <td><code>.opencode/command/*.md</code><br />15 comandos</td>
+                <td><code>.opencode/agent/*.md</code><br />4 roles</td>
+                <td><code>AGENTS.md</code> · <code>opencode.json</code></td>
+              </tr>
+              <tr>
+                <td><strong>VS Code Copilot</strong><br />espejo generado</td>
+                <td><code>.github/prompts/*.prompt.md</code><br />15 comandos</td>
+                <td><code>.github/agents/*.agent.md</code><br />4 roles</td>
+                <td><code>.github/copilot-instructions.md</code> · <code>AGENTS.md</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="process-grid tres">
+          <article>
+            <strong>Captura de datos de clima</strong>
+            <p>
+              <code>/clima</code> consulta Open-Meteo con sus tres validaciones de cuota y deja la tabla
+              enriquecida en <code>data/</code>. Disponible en los tres entornos.
+            </p>
+          </article>
+          <article>
+            <strong>Generación de informes automáticos</strong>
+            <p>
+              <code>/report</code>, <code>/reporte-lote</code> e <code>/informe-gerencial</code> producen
+              los informes por circuito y la síntesis por banda de riesgo con el mismo contrato en
+              cualquiera de los tres entornos.
+            </p>
+          </article>
+          <article>
+            <strong>Conexión con la CLI de Databricks</strong>
+            <p>
+              <code>/subir-a-databricks</code> conduce el despliegue completo desde la terminal mediante la
+              CLI, sin depender del editor desde el que se invoque.
+            </p>
+          </article>
         </div>
 
         <div class="connection-intro">
