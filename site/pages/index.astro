@@ -9,6 +9,7 @@ import tableroTrayCircuitos from "../assets/site/results/tablero-trayectorias-ci
 import tableroTrayVanos from "../assets/site/results/tablero-trayectorias-vanos.png";
 import simuladorMapas from "../assets/site/results/simulador-mapas.png";
 import simuladorResultados from "../assets/site/results/simulador-resultados.png";
+import simuladorGuardar from "../assets/site/results/simulador-guardar.png";
 import variables from "../data/variables.json";
 
 
@@ -926,7 +927,9 @@ const cronograma = [
             simulación requiere una nueva inferencia del modelo. Se selecciona un circuito y una ventana,
             se marcan vanos, se genera un diagnóstico de intervención, se modifican las variables
             seleccionadas y se compara la criticidad observada con la simulada, junto con el costo
-            asociado a la intervención.
+            asociado a la intervención. Cada ejecución puede <strong>archivarse y recuperarse</strong>:
+            el tablero genera un informe HTML autocontenido y un registro de unos kilobytes que permite
+            reconstruir la simulación completa.
           </p>
         </div>
 
@@ -960,11 +963,119 @@ const cronograma = [
           <img src={simuladorResultados.src} alt="Resultados del simulador: caída de UITI por variable, medido contra simulado, costo de la intervención y grafo de relaciones" loading="lazy" />
           <figcaption>
             <strong>Figura 8. Resultados de la simulación del circuito INS23L13 en la ventana V11.</strong>
-            Corresponden a la misma ejecución de la Figura 7: la reducción del UITI que produce cada
-            variable en cada vano, el UITI observado frente al simulado, el costo por vano y el costo
-            acumulado (369.703.635 COP), y el grafo de relaciones relevantes de esta simulación.
+            Corresponden a la misma ejecución de la Figura 7: la caída de UITI que aporta cada variable
+            en cada vano, el UITI observado frente al simulado, el costo por vano y el costo acumulado
+            (195.345.980 COP sobre cinco actividades del contrato), y el grafo de relaciones relevantes
+            de esta simulación. <strong>El escenario simulado no produce una mejora</strong>: el UITI
+            acumulado <em>sube</em> 10.339,0 con un desfase del modelo de ±10.365,8, y el propio título
+            del panel lo declara. Es un resultado legítimo y no un error de la ejecución: el margen es
+            del orden del cambio, de modo que esta corrida <strong>no sostiene una diferencia</strong> en
+            un sentido ni en el otro. Publicar la cifra sin ese margen convertiría el sesgo del modelo en
+            un ahorro.
           </figcaption>
         </figure>
+
+        <div class="connection-intro">
+          <h3>Guardar una simulación y volver a ella</h3>
+          <p>
+            Bajo <em>Simular</em> y <em>Limpiar</em>, el panel dispone de <strong>Guardar</strong> y
+            <strong>Cargar</strong>. <em>Guardar</em> permanece deshabilitado mientras no exista una
+            simulación en pantalla, dado que archivar un tablero vacío no constituye un registro.
+          </p>
+        </div>
+
+        <figure class="shot">
+          <img src={simuladorGuardar.src} alt="Bloque de guardado del simulador: los botones Guardar y Cargar, la lista de simulaciones archivadas, la ruta de la carpeta y los dos archivos que se acaban de escribir" loading="lazy" />
+          <figcaption>
+            <strong>Figura 9. Bloque de archivo del simulador, correspondiente a la misma ejecución.</strong>
+            La <strong>ruta de la carpeta se publica de forma permanente</strong> —desde la apertura del
+            tablero y con independencia de que se haya guardado— en el renglón situado bajo la lista
+            desplegable. Tras guardar, se indican los nombres de los dos archivos escritos.
+          </figcaption>
+        </figure>
+
+        <div class="table-wrap compact-table">
+          <table>
+            <thead>
+              <tr><th>Archivo</th><th>Tamaño medido</th><th>Contenido</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>&lt;circuito&gt;_&lt;ventana&gt;_&lt;fecha&gt;.html</code></td>
+                <td><strong>7,1 MB</strong></td>
+                <td>El <strong>informe</strong>: los ocho paneles de las Figuras 7 y 8, más tres tablas
+                    —vanos con las variables simuladas y su valor fijado; actividades de contrato por
+                    vano con número de intervenciones, costo unitario, descripción y costo total; y el
+                    UITI medido frente al simulado por vano, con su porcentaje de variación y los totales
+                    de ambas columnas—. Es autocontenido: incorpora la biblioteca de graficación, por lo
+                    que se abre sin conexión y sin requerir instalación alguna.</td>
+              </tr>
+              <tr>
+                <td><code>&lt;circuito&gt;_&lt;ventana&gt;_&lt;fecha&gt;.simchec.json.gz</code></td>
+                <td><strong>6,9 KB</strong></td>
+                <td>El <strong>registro</strong> con el que <em>Cargar</em> reconstruye la simulación:
+                    circuito, ventana, los 34 vanos, las 374 variables con su valor y las 170 actividades
+                    con sus cantidades.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="note-callout">
+          <strong>El registro no almacena las figuras, y esa es la razón de la diferencia de tres órdenes
+          de magnitud entre ambos archivos.</strong> La totalidad de lo que se presenta en pantalla se
+          deriva de ejecutar el modelo sobre las entradas, de modo que almacenarlo equivaldría a guardar
+          el valor de retorno de una función junto a sus argumentos: dos representaciones de lo mismo que
+          divergen en el momento en que se reentrena el modelo. El registro almacena las
+          <strong>entradas</strong>, y <em>Cargar</em> las repone y <strong>vuelve a ejecutar el
+          modelo</strong>. El costo de esa decisión —que un modelo reentrenado devuelva valores
+          distintos— se asume de forma explícita: el registro incorpora la firma de los artefactos con
+          los que se ejecutó, y al cargar el panel lo advierte cuando no coinciden. El informe HTML
+          conserva de forma íntegra lo que se decidió ese día. El formato es <code>gzip</code> de JSON y
+          no un formato propietario, de modo que una auditoría posterior puede abrirlo sin este programa.
+        </div>
+
+        <div class="table-wrap compact-table">
+          <table>
+            <thead>
+              <tr><th>Entorno</th><th>Dónde se almacena</th><th>Cómo se recupera</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Local</strong><br />macOS y Windows</td>
+                <td><code>~/CriticidadCHEC/simulaciones</code><br />
+                    <code>C:\Users\&lt;usuario&gt;\CriticidadCHEC\simulaciones</code> en Windows</td>
+                <td>El informe se abre con doble clic. La carpeta depende del directorio personal del
+                    usuario y <strong>no</strong> de la aplicación: esta se reconstruye automáticamente
+                    cuando cambian los datos y en Windows puede trasladarse a una ruta más corta, de modo
+                    que el trabajo del usuario no debe residir en ella.</td>
+              </tr>
+              <tr>
+                <td><strong>Databricks</strong><br />la misma aplicación</td>
+                <td><code>/Volumes/&lt;catálogo&gt;/&lt;esquema&gt;/chec-simulador/simulaciones</code></td>
+                <td>Se descarga desde <strong>Catalog → Volumes</strong> en la interfaz del workspace. La
+                    aplicación no puede ofrecer la descarga directamente, dado que Voilà no sirve archivos
+                    individuales.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="connection-intro">
+          <p>
+            El almacenamiento en el Volume y no en el contenedor <strong>es una condición necesaria</strong>:
+            el disco del contenedor es efímero —se elimina en el siguiente despliegue— y el usuario no
+            dispone de acceso a él. La selección entre ambos destinos la determina una variable de entorno
+            que <code>/subir-a-databricks</code> resuelve y registra en la configuración de la aplicación;
+            no se infiere del entorno de ejecución, dado que una inferencia de ese tipo produciría un
+            tablero local intentando escribir en un Volume inexistente. La carpeta se crea durante el
+            despliegue y es <strong>hermana</strong> de la del paquete precalculado, nunca interna a ella:
+            el paquete se elimina y se vuelve a crear en cada despliegue, por lo que ubicar las
+            simulaciones en su interior eliminaría el trabajo almacenado en cada actualización. La
+            aplicación requiere el privilegio <code>WRITE VOLUME</code> sobre ese Volume; sin él, el
+            tablero opera con normalidad y únicamente falla la acción de guardar.
+          </p>
+        </div>
 
         <div class="diagram-card" tabindex="0">
           <h3>Uso del modelo MIL entrenado en la simulación: grafo de diferencias y sensibilidad</h3>
