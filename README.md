@@ -16,19 +16,12 @@ Este proyecto carga un dataset estructurado ancho, filtra por circuitos y fechas
 
 ## Qué hace este proyecto
 
-El repositorio cubre el flujo completo de interpretabilidad local para el análisis de circuitos CHEC:
+La solución integra **cinco aplicaciones locales**, un **modelo predictivo entrenado**, un
+**simulador contrafactual** y un **conjunto de agentes** para la generación de informes.
+Todos los componentes se ejecutan localmente en `127.0.0.1`, sin exponer servicios a la red,
+y pueden desplegarse en Databricks con `/subir-a-databricks`.
 
-- resolución determinista de circuito y ventana de fechas;
-- selección determinista de las tres ventanas que el informe estudia (la última con
-  eventos del circuito más las dos de mayor influencia);
-- construcción de contexto estructurado para razonamiento nativo de agentes;
-- diagnóstico descriptivo histórico sobre la serie por ventana (`historical`);
-- interpretación del modelo MIL por bolsas del cuaderno 05 (`inference`), con las
-  variables separadas en intervención y escenario;
-- alineación contra reportes PDF expertos (`expert-alignment`);
-- extracción de tabla base de discusiones desde PDFs (`pdf-discussion-extraction`);
-- render del reporte HTML local completo;
-- exportación manual opcional al sitio estático.
+Se organiza en tres partes.
 
 ### El modelo: M-GCECDL
 
@@ -42,9 +35,59 @@ Se implementa como MIL por bolsas vano × ventana en el cuaderno
 `05_mil_vano_ventana.ipynb`, y su artefacto entrenado es
 `data/models/mil_vano_ventana_v1.pt`.
 
-## Alcance y no objetivos
+### 1. Tableros de visualización
 
-### En alcance
+Cuatro visores y un menú, cada uno con su propio entorno y su puerto fijo. Los cuatro
+visores se publican como HTML estático y se cargan en menos de un segundo.
+
+| Tablero | Puerto | Qué muestra |
+|---|---|---|
+| CriticidadCHEC | `8800` | El menú de control: inicia, supervisa y detiene los demás |
+| Nube por vano y clima | `8801` | El UITI diario por vano sobre el mapa, con la variable climática elegida superpuesta |
+| Agrupamiento de vanos | `8802` | `k-means` sobre el par (UITI acumulado, número de eventos) y la clasificación de los 208 circuitos |
+| Trayectorias de circuitos | `8803` | Cada circuito a lo largo de las 11 ventanas, coloreado por el grupo de cada momento |
+| Trayectorias de vanos | `8804` | Lo mismo a nivel de vano, con el perfil del circuito y la evolución por vano |
+
+De aquí sale la **etiqueta de criticidad**: no es un umbral definido manualmente, sino el
+resultado de agrupar los vanos por su comportamiento observado y ordenar después los
+circuitos por el número de vanos críticos que acumulan. Esa etiqueta es la que el modelo
+predictivo aprende a anticipar.
+
+### 2. Simulador «¿Qué pasa si…?» con el modelo de IA predictiva
+
+El único tablero que mantiene un proceso de Python en ejecución (puerto `8866`, Voilà con
+kernel), porque cada simulación requiere una nueva inferencia del modelo.
+
+Se selecciona un circuito y una ventana, se marcan vanos, se genera un diagnóstico de
+intervención, se modifican las variables seleccionadas y se compara la criticidad observada
+con la simulada, junto con el costo asociado a la intervención. El catálogo contractual de
+142 actividades aporta el costo unitario; el tablero calcula el costo individual y
+acumulado, sin inferir qué actividad corresponde a cada modificación.
+
+Las variables se separan en tres clases, y la separación determina qué pregunta se responde:
+**intervención** (11 variables modificables mediante una obra), **escenario** (7 variables de
+contexto no controlables) y **no modificables** (8 atributos de identidad y topología).
+
+### 3. Informes automáticos con agentes
+
+El simulador proporciona la exploración interactiva; los agentes generan la documentación
+técnica de los resultados. Ambos usan el mismo motor analítico: el diagnóstico que el
+simulador muestra en pantalla es exactamente el que recibe y redacta el agente `inference`.
+
+| Comando | Salida generada |
+|---|---|
+| `/report` | Informe HTML de un circuito, con figuras y trazabilidad por afirmación |
+| `/reporte-lote` | Encadena `/report` sobre todos los circuitos de una banda de riesgo |
+| `/informe-gerencial` | Síntesis por banda, con barras del conjunto completo de circuitos y grafo radial |
+
+Los agentes complementan la salida del tablero con el contexto que no cabe en un tablero:
+la serie histórica (`historical`), la lectura del modelo (`inference`) y la comparación
+contra la discusión experta de los informes en PDF (`expert-alignment`).
+
+Como en el resto del proyecto, el razonamiento lo hace el runtime del agente invocador:
+Python no llama a ninguna API de LLM.
+
+## Alcance
 
 - procesamiento determinista y funciones puras en `src/chec_local_interpreter`;
 - generación local de reportes;
@@ -52,27 +95,15 @@ Se implementa como MIL por bolsas vano × ventana en el cuaderno
 - contratos compartidos y validadores del flujo;
 - publicación del sitio como paso explícito e independiente.
 
-### Explícitamente fuera de alcance
-
-- Dash
-- FastAPI
-- RAG
-- bases vectoriales
-- llamadas Python a Gemini, OpenAI u otros proveedores LLM hospedados
-- publicación automática como efecto colateral de generar un reporte
-- Databricks **dentro de** `src/chec_local_interpreter` o de los 5 roles LLM (`historical`,
-  `inference`, `expert-alignment`, `pdf-discussion-extraction`) — nunca se
-  agrega lógica de negocio ahí
-
-**Excepción sancionada — despliegue a Databricks:** el proyecto sí incluye una migración manual,
-bajo demanda, de los activos locales hacia un workspace Databricks, vía 3 comandos de Claude Code
-(`/subir-a-databricks`, el único que habla con Databricks: las tres
-etapas —datos, aplicaciones y cuaderno— viven dentro de él, cada una verificando antes de
-subir). Se apoya en
+**Despliegue a Databricks.** La migración de los activos locales hacia un workspace
+Databricks es manual y bajo demanda, mediante `/subir-a-databricks`, el único comando que
+habla con Databricks: sus tres etapas —datos, aplicaciones y cuaderno— viven dentro de él y
+cada una verifica antes de subir. Se apoya en
 [`_contrato-despliegue-databricks.md`](.claude/commands/_contrato-despliegue-databricks.md).
-Es un árbol de comandos aislado que nunca modifica `report_pipeline.py`
-ni los roles LLM. Solo viajan los datos que consumen los cuadernos `01`-`06` y el comando
-`/report`: **no se crea ninguna tabla Delta, vista ni dashboard**. Detalle completo en [`docs/flujo-detallado.md`](docs/flujo-detallado.md#6-la-subida-a-databricks).
+Es un árbol de comandos aislado que nunca modifica `report_pipeline.py` ni los roles de
+agente. Solo viajan los datos que consumen el cuaderno y el comando `/report`: **no se crea
+ninguna tabla Delta, vista ni dashboard**. Detalle completo en
+[`docs/flujo-detallado.md`](docs/flujo-detallado.md#6-la-subida-a-databricks).
 
 ## Estructura del repositorio
 
