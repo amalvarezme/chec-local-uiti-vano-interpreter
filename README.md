@@ -88,6 +88,56 @@ ni los roles LLM. Solo viajan los datos que consumen los cuadernos `01`-`06` y e
 > CriticidadCHEC, desde donde se abren y se cierran los cinco tableros. El detalle está
 > en [`aplicaciones/README.md`](aplicaciones/README.md).
 
+### Árbol de carpetas
+
+El árbol omite los archivos generados y las dependencias; muestra dónde está el código
+que se lee y se modifica. Donde aparece un conteo, es el número de archivos versionados
+de esa carpeta.
+
+```text
+chec-local-uiti-vano-interpreter/
+├── src/                                                    # el código que ejecutan todos los flujos
+│   ├── chec_local_interpreter/                             # motor del análisis y de los informes · 55 archivos
+│   │   ├── agent_tools/                                    # lo que los agentes pueden invocar
+│   │   ├── llm/ · prompt_assets/                           # contratos y plantillas de los agentes
+│   │   ├── clima_engine.py                                 # motor de /clima: validaciones y Open-Meteo
+│   │   ├── ventanas_015.py                                 # celdas vano × ventana
+│   │   ├── mil_inferencia.py · mil_figuras.py              # lectura del artefacto MIL y sus figuras
+│   │   ├── ranking_circuitos.py                            # las cuatro bandas de riesgo del circuito
+│   │   ├── plotting.py                                     # mapas y gráficas del informe
+│   │   └── report_contract.py · batch_report_contract.py   # contratos de /report y /reporte-lote
+│   ├── chec_tableros/                                      # los cinco tableros
+│   │   ├── clima.py                                        # nube por vano y clima · 8801
+│   │   ├── agrupamiento.py                                 # agrupamiento de vanos · 8802
+│   │   ├── trayectorias_circuitos.py                       # trayectorias de circuitos · 8803
+│   │   ├── trayectorias_vanos.py                           # trayectorias de vanos · 8804
+│   │   └── simulador/                                      # «¿Qué pasa si…?» · 8866, con kernel de Python
+│   └── chec_impacto/                                       # modelos, entrenamiento e interpretabilidad · 18 archivos
+├── aplicaciones/                                           # empaquetado de escritorio para mac y Windows · 92 archivos
+│   ├── _comun/                                             # menú, servidor, huellas de insumos y empaquetado
+│   ├── 00_criticidad_chec/                                 # el menú CriticidadCHEC · 8800
+│   ├── 01_clima/ … 04_trayectorias_vanos/                  # un ejecutable por tablero estático
+│   ├── 06_simulador/                                       # el único que arranca un intérprete de Python
+│   └── databricks/                                         # el mismo empaquetado, para Databricks Apps
+├── notebooks/
+│   └── 05_mil_vano_ventana.ipynb                           # entrena el MIL; se genera desde scripts/
+├── .claude/                                                # el contrato de los agentes · 43 archivos
+│   ├── skills/                                             # /report · /reporte-lote · /informe-gerencial · /clima
+│   ├── agents/                                             # historical · inference · expert-alignment
+│   └── commands/                                           # /subir-a-databricks · /actualizar · /instalar-local
+├── .opencode/ · .github/                                   # los mismos comandos, portados a otros entornos
+├── data/                                                   # insumos: Indicadores_vano_v3.csv, GEO/, models/
+├── reports/                                                # salidas: informes, bóveda, paneles y bitácoras
+├── tests/                                                  # la suite del proyecto · 182 archivos
+├── scripts/                                                # generadores, diagnóstico y empaquetado
+├── docs/                                                   # guías de flujo, requisitos y portabilidad
+├── site/                                                   # la página pública · Astro
+└── requirements.txt · package.json · astro.config.mjs
+```
+
+`data/` entra y `reports/` sale. Esa separación es la que permite que cada aplicación
+calcule una huella de sus insumos y se reconstruya sola cuando alguno cambia.
+
 ## Instalación
 
 **Empezá por el diagnóstico.** Corre con el Python del sistema, antes de que exista
@@ -147,6 +197,29 @@ reentrenamiento del cuaderno `mil_vano` y generación de informes— está medid
 Y antes de nada, `git lfs pull`: sin él, el CSV de 566 MB y las bolsas de 199 MB llegan
 como punteros de 134 bytes que **existen** y no sirven. El diagnóstico lo comprueba por
 contenido, no por presencia.
+
+### Librerías requeridas
+
+Las dependencias viven en **cuatro listas separadas**, y el aislamiento es deliberado: el
+menú CriticidadCHEC mantiene un entorno mínimo de ~15 MB porque no carga las dependencias
+de sus cinco tableros. Sin esa separación haría falta `torch` sólo para abrir un menú.
+
+| Componente | Lista | Dependencias principales |
+|---|---|---|
+| **Los cuatro tableros estáticos**<br>puertos 8801 a 8804 | `aplicaciones/<app>/requirements.txt`<br>una por tablero | `pandas` · `numpy` · `pyarrow` · `plotly` · `geopandas` · `ipython` |
+| **El simulador**<br>puerto 8866, el único con un intérprete de Python en ejecución | `aplicaciones/06_simulador/requirements.txt` | incluye las anteriores y, además, `torch` · `voila` · `jupyter-server` · `ipykernel` · `ipywidgets` · `anywidget` · `scipy` · `scikit-learn` · `matplotlib` · `joblib` · `cloudpickle` · `openpyxl` · `pyogrio` · `shapely` |
+| **El cuaderno `mil_vano` en local**<br>entrenar y reentrenar | `requirements.txt`<br>archivo raíz | `torch` · `networkx` · `jupyter` · `ipykernel` · `papermill` · `nbformat` · `pyproj` · `folium`, además de las dependencias numéricas y geoespaciales del proyecto |
+| **Los informes**<br>`/report`, `/reporte-lote`, `/informe-gerencial` | `requirements.txt`<br>el mismo archivo raíz | incluye las del cuaderno y, además, `pdfplumber` · `jsonschema` · `xlsxwriter` · `graphifyy` · `openmeteo-requests` · `requests-cache` · `retry-requests` |
+
+El paquete de `graphify` se instala como **`graphifyy`**, con dos íes; `pip install graphify`
+no existe. Las versiones exactas están fijadas en cada `requirements.txt`, que es la fuente:
+esta tabla nombra los paquetes, no los pines.
+
+**La generación de informes depende de la cuota del modelo, no de la máquina.** Es el único
+componente que necesita un servicio externo no incluido en la instalación local: un entorno
+de agente con cuota de modelo y salida a la red. Un informe por circuito consume del orden
+de **318.760 tokens**. Todo lo demás se ejecuta sin conexión una vez instalado y con los
+insumos disponibles.
 
 ### En Windows, dos cosas del sistema que no son paquetes de pip
 
@@ -217,6 +290,26 @@ Las columnas opcionales se usan cuando existen y se registran como no disponible
 El proyecto usa **puntos de entrada nativos del runtime** sobre contratos locales compartidos.
 La lógica de negocio **no** vive en los adaptadores. Vive en los contratos Python y en los skills canónicos de Claude.
 
+### Catálogo de comandos
+
+Los 15 comandos se teclean igual en los tres editores. Lo que cambia es dónde busca cada
+uno su archivo, no cómo se invoca.
+
+| Comando | Qué hace |
+|---|---|
+| `/report <circuito> [ini fin]` | Informe HTML de un circuito, con figuras y trazabilidad por afirmación |
+| `/reporte-lote <grupo> [ini fin]` | Encadena `/report` sobre todos los circuitos de una banda de riesgo |
+| `/informe-gerencial <grupo> [ini fin]` | Síntesis por banda, con barras del conjunto completo de circuitos y grafo radial |
+| `/clima` | Enriquece los datos con Open-Meteo; tres validaciones bloqueantes antes de consumir cuota |
+| `/limpiar-corridas` | Mantenimiento de artefactos de corrida; `dry-run` y confirmación explícita |
+| `/redaccion-es` | Revisión de tildes, mayúsculas y redacción sobre la prosa generada |
+| `/instalar-local` | Diagnostica la máquina e instala sólo lo que falta, para los tres destinos locales |
+| `/actualizar` | Detecta cambios en los insumos del modelo y reconstruye en orden lo afectado |
+| `/app-local-criticidadCHEC` | Abre el menú CriticidadCHEC, desde el que se lanzan y se cierran los cinco tableros |
+| `/subir-a-databricks` | Único comando de despliegue; tres etapas que verifican antes de subir |
+| `/vault-circuito` | Proyecta los JSON validados del circuito a `reports/vault/` y encadena `graphify` |
+| `/expert-alignment`, `/historical`, `/inference`, `/pdf-discussion-extraction` | Los cuatro roles de agente, invocables también por su nombre |
+
 ### Punto de entrada principal del reporte
 
 | Runtime | Comando |
@@ -254,6 +347,26 @@ por el mismo mecanismo.
 
 ### Comandos de despliegue a Databricks
 
+**La CLI de Databricks es la estrategia de migración, no un detalle de configuración.** Es
+lo que permite que un agente de código conduzca el despliegue completo desde la terminal,
+sin pasar por la interfaz web del espacio de trabajo (*workspace*). `/subir-a-databricks`
+se comunica con Databricks **exclusivamente** a través de la CLI —51 invocaciones de
+`databricks`—: `auth login` abre la sesión OAuth, `catalogs list` y `volumes list`
+descubren el destino, `fs cp` y `workspace import` suben los artefactos, y `apps create`
+y `apps deploy` publican las aplicaciones. De ahí que el usuario sólo aporte la URL del
+workspace: el perfil se deriva de esa URL y todo lo demás se resuelve en tiempo de
+ejecución.
+
+La CLI se instala una sola vez, y tiene que estar **al día**: una versión vieja completa
+las etapas iniciales y falla en el despliegue, cuando `databricks apps create` no reconoce
+las opciones requeridas. `/instalar-local` comprueba las dos cosas —que exista y que
+sirva— y deja la sesión autenticada.
+
+```bash
+brew tap databricks/tap && brew install databricks   # macOS
+winget install Databricks.DatabricksCLI              # Windows
+```
+
 Es **un solo comando**, `/subir-a-databricks`, con tres etapas. Cada etapa le pregunta primero
 a Databricks qué hay ya, y solo sube lo que falta:
 
@@ -278,6 +391,31 @@ Ver [`docs/flujo-detallado.md`](docs/flujo-detallado.md#6-la-subida-a-databricks
 
 ### Modelo de portabilidad
 
+**La instalación no está atada a un proveedor de modelo ni a un editor.** Los comandos son
+contratos en texto —persona, invariantes, secuencia de ejecución y forma de la salida—, así
+que pueden ejecutarse con distintos modelos de lenguaje según la cuota y la política de
+datos de la organización. Python se mantiene determinista y no llama a ninguna API de LLM.
+
+El repositorio publica los mismos 15 comandos y los 4 roles para **tres entornos de
+agente**. La fuente única es `.claude/`; los espejos se generan:
+
+| | Claude Code | OpenCode | VS Code Copilot |
+|---|---|---|---|
+| Papel | fuente del contrato | espejo generado | espejo generado |
+| Comandos | `.claude/skills/*/SKILL.md`, `.claude/commands/*.md` | `.opencode/command/*.md` · 15 | `.github/prompts/*.prompt.md` · 15 |
+| Roles | `.claude/agents/*.md` | `.opencode/agent/*.md` · 4 | `.github/agents/*.agent.md` · 4 |
+| Reglas del proyecto | `.claude/agents/rules/invariants.md` | `AGENTS.md` + `opencode.json` | `.github/copilot-instructions.md` + `AGENTS.md` |
+| Invocación | `/report DON23L14` | `/report DON23L14` | `/report DON23L14` |
+
+Los tres usos que el portado habilita son los mismos en cualquiera de los tres editores:
+
+- **captura de datos de clima** con `/clima`, que consulta Open-Meteo con sus tres
+  validaciones de cuota y deja la tabla enriquecida en `data/`;
+- **generación de informes automáticos** con `/report`, `/reporte-lote` e
+  `/informe-gerencial`;
+- **conexión con Databricks** con `/subir-a-databricks`, que conduce el despliegue por la
+  CLI sin depender del editor desde el que se invoque.
+
 La compatibilidad con los otros dos editores es deliberadamente delgada:
 
 - los espejos de `.opencode/` y `.github/` los **genera** `scripts/portabilidad_agentes.py`
@@ -291,6 +429,13 @@ La compatibilidad con los otros dos editores es deliberadamente delgada:
   - `.claude/agents/*`
   - `.claude/commands/*`
   - `src/chec_local_interpreter/*`
+
+Se regenera y se verifica con:
+
+```bash
+PYTHONPATH=src .venv/bin/python scripts/portabilidad_agentes.py generar
+PYTHONPATH=src .venv/bin/python scripts/portabilidad_agentes.py verificar
+```
 
 Ver [`docs/portabilidad-agentes.md`](docs/portabilidad-agentes.md) para el detalle, incluido
 por qué los espejos escritos a mano se mueren sin que nadie lo note.
@@ -413,6 +558,7 @@ ambos cubren el pipeline local de reportes **y** el despliegue a Databricks:
 Diagrama actual end-to-end:
 
 ```mermaid
+%%{init: {"theme":"base","themeVariables":{"background":"#ffffff","primaryColor":"#ffffff","primaryTextColor":"#102129","primaryBorderColor":"#5f6f77","secondaryColor":"#f3f8f6","tertiaryColor":"#ffffff","lineColor":"#5f6f77","textColor":"#102129","mainBkg":"#ffffff","nodeBorder":"#5f6f77","clusterBkg":"#f8fbfa","clusterBorder":"#dce7e4","edgeLabelBackground":"#ffffff","titleColor":"#102129"}}}%%
 %% Workflow actual del proyecto
 flowchart TD
     START([Inicio]) --> LANE1
@@ -503,6 +649,7 @@ invoca ningún agente ni skill — solo hace mantenimiento sobre los artefactos 
 | `/limpiar-corridas` | Command de mantenimiento | Ninguno — dry-run + confirmación explícita antes de borrar | `cleanup_runs.py` |
 
 ```mermaid
+%%{init: {"theme":"base","themeVariables":{"background":"#ffffff","primaryColor":"#ffffff","primaryTextColor":"#102129","primaryBorderColor":"#5f6f77","secondaryColor":"#f3f8f6","tertiaryColor":"#ffffff","lineColor":"#5f6f77","textColor":"#102129","mainBkg":"#ffffff","nodeBorder":"#5f6f77","clusterBkg":"#f8fbfa","clusterBorder":"#dce7e4","edgeLabelBackground":"#ffffff","titleColor":"#102129"}}}%%
 %% Familia de comandos de reporte — agentes, skills e interacciones
 %% Verificado contra .claude/skills/*/SKILL.md y .claude/commands/limpiar-corridas.md (2026-07-22)
 flowchart TB
