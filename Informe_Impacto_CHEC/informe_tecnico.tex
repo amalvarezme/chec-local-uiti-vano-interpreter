@@ -254,7 +254,7 @@ desarrolla en las secciones siguientes.
         y validó un regresor de instancias múltiples que puntúa la celda
         $(\text{circuito}, \text{vano}, \text{ventana})$ y deriva su clase de criticidad de
         una geometría de agrupamiento congelada, con validación cruzada agrupada por vano y
-        una barra de aceptación preregistrada.
+        un criterio de aceptación prerregistrado.
 
   \item \textbf{Simulador contrafactual por vano.} Se desarrolló el tablero que compara la
         criticidad observada contra la simulada sobre el mismo circuito y la misma ventana,
@@ -795,8 +795,9 @@ la regla de vecino más cercano. La Figura~\ref{fig:modelo} presenta su diagrama
 \end{tikzpicture}
 \caption{Diagrama de bloques del modelo por bolsas. La primera pasada produce la compuerta por
 bolsa que modula el grafo de restricciones fijo; la segunda recodifica la entrada ya propagada
-reutilizando exactamente los mismos pesos. La clase no procede de la red, sino de caer sobre la
-geometría de agrupamiento congelada.}
+reutilizando exactamente los mismos pesos. La clase no procede de la red, sino de asignarse al
+centroide o
+región correspondiente de la geometría de agrupamiento congelada.}
 \label{fig:modelo}
 \end{figure}
 
@@ -862,7 +863,8 @@ $g_b = 2\,\sigma(W z_b) \in (0,2)^{E}$ modula el grafo fijo y escribe únicament
 columnas destino de las $E$ aristas:
 
 \begin{equation}
-x'_i = x_i + \alpha \sum_{(r \to c)\, \in\, \mathcal{E}} g_{b(i),\,rc}\; A_{rc}\; x_{i,r}\; \mathbf{e}_c .
+x'_i = x_i + \alpha \sum_{(r \to c)\, \in\, \mathcal{E}} g_{b(i),\,rc}\; A_{rc}\; x_{i,r}\;
+\mathbf{e}_c .
 \end{equation}
 
 \paragraph{Función de costo.} Sobre un lote de $B$ bolsas, con $t_b = \log(1 + u_b)$ el
@@ -889,7 +891,8 @@ w(t) = \frac{1}{\max\!\big(\hat{f}_{\mathrm{KDE}}(t),\,\varepsilon\big)},
 \end{equation}
 
 La densidad $\hat{f}_{\mathrm{KDE}}$ se ajusta una sola vez sobre el pliegue de entrenamiento
---- higiene de pliegue --- y los pesos se renormalizan a media unitaria por lote, de manera que
+--- ajuste realizado exclusivamente con datos del pliegue de entrenamiento, para evitar fuga de
+información --- y los pesos se renormalizan a media unitaria por lote, de manera que
 la escala resulte comparable con un error cuadrático plano.
 
 El término de reconstrucción se calcula contra la entrada estandarizada $z=(x-\mu)/\sigma$ y se
@@ -1152,7 +1155,7 @@ Alto       & $0{,}9741$ & $0{,}9421$ & $0{,}9578$ & \phantom{0}6.342 \\
 
 \begin{table}[H]
 \centering
-\caption{Resultado del protocolo de validación con barra preregistrada}
+\caption{Resultado del protocolo de validación con criterio de aceptación prerregistrado}
 \label{tab:validacion}
 \small
 \begin{tabularx}{\textwidth}{X r}
@@ -1162,7 +1165,7 @@ Alto       & $0{,}9741$ & $0{,}9421$ & $0{,}9578$ & \phantom{0}6.342 \\
 Bolsas evaluadas en validación cruzada agrupada & 62.114 \\
 macro-F1 del modelo & $0{,}8710$ \\
 macro-F1 de la mejor línea base & $0{,}8812$ \\
-Barra de aceptación preregistrada & $+5{,}0$ puntos \\
+Criterio de aceptación prerregistrado & $+5{,}0$ puntos \\
 Diferencia observada & $-1{,}02$ puntos \\
 \textbf{Veredicto} & \textbf{No alcanzado} \\
 \bottomrule
@@ -1206,7 +1209,7 @@ GPU integrada (MPS) & $19{,}63$ & $49{,}1$ min & 11.234 MB \\
 \end{tabularx}
 \end{table}
 
-Dos lecturas se derivan de esa medición, y ninguna es la esperable. La GPU integrada del propio
+Los resultados evidencian dos comportamientos no anticipados. La GPU integrada del propio
 procesador resulta seis veces más lenta y demanda $3{,}4$ veces más memoria que la CPU del mismo
 equipo: el modelo, con 150.926 parámetros, es demasiado pequeño para amortizar el traslado de
 cada lote. Y un mayor número de núcleos empeora el tiempo de forma monótona, porque coordinar
@@ -1226,10 +1229,12 @@ y una ventana, marcar vanos, generar un diagnóstico de intervención, modificar
 elegidas y comparar la criticidad observada con la simulada junto con el costo asociado.
 
 El simulador responde una pregunta distinta de la que responde la atribución de importancia. La
-atribución indica qué explica el \texttt{UITI\_VANO} observado; el simulador indica qué mover, y
-hasta qué valor, para que el vano descienda de grupo. Las respuestas no coinciden: medido sobre
-vanos reales, el ranking por sensibilidad y el ranking por caída alcanzable no comparten ninguna
-de sus cinco primeras variables, lo que justifica calcular el segundo en lugar de derivarlo del
+atribución indica qué explica el \texttt{UITI\_VANO} observado; el simulador indica qué variable
+modificar y hasta qué valor para que el vano descienda de grupo. Las respuestas no coinciden:
+medido sobre
+vanos reales, el ranking por sensibilidad y el ranking por reducción alcanzable no comparten
+ninguna de sus cinco primeras variables, lo que justifica calcular el segundo en lugar de
+derivarlo del
 primero.
 
 \subsection{Flujo de una simulación}
@@ -1242,7 +1247,7 @@ primero.
   \node[blko, below=10mm of $(obs)!0.5!(cf)$] (mil) {\textbf{Modelo entrenado}\\ los mismos pesos, sin reentrenar nada};
   \node[blk, below=of mil] (dif) {\textbf{Diferencia}: $\hat{u}$ simulado $-$ $\hat{u}$ observado\\ por vano y por variable, y el cambio de grupo};
   \node[blkn, below=10mm of obs |- dif] (gr) {\textbf{Grafo de diferencias}\\ se resaltan las aristas cuyas variables\\ se modificaron y alteraron el UITI};
-  \node[blkn, below=10mm of cf |- dif] (sen) {\textbf{Análisis de sensibilidad}\\ cada variable se modifica por separado\\ y se mide su caída del UITI\\ $\rightarrow$ el orden del diagnóstico};
+  \node[blkn, below=10mm of cf |- dif] (sen) {\textbf{Análisis de sensibilidad}\\ cada variable se modifica por separado\\ y se mide su reducción del UITI\\ $\rightarrow$ el orden del diagnóstico};
   \draw[fl] (obs.south) -- (mil.north west);
   \draw[fl] (cf.south) -- (mil.north east);
   \draw[fl] (mil) -- (dif);
@@ -1272,7 +1277,7 @@ Las decisiones de interacción que gobiernan el tablero son las siguientes:
         reducción media del UITI --- variables de intervención y variables de escenario ---,
         cada una con su valor sugerido y su reducción estimada, e identifica cuándo la
         modificación de una sola variable basta para cambiar de grupo a por lo menos un vano.
-  \item \textbf{Los valores se pueden ajustar a mano.} Cada vano seleccionado dispone de un
+  \item \textbf{Los valores pueden ajustarse manualmente.} Cada vano seleccionado dispone de un
         panel con sus variables, inicializadas con el valor observado en la ventana activa
         --- mediana para las numéricas y moda para las categóricas ---, nunca con un valor
         genérico.
@@ -1295,7 +1300,7 @@ perfil del circuito y la serie de UITI acumulado y eventos por ventana.}
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.96\textwidth]{figures/cuadernos/simulador_resultados.png}
-\caption{Resultados de la misma ejecución: la caída de UITI que aporta cada variable en cada
+\caption{Resultados de la misma ejecución: la reducción del UITI que aporta cada variable en cada
 vano, el UITI observado frente al simulado, el costo por vano y el costo acumulado ---
 195.345.980 COP sobre cinco actividades del contrato --- y el grafo de relaciones relevantes.
 El escenario simulado no produce mejora: el UITI acumulado sube $10.339{,}0$ con un desfase del
@@ -1309,8 +1314,9 @@ convertiría el sesgo del modelo en un ahorro.}
 \subsection{Clases de variable y criterios de separación}
 
 No todas las variables del modelo son modificables, y las que sí lo son no tienen el mismo
-significado. El simulador las separa en tres clases, y la separación no es cosmética: determina
-qué pregunta se está respondiendo. Esta capa evita que el panel presente como equivalentes
+significado. El simulador las separa en tres clases, y la separación tiene implicaciones
+funcionales en la interpretación del escenario: determina qué pregunta se está respondiendo.
+Esta capa evita que el panel presente como equivalentes
 intervenciones de naturaleza distinta, por ejemplo el desplazamiento de las coordenadas
 geográficas de un vano y la reducción de su riesgo por vegetación.
 
@@ -1371,7 +1377,7 @@ como clave.
   \node[blkn] (cat) {\textbf{Catálogo del contrato}\\ 142 actividades con su\\ costo unitario en COP};
   \node[blkd, right=of cat] (asig) {\textbf{Asignación manual}\\ el usuario marca qué actividades\\ corresponden a la intervención};
   \node[blkg, below=of cat] (fila) {\textbf{Una fila bajo cada vano}\\ con su cantidad editable:\\ cantidad $\times$ costo unitario};
-  \node[blko, below=of asig] (tot) {\textbf{Costo por vano y acumulado}\\ se lee al lado de la caída\\ de UITI que lo acompaña};
+  \node[blko, below=of asig] (tot) {\textbf{Costo por vano y acumulado}\\ se lee al lado de la reducción\\ del UITI que la acompaña};
   \draw[fl] (cat) -- (asig);
   \draw[fl] (asig) -- (tot);
   \draw[fl] (tot) -- (fila);
@@ -1634,7 +1640,8 @@ radial de causas reúne los patrones que cruzan circuitos.
 
 \paragraph{Costo por informe.} Un informe por circuito consume del orden de 318.760 unidades de
 texto del modelo de lenguaje. El requisito determinante no es la capacidad de cómputo local sino
-\textbf{la cuota del modelo}: mientras los tres roles razonan, el equipo permanece ocioso.
+\textbf{la cuota del modelo}: mientras los tres roles razonan, el consumo de recursos locales
+de cómputo permanece limitado durante esta etapa.
 
 % ============================================== 10. DATABRICKS ============
 \section{Migración a Azure Databricks}
@@ -1725,12 +1732,14 @@ La primera resume el proceso con una fila por etapa --- siempre las tres etapas 
 incluso las que no hicieron falta o quedaron bloqueadas ---, con columnas de lo que ya estaba, lo
 que se subió, el estado y \textbf{la causa}. La columna de causa la llenan únicamente las etapas
 que no terminaron de forma satisfactoria, e indica \emph{por qué}, no \emph{qué}. Una etapa que
-no salió bien y no declara causa se reporta de forma explícita como carente de causa registrada:
+no finalizó satisfactoriamente y no declara causa se reporta de forma explícita como carente de
+causa registrada:
 una celda vacía junto a un fallo se leería como un fallo sin motivo, y eso constituiría otra
 afirmación.
 
 La segunda es la tabla de ubicaciones, que responde la pregunta que se formula cuando el
-despliegue salió bien: dónde quedó cada cosa. Reúne el Volume de datos, el paquete precalculado
+despliegue finaliza satisfactoriamente: la ubicación de cada artefacto desplegado. Reúne el
+Volume de datos, el paquete precalculado
 del simulador, la carpeta de simulaciones guardadas, las dos aplicaciones con su URL literal y
 el cuaderno del espacio de trabajo, cada uno con su ruta y su camino de acceso en la interfaz.
 Esas rutas no son deducibles, porque el catálogo y el esquema se resuelven en cada corrida.
@@ -1746,7 +1755,7 @@ la rama principal.
 
 La puesta en marcha se compone de seis pasos, de los cuales los dos últimos aplican únicamente
 si el proyecto se despliega en Databricks. Los pasos 3, 4 y 6 se ejecutan desde un agente de
-código y no requieren instalar dependencias a mano.
+código y no requieren instalar dependencias manualmente.
 
 \subsection{Los seis pasos}
 
@@ -1983,8 +1992,8 @@ remite a la sección que describe cada pieza.
         se detienen las cinco aplicaciones (Tabla~\ref{tab:tableros}).
   \item \textbf{Situar el problema.} El tablero de agrupamiento indica en qué vanos se
         concentra la criticidad, y el ranking de circuitos, en qué circuitos
-        (Sección~\ref{sec:bandas}). De ahí sale la banda de riesgo sobre la que conviene
-        trabajar.
+        (Sección~\ref{sec:bandas}). A partir de esta clasificación se determina la banda
+        de riesgo sobre la que conviene trabajar.
   \item \textbf{Situarlo en el tiempo.} Los tableros de trayectorias muestran si el circuito
         elegido mejora o se deteriora y en qué ventana, primero a nivel de circuito y después
         a nivel de vano.
@@ -2184,7 +2193,8 @@ técnico reconoce. La medición asociada indica, sin embargo, que con los pesos 
 término apenas participa del gradiente, de modo que su aporte real debe establecerse mediante una
 ablación explícita antes de atribuirle efecto.
 
-El protocolo de validación del modelo no alcanzó la barra preregistrada. El análisis del
+El protocolo de validación del modelo no alcanzó el criterio de aceptación prerregistrado. El
+análisis del
 resultado muestra que la brecha frente a la mejor línea base es menor que el ruido de
 entrenamiento observado, por lo que la prioridad técnica inmediata es estabilizar el determinismo
 del entrenamiento antes de comparar variantes o continuar la búsqueda de hiperparámetros. El
