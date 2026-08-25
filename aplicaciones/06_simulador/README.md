@@ -252,9 +252,66 @@ celda siguiente aparece el tablero completo y ya no hace falta volver a subir.
    dos si quieres ver las dos juntas.
 4. **Simular** puntua la seleccion y llena el mapa de la derecha, las series,
    los violines y el costo.
+5. **Guardar** archiva esa corrida; **Cargar** vuelve a ella. Ver mas abajo.
 
 Tambien se puede marcar vanos con las casillas o haciendo clic sobre el mapa
 base, y mover a mano cualquier variable sin pasar por el diagnostico.
+
+## Guardar una corrida y volver a ella
+
+Debajo de *Simular* y *Limpiar*, el panel trae **Guardar** y **Cargar**.
+
+**Guardar** solo se habilita con una simulacion en pantalla -- guardar antes
+archivaria un tablero vacio -- y escribe **dos** archivos con el mismo nombre
+base:
+
+| archivo | tamanio | para que |
+|---|---|---|
+| `<circuito>_<ventana>_<fecha>.html` | ~6 MB | el **informe**: las ocho figuras y las tres tablas |
+| `<circuito>_<ventana>_<fecha>.simchec.json.gz` | ~1-20 KB | el **registro** con el que *Cargar* vuelve a esa corrida |
+
+El informe se abre con doble clic y no necesita nada instalado: plotly.js viaja
+dentro. Lleva la tabla de **vanos y variables simuladas** con el valor fijado de
+cada una, una tabla **por vano** con las actividades del contrato -- numero de
+intervenciones, costo unitario, descripcion y costo total --, y la tabla que
+contrasta el **UITI medido contra el simulado** vano por vano con su porcentaje
+de mejora o de subida y el total de las dos columnas. Lo unico que pide por red
+es el mapa de fondo de las dos primeras figuras; los vanos se dibujan igual sin
+internet.
+
+**Donde quedan.** En `~/CriticidadCHEC/simulaciones` -- o sea
+`/Users/<tu-usuario>/CriticidadCHEC/simulaciones` en macOS y
+`C:\Users\<tu-usuario>\CriticidadCHEC\simulaciones` en Windows. Cuelgan de tu
+carpeta personal y **no** de esta aplicacion a proposito: la aplicacion se
+reconstruye sola cuando cambian los datos, y en Windows hay un `.bat` que la
+traslada a una ruta corta. El panel escribe la ruta completa despues de guardar,
+asi que no hay que recordarla.
+
+### Por que el registro pesa kilobytes y no megabytes
+
+Porque **no guarda las figuras**. Lo que hay en pantalla se deriva entero de
+correr el modelo MIL sobre las entradas, asi que congelarlo seria guardar el
+valor de retorno de una funcion al lado de sus argumentos: dos versiones de lo
+mismo que se separan en cuanto alguien reentrena. El registro guarda las
+ENTRADAS -- circuito, ventana, vanos, el valor de cada variable y las
+actividades con sus repeticiones -- y *Cargar* las repone y **vuelve a simular**.
+
+El precio de esa decision es que un modelo reentrenado devuelve otros numeros, y
+se paga diciendolo: el registro lleva la firma de los artefactos con los que
+corrio, y al cargar el panel avisa si no coinciden. El informe HTML que se
+guardo ese dia sigue siendo el registro fiel de lo que se decidio entonces.
+
+Es ademas `gzip` de JSON, no un formato propio: quien audite una decision dentro
+de dos anios puede abrirlo sin este programa.
+
+### En Databricks
+
+El mismo tablero, con los mismos dos botones. Alli las corridas van al **Volume**
+de Unity Catalog -- `/Volumes/<catalogo>/<esquema>/chec-simulador/simulaciones` --
+y no al disco del contenedor, que es efimero y que el usuario no puede alcanzar.
+Se bajan desde **Catalog → Volumes** en la interfaz del workspace. La carpeta la
+crea `/subir-a-databricks`, y la app necesita `WRITE_VOLUME` sobre ese Volume;
+sin ese permiso el tablero simula igual y solo falla al pulsar *Guardar*.
 
 > El codigo de las celdas esta plegado. Para leerlo, despliega la celda desde
 > el margen izquierdo; lo que hace cada pieza esta explicado en las celdas de

@@ -15,3 +15,16 @@ env:
   # del contenedor, no del workspace.
   - name: PAQUETE_06
     value: "/tmp/paquete_06"
+  # La carpeta del Volume donde el tablero escribe lo que se guarda con el boton
+  # "Guardar": el informe HTML de cada corrida y el registro con el que "Cargar"
+  # vuelve a ella. `/subir-a-databricks` la sustituye por el destino resuelto, igual
+  # que `VOLUME_06`.
+  #
+  # Hermana de `paquete_06` y no hija suya: volver a subir el paquete no puede
+  # llevarse por delante el trabajo guardado por la gente.
+  #
+  # Es el Volume y NO el disco del contenedor porque ese disco es efimero y ademas el
+  # usuario no puede alcanzarlo. Que este puesta es lo que hace que el tablero elija
+  # el almacen del Volume; en local no existe y escribe en el disco del usuario.
+  - name: SIMULACIONES_VOLUMEN
+    value: "/Volumes/workspace/default/chec-simulador/simulaciones"

@@ -101,8 +101,23 @@ Es la que de verdad importa, y no cuesta licencia ni disco. Diez pasos:
 9. **Cerrar todo**, en el menú. Los puertos que quedaran quedan libres y no queda ningún
    `python.exe` vivo (mirar el Administrador de tareas).
 10. Repetir el paso 7. Todo vuelve a abrir: ningún puerto quedó bloqueado.
+11. En el **simulador** (`aplicaciones\06_simulador\iniciar.bat`): *Simular* y después
+    *Guardar*. El panel tiene que contestar con una ruta bajo
+    `C:\Users\<tu-usuario>\CriticidadCHEC\simulaciones`, y ahí tienen que estar los dos
+    archivos — el `.html` y el `.simchec.json.gz`. Abrir el `.html` con doble clic: las
+    tildes de las descripciones del contrato se ven bien (se escribe en UTF-8 explícito;
+    con la codificación por defecto de Windows saldrían rotas, y **solo** en Windows).
+    Después *Limpiar* y *Cargar*: los vanos, las variables y las actividades vuelven.
 
 Si algo falla, lo útil es el número de puerto y el texto exacto de la consola.
+
+> **Lo que el paso 11 vigila** es el nombre del archivo, no el guardado. La etiqueta de
+> ventana del tablero lleva dos puntos (`V10: 2024-06-01 a …`) y Windows los rechaza en
+> un nombre de archivo: `nombre_de_archivo` los sustituye, y
+> `test_simulaciones_guardadas.py` lo fija desde macOS. Lo que **no** se puede
+> comprobar desde aquí es la carpeta personal — `Path.home()` — cuando el usuario tiene
+> Documentos redirigidos a OneDrive. Por eso las simulaciones cuelgan de
+> `~\CriticidadCHEC` y no de `~\Documents`.
 
 ---
 

@@ -300,3 +300,65 @@ def test_el_catalogo_viaja_dentro_del_paquete_que_baja_la_app():
     assert "DESTINO" in linea, (
         "la ruta del catalogo tiene que colgar de DESTINO -- la copia local del paquete "
         f"--, no de VOLUMEN. Linea encontrada: {linea.strip()!r}")
+
+
+# ----------------------------------------- la carpeta donde el tablero guarda corridas
+
+
+def test_el_yaml_declara_donde_guarda_el_tablero_sus_simulaciones():
+    """El disco del contenedor es efimero y el usuario no puede alcanzarlo: lo que se
+    guarde tiene que ir al Volume. La variable es ademas lo que ELIGE ese camino --
+    `almacen_simulaciones.py` no adivina mirando si existe `/Volumes` --, asi que sin
+    ella el tablero escribiria en un disco que desaparece con el proximo despliegue."""
+    yaml = (APP / "app.yaml").read_text("utf-8")
+    assert "SIMULACIONES_VOLUMEN" in yaml
+
+
+def test_la_carpeta_de_simulaciones_es_hermana_del_paquete_y_no_hija():
+    """Volver a subir el paquete borra y recrea `paquete_06`. Colgar las simulaciones
+    de ahi dentro se llevaria por delante el trabajo guardado por la gente en cada
+    despliegue, y sin un solo error."""
+    yaml = (APP / "app.yaml").read_text("utf-8")
+    assert "/chec-simulador/simulaciones" in yaml
+    assert "/paquete_06/simulaciones" not in yaml
+
+
+def test_preparar_la_fuente_sustituye_tambien_la_carpeta_de_simulaciones(tmp_path):
+    """Se DERIVA del volumen del paquete en vez de entrar como una segunda bandera: dos
+    rutas que hay que pasar por separado son dos rutas que pueden acabar en catalogos
+    distintos, y ese desajuste no da ningun error -- la app guarda en un Volume que
+    nadie mira."""
+    empacador = _empacador()
+    empacador.preparar_fuente_simulador(
+        tmp_path, volumen_paquete="/Volumes/gold/chec/chec-simulador/paquete_06")
+    yaml = (tmp_path / "app.yaml").read_text("utf-8")
+    assert "/Volumes/gold/chec/chec-simulador/simulaciones" in yaml
+    assert "/Volumes/workspace/default" not in yaml
+
+
+def test_la_carpeta_de_simulaciones_se_puede_fijar_a_mano(tmp_path):
+    empacador = _empacador()
+    empacador.preparar_fuente_simulador(
+        tmp_path, volumen_paquete="/Volumes/gold/chec/chec-simulador/paquete_06",
+        volumen_simulaciones="/Volumes/gold/otro/sitio/corridas")
+    yaml = (tmp_path / "app.yaml").read_text("utf-8")
+    assert "/Volumes/gold/otro/sitio/corridas" in yaml
+
+
+def test_el_arranque_prepara_la_carpeta_y_lo_dice_en_los_logs():
+    """La linea que `/subir-a-databricks` busca para separar "el permiso de escritura
+    no llego" de "la app no arranco". Sin ella los dos se ven igual: una app que sirve
+    y un boton Guardar que falla al pulsarlo, cuando ya no hay nadie mirando los logs."""
+    fuente = (APP / "arranque.py").read_text("utf-8")
+    assert "create_directory" in fuente
+    assert "simulaciones ->" in fuente
+
+
+def test_no_poder_preparar_la_carpeta_no_tumba_la_app():
+    """El tablero sirve para simular aunque no pueda archivar. Morir aqui cambiaria una
+    funcion que falta por una app que no abre."""
+    arbol = ast.parse((APP / "arranque.py").read_text("utf-8"))
+    protegidas = [n for n in ast.walk(arbol) if isinstance(n, ast.Try)
+                  and "create_directory" in ast.dump(n.body[0] if n.body else ast.Pass())]
+    assert protegidas, "`create_directory` no esta dentro de un try: un Volume sin " \
+                       "permiso de escritura tumbaria el arranque entero"

@@ -141,6 +141,26 @@ If this fails on privileges, **do not stop** (rule B). Only when no catalog anyw
 `CREATE VOLUME` does this become a `bloqueante` restriction — and even then the run
 continues, so the report ends up listing every other wall too, not just the first one.
 
+Y crea dentro la carpeta donde el simulador **guarda las corridas** de la gente:
+```
+databricks fs mkdir dbfs:/Volumes/<catalogo>/<esquema>/chec-simulador/simulaciones -p <profile>
+```
+Ahi caen los dos archivos que escribe el boton *Guardar* del tablero: el **informe HTML**
+de cada corrida — figuras, vanos y variables simuladas, actividades del contrato con su
+costo, y el UITI medido contra el simulado — y un **registro de unos kilobytes** con el que
+*Cargar* vuelve a esa simulación. El usuario los baja desde **Catalog → Volumes** en la UI
+del workspace; la app no ofrece descarga porque Voila no sirve archivos sueltos.
+
+**Hermana de `paquete_06`, nunca dentro de él.** La etapa 4c borra y recrea `paquete_06`
+en cada despliegue: colgar las simulaciones de ahí se llevaría por delante el trabajo
+guardado por la gente cada vez que se sube, y sin un solo error a la vista.
+
+`mkdir` aquí y no solo en la app: la app la crea también al arrancar, pero si le falta
+`WRITE VOLUME` eso falla y el fallo solo se ve en sus logs. Creándola desde el despliegue
+—que corre con la identidad del usuario— el permiso que falta se separa del sitio que
+falta. Si este `mkdir` falla, es una restricción `informativa`: el tablero simula igual,
+lo único que no puede es archivar.
+
 ## 3. Are the data in the Volume? Upload only if not
 
 **Read-only check first.** Do not upload 566 MB to find out it was already there:
@@ -651,10 +671,28 @@ python3 scripts/empacar_app_databricks.py fuente-simulador \
   --volumen-paquete /Volumes/<catalogo>/<esquema>/chec-simulador/paquete_06
 ```
 
-Copia `arranque.py`, `app.yaml` y `requirements.txt`, y sustituye en el `app.yaml` la ruta
-resuelta del Volume — igual que `--raiz-paneles` en 4b, y por el mismo motivo: sin esa
+Copia `arranque.py`, `app.yaml` y `requirements.txt`, y sustituye en el `app.yaml` **dos**
+rutas del Volume — igual que `--raiz-paneles` en 4b, y por el mismo motivo: sin esa
 sustitucion la app arranca buscando su paquete en `workspace.default`, que en CHEC no
 existe (D1), y el sintoma es "no encuentra el paquete", que no apunta hasta aqui.
+
+Las dos son `VOLUME_06` (el paquete) y `SIMULACIONES_VOLUMEN` (donde el tablero guarda las
+corridas). La segunda **se deriva** de la primera — hermana suya, `.../simulaciones` — y por
+eso el comando de arriba no lleva una bandera más: dos rutas que hay que pasar por separado
+son dos rutas que pueden acabar en catálogos distintos, y ese desajuste no da ningún error,
+solo guarda en un Volume que nadie mira. `--volumen-simulaciones` existe para el caso en que
+las corridas deban vivir en otro sitio, que es una decisión explícita.
+
+**Qué gana el usuario con eso**: bajo *Simular* y *Limpiar*, el panel trae *Guardar* y
+*Cargar*. *Guardar* — habilitado solo con una simulación en pantalla — escribe el informe
+HTML de la corrida (las ocho figuras, más las tablas de vanos y variables simuladas,
+actividades del contrato por vano con costo unitario y total, y el UITI medido contra el
+simulado con su porcentaje) y, al lado, un registro de unos kilobytes. *Cargar* toma ese
+registro, repone circuito, ventana, vanos, variables y actividades, y **vuelve a correr el
+modelo**: lo que se guarda son las entradas, no las figuras, y por eso el registro pesa lo
+que pesa. El registro lleva la firma de los artefactos con los que corrió, así que una
+corrida cargada contra un modelo reentrenado lo dice en vez de dar otros números en
+silencio.
 
 > **Los tres archivos estuvieron dentro de este `.md`, y por eso se perdieron.** El comando
 > retirado `/app-simulador-vano` los llevaba como bloques de codigo; al consolidar
@@ -707,22 +745,42 @@ databricks apps create --compute-size MEDIUM --json '{
     "uc_securable": {
       "securable_type": "VOLUME",
       "securable_full_name": "<catalogo>.<esquema>.chec-simulador",
-      "permission": "READ_VOLUME"
+      "permission": "<permiso>"
     }
   }]
 }' -p <profile>
 ```
+
+**El `<permiso>` no es el mismo para las dos.** `criticidad-chec` solo LEE paneles, y le
+basta `READ_VOLUME`. `simulador-vano` además ESCRIBE: su botón *Guardar* deja el informe
+HTML de la corrida y su registro en `.../chec-simulador/simulaciones`, así que necesita
+`WRITE_VOLUME`. Dado a la primera sería permiso de escritura que nadie usa; negado a la
+segunda, el tablero abre y simula perfectamente y solo falla al pulsar *Guardar* — cuando
+ya no hay nadie mirando los logs del despliegue.
+
+| App | Permiso | Por qué |
+|---|---|---|
+| `criticidad-chec` | `READ_VOLUME` | solo lee los cuatro paneles del Volume |
+| `simulador-vano` | `WRITE_VOLUME` | además guarda ahí las corridas de la gente |
+
 Comillas **simples** alrededor del JSON: escapar identificadores con acento grave dentro de
 comillas dobles se rompe en zsh. Si la app ya existe, adjunta el mismo recurso con
 `databricks apps update <app-name> --json '<mismo cuerpo sin name>'`. El service principal
 es nuevo en cada re-creacion, asi que un permiso que dejo una app anterior del mismo nombre
-no sirve: verifica que el recurso quedo, no lo supongas.
+no sirve: verifica que el recurso quedo — **y con que permiso**, no solo que existe —, no lo
+supongas.
 
 Si `uc_securable` falla por falta de `USE CATALOG`, eso es **D3**: crea la app **sin** el
 bloque `resources`, anota la restriccion como `bloqueante` nombrando quien la levanta, y
 sigue (rule B). La app respondera 502 en cada ruta de tablero hasta que exista el permiso —
 por eso `/salud` deliberadamente no toca el Volume, y por eso una pieza que falta responde
 404 y un muro de permisos responde 502.
+
+Si `WRITE_VOLUME` falla pero `READ_VOLUME` pasa, **crea `simulador-vano` con `READ_VOLUME`**
+y anota una restricción `degradada`, no `bloqueante`: el tablero abre, simula y dibuja sus
+ocho paneles; lo único que no puede es guardar. Dilo así en la bitácora — «simulador sin
+permiso de escritura: el botón Guardar va a fallar» — y nombra quién levanta el permiso.
+Dejar la app fuera por esto cambiaría una función que falta por un tablero que no está.
 
 Espera a que el compute llegue a `ACTIVE` antes de desplegar; desplegar contra una app que
 todavia se aprovisiona falla con `Cannot deploy app <name> as it is not in RUNNING state`:
@@ -758,12 +816,23 @@ que no reportes un `302` como exito.
   pero faltan los paneles" de "la app esta caida". Despues pide las cuatro rutas. Un 500 o
   502 en una ruta de tablero con `/salud` en 200 es la firma de **D3**.
 - Para `simulador-vano`, lee los logs y confirma, en orden: `paquete listo en N s (94.5 MB)`
-  — si falta, el permiso del Volume no llego; la linea de arranque de Voila y **ningun**
+  — si falta, el permiso del Volume no llego; `simulaciones -> /Volumes/<catalogo>/...`
+  — si en su lugar sale `AVISO: no se pudo preparar ...`, el service principal se quedó sin
+  `WRITE VOLUME` y el botón *Guardar* va a fallar (registra `degradado`, no `fallo`: el
+  resto del tablero sirve); la linea de arranque de Voila y **ningun**
   `ModuleNotFoundError`; y ningun `KeyError`/`NameError` con `context_df` o `Xdf`.
   **Lo que de verdad importa no se puede comprobar desde aqui**: pidele al usuario que abra
   la URL y confirme que el panel y los dos mapas dibujan (el kernel arranco y el paquete
   cargo), que **hacer clic en un vano del mapa marca su casilla** (el viaje de ida y vuelta
-  por WebSocket funciona) y que *Simular* responde en unos segundos. El del WebSocket es el
+  por WebSocket funciona), que *Simular* responde en unos segundos, y que ***Guardar*
+  contesta con una ruta del Volume** y no con un error rojo — eso es lo único que prueba
+  que el permiso de escritura llegó de verdad. Después de guardar una vez, comprueba desde
+  aquí que los dos archivos están:
+  ```
+  databricks fs ls dbfs:/Volumes/<catalogo>/<esquema>/chec-simulador/simulaciones -p <profile>
+  ```
+  Tienen que salir dos con el mismo nombre base: un `.html` de varios MB y un
+  `.simchec.json.gz` de unos kilobytes. Si solo sale uno, el guardado se cortó a la mitad. El del WebSocket es el
   que fallaria si el proxy no los pasara, y falla **en silencio**: la pagina se ve perfecta y
   simplemente no reacciona. Si falla, reportalo y para — no empieces una reescritura en Dash
   sin preguntar.

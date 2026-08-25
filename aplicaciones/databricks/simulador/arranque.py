@@ -82,6 +82,35 @@ print(f"paquete listo en {time.perf_counter() - t0:.1f} s ({_megas:.1f} MB) "
 # llegar a Voila y de ahi al kernel del tablero.
 os.environ["RUTA_VARIABLES_SIMULAR"] = str(DESTINO / "Variables_simular.xlsx")
 
+# --- Donde guarda el tablero las simulaciones ------------------------------------
+# El disco de este contenedor es EFIMERO -- desaparece con el proximo despliegue -- y
+# ademas el usuario no puede alcanzarlo: no hay descarga desde una pagina de Voila.
+# La unica superficie que sobrevive y que el usuario ve es el Volume, asi que aqui el
+# tablero guarda ahi. `almacen_simulaciones.py` elige por esta variable y por ninguna
+# heuristica: en local no esta puesta y el tablero escribe en el disco del usuario.
+#
+# Se DERIVA de `VOLUME_06` cuando `app.yaml` no la trae, y no se deja caer a un
+# literal: `VOLUME_06` ya viene con el catalogo y el esquema que `/subir-a-databricks`
+# resolvio para ESTE workspace (contrato C), y un literal apuntaria al de otro. Es
+# hermana del paquete y no hija: `.../chec-simulador/paquete_06` y
+# `.../chec-simulador/simulaciones`, para que borrar y volver a subir el paquete no
+# se lleve por delante el trabajo guardado.
+VOLUMEN_SIMULACIONES = os.environ.get("SIMULACIONES_VOLUMEN", "").strip() or (
+    VOLUMEN.rsplit("/", 1)[0] + "/simulaciones")
+os.environ["SIMULACIONES_VOLUMEN"] = VOLUMEN_SIMULACIONES
+try:
+    cliente.files.create_directory(VOLUMEN_SIMULACIONES)
+    print(f"simulaciones -> {VOLUMEN_SIMULACIONES}", flush=True)
+except Exception as _exc:  # noqa: BLE001 -- la app arranca igual, sin guardar
+    # NO se aborta. El tablero sirve para simular aunque no pueda archivar, y morir
+    # aqui cambiaria una funcion que falta por una app que no abre. Se dice en los
+    # logs, que es donde `/subir-a-databricks` lo busca: casi siempre es que al
+    # service principal le falta WRITE VOLUME (contrato D3), y ese permiso lo aplica
+    # el recurso `uc_securable` de la app.
+    print(f"AVISO: no se pudo preparar {VOLUMEN_SIMULACIONES} ({_exc}). "
+          "El boton Guardar del tablero va a fallar; revisa WRITE VOLUME del "
+          "service principal.", flush=True)
+
 # `os.execvp` y no `subprocess.run`: Voila tiene que quedar como hijo DIRECTO del
 # proceso de la plataforma para que sus senales le lleguen, y un lanzador que se queda
 # vivo detras se las come y ademas deja una copia residente de si mismo.

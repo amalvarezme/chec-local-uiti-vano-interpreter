@@ -63,6 +63,11 @@ ARCHIVOS_SIMULADOR = ("arranque.py", "app.yaml", "requirements.txt")
 
 MARCA_VOLUMEN_PAQUETE = '/Volumes/workspace/default/chec-simulador/paquete_06'
 
+# La carpeta donde el tablero escribe lo que se guarda con su boton "Guardar". Misma
+# historia que la del paquete -- el valor del repositorio es un DEFECTO que apunta a
+# `workspace.default` -- y misma sustitucion.
+MARCA_VOLUMEN_SIMULACIONES = '/Volumes/workspace/default/chec-simulador/simulaciones'
+
 
 def _tableros():
     sys.path.insert(0, str(COMUN))
@@ -162,15 +167,27 @@ def preparar_fuente(destino: Path, *, raiz_paneles: str) -> list[str]:
     return copiados
 
 
-def preparar_fuente_simulador(destino: Path, *, volumen_paquete: str) -> list[str]:
-    """Copia la fuente de `simulador-vano` y le sustituye la ruta del Volume.
+def preparar_fuente_simulador(destino: Path, *, volumen_paquete: str,
+                              volumen_simulaciones: str | None = None) -> list[str]:
+    """Copia la fuente de `simulador-vano` y le sustituye las DOS rutas del Volume.
 
     Misma forma que `preparar_fuente`, y a proposito: las dos apps se suben con la misma
     secuencia de `workspace import`, asi que lo que cambia entre ellas es la lista de
-    archivos y cual es la marca a sustituir.
+    archivos y cuales son las marcas a sustituir.
 
-    Lo que se sustituye aqui es `VOLUME_06`, la carpeta del Volume con el paquete
-    precalculado. `PAQUETE_06` no se toca: es una ruta DENTRO del contenedor.
+    Lo que se sustituye es `VOLUME_06` -- la carpeta con el paquete precalculado -- y
+    `SIMULACIONES_VOLUMEN` -- donde el tablero escribe lo que se guarda con su boton
+    "Guardar". `PAQUETE_06` no se toca: es una ruta DENTRO del contenedor.
+
+    La segunda se DERIVA de la primera por defecto, y eso no es pereza: dos rutas que
+    hay que pasar por separado son dos rutas que pueden acabar en catalogos distintos,
+    y ese desajuste no produce ningun error -- la app guardaria en un Volume que nadie
+    mira. Se deja fijar a mano para el caso en que las corridas deban vivir en otro
+    sitio, que es una decision explicita y no un descuido.
+
+    Hermana de `paquete_06` y no hija suya: volver a subir el paquete borra y recrea esa
+    carpeta, y colgar las simulaciones de ahi dentro se llevaria por delante el trabajo
+    guardado en cada despliegue.
     """
     destino.mkdir(parents=True, exist_ok=True)
     copiados = []
@@ -181,17 +198,26 @@ def preparar_fuente_simulador(destino: Path, *, volumen_paquete: str) -> list[st
         shutil.copy2(origen, destino / nombre)
         copiados.append(nombre)
 
+    if volumen_simulaciones is None:
+        volumen_simulaciones = volumen_paquete.rsplit("/", 1)[0] + "/simulaciones"
+
     yaml = destino / "app.yaml"
     texto = yaml.read_text("utf-8")
-    if texto.count(MARCA_VOLUMEN_PAQUETE) != 1:
-        raise SystemExit(
-            f"`app.yaml` deberia nombrar {MARCA_VOLUMEN_PAQUETE!r} exactamente una vez "
-            f"y lo nombra {texto.count(MARCA_VOLUMEN_PAQUETE)}. Sin la sustitucion, la "
-            "app arranca buscando su paquete en el Volume de otro workspace y el "
-            "sintoma -- 'no encuentra el paquete' -- no apunta hasta aqui."
-        )
-    yaml.write_text(texto.replace(MARCA_VOLUMEN_PAQUETE, volumen_paquete, 1),
-                    encoding="utf-8")
+    for marca, resuelta, sintoma in (
+        (MARCA_VOLUMEN_PAQUETE, volumen_paquete,
+         "la app arranca buscando su paquete en el Volume de otro workspace y el "
+         "sintoma -- 'no encuentra el paquete' -- no apunta hasta aqui"),
+        (MARCA_VOLUMEN_SIMULACIONES, volumen_simulaciones,
+         "el boton Guardar del tablero escribe en el Volume de otro workspace, o "
+         "falla por permisos, y en ninguno de los dos casos el error apunta hasta aqui"),
+    ):
+        if texto.count(marca) != 1:
+            raise SystemExit(
+                f"`app.yaml` deberia nombrar {marca!r} exactamente una vez y lo nombra "
+                f"{texto.count(marca)}. Sin la sustitucion, {sintoma}."
+            )
+        texto = texto.replace(marca, resuelta, 1)
+    yaml.write_text(texto, encoding="utf-8")
     return copiados
 
 
@@ -214,6 +240,9 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--destino", required=True, type=Path)
     s.add_argument("--volumen-paquete", required=True,
                    help="carpeta del Volume con el paquete, ya resuelta, sin barra final")
+    s.add_argument("--volumen-simulaciones", default=None,
+                   help="carpeta del Volume donde el tablero guarda sus corridas; por "
+                        "defecto, hermana de la del paquete")
 
     args = analizador.parse_args(argv)
     if args.orden == "paneles":
@@ -224,7 +253,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.orden == "fuente-simulador":
         copiados = preparar_fuente_simulador(
-            args.destino, volumen_paquete=args.volumen_paquete.rstrip("/"))
+            args.destino, volumen_paquete=args.volumen_paquete.rstrip("/"),
+            volumen_simulaciones=(args.volumen_simulaciones or "").rstrip("/") or None)
         print(json.dumps({"copiados": copiados}, indent=1))
         return 0
 
