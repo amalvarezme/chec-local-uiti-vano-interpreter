@@ -142,7 +142,13 @@ const cronograma = [
             criticidad y la evaluación de intervenciones en redes de nivel de tensión 2.
           </p>
         </div>
-        <aside class="hero-panel" aria-label="Datos principales del proyecto">
+        <div class="hero-side">
+          <div class="hero-logos" role="img" aria-label="CHEC, Universidad Nacional de Colombia y Laboratorio de Inteligencia Artificial">
+            <img src={logoChec.src} alt="" />
+            <img src={logoUnal.src} alt="" />
+            <img src={logoLab.src} alt="" />
+          </div>
+          <aside class="hero-panel" aria-label="Datos principales del proyecto">
           <dl>
             <div>
               <dt>Contrato</dt>
@@ -161,12 +167,8 @@ const cronograma = [
               <dd>27 de abril de 2026</dd>
             </div>
           </dl>
-        </aside>
-      </section>
-
-      <section class="logo-strip" aria-label="Instituciones participantes">
-        <img src={logoChec.src} alt="Logo CHEC" />
-        <img src={logoUnal.src} alt="Logo Universidad Nacional de Colombia" />
+          </aside>
+        </div>
       </section>
 
       <section id="acta" class="section">
@@ -317,9 +319,10 @@ const cronograma = [
           </table>
         </div>
         <p class="nota-tabla">
-          <strong class="sigla">M-GCECDL</strong> es el modelo de inteligencia artificial predictiva para la estimación
-          de criticidad, regularizado por restricciones físicas y por un autoencoder del vector de
-          características, construido desde el análisis temporal de eventos sobre vanos mediante una
+          <strong class="sigla">M-GCECDL</strong> —<em>Multimodal-Graph Connectivity Enhanced and
+          Conditioned Deep Learning</em>— es el modelo de inteligencia artificial predictiva para la
+          estimación de criticidad, regularizado por restricciones físicas y por un autoencoder del vector
+          de características, construido desde el análisis temporal de eventos sobre vanos mediante una
           representación por bolsas y múltiples instancias. Se describe en
           <a href="#modelo-mil">Modelo de IA predictiva M-GCECDL</a>.
         </p>
@@ -600,10 +603,12 @@ const cronograma = [
           <p class="eyebrow">IA + Criticidad CHEC · 3 de 6</p>
           <h2>Modelo de IA predictiva <span class="sigla">M-GCECDL</span> — MIL sobre bolsas vano × ventana</h2>
           <p>
-            El módulo se denomina <strong class="sigla">M-GCECDL</strong>: un modelo de inteligencia artificial
-            predictiva para la estimación de criticidad, regularizado por restricciones físicas y por un
-            autoencoder del vector de características, construido desde el análisis temporal de eventos
-            sobre vanos mediante una representación por bolsas y múltiples instancias.
+            El módulo se denomina <strong class="sigla">M-GCECDL</strong>, por
+            <em>Multimodal-Graph Connectivity Enhanced and Conditioned Deep Learning</em>: un modelo de
+            inteligencia artificial predictiva para la estimación de criticidad, regularizado por
+            restricciones físicas y por un autoencoder del vector de características, construido desde el
+            análisis temporal de eventos sobre vanos mediante una representación por bolsas y múltiples
+            instancias.
           </p>
           <p>
             El modelo no predice un vano, sino una <strong>bolsa</strong>. Una bolsa corresponde a un par
@@ -2499,21 +2504,47 @@ const cronograma = [
     font-weight: 800;
   }
 
-  .logo-strip {
+  .hero-side {
+    display: grid;
+    gap: 1.15rem;
+    align-content: center;
+  }
+
+  /* Los tres logos tienen proporciones muy distintas (4,4 · 2,4 · 1,0), asi que
+     el alto se fija por logo y no en comun: con un solo max-height el cuadrado
+     del laboratorio empequenece a los otros dos. */
+  .hero-logos {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: clamp(2rem, 8vw, 6rem);
-    width: 100%;
-    padding: 2rem 1rem;
-    background: white;
-    border-block: 1px solid var(--line);
+    gap: 1.15rem;
+    padding: 0.75rem 1.25rem;
   }
 
-  .logo-strip img {
-    max-width: 180px;
-    max-height: 78px;
+  /* El ancho manda y el alto es el tope. Los tres logos tienen proporciones muy
+     distintas (4,37 · 2,42 · 1,00): con un max-height comun el cuadrado del
+     laboratorio empequenece a los otros dos, y con un ancho fijo la fila se sale
+     cuando la columna se angosta. Los porcentajes suman 86 % y dejan sitio a los
+     dos huecos. */
+  .hero-logos img {
+    width: auto;
+    height: auto;
     object-fit: contain;
+  }
+
+  .hero-logos img:nth-child(1) {
+    max-width: 42%;
+    max-height: 40px;
+  }
+
+  .hero-logos img:nth-child(2) {
+    max-width: 30%;
+    max-height: 54px;
+  }
+
+  .hero-logos img:nth-child(3) {
+    max-width: 14%;
+    max-height: 60px;
   }
 
   .section {
@@ -4167,8 +4198,8 @@ const cronograma = [
       font-size: 0.82rem;
     }
 
-    .logo-strip {
-      flex-direction: column;
+    .hero-logos {
+      gap: 1.25rem;
     }
 
     .button {
