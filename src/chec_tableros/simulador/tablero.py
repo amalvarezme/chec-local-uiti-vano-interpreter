@@ -51,11 +51,24 @@ except ImportError as exc:  # pragma: no cover -- entorno sin interfaz
         "El tablero del simulador requiere ipywidgets para su interfaz interactiva."
     ) from exc
 
+from chec_local_interpreter.almacen_simulaciones import almacen_por_defecto
 from chec_local_interpreter.costos_items import (
     MAX_REPETICIONES,
     costos_de_intervencion,
     detalle_html_de_item,
     leer_catalogo_costos,
+)
+from chec_local_interpreter.simulaciones_guardadas import (
+    GRANO_CIRCUITO,
+    actividades_por_vano,
+    deserializar,
+    informe_html,
+    nombre_de_archivo,
+    registro_de_simulacion,
+    sello_del_modelo,
+    serializar,
+    variables_por_vano,
+    veredicto_del_sello,
 )
 from chec_local_interpreter.mil_simulador_015 import (
     gates_de_bolsas,
@@ -2627,6 +2640,10 @@ def construir(
     (medido con 50 y 200 replicas). La prediccion no depende de que eventos cayeron en
     la bolsa, asi que esa barra de error habria sido adorno sobre la incertidumbre real,
     que es dos ordenes de magnitud mayor.
+
+    DEVUELVE lo que acaba de pintar. La tabla de UITI del informe guardado sale de
+    aqui y no de una segunda cuenta sobre la tabla simulada: dos formas de calcular
+    el mismo contraste acaban discrepando, y el informe es lo que se archiva.
     """
         if tabla_simulada is None or len(tabla_simulada) == 0:
             barras = barras_uiti_por_vano(None, observados={}, total_circuito=0.0)
@@ -2674,6 +2691,7 @@ def construir(
             fig.layout.annotations[IDX_ANOTACION_BARRAS].text = (
                 '' if barras['x'] else 'Marca vanos y presiona <b>Simular</b>.')
             fig.layout.annotations[IDX_TITULO_BARRAS].text = _titulo_de_barras(barras)
+        return barras
 
     def _titulo_de_barras(barras):
         """El titulo lleva la cifra que el tablero viene a producir: cuanto baja el UITI
@@ -2684,8 +2702,16 @@ def construir(
     pasar por un resultado firme."""
         if barras['reduccion'] is None:
             return 'UITI acumulado: medido contra simulado'
-        return (f'UITI acumulado: medido contra simulado: baja '
-                f'<b>{barras["reduccion"]:,.1f}</b> &plusmn; {barras["desviacion"]:,.1f} '
+        # `reduccion` es `medido - simulado` y puede salir NEGATIVA: el escenario
+        # simulado EMPEORA el UITI de esos vanos, que es un resultado legitimo -- no
+        # todo escenario mejora. Publicado como "baja -59,4" se lee como una errata y
+        # esconde justo el desenlace que hay que ver. El informe que escribe "Guardar"
+        # usa la misma regla, y tenerlas distintas haria que el panel y el archivo de
+        # la misma corrida dijeran cosas distintas.
+        _cambio = float(barras['reduccion'])
+        _verbo = 'baja' if _cambio >= 0 else 'sube'
+        return (f'UITI acumulado: medido contra simulado: {_verbo} '
+                f'<b>{abs(_cambio):,.1f}</b> &plusmn; {barras["desviacion"]:,.1f} '
                 f'en los {len(barras["x"]) - 1} vanos')
 
     def _pintar_costos(costos):
@@ -2780,6 +2806,11 @@ def construir(
     _tarea_pendiente_simular = None
     _ultimo_resultado_simulacion = None   # DataFrame de simulate_explicit_overrides, o None
     _ultima_seleccion_simulada = None     # (circuito, ventana_i) al que corresponde ese resultado
+    # Todo lo que hace falta para GUARDAR la corrida que hay en pantalla: la seleccion,
+    # los valores del panel, las actividades, los costos y las barras de UITI. Se llena
+    # en `_escribir` -- donde se pinta -- y se suelta con el resultado. `None` significa
+    # "no hay nada que guardar", y es lo que deshabilita el boton.
+    _ULTIMA_CORRIDA = None
 
     # El texto de arranque va en una constante y no repetido: "Limpiar" tiene que devolver
     # el panel EXACTAMENTE a este estado, y dos copias del mismo texto se separan a la
@@ -2887,7 +2918,11 @@ def construir(
     # {fid o GRANO_CIRCUITO: {knob_id: widget}}. Una COLUMNA por vano, con el vano escrito
     # encima: sin ese encabezado cinco columnas de deslizadores identicos son indistinguibles.
     _controles_por_vano = {}
-    GRANO_CIRCUITO = '(todo el circuito)'
+    # `GRANO_CIRCUITO` ya no se declara aqui: vive en `simulaciones_guardadas` y se
+    # importa arriba. Es el literal bajo el que un registro guardado escribe los
+    # valores de una corrida SIN vanos marcados, asi que tenerlo dos veces -- uno en
+    # el tablero y otro en el formato -- convertiria cualquier retoque de redaccion
+    # en una carga que repone cero controles sin decir por que.
 
 
     def _seleccion_de_bolsas():
@@ -3176,6 +3211,64 @@ def construir(
         tooltip='Marca los vanos del diagnostico y abre sus controles en el valor sugerido')
     AVISO_APLICAR = widgets.HTML('')
 
+    # --- Guardar y cargar una corrida -----------------------------------------------
+    # Debajo de "Simular" y "Limpiar" y no en otro sitio: las cuatro operan sobre la
+    # MISMA corrida -- lanzarla, deshacerla, archivarla y recuperarla -- y separarlas
+    # obligaria a recorrer el panel entero para archivar lo que se acaba de mirar.
+    #
+    # `Guardar` arranca deshabilitado y solo se habilita con un resultado en pantalla.
+    # Un boton que acepta el clic y contesta "primero simula" gasta el viaje; uno
+    # deshabilitado con su `tooltip` lo dice antes de pulsarlo.
+    boton_guardar = widgets.Button(
+        description='Guardar', disabled=True, icon='',
+        tooltip='Escribe el informe HTML de esta corrida y el archivo con el que se '
+                'puede volver a ella. Hace falta haber simulado.')
+    boton_cargar = widgets.Button(
+        description='Cargar', disabled=True,
+        tooltip='Repone los vanos, las variables y las actividades de la simulación '
+                'elegida, y la vuelve a correr')
+    selector_guardadas = widgets.Dropdown(
+        options=[], description='', layout=widgets.Layout(width='330px'))
+    # Releer la carpeta es su PROPIO disparador: en Databricks el Volume es compartido
+    # y otra persona puede haber guardado desde su sesion, y en local el usuario puede
+    # haber copiado ahi un archivo a mano. Colgarlo de abrir el tablero dejaria la
+    # lista congelada en lo que hubiera al arrancar.
+    boton_refrescar = widgets.Button(
+        description='Actualizar lista', layout=widgets.Layout(width='150px'),
+        tooltip='Vuelve a leer la carpeta de simulaciones guardadas')
+    AVISO_ARCHIVO = widgets.HTML('')
+    # El almacen decide SOLO donde escribe: una carpeta del disco en local, un Volume
+    # de Unity Catalog por la Files API cuando la app lo declara. Ver
+    # `chec_local_interpreter/almacen_simulaciones.py`; desde aqui no se sabe cual toco.
+    ALMACEN = almacen_por_defecto()
+    # La descripcion de cada actividad, para la tabla del informe. Sale del MISMO
+    # objeto que el precio: el informe se archiva, y una descripcion tomada de otra
+    # lectura del libro podria describir una fila que ya no es la que se coste.
+    DESCRIPCION_ITEMS = {_it.nombre: _it.descripcion for _it in CATALOGO_COSTOS.items}
+    _SELLO = None
+
+
+    def _sello():
+        """La firma de los artefactos de esta sesion, calculada una sola vez.
+
+    Perezosa y no al construir: recorre los pesos del modelo, y quien abre el tablero
+    para mirar el mapa historico no tiene por que pagarlo.
+    """
+        nonlocal _SELLO
+        if _SELLO is None:
+            _SELLO = sello_del_modelo(MIL, FEATURES_MIL,
+                                      [_k.id for _k in KNOBS_PANEL])
+        return _SELLO
+
+
+    def _mensaje(texto, color='#5b4a48'):
+        return f'<span style="font-size:12px;color:{color};">{texto}</span>'
+
+
+    def _actualizar_botones_de_archivo():
+        """"Guardar" vale exactamente cuando hay una corrida en pantalla."""
+        boton_guardar.disabled = _ULTIMA_CORRIDA is None
+
 
     _CAPA_VACIA = {'lat': [], 'lon': [], 'hovertext': [], 'customdata': []}
 
@@ -3290,8 +3383,13 @@ def construir(
     importancia se vacia) en vez de mostrar la corrida de OTRA seleccion, que violaria
     la regla anti-confusion (D2)."""
         nonlocal _ultimo_resultado_simulacion, _ultima_seleccion_simulada, _EPOCA
+        nonlocal _ULTIMA_CORRIDA
         _ultimo_resultado_simulacion = None
         _ultima_seleccion_simulada = None
+        # La corrida guardable se suelta con el resultado, y por el mismo motivo:
+        # guardar despues de cambiar de circuito escribiria un informe que describe
+        # una seleccion que ya no esta en pantalla.
+        _ULTIMA_CORRIDA = None
         _EPOCA = siguiente_epoca(_EPOCA)  # invalida cualquier job en vuelo
         # El texto de estado vuelve al de arranque. Sin esto sobrevivia al cambio de
         # circuito el resumen de la corrida ANTERIOR -- "12 de 40 vanos cambian de grupo" --
@@ -3303,6 +3401,7 @@ def construir(
         _pintar_top_por_vano(TOP_VACIO)
         _pintar_barras_uiti(None)
         _pintar_costos(None)
+        _actualizar_botones_de_archivo()
 
 
     def _pintar_rotulos_del_grafo(nodos):
@@ -3449,10 +3548,18 @@ def construir(
         # circuito.
         # `KNOBS` completo y no `KNOBS_PANEL`: el diccionario solo se usa para resolver
         # que features toca cada knob, y solo llegan aqui los que el panel ofrecio.
-        por_vano = {
-            fid: expand_knob_overrides(
-                {knob_id: control.value for knob_id, control in controles.items()}, KNOBS)
+        # Lo que el panel tiene marcado AHORA, en su propio vocabulario -- knob y valor,
+        # no columnas del modelo. Se copia aqui, junto a la expansion que alimenta la
+        # simulacion, y no mas tarde en `_escribir`: entre una cosa y la otra hay un
+        # `await`, y un control movido en ese hueco haria que el registro guardado
+        # describiera un escenario distinto del que se puntuo.
+        valores_del_panel = {
+            fid: {knob_id: control.value for knob_id, control in controles.items()}
             for fid, controles in _controles_por_vano.items()
+        }
+        por_vano = {
+            fid: expand_knob_overrides(valores, KNOBS)
+            for fid, valores in valores_del_panel.items()
         }
         global_ = por_vano.pop(GRANO_CIRCUITO, None)
 
@@ -3489,15 +3596,16 @@ def construir(
         # Solo los vanos que la simulacion PUNTUO: costear un vano que el modelo no vio
         # pondria un precio al lado de un riesgo que nadie estimo.
         _puntuados = set(resultado['FID_VANO'].astype(str))
-        costos = costos_de_intervencion(
-            {fid: {nombre: int(control.value) for nombre, control in actividades.items()}
-             for fid, actividades in _costos_por_vano.items() if fid in _puntuados},
-            CATALOGO_COSTOS,
-        )
+        actividades_del_panel = {
+            fid: {nombre: int(control.value) for nombre, control in actividades.items()}
+            for fid, actividades in _costos_por_vano.items() if fid in _puntuados
+        }
+        costos = costos_de_intervencion(actividades_del_panel, CATALOGO_COSTOS)
         duracion = time.perf_counter() - t0
 
         def _escribir():
             nonlocal _ultimo_resultado_simulacion, _ultima_seleccion_simulada
+            nonlocal _ULTIMA_CORRIDA
             _ultimo_resultado_simulacion = resultado
             _ultima_seleccion_simulada = (circuito, ventana_i)
             grano = f'{len(marcados)} vanos marcados' if marcados else 'todo el circuito'
@@ -3572,8 +3680,24 @@ def construir(
             _redibujar_mapa_predicho()
             _pintar_grafo(grafo)
             _pintar_top_por_vano(top_por_vano)
-            _pintar_barras_uiti(resultado, ventana_i, circuito)
+            barras = _pintar_barras_uiti(resultado, ventana_i, circuito)
             _pintar_costos(costos)
+            # Lo que "Guardar" necesita, congelado en el MISMO sitio donde se pinta.
+            # Recomponerlo despues, leyendo otra vez los controles, describiria lo que
+            # el panel tenga en ese momento y no lo que hay en pantalla: son dos cosas
+            # distintas en cuanto alguien mueve un deslizador sin volver a simular.
+            _ULTIMA_CORRIDA = {
+                'circuito': circuito,
+                'ventana_i': ventana_i,
+                'vanos': sorted(marcados),
+                'valores': valores_del_panel,
+                'actividades': actividades_del_panel,
+                'costos': costos,
+                'barras': barras,
+                'cambian': cambian,
+                'n_vanos': int(metadata['n_vanos']),
+            }
+            _actualizar_botones_de_archivo()
 
         aplicar_si_vigente(_escribir, epoca_job=epoca_job, epoca_actual=lambda: _EPOCA)
 
@@ -3743,11 +3867,355 @@ def construir(
             item_selector_widget.desmarcar_todos()
             _olvidar_diagnostico()
             _limpiar_resultado_simulacion()
+            # El renglon de archivo tambien: "Guardado en ..." sobre un tablero recien
+            # vaciado afirma que en pantalla esta lo que se archivo, y no lo esta.
+            # La LISTA de guardadas no se toca: describe el disco, no la corrida.
+            AVISO_ARCHIVO.value = ''
             STATUS.value = TEXTO_STATUS_INICIAL
             # El mapa base vuelve al circuito completo. El simulado ya lo devolvio
             # `_limpiar_resultado_simulacion` al vaciar su resultado.
             _aplicar_vista('map', _vista_del_circuito(circuito))
 
+
+    # --- Archivar una corrida y volver a ella ----------------------------------------
+
+
+    def _registro_de_lo_simulado():
+        """La corrida que hay en pantalla, en el formato que se archiva.
+
+    Sale entera de `_ULTIMA_CORRIDA` -- lo que `_escribir` congelo al pintar -- y no
+    de volver a leer los controles: entre simular y guardar el usuario pudo mover un
+    deslizador, y un registro armado de los controles describiria un escenario que
+    nadie llego a puntuar.
+
+    Los campos de presentacion viajan RESUELTOS: la etiqueta de cada variable, su
+    grupo y su unidad, y la descripcion de cada actividad. El archivo es
+    trazabilidad, y abrirlo dentro de dos anios no puede depender de que el libro de
+    costos de entonces siga trayendo la misma fila.
+    """
+        corrida = _ULTIMA_CORRIDA
+        ventana = VENTANAS[corrida['ventana_i']]
+        variables = [
+            {
+                'vano': fid,
+                'knob_id': knob_id,
+                'variable': (_knobs_por_id[knob_id].label if knob_id in _knobs_por_id
+                             else knob_id),
+                'grupo': GRUPO_POR_KNOB.get(knob_id, 'Sin grupo'),
+                'unidad': UNIDADES.get(knob_id, ''),
+                'valor': valor,
+            }
+            for fid, valores in corrida['valores'].items()
+            for knob_id, valor in valores.items()
+        ]
+        actividades = [
+            {
+                'vano': fid,
+                'actividad': renglon['item'],
+                'repeticiones': renglon['repeticiones'],
+                'costo_unitario': renglon['costo_unitario'],
+                'subtotal': renglon['subtotal'],
+                'descripcion': DESCRIPCION_ITEMS.get(renglon['item'], ''),
+            }
+            for fid, bloque in corrida['costos']['por_vano'].items()
+            for renglon in bloque['renglones']
+        ]
+        # La ULTIMA barra es el circuito entero y no un vano (`barras_uiti_por_vano`
+        # la agrega al final). La tabla del informe contrasta los vanos SIMULADOS y
+        # totaliza sus propias columnas, asi que esa se corta aqui: sumarla dentro
+        # contaria el circuito ademas de sus vanos.
+        barras = corrida['barras']
+        corte = max(len(barras['x']) - 1, 0)
+        uiti = [
+            {'vano': barras['x'][i], 'observado': barras['observado'][i],
+             'simulado': barras['simulado'][i], 'error': barras['error'][i],
+             'clase_observado': barras['clase_observado'][i],
+             'clase_simulado': barras['clase_simulado'][i]}
+            for i in range(corte)
+        ]
+        return registro_de_simulacion(
+            circuito=corrida['circuito'],
+            ventana_i=corrida['ventana_i'],
+            ventana_etiqueta=ventana['etiqueta'],
+            ventana_periodo=ventana['periodo'],
+            vanos=corrida['vanos'],
+            variables=variables,
+            actividades=actividades,
+            uiti=uiti,
+            total_uiti={
+                'observado': sum(f['observado'] for f in uiti),
+                'simulado': sum(f['simulado'] for f in uiti),
+                # SUMA de los desfases y no su cuadratura, igual que hace el panel: el
+                # sesgo del modelo es sistematico, y combinarlos en cuadratura
+                # afirmaria una cancelacion que no ocurre.
+                'error': sum(f['error'] for f in uiti),
+            },
+            costo_total=corrida['costos']['total'],
+            reduccion=barras['reduccion'],
+            desviacion=barras['desviacion'],
+            cambian=corrida['cambian'],
+            n_vanos=corrida['n_vanos'],
+            sello=_sello(),
+            creado_en=time.strftime('%Y-%m-%dT%H:%M:%S'),
+        )
+
+
+    def _figuras_para_el_informe():
+        """Las ocho figuras tal como estan, como un bloque HTML autocontenido.
+
+    `include_plotlyjs=True` embebe plotly.js dentro del archivo -- son ~3,5 MB --, y
+    es la misma decision que ya toman los tableros estaticos de 01 y 02. El informe
+    se abre con doble clic desde una carpeta o desde una descarga del Volume, a veces
+    sin internet: un `cdn` lo dejaria en blanco justo ahi.
+
+    Se convierte a `go.Figure` antes de exportar. `fig` es un `FigureWidget`, y
+    exportarlo directamente arrastraria su maquinaria de widget a un archivo que no
+    tiene kernel detras.
+
+    Lo unico que sigue pidiendo red son los MOSAICOS del fondo de los dos mapas
+    (`carto-positron`). La geometria de los vanos viaja dentro y se dibuja igual; sin
+    internet se ve sobre fondo vacio. El informe lo dice.
+    """
+        import plotly.io as pio
+
+        return pio.to_html(go.Figure(fig.to_dict()), include_plotlyjs=True,
+                           full_html=False, config={'displaylogo': False})
+
+
+    def _rotulo_de_guardada(entrada):
+        """Como se lee una simulacion en el desplegable. El nombre del archivo trae
+    circuito, ventana y fecha separados por guiones bajos; aqui se le quita la doble
+    extension y se separan, que es lo unico que hace falta para elegir entre veinte."""
+        base = str(entrada['clave'])
+        for _ext in ('.simchec.json.gz',):
+            if base.endswith(_ext):
+                base = base[: -len(_ext)]
+        return base.replace('_', '  ·  ').replace('T', ' ')
+
+
+    def _refrescar_guardadas(*_ignorado):
+        """Vuelve a leer el almacen y repuebla el desplegable.
+
+    Un almacen que no se deja leer -- carpeta ausente, Volume sin permiso -- deja la
+    lista vacia y LO DICE, en vez de tumbar el tablero. Sigue siendo un tablero util
+    para simular; lo unico que no se puede es cargar.
+    """
+        try:
+            entradas = ALMACEN.listar()
+        except Exception as exc:  # noqa: BLE001 -- el motivo real viaja al usuario
+            selector_guardadas.options = []
+            boton_cargar.disabled = True
+            AVISO_ARCHIVO.value = _mensaje(
+                f'No se pudo leer {ALMACEN.donde()}: {exc}', '#b91c1c')
+            return
+        elegida = selector_guardadas.value
+        selector_guardadas.options = [(_rotulo_de_guardada(e), e['clave'])
+                                      for e in entradas]
+        boton_cargar.disabled = not entradas
+        if not entradas:
+            AVISO_ARCHIVO.value = _mensaje(
+                f'Todavía no hay simulaciones guardadas en {ALMACEN.donde()}.')
+            return
+        # `value` se fija A MANO, y no es defensa preventiva: ipywidgets 8.1.8 NO
+        # selecciona la primera opcion cuando la lista pasa de VACIA a poblada --
+        # `index` se queda en `None` -- mientras que repoblar una lista que ya tenia
+        # opciones SI reinicia el indice a 0. Las dos mitades de esa asimetria
+        # estorban aqui: sin la primera, "Cargar" contestaba "elige una simulacion"
+        # sobre un desplegable que mostraba una, que es como se veia la primera
+        # simulacion guardada de la sesion; sin la segunda, pulsar "Actualizar lista"
+        # le cambiaba al usuario la simulacion elegida por la mas reciente.
+        claves = [e['clave'] for e in entradas]
+        selector_guardadas.index = claves.index(elegida) if elegida in claves else 0
+
+
+    def _al_guardar(*_ignorado):
+        """Escribe los DOS archivos de la corrida: el informe y el registro.
+
+    Dos y no uno porque contestan preguntas distintas. El HTML dice que se decidio y
+    se archiva o se manda por correo; el registro -- unos kilobytes -- es lo que
+    "Cargar" convierte otra vez en un tablero vivo. Comparten nombre base para que
+    quien abra la carpeta los vea como una pareja.
+    """
+        if _ULTIMA_CORRIDA is None:
+            AVISO_ARCHIVO.value = _mensaje(
+                'No hay nada que guardar: presiona <b>Simular</b> primero.', '#b91c1c')
+            return
+        boton_guardar.disabled = True
+        AVISO_ARCHIVO.value = _mensaje('Guardando la simulación y su informe...')
+        try:
+            registro = _registro_de_lo_simulado()
+            destino = ALMACEN.guardar(
+                nombre_de_archivo(registro),
+                datos=serializar(registro),
+                informe=informe_html(registro, figuras_html=_figuras_para_el_informe()),
+            )
+        except Exception as exc:  # noqa: BLE001 -- el motivo real viaja al usuario
+            AVISO_ARCHIVO.value = _mensaje(
+                f'No se pudo guardar en {ALMACEN.donde()}: {exc}', '#b91c1c')
+            _actualizar_botones_de_archivo()
+            return
+        _actualizar_botones_de_archivo()
+        AVISO_ARCHIVO.value = _mensaje(
+            'Guardado.<br><b>Informe:</b> ' + destino['informe']
+            + '<br><b>Para volver a cargarla:</b> ' + destino['registro']
+            # Como se LLEGA a el, que no es lo mismo que donde esta: en Databricks el
+            # archivo esta en un Volume y esta pagina no puede ofrecer la descarga.
+            + '<br>' + ALMACEN.pista(), '#15803d')
+        _refrescar_guardadas()
+
+
+    def _al_cargar(*_ignorado):
+        """Repone una corrida guardada y la vuelve a simular.
+
+    Vuelve a simular en vez de pintar los numeros del archivo, y esa es la decision
+    que sostiene todo el formato: lo que se guarda son las ENTRADAS, y las ocho
+    figuras se derivan de correr el modelo sobre ellas. Congelar las figuras habria
+    sido guardar el valor de retorno de una funcion al lado de sus argumentos, y los
+    dos se separan en cuanto alguien reentrena.
+
+    El precio de esa decision -- que un modelo reentrenado devuelva otros numeros --
+    se paga DICIENDOLO: el registro lleva la firma de los artefactos con los que
+    corrio y `veredicto_del_sello` la compara con la de esta sesion.
+    """
+        clave = selector_guardadas.value
+        if not clave:
+            AVISO_ARCHIVO.value = _mensaje(
+                'Elige una simulación de la lista.', '#b91c1c')
+            return
+        try:
+            registro = deserializar(ALMACEN.leer(clave))
+        except Exception as exc:  # noqa: BLE001 -- el motivo real viaja al usuario
+            AVISO_ARCHIVO.value = _mensaje(
+                f'No se pudo leer {clave}: {exc}', '#b91c1c')
+            return
+        avisos = _reponer_registro(registro)
+        veredicto = veredicto_del_sello(registro, _sello())
+        if veredicto is not None:
+            avisos.append(veredicto['mensaje'])
+        AVISO_ARCHIVO.value = _mensaje(
+            'Simulación cargada; volviendo a correrla.'
+            + (''.join(f'<br>{a}' for a in avisos) if avisos else ''),
+            '#b45309' if avisos else '#15803d')
+        _programar_simulacion()
+
+
+    def _reponer_registro(registro):
+        """Deja el panel exactamente como estaba al guardar. Devuelve los avisos de lo
+    que NO se pudo reponer.
+
+    El orden no es negociable y es el mismo que exige `_limpiar_todo` al reves:
+    circuito primero -- repuebla la lista de ventanas y la de vanos --, ventana
+    despues, y solo entonces los vanos y las dos listas de casillas. Marcar vanos
+    antes de fijar el circuito los escribiria contra el universo del circuito
+    anterior, donde `value` los descarta en silencio por no tener casilla.
+
+    Lo que ya no existe se NOMBRA en vez de desaparecer: una variable que se retiro
+    del catalogo, una actividad que el contrato ya no trae, un vano sin casilla. Un
+    escenario repuesto a medias y en silencio se simula igual y da otro numero.
+    """
+        sel = registro.get('seleccion', {})
+        avisos = []
+        circuito = str(sel.get('circuito', ''))
+        if circuito not in CIRCUITOS:
+            return [f'El circuito {circuito} ya no está en los datos: no se pudo '
+                    'reponer nada de esta simulación.']
+        if circuito_widget.value != circuito:
+            circuito_widget.value = circuito
+        disponibles = [i for _rotulo, i in _opciones_de_ventana(circuito)]
+        ventana_i = int(sel.get('ventana_i', -1))
+        if ventana_i in disponibles:
+            ventana_widget.value = ventana_i
+        else:
+            avisos.append(
+                f'La ventana {sel.get("ventana_etiqueta", ventana_i)} ya no tiene '
+                f'eventos en {circuito}: se simula sobre '
+                f'{VENTANAS[ventana_widget.value]["etiqueta"]}.')
+
+        vanos = [str(v) for v in sel.get('vanos', ())]
+        marcables = set(_vanos_marcables(circuito))
+        perdidos = [v for v in vanos if v not in marcables]
+        if perdidos:
+            avisos.append(f'{len(perdidos)} vanos guardados ya no existen en el '
+                          f'circuito: {", ".join(perdidos[:3])}...')
+        vano_widget.value = tuple(v for v in vanos if v in marcables)
+
+        valores = variables_por_vano(registro)
+        actividades = actividades_por_vano(registro)
+        ids_guardados = list(dict.fromkeys(
+            k for v in valores.values() for k in v))
+        sin_catalogo = [k for k in ids_guardados if k not in _knobs_por_id]
+        if sin_catalogo:
+            avisos.append(
+                f'{len(sin_catalogo)} variables del escenario guardado ya no están en '
+                f'el catálogo del simulador: {", ".join(sin_catalogo[:3])}.')
+        items_guardados = list(dict.fromkeys(
+            n for v in actividades.values() for n in v))
+        sin_precio = [n for n in items_guardados if n not in COSTO_POR_ITEM]
+        if sin_precio:
+            avisos.append(
+                f'{len(sin_precio)} actividades ya no están en el libro de costos y '
+                'no se repusieron.')
+
+        knob_selector_widget.value = tuple(k for k in ids_guardados
+                                           if k in _knobs_por_id)
+        item_selector_widget.value = tuple(n for n in items_guardados
+                                           if n in COSTO_POR_ITEM)
+        # La rejilla se rehace AQUI y no se deja al observer: los observers de las dos
+        # listas ya la reconstruyen, pero llamarla explicitamente es lo que garantiza
+        # que las columnas existan antes de escribirles un valor -- que es lo que hace
+        # `_aplicar_sugerencia` por la misma razon.
+        _reconstruir_controles_knob()
+
+        for fid, por_knob in valores.items():
+            columna = _controles_por_vano.get(fid, {})
+            for knob_id, valor in por_knob.items():
+                control = columna.get(knob_id)
+                if control is None:
+                    continue
+                _escribir_en_control(control, _knobs_por_id.get(knob_id), valor)
+        for fid, por_item in actividades.items():
+            columna = _costos_por_vano.get(fid, {})
+            for nombre, repeticiones in por_item.items():
+                control = columna.get(nombre)
+                if control is not None:
+                    control.value = int(repeticiones)
+        return avisos
+
+
+    def _escribir_en_control(control, knob, valor):
+        """Un valor guardado dentro de su control, sin tumbar el panel.
+
+    Misma regla que `_control_con_valor` y por el mismo motivo: un `FloatSlider`
+    LANZA si el valor cae fuera de `[min, max]`, y los limites salen del rango
+    observado, que cambia cuando se recalculan los datos. Un valor guardado en julio
+    puede quedar un decimal fuera del rango de agosto, y perder la carga entera por
+    eso seria un pesimo negocio. Se recorta y se sigue.
+    """
+        opciones = list(getattr(control, 'options', ()) or ())
+        if opciones:
+            valores = ([v for _e, v in opciones] if isinstance(opciones[0], tuple)
+                       else opciones)
+            if valor in valores:
+                control.value = valor
+            elif all(isinstance(v, (int, float)) for v in valores):
+                try:
+                    control.value = min(valores,
+                                        key=lambda v: abs(float(v) - float(valor)))
+                except (TypeError, ValueError):
+                    pass
+            return
+        if knob is not None and knob.kind == 'numeric':
+            try:
+                control.value = type(control.value)(
+                    min(max(float(valor), control.min), control.max))
+            except (TypeError, ValueError):
+                pass
+
+
+    boton_guardar.on_click(_al_guardar)
+    boton_cargar.on_click(_al_cargar)
+    boton_refrescar.on_click(_refrescar_guardadas)
+    _refrescar_guardadas()
 
     boton_simular.on_click(_programar_simulacion)
     boton_limpiar.on_click(_limpiar_todo)
@@ -3865,6 +4333,14 @@ def construir(
                    widgets.HBox([boton_aplicar_intervencion, boton_aplicar_escenario]),
                    AVISO_APLICAR),
             _grupo(widgets.HBox([boton_simular, boton_limpiar])),
+            # Archivar va DEBAJO de simular y con su propio rotulo: son la misma
+            # corrida, pero "guardar" y "cargar" tocan el disco y las otras dos no, y
+            # una fila de cuatro botones iguales invita a pulsar "Cargar" creyendo que
+            # recarga el tablero.
+            _grupo(_titulo('Guardar y cargar simulaciones'),
+                   widgets.HBox([boton_guardar, boton_cargar]),
+                   widgets.HBox([selector_guardadas, boton_refrescar]),
+                   AVISO_ARCHIVO),
             _grupo(STATUS),
         ],
         layout=widgets.Layout(

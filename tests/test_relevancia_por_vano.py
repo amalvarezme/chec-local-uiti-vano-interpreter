@@ -205,9 +205,13 @@ def test_the_blocked_variables_reach_the_simulation_but_never_the_ranking(fuente
     distintas, y confundirlas es lo que este par de pruebas separa."""
     assert "KNOBS_BLOQUEADOS = knobs_bloqueados(KNOBS)" in fuente
     # `expand_knob_overrides` resuelve que features toca cada control fijado, y
-    # solo llegan ahi los que el panel ofrecio.
-    assert "expand_knob_overrides(\n" in fuente
-    assert "{knob_id: control.value for knob_id, control in controles.items()}, KNOBS)" in fuente
+    # solo llegan ahi los que el panel ofrecio. Se afirma que la llamada existe y
+    # contra que diccionario resuelve -- `KNOBS`, el completo --, no como esta
+    # partida en lineas: la version anterior exigia el salto de linea del `(` y se
+    # puso roja al extraer los valores del panel a su propia variable, sin que nada
+    # del comportamiento hubiera cambiado.
+    assert "expand_knob_overrides(valores, KNOBS)" in fuente
+    assert "{knob_id: control.value for knob_id, control in controles.items()}" in fuente
 
 
 def test_the_panel_ranks_by_achievable_drop_and_not_by_unsigned_sensitivity(fuente):

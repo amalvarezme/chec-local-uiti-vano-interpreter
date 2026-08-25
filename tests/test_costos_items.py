@@ -302,7 +302,11 @@ def test_only_the_vanos_the_model_scored_are_costed(fuente):
 def test_changing_circuit_or_window_clears_the_cost_row(fuente):
     """El costo pertenece a una seleccion concreta. Sobrevivir a un cambio de ventana lo
     dejaria describiendo una intervencion sobre otros vanos."""
-    limpiar = fuente[fuente.index("def _limpiar_resultado_simulacion"):][:1200]
+    # La funcion ENTERA y no sus primeros 1.200 caracteres. Ese recorte a ojo ya dio
+    # un falso rojo: un comentario nuevo dentro de la funcion empujo la llamada fuera
+    # de la ventana y la prueba afirmo que el costo sobrevivia al cambio de ventana.
+    desde = fuente.index("def _limpiar_resultado_simulacion")
+    limpiar = fuente[desde:fuente.index("\n    def ", desde + 1)]
     assert "_pintar_costos(None)" in limpiar
 
 
