@@ -19,8 +19,23 @@ para contentar al corrector. La regla es mecanica -- si va en MAYUSCULAS, o llev
 digitos, es un codigo --, no una lista de excepciones que haya que mantener.
 
 **Lo ambiguo se reporta pero no se decide.** `periodo`/`período`, `calculo`/`cálculo`,
-`critica`/`crítica` y `area`/`área` son las dos correctas segun el caso; llevan `None` y
-la guarda las deja pasar. Corregirlas a ciegas cambia el significado.
+`critica`/`crítica`, `area`/`área` y `campana`/`campaña` son las dos correctas segun el
+caso; llevan `None` o simplemente no estan, y la guarda las deja pasar. Corregirlas a
+ciegas cambia el significado.
+
+**La enye no es una tilde.** `_sin_tildes` quitaba toda marca combinante, asi que `ñ` se
+descomponia en `n` + virgulilla y la perdia. Como esa funcion es la que decide si una
+palabra "ya lleva tilde", TODA palabra con enye se saltaba entera: `añadira` y `señalo` no
+se revisaban nunca por la tilde que de verdad les faltaba. Ahora solo se quita la tilde
+aguda (U+0301), que es la que acentua.
+
+**El glosario exime al codigo; no tapa a la palabra.** `duracion` en minusculas dentro de
+una frase no se marcaba nunca porque `DURACION` es una columna. El token se juzga por como
+esta ESCRITO: en mayusculas y en el glosario es la columna, en minusculas es castellano.
+
+Los dos defectos salieron de la misma corrida (`/informe-gerencial todos`, 2026-08-26): 36
+agentes pasaron la guarda en verde y aun asi tuvieron que revisarse la prosa a mano, cada
+uno cazando entre 1 y 12 palabras que esta guarda no habia visto.
 """
 
 from __future__ import annotations
@@ -39,6 +54,15 @@ __all__ = [
 
 
 SIEMPRE_CON_TILDE: dict[str, str | None] = {
+    'acompana': 'acompaña',
+    'acompanada': 'acompañada',
+    'acompanadas': 'acompañadas',
+    'acompanado': 'acompañado',
+    'acompanados': 'acompañados',
+    'acompanamiento': 'acompañamiento',
+    'acompanan': 'acompañan',
+    'acompanando': 'acompañando',
+    'acompanar': 'acompañar',
     'ademas': 'además',
     'adonde': None,
     'afectacion': 'afectación',
@@ -47,7 +71,12 @@ SIEMPRE_CON_TILDE: dict[str, str | None] = {
     'algun': 'algún',
     'alli': 'allí',
     'ambito': 'ámbito',
+    'anade': 'añade',
+    'anadieron': 'añadieron',
+    'anadir': 'añadir',
     'analisis': 'análisis',
+    'ano': 'año',
+    'anos': 'años',
     'aplicacion': 'aplicación',
     'aqui': 'aquí',
     'area': None,
@@ -80,14 +109,19 @@ SIEMPRE_CON_TILDE: dict[str, str | None] = {
     'concentracion': 'concentración',
     'condicion': 'condición',
     'conexion': 'conexión',
+    'configuracion': 'configuración',
     'construccion': 'construcción',
     'contribucion': 'contribución',
+    'contribuyo': 'contribuyó',
+    'coordinacion': 'coordinación',
     'correlacion': 'correlación',
     'criterio': None,
     'critica': None,
     'criticas': None,
     'critico': 'crítico',
     'criticos': 'críticos',
+    'dano': 'daño',
+    'danos': 'daños',
     'deberia': 'debería',
     'debil': 'débil',
     'debiles': 'débiles',
@@ -103,12 +137,16 @@ SIEMPRE_CON_TILDE: dict[str, str | None] = {
     'dias': 'días',
     'dimension': 'dimensión',
     'direccion': 'dirección',
+    'discusion': 'discusión',
+    'diseno': 'diseño',
     'distribucion': 'distribución',
+    'documentacion': 'documentación',
     'duracion': 'duración',
     'ejecucion': 'ejecución',
     'electrica': 'eléctrica',
     'electrico': 'eléctrico',
     'electricos': 'eléctricos',
+    'encontro': 'encontró',
     'energetica': 'energética',
     'energetico': 'energético',
     'energia': 'energía',
@@ -121,6 +159,7 @@ SIEMPRE_CON_TILDE: dict[str, str | None] = {
     'estandar': 'estándar',
     'estara': 'estará',
     'estimacion': 'estimación',
+    'estres': 'estrés',
     'evaluacion': 'evaluación',
     'evolucion': 'evolución',
     'explicacion': 'explicación',
@@ -155,6 +194,7 @@ SIEMPRE_CON_TILDE: dict[str, str | None] = {
     'interaccion': 'interacción',
     'interpretacion': 'interpretación',
     'interrupcion': 'interrupción',
+    'interseccion': 'intersección',
     'intervencion': 'intervención',
     'iria': 'iría',
     'iteracion': 'iteración',
@@ -163,6 +203,7 @@ SIEMPRE_CON_TILDE: dict[str, str | None] = {
     'lineas': 'líneas',
     'logica': None,
     'logico': 'lógico',
+    'margenes': 'márgenes',
     'mas': None,
     'maxima': 'máxima',
     'maximas': 'máximas',
@@ -177,8 +218,10 @@ SIEMPRE_CON_TILDE: dict[str, str | None] = {
     'minimas': 'mínimas',
     'minimo': 'mínimo',
     'minimos': 'mínimos',
+    'moviles': 'móviles',
     'ningun': 'ningún',
     'normalizacion': 'normalización',
+    'nucleo': 'núcleo',
     'numerica': 'numérica',
     'numerico': 'numérico',
     'numero': 'número',
@@ -191,6 +234,11 @@ SIEMPRE_CON_TILDE: dict[str, str | None] = {
     'particion': 'partición',
     'patron': 'patrón',
     'penalizacion': 'penalización',
+    'pequena': 'pequeña',
+    'pequenas': 'pequeñas',
+    'pequenisimo': 'pequeñísimo',
+    'pequeno': 'pequeño',
+    'pequenos': 'pequeños',
     'periodo': None,
     'perturbacion': 'perturbación',
     'poblacion': 'población',
@@ -211,16 +259,26 @@ SIEMPRE_CON_TILDE: dict[str, str | None] = {
     'rapido': 'rápido',
     'razon': 'razón',
     'reduccion': 'reducción',
+    'regimen': 'régimen',
     'region': 'región',
     'regularizacion': 'regularización',
     'relacion': 'relación',
+    'repeticion': 'repetición',
     'representacion': 'representación',
     'resolucion': 'resolución',
+    'revision': 'revisión',
     'rotacion': 'rotación',
     'sabria': 'sabría',
     'seccion': 'sección',
     'segun': 'según',
     'seleccion': 'selección',
+    'senal': 'señal',
+    'senala': 'señala',
+    'senaladas': 'señaladas',
+    'senalado': 'señalado',
+    'senalan': 'señalan',
+    'senalando': 'señalando',
+    'senales': 'señales',
     'separacion': 'separación',
     'sera': 'será',
     'seran': 'serán',
@@ -231,12 +289,16 @@ SIEMPRE_CON_TILDE: dict[str, str | None] = {
     'sintesis': 'síntesis',
     'sismico': 'sísmico',
     'situa': 'sitúa',
+    'situacion': 'situación',
+    'supervision': 'supervisión',
+    'tamano': 'tamaño',
     'tambien': 'también',
     'taxonomia': 'taxonomía',
     'tecnica': 'técnica',
     'tecnicas': None,
     'tecnico': 'técnico',
     'tecnicos': 'técnicos',
+    'telemetria': 'telemetría',
     'tendria': 'tendría',
     'teorico': 'teórico',
     'termica': 'térmica',
@@ -252,6 +314,7 @@ SIEMPRE_CON_TILDE: dict[str, str | None] = {
     'trafico': 'tráfico',
     'transicion': 'transición',
     'tras': None,
+    'traves': 'través',
     'ultima': 'última',
     'ultimas': 'últimas',
     'ultimo': 'último',
@@ -266,7 +329,8 @@ SIEMPRE_CON_TILDE: dict[str, str | None] = {
     'veria': 'vería',
     'verificacion': 'verificación',
     'version': 'versión',
-    'visualizacion': 'visualización',
+    'via': 'vía',
+    'visualizacion': 'visualización'
 }
 
 
@@ -286,11 +350,24 @@ TONICOS: dict[str, str] = {   'como': 'cómo',
 
 _PALABRA = re.compile(r"\b[a-záéíóúñüA-ZÁÉÍÓÚÑÜ]+\b")
 
+# La unica marca que en castellano senala el ACENTO. La virgulilla de la enye (U+0303) y
+# la dieresis de la u (U+0308) tambien son marcas combinantes, pero no acentuan: forman
+# otra letra.
+_TILDE_AGUDA = "\u0301"
+
 
 def _sin_tildes(texto: str) -> str:
-    return "".join(
-        c for c in unicodedata.normalize("NFD", texto)
-        if unicodedata.category(c) != "Mn"
+    """El texto sin sus tildes de acentuacion, conservando la enye y la dieresis.
+
+    Quitaba TODA marca combinante, y ahi `ñ` se descomponia en `n` + virgulilla y perdia la
+    virgulilla. La consecuencia no era cosmetica: `palabras_sin_tilde` usa esta funcion para
+    decidir si una palabra "ya lleva tilde", asi que cualquier palabra con enye salia
+    distinta de si misma y se saltaba entera. `añadira`, `señalo` y `acompañara` no se
+    revisaban NUNCA por la tilde que de verdad les faltaba -- la enye les hacia de escudo.
+    """
+    return unicodedata.normalize(
+        "NFC",
+        unicodedata.normalize("NFD", texto).replace(_TILDE_AGUDA, ""),
     )
 
 
@@ -305,12 +382,20 @@ def es_codigo(palabra: str, entorno: str) -> bool:
 
     `entorno` es el texto inmediatamente alrededor: un `_` o un digito pegado delatan que la
     palabra es un TROZO de un codigo compuesto (`PROMEDIO_KWH_TRF` llega partido en tres).
+
+    **El glosario exime al codigo; no tapa a la palabra.** Decidir solo con
+    `palabra.upper() in NOMBRE_NATURAL` hacia que `duracion` en minusculas, en mitad de una
+    frase, no se marcara nunca -- porque `DURACION` es una columna. El punto ciego alcanzaba
+    a cualquier palabra corriente que chocara con un nombre de columna (`tipo`, `conductor`,
+    `altura`, `codigo`), y ahi el diccionario ni llegaba a fallar: la guarda se saltaba la
+    palabra antes de mirarlo. Lo que decide es como esta ESCRITO el token: en MAYUSCULAS y en
+    el glosario es la columna; escrito como castellano es castellano.
     """
     from chec_local_interpreter.glosario_variables import NOMBRE_NATURAL
 
     if "_" in entorno or any(c.isdigit() for c in entorno):
         return True
-    return palabra.upper() in NOMBRE_NATURAL
+    return palabra.isupper() and palabra.upper() in NOMBRE_NATURAL
 
 
 def _con_la_caja_de(original: str, correcta: str) -> str:
