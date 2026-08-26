@@ -254,6 +254,22 @@ no state. Sequential execution is reserved strictly for a runtime where concurre
 unconfirmed or unavailable — a technical fallback, never a discretionary choice, and never
 something to surface to the user as a question.
 
+**Concurrency ceiling: one circuit at a time (hard rule).** The parallel dispatch above is scoped
+to the two role calls of ONE circuit's own steps 3/4, and to nothing else. It is never a licence to
+have two circuits in flight at the same time. When these steps run inside a batch
+(`/reporte-lote`'s loop, `/informe-gerencial`'s missing-run loop), the orchestrator finishes one
+circuit's steps 2-8 completely — `render` included — before dispatching a single call for the next
+circuit. So at most TWO role agents of this pipeline are live at any instant, and they always
+belong to the same circuit.
+
+Why this ceiling exists, measured on this repo: fanning circuits out multiplies live agents by N,
+which makes the wall-clock and the memory of any ONE report unpredictable (the same circuit takes
+wildly different times depending on how many neighbours happen to share the machine), and a session
+limit reached mid-fan-out kills every circuit at once instead of costing one. A 2026-08-26 run of
+`/informe-gerencial todos` lost 15 of 18 in-flight agents to a single session limit for exactly
+this reason. Sequential circuits trade a little total throughput for a stable, predictable cost per
+report — that trade is the intended behavior, not a degradation to work around.
+
 **Role-dispatch safety contract:** every dispatched role-authoring task must name exactly one role
 in its first line (`historical` or `inference`) and exactly one source envelope
 path (`run_dir/<role>.bc.json`) plus exactly one target output path (`run_dir/<role>.out.json`). Before
@@ -277,8 +293,10 @@ time. A `circuito`-only prefix is not enough to separate them — confirmed in p
 one circuit's `inference` agent had its own `<circuito>_envelope.json` silently overwritten by that
 same circuit's concurrently-running `historical` agent, and in a multi-circuit
 `informe-gerencial` batch the same failure mode recurred across circuits despite per-circuit
-prefixing. Under batch dispatch (`reporte-lote`/`informe-gerencial`'s missing-run loop), the risk
-compounds: N circuits × 3-4 roles each, all sharing one scratchpad.
+prefixing. Under batch dispatch (`reporte-lote`/`informe-gerencial`'s missing-run loop) circuits
+now run one at a time (see the concurrency ceiling above), so the scratchpad only ever holds one
+circuit's two live roles — but every circuit of the batch reuses that same directory in turn, so
+the role + uniqueness prefix below stays mandatory on every dispatch, batched or standalone.
 
 Every dispatch prompt for a role-authoring task MUST instruct the agent to:
 1. Prefix any scratch file it writes with BOTH the current `circuito` AND its own role name, plus a
@@ -318,8 +336,8 @@ already completed — dispatch it alone, immediately once both are done, without
    sub-agent (Claude Code's `Agent` tool or an equivalent runtime), its completion notification
    carries a `<usage>` block with `subagent_tokens` and `duration_ms` already measured by the
    harness — read those two fields directly rather than tracking your own separate wall-clock
-   before/after (manual tracking is what silently drops this under multi-circuit parallel fan-out,
-   see the note below). As soon as the notification for this stage arrives, in the same turn call
+   before/after (manual tracking is what silently drops this once notifications interleave, see the
+   batch reminder below). As soon as the notification for this stage arrives, in the same turn call
    BOTH, before doing anything else with that notification:
    - `PYTHONPATH=src .venv/bin/python -m chec_local_interpreter.report_contract record-usage
      --run-dir <run_dir> --stage historical --total <subagent_tokens>` — the combined token figure
@@ -335,11 +353,11 @@ already completed — dispatch it alone, immediately once both are done, without
 
    Do not scrape prose, session history, or output sizes for either value.
 
-   **Multi-circuit parallel fan-out reminder (`reporte-lote`/`informe-gerencial`'s missing-run
-   loop).** When several circuits' stages are dispatched concurrently, their completion
-   notifications arrive interleaved, one at a time, over the course of the run. The failure mode
-   observed in practice is processing a notification's text summary and moving straight to the
-   next action (verifying a file, dispatching the next circuit) WITHOUT calling `record-usage`/
+   **Batch reminder (`reporte-lote`/`informe-gerencial`'s missing-run loop).** Even with circuits
+   run one at a time, this circuit's own steps 3 and 4 are two concurrent agents, so their two
+   completion notifications still arrive interleaved. The failure mode observed in practice is
+   processing a notification's text summary and moving straight to the next action (verifying a
+   file, dispatching the next stage or the next circuit) WITHOUT calling `record-usage`/
    `record-duration` first — silently leaving every stage's timing/token sidecar unwritten and the
    final report's "Tiempo por etapa"/tokens columns showing `N/D` for the whole run, even though
    the measurement was available in the notification the whole time. Treat these two calls as a
@@ -360,8 +378,8 @@ already completed — dispatch it alone, immediately once both are done, without
    exposes no token total) and `PYTHONPATH=src .venv/bin/python -m
    chec_local_interpreter.report_contract record-duration --run-dir <run_dir> --stage inference
    --seconds <duration_ms / 1000>`. Record the FINAL successful attempt's value only. Do not scrape
-   prose, session history, or output sizes for either value. Under multi-circuit parallel
-   dispatch, do this BEFORE reacting to any other notification — see step 3's fan-out reminder.
+   prose, session history, or output sizes for either value. Do this BEFORE reacting to any
+   other notification — see step 3's batch reminder.
 5. **`prepare_expert_alignment`** — run
    `report_pipeline.prepare_expert_alignment(run_dir)`. Reads the validated
    `historical.out.json`/`inference.out.json` from steps 3-4, pools report dates, matches the
@@ -381,9 +399,8 @@ already completed — dispatch it alone, immediately once both are done, without
    runtime exposes no token total) and `PYTHONPATH=src .venv/bin/python -m
    chec_local_interpreter.report_contract record-duration --run-dir <run_dir> --stage
    expert-alignment --seconds <duration_ms / 1000>`. Record the FINAL successful attempt's value
-   only. Do not scrape prose, session history, or output sizes for either value. Under
-   multi-circuit parallel dispatch, do this before reacting to any other notification — see step
-   3's fan-out reminder.
+   only. Do not scrape prose, session history, or output sizes for either value. Do this before
+   reacting to any other notification — see step 3's batch reminder.
 7. **`render`** — prefer the shared contract render command. Pass runtime metadata explicitly when your runtime exposes it; otherwise let the contract resolve the effective runtime model from execution evidence:
 
    ```bash
