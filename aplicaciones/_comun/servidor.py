@@ -501,7 +501,15 @@ def pid_de(app: Path) -> int | None:
             # Sin poder preguntar, se conserva lo que habia: negarlo aqui dejaria al
             # simulador sin ninguna via de apagado.
             return pid
-        return pid if "python" in salida.stdout.lower() else None
+        # `voila` ademas de `python`: el pid que el simulador deja escrito es el del
+        # entry point que genera pip, y su nombre de imagen es `voila.exe`, no
+        # `python.exe`. Sin esa segunda palabra esto devolvia None para un simulador
+        # VIVO, y como el menu lo lanza en su propia ventana -- no se queda con ningun
+        # proceso --, el pid escrito es su UNICA via de apagado: la tarjeta contestaba
+        # "no lo lanzo este menu y no se le manda ninguna senal" incluso sobre el que
+        # acababa de abrir, y no habia forma de cerrarlo desde el menu.
+        imagen = salida.stdout.lower()
+        return pid if ("python" in imagen or "voila" in imagen) else None
     try:
         salida = subprocess.run(["/bin/ps", "-p", str(pid), "-o", "command="],
                                 capture_output=True, text=True, timeout=3)

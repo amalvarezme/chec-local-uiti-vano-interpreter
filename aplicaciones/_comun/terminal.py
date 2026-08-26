@@ -370,8 +370,21 @@ def _abrir_windows(comando: list[str], *, etiqueta: str,
     # el trampolin, que sabe si hubo error; `/k` no.
     partes = ["cmd", "/c", "start", f"{TITULO} -- {etiqueta}", "/D",
               str(directorio or temporal), "cmd", "/c", str(trampolin)]
+    #
+    # Y sin `capture_output`, que es lo que colgaba el menu entero. `start` vuelve al
+    # instante, pero los pipes los HEREDA todo el arbol que arranca en la ventana nueva:
+    # `communicate()` se queda esperando un EOF que no llega mientras el servidor viva.
+    # El `timeout` no rescata nada -- en Windows CPython responde al plazo con `kill()` y
+    # otro `communicate()` SIN plazo, y ese `kill()` solo alcanza al `cmd /c start`, que
+    # ya murio --, asi que la llamada no volvia nunca y el hilo se quedaba aqui, antes de
+    # `_esperar`: la tarjeta decia "levantando el servidor" para siempre con el tablero ya
+    # sirviendo. Medido: con `timeout=3` y un nieto de 25 s, `run()` volvio en 24,9 s, o
+    # sea que espero al NIETO y no al plazo. De esta llamada solo interesa el codigo de
+    # `start`; su salida no la lee nadie.
     try:
-        return subprocess.run(partes, capture_output=True, timeout=20).returncode == 0
+        return subprocess.run(partes, stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL,
+                              timeout=20).returncode == 0
     except (OSError, subprocess.SubprocessError):
         return False
 
