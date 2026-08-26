@@ -450,10 +450,17 @@ def test_a_short_diagnostic_says_how_many_it_found(fuente):
 
 def test_the_apply_buttons_use_each_vano_own_value_and_not_the_average(fuente):
     """El promedio ORDENA la lista, pero lo que baja a un vano concreto es su propio
-    optimo. Aplicar el promedio simularia un escenario que no es el de ninguno."""
+    optimo. Aplicar el promedio simularia un escenario que no es el de ninguno.
+
+    Lo que se aplica ya no es el ranking sino el PLAN, y el plan tambien es por vano:
+    `plan_hacia_clase_minima` lleva el estado de cada bolsa por separado. El ranking
+    sigue viajando en el diagnostico porque es la TABLA que se lee, pero dejo de
+    dictar la simulacion -- sus optimos son marginales y no componen.
+    """
     assert "'ranking': ranking," in fuente
-    cuerpo = fuente[fuente.index("def _aplicar_sugerencia"):][:3200]
-    assert "diag['ranking'].get(fid, {}).get('filas', [])" in cuerpo
+    cuerpo = _cuerpo(fuente, "_aplicar_sugerencia")
+    assert "plan.get(fid, {}).get('pasos', [])" in cuerpo
+    assert "for fid in fids:" in cuerpo
 
 
 def test_the_diagnosis_marks_the_vanos_it_identified(fuente):
@@ -482,12 +489,22 @@ def test_each_apply_button_only_brings_in_its_own_half(fuente):
 
     Los dos botones juntos si suman, porque presionar los dos es una decision del
     usuario y no un residuo. Verificado en vivo sobre AGU23L14: intervencion sola da
-    5/0, escenario solo 0/3, y los dos 5/3."""
-    cuerpo = fuente[fuente.index("def _aplicar_sugerencia"):][:3200]
+    5/0, escenario solo 0/3, y los dos 5/3.
+
+    Con los dos aplicados se calcula UN plan sobre la union de los dos conjuntos y no
+    dos planes que despues se juntan: dos descensos golosos independientes vuelven a
+    componer optimos que nadie evaluo juntos.
+
+    Que la mitad aplicada sea de verdad la del boton se comprueba sobre el tablero
+    construido en `test_simulador_baja_el_uiti.py`; aqui se fija el mecanismo."""
+    cuerpo = _cuerpo(fuente, "_aplicar_sugerencia")
     assert "GRUPOS_SUGERIDOS = ('intervencion', 'escenario')" in fuente
     # La seleccion se REEMPLAZA por los grupos aplicados, no se acumula sobre lo que
     # hubiera antes: eso es lo que hace que "solo lo aplicado" sea cierto.
-    assert "knob_selector_widget.value = tuple(dict.fromkeys(ids_sugeridos))" in cuerpo
+    assert "knob_selector_widget.value = tuple(ids_del_plan)" in cuerpo
+    assert "_valores_fijados.clear()" in cuerpo
+    # UN plan sobre la union, no uno por grupo.
+    assert "GRUPO_POR_KNOB.get(k.id) in nombres_activos" in cuerpo
     assert "for g in GRUPOS_SUGERIDOS if g in _GRUPOS_APLICADOS" in cuerpo
     assert "if clave not in _GRUPOS_APLICADOS:" in cuerpo
 

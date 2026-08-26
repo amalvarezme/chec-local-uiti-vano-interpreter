@@ -875,3 +875,70 @@ def test_sin_geometria_las_series_salen_sin_clase_en_vez_de_con_una_inventada():
         recursos, [{"fid": "V1", "w": ["W1"], "uv": [3.0], "n": [3]}])
 
     assert "clase" not in con_clase[0]
+
+
+# --- El plan del diagnostico tiene que ser EJECUTABLE ------------------------------------
+
+
+def _recursos_con_dos_grupos():
+    """Un vano critico y dos palancas: una de obra y una de clima.
+
+    La de clima baja el u-hat MUCHO mas que la de obra -- que es lo que pasa en el
+    modelo real, medido: sobre ocho circuitos el escenario lleva la seleccion de 359
+    a 5,3 y la intervencion solo a 86,3 --, asi que un descenso goloso sobre las dos
+    elige clima siempre y el plan sale sin una sola obra.
+    """
+    from chec_local_interpreter.mil_inferencia import GRUPO_ESCENARIO, GRUPO_INTERVENCION
+
+    # Columna 0 = u-hat. La palanca de clima la mueve entera; la de obra, la mitad.
+    X = np.array([[4.0, 0.0, 0.0], [4.0, 0.0, 0.0]], dtype=np.float32)
+    bag_index = _BagIndexFalso(
+        keys=pd.DataFrame({"CIRCUITO": ["C1"], "FID_VANO": ["V1"], "VENTANA": ["W1"]}),
+        offsets=[0, 2], counts=[2], y=[3.0],
+    )
+
+    class _Predictor(_PredictorFalso):
+        def predict(self, X_inst, instance_bag=None):
+            X_inst = np.asarray(X_inst, dtype=float)
+            # obra resta 1 por unidad; clima resta 3. El goloso preferira clima.
+            u = X_inst[:, 0] - X_inst[:, 1] - 3.0 * X_inst[:, 2]
+            if instance_bag is None:
+                return u
+            instance_bag = np.asarray(instance_bag)
+            n = int(instance_bag.max()) + 1 if instance_bag.size else 0
+            return np.array([u[instance_bag == b].mean() for b in range(n)])
+
+    return RecursosMIL(
+        modelo=_Predictor(_geometria()),
+        X_inst=X,
+        features=["u", "obra", "clima"],
+        bag_index=bag_index,
+        knobs=[_knob("obra", bounds=(0.0, 1.0)), _knob("clima", bounds=(0.0, 1.0))],
+        grupos_por_knob={"obra": GRUPO_INTERVENCION, "clima": GRUPO_ESCENARIO},
+    )
+
+
+def test_el_plan_del_diagnostico_solo_mueve_palancas_de_intervencion():
+    """El plan que el informe publica por vano critico sustenta una ORDEN DE TRABAJO.
+
+    `simulacion_de_circuito`, en el mismo escenario, ya restringe a intervencion; el
+    diagnostico corria sobre TODOS los controles y publicaba pasos como "lleva DDT a
+    411" o "el viento a 11,53", que ninguna cuadrilla ejecuta. Medido sobre los ocho
+    circuitos con mas celdas: 190 de 218 pasos (87%) eran de escenario y 72 de 94
+    vanos recibian un plan sin un solo paso ejecutable.
+
+    Las de escenario NO salen del modelo: entran con el valor observado de cada vano.
+    Lo que no hacen es moverse dentro del plan.
+    """
+    from chec_local_interpreter.mil_inferencia import GRUPO_INTERVENCION
+
+    recursos = _recursos_con_dos_grupos()
+
+    criticos = diagnostico_de_circuito(recursos, circuito="C1", ventana="W1")
+
+    assert criticos, "el vano critico tiene que salir en el diagnostico"
+    movidos = {p["knob_id"] for c in criticos for p in c["pasos"]}
+    assert movidos, "un vano critico sin ningun paso no es un plan"
+    assert all(recursos.grupos_por_knob.get(k) == GRUPO_INTERVENCION for k in movidos), (
+        f"el plan mueve palancas que no son de intervencion: {sorted(movidos)}"
+    )

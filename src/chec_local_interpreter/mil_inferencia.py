@@ -463,6 +463,19 @@ def diagnostico_de_circuito(
     observada; esto ordena por la clase que el modelo asigna a la bolsa y ademas
     entrega QUE mover -- que es lo que convierte una lista de vanos en una orden de
     trabajo. Es el mismo diagnostico que el boton del cuaderno 06.
+
+    El plan mueve SOLO palancas de intervencion, igual que `simulacion_de_circuito`.
+    Corria sobre todos los controles y publicaba pasos que ninguna cuadrilla ejecuta:
+    medido sobre los ocho circuitos con mas celdas en su ultima ventana, 190 de 218
+    pasos (87%) eran de escenario y 72 de 94 vanos recibian un plan sin un solo paso
+    ejecutable -- "lleva DDT a 411", "el viento a 11,53". No era mala suerte: el
+    escenario mueve el u-hat mucho mas que la obra -- en AGU23L12/V11 lleva la
+    seleccion de 359 a 5,3 contra 86,3 --, asi que un descenso goloso sobre los dos
+    conjuntos elige clima casi siempre.
+
+    Y era ademas una contradiccion dentro del mismo escenario: `simulacion` decia
+    "cambia el CONDUCTOR" mientras `vanos_criticos` decia "que no llueva", y el
+    prompt del agente presenta la segunda como el plan que la primera ejecuta.
     """
     from chec_local_interpreter.mil_simulador_015 import plan_hacia_clase_minima
 
@@ -475,7 +488,7 @@ def diagnostico_de_circuito(
         recursos.X_inst,
         seleccion=seleccion,
         feature_names=recursos.features,
-        knobs=recursos.knobs,
+        knobs=knobs_de_intervencion(recursos),
         puntos=PUNTOS_REJILLA,
         max_pasos=MAX_PASOS_PLAN,
         label_encoders=recursos.label_encoders,

@@ -74,6 +74,7 @@ from chec_local_interpreter.simulaciones_guardadas import (
 from chec_local_interpreter.mil_simulador_015 import (
     gates_de_bolsas,
     grafo_diferencia,
+    plan_hacia_clase_minima,
     plegar_rezagos,
     relevancia_hacia_uiti_minimo,
     seleccionar_bolsas,
@@ -319,6 +320,13 @@ TOP_VANOS_CIRCUITO = 15
 # variable necesaria sino ruido en la tabla.
 TOP_INTERVENCION_CIRCUITO = None
 TOP_ESCENARIO_CIRCUITO = None
+# Cuantas palancas puede fijar como maximo el plan que aplican los botones. Cuatro, el
+# MISMO numero que `mil_inferencia.MAX_PASOS_PLAN`: el tablero y el informe tienen que
+# aplicar el mismo plan, y dos topes distintos los separan en cuanto alguien mueve uno.
+# El plan para antes por su cuenta en cuanto alcanza el grupo objetivo: una orden de
+# trabajo no agrega obra despues de la meta, porque cada paso de mas es dinero que no
+# compra nada.
+MAX_PASOS_APLICAR = 4
 # Fuente del rotulo dentro de la barra. Es la MISMA que la de las marcas del eje x de ese
 # panel (`tickfont=dict(size=9)`, fila 4): el codigo de columna escrito en la barra y el
 # identificador del vano escrito debajo son dos etiquetas del mismo dibujo, y a tamanios
@@ -2371,6 +2379,10 @@ def construir(
             'circuito': circuito,
             'ventana': VENTANAS[ventana_i],
             'vanos': peores,
+            # Las bolsas YA resueltas. Los botones de aplicar corren el plan sobre
+            # estas mismas y no vuelven a resolverlas: una segunda seleccion podria
+            # describir un conjunto distinto del que la tabla acaba de diagnosticar.
+            'bolsas': seleccion,
             # Cuantos aporto cada grupo de criticidad: es contexto de lectura de la lista.
             'por_grupo': reparto,
             # De donde salio cada vano y que quedo fuera: es lo que sostiene los avisos.
@@ -2919,6 +2931,33 @@ def construir(
     # {fid o GRANO_CIRCUITO: {knob_id: widget}}. Una COLUMNA por vano, con el vano escrito
     # encima: sin ese encabezado cinco columnas de deslizadores identicos son indistinguibles.
     _controles_por_vano = {}
+    # {fid: {knob_id: valor}} -- lo que el usuario FIJO, aparte de los widgets que lo
+    # muestran. Los widgets no son el estado: la rejilla se rehace entera cada vez que
+    # cambia cualquiera de los tres selectores, y marcar una actividad del contrato es
+    # uno de esos cambios. Sin este diccionario, costear una obra devolvia los controles
+    # a su valor observado y la simulacion corria sobre el vano intacto -- mientras el
+    # aviso verde seguia diciendo "27 controles abiertos en su valor sugerido".
+    _valores_fijados = {}
+    # (circuito, ventana_i) de cuando se fijaron. Un valor describe UNA celda
+    # (vano, ventana): el control abre en el valor de ese vano EN ESA VENTANA, asi que
+    # arrastrarlo al mover el deslizador simularia con lo que se decidio para otra.
+    # No basta con soltar los vanos que dejan de estar marcados: un vano con celda en
+    # las dos ventanas sigue marcado -- V10 y V11 de AGU23L12 comparten ocho -- y el
+    # suyo sobrevivia, sin nada en pantalla que lo distinguiera de su valor observado.
+    _contexto_fijado = None
+
+
+    def _recordar_valor(fid, knob_id):
+        """Anota lo que el usuario acaba de mover, para que sobreviva a la rejilla.
+
+    Tambien las ediciones a mano, y no solo lo que aplica el diagnostico: teclear un
+    valor y despues marcar una actividad del contrato lo borraba igual.
+    """
+        def _al_cambiar(cambio):
+            nonlocal _contexto_fijado
+            _contexto_fijado = _seleccion_actual()[:2]
+            _valores_fijados.setdefault(fid, {})[knob_id] = cambio['new']
+        return _al_cambiar
     # `GRANO_CIRCUITO` ya no se declara aqui: vive en `simulaciones_guardadas` y se
     # importa arriba. Es el literal bajo el que un registro guardado escribe los
     # valores de una corrida SIN vanos marcados, asi que tenerlo dos veces -- uno en
@@ -3100,12 +3139,22 @@ def construir(
     una linea las separa, y el modelo solo consume la de arriba.
     """
         nonlocal _controles_por_vano, _costos_por_vano, _COLUMNAS_VANO, _PAGINA
+        nonlocal _contexto_fijado
         _controles_por_vano = {}
         _costos_por_vano = {}
         knob_ids = list(knob_selector_widget.value)
         _circuito, _ventana_i, marcados = _seleccion_actual()
         seleccion = _seleccion_de_bolsas()
         valores = _valores_iniciales(seleccion, marcados)
+        # Lo fijado se suelta ENTERO al cambiar de circuito o de ventana, y se PODA a
+        # los vanos que siguen marcados dentro de la misma. Sin la poda, desmarcar un
+        # grupo y marcar otro traeria de vuelta los valores del anterior en cuanto
+        # alguno de sus vanos volviera a entrar, y nadie los habria pedido.
+        if _contexto_fijado is not None and _contexto_fijado != (_circuito, _ventana_i):
+            _valores_fijados.clear()
+            _contexto_fijado = None
+        for _fid in [f for f in _valores_fijados if f not in marcados]:
+            _valores_fijados.pop(_fid, None)
 
         if not knob_ids and not item_selector_widget.value:
             _COLUMNAS_VANO.clear()
@@ -3128,9 +3177,20 @@ def construir(
         columnas = []
         for fid in columnas_fid:
             controles = {}
+            fijados = _valores_fijados.get(fid, {})
             for knob_id in knob_ids:
                 knob = _knobs_por_id[knob_id]
-                controles[knob_id] = _control_con_valor(knob, valores.get(fid, {}).get(knob_id))
+                # Lo FIJADO manda sobre el valor observado. El observado es de donde
+                # arranca un control que nadie ha tocado; reponerlo encima de una obra
+                # ya aplicada la borra, que es lo que hacia marcar una actividad.
+                inicial = (fijados[knob_id] if knob_id in fijados
+                           else valores.get(fid, {}).get(knob_id))
+                control = _control_con_valor(knob, inicial)
+                # El observador se cuelga DESPUES de construir, para que el valor
+                # inicial no se registre como una decision del usuario: lo que hay que
+                # recordar es lo que alguien MOVIO, no de donde arranco el control.
+                control.observe(_recordar_valor(fid, knob_id), names='value')
+                controles[knob_id] = control
             _controles_por_vano[fid] = controles
             encabezado = widgets.HTML(
                 f'<div style="font-weight:600;border-bottom:2px solid rgb(0,128,36);'
@@ -3704,10 +3764,41 @@ def construir(
                         f'</b><table style="font-size:11px;border-collapse:collapse;">{_r}'
                         '</table></div>')
 
+            # El contraste MODELO contra MODELO, en palabras. El titulo de las barras
+            # enfrenta lo MEDIDO contra lo simulado, y esas dos son de naturaleza
+            # distinta: el desfase de nivel del modelo -- que aqui es del orden del
+            # propio cambio y cambia de signo con el circuito y la ventana -- se leia
+            # como el efecto de la obra. `u_base` contra `u_simulado` sobre la MISMA
+            # bolsa es la unica comparacion limpia que hay, porque el desfase se
+            # cancela: lo que quede es lo que movieron los controles.
+            #
+            # Que la obra simulada EMPEORE el vano es un resultado legitimo -- el
+            # modelo no es monotono --, pero solo mientras se diga. Ahora el plan de
+            # los botones no puede producirlo; una edicion a mano si.
+            _u_base = float(resultado['u_base'].sum())
+            _u_sim = float(resultado['u_simulado'].sum())
+            _delta = _u_base - _u_sim
+            if not del_panel:
+                _segun_modelo = ('Sin ningún control fijado, no hay obra que evaluar '
+                                 'según el modelo.')
+            elif _delta > 0:
+                _segun_modelo = (f'Según el modelo, lo fijado <b>baja</b> el UITI de '
+                                 f'estos vanos de {_u_base:,.1f} a {_u_sim:,.1f} '
+                                 f'(&minus;{_delta:,.1f}).')
+            elif _delta < 0:
+                _segun_modelo = (f'<b>Ojo:</b> según el modelo, lo fijado <b>sube</b> el '
+                                 f'UITI de estos vanos de {_u_base:,.1f} a {_u_sim:,.1f} '
+                                 f'(+{abs(_delta):,.1f}). No es una mejora.')
+            else:
+                _segun_modelo = ('Según el modelo, lo fijado <b>no mueve</b> el UITI de '
+                                 'estos vanos.')
+
             STATUS.value = (
                 '<div style="font-size:12px;color:#2b2b2b;">'
                 f'<b>{cambian}</b> de {metadata["n_vanos"]} vanos cambian de grupo de '
                 f'criticidad{costo}{avisos}'
+                f'<div style="margin-top:3px;color:'
+                f'{"#b91c1c" if _delta < 0 else "#2b2b2b"};">{_segun_modelo}</div>'
                 '<div style="display:flex;flex-flow:row wrap;align-items:flex-start;'
                 'margin-top:4px;">'
                 + _bloque('Intervencion &mdash; lo que se HACE', '#0072b2',
@@ -3791,75 +3882,110 @@ def construir(
 
 
     def _aplicar_sugerencia(clave, nombre):
-        """Marca los vanos del diagnostico y abre sus controles en el valor SUGERIDO.
+        """Marca los vanos del diagnostico y les fija EL PLAN que baja su UITI.
 
     Es el puente entre el diagnostico y el simulador: sin el, leer "lleva NR_T a 116"
     para diez vanos obliga a marcarlos uno por uno y teclear cuarenta valores, y en ese
     trayecto se pierde justamente lo que el diagnostico acababa de calcular.
 
-    El valor es el de CADA vano y no el promedio: el promedio ordena la lista, pero lo
-    que baja a un vano concreto es su propio optimo, y aplicar el promedio simularia un
-    escenario que no es el de ninguno.
+    Lo que se aplica es el PLAN -- `plan_hacia_clase_minima`, el mismo que corre el
+    informe -- y ya no la lista entera del ranking. La diferencia importa y esta
+    medida. El ranking calcula, para cada variable POR SEPARADO, el valor que minimiza
+    el u-hat con las demas en su valor observado; fijarlas todas a la vez simula un
+    punto que nadie evaluo, y los optimos marginales no componen. Sobre AGU23L12/V11:
+    359,07 de base, 137,13 con las nueve marginales y 86,25 con el plan. El plan
+    ademas no puede empeorar el vano -- solo acepta un paso si baja el u-hat -- y para
+    al alcanzar el grupo objetivo, asi que fija menos variables y son menos obra que
+    cotizar.
 
-    La seleccion de variables queda EXACTAMENTE en los grupos aplicados, y no se suma a
-    lo que hubiera marcado antes. Es lo que hace que el resultado sea legible: si al
-    aplicar intervencion quedaran ademas variables de escenario de una vuelta anterior,
-    la simulacion mezclaria obra y clima y no se sabria cual de los dos movio el UITI.
-    Para ver los dos efectos juntos se presionan los DOS botones -- el segundo conserva
-    lo del primero --, que es una decision del usuario y no un residuo.
+    El ranking NO desaparece: sigue siendo la tabla del diagnostico, que es donde se
+    lee cuanto puede cada palanca por si sola. Lo que ya no hace es dictar la
+    simulacion.
+
+    Con los dos botones presionados se calcula UN plan sobre la union de los dos
+    conjuntos, y no dos planes que despues se juntan: dos descensos golosos
+    independientes vuelven a chocar con el mismo problema de composicion que este
+    cambio viene a arreglar.
     """
-        nonlocal _GRUPOS_APLICADOS
+        nonlocal _GRUPOS_APLICADOS, _contexto_fijado
         if _ULTIMO_DIAGNOSTICO is None or not _ULTIMO_DIAGNOSTICO['vanos']:
             AVISO_APLICAR.value = ('<span style="font-size:12px;color:#b91c1c;">Primero '
                                    'presiona <b>Diagnostico</b>.</span>')
             return
         diag = _ULTIMO_DIAGNOSTICO
-        sugeridas = diag[clave]
-        if not sugeridas:
+        if not diag[clave]:
             AVISO_APLICAR.value = (f'<span style="font-size:12px;color:#b91c1c;">El '
                                    f'diagnostico no trae variables de {nombre}.</span>')
             return
-        # La lista ENTERA del diagnostico. Recortarla aplicaba la obra a quince columnas
-        # de una rejilla de cuatrocientas, y las otras se simulaban con su valor actual:
-        # el resultado se leia como que la intervencion no rindio.
         fids = [f for f, _u, _n in diag['vanos']]
         if clave not in _GRUPOS_APLICADOS:
             _GRUPOS_APLICADOS.append(clave)
+        nombres_activos = {NOMBRES_SUGERIDOS[g] for g in _GRUPOS_APLICADOS}
+        knobs_activos = [k for k in KNOBS_PANEL
+                         if GRUPO_POR_KNOB.get(k.id) in nombres_activos]
+
+        plan = plan_hacia_clase_minima(
+            MIL, X_INST, seleccion=diag['bolsas'], feature_names=FEATURES_MIL,
+            knobs=knobs_activos, puntos=PUNTOS_REJILLA_RELEVANCIA,
+            max_pasos=MAX_PASOS_APLICAR, label_encoders=label_encoders,
+            max_values_imputed=max_values_imputed, catalogo=CATALOGO_SIM)
+
+        # Lo fijado se escribe ANTES de tocar los selectores: cada uno de los dos
+        # dispara `_reconstruir_controles_knob`, y es esa reconstruccion la que abre
+        # cada control en su valor. Escribirlo despues obligaria a una tercera pasada.
+        _valores_fijados.clear()
+        _contexto_fijado = _seleccion_actual()[:2]
+        for fid in fids:
+            del_vano = {}
+            for paso in plan.get(fid, {}).get('pasos', []):
+                knob = _knobs_por_id.get(paso['knob_id'])
+                valor = paso['valor']
+                if knob is None:
+                    continue
+                if knob.kind == 'numeric':
+                    # Un valor fuera de los limites del deslizador se recorta:
+                    # `FloatSlider` lanza si cae fuera de [min, max], y tumbar el panel
+                    # por un decimal no vale la pena.
+                    lo, hi = knob.bounds
+                    del_vano[knob.id] = float(min(max(float(valor), lo), hi))
+                elif knob.kind == 'categorical' and valor in (knob.categories or ()):
+                    del_vano[knob.id] = valor
+            if del_vano:
+                _valores_fijados[fid] = del_vano
+
         # El ORDEN es el de los botones y no el de los clics, para que la rejilla no se
         # baraje segun por cual se empezo.
-        ids_sugeridos = [e['knob_id'] for g in GRUPOS_SUGERIDOS if g in _GRUPOS_APLICADOS
-                         for _lab, e in diag[g]]
+        ids_del_plan = [k.id for k in knobs_activos
+                        if any(k.id in v for v in _valores_fijados.values())]
 
         vano_widget.value = tuple(fids)
-        knob_selector_widget.value = tuple(dict.fromkeys(ids_sugeridos))
+        knob_selector_widget.value = tuple(ids_del_plan)
         _reconstruir_controles_knob()
 
-        # Y ahora el valor sugerido de cada vano, encima del valor actual con que abrio cada
-        # control. Un valor fuera de los limites del deslizador se recorta: `FloatSlider`
-        # lanza si cae fuera de [min, max], y tumbar el panel por un decimal no vale la pena.
-        aplicados = 0
-        for fid in fids:
-            filas = {f['knob_id']: f['valor'] for f in diag['ranking'].get(fid, {}).get('filas', [])}
-            for knob_id in ids_sugeridos:
-                control = _controles_por_vano.get(fid, {}).get(knob_id)
-                if control is None or knob_id not in filas:
-                    continue
-                knob = _knobs_por_id[knob_id]
-                valor = filas[knob_id]
-                if knob.kind == 'numeric':
-                    lo, hi = knob.bounds
-                    control.value = float(min(max(float(valor), lo), hi))
-                elif knob.kind == 'categorical' and valor in (knob.categories or ()):
-                    control.value = valor
-                aplicados += 1
         _activos = ' + '.join(NOMBRES_SUGERIDOS[g] for g in GRUPOS_SUGERIDOS
                               if g in _GRUPOS_APLICADOS)
+        if not ids_del_plan:
+            # Ni un solo paso baja el u-hat de ningun vano. Decirlo vale mas que dejar
+            # la rejilla vacia y que el usuario simule creyendo que aplico algo.
+            AVISO_APLICAR.value = (
+                f'<span style="font-size:12px;color:#b45309;">Con las variables de '
+                f'<b>{_activos}</b> no hay ningún cambio que baje el UITI de estos '
+                f'{len(fids)} vanos según el modelo. No se fijó ningún control.</span>')
+            return
+        n_pasos = sum(len(v) for v in _valores_fijados.values())
+        # El plan casi siempre fija UNA variable por vano, asi que el plural sale mal
+        # justo en el caso normal. Se concuerda a mano: un panel que dice "1 variables
+        # distintas" se lee como una plantilla sin terminar.
+        _variables = (f'{len(ids_del_plan)} variable distinta' if len(ids_del_plan) == 1
+                      else f'{len(ids_del_plan)} variables distintas')
+        _controles = ('1 control fijado' if n_pasos == 1
+                      else f'{n_pasos} controles fijados')
         AVISO_APLICAR.value = (
             f'<span style="font-size:12px;color:#15803d;">{len(fids)} vanos marcados y '
-            f'{aplicados} controles abiertos en su valor sugerido. La simulación va a usar '
+            f'{_controles} por el plan sobre {_variables}. La simulación va a usar '
             f'<b>solo variables de {_activos}</b>'
             + ('.' if len(_GRUPOS_APLICADOS) == len(GRUPOS_SUGERIDOS) else
-               f'; presiona también el otro botón si quieres las dos mitades.')
+               '; presiona también el otro botón si quieres las dos mitades.')
             + ' Presiona <b>Simular</b>.</span>')
 
 
@@ -4512,6 +4638,28 @@ def construir(
         figura._widget_layout = copy.deepcopy(figura._layout_obj._props)
         figura._widget_data = copy.deepcopy(figura._data)
 
+
+    def _estado_del_panel():
+        """Lo que el panel tiene puesto ahora mismo, y el resultado de la ultima corrida.
+
+    Todo el estado del tablero vive en el cierre de `construir`, asi que desde fuera
+    no hay forma de preguntarle que valor tiene un control ni que devolvio el modelo:
+    solo se ven los widgets, y un widget no dice a que vano ni a que variable
+    corresponde. Sin esta ventana, la unica manera de comprobar que costear no borra
+    la obra aplicada era levantar Voila y leer el DOM -- 700 MB de kernel para mirar
+    un diccionario.
+
+    Devuelve COPIAS de los valores, no los widgets: quien pregunta por el estado no
+    tiene que poder cambiarlo sin pasar por el panel.
+    """
+        return {
+            'valores': {fid: {k: c.value for k, c in ctrls.items()}
+                        for fid, ctrls in _controles_por_vano.items()},
+            'fijados': {fid: dict(vals) for fid, vals in _valores_fijados.items()},
+            'ultima_simulacion': _ultimo_resultado_simulacion,
+        }
+
+    APP.estado_del_panel = _estado_del_panel
 
     _sincronizar_estado_inicial(fig)
     return APP

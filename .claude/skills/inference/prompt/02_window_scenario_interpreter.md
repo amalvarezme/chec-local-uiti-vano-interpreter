@@ -28,9 +28,12 @@ leer el informe, y que el modelo no respalda. El validador la rechaza.
   bajarle el UITI.
 - `variables_por_grupo`: ese mismo ranking, partido en **Intervención** y **Escenario**.
 - `vanos_criticos`: hasta 15 vanos, primero los del grupo Alto y luego Medio-Alto, cada uno
-  con el plan que lo baja de clase.
-- `simulacion`: qué le pasa al UITI y al grupo de esos vanos si se ejecuta el plan, más el
-  grafo diferencia.
+  con el plan que lo baja de clase. El plan mueve **solo palancas de intervención**: es lo
+  que sustenta una orden de trabajo, y un paso de escenario —«que no llueva», «que el
+  viento baje a 11,53»— no lo ejecuta ninguna cuadrilla.
+- `simulacion`: qué le pasa al UITI y al grupo de esos vanos al ejecutar **ese mismo**
+  plan, más el grafo diferencia. Las dos claves describen la misma obra sobre el mismo
+  conjunto de palancas.
 
 ## Intervención contra Escenario
 

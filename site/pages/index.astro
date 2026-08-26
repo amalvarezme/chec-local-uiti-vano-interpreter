@@ -10,6 +10,7 @@ import tableroTrayVanos from "../assets/site/results/tablero-trayectorias-vanos.
 import simuladorMapas from "../assets/site/results/simulador-mapas.png";
 import simuladorResultados from "../assets/site/results/simulador-resultados.png";
 import simuladorGuardar from "../assets/site/results/simulador-guardar.png";
+import simuladorVeredicto from "../assets/site/results/simulador-veredicto.png";
 import variables from "../data/variables.json";
 
 
@@ -952,7 +953,7 @@ const cronograma = [
           <li><strong>Selección de vanos mediante tres mecanismos acumulativos.</strong> Un botón por grupo de criticidad —<em>G. Alto</em>, <em>G. Medio-Alto</em>, <em>G. Medio</em>, <em>G. Bajo</em>— marca los vanos de ese grupo <em>en la ventana fijada</em>; también es posible la selección individual mediante casillas o la selección directa sobre el mapa. La selección de un grupo tras otro es acumulativa: la acción <em>Desmarcar</em> es la única que elimina la selección vigente. El panel informa en todo momento el número de vanos correspondiente al grupo y a la ventana seleccionados, con su fecha.</li>
           <li><strong>El diagnóstico se calcula exclusivamente sobre los vanos seleccionados.</strong> Si no existe una selección explícita, se utilizan los 15 vanos con mayor UITI en la ventana activa. Cuando existen vanos con eventos por fuera de la selección, el tablero informa esta condición y permite incorporarlos.</li>
           <li><strong>El diagnóstico genera dos listas ordenadas por reducción media del UITI:</strong> <em>variables de intervención</em> y <em>variables de escenario</em>. Para cada variable se presenta el valor sugerido y la reducción media estimada. También se identifica cuando la modificación de una única variable permite cambiar el grupo de criticidad de al menos un vano.</li>
-          <li><strong>La aplicación de las recomendaciones habilita los controles asociados con los valores sugeridos.</strong> Se ofrecen controles independientes para simular únicamente la intervención, únicamente el escenario o ambos componentes. En el ejemplo se aplicaron <em>únicamente las variables de intervención</em>: el diagnóstico propuso nueve para los tres vanos del grupo Medio-Alto, de modo que se habilitaron 27 controles en su valor sugerido, y las variables de escenario quedaron sin marcar.</li>
+          <li><strong>La aplicación de las recomendaciones habilita los controles asociados con los valores sugeridos.</strong> Se ofrecen controles independientes para simular únicamente la intervención, únicamente el escenario o ambos componentes. Lo que se aplica es el <strong>plan</strong>, no la lista completa del ranking. La diferencia es sustantiva: el ranking evalúa cada variable <em>por separado</em>, con las demás en su valor observado, y fijar todas simultáneamente simula un punto que no fue evaluado —los óptimos marginales no se componen—. El plan evalúa cada candidato contra el estado vigente, incorpora un paso únicamente si reduce el UITI y se detiene al alcanzar el grupo objetivo. En el ejemplo, aplicar <em>únicamente las variables de intervención</em> fijó <strong>un solo control por vano</strong> —<code>CONDUCTOR</code> a <code>4/0-CU-AISLADO</code>— y los tres vanos descendieron de grupo. Es además el mismo procedimiento que ejecuta el informe automático, de modo que tablero e informe sostienen la misma orden de trabajo.</li>
           <li><strong>Los valores pueden ajustarse manualmente.</strong> Cada vano seleccionado dispone de un panel con sus variables, inicializadas con el valor observado en la ventana activa —mediana para variables numéricas y moda para variables categóricas—, no con un valor genérico.</li>
           <li><strong>Los costos se asignan manualmente por actividad.</strong> El catálogo contractual incluye 142 actividades con su costo unitario. Cada actividad seleccionada se incorpora al vano correspondiente con su cantidad; el tablero calcula el costo individual y acumulado, <strong>sin inferir automáticamente</strong> la actividad asociada a cada modificación.</li>
           <li><strong>La acción de simulación ejecuta nuevamente el modelo y compara la condición observada con la simulada.</strong> Se presentan los mapas de <em>Criticidad Original</em> y <em>Criticidad Simulada</em>, el UITI observado y simulado por vano y por circuito, las diez variables con mayor reducción estimada del UITI y los costos individual y acumulado.</li>
@@ -966,12 +967,30 @@ const cronograma = [
             Corresponden a la misma ejecución de la Figura 7: la caída de UITI que aporta cada variable
             en cada vano, el UITI observado frente al simulado, el costo por vano y el costo acumulado
             (17.236.410 COP sobre cinco actividades del contrato), y el grafo de relaciones relevantes
-            de esta simulación. <strong>La intervención simulada no produce una mejora</strong>: el UITI
-            acumulado <em>sube</em> 103,2 con un desfase del modelo de ±119,4, y el propio título
-            del panel lo declara. Es un resultado legítimo y no un error de la ejecución: el margen
-            <em>supera</em> el cambio, de modo que esta corrida <strong>no sostiene una diferencia</strong> en
-            un sentido ni en el otro. Publicar la cifra sin ese margen convertiría el sesgo del modelo en
-            un ahorro.
+            de esta simulación. El plan fija <strong>una sola variable por vano</strong> —<code>CONDUCTOR</code>
+            a <code>4/0-CU-AISLADO</code>— y <strong>los tres vanos descienden de Medio-Alto a Medio</strong>.
+            El UITI acumulado de los tres <em>baja</em> 101,8 respecto del observado. La cifra se presenta
+            con su margen —±119,4, el desfase del modelo en la base de esos mismos vanos— y ese margen
+            <strong>excede la reducción</strong>: la magnitud del ahorro no queda establecida por esta
+            corrida. El cambio de grupo sí, dado que se obtiene comparando el modelo consigo mismo
+            —359,1 frente a 154,1— y esa comparación no incorpora el desfase.
+          </figcaption>
+        </figure>
+
+        <figure class="shot">
+          <img src={simuladorVeredicto.src} alt="Renglón de resultado del simulador: cuántos vanos cambian de grupo, el costo, el contraste del UITI según el modelo y el desglose por intervención y escenario" loading="lazy" />
+          <figcaption>
+            <strong>Figura 9. Renglón de resultado, correspondiente a la misma ejecución.</strong>
+            Bajo el panel, el tablero declara <strong>qué produjo la obra según el modelo</strong>:
+            el UITI de los tres vanos pasa de 359,1 a 154,1. Es una comparación del modelo consigo
+            mismo sobre las mismas celdas, de modo que el desfase de nivel se cancela y lo que resta
+            corresponde al efecto de los controles. Es una lectura distinta de la del título de la
+            Figura 8, que enfrenta lo <em>medido</em> con lo simulado —dos cantidades de naturaleza
+            diferente—. Cuando la modificación aplicada <em>eleva</em> el UITI, el renglón lo declara
+            de forma explícita: es un resultado posible al ajustar valores manualmente, y publicarlo
+            sin advertirlo convertiría el sesgo del modelo en un ahorro. Debajo se detallan las
+            variables efectivamente aplicadas, separadas en lo que <em>se ejecuta</em> y las
+            condiciones que <em>se anticipan</em>.
           </figcaption>
         </figure>
 
@@ -987,7 +1006,7 @@ const cronograma = [
         <figure class="shot">
           <img src={simuladorGuardar.src} alt="Bloque de guardado del simulador: los botones Guardar y Cargar, la lista de simulaciones archivadas, la ruta de la carpeta y los dos archivos que se acaban de escribir" loading="lazy" />
           <figcaption>
-            <strong>Figura 9. Bloque de archivo del simulador, correspondiente a la misma ejecución.</strong>
+            <strong>Figura 10. Bloque de archivo del simulador, correspondiente a la misma ejecución.</strong>
             La <strong>ruta de la carpeta se publica de forma permanente</strong> —desde la apertura del
             tablero y con independencia de que se haya guardado— en el renglón situado bajo la lista
             desplegable. Tras guardar, se indican los nombres de los dos archivos escritos.
@@ -1012,10 +1031,10 @@ const cronograma = [
               </tr>
               <tr>
                 <td><code>&lt;circuito&gt;_&lt;ventana&gt;_&lt;fecha&gt;.simchec.json.gz</code></td>
-                <td><strong>2,4 KB</strong></td>
+                <td><strong>2,2 KB</strong></td>
                 <td>El <strong>registro</strong> con el que <em>Cargar</em> reconstruye la simulación:
-                    circuito, ventana, los 3 vanos, las 27 variables con su valor y las 15 actividades
-                    con sus cantidades.</td>
+                    circuito, ventana, los 3 vanos, las 3 variables que fijó el plan con su valor y las
+                    15 actividades con sus cantidades.</td>
               </tr>
             </tbody>
           </table>
@@ -1597,7 +1616,7 @@ const cronograma = [
             loading="lazy"
           ></iframe>
           <figcaption class="pie-grafo">
-            <strong>Figura 10. Grafo de conocimiento del proyecto.</strong> Vista agregada de 754
+            <strong>Figura 11. Grafo de conocimiento del proyecto.</strong> Vista agregada de 754
             comunidades y las 877 relaciones entre ellas, construida con <code>graphify</code>.
             <a href={`${import.meta.env.BASE_URL}grafo_proyecto.html`} target="_blank" rel="noopener"
             >Abrir versión ampliada en una pestaña independiente</a>.
