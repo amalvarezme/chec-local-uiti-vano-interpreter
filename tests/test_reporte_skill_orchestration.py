@@ -90,3 +90,60 @@ def test_skill_requires_measured_subagent_totals_when_runtime_exposes_them():
     assert "an equivalent runtime" in body or "Claude Code's `Agent` tool" in body
     assert "This is mandatory whenever the runtime exposes that" in body
     assert "do not show a `chars // 4` artifact estimate" in body
+
+
+# --- Techo de concurrencia: un circuito a la vez -----------------------------
+#
+# El paralelismo declarado arriba es INTRA-circuito (steps 3/4). Nada de eso
+# autoriza tener dos circuitos en vuelo. Se midio el costo de lo contrario el
+# 2026-08-26: un fan-out de `/informe-gerencial todos` perdio 15 de 18 agentes
+# vivos contra un solo tope de sesion, y el tiempo por informe dependia de
+# cuantos vecinos compartian la maquina. Estas guardas fijan la regla en los
+# tres runbooks para que no vuelva a diluirse en prosa.
+
+LOTE_SKILL_PATH = PROJECT_ROOT / ".claude" / "skills" / "reporte-lote" / "SKILL.md"
+GERENCIAL_SKILL_PATH = PROJECT_ROOT / ".claude" / "skills" / "informe-gerencial" / "SKILL.md"
+
+
+def test_report_skill_declara_el_techo_de_un_circuito():
+    """`report/SKILL.md` debe acotar el paralelismo a UN circuito, en la misma
+    seccion donde lo autoriza -- si no, la regla de paralelizar se lee como
+    permiso para abanicar circuitos."""
+    body = _run_sequence_text()
+
+    assert "Concurrency ceiling: one circuit at a time" in body, (
+        "Run sequence must cap the parallel-dispatch rule at one circuit in flight"
+    )
+    assert re.search(r"never a licence to\s+have two circuits in flight", body), (
+        "The ceiling must say explicitly that parallel dispatch is not a licence "
+        "for two circuits at once"
+    )
+
+
+def test_report_skill_ya_no_normaliza_el_fan_out_entre_circuitos():
+    """La prosa vieja hablaba de `multi-circuit parallel fan-out` como modo
+    esperado. Mientras esa frase siga ahi, el orquestador tiene de donde
+    agarrarse para abanicar."""
+    text = REPORTE_SKILL_PATH.read_text(encoding="utf-8")
+
+    for frase in ("multi-circuit parallel fan-out", "multi-circuit parallel\ndispatch"):
+        assert frase not in text, (
+            f"`report/SKILL.md` still normalizes cross-circuit concurrency: {frase!r}"
+        )
+
+
+def test_los_dos_comandos_de_lote_fijan_un_circuito_a_la_vez():
+    """`/reporte-lote` e `/informe-gerencial` son los dos unicos que iteran
+    circuitos. Los dos deben llevar la regla dura, no solo uno."""
+    for path in (LOTE_SKILL_PATH, GERENCIAL_SKILL_PATH):
+        text = path.read_text(encoding="utf-8")
+
+        assert "One circuit at a time (hard rule, not negotiable)" in text, (
+            f"{path.name} must carry the hard one-circuit-at-a-time rule"
+        )
+        assert re.search(r"Never start ANY work for circuit N\+1", text), (
+            f"{path.name} must forbid starting circuit N+1 before N resolves"
+        )
+        assert "dispatching several circuits together" in text, (
+            f"{path.name} must forbid dispatching several circuits together"
+        )

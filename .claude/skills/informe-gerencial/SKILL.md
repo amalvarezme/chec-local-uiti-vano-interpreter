@@ -316,12 +316,29 @@ Given `grupo` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
 
 2. **Auto-trigger `/report` for each missing circuit, in order (only when `missing_runs.count > 0`
    and the user confirmed).** For each `circuito` in the confirmed `missing_runs.circuitos` list,
-   sequentially: execute [`report/SKILL.md`](../report/SKILL.md)'s Run-sequence **steps 2 through 8
-   exactly as written there, and NO FURTHER** (including its sub-step 4b, but explicitly stopping
+   in order and strictly one circuit at a time: execute
+   [`report/SKILL.md`](../report/SKILL.md)'s Run-sequence **steps 2 through 8 exactly as written
+   there, and NO FURTHER** (including its sub-step 4b, but explicitly stopping
    before its own step 9 — see the vault-population sub-step below), substituting the current
    `circuito` and THIS Skill's already-resolved `fecha_inicio`/`fecha_fin` for `report/SKILL.md`'s own
    step-1 outputs — no per-circuit re-preflight, no new date window. Do **not** run `report/SKILL.md`'s
    step 1 for any circuit; this Skill's step 1 already replaced it for the whole group.
+
+   **One circuit at a time (hard rule, not negotiable).** Never start ANY work for circuit N+1 —
+   not `prepare`, not a role dispatch, not a single Bash verb — until circuit N has fully resolved
+   (its steps 2-8 plus the vault-population sub-step below finished, or it was recorded failed).
+   The only concurrency allowed anywhere in this loop is the two role agents of the CURRENT
+   circuit's own steps 3/4, exactly as `report/SKILL.md`'s "Concurrency ceiling: one circuit at a
+   time" states. At most two role agents of this pipeline are live at any instant, and they always
+   belong to the same circuit.
+
+   This is deliberate and it costs total throughput on purpose. Fanning circuits out makes any ONE
+   report's wall-clock and memory depend on how many neighbours share the machine, and a session
+   limit reached mid-fan-out kills every in-flight circuit instead of costing one — measured on
+   2026-08-26, when a fan-out of this very loop lost 15 of 18 live agents to one session limit.
+   Stability per circuit report is the objective here; finishing the whole group sooner is not.
+   Never "optimize" this loop by dispatching several circuits together, and never surface the
+   choice to the user.
 
    **Alert-and-continue override (scoped to this loop only, same convention `reporte-lote` uses).** On
    any step 2-8 failure for `circuito` (zero events in the window, a `ReportPipelineError`, or agent

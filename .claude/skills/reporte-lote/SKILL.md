@@ -146,10 +146,8 @@ Given `grupo` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
       never blocks or delays the circuit loop in step 2. Report the returned `output_html` path to the
       user alongside the step 1.4 confirmation summary, before the loop's per-circuit output begins.
 
-2. **Run `report/SKILL.md` steps 2-9 for each confirmed circuit, in order.** For each `circuito` in
-   the confirmed `group.circuitos` list, sequentially (never in parallel across circuits — only the
-   independent sub-steps *within* one circuit's own step 3/4/4b may run concurrently, exactly as
-   `report/SKILL.md` already documents for those): execute
+2. **Run `report/SKILL.md` steps 2-9 for each confirmed circuit, strictly one circuit at a time.**
+   For each `circuito` in the confirmed `group.circuitos` list, in order and sequentially: execute
    [`report/SKILL.md`](../report/SKILL.md)'s Run-sequence **steps 2 through 9 exactly as written
    there**, substituting the current `circuito` and this batch's already-resolved
    `fecha_inicio`/`fecha_fin` for `report/SKILL.md`'s own step-1 outputs. Do **not** run
@@ -160,6 +158,19 @@ Given `grupo` (and optionally `fecha_inicio`/`fecha_fin` as a validated pair):
    `prepare_expert_alignment`, `expert-alignment`, `render`, and the step-9 vault-note +
    `/graphify --update` chain (`vault-circuito/SKILL.md`) — applies to each circuit's run unchanged
    and in full.
+
+   **One circuit at a time (hard rule, not negotiable).** Never start ANY work for circuit N+1 —
+   not `prepare`, not a role dispatch, not a single Bash verb — until circuit N has fully resolved
+   (its own step 9 finished, or it was recorded `FAILED`). The only concurrency allowed anywhere in
+   this loop is the two role agents of the CURRENT circuit's own steps 3/4, exactly as
+   `report/SKILL.md`'s "Concurrency ceiling: one circuit at a time" states. At most two role agents
+   of this pipeline are live at any instant, and they always belong to the same circuit.
+
+   This is deliberate and it costs total throughput on purpose. Fanning circuits out makes any ONE
+   report's wall-clock and memory depend on how many neighbours share the machine, and a session
+   limit reached mid-fan-out kills every in-flight circuit instead of costing one. Stability per
+   circuit report is the objective here; finishing the whole batch sooner is not. Never "optimize"
+   this loop by dispatching several circuits together, and never surface the choice to the user.
 
    **Alert-and-continue override (batch-only, scoped to this loop).** `report/SKILL.md`'s own "Error
    handling summary" table makes every step 2-8 failure (zero events in the window, a `prepare`/
