@@ -732,6 +732,7 @@ ya produjo un `ModuleNotFoundError` en produccion. **No pases `--base_url`**: Da
 Apps hace proxy en la raiz y ahi un `base_url` deja todos los assets en 404.
 
 ```
+databricks sync src/chec_tableros          <base>/src/chec_tableros          --exclude '**/__pycache__/**' --full -p <profile>
 databricks sync src/chec_local_interpreter <base>/src/chec_local_interpreter --exclude '**/__pycache__/**' --full -p <profile>
 databricks sync src/chec_impacto           <base>/src/chec_impacto           --exclude '**/__pycache__/**' --full -p <profile>
 databricks workspace import <base>/arranque.py        --file <scratch>/arranque.py        --format RAW --language PYTHON --overwrite -p <profile>
@@ -739,9 +740,17 @@ databricks workspace import <base>/app.yaml           --file <scratch>/app.yaml 
 databricks workspace import <base>/requirements.txt   --file <scratch>/requirements.txt   --format RAW --overwrite -p <profile>
 databricks workspace import <base>/06_simulador.ipynb --file <scratch>/06_simulador.ipynb --format JUPYTER --overwrite -p <profile>
 ```
-`databricks sync` y no `workspace import-dir` para los dos paquetes: es el unico que tiene
+`databricks sync` y no `workspace import-dir` para los tres paquetes: es el unico que tiene
 exclusion, asi que `__pycache__` nunca llega al workspace. El nivel `src/` es funcional, no
 cosmetico — es lo que hace que el `ROOT` del cuaderno resuelva sin ningun parche.
+
+**`chec_tableros` es el primero de los tres y estuvo faltando.** Es el tablero ENTERO: la
+unica celda del cuaderno hace `from chec_tableros.simulador import derivacion, tablero`.
+Sin esa linea la app bajaba su paquete de 95 MB, levantaba Voila y moria en el import,
+o sea despues de todo lo caro y con un sintoma — `ModuleNotFoundError` dentro del kernel —
+que no apunta hasta esta lista. Lo vigila
+`tests/test_app_simulador_databricks.py::test_lo_que_la_celda_importa_tambien_se_sube`,
+que lee los imports de la celda y los cruza con estas lineas.
 
 Tamano de compute: **MEDIUM** (2 vCPU / 6 GB, 0,5 DBU/h) por defecto, que con ~648 MB por
 sesion deja seis o siete usuarios simultaneos. **LARGE** solo si el usuario dijo que seran

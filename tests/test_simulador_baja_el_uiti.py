@@ -86,6 +86,9 @@ class _Tablero:
                             if isinstance(s, widgets.SelectionSlider))
         selectores = [s for s in piezas if type(s).__name__ == "SelectorCasillas"]
         self.vanos, self.knobs, self.items = selectores[0], selectores[1], selectores[2]
+        self.guardadas = next(d for d in piezas if isinstance(d, widgets.Dropdown)
+                              and d is not self.circuito and d.description == ""
+                              and d.layout.width == "330px")
 
     def controles(self):
         """`{fid: {knob_id: valor}}` de la rejilla, tal y como la lee `Simular`.
@@ -308,3 +311,108 @@ def test_un_vano_de_dos_ventanas_no_arrastra_el_valor_de_la_otra(tablero):
     _correr_pendientes()
     assert not tablero.app.estado_del_panel()["fijados"], (
         "el valor puesto en V10 sigue fijado despues de pasar a V11")
+
+
+# --- 6. El total del circuito tiene que ser una SUMA de verdad ---------------------------
+
+
+def test_la_barra_del_circuito_entero_suma_los_vanos_de_la_ventana(tablero):
+    """`TODOS los vanos` no es un adorno: es la suma que dice cuanto pesa la obra.
+
+    `barras_uiti_por_vano` esta probada como unidad, pero lo que ninguna prueba de esa
+    funcion pura puede ver es el CABLEADO: que el tablero le pase el total del circuito
+    en la ventana activa -- todos sus vanos con celda, no solo los marcados -- y los
+    observados de los vanos que de verdad simulo. Un total armado sobre el conjunto
+    equivocado sigue dibujando dos barras crecibles.
+
+    Se comprueba contra la tabla del paquete, que es la fuente, y no contra otra cuenta
+    del propio tablero.
+    """
+    import pandas as pd
+
+    _diagnosticar_y_aplicar(tablero)
+    _pulsar(tablero.botones["Simular"])
+    _correr_pendientes()
+
+    estado = tablero.app.estado_del_panel()
+    barras = estado["ultima_corrida"]["barras"]
+    tabla = estado["ultima_simulacion"]
+
+    ventana = [r for r, v in tablero.ventana.options if v == tablero.ventana.value][0]
+    etiqueta = ventana.split(":")[0].strip()
+    celdas = pd.read_parquet(PAQUETE / "tabla.parquet")
+    celdas = celdas[(celdas["CIRCUITO"].astype(str) == CIRCUITO)
+                    & (celdas["ventana"] == etiqueta)]
+    assert len(celdas), f"{CIRCUITO}/{etiqueta} no tiene celdas en la tabla"
+
+    # La barra izquierda: el UITI medido de TODOS los vanos con celda en la ventana.
+    assert barras["observado"][-1] == pytest.approx(float(celdas["uiti_acumulado"].sum()))
+
+    # La derecha: los no simulados se quedan como estan y los simulados aportan lo suyo.
+    simulados = {str(f) for f in tabla["FID_VANO"]}
+    quietos = float(celdas[~celdas["FID_VANO"].astype(str).isin(simulados)]
+                    ["uiti_acumulado"].sum())
+    assert barras["simulado"][-1] == pytest.approx(quietos + sum(barras["simulado"][:-1]))
+
+    # Y la cabecera es la diferencia de las dos, sobre los simulados.
+    assert barras["reduccion"] == pytest.approx(
+        sum(barras["observado"][:-1]) - sum(barras["simulado"][:-1]))
+
+
+# --- 7. Guardar y cargar sigue siendo consistente ----------------------------------------
+
+
+def test_el_ciclo_guardar_cargar_repone_el_plan_y_lo_conserva_al_costear(tablero):
+    """Lo que se archiva y se repone es el PLAN, y sobrevive a seguir trabajando.
+
+    Guardar y cargar ya tenian su ciclo probado, pero sobre una escena montada a mano.
+    Lo que cambia aqui es de donde salen los valores -- el plan -- y que ahora existe
+    un estado aparte de los widgets. Dos cosas que hay que comprobar juntas:
+
+    1. el registro archiva EXACTAMENTE los valores que el plan fijo, y cargarlo los
+       devuelve a los mismos controles;
+    2. despues de cargar, marcar una actividad del contrato NO los borra. Es el mismo
+       defecto que se arreglo para el camino de aplicar, y el de cargar escribe en los
+       controles por su propia via -- `_escribir_en_control` --, asi que podria haber
+       quedado fuera del arreglo.
+    """
+    import gzip
+    import json
+
+    _diagnosticar_y_aplicar(tablero)
+    _pulsar(tablero.botones["Simular"])
+    _correr_pendientes()
+    puesto = {fid: dict(vals)
+              for fid, vals in tablero.app.estado_del_panel()["fijados"].items()}
+    assert puesto, "el plan no fijo nada que archivar"
+
+    _pulsar(tablero.botones["Guardar"])
+    carpeta = Path(os.environ["SIMULACIONES_LOCAL"])
+    registros = sorted(carpeta.glob("*.simchec.json.gz"))
+    assert registros, "Guardar no escribio el registro"
+    guardado = json.loads(gzip.decompress(registros[-1].read_bytes()).decode("utf-8"))
+    del_registro = {}
+    for fila in guardado["variables"]:
+        del_registro.setdefault(str(fila["vano"]), {})[fila["knob_id"]] = fila["valor"]
+    assert del_registro == puesto, "el registro no archiva lo que el plan fijo"
+
+    # Se ensucia el panel antes de cargar, para que reponer tenga algo que deshacer.
+    _pulsar(tablero.botones["Limpiar"])
+    _correr_pendientes()
+    assert not tablero.app.estado_del_panel()["fijados"]
+
+    tablero.guardadas.value = registros[-1].name
+    _pulsar(tablero.botones["Cargar"])
+    _correr_pendientes()
+    assert tablero.app.estado_del_panel()["valores"] == puesto, (
+        "cargar no repuso los valores del plan")
+
+    # Y ahora lo que antes los borraba.
+    tablero.items.value = tuple(list(tablero.items.casillas)[:2])
+    _correr_pendientes()
+    en_pantalla = tablero.app.estado_del_panel()["valores"]
+    for fid, vals in puesto.items():
+        for knob_id, valor in vals.items():
+            assert en_pantalla[fid][knob_id] == valor, (
+                f"{fid}/{knob_id}: costear tras cargar lo devolvio a "
+                f"{en_pantalla[fid][knob_id]!r}")

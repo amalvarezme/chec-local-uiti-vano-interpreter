@@ -4657,6 +4657,11 @@ def construir(
                         for fid, ctrls in _controles_por_vano.items()},
             'fijados': {fid: dict(vals) for fid, vals in _valores_fijados.items()},
             'ultima_simulacion': _ultimo_resultado_simulacion,
+            # Lo que "Guardar" archivaria. Trae `barras`, que es la unica forma de
+            # comprobar desde fuera que el total del circuito se armo sobre el
+            # conjunto de vanos que corresponde: la funcion que las calcula es pura y
+            # no sabe de donde salieron sus argumentos.
+            'ultima_corrida': _ULTIMA_CORRIDA,
         }
 
     APP.estado_del_panel = _estado_del_panel

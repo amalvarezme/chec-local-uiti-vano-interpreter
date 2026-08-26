@@ -82,6 +82,22 @@ print(f"paquete listo en {time.perf_counter() - t0:.1f} s ({_megas:.1f} MB) "
 # llegar a Voila y de ahi al kernel del tablero.
 os.environ["RUTA_VARIABLES_SIMULAR"] = str(DESTINO / "Variables_simular.xlsx")
 
+# --- Donde encuentra el cuaderno el codigo del tablero ---------------------------
+# La unica celda que Voila corre resuelve su `sys.path` con estas dos, y las lee con
+# `os.environ[...]`, que LANZA si faltan. No estaban puestas: la app bajaba su paquete,
+# levantaba Voila y moria en la primera celda con un `KeyError` -- despues de todo lo
+# caro, que es donde peor se diagnostica.
+#
+# Se DERIVAN de donde esta este archivo y no se declaran en `app.yaml`: los paquetes de
+# `src/` se sincronizan al lado de `arranque.py`, asi que el contenedor ya sabe la
+# respuesta. Una ruta en el `app.yaml` seria una tercera cosa que alguien tiene que
+# acordarse de sustituir en cada despliegue.
+#
+# `execvp` hereda el entorno, que es lo que las hace llegar al kernel del tablero.
+_AQUI = pathlib.Path(__file__).parent
+os.environ.setdefault("RAIZ_SRC_06", str(_AQUI / "src"))
+os.environ.setdefault("APP_06", str(_AQUI))
+
 # --- Donde guarda el tablero las simulaciones ------------------------------------
 # El disco de este contenedor es EFIMERO -- desaparece con el proximo despliegue -- y
 # ademas el usuario no puede alcanzarlo: no hay descarga desde una pagina de Voila.

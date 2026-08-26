@@ -362,3 +362,95 @@ def test_no_poder_preparar_la_carpeta_no_tumba_la_app():
                   and "create_directory" in ast.dump(n.body[0] if n.body else ast.Pass())]
     assert protegidas, "`create_directory` no esta dentro de un try: un Volume sin " \
                        "permiso de escritura tumbaria el arranque entero"
+
+
+# ------------------------------- lo que la CELDA del cuaderno lee, tambien tiene que viajar
+
+
+def _celda_servida() -> str:
+    """El codigo de la unica celda que Voila corre en el contenedor.
+
+    Se pide a `preparar.celda(con_cierre=False)`, que es exactamente lo que
+    `/subir-a-databricks` escribe y sube, y no al `.ipynb` del repositorio: ese es la
+    variante LOCAL, con boton de cerrar.
+    """
+    ruta = RAIZ / "aplicaciones" / "06_simulador" / "preparar.py"
+    fuente = ruta.read_text("utf-8")
+    # Se lee el literal de la plantilla con `ast` en vez de importar el modulo:
+    # `preparar` arrastra la derivacion entera -- matplotlib, torch -- y esta prueba
+    # corre tambien en el runner de Windows, donde esa pila no esta instalada.
+    for nodo in ast.walk(ast.parse(fuente)):
+        if (isinstance(nodo, ast.Assign) and len(nodo.targets) == 1
+                and isinstance(nodo.targets[0], ast.Name)
+                and nodo.targets[0].id == "_PLANTILLA_CELDA"
+                and isinstance(nodo.value, ast.Constant)):
+            return nodo.value.value.format(importar_cierre="", encabezado="[]")
+    raise AssertionError("`preparar.py` ya no declara `_PLANTILLA_CELDA`")
+
+
+def test_el_yaml_fija_las_variables_que_lee_la_celda_del_cuaderno():
+    """La celda resuelve su `sys.path` con dos variables de entorno, y las lee con
+    `os.environ[...]` -- que LANZA si faltan.
+
+    `test_el_yaml_fija_todas_las_variables_que_arranque_lee` no las ve: mira
+    `arranque.py`, y estas las lee el cuaderno. El sintoma en el contenedor es un
+    `KeyError` en la primera celda, o sea una pagina de Voila con un traceback en vez
+    del tablero, y nada en el `app.yaml` que apunte hasta aqui.
+    """
+    leidas = set()
+    for nodo in ast.walk(ast.parse(_celda_servida())):
+        if (isinstance(nodo, ast.Subscript)
+                and isinstance(nodo.value, ast.Attribute)
+                and nodo.value.attr == "environ"
+                and isinstance(nodo.slice, ast.Constant)):
+            leidas.add(nodo.slice.value)
+    assert leidas, "la celda ya no resuelve nada por entorno; revisa esta guarda"
+
+    yaml = (APP / "app.yaml").read_text("utf-8")
+    puestas = set(re.findall(r"- name:\s*\"?([A-Z_0-9]+)\"?", yaml))
+    # O las declara el `app.yaml`, o las escribe `arranque.py` antes del `execvp`, que
+    # hereda el entorno. Las dos valen; lo que no vale es que no las ponga nadie.
+    for nodo in ast.walk(ast.parse((APP / "arranque.py").read_text("utf-8"))):
+        if (isinstance(nodo, ast.Subscript) and isinstance(nodo.value, ast.Attribute)
+                and nodo.value.attr == "environ"
+                and isinstance(nodo.slice, ast.Constant)
+                and isinstance(getattr(nodo, "ctx", None), ast.Store)):
+            puestas.add(nodo.slice.value)
+        if (isinstance(nodo, ast.Call) and isinstance(nodo.func, ast.Attribute)
+                and nodo.func.attr == "setdefault"
+                and isinstance(nodo.func.value, ast.Attribute)
+                and nodo.func.value.attr == "environ"
+                and nodo.args and isinstance(nodo.args[0], ast.Constant)):
+            puestas.add(nodo.args[0].value)
+    faltan = sorted(leidas - puestas)
+    assert not faltan, (
+        f"la celda del cuaderno lee {faltan} con `os.environ[...]` y nadie las pone -- "
+        "ni `app.yaml` ni `arranque.py`: la app arranca y la primera celda levanta "
+        "KeyError")
+
+
+def test_lo_que_la_celda_importa_tambien_se_sube():
+    """`chec_tableros` es el tablero entero, y tiene que llegar al workspace.
+
+    El comando sincroniza `src/chec_local_interpreter` y `src/chec_impacto`. Si la
+    celda importa un tercer paquete de `src/` que nadie sube, la app arranca, baja su
+    paquete de datos, levanta Voila y muere en el import -- despues de todo lo caro,
+    que es donde peor se diagnostica.
+    """
+    comando = (RAIZ / ".claude" / "commands" / "subir-a-databricks.md").read_text("utf-8")
+    sincronizados = set(re.findall(r"databricks sync src/(\w+)", comando))
+
+    propios = {p.name for p in (RAIZ / "src").iterdir() if p.is_dir()}
+    faltan = []
+    for nodo in ast.walk(ast.parse(_celda_servida())):
+        if isinstance(nodo, ast.ImportFrom) and nodo.level == 0:
+            paquete = (nodo.module or "").split(".")[0]
+        elif isinstance(nodo, ast.Import):
+            paquete = nodo.names[0].name.split(".")[0]
+        else:
+            continue
+        if paquete in propios and paquete not in sincronizados:
+            faltan.append(paquete)
+    assert not faltan, (
+        f"la celda importa {sorted(set(faltan))} de `src/` y el comando no lo "
+        "sincroniza: la app muere en el import dentro del contenedor")
