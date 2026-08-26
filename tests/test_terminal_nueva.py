@@ -403,3 +403,28 @@ def test_sin_ventanas_no_se_intenta_abrir_ninguna():
     `gnome-terminal`, `konsole` y `xterm` es como se termina fallando en la maquina de
     alguien. Alli el menu lanza en segundo plano, que es lo que hacia antes."""
     assert _terminal.hay_ventanas() == (sys.platform == "darwin" or __import__("os").name == "nt")
+
+
+def test_windows_no_captura_la_salida_de_start():
+    """`capture_output` en la ventana de Windows colgaba el menu para siempre.
+
+    `start` vuelve al instante, pero los pipes los HEREDA todo el arbol que arranca en la
+    consola nueva -- el gestor, la aplicacion, Voila y sus kernels --, y `communicate()`
+    espera un EOF que no llega mientras el servidor viva. El `timeout` no rescata nada:
+    en Windows CPython responde al plazo con `kill()` y otro `communicate()` SIN plazo, y
+    ese `kill()` solo alcanza al `cmd /c start`, que ya murio.
+
+    Medido: con `timeout=3` y un nieto de 25 s, `run()` volvio en 24,9 s -- espero al
+    NIETO, no al plazo. Con un tablero detras no volvia nunca, y el hilo se quedaba ahi
+    ANTES de `_esperar`: la tarjeta decia "levantando el servidor" indefinidamente con el
+    tablero ya sirviendo, hasta caer al respaldo en segundo plano y perder la ventana.
+    """
+    fuente = _sin_prosa((COMUN / "terminal.py").read_text(encoding="utf-8"))
+    windows = fuente.split("def _abrir_windows")[1]
+    # Solo ESTA funcion: mas abajo hay un `capture_output` legitimo, el del
+    # `tasklist` con que se cierran las ventanas que no se cerraron solas.
+    windows = windows.split("\ndef ")[0]
+    assert "capture_output" not in windows, \
+        "capturar la salida de `start` cuelga al menu hasta que muera el tablero"
+    assert "stdout=subprocess.DEVNULL" in windows
+    assert "stderr=subprocess.DEVNULL" in windows

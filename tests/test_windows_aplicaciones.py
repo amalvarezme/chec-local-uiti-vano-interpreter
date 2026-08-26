@@ -209,12 +209,21 @@ def test_el_pid_escrito_se_comprueba_tambien_en_windows():
     Sobre ese numero, `menu.py` manda `taskkill /PID <pid> /T /F`: un pid reciclado se
     llevaba por delante a un proceso ajeno y a todo su arbol. Y `revisar_puerto`
     concluia "ya se esta sirviendo" y abria el navegador sobre un servidor de otro.
+
+    El nombre de imagen se compara contra DOS palabras y no una. El simulador deja
+    escrito el pid del entry point que genera pip, que se llama `voila.exe` y no
+    `python.exe`: con solo `python`, `pid_de` devolvia None sobre un simulador VIVO.
+    Y como el menu lo lanza en su propia ventana -- no se queda con ningun proceso --,
+    ese pid escrito es su UNICA via de apagado, asi que la tarjeta contestaba "no lo
+    lanzo este menu y no se le manda ninguna senal" sobre el que acababa de abrir.
     """
     fuente = (COMUN / "servidor.py").read_text(encoding="utf-8")
     cuerpo = fuente[fuente.index("def pid_de("):]
     cuerpo = cuerpo[: cuerpo.index('    try:\n        salida = subprocess.run(["/bin/ps"')]
     assert "tasklist" in cuerpo, "en Windows el pid del archivo no se comprueba contra nada"
-    assert '"python" in salida.stdout.lower()' in cuerpo
+    assert '"python" in imagen' in cuerpo
+    assert '"voila" in imagen' in cuerpo, (
+        "sin `voila` el menu no puede apagar el simulador en Windows")
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="en Windows el checkout es CRLF")
