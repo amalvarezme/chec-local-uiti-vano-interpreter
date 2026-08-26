@@ -56,6 +56,7 @@ if str(_RAIZ / "src") not in sys.path:
 from chec_local_interpreter.ortografia import SIEMPRE_CON_TILDE as _SIEMPRE_CON_TILDE
 from chec_local_interpreter.ortografia import TONICOS as _TONICOS
 from chec_local_interpreter.ortografia import es_codigo as _es_codigo
+from chec_local_interpreter.ortografia import _sin_tildes as _sin_tildes_de_acento
 
 _MULETILLAS = {
     "de manera que": "para", "con el fin de": "para", "con el objetivo de": "para",
@@ -100,7 +101,20 @@ class Hallazgo:
 AUTOMATICAS = frozenset({"tilde"})
 
 
-def _sin_tildes(texto: str) -> str:
+def _plano_ascii(texto: str) -> str:
+    """El texto plegado a ASCII, para CASAR FRASES y para nada mas.
+
+    Las 35 frases de `_MULETILLAS`/`_REDUNDANCIAS`/`_DIALECTO` estan escritas sin tilde, asi
+    que para encontrarlas dentro de prosa acentuada hay que plegar las dos partes al mismo
+    alfabeto.
+
+    **No sirve para decidir si una palabra ya lleva tilde.** Esa pregunta es de
+    `_sin_tildes_de_acento`, importada del modulo. Este plegado se lleva por delante la enye
+    -- y todo lo que no sea ASCII --, de modo que usarlo para decidir el acento hacia que
+    TODA palabra con enye saliera distinta de si misma y se saltara entera. Era la misma
+    duplicacion que ya habia costado un diccionario con 153 palabras y ninguna de las que
+    fallaban.
+    """
     return unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode("ascii")
 
 
@@ -149,7 +163,7 @@ def _tildes(texto: str, archivo: str, linea: int) -> list[Hallazgo]:
         entorno = texto[max(0, m.start() - 1):min(len(texto), m.end() + 1)]
         if _es_codigo(palabra, entorno):
             continue
-        if palabra != _sin_tildes(palabra):
+        if palabra != _sin_tildes_de_acento(palabra):
             continue  # ya lleva tilde
         if baja in _SIEMPRE_CON_TILDE:
             correcta = _SIEMPRE_CON_TILDE[baja]
@@ -199,7 +213,7 @@ def _mayusculas(texto: str, archivo: str, linea: int) -> list[Hallazgo]:
 
 
 def _listas(texto: str, archivo: str, linea: int) -> list[Hallazgo]:
-    fuera, plano = [], _sin_tildes(texto.lower())
+    fuera, plano = [], _plano_ascii(texto.lower())
     for frase, mejor in _MULETILLAS.items():
         if frase in plano:
             fuera.append(Hallazgo(archivo, linea, "verboseo", frase, mejor or "(sobra)",

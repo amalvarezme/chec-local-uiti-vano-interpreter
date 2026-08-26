@@ -357,3 +357,201 @@ def test_los_plurales_en_ciones_siguen_sin_llevar_tilde():
         plural = singular + "es"
         assert plural not in SIEMPRE_CON_TILDE, plural
         assert palabras_sin_tilde(f"varias {plural} del tramo") == []
+
+
+# --- La enye, y el glosario que tapaba la prosa --------------------------------
+#
+# Los dos defectos salieron de una corrida real de `/informe-gerencial todos`
+# (2026-08-26): 36 agentes pasaron la guarda en verde y aun asi tuvieron que
+# revisarse la prosa A MANO, cada uno cazando entre 1 y 12 palabras que
+# `errores_de_tilde` no habia visto. Dos mecanismos, no un diccionario corto.
+
+
+def test_la_enye_no_es_una_tilde_y_no_puede_tapar_a_la_palabra():
+    """El defecto de mecanismo: `_sin_tildes` descomponia `ñ` en `n` + virgulilla y la
+    quitaba, asi que TODA palabra con enye salia distinta de si misma y se saltaba con el
+    comentario `# ya la lleva`.
+
+    El efecto no era que faltaran entradas en el diccionario: era que `añadira`, `señalo` y
+    `acompañara` no se revisaban NUNCA por la tilde que de verdad les faltaba. La enye les
+    servia de escudo.
+    """
+    from chec_local_interpreter.ortografia import _sin_tildes
+
+    # La enye se conserva: no es una tilde de acentuacion, es otra letra.
+    assert _sin_tildes("años") == "años"
+    assert _sin_tildes("señal") == "señal"
+    assert _sin_tildes("PEQUEÑO") == "PEQUEÑO"
+
+    # La dieresis tampoco es una tilde.
+    assert _sin_tildes("pingüino") == "pingüino"
+
+    # Lo unico que se quita es la tilde aguda, que es la que marca el acento.
+    assert _sin_tildes("análisis") == "analisis"
+    assert _sin_tildes("añadirá") == "añadira"
+
+    # La consecuencia que importa: una palabra con enye ya NO se salta, se mira.
+    assert _sin_tildes("añadira") == "añadira"
+    assert _sin_tildes("señalo") == "señalo"
+
+
+def test_una_palabra_con_enye_ya_escrita_bien_no_se_marca():
+    """La otra mitad del arreglo: conservar la enye no puede inventar defectos."""
+    assert palabras_sin_tilde("la señal acompaña al pequeño tramo") == []
+    assert palabras_sin_tilde("hace dos años se añadio el diseño") == []
+
+
+def test_el_vocabulario_con_enye_de_la_corrida_esta_en_el_diccionario():
+    """Las 28 formas con enye que los agentes escribieron de verdad en los 12 circuitos.
+
+    Salen del corpus (`*.out.json` + `reports/vault/*.md`), no de una lista imaginada: 264
+    apariciones, encabezadas por `señal` (48), `acompaña` (47) y `señala` (30).
+    """
+    corpus = {
+        "senal": "señal", "senales": "señales",
+        "senala": "señala", "senalan": "señalan", "senalado": "señalado",
+        "senaladas": "señaladas", "senalando": "señalando",
+        "acompana": "acompaña", "acompanan": "acompañan",
+        "acompanado": "acompañado", "acompanada": "acompañada",
+        "acompanados": "acompañados", "acompanadas": "acompañadas",
+        "acompanar": "acompañar", "acompanando": "acompañando",
+        "acompanamiento": "acompañamiento",
+        "pequeno": "pequeño", "pequena": "pequeña",
+        "pequenos": "pequeños", "pequenas": "pequeñas",
+        "ano": "año", "anos": "años", "tamano": "tamaño",
+        "anade": "añade", "anadir": "añadir", "anadieron": "añadieron",
+        "diseno": "diseño",
+    }
+    for escrita, correcta in corpus.items():
+        assert SIEMPRE_CON_TILDE.get(escrita) == correcta, escrita
+        assert palabras_sin_tilde(f"el {escrita} del tramo") == [(escrita, correcta)]
+
+
+def test_campana_se_queda_sin_decidir_porque_las_dos_son_palabras():
+    """`campana` y `campaña` existen las dos. Es el mismo caso de `periodo`/`período`: la
+    guarda no puede elegir sin cambiar el significado, asi que no elige."""
+    assert SIEMPRE_CON_TILDE.get("campana", "AUSENTE") in (None, "AUSENTE")
+    assert palabras_sin_tilde("la campana del circuito") == []
+
+
+def test_el_glosario_no_puede_tapar_una_palabra_escrita_como_prosa():
+    """El segundo defecto: `es_codigo` no solo eximia al codigo, TAPABA a la palabra.
+
+    `duracion` en minusculas dentro de una frase no se marcaba nunca, porque `DURACION`
+    esta en `NOMBRE_NATURAL`. El punto ciego alcanzaba a cualquier palabra corriente que
+    chocara con un nombre de columna. Lo que decide es como esta ESCRITO el token: en
+    mayusculas y en el glosario es una columna; en minusculas es castellano.
+    """
+    from chec_local_interpreter.ortografia import es_codigo
+
+    # La columna sigue exenta, y el rotulo en mayusculas sigue siendo prosa.
+    assert es_codigo("DURACION", "DURACION")
+    assert not es_codigo("GEOMETRIA", "GEOMETRIA")
+
+    # Lo nuevo: en minusculas es prosa aunque el glosario tenga esa columna.
+    assert not es_codigo("duracion", "la duracion")
+    assert not es_codigo("codigo", "el codigo de causa")
+
+    # Y en mitad de frase, con mayuscula inicial, tambien es prosa.
+    assert not es_codigo("Duracion", "Duracion de la falla")
+
+
+def test_la_prosa_y_la_columna_conviven_en_la_misma_frase():
+    """La prueba que resume las dos mitades: la palabra se corrige, la columna no."""
+    assert palabras_sin_tilde("la duracion de la interrupcion") == [
+        ("duracion", "duración"),
+        ("interrupcion", "interrupción"),
+    ]
+    assert palabras_sin_tilde("la duracion se lee en DURACION") == [
+        ("duracion", "duración"),
+    ]
+
+
+def test_el_vocabulario_que_los_agentes_corrigieron_a_mano_esta_en_el_diccionario():
+    """Los dos arreglos de mecanismo recuperaron 10 de las 32 palabras que los 36 agentes
+    de la corrida reportaron haber corregido A MANO despues de un exit 0. Las otras eran
+    hueco de diccionario: sin ellas la guarda sigue dependiendo de que cada agente se
+    revise solo, que es justo lo que este modulo existe para no tener que hacer."""
+    faltaban = {
+        "discusion": "discusión", "revision": "revisión", "supervision": "supervisión",
+        "situacion": "situación", "configuracion": "configuración",
+        "documentacion": "documentación", "coordinacion": "coordinación",
+        "repeticion": "repetición", "interseccion": "intersección",
+        "telemetria": "telemetría", "nucleo": "núcleo", "regimen": "régimen",
+        "estres": "estrés", "traves": "través", "margenes": "márgenes",
+        "moviles": "móviles", "via": "vía",
+        "encontro": "encontró", "contribuyo": "contribuyó",
+        "pequenisimo": "pequeñísimo",
+    }
+    for escrita, correcta in faltaban.items():
+        assert SIEMPRE_CON_TILDE.get(escrita) == correcta, escrita
+        assert palabras_sin_tilde(f"el {escrita} del tramo") == [(escrita, correcta)]
+
+
+def test_mas_sigue_sin_decidirse_como_ya_lo_habia_decidido_el_modulo():
+    """Un agente tambien corrigio `mas` -> `más`, pero el diccionario ya la tenia en `None`
+    a proposito: `mas` adversativo (`pobre mas honrado`) y `más` de cantidad son las dos
+    correctas. Medido sobre el corpus de los 12 circuitos salen 475 `más` y ningun `mas`
+    adversativo, asi que en ESTE dominio decidirla seria seguro -- pero es una decision de
+    politica del modulo, no un hueco, y se deja donde estaba."""
+    assert SIEMPRE_CON_TILDE["mas"] is None
+    assert palabras_sin_tilde("cada vez mas registros") == []
+
+
+def test_cambio_se_queda_fuera_porque_el_sustantivo_manda():
+    """Un agente corrigio `cambio` -> `cambió` y lo reporto, pero medido sobre el corpus de
+    los 12 circuitos el sustantivo sale 85 veces (`un cambio de resolución`, `en cambio`)
+    contra 2 del verbo. Meterla daria 85 falsos positivos: es el caso de `periodo`."""
+    assert SIEMPRE_CON_TILDE.get("cambio", "AUSENTE") in (None, "AUSENTE")
+    assert palabras_sin_tilde("un cambio de grupo simulado") == []
+
+
+def test_ningun_plural_en_siones_ni_en_iones_pide_tilde():
+    """La guarda de plurales solo miraba `-ciones`, y las palabras nuevas en `-sión`
+    (`discusión`, `revisión`, `supervisión`) caen en la MISMA trampa sin que nadie mire:
+    `-sión` es aguda y lleva tilde, `-siones` es llana terminada en -s y no.
+
+    Vigilar la terminacion y no una lista es lo que impide que la proxima palabra vuelva a
+    meter su plural por descuido.
+    """
+    culpables = [
+        k for k, v in SIEMPRE_CON_TILDE.items()
+        if v is not None and (k.endswith("siones") or k.endswith("ciones"))
+    ]
+    assert culpables == [], f"plurales en -siones/-ciones en el diccionario: {culpables}"
+
+    for singular in ("discusion", "revision", "supervision", "situacion", "repeticion"):
+        plural = singular[:-3] + "ones"
+        assert plural not in SIEMPRE_CON_TILDE, plural
+        assert palabras_sin_tilde(f"varias {plural} del tramo") == []
+
+
+def test_el_verificador_del_skill_no_duplica_la_regla_de_la_enye():
+    """El skill tenia su PROPIA copia de `_sin_tildes`, y era peor que la del modulo:
+    `NFKD -> ascii ignore` se lleva la enye y de paso todo lo que no sea ASCII.
+
+    Es exactamente la duplicacion que el docstring del modulo declara como el fallo
+    original -- la copia del diccionario en el skill tenia 153 palabras y ninguna de las que
+    de verdad fallaron. Una regla duplicada deriva; una importada, no. La decision de si una
+    palabra YA lleva tilde tiene que salir del modulo, no de una copia.
+    """
+    from chec_local_interpreter import ortografia
+
+    rv = _cargar_verificador()
+
+    assert rv._sin_tildes_de_acento is ortografia._sin_tildes
+    assert rv._sin_tildes_de_acento("años") == "años"
+
+
+def test_el_verificador_del_skill_pliega_a_ASCII_solo_para_casar_frases():
+    """La otra mitad: el emparejado de muletillas SI necesita plegar a ASCII, porque las 35
+    frases de `_MULETILLAS`/`_REDUNDANCIAS`/`_DIALECTO` estan escritas sin tilde y tienen
+    que casar con prosa acentuada. Son dos preguntas distintas que compartian un nombre."""
+    rv = _cargar_verificador()
+
+    assert rv._plano_ascii("análisis periódico") == "analisis periodico"
+    assert rv._plano_ascii("años") == "anos"
+
+    clases = {h.clase for h in rv.revisar_texto(
+        "Se hizo así con el fin de medir la señal.", "x", 1)}
+    assert "verboseo" in clases
