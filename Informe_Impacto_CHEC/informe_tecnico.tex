@@ -1800,10 +1800,11 @@ hilos cuesta más que el trabajo que reparten.
 \paragraph{Por qué la GPU resulta más lenta, medido.} La explicación intuitiva ---que el modelo,
 con 150.926 parámetros, sería demasiado pequeño para amortizar el traslado de cada lote--- se
 verificó y \textbf{no se sostiene}. El desglose de un paso de entrenamiento muestra que el
-traslado de datos es despreciable: $0{,}80$~ms de transferencia y $0{,}23$~ms de armado del lote,
-frente a un paso completo de 172~ms. Y una red equivalente en tamaño, entrenada sobre lotes del
-mismo número de instancias, corre \emph{más rápido} en la GPU integrada que en la CPU
-($0{,}90$~ms contra $1{,}21$~ms), de modo que el tamaño del modelo tampoco es el factor.
+traslado de datos es despreciable: $0{,}7$~ms de transferencia y $0{,}23$~ms de armado del lote,
+frente a un paso completo de 70~ms, es decir un $1{,}3$\,\% del total. Y una red equivalente en
+tamaño, entrenada sobre lotes del mismo número de instancias, corre \emph{más rápido} en la GPU
+integrada que en la CPU ($0{,}9$~ms contra $1{,}2$~ms), de modo que el tamaño del modelo tampoco
+es el factor.
 
 La causa real está en la estructura de la bolsa. Las bolsas no tienen todas el mismo número de
 instancias, así que cada lote de 256 bolsas presenta un total distinto de filas: entre 560 y 793
@@ -1822,16 +1823,20 @@ iteraciones.}
 \toprule
 \textbf{Régimen} & \textbf{CPU} & \textbf{GPU integrada} & \textbf{Sobrecosto} \\
 \midrule
-El mismo lote repetido (forma fija)      & $9{,}99$~ms & $15{,}12$~ms & $1{,}5\times$ \\
-Lotes distintos (forma variable, el caso real) & $9{,}03$~ms & $106{,}27$~ms & $11{,}8\times$ \\
+El mismo lote repetido (forma fija)      & $9{,}4$~ms & $14{,}4$~ms & $1{,}5\times$ \\
+Lotes distintos (forma variable, el caso real) & $8{,}5$~ms & $68{,}4$~ms & $8{,}0\times$ \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-Siete de esas once veces provienen únicamente de la recompilación por cambio de forma. La
-memoria confirma el mecanismo: con forma fija el controlador reserva $62{,}9$~MB y con forma
-variable $129{,}6$~MB, mientras los tensores efectivamente vivos son los mismos en ambos casos
----alrededor de 24~MB---. El exceso es caché de núcleos compilados, no datos.
+De ese factor de ocho, \textbf{un factor de $4{,}8$ proviene únicamente de la recompilación por
+cambio de forma}: es lo que separa las dos filas de la tabla, sobre el mismo modelo y el mismo
+código. Las cifras corresponden a la mediana de cuatro repeticiones y son estables entre
+corridas; la primera medición de una sesión, con la caché de núcleos aún vacía, llega a
+duplicarlas. La memoria confirma el mecanismo: con forma fija el controlador reserva
+$62{,}9$~MB y con forma variable $129{,}6$~MB, mientras los tensores efectivamente vivos son los
+mismos en ambos casos ---alrededor de 24~MB---. El exceso es caché de núcleos compilados, no
+datos.
 
 Dos consecuencias, y conviene no confundirlas:
 
@@ -1841,8 +1846,8 @@ Dos consecuencias, y conviene no confundirlas:
         una propiedad legítima del problema ---las bolsas tienen cardinalidad variable--- y la
         forma en que ese motor de cómputo almacena sus núcleos.
   \item \textbf{La interacción es mitigable, pero no cambia la decisión.} Rellenar los lotes
-        hasta un número fijo de instancias recuperaría ese factor de siete. Aun así la GPU
-        integrada quedaría un $50$\,\% por encima de la CPU, de modo que la conclusión
+        hasta un número fijo de instancias recuperaría ese factor de casi cinco. Aun así la
+        GPU integrada quedaría un $50$\,\% por encima de la CPU, de modo que la conclusión
         se mantiene: no hay motivo para trasladar este entrenamiento a la GPU, y la
         optimización solo tendría sentido si en el futuro se entrenara sobre un volumen que la
         CPU ya no absorbiera.

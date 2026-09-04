@@ -81,9 +81,9 @@ escribe nada.
 
 | Guion | Que mide | Cifra que sostiene |
 |---|---|---|
-| `bench_device.py` | Las cuatro etapas de un paso, por separado, en CPU y MPS | 0,80 ms de transferencia y 0,23 ms de armado contra 172 ms del paso |
+| `bench_device.py` | Las cuatro etapas de un paso, por separado, en CPU y MPS | 0,7 ms de transferencia y 0,23 ms de armado contra 70 ms del paso |
 | `bench_size.py` | Una MLP equivalente, escalando el lote de 664 a 169.984 instancias | 0,90 ms en MPS contra 1,21 ms en CPU: el tamano del modelo NO es el factor |
-| `bench_shape.py` | El mismo lote repetido contra 32 lotes distintos | 15,12 ms (1,5x) contra 106,27 ms (11,8x) |
+| `bench_shape.py` | El mismo lote repetido contra 32 lotes distintos | 14,4 ms (1,5x) contra 68,4 ms (8,0x) |
 | `bench_mem.py` | Memoria reservada por el driver en ambos regimenes | 62,9 MB contra 129,6 MB con ~24 MB de tensores vivos en los dos |
 
 La explicacion anterior del informe ---"el modelo es demasiado pequeno para amortizar el
@@ -91,3 +91,8 @@ traslado de cada lote"--- quedo **refutada** por `bench_device.py` y `bench_size
 sustituyo por la causa medida: las bolsas tienen cardinalidad variable, cada lote cambia de
 forma (560 a 793 filas, 34 valores distintos en 40 lotes) y MPS recompila sus nucleos por
 forma.
+
+**Cuidado con la primera corrida.** Las cifras del informe son la mediana de cuatro
+repeticiones y son estables entre si (68,0 / 68,6 / 68,9 / 68,0 ms). La PRIMERA corrida de
+una sesion, con la cache de nucleos de Metal aun vacia, dio 106 ms: casi el doble. Al citar
+una cifra de estos guiones hay que descartar la primera pasada.
