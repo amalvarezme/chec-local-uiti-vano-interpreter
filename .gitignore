@@ -120,6 +120,9 @@ Informe_Impacto_CHEC/*
 !Informe_Impacto_CHEC/informe_tecnico.tex
 !Informe_Impacto_CHEC/informe_tecnico.pdf
 !Informe_Impacto_CHEC/figures/
+# Los guiones que producen las figuras medidas del informe, con sus datos crudos
+# (144 KB): sin ellos, FUENTES.md apunta a archivos que no existen en un clon.
+!Informe_Impacto_CHEC/scripts/
 
 # Never track compiled Python caches, even under the re-included .claude/skills/**
 .claude/skills/**/__pycache__/

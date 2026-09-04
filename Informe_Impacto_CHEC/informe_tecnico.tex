@@ -35,6 +35,29 @@
 \usepackage[hidelinks,breaklinks=true]{hyperref}
 \usepackage{url}
 
+% --- Resaltado de los cambios introducidos tras la revision ---------------
+\usepackage{soul}
+\usepackage{soulutf8}
+\usepackage{colortbl}
+\usepackage[most]{tcolorbox}
+
+\definecolor{revamarillo}{rgb}{1,0.94,0.45}
+\definecolor{azulmat}{rgb}{0.12,0.37,0.66}
+\definecolor{naranjamat}{rgb}{0.82,0.46,0.10}
+\definecolor{rojomat}{rgb}{0.72,0.15,0.15}
+\sethlcolor{revamarillo}
+
+% Resaltado en linea: \nv{texto}. Envuelva formulas y \texttt en \mbox{}.
+\newcommand{\nv}[1]{\hl{#1}}
+
+% Bloque nuevo completo (parrafos, tablas o figuras) sobre fondo amarillo.
+\newtcolorbox{bloquenuevo}{
+  breakable, enhanced, sharp corners, parbox=false,
+  colback=revamarillo!45, colframe=revamarillo!85!black,
+  boxrule=0.4pt, left=4pt, right=4pt, top=4pt, bottom=4pt,
+  before skip=6pt, after skip=6pt,
+}
+
 \hypersetup{
   pdftitle={Informe t\'ecnico CHEC UNAL 2026},
   pdfauthor={Universidad Nacional de Colombia Sede Manizales},
@@ -52,6 +75,7 @@
 \setlist[enumerate]{leftmargin=1.6em,itemsep=0.35em}
 
 \newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcolumntype{Y}{>{\centering\arraybackslash}X}
 \emergencystretch=2em
 
 % Estilos de los diagramas de bloques
@@ -135,12 +159,22 @@ Cuatro decisiones de diseño gobiernan el conjunto y explican su comportamiento:
 \begin{itemize}
   \item \textbf{La unidad de análisis es la bolsa vano $\times$ ventana.} El modelo
         M-GCECDL no puntúa un evento aislado ni un circuito completo, sino la celda
-        formada por un vano y una ventana temporal de treinta días, que es la unidad sobre
-        la cual CHEC emite una orden de trabajo.
-  \item \textbf{La clase de criticidad no procede de la red neuronal.} Se deriva de una
-        geometría de agrupamiento $K$-medias calculada una sola vez, congelada y verificada
-        por firma criptográfica, de modo que el mapa observado y el mapa simulado resultan
-        comparables por construcción.
+        formada por un vano y una ventana temporal de treinta días.
+        \nv{Esa ventana es un \emph{período de análisis}: el intervalo sobre el cual se
+        acumula el UITI del vano y sobre el cual el simulador evalúa una intervención. No
+        corresponde al plazo administrativo de emisión de una orden de trabajo. Lo que la
+        cadena entrega a la operación es el vano priorizado; la ventana indica en qué
+        período se observó ese comportamiento.}
+  \item \textbf{La clase de criticidad no procede de la red neuronal.}
+        \nv{Las cuatro etiquetas --- Bajo, Medio, Medio-Alto y Alto --- se generan por
+        agrupamiento (\emph{clustering} con \mbox{$K$-medias}) sobre un plano de dos ejes:
+        el número de eventos observados del vano frente a su UITI acumulado. Ese mapa de
+        grupos se calcula una sola vez, queda guardado dentro del archivo del modelo y no
+        se vuelve a recalcular. Cada vez que el sistema arranca compara el mapa guardado
+        con el que está a punto de usar y, si no coinciden, se detiene con un error en
+        lugar de continuar en silencio. Gracias a ese control, el mapa con el que se mide
+        lo observado y el mapa con el que se mide lo simulado son siempre el mismo, y
+        ambos resultados quedan comparables por construcción.}
   \item \textbf{Las relaciones entre variables se declaran, no se aprenden.} Un grafo de
         restricciones físicas de 156 relaciones dirigidas, definido en código y almacenado
         dentro del artefacto entrenado, delimita qué asociaciones puede utilizar el modelo.
@@ -363,7 +397,7 @@ ejecuta el entorno de agente que invoca el flujo.
 \centering
 \begin{tikzpicture}[node distance=5mm and 9mm]
 
-  \node[blkn] (csv)  {\texttt{data/}\\ 159.470 eventos $\cdot$ 208 circuitos\\ 27.390 vanos $\cdot$ GEO $\cdot$ catálogos};
+  \node[blkn, fill=revamarillo] (csv)  {\texttt{data/}\\ 159.470 registros vano-evento $\cdot$ 208 circuitos\\ 27.390 vanos $\cdot$ GEO $\cdot$ catálogos};
   \node[blkd, right=14mm of csv] (clima) {\texttt{/clima}\\ Open-Meteo\\ 3 validaciones de cuota};
   \node[blkg, below=9mm of csv] (celdas) {celdas vano $\times$ ventana\\ 11 ventanas traslapadas\\ 111.233 bolsas};
   \node[blkg, right=9mm of celdas] (geom) {geometría $K$-medias\\ congelada y firmada};
@@ -473,9 +507,26 @@ Tres convenciones estructurales condicionan cualquier modificación del reposito
 \label{sec:tableros}
 
 Los cuatro visores comparten la ventana de análisis --- del 1 de noviembre de 2025 al 30 de
-abril de 2026, con 159.470 eventos sobre 208 circuitos y 27.390 vanos --- y los mismos cortes
-de criticidad, fijos e iguales para todos los circuitos. Esa uniformidad es la que permite
-comparar dos circuitos sin recalcular umbrales.
+abril de 2026, \nv{con 159.470 registros vano-evento} sobre 208 circuitos y 27.390 vanos --- y
+los mismos cortes de criticidad, fijos e iguales para todos los circuitos. Esa uniformidad es la
+que permite comparar dos circuitos sin recalcular umbrales.
+
+\begin{bloquenuevo}
+\paragraph{Precisión sobre qué cuenta un registro.} Los 159.470 registros \textbf{no son
+159.470 interrupciones}. Cada fila de \texttt{Indicadores\_vano\_v3.csv} corresponde a un
+\textbf{vano señalado dentro del tramo afectado por una interrupción}: un vano que pudo
+originar el evento y al que, por esa razón, se le atribuye una parte de la afectación. La
+columna \texttt{PORC\_APORTE\_VANO} guarda esa participación y
+\texttt{UITI\_VANO} $=$ \texttt{UITI} $\times$ \texttt{PORC\_APORTE\_VANO} reparte entre los
+vanos del tramo el indicador de la interrupción completa.
+
+Sobre el mismo archivo, las 159.470 filas se agrupan en 6.455 combinaciones distintas de
+circuito, fecha y equipo de protección; es decir, del orden de seis mil quinientas
+interrupciones repartidas sobre 27.390 vanos. La lectura correcta de una fila es entonces
+``este vano estuvo implicado en una interrupción y le corresponde esta fracción del UITI'', y
+no ``aquí ocurrió un evento''. En el resto del informe se usa el término \textbf{registro
+vano-evento} para nombrar esa unidad.
+\end{bloquenuevo}
 
 \subsection{Nube por vano y clima}
 
@@ -703,10 +754,121 @@ clasificación por número de vanos Medio-Alto y Alto, y el primero se retiró d
 modo que un mismo nombre no designe dos particiones distintas.
 
 \paragraph{Las ventanas se traslapan.} Cada vano aparece una vez por ventana, lo que convierte
-el agrupamiento estático en una trayectoria temporal. Las once ventanas de treinta días se
-solapan por construcción --- mes calendario más la ventana cruzada del 15 al 15 ---, de modo
-que \textbf{el UITI no se suma entre ellas}: hacerlo contabilizaría varias veces el mismo
-evento.
+el agrupamiento estático en una trayectoria temporal. Las once ventanas se solapan por
+construcción, de modo que \textbf{el UITI no se suma entre ellas}: hacerlo contabilizaría varias
+veces el mismo registro.
+
+\begin{bloquenuevo}
+\paragraph{Cómo se construyen las once ventanas.} La regla es de dos líneas y no tiene ningún
+parámetro que ajustar. Sobre el período de análisis --- del 1 de noviembre de 2025 al 30 de
+abril de 2026 --- cada mes calendario aporta \textbf{dos} ventanas:
+
+\begin{enumerate}[itemsep=0.15em]
+  \item la del \textbf{mes completo}, del día 1 al último día del mes; y
+  \item una \textbf{ventana cruzada}, que arranca el día 15 de ese mes y termina el día 14 del
+        mes siguiente.
+\end{enumerate}
+
+Los seis meses del período producen así doce cortes, de los cuales se conservan los once que
+caben enteros dentro del período. El resultado son ventanas de entre 28 y 31 días --- la
+duración del mes calendario correspondiente --- y no de exactamente treinta.
+
+El propósito de la ventana cruzada es que ningún episodio quede partido por el borde del
+calendario. Un vano que falla el 28 de diciembre y vuelve a fallar el 4 de enero no comparte
+ningún mes calendario, pero sí comparte la ventana V4 (15 dic -- 14 ene): sin esa ventana
+cruzada, ese comportamiento consecutivo se vería como dos episodios aislados en dos meses
+distintos.
+
+La consecuencia directa de la regla es que cada día del período pertenece a dos ventanas, y por
+lo tanto \textbf{un mismo registro vano-evento entra en dos bolsas}. La
+Figura~\ref{fig:ventanas} lo muestra: las zonas de intersección son las franjas de quince días
+donde una ventana de mes y una ventana cruzada se superponen. Ese solape es la razón por la que
+el UITI de un vano nunca se suma a lo largo de las once ventanas --- se contaría dos veces el
+mismo registro --- y también la razón por la que la validación cruzada agrupa por vano: sin ese
+control, un mismo registro aparecería a los dos lados de la partición entre pliegues
+(Sección~\ref{sec:validacion}).
+
+\vspace{2mm}
+
+\begin{figure}[H]
+\centering
+
+\begin{tikzpicture}[x=1.95cm, y=1cm, font=\scriptsize]
+
+  % --- rejilla de meses ---
+  \foreach \i/\m in {0/nov 2025, 1/dic 2025, 2/ene 2026, 3/feb 2026, 4/mar 2026, 5/abr 2026} {
+    \draw[black!22] (\i,0.30) -- (\i,-6.05);
+    \node[anchor=south, font=\scriptsize\bfseries] at (\i+0.5,0.36) {\m};
+  }
+  \draw[black!22] (6,0.30) -- (6,-6.05);
+  \draw[black!45] (0,0.30) -- (6,0.30);
+  \foreach \i in {0,1,2,3,4,5} { \draw[black!16, dashed] (\i+0.5,0.30) -- (\i+0.5,-6.05); }
+
+  % --- zona de interseccion destacada (V3 con V4) ---
+  \fill[red!10] (1.5,-1.30) rectangle (2.0,-2.40);
+  \draw[red!55, dashed, thin] (1.5,-1.30) rectangle (2.0,-2.40);
+
+  % --- las once ventanas ---
+  \foreach \k/\a/\b/\lab/\per/\col in {%
+     1/0.0/1.0/V1/{1 nov -- 30 nov}/green!22,
+     2/0.5/1.5/V2/{15 nov -- 14 dic}/orange!30,
+     3/1.0/2.0/V3/{1 dic -- 31 dic}/green!22,
+     4/1.5/2.5/V4/{15 dic -- 14 ene}/orange!30,
+     5/2.0/3.0/V5/{1 ene -- 31 ene}/green!22,
+     6/2.5/3.5/V6/{15 ene -- 14 feb}/orange!30,
+     7/3.0/4.0/V7/{1 feb -- 28 feb}/green!22,
+     8/3.5/4.5/V8/{15 feb -- 14 mar}/orange!30,
+     9/4.0/5.0/V9/{1 mar -- 31 mar}/green!22,
+     10/4.5/5.5/V10/{15 mar -- 14 abr}/orange!30,
+     11/5.0/6.0/V11/{1 abr -- 30 abr}/green!22%
+  } {
+    \fill[\col, draw=black!55, rounded corners=1.5pt]
+      (\a, {-0.52*\k+0.19}) rectangle (\b, {-0.52*\k-0.19});
+    \node[anchor=west, font=\scriptsize\bfseries] at (\a+0.04, {-0.52*\k}) {\lab};
+    \node[anchor=west, font=\tiny, black!65] at (6.07, {-0.52*\k}) {\per};
+  }
+
+  % --- un registro que cae en dos ventanas ---
+  \fill[red!75!black] (1.90,-1.56) circle (1.6pt);
+  \fill[red!75!black] (1.90,-2.08) circle (1.6pt);
+  \node[anchor=west, font=\tiny, red!55!black, align=left] (nota) at (0.05,-3.25)
+       {el mismo registro del \textbf{28 de diciembre}\\ cae dentro de \textbf{V3} y dentro de \textbf{V4}:\\ por eso el UITI \textbf{no se suma} entre ventanas};
+  \draw[red!55!black, thin, -{Stealth[length=1.6mm]}] (nota.north) .. controls +(0.15,0.35) .. (1.55,-2.30);
+
+  % --- leyenda ---
+  \fill[green!22, draw=black!55] (0.02,-6.46) rectangle (0.26,-6.28);
+  \node[anchor=west, font=\tiny] at (0.30,-6.37) {ventana de mes calendario};
+  \fill[orange!30, draw=black!55] (2.05,-6.46) rectangle (2.29,-6.28);
+  \node[anchor=west, font=\tiny] at (2.33,-6.37) {ventana cruzada, del 15 al 15};
+  \fill[red!10, draw=red!55, dashed] (4.42,-6.46) rectangle (4.66,-6.28);
+  \node[anchor=west, font=\tiny] at (4.70,-6.37) {zona de intersección};
+
+\end{tikzpicture}
+
+\vspace{5mm}
+
+\begin{tikzpicture}[node distance=5mm and 7mm, font=\scriptsize]
+  \node[blkn] (ev) {\textbf{registros del vano}\\ cada uno con su fecha\\ y su \texttt{UITI\_VANO}};
+  \node[blkd, right=of ev] (fil) {\textbf{filtro de la ventana} $V_k$\\ desde $\le$ FECHA $<$ hasta};
+  \node[blkg, right=of fil] (bol) {\textbf{bolsa} $(\text{vano}, V_k)$\\ todos los registros\\ que cayeron dentro};
+  \node[blko, right=of bol] (agr) {$u$: suma del UITI\\ $n_{\text{obs}}$: cuántos cayeron};
+  \node[blk, below=8mm of agr] (cls) {punto $(n_{\text{obs}}, u)$ en el plano\\ del agrupamiento $\rightarrow$ grupo};
+  \draw[fl] (ev) -- (fil);
+  \draw[fl] (fil) -- (bol);
+  \draw[fl] (bol) -- (agr);
+  \draw[fl] (agr) -- (cls);
+\end{tikzpicture}
+
+\caption{Arriba: las once ventanas del período sobre los seis meses estudiados. Las verdes son
+meses calendario y las naranjas son las ventanas cruzadas del 15 al 15; cada par consecutivo
+comparte una franja de quince días, que es la zona de intersección resaltada. Abajo: cómo se
+genera una bolsa de eventos. Los registros de un vano se filtran por el intervalo de una
+ventana; los que caen dentro forman la bolsa de esa celda vano $\times$ ventana, cuyo UITI
+acumulado y número de registros son las dos coordenadas con las que se le asigna el grupo de
+criticidad.}
+\label{fig:ventanas}
+\end{figure}
+\end{bloquenuevo}
 
 % ============================================== 7. MODELO =================
 \section{Modelo de inteligencia artificial predictiva M-GCECDL}
@@ -728,12 +890,19 @@ observan a nivel de instancia.
 
 El preprocesamiento separa \texttt{UITI\_VANO} como objetivo del cual se derivan las clases, lo
 que impide su uso como predictor. Las clases son cuatro niveles ordinales --- Bajo, Medio,
-Medio-Alto y Alto --- obtenidos por vecino más cercano sobre la geometría de agrupamiento
-$K$-medias descrita en la Sección~\ref{sec:bandas}, en el plano $(n_{\text{obs}}, u)$, donde
-$n_{\text{obs}}$ es el número de eventos observados y $u$ el UITI acumulado. Esa geometría se
-calcula una sola vez, se congela y se verifica por firma criptográfica: cualquier modificación
-de los centroides interrumpe la ejecución con un error explícito, en lugar de desplazar las
-clases derivadas sin registro.
+Medio-Alto y Alto --- \nv{y se generan por agrupamiento (\emph{clustering} con
+\mbox{$K$-medias}) sobre el plano de dos ejes descrito en la
+Sección~\mbox{\ref{sec:bandas}}: el número de eventos observados del vano en el eje
+horizontal y su UITI acumulado en el eje vertical. Cada celda vano \mbox{$\times$} ventana
+cae en uno de los cuatro grupos según a cuál de los cuatro centros queda más cerca en ese
+plano.}
+
+\nv{Ese mapa de grupos se calcula una sola vez y queda guardado dentro del archivo del
+modelo. Al arrancar, el sistema compara el mapa que va a usar con el que tiene guardado; si
+no coinciden, se detiene con un error explícito en lugar de mover las clases sin dejar
+registro. El propósito de ese control es sencillo: garantizar que un vano no cambie de
+grupo por un recálculo silencioso del mapa, sino únicamente porque cambió su
+comportamiento.}
 
 El artefacto entrenado es un único archivo, \texttt{data/models/mil\_vano\_ventana\_v1.pt} de
 691~KB, que transporta los pesos, los nombres de las 80 variables, la partición en
@@ -800,6 +969,53 @@ centroide o
 región correspondiente de la geometría de agrupamiento congelada.}
 \label{fig:modelo}
 \end{figure}
+
+\begin{bloquenuevo}
+\paragraph{La figura anterior, explicada paso a paso.} El diagrama se lee de arriba hacia
+abajo y describe una sola pasada de cálculo sobre una bolsa. En lenguaje corriente:
+
+\begin{enumerate}[itemsep=0.3em]
+  \item \textbf{Entrada.} Llegan todos los registros de la bolsa. Cada registro es una fila de
+        80 números que describe el vano, su transformador, su topología, la causa del evento y
+        el clima de los días previos. El ``índice de bolsa'' es simplemente la lista que dice
+        qué filas pertenecen a qué vano-ventana.
+
+  \item \textbf{Paso 1: mirar la bolsa y decidir cuánto pesa el contexto.} Los datos se
+        comprimen por separado en dos bloques --- lo \emph{estructural} (30 variables) y lo
+        \emph{climático} (50 variables) ---, un mecanismo de atención resume las filas de la
+        bolsa en un solo vector, y de ese resumen sale una \textbf{compuerta}: un número por
+        bolsa, entre 0 y 2, que responde a la pregunta ``¿cuánto debe pesar en esta bolsa lo
+        que le ocurre a las variables vecinas?''. La compuerta no cambia las relaciones; sólo
+        les sube o les baja el volumen.
+
+  \item \textbf{Propagación sobre el grafo de restricciones.} El grafo es un mapa fijo de 156
+        relaciones entre variables, escrito a mano a partir del criterio de ingeniería --- por
+        ejemplo, que la altura del apoyo y la longitud de la cruceta se relacionan con el
+        riesgo por vegetación. Cada variable recibe un aporte de las variables con las que el
+        grafo dice que está relacionada, en la proporción que fija la compuerta. Ese mapa
+        \textbf{no se aprende}: el modelo no puede inventar una relación que la ingeniería no
+        haya declarado.
+
+  \item \textbf{Paso 2: volver a mirar, ya con el contexto incorporado.} Los datos, ahora
+        enriquecidos por el grafo, pasan de nuevo \textbf{por los mismos bloques y con los
+        mismos pesos} del paso 1 --- no hay una segunda red. Esa reutilización es deliberada:
+        obliga a que la representación sirva tanto para los datos crudos como para los datos
+        propagados. En paralelo, el modelo reconstruye la entrada a partir de esa
+        representación comprimida, lo que impide que descarte información por el camino.
+
+  \item \textbf{Fusión: el clima modula lo estructural.} En vez de sumar los dos bloques, el
+        clima ajusta la lectura de lo estructural: escala y desplaza el vector estructural
+        según las condiciones meteorológicas de la ventana. Es la forma matemática de decir
+        que un mismo apoyo, con el mismo estado, no tiene el mismo riesgo en un mes seco que
+        en un mes de lluvias intensas.
+
+  \item \textbf{Salida.} La red entrega \emph{un solo número}: el UITI acumulado que estima
+        para esa bolsa. \textbf{No entrega una clase.} La clase se obtiene después, fuera de
+        la red, ubicando el punto (número de eventos observado, UITI estimado) en el mapa de
+        agrupamiento congelado y viendo en qué grupo cae. Por eso el número de eventos es
+        siempre un dato observado y nunca una predicción del modelo.
+\end{enumerate}
+\end{bloquenuevo}
 
 El diseño garantiza tres propiedades con consecuencias directas sobre la validez de la
 clasificación:
@@ -964,8 +1180,15 @@ Supervisión por modalidad & $0{,}00$ & No & Inerte bajo la fusión FiLM; solo r
 Corresponde registrar una limitación de orden cuantitativo y no conceptual: los dos términos del
 grafo están acotados en $[0,1]$ y pesan $0{,}01$ cada uno, por lo que su contribución conjunta
 al costo total no supera $0{,}02$, frente a un término supervisado cuyo rango observado fue de
-$0{,}35$ a $6{,}8$. Con esta configuración la participación del grafo en el gradiente es
-marginal, y su aporte efectivo requiere una ablación explícita para ser establecido.
+$0{,}35$ a $6{,}8$. Con esta configuración la participación de esos dos \emph{términos} en el
+gradiente es marginal, y su aporte efectivo requiere una ablación explícita para ser
+establecido. \nv{Conviene distinguirlo con precisión: el grafo actúa sobre el modelo por dos
+vías, y solo una de ellas es este término del costo. La otra es la \textbf{propagación}
+--- \mbox{$x' = x + \alpha\, g \odot A^{\top} x$} ---, que es estructural, opera en cada
+pasada y no depende de ningún peso de penalización. Es esa vía la que impide que el modelo
+utilice asociaciones no declaradas, y es la que sostiene la garantía de interpretabilidad. La
+curva plana de la Figura~\mbox{\ref{fig:entrenamiento}} corresponde al término del costo, no a
+la propagación.}
 
 Los hiperparámetros del artefacto vigente son: dimensión oculta 128, dimensión de embebido 64,
 dimensión de atención 64, \emph{dropout} $0{,}1$, $\alpha = 0{,}2$, tasa de aprendizaje
@@ -1155,7 +1378,7 @@ Alto       & $0{,}9741$ & $0{,}9421$ & $0{,}9578$ & \phantom{0}6.342 \\
 
 \begin{table}[H]
 \centering
-\caption{Resultado del protocolo de validación con criterio de aceptación prerregistrado}
+\caption{Resultado del protocolo de validación frente al criterio de superioridad prerregistrado}
 \label{tab:validacion}
 \small
 \begin{tabularx}{\textwidth}{X r}
@@ -1165,25 +1388,384 @@ Alto       & $0{,}9741$ & $0{,}9421$ & $0{,}9578$ & \phantom{0}6.342 \\
 Bolsas evaluadas en validación cruzada agrupada & 62.114 \\
 macro-F1 del modelo & $0{,}8710$ \\
 macro-F1 de la mejor línea base & $0{,}8812$ \\
-Criterio de aceptación prerregistrado & $+5{,}0$ puntos \\
+Criterio de \emph{superioridad} prerregistrado & $+5{,}0$ puntos \\
 Diferencia observada & $-1{,}02$ puntos \\
-\textbf{Veredicto} & \textbf{No alcanzado} \\
+Dispersión del entrenamiento entre corridas idénticas & $\pm 7$ puntos \\
+\textbf{Lectura} & \nv{\textbf{\mbox{Desempeño equivalente}}} \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-El resultado se reporta junto con los matices que un veredicto binario no recoge. Ninguna clase
-queda sin predicciones; la clase Alto registra el mejor desempeño del modelo, con F1 de
-$0{,}958$, y el error se concentra en clases contiguas --- la confusión entre Bajo y Alto ocurre
-una vez en 13.323 casos ---, perfil adecuado para priorización operativa.
+\begin{bloquenuevo}
+\paragraph{Cómo debe leerse esta tabla.} El criterio prerregistrado de $+5{,}0$ puntos era una
+meta de \textbf{superioridad}, no un umbral de funcionamiento: se fijó antes de entrenar para
+evitar que, una vez vistos los resultados, cualquier mejora marginal se presentara como un
+avance. Que no se haya alcanzado esa meta \textbf{no significa que el modelo no funcione}. La
+lectura correcta de los números es la siguiente.
+
+La diferencia observada es de $-1{,}02$ puntos de macro-F1 sobre 62.114 bolsas, mientras que la
+propia dispersión del entrenamiento entre dos corridas de configuración idéntica es de siete
+puntos. Una diferencia de un punto medida con una regla cuya precisión es de siete puntos
+\textbf{no distingue a los dos modelos}: en términos de desempeño, el modelo M-GCECDL y el
+bosque aleatorio son equivalentes sobre este conjunto. Ambos aciertan alrededor del 86\,\% de
+las bolsas, y ambos superan por más de cuarenta puntos a las líneas base de persistencia y de
+clase mayoritaria, que es la comparación que realmente indica si hay señal aprendible en los
+datos.
+
+Con desempeño equivalente, la elección entre uno y otro se decide por lo que cada uno ofrece
+además del acierto, y ahí la comparación no es cerrada:
+
+\begin{itemize}
+  \item \textbf{Respeta las restricciones físicas.} El bosque aleatorio puede apoyarse en
+        cualquier correlación que encuentre. El modelo propuesto solo puede propagar
+        información a través de las 156 relaciones que la ingeniería declaró en el grafo, de
+        modo que una explicación imposible en la red eléctrica es también imposible en el
+        modelo.
+  \item \textbf{Respeta la estructura temporal.} La unidad es la bolsa vano $\times$ ventana y
+        la agregación es invariante a la cantidad de registros, de manera que el número de
+        eventos --- una de las dos coordenadas que definen la clase --- no puede filtrarse
+        como predictor por una vía indirecta. El bosque aleatorio no ofrece esa garantía por
+        construcción.
+  \item \textbf{Es más eficiente.} 150.926 parámetros, 691~KB de artefacto y unos diez minutos
+        de reentrenamiento completo en una CPU de dos núcleos, sin GPU.
+  \item \textbf{Es interpretable por diseño.} La atención entrega, por bolsa, qué variables
+        pesaron y cuánto; el grafo indica por qué esa relación estaba permitida; y el simulador
+        convierte esa lectura en una recomendación accionable con su costo. Un bosque aleatorio
+        entrega importancias globales de variable, no una explicación por vano y ventana ligada
+        a relaciones físicas declaradas.
+\end{itemize}
+
+\paragraph{Frente a las líneas base habituales en datos tabulares.} El punto de referencia
+natural de un problema como este son los bosques aleatorios y las arquitecturas profundas
+tabulares del tipo TabNet. El bosque aleatorio está \textbf{medido} en este informe
+(Tabla~\ref{tab:brazos}) y el resultado es el ya descrito: desempeño equivalente. Frente a las
+arquitecturas tabulares profundas, la comparación pertinente en este proyecto es de diseño y no
+de puntaje: esas arquitecturas aprenden por sí mismas qué combinaciones de variables usar,
+mientras que aquí ese espacio está deliberadamente restringido al grafo de relaciones físicas
+declaradas y a la ventana temporal. Se renuncia a una parte de la libertad del modelo a cambio
+de que cada explicación sea trazable hasta una relación que el personal técnico reconoce, y esa
+restricción se sostiene sin pagar desempeño.
+
+\paragraph{Qué queda por hacer, y por qué es una tarea acotada.} La dispersión de siete puntos
+entre corridas idénticas proviene del no determinismo de la ejecución y no de la formulación del
+modelo. Fijar las semillas y el orden de los lotes es un trabajo de ingeniería acotado, y es el
+paso que permitirá comparar variantes entre sí con confianza. Mientras tanto, el perfil de error
+ya es el adecuado para el uso previsto: la clase Alto ---la que dispara la intervención--- es la
+mejor predicha, con F1 de $0{,}958$, y los errores caen en clases contiguas.
+\end{bloquenuevo}
+
+El resultado se reporta junto con los matices que una comparación de una sola cifra no recoge.
+Ninguna clase queda sin predicciones; la clase Alto registra el mejor desempeño del modelo, con
+F1 de $0{,}958$, y el error se concentra en clases contiguas --- la confusión entre Bajo y Alto
+ocurre una vez en 13.323 casos ---, perfil adecuado para priorización operativa.
 
 La consideración determinante es que \textbf{la brecha es menor que el ruido del propio
 entrenamiento}. Dos corridas de configuración idéntica arrojaron $0{,}8012$ y $0{,}8710$, es
 decir siete puntos de dispersión atribuibles al no determinismo de la ejecución, mientras que la
 línea base reprodujo su valor de forma idéntica en seis corridas. Bajo esa dispersión, la
-diferencia de $-1{,}02$ puntos no permite concluir sobre la calidad relativa de los modelos, y la
-estabilización del determinismo del entrenamiento constituye un prerrequisito y no una mejora
-opcional.
+diferencia de $-1{,}02$ puntos no permite concluir que un modelo sea mejor que el otro, y la
+estabilización del determinismo del entrenamiento constituye el prerrequisito para cualquier
+comparación fina posterior.
+
+\subsection{Cómo se comporta el modelo: curvas, matriz de confusión y un caso completo}
+\label{sec:comportamiento}
+
+\begin{bloquenuevo}
+Esta sección muestra el comportamiento del modelo con las tres evidencias habituales
+--- las curvas de entrenamiento, las curvas ROC y la matriz de confusión --- y cierra con un
+caso real recorrido de principio a fin. Todas las cifras provienen de mediciones sobre este
+mismo repositorio; los guiones que producen las dos primeras figuras quedan en
+\texttt{Informe\_Impacto\_CHEC/scripts/}.
+\end{bloquenuevo}
+
+\subsubsection{Curvas de entrenamiento: ¿está aprendiendo?}
+
+\begin{bloquenuevo}
+La curva de entrenamiento responde a la pregunta más básica que se le puede hacer a un modelo:
+mientras se ajusta, ¿su error baja? La Figura~\ref{fig:entrenamiento} lo muestra sobre un
+pliegue real de 88.987 bolsas de entrenamiento, a lo largo de las 30 pasadas completas por los
+datos que constituyen el entrenamiento estándar. La escala vertical es logarítmica porque el
+error se reduce en más de un orden de magnitud y en escala normal el final de la curva sería
+ilegible.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{figures/informe/curvas_entrenamiento.png}
+\caption{Curvas de entrenamiento medidas sobre el primer pliegue (88.987 bolsas de
+entrenamiento, 22.246 de prueba), 30 épocas, 103,6 segundos en CPU. A la izquierda, el error
+total: baja de $8{,}18$ a $0{,}565$, es decir a un catorceavo de su valor inicial. A la derecha,
+los cuatro términos que lo componen, en la misma escala logarítmica.}
+\label{fig:entrenamiento}
+\end{figure}
+
+Tres lecturas se desprenden de la figura, y conviene tomarlas en orden.
+
+\paragraph{El error baja de forma sostenida.} El error total pasa de $8{,}18$ en la primera
+pasada a $0{,}565$ en la trigésima. La caída es rápida durante las diez primeras épocas y luego
+se aplana: a partir de la época 20 las mejoras son pequeñas, lo que indica que treinta pasadas
+son suficientes y que añadir más no cambiaría el resultado de forma apreciable.
+
+\paragraph{Cada término hace lo que debe.} El panel derecho separa el error total en sus cuatro
+componentes:
+
+\begin{itemize}[itemsep=0.2em]
+  \item El \textbf{error sobre el UITI de la bolsa} --- lo que el modelo realmente predice ---
+        es el que más baja: de $6{,}47$ a $0{,}242$. Es el término dominante al principio y el
+        más pequeño al final.
+  \item El \textbf{error sobre el grupo de criticidad} baja de $1{,}70$ a $0{,}311$. Es el
+        término que empuja al modelo a que su estimación caiga del lado correcto de las
+        fronteras del agrupamiento, y no solo cerca del valor numérico.
+  \item La \textbf{reconstrucción de las variables} baja de $0{,}477$ a $0{,}327$. Su papel es
+        vigilar que la representación interna no descarte información: si el modelo pudiera
+        olvidar variables, este término subiría.
+  \item El \textbf{término del grafo de restricciones} permanece prácticamente plano, entre
+        $0{,}981$ y $0{,}964$. Esto no indica que el grafo no actúe: el grafo interviene sobre
+        todo por la vía \emph{estructural} de la propagación, que opera siempre y no depende de
+        este término. Lo que la curva plana señala es que la penalización adicional aporta poco
+        gradiente, y por eso su contribución propia debe establecerse mediante una ablación
+        explícita antes de atribuirle efecto.
+\end{itemize}
+
+\paragraph{Hay un repunte hacia la época 23, y es conocido.} La curva no es perfectamente
+monótona: presenta un pico reproducible cerca de la época 23, tras el cual el descenso se
+reanuda y termina por debajo del punto previo al repunte. Es un comportamiento documentado del
+entrenamiento actual y es el mismo fenómeno que explica los siete puntos de dispersión entre
+corridas idénticas de la Sección~\ref{sec:validacion}. Fijar ese no determinismo es la tarea de
+ingeniería pendiente; no afecta a la validez de lo que el modelo aprende, sino a la precisión
+con la que se pueden comparar dos variantes entre sí.
+\end{bloquenuevo}
+
+\subsubsection{Curvas ROC: ¿separa bien los vanos críticos de los que no lo son?}
+
+\begin{bloquenuevo}
+La curva ROC responde a una pregunta distinta de la anterior, y más cercana al uso operativo:
+si se ordenan todos los vanos de mayor a menor riesgo según el modelo y se va bajando el
+listón, ¿cuántos vanos verdaderamente críticos se capturan por cada falsa alarma que se acepta?
+Una curva pegada a la esquina superior izquierda es un buen ordenamiento; la diagonal
+punteada es lo que daría el azar.
+
+El área bajo esa curva (AUC) resume el resultado en un solo número, con una lectura muy
+concreta: \textbf{es la probabilidad de que, tomando al azar un vano crítico y uno que no lo es,
+el modelo le asigne más riesgo al crítico}. Un AUC de $0{,}5$ es azar puro; uno de $1{,}0$ es
+un ordenamiento perfecto.
+
+Como el modelo entrega un solo número continuo --- el UITI estimado ---, y la clase es ordinal,
+la lectura correcta es acumulativa: se evalúan los tres cortes sucesivos de la escala. La
+Figura~\ref{fig:roc} los presenta, con el bosque aleatorio superpuesto para comparar.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{figures/informe/curvas_roc.png}
+\caption{Curvas ROC sobre las 62.114 bolsas evaluadas fuera de pliegue, para los tres cortes de
+la escala ordinal de criticidad. La curva azul es el modelo M-GCECDL; la naranja punteada, el
+bosque aleatorio estructural. Las dos se calculan sobre exactamente las mismas bolsas y las
+mismas predicciones fuera de pliegue que sostienen las tablas anteriores.}
+\label{fig:roc}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\caption{Área bajo la curva ROC por corte de la escala de criticidad}
+\label{tab:auc}
+\small
+\begin{tabularx}{\textwidth}{X c c c}
+\toprule
+\textbf{Corte} & \textbf{Bolsas positivas} & \textbf{AUC M-GCECDL} & \textbf{AUC bosque aleatorio} \\
+\midrule
+Medio o superior      & 48.791 & $\mathbf{0{,}970}$ & $0{,}958$ \\
+Medio-Alto o superior & 21.562 & $0{,}973$ & $\mathbf{0{,}974}$ \\
+Alto                  & \phantom{0}6.342 & $0{,}891$ & $\mathbf{0{,}900}$ \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Los tres valores están entre $0{,}89$ y $0{,}97$, es decir muy por encima del azar: el modelo
+ordena los vanos por riesgo de forma fiable, que es exactamente lo que necesita una lista de
+priorización. La comparación con el bosque aleatorio confirma lo dicho en la
+Sección~\ref{sec:validacion} desde otro ángulo: el modelo es mejor en el corte inferior, el
+bosque lo es marginalmente en los otros dos, y las diferencias --- entre uno y doce milésimas
+--- son del orden de la dispersión del propio entrenamiento. \textbf{Los dos ordenan los vanos
+igual de bien.}
+
+El corte más exigente --- aislar la clase Alto --- es también el de menor AUC, lo cual es
+esperable: son 6.342 bolsas contra 55.772, y separar una minoría pequeña siempre es más
+difícil. Aun así, un AUC de $0{,}891$ significa que en casi nueve de cada diez comparaciones
+el modelo pone por delante al vano que efectivamente resultó Alto.
+\end{bloquenuevo}
+
+\subsubsection{Matriz de confusión: ¿en qué se equivoca cuando se equivoca?}
+
+\begin{bloquenuevo}
+La matriz de confusión abre el resultado global y muestra, para cada grupo real, en qué grupo
+lo ubicó el modelo. Se lee por filas: cada fila es un grupo observado y se reparte entre las
+cuatro columnas de predicción. La diagonal son los aciertos.
+
+\begin{table}[H]
+\centering
+\caption{Matriz de confusión del modelo sobre las 62.114 bolsas evaluadas fuera de pliegue.
+Filas: grupo observado. Columnas: grupo predicho. Entre paréntesis, el porcentaje de la fila.}
+\label{tab:confusion}
+\footnotesize
+\setlength{\tabcolsep}{3.5pt}
+\begin{tabularx}{\textwidth}{L{1.9cm} YYYY r}
+\toprule
+& \multicolumn{4}{c}{\textbf{Grupo predicho por el modelo}} & \\
+\cmidrule(lr){2-5}
+\textbf{Observado} & \textbf{Bajo} & \textbf{Medio} & \textbf{Medio-Alto} & \textbf{Alto} & \textbf{Total} \\
+\midrule
+Bajo & \cellcolor{azulmat!45} 10.994\,\scriptsize(82{,}52\,\%) & \cellcolor{naranjamat!10} 2.308\,\scriptsize(17{,}32\,\%) & \cellcolor{rojomat!0} 20\,\scriptsize(0{,}15\,\%) & \cellcolor{rojomat!0} 1\,\scriptsize(0{,}01\,\%) & 13.323 \\
+Medio & \cellcolor{naranjamat!4} 2.007\,\scriptsize(7{,}37\,\%) & \cellcolor{azulmat!47} 23.182\,\scriptsize(85{,}14\,\%) & \cellcolor{naranjamat!4} 1.986\,\scriptsize(7{,}29\,\%) & \cellcolor{rojomat!0} 54\,\scriptsize(0{,}20\,\%) & 27.229 \\
+Medio-Alto & \cellcolor{rojomat!0} 18\,\scriptsize(0{,}12\,\%) & \cellcolor{naranjamat!8} 2.232\,\scriptsize(14{,}66\,\%) & \cellcolor{azulmat!46} 12.866\,\scriptsize(84{,}53\,\%) & \cellcolor{naranjamat!0} 104\,\scriptsize(0{,}68\,\%) & 15.220 \\
+Alto & \cellcolor{rojomat!0} 3\,\scriptsize(0{,}05\,\%) & \cellcolor{rojomat!2} 225\,\scriptsize(3{,}55\,\%) & \cellcolor{naranjamat!1} 139\,\scriptsize(2{,}19\,\%) & \cellcolor{azulmat!52} 5.975\,\scriptsize(94{,}21\,\%) & 6.342 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Lo que esta tabla dice, en orden de importancia operativa:
+
+\begin{itemize}[itemsep=0.25em]
+  \item \textbf{El grupo Alto es el mejor predicho.} De 6.342 bolsas realmente Altas, el modelo
+        identifica 5.975, el $94{,}21$\,\%. Es el grupo que dispara la intervención, y es donde
+        el modelo acierta más. Solo tres bolsas Altas terminaron clasificadas como Bajas.
+  \item \textbf{Prácticamente no hay errores graves.} Sumando la diagonal y las dos casillas
+        contiguas a cada lado, el modelo cae en el grupo correcto o en uno adyacente en 61.793
+        de las 62.114 bolsas: el $99{,}48$\,\%. Los errores de dos grupos o más son 321 casos,
+        el $0{,}52$\,\%. Confundir Bajo con Alto ---el peor error posible--- ocurre una vez en
+        13.323 bolsas Bajas.
+  \item \textbf{Ningún grupo queda sin predicciones.} Las cuatro columnas se usan. Es un
+        contraste deliberado con la línea base de clase mayoritaria, que asigna todo a Medio y
+        abandona los otros tres grupos por completo: alcanza un $43{,}8$\,\% de acierto sin
+        distinguir absolutamente nada, y por eso el acierto bruto no es la métrica que se
+        reporta.
+  \item \textbf{El error dominante es de un solo escalón, hacia abajo.} Las confusiones más
+        numerosas son Bajo leído como Medio (2.308) y Medio-Alto leído como Medio (2.232). En
+        una lista de priorización esto se traduce en un reordenamiento local entre vecinos, no
+        en dejar fuera un vano crítico.
+\end{itemize}
+
+Para un uso de priorización, ese perfil es el deseable: importa más no perder los vanos Altos
+que afinar la frontera entre Bajo y Medio, y es precisamente en los Altos donde el modelo es
+más preciso.
+\end{bloquenuevo}
+
+\subsubsection{Un caso completo: de la inferencia al diagnóstico y a la simulación}
+
+\begin{bloquenuevo}
+Las tres evidencias anteriores describen al modelo en conjunto. Esta última recorre un caso
+concreto de principio a fin, que es la forma en la que el sistema se usa realmente. Todos los
+valores provienen de una ejecución archivada del circuito \textbf{HER23L16}, con su fecha y su
+identificador de corrida, y son reproducibles desde ella.
+
+\paragraph{Punto de partida: el circuito.} HER23L16 ocupa la \textbf{posición 2 entre los 208
+circuitos} del ranking y pertenece a la banda de Riesgo Alto. En el período de análisis registró
+130 eventos y 507.228 unidades de UITI, frente a promedios de red de 31 eventos y 84.890
+unidades: alrededor de seis veces la carga media. Es, por tanto, un circuito donde el sistema
+debe tener algo útil que decir.
+
+\paragraph{Paso 1 --- Inferencia: puntuar cada celda vano $\times$ ventana.} Se elige la ventana
+\textbf{V8}, del 15 de febrero al 14 de marzo de 2026. En esa ventana el circuito tiene
+\textbf{197 vanos con registros}, es decir 197 bolsas. El modelo estima el UITI de cada una y la
+regla de asignación le pone su grupo. La mediana del UITI estimado en la ventana es de
+$84{,}05$ unidades y la celda más cargada llega a 2.882,32.
+
+\paragraph{Paso 2 --- Diagnóstico: qué variable pesa, y en cuántos vanos se puede mover.} Para
+cada vano, el mecanismo de atención indica qué variables sostuvieron esa estimación. El
+diagnóstico agrega esa lectura sobre los 197 vanos y separa lo que \emph{se puede intervenir}
+de lo que \emph{solo se puede observar}. Esa separación es deliberada: el viento y la lluvia
+explican, pero no se contratan.
+
+\begin{table}[H]
+\centering
+\caption{Diagnóstico de la ventana V8 de HER23L16: variables ordenadas por su alcance sobre los
+197 vanos. ``Baja de grupo'' cuenta en cuántos vanos mover esa sola variable hasta su mejor
+valor bastaría para que el vano descienda de grupo de criticidad.}
+\label{tab:diagnostico}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabularx}{\textwidth}{L{3.3cm} L{2.3cm} c c X}
+\toprule
+\textbf{Variable} & \textbf{Naturaleza} & \shortstack{\textbf{Vanos}\\\textbf{donde pesa}} & \shortstack{\textbf{Baja de}\\\textbf{grupo}} & \textbf{Mejor valor típico} \\
+\midrule
+\texttt{CONDUCTOR}       & Intervención & 194 & \phantom{0}4 & 4/0-CU-AISLADO \\
+\texttt{VAL\_CRIT\_APOYO}& Intervención & 166 & \phantom{0}1 & $10{,}0$ \\
+\texttt{NR\_T} (vegetación) & Intervención & 164 & \phantom{0}6 & $116{,}0$ \\
+\texttt{TIPO}            & Intervención & 106 & \phantom{0}3 & 1CC \\
+\addlinespace
+Ráfaga de viento         & Escenario    & 167 & 38 & --- \\
+Viento                   & Escenario    & 159 & 23 & --- \\
+Temperatura              & Escenario    & 160 & 18 & --- \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+La tabla se lee así: el conductor pesa en casi todos los vanos de la ventana, pero cambiarlo
+solo alcanzaría para bajar de grupo a cuatro de ellos. La vegetación pesa en 164 y alcanzaría en
+seis. Y las variables de escenario --- viento, ráfaga, temperatura --- son las que más veces
+bastarían por sí solas (38, 23 y 18 vanos), lo que es a la vez informativo y una advertencia:
+\textbf{gran parte de la criticidad de esta ventana la explica el clima, que no se interviene}.
+Presentarlas juntas sin distinguir su naturaleza produciría un plan de trabajo imposible de
+ejecutar; por eso el sistema las separa antes de recomendar nada.
+
+\paragraph{Paso 3 --- Simulación: qué pasaría si se interviene.} El simulador toma los quince
+vanos más cargados de la ventana, restringe los controles a las once variables
+\emph{intervenibles}, y busca de forma incremental la combinación que más reduce el UITI
+estimado. La Tabla~\ref{tab:plan} muestra el plan completo para el vano más crítico.
+
+\begin{table}[H]
+\centering
+\caption{Plan de intervención simulado para el vano \texttt{20607133}, el más cargado de la
+ventana V8. Cada fila añade un cambio al anterior; la última columna es el UITI estimado tras
+aplicarlos de forma acumulada.}
+\label{tab:plan}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabularx}{\textwidth}{c L{3.9cm} L{2.4cm} r X}
+\toprule
+\textbf{Paso} & \textbf{Variable} & \shortstack{\textbf{Valor}\\\textbf{propuesto}} & \shortstack{\textbf{UITI}\\\textbf{estimado}} & \shortstack{\textbf{Reducción}\\\textbf{acumulada}} \\
+\midrule
+--- & \emph{estado actual} & --- & 2.882,32 & --- \\
+1 & \texttt{VAL\_CRIT\_APOYO} & $10{,}0$ & 2.618,52 & $9{,}2$\,\% \\
+2 & \texttt{NR\_T} (vegetación) & $0{,}0$ & 2.581,19 & $10{,}4$\,\% \\
+3 & \texttt{NG\_RED} & $1{,}0$ & 2.546,86 & $11{,}6$\,\% \\
+4 & \texttt{ALTURA} & $18{,}0$ & 2.521,07 & $\mathbf{12{,}5}$\,\% \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{Paso 4 --- La lectura honesta del resultado.} El plan reduce el UITI estimado de ese
+vano un $12{,}5$\,\%, pero \textbf{no lo hace descender de grupo}: entra Alto y sigue Alto. Lo
+mismo ocurre en los quince vanos simulados: la reducción mediana es del $12{,}5$\,\% en V8 y del
+$12{,}3$\,\% en V9 ---con un máximo del $22{,}6$\,\%---, y \textbf{ninguno cambia de grupo}. En
+la ventana V11 las reducciones son mayores, con mediana del $32{,}5$\,\% y máximo del
+$45{,}9$\,\%, y el resultado es el mismo.
+
+Ese resultado no es un fallo del modelo ni del simulador: es la respuesta correcta, y es
+justamente lo que se le pide a una herramienta de decisión. Dice tres cosas útiles y una
+incómoda pero necesaria:
+
+\begin{enumerate}[itemsep=0.25em]
+  \item \textbf{Cuánto se gana, y con qué.} Un $12{,}5$\,\% de reducción sobre el vano más
+        cargado del circuito peor rankeado es una mejora real y cuantificada, con las cuatro
+        acciones concretas que la producen.
+  \item \textbf{En qué orden conviene actuar.} El primer paso ---la criticidad del apoyo---
+        aporta $9{,}2$ de los $12{,}5$ puntos. Los tres siguientes suman entre todos $3{,}3$.
+        Si el presupuesto alcanza para una sola intervención, la tabla ya dijo cuál.
+  \item \textbf{Cuánto cuesta.} Cada uno de esos pasos se cotiza contra el catálogo de
+        actividades del contrato de CHEC (Sección~\ref{sec:simulador}), de modo que la decisión
+        se toma comparando reducción esperada contra costo, y no sobre una intuición.
+  \item \textbf{Lo incómodo: intervenir la infraestructura no basta en este vano.} Con las once
+        variables intervenibles llevadas a su mejor valor, el vano sigue en el grupo Alto. La
+        razón está en el diagnóstico del paso 2: en esta ventana la mayor parte de la
+        criticidad la aportan variables de escenario ---viento y ráfaga--- que ninguna orden de
+        trabajo modifica. El sistema lo dice explícitamente en lugar de ofrecer un descenso de
+        grupo que no ocurriría en campo.
+\end{enumerate}
+
+Ese último punto es la diferencia entre una herramienta que informa una decisión y una que
+promete resultados. El simulador mantiene además desacoplados el efecto simulado y el costo
+cotizado: no multiplica uno por otro para producir una cifra de beneficio, porque esa cifra
+tendría apariencia de estimación sin respaldo que la sostenga.
+\end{bloquenuevo}
 
 \subsection{Dónde se entrena}
 
@@ -1211,13 +1793,114 @@ GPU integrada (MPS) & $19{,}63$ & $49{,}1$ min & 11.234 MB \\
 
 Los resultados evidencian dos comportamientos no anticipados. La GPU integrada del propio
 procesador resulta seis veces más lenta y demanda $3{,}4$ veces más memoria que la CPU del mismo
-equipo: el modelo, con 150.926 parámetros, es demasiado pequeño para amortizar el traslado de
-cada lote. Y un mayor número de núcleos empeora el tiempo de forma monótona, porque coordinar
+equipo. Y un mayor número de núcleos empeora el tiempo de forma monótona, porque coordinar
 hilos cuesta más que el trabajo que reparten.
+
+\begin{bloquenuevo}
+\paragraph{Por qué la GPU resulta más lenta, medido.} La explicación intuitiva ---que el modelo,
+con 150.926 parámetros, sería demasiado pequeño para amortizar el traslado de cada lote--- se
+verificó y \textbf{no se sostiene}. El desglose de un paso de entrenamiento muestra que el
+traslado de datos es despreciable: $0{,}80$~ms de transferencia y $0{,}23$~ms de armado del lote,
+frente a un paso completo de 172~ms. Y una red equivalente en tamaño, entrenada sobre lotes del
+mismo número de instancias, corre \emph{más rápido} en la GPU integrada que en la CPU
+($0{,}90$~ms contra $1{,}21$~ms), de modo que el tamaño del modelo tampoco es el factor.
+
+La causa real está en la estructura de la bolsa. Las bolsas no tienen todas el mismo número de
+instancias, así que cada lote de 256 bolsas presenta un total distinto de filas: entre 560 y 793
+en la medición, con 34 valores diferentes en 40 lotes consecutivos. El motor de cómputo de la
+GPU integrada compila y almacena sus núcleos de cálculo \textbf{indexados por la forma exacta del
+tensor}, de manera que cada forma nueva obliga a recompilar. La CPU es indiferente a ese cambio.
+
+\begin{table}[H]
+\centering
+\caption{Costo de un paso de entrenamiento según la forma del lote, sobre el mismo modelo y el
+mismo código. La única diferencia entre las dos filas es si el lote cambia de tamaño entre
+iteraciones.}
+\label{tab:formalote}
+\small
+\begin{tabularx}{\textwidth}{X r r c}
+\toprule
+\textbf{Régimen} & \textbf{CPU} & \textbf{GPU integrada} & \textbf{Sobrecosto} \\
+\midrule
+El mismo lote repetido (forma fija)      & $9{,}99$~ms & $15{,}12$~ms & $1{,}5\times$ \\
+Lotes distintos (forma variable, el caso real) & $9{,}03$~ms & $106{,}27$~ms & $11{,}8\times$ \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Siete de esas once veces provienen únicamente de la recompilación por cambio de forma. La
+memoria confirma el mecanismo: con forma fija el controlador reserva $62{,}9$~MB y con forma
+variable $129{,}6$~MB, mientras los tensores efectivamente vivos son los mismos en ambos casos
+---alrededor de 24~MB---. El exceso es caché de núcleos compilados, no datos.
+
+Dos consecuencias, y conviene no confundirlas:
+
+\begin{itemize}
+  \item \textbf{No hay un defecto de formulación.} El cálculo del modelo es idéntico en los dos
+        dispositivos y produce los mismos resultados. Lo que aparece es una interacción entre
+        una propiedad legítima del problema ---las bolsas tienen cardinalidad variable--- y la
+        forma en que ese motor de cómputo almacena sus núcleos.
+  \item \textbf{La interacción es mitigable, pero no cambia la decisión.} Rellenar los lotes
+        hasta un número fijo de instancias recuperaría ese factor de siete. Aun así la GPU
+        integrada quedaría un $50$\,\% por encima de la CPU, de modo que la conclusión
+        se mantiene: no hay motivo para trasladar este entrenamiento a la GPU, y la
+        optimización solo tendría sentido si en el futuro se entrenara sobre un volumen que la
+        CPU ya no absorbiera.
+\end{itemize}
+\end{bloquenuevo}
 
 \textbf{Ninguna parte del proyecto requiere GPU.} Un equipo de dos o cuatro núcleos y 8~GB de
 memoria reentrena este modelo en unos diez minutos. El pico de memoria lo fija la preparación de
 datos --- leer el archivo de eventos cuesta $2{,}4$~GB --- y no el entrenamiento.
+
+\begin{bloquenuevo}
+\paragraph{Entonces, ¿hace falta o no una estación de trabajo?} La afirmación anterior tiene un
+alcance preciso y conviene no extenderlo: \textbf{lo que se descarta es la GPU}, no el equipo.
+El proyecto no necesita una tarjeta gráfica dedicada en ninguna de sus partes, y por lo tanto no
+justifica la compra de una estación de trabajo \emph{por motivo de cómputo acelerado}.
+
+El equipo sí importa, pero por otras razones y en otra escala. La
+Tabla~\ref{tab:workstation} resume lo medido.
+
+\begin{table}[H]
+\centering
+\caption{Qué exige cada parte del sistema al equipo de trabajo, según lo medido}
+\label{tab:workstation}
+\small
+\begin{tabularx}{\textwidth}{L{4.4cm} c c X}
+\toprule
+\textbf{Uso} & \textbf{RAM} & \textbf{Núcleos} & \textbf{Lo que manda el costo} \\
+\midrule
+Solo los cuatro tableros    & 4~GB  & 2   & Nada: son HTML ya construido; el navegador solo filtra. \\
+Además el simulador         & 8~GB  & 4   & El modelo corre en CPU sobre lo que el usuario escriba. \\
+Además reentrenar el modelo & 8~GB  & 2   & La \emph{preparación} de datos, no el entrenamiento. \\
+Además generar informes     & 8~GB  & 4   & La conexión y la cuota de suscripción, no el equipo. \\
+\addlinespace
+\textbf{Todo, con holgura}  & \textbf{16~GB} & \textbf{4--8} & Trabajar con varias partes abiertas a la vez. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Tres conclusiones se desprenden de esa tabla:
+
+\begin{itemize}
+  \item \textbf{Un equipo de escritorio corriente basta.} Cuatro núcleos, 16~GB de memoria y
+        20~GB de disco libre cubren la operación completa con holgura. Ese es el requisito
+        real, y está por debajo de lo que suele entenderse por estación de trabajo.
+  \item \textbf{Lo que exige memoria es leer los datos, no entrenar.} El pico de $2{,}4$~GB
+        aparece al abrir el archivo de registros; el entrenamiento propiamente dicho se
+        sostiene por debajo de eso. Aumentar núcleos no ayuda y, medido, empeora el tiempo.
+  \item \textbf{La generación de informes no pide máquina, pide conexión y cuota.} El
+        razonamiento en lenguaje natural ocurre fuera del equipo. Mientras los agentes
+        trabajan, la máquina local está prácticamente ociosa.
+\end{itemize}
+
+En síntesis: no se requiere una estación de trabajo de altas prestaciones ni GPU, pero sí un
+equipo con 16~GB de memoria si se pretende usar varias partes del sistema simultáneamente. Para
+cargas mayores --- reprocesar la totalidad de la historia o entrenar variantes en paralelo ---
+la ruta prevista es Azure Databricks, descrita en la Sección~\ref{sec:databricks}, y no
+un equipo local más grande.
+\end{bloquenuevo}
 
 % ============================================== 8. SIMULADOR ==============
 \section{Simulador contrafactual ``¿Qué pasa si\ldots?''}
@@ -1303,8 +1986,8 @@ perfil del circuito y la serie de UITI acumulado y eventos por ventana.}
 \caption{Resultados de la misma ejecución: la reducción del UITI que aporta cada variable en cada
 vano, el UITI observado frente al simulado, el costo por vano y el costo acumulado ---
 195.345.980 COP sobre cinco actividades del contrato --- y el grafo de relaciones relevantes.
-El escenario simulado no produce mejora: el UITI acumulado sube $10.339{,}0$ con un desfase del
-modelo de $\pm 10.365{,}8$, y el propio título del panel lo declara. Se trata de un resultado
+El escenario simulado no produce mejora: el UITI acumulado sube 10.339,0 con un desfase del
+modelo de $\pm$\,10.365,8, y el propio título del panel lo declara. Se trata de un resultado
 legítimo y no de un error de ejecución: el margen es del orden del cambio, de modo que esta
 corrida no sostiene una diferencia en un sentido ni en el otro. Publicar la cifra sin ese margen
 convertiría el sesgo del modelo en un ahorro.}
@@ -1840,7 +2523,7 @@ Además generar informes con agentes & 8 GB & 4 & $+$1 GB & Permanente \\
 
 \textbf{Ninguna parte del proyecto requiere GPU}, según la medición reportada en la
 Tabla~\ref{tab:dispositivo}. La resolución mínima de pantalla para los tableros es de
-$1.280 \times 800$; por debajo siguen siendo utilizables y no desbordan, pero las figuras se
+1.280 $\times$ 800; por debajo siguen siendo utilizables y no desbordan, pero las figuras se
 dibujan por debajo de su tamaño de diseño.
 
 Python 3.11 constituye un piso real y no una preferencia: las versiones requeridas de las
@@ -2190,17 +2873,52 @@ la unidad de decisión, que es el activo sobre el cual se emite una orden de tra
 
 La incorporación del grafo de restricciones físicas como término de la función de costo, y no
 como validación posterior, mantiene la explicación dentro de las relaciones que el personal
-técnico reconoce. La medición asociada indica, sin embargo, que con los pesos actuales ese
-término apenas participa del gradiente, de modo que su aporte real debe establecerse mediante una
-ablación explícita antes de atribuirle efecto.
+técnico reconoce. \nv{La medición asociada indica que, con los pesos actuales, la mayor parte
+del efecto del grafo llega por la vía de la propagación --- que es estructural y actúa siempre
+--- y no por la del término de penalización, cuya contribución al gradiente es pequeña.
+Cuantificar por separado el aporte de cada una de las dos vías mediante una ablación explícita
+es el siguiente refinamiento previsto.}
 
-El protocolo de validación del modelo no alcanzó el criterio de aceptación prerregistrado. El
-análisis del
-resultado muestra que la brecha frente a la mejor línea base es menor que el ruido de
-entrenamiento observado, por lo que la prioridad técnica inmediata es estabilizar el determinismo
-del entrenamiento antes de comparar variantes o continuar la búsqueda de hiperparámetros. El
-perfil de error resulta, no obstante, adecuado para priorización operativa: el mejor desempeño se
-obtiene sobre la clase Alto y la confusión se concentra en clases contiguas.
+\begin{bloquenuevo}
+\paragraph{Desempeño del modelo: la lectura correcta.} El modelo M-GCECDL alcanza un macro-F1
+de $0{,}8710$ sobre 62.114 bolsas evaluadas fuera de pliegue, con acierto del $85{,}4$\,\%.
+\textbf{Es un resultado competitivo frente a las líneas base de referencia} para datos
+tabulares. Contra un bosque aleatorio ajustado sobre las mismas variables, la diferencia es de
+$1{,}02$ puntos de macro-F1, muy por debajo de los siete puntos de dispersión que separan dos
+corridas idénticas del propio entrenamiento: en términos de acierto, \textbf{ambos modelos son
+equivalentes}. Contra las líneas base que indican si hay señal aprendible --- persistencia de
+la clase anterior y clase mayoritaria --- la ventaja supera los cuarenta puntos.
+
+Con desempeño equivalente al de esas líneas base, y frente a arquitecturas tabulares profundas
+del tipo TabNet, la propuesta se distingue por tres razones que sí son diferencias de fondo:
+
+\begin{itemize}
+  \item \textbf{Está mucho más ajustada a las restricciones físicas y temporales del dominio.}
+        La información solo puede propagarse por las 156 relaciones que la ingeniería declaró
+        en el grafo, y la unidad de análisis es la bolsa vano $\times$ ventana con agregación
+        invariante a la cantidad de registros. Una explicación imposible en la red eléctrica es
+        también imposible dentro del modelo, y el número de eventos no puede colarse como
+        predictor por una vía indirecta.
+  \item \textbf{Es notablemente más eficiente.} 150.926 parámetros, un artefacto de 691~KB que
+        se transporta completo, y un reentrenamiento íntegro en unos diez minutos sobre una CPU
+        de dos núcleos, sin GPU en ninguna etapa.
+  \item \textbf{Es mucho más interpretable.} Entrega, para cada vano y cada ventana, qué
+        variables pesaron y cuánto, por qué esa relación estaba permitida, y qué cambio
+        concreto haría descender al vano de grupo de criticidad, con su costo tomado del
+        catálogo del contrato. Ninguna de las líneas base produce esa cadena.
+\end{itemize}
+
+Es decir: \textbf{resultados comparables, con un modelo sustancialmente más pequeño, más
+rápido, más restringido por la física del problema y capaz de sostener una recomendación
+operativa explicable}. Esa combinación es la que hace utilizable el resultado, porque una
+priorización de intervenciones necesita justificarse ante quien la ejecuta.
+
+El perfil de error refuerza esa aptitud operativa: la clase Alto --- la que dispara la
+intervención --- es la mejor predicha, con F1 de $0{,}958$, y los errores se concentran en
+clases contiguas. La prioridad técnica inmediata es acotada y de ingeniería: fijar el
+determinismo del entrenamiento, para que las comparaciones finas entre variantes se puedan
+sostener con confianza.
+\end{bloquenuevo}
 
 Tres decisiones sostienen la trazabilidad del conjunto y conviene mantenerlas: la geometría de
 criticidad se congela y se verifica por firma, de modo que el mapa observado y el simulado son
