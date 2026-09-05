@@ -366,7 +366,9 @@ CRITERIOS_ESTUDIO: tuple[tuple[str, str], ...] = (
     ("uv", "Mayor UITI acumulado: el momento de mayor impacto del período"),
     ("vanos", "Más vanos tocados: el episodio más extendido del período"),
 )
-RAZON_ULTIMA = "La última con eventos: cómo está el circuito hoy"
+#: Va con sus dos signos: lo que sigue a los dos puntos ES la pregunta que esa
+#: ventana contesta, y el informe ya escribe asi sus encabezados.
+RAZON_ULTIMA = "La última con eventos: ¿cómo está el circuito hoy?"
 #: Una corrida anterior pudo estudiar otras ventanas. Adjudicarle un criterio que no la
 #: eligio seria inventar el motivo, que es peor que no darlo.
 RAZON_SIN_CRITERIO = "Estudiada a fondo"

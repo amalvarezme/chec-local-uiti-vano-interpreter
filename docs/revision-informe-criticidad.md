@@ -150,6 +150,7 @@ ya aplicados.
 | 22 | En la sección 3, toda variable con nombre y código entre paréntesis | Aplicado | `PREP_i`, `WIND_SPD_i` y `WIND_GUST_SPD_i` salían pelados. Ver §5 |
 | 23 | En «Escenario de disminución», columna con el % de UITI que baja o sube | Aplicado | Columna «Cambio de UITI», con signo. Se calcula contra la base de **ese** vano: dos vanos de UITI 900 y 9 pueden bajar el mismo porcentaje con magnitudes que no se parecen |
 | 24 | «Cómo se construyó este informe» entre `¿ ?` | Aplicado | Igual que el 19. Se cambió también el mismo título en el informe gerencial, para que los dos productos no digan la misma frase de dos maneras |
+| 25 | «cómo está el circuito hoy» entre `¿ ?` | Aplicado | Es la pregunta que contesta la ventana más reciente, y va detrás de los dos puntos en la columna del porqué: `La última con eventos: ¿cómo está el circuito hoy?` |
 
 ## 5. Por qué las variables de clima salían sin nombre
 

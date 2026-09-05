@@ -175,6 +175,9 @@ class TestRazonesDeEstudio:
         razones = razones_de_estudio(self._serie, ("V1", "V2", "V5"))
 
         assert "última" in razones["V5"], razones["V5"]
+        # La razon de la ultima ES una pregunta -- la que esa ventana contesta -- y va
+        # con sus dos signos, igual que los encabezados del informe.
+        assert "¿cómo está el circuito hoy?" in razones["V5"], razones["V5"]
         assert "UITI" in razones["V2"], razones["V2"]
         assert "vanos" in razones["V1"], razones["V1"]
 
