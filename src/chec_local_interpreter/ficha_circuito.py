@@ -271,7 +271,7 @@ def tabla_ficha_html(ficha: dict[str, Any]) -> str:
 
 def tabla_clasificacion_html(
     raw_df: pd.DataFrame,
-    circuito: str,
+    circuito: str | list[str] | tuple[str, ...],
     *,
     start_date: Any = None,
     end_date: Any = None,
@@ -283,11 +283,24 @@ def tabla_clasificacion_html(
     nombres legibles, y el numero de ubicacion es lo que permite cruzar las dos -- por
     eso la barra tambien lo lleva ahora en su rotulo.
 
+    `circuito` admite un nombre (el informe por circuito) o una lista (el gerencial, que
+    resalta los circuitos muestreados del grupo). Son las MISMAS dos formas que acepta
+    `plot_ranking_circuitos`: con una sola, la tabla y la figura que la acompana
+    marcarian conjuntos distintos sobre los mismos datos.
+
     Va plegada. Doscientas filas abiertas empujan el informe entero hacia abajo, y la
-    pregunta habitual es por el circuito estudiado y sus vecinos, que van visibles.
+    pregunta habitual es por los circuitos estudiados y sus vecinos, que van visibles.
     """
     if raw_df is None or raw_df.empty or not _COLUMNAS_MINIMAS <= set(raw_df.columns):
         return ""
+
+    if circuito is None:
+        destacados: list[str] = []
+    elif isinstance(circuito, str):
+        destacados = [circuito] if circuito else []
+    else:
+        destacados = [str(c) for c in circuito if c]
+    conjunto = set(destacados)
 
     from chec_local_interpreter.ranking_circuitos import ranking_circuitos
 
@@ -298,7 +311,7 @@ def tabla_clasificacion_html(
     ordenada = tabla.sort_values("posicion")
 
     def _fila(r) -> str:
-        destacada = " class='fila-destacada'" if str(r.circuito) == str(circuito) else ""
+        destacada = " class='fila-destacada'" if str(r.circuito) in conjunto else ""
         return (
             f"<tr{destacada}>"
             f"<td class='num'>{_num(float(r.posicion))}</td>"
@@ -317,13 +330,14 @@ def tabla_clasificacion_html(
         "<th>UITI acumulado</th></tr></thead>"
     )
 
-    # El circuito estudiado y sus vecinos inmediatos, visibles sin desplegar nada.
-    try:
-        indice = [str(c) for c in ordenada["circuito"]].index(str(circuito))
-    except ValueError:
-        indice = 0
+    # Los circuitos estudiados y sus vecinos inmediatos, visibles sin desplegar nada.
+    # Con varios destacados, la ventana se abre desde el MEJOR situado de ellos: es el
+    # que fija el techo del grupo, y el que un lector busca primero.
+    nombres = [str(c) for c in ordenada["circuito"]]
+    indices = [nombres.index(c) for c in destacados if c in nombres]
+    indice = min(indices) if indices else 0
     desde = max(0, indice - 4)
-    vecinos = ordenada.iloc[desde:desde + 9]
+    vecinos = ordenada.iloc[desde:desde + max(9, len(destacados) + 4)]
 
     filas_vecinas = "".join(_fila(r) for r in vecinos.itertuples())
     filas_todas = "".join(_fila(r) for r in ordenada.itertuples())
@@ -402,4 +416,93 @@ def tabla_ventanas_html(
         "<th>UITI acumulado</th><th>Registros vano-evento</th><th>Vanos</th>"
         "<th></th></tr></thead>"
         f"<tbody>{''.join(filas)}</tbody></table>{nota}</div>"
+    )
+
+
+# ------------------------------------------------------------------- afectacion
+
+
+#: Umbrales del tipo de afectacion. Estan aqui, con nombre, y no incrustados en un `if`:
+#: son la definicion operativa de "sostenida" y cualquiera que discuta el veredicto
+#: discute estos dos numeros.
+#:
+#: `SOSTENIDA_MIN_VENTANAS` es una FRACCION de la rejilla, no un conteo: el periodo del
+#: informe se elige al invocarlo y una rejilla de cinco ventanas no puede exigir ocho.
+SOSTENIDA_MIN_VENTANAS = 0.6
+#: Por encima de esta fraccion en UNA sola ventana, el periodo lo explica esa ventana.
+PUNTUAL_MIN_CONCENTRACION = 0.5
+
+
+def tipo_de_afectacion(serie) -> dict[str, Any]:
+    """Sostenida o puntual, decidido sobre la serie por ventana.
+
+    Se calcula y no se le pide al agente. Es un umbral sobre dos cifras -- en cuantas
+    ventanas hubo actividad, y que fraccion del UITI se lleva la mayor --, y un modelo
+    contestando eso sobre los mismos numeros puede dar una respuesta distinta en cada
+    corrida sin que nada haya cambiado. Ademas se puede discutir: el veredicto viaja con
+    las dos cifras que lo sostienen.
+
+    Sin actividad devuelve vacio. Un "puntual" por defecto sobre una serie en cero seria
+    afirmar algo sobre un circuito del que no hay nada que decir.
+    """
+    registros = [r for r in (serie or []) if isinstance(r, dict)]
+    valores = [float(r.get("uv") or 0.0) for r in registros]
+    total = sum(valores)
+    if not registros or total <= 0:
+        return {}
+
+    con_actividad = sum(1 for v in valores if v > 0)
+    indice_pico = max(range(len(valores)), key=lambda i: valores[i])
+    fraccion_pico = valores[indice_pico] / total
+
+    if fraccion_pico >= PUNTUAL_MIN_CONCENTRACION:
+        # Una sola ventana explica la mitad o mas del periodo: da igual en cuantas hubo
+        # algo, lo que hay que atender es ese episodio.
+        tipo = "puntual"
+    elif con_actividad >= SOSTENIDA_MIN_VENTANAS * len(registros):
+        tipo = "sostenida"
+    else:
+        # Ni concentrada en una ventana ni repartida por casi todas.
+        tipo = "intermitente"
+
+    return {
+        "tipo": tipo,
+        "ventanas_con_actividad": con_actividad,
+        "ventanas_totales": len(registros),
+        "ventana_pico": str(registros[indice_pico].get("w") or ""),
+        "periodo_pico": str(registros[indice_pico].get("periodo") or ""),
+        "uiti_pico": valores[indice_pico],
+        "pct_ventana_pico": 100.0 * fraccion_pico,
+    }
+
+
+#: Que significa cada veredicto, en una linea. La palabra sola no dice que hacer.
+_LECTURA_AFECTACION = {
+    "sostenida": ("el problema está repartido a lo largo del período y no lo explica "
+                  "un episodio concreto"),
+    "puntual": ("una sola ventana explica la mayor parte del período: el resto del "
+                "tiempo el circuito se comporta distinto"),
+    "intermitente": ("la actividad ni se reparte por todo el período ni la concentra "
+                     "una sola ventana"),
+}
+
+
+def afectacion_html(afectacion: dict[str, Any]) -> str:
+    """El veredicto con las dos cifras que lo sostienen, nunca solo el adjetivo."""
+    if not afectacion:
+        return ""
+    tipo = str(afectacion.get("tipo", ""))
+    periodo = afectacion.get("periodo_pico")
+    detalle_periodo = f", {_escapar(periodo)}" if periodo else ""
+    return (
+        "<div class='content-box'>"
+        f"<p style='margin:0 0 6px 0;'>La afectación del período es "
+        f"<b>{_escapar(tipo)}</b>: {_escapar(_LECTURA_AFECTACION.get(tipo, ''))}.</p>"
+        f"<p class='muted' style='margin:0;'>Registran actividad "
+        f"<b>{_num(float(afectacion.get('ventanas_con_actividad', 0)))}</b> de las "
+        f"{_num(float(afectacion.get('ventanas_totales', 0)))} ventanas de la rejilla, "
+        f"y la de mayor aporte "
+        f"(<b>{_escapar(afectacion.get('ventana_pico', ''))}</b>{detalle_periodo}) "
+        f"concentra el <b>{_num(float(afectacion.get('pct_ventana_pico', 0.0)), 1)}%</b> "
+        f"del UITI acumulado.</p></div>"
     )

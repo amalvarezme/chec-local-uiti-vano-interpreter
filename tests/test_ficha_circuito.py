@@ -169,3 +169,78 @@ def test_los_vanos_de_mayor_impacto_separan_uiti_de_apariciones(flota):
 def test_los_vanos_de_mayor_impacto_sin_datos_devuelven_listas_vacias():
     resultado = vanos_de_mayor_impacto(pd.DataFrame(), "C1")
     assert resultado == {"por_uiti": [], "por_apariciones": [], "coincidentes": []}
+
+
+# --------------------------------------------------------------------- afectacion
+
+
+from chec_local_interpreter.ficha_circuito import tipo_de_afectacion  # noqa: E402
+
+
+class TestTipoDeAfectacion:
+    """Comentario 18, subseccion 2.1: sostenida o puntual.
+
+    Se CALCULA y no se le pide al agente. Es un umbral sobre la serie por ventana --
+    en cuantas hubo actividad y que fraccion del UITI se lleva la mayor --, y un modelo
+    contestando eso sobre los mismos numeros puede dar una respuesta distinta en cada
+    corrida sin que nada haya cambiado.
+    """
+
+    def _serie(self, valores):
+        return [{"w": f"V{i+1}", "periodo": "", "uv": v, "n": 10, "vanos": 5}
+                for i, v in enumerate(valores)]
+
+    def test_actividad_repartida_en_todas_las_ventanas_es_sostenida(self):
+        resultado = tipo_de_afectacion(self._serie([100.0] * 11))
+        assert resultado["tipo"] == "sostenida"
+        assert resultado["ventanas_con_actividad"] == 11
+
+    def test_todo_el_uiti_en_una_ventana_es_puntual(self):
+        resultado = tipo_de_afectacion(self._serie([0.0] * 10 + [1000.0]))
+        assert resultado["tipo"] == "puntual"
+        assert resultado["ventanas_con_actividad"] == 1
+
+    def test_la_ventana_de_mayor_aporte_viene_nombrada(self):
+        resultado = tipo_de_afectacion(self._serie([10.0, 900.0, 10.0]))
+        assert resultado["ventana_pico"] == "V2"
+        assert resultado["pct_ventana_pico"] > 90
+
+    def test_una_serie_vacia_no_afirma_nada(self):
+        """Sin datos no hay tipo. Devolver "puntual" por defecto seria inventar."""
+        assert tipo_de_afectacion([]) == {}
+        assert tipo_de_afectacion([{"w": "V1", "uv": 0.0}]) == {}
+
+    def test_el_bloque_html_nombra_las_dos_cifras_que_lo_sostienen(self):
+        """Un veredicto sin sus numeros al lado no se puede discutir."""
+        from chec_local_interpreter.ficha_circuito import afectacion_html
+
+        html = afectacion_html(tipo_de_afectacion(self._serie([100.0] * 11)))
+        assert "sostenida" in html
+        assert "11" in html          # ventanas con actividad
+        assert "%" in html           # fraccion de la ventana mayor
+
+    def test_sin_afectacion_no_se_dibuja_el_bloque(self):
+        from chec_local_interpreter.ficha_circuito import afectacion_html
+
+        assert afectacion_html({}) == ""
+
+
+class TestTablaClasificacionConVariosCircuitos:
+    """El informe gerencial resalta un GRUPO, no un circuito.
+
+    `plot_ranking_circuitos` ya admitia las dos formas -- un nombre o una lista -- y la
+    tabla que la acompana tenia que admitir las mismas, o las dos piezas marcarian
+    conjuntos distintos sobre la misma figura.
+    """
+
+    def test_una_lista_marca_todos_sus_circuitos(self, flota):
+        html = tabla_clasificacion_html(flota, ["C1", "C3"])
+        assert html.count("fila-destacada") >= 4  # dos filas, en la tabla corta y larga
+
+    def test_un_nombre_suelto_sigue_funcionando(self, flota):
+        html = tabla_clasificacion_html(flota, "C1")
+        assert "fila-destacada" in html
+
+    def test_una_lista_vacia_no_marca_nada(self, flota):
+        html = tabla_clasificacion_html(flota, [])
+        assert "fila-destacada" not in html

@@ -77,6 +77,8 @@ El objeto de salida debe incluir, en el nivel raíz, exactamente estas claves
     ]
   },
   "period_synthesis": "<sintesis_del_periodo>",
+  "variables_relevantes": ["<variable_y_por_que_pesa>"],
+  "conclusion_general": "<conclusion_del_numeral>",
   "data_gaps": ["<brecha_de_datos>"],
   "recommended_actions": ["<accion_recomendada>"]
 }
@@ -84,6 +86,24 @@ El objeto de salida debe incluir, en el nivel raíz, exactamente estas claves
 
 `period_synthesis` es una clave raíz obligatoria: debe estar presente en
 todas las respuestas, no solo mencionarse como estilo narrativo.
+
+## Claves Opcionales
+
+Estas dos NO están en la lista de obligatorias porque las respuestas ya archivadas no
+las traen, y el informe se dibuja sin ellas. Escríbelas siempre que tengas evidencia
+para hacerlo: cada una es una subsección propia del informe, y sin ella esa subsección
+no existe.
+
+- `variables_relevantes` — **qué variables pesan y por qué**, una por ítem, máximo 5.
+  Es la lectura descriptiva de las variables del contexto: cuál aparece en las tres
+  ventanas estudiadas, cuál solo en una, cuál acompaña a los valores altos de
+  `UITI_VANO`. No es el ranking del modelo predictivo ni una recomendación de
+  intervención: es qué se observa en la evidencia tabular entregada. Nombra la variable
+  por su código, que el informe lo expande al pintar.
+- `conclusion_general` — **el cierre del análisis descriptivo**, un párrafo. Qué queda
+  establecido sobre este circuito después de todo lo anterior. No repite la trayectoria
+  (eso es `period_synthesis`) ni el veredicto de apertura (eso es `executive_summary`):
+  dice qué se puede sostener y qué no con la evidencia de este período.
 
 ## Reparto entre los campos narrativos
 
@@ -111,6 +131,17 @@ El reparto es este:
 - `period_synthesis` — **cómo evolucionó en el tiempo**: en qué ventanas se concentró,
   si sube o baja, si el problema se queda en el mismo tramo o se mueve. Es el único campo
   que habla de trayectoria.
+- `variables_relevantes` — **qué variables pesan**, con la evidencia tabular delante. No
+  narres aquí la trayectoria ni el veredicto.
+- `conclusion_general` — **qué queda establecido**. Es lo último que se lee del análisis
+  descriptivo, así que no puede ser un resumen de los campos anteriores: si se pudiera
+  reconstruir leyendo los otros cinco, está de más.
+
+Un dato que el informe CALCULA por su cuenta y que no debes narrar como si lo hubieras
+descubierto: si la afectación es sostenida o puntual, cuántas ventanas registran
+actividad y qué fracción del UITI se lleva la mayor. Eso sale de un umbral determinista
+sobre la serie y abre el numeral; repetirlo en prosa lo dice dos veces con dos
+redacciones distintas.
 
 Si un hecho sirve en dos campos, va en el que lo tiene asignado arriba y en el otro se
 omite. Un campo corto y propio vale más que uno largo y repetido.

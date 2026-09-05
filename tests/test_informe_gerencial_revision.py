@@ -49,6 +49,8 @@ def perfil():
         "vanos_flota": 5000,
         "vanos_criticos_banda": 300,
         "vanos_criticos_flota": 1200,
+        "uiti_banda": 12345.6,
+        "uiti_flota": 98765.4,
         "pct_criticos_de_la_flota": 25.0,
         "pct_vanos_de_la_flota": 18.0,
         "grupos": [
@@ -129,3 +131,134 @@ class TestDegradacion:
 
     def test_la_figura_por_ventana_sigue_saliendo(self, filas_ventana):
         assert figura_por_ventana(filas_ventana) is not None
+
+
+class TestFichaDelGrupo:
+    """Comentario 1, sobre otro sujeto: cuantos son, cuanto pesan, cuanto miden.
+
+    El gerencial abria con el ranking, igual que el informe de circuito: una figura que
+    situa al grupo entre los demas antes de decir de que grupo se habla.
+    """
+
+    def test_la_ficha_trae_los_valores_generales_del_grupo(self, perfil):
+        from chec_local_interpreter.informe_gerencial_contract import ficha_grupo_html
+
+        html = ficha_grupo_html(perfil, ["C1", "C2"], label="Riesgo Alto")
+        assert "Vanos probables de causa de falla" in html
+        assert "UITI acumulado" in html
+        assert "Circuitos del grupo" in html
+
+    def test_sin_perfil_no_dibuja_nada(self):
+        from chec_local_interpreter.informe_gerencial_contract import ficha_grupo_html
+
+        assert ficha_grupo_html({}, [], label="x") == ""
+
+
+class TestExplicacionDeVentanasEnElGerencial:
+    """Comentario 2: la seccion por ventana se lee sobre la misma rejilla."""
+
+    def test_la_seccion_explica_como_se_arman_las_ventanas(self, filas_ventana):
+        html = _ventanas_html(filas_ventana)
+        assert "treinta días" in html
+        assert "quince en quince" in html
+
+    def test_la_seccion_advierte_que_describe_lo_observado(self, filas_ventana):
+        html = _ventanas_html(filas_ventana)
+        assert "no anticipa" in html
+
+
+class TestCostoDeLasCorridas:
+    """El gerencial NO ejecuta agentes: es Python puro, cero tokens.
+
+    Su costo son las corridas de `/report` que sintetiza, y esas ya dejaron
+    `stage_timing.json` y `token_usage.json` en disco. Agregar esos archivos no gasta
+    nada y contesta la pregunta que el pie del informe abre.
+    """
+
+    def _corrida(self, raiz, circuito, marca, *, hist, inf, exp, tokens):
+        import json
+
+        d = raiz / circuito / marca
+        d.mkdir(parents=True)
+        (d / "stage_timing.json").write_text(json.dumps({
+            "historical": {"duration_seconds": hist},
+            "inference": {"duration_seconds": inf},
+            "expert-alignment": {"duration_seconds": exp},
+        }), encoding="utf-8")
+        (d / "token_usage.json").write_text(json.dumps({
+            k: {"total": v} for k, v in tokens.items()}), encoding="utf-8")
+        return d
+
+    def test_agrega_tokens_y_reloj_de_las_corridas_sintetizadas(self, tmp_path):
+        from chec_local_interpreter.informe_gerencial_contract import costo_de_las_corridas
+
+        raiz = tmp_path / "runs"
+        self._corrida(raiz, "C1", "20260101T000000", hist=100.0, inf=200.0, exp=50.0,
+                      tokens={"historical": 1000, "inference": 2000, "expert-alignment": 500})
+        self._corrida(raiz, "C2", "20260101T000000", hist=300.0, inf=100.0, exp=60.0,
+                      tokens={"historical": 3000, "inference": 1000, "expert-alignment": 600})
+
+        costo = costo_de_las_corridas(["C1", "C2"], runs_root=raiz)
+
+        assert costo["corridas"] == 2
+        assert costo["tokens_totales"] == 8100
+
+    def test_la_barrera_se_aplica_por_corrida_y_no_a_la_suma(self, tmp_path):
+        """`historical` e `inference` van a la vez DENTRO de cada corrida.
+
+        Sumar las duraciones de las dos corridas y aplicar la barrera al total
+        afirmaria un paralelismo ENTRE corridas que no existe: se lanzan una tras otra.
+        C1 = max(100,200)+50 = 250. C2 = max(300,100)+60 = 360. Total 610.
+        """
+        from chec_local_interpreter.informe_gerencial_contract import costo_de_las_corridas
+
+        raiz = tmp_path / "runs"
+        self._corrida(raiz, "C1", "20260101T000000", hist=100.0, inf=200.0, exp=50.0,
+                      tokens={"historical": 1000, "inference": 2000, "expert-alignment": 500})
+        self._corrida(raiz, "C2", "20260101T000000", hist=300.0, inf=100.0, exp=60.0,
+                      tokens={"historical": 3000, "inference": 1000, "expert-alignment": 600})
+
+        costo = costo_de_las_corridas(["C1", "C2"], runs_root=raiz)
+
+        assert costo["reloj_segundos"] == 610.0
+        assert costo["suma_etapas_segundos"] == 810.0
+        assert costo["ahorro_segundos"] == 200.0
+
+    def test_sin_corridas_en_disco_devuelve_vacio(self, tmp_path):
+        from chec_local_interpreter.informe_gerencial_contract import costo_de_las_corridas
+
+        assert costo_de_las_corridas(["C1"], runs_root=tmp_path / "no-existe") == {}
+
+    def test_el_html_dice_que_el_gerencial_no_gasta_tokens_propios(self, tmp_path):
+        from chec_local_interpreter.informe_gerencial_contract import (
+            costo_de_las_corridas, costo_corridas_html,
+        )
+
+        raiz = tmp_path / "runs"
+        self._corrida(raiz, "C1", "20260101T000000", hist=100.0, inf=200.0, exp=50.0,
+                      tokens={"historical": 1000, "inference": 2000, "expert-alignment": 500})
+        html = costo_corridas_html(costo_de_las_corridas(["C1"], runs_root=raiz))
+
+        assert "no ejecuta agentes" in html
+        assert "en paralelo" in html
+
+    def test_sin_costo_no_dibuja_seccion(self):
+        from chec_local_interpreter.informe_gerencial_contract import costo_corridas_html
+
+        assert costo_corridas_html({}) == ""
+
+
+class TestElPerfilTraeElUiti:
+    """La ficha del grupo no puede pedir una clave que el perfil no escribe.
+
+    Sin esta prueba, el fixture de arriba seria ficcion: pasaria porque yo se la puse,
+    y en produccion la fila de UITI no saldria nunca.
+    """
+
+    def test_perfil_de_banda_calcula_el_uiti_del_grupo_y_de_la_red(self, base):
+        from chec_local_interpreter.informe_gerencial_contract import perfil_de_banda
+
+        perfil = perfil_de_banda(base, ["C1"], "2026-01-01", "2026-01-31")
+
+        assert perfil["uiti_banda"] > 0
+        assert perfil["uiti_flota"] >= perfil["uiti_banda"]

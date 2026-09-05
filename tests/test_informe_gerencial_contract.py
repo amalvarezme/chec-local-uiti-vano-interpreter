@@ -1689,18 +1689,22 @@ def test_las_secciones_que_quedan_van_en_este_orden():
     con el fixture vacio degradan y no aparecen, que es lo correcto. Lo que se afirma aqui
     es el ORDEN de las que si estan y que ninguna de las retiradas vuelva."""
     html = _html_del_informe()
+    # Los numerales entraron con la revision: el revisor razona en numeros de seccion
+    # ("el punto 2.3"), y sin ellos no hay como referirse a una parte del informe. Lo
+    # que esta prueba afirma no cambia -- el ORDEN --, y el numeral es ahora parte del
+    # titulo, asi que va en la cadena que se busca.
     orden = [
-        "Panorama del grupo",
-        "Resumen ejecutivo del grupo",
-        "Concentración por ventana",
-        "Causas y estrategias de intervención",
-        "Riesgo agregado",
-        "Acciones recomendadas",
-        "Anexo por circuito",
+        "1. Panorama del grupo",
+        "2. Resumen ejecutivo del grupo",
+        "3. Concentración por ventana",
+        "4. Causas y estrategias de intervención",
+        "5. Riesgo agregado",
+        "6. Acciones recomendadas",
+        "7. Anexo por circuito",
     ]
     presentes = [s for s in orden if f"<h2>{s}</h2>" in html]
-    assert presentes[0] == "Panorama del grupo"
-    assert presentes[-1] == "Anexo por circuito"
+    assert presentes[0] == "1. Panorama del grupo"
+    assert presentes[-1] == "7. Anexo por circuito"
     posiciones = [html.index(f"<h2>{s}</h2>") for s in presentes]
     assert posiciones == sorted(posiciones)
     for retirada in ("Patrones comunes", "Circuitos atípicos", "Patrones cross-circuito",

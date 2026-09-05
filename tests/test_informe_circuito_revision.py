@@ -326,11 +326,22 @@ class TestSubsecionesNumeradas:
         self, tmp_path, flota, validacion
     ):
         html = _render(tmp_path, flota, validacion)
-        for titulo in ("2.1 Comportamiento del circuito",
-                       "2.2 Ventanas estudiadas",
+        # Las siete del revisor. 2.5 y 2.7 dependen de campos opcionales del contrato
+        # y por eso no van aqui: las fija `TestSubseccionesDelComentario18`.
+        for titulo in ("2.1 Tipo de afectación",
+                       "2.2 Ventana de mayor aporte y ventanas estudiadas",
                        "2.3 Análisis de vanos",
-                       "2.5 Conclusión general del período"):
+                       "2.4 Justificaciones y estado del circuito",
+                       "2.6 Análisis de evolución temporal"):
             assert titulo in html, titulo
+
+    def test_la_numeracion_no_repite_ningun_numeral(self, tmp_path, flota, validacion):
+        """Dos `2.1` seguidos se leen como un error, no como dos bloques hermanos."""
+        import re
+
+        html = _render(tmp_path, flota, validacion)
+        numerales = re.findall(r"<h3[^>]*>(\d+\.\d+)\s", html)
+        assert len(numerales) == len(set(numerales)), numerales
 
     def test_ningun_titulo_repite_al_de_su_seccion(self, tmp_path, flota, validacion):
         """El bloque de hallazgos se titulaba igual que la seccion que lo contiene."""
@@ -440,3 +451,92 @@ class TestOrigenDeLasVentanasEstudiadas:
             inference_analysis={"escenarios": [{"nombre": "C1 -- ventana V1"}]},
         )
         assert "estudiada a fondo" in html
+
+
+class TestSubseccionesDelComentario18:
+    """Las siete subsecciones que el revisor numero dentro de Hallazgos.
+
+    Cuatro salen de calculo y tres de la corrida. Las dos nuevas de la corrida
+    (`variables_relevantes` y `conclusion_general`) entran al esquema como OPCIONALES,
+    asi que un informe rearmado desde un `.out.json` viejo se dibuja sin ellas en vez
+    de reventar.
+    """
+
+    def test_el_tipo_de_afectacion_abre_los_hallazgos(self, tmp_path, flota, validacion):
+        html = _render(tmp_path, flota, validacion)
+        assert "2.1 Tipo de afectación" in html
+        assert "La afectación del período es" in html
+
+    def test_el_veredicto_viene_con_las_cifras_que_lo_sostienen(
+        self, tmp_path, flota, validacion
+    ):
+        """Un adjetivo suelto no se puede discutir."""
+        html = _render(tmp_path, flota, validacion)
+        assert "ventanas de la rejilla" in html
+        assert "del UITI acumulado" in html
+
+    def test_las_variables_relevantes_son_su_propia_subseccion(
+        self, tmp_path, flota, validacion
+    ):
+        validacion["variables_relevantes"] = [
+            "El riesgo por vegetación es la variable de mayor presencia en las tres ventanas."
+        ]
+        html = _render(tmp_path, flota, validacion)
+        assert "2.5 Análisis de variables relevantes" in html
+        assert "mayor presencia en las tres ventanas" in html
+
+    def test_la_evolucion_temporal_se_separa_de_la_conclusion(
+        self, tmp_path, flota, validacion
+    ):
+        validacion["conclusion_general"] = "El circuito requiere intervención programada."
+        html = _render(tmp_path, flota, validacion)
+        assert "2.6 Análisis de evolución temporal" in html
+        assert "2.7 Conclusión general" in html
+        assert html.index("2.6 Análisis de evolución temporal") < html.index(
+            "2.7 Conclusión general"
+        )
+
+    def test_sin_los_campos_nuevos_el_informe_se_dibuja_igual(
+        self, tmp_path, flota, validacion
+    ):
+        """Es el caso de las quince corridas ya archivadas."""
+        html = _render(tmp_path, flota, validacion)
+        assert "2.5 Análisis de variables relevantes" not in html
+        assert "2.7 Conclusión general" not in html
+        assert "2.6 Análisis de evolución temporal" in html
+
+
+class TestEsquemaDelHistorico:
+    """Los dos campos nuevos tienen que estar DECLARADOS.
+
+    `additionalProperties` esta en `false`: un campo que el prompt pide y el esquema no
+    declara invalida la respuesta entera del agente. Y tienen que ser opcionales, o las
+    corridas archivadas dejan de validar.
+    """
+
+    def _esquema(self):
+        import json
+        from pathlib import Path
+
+        ruta = (Path(__file__).resolve().parents[1] / "src" / "chec_local_interpreter"
+                / "prompt_assets" / "uiti_vano_explanation.output_schema.json")
+        return json.loads(ruta.read_text(encoding="utf-8"))
+
+    def test_los_campos_nuevos_estan_declarados(self):
+        propiedades = self._esquema()["properties"]
+        assert "variables_relevantes" in propiedades
+        assert "conclusion_general" in propiedades
+
+    def test_los_campos_nuevos_no_son_obligatorios(self):
+        requeridos = self._esquema()["required"]
+        assert "variables_relevantes" not in requeridos
+        assert "conclusion_general" not in requeridos
+
+    def test_el_contrato_del_prompt_los_pide(self):
+        from pathlib import Path
+
+        contrato = (Path(__file__).resolve().parents[1] / ".claude" / "skills"
+                    / "historical" / "prompt" / "07_base_output_contract.md")
+        texto = contrato.read_text(encoding="utf-8")
+        assert "variables_relevantes" in texto
+        assert "conclusion_general" in texto

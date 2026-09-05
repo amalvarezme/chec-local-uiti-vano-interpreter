@@ -17,10 +17,12 @@ from chec_local_interpreter.config import PROJECT_ROOT
 from chec_local_interpreter.event_counts import count_unique_event_dates
 from chec_local_interpreter.domain_context import NOMBRE_LEGIBLE_GRUPO
 from chec_local_interpreter.ficha_circuito import (
+    afectacion_html,
     ficha_general,
     tabla_clasificacion_html,
     tabla_ficha_html,
     tabla_ventanas_html,
+    tipo_de_afectacion,
     vanos_de_mayor_impacto,
 )
 from chec_local_interpreter.glosario_variables import (
@@ -1530,17 +1532,27 @@ def render_llm_analysis(
     # contestando la misma pregunta dos veces con dos numeros distintos.
     from chec_local_interpreter.ficha_circuito import _num as _numero_local
 
-    def _ventanas_principales() -> list:
+    def _serie_por_ventana() -> list:
         from chec_local_interpreter.context_builder import window_series_records
 
         try:
-            serie = window_series_records(raw_df, circuito=primary_circuit)
+            return window_series_records(raw_df, circuito=primary_circuit)
         except Exception:
+            # Hay caminos del informe que entregan eventos ya agregados, sin identidad
+            # de vano. Sin serie se pierden las subsecciones que dependen de ella, no
+            # el informe.
             return []
-        ordenadas = sorted(serie, key=lambda r: -float(r.get("uv") or 0.0))
-        return [r for r in ordenadas[:3] if float(r.get("uv") or 0.0) > 0]
 
-    ventanas_principales = _ventanas_principales()
+    serie_ventanas = _serie_por_ventana()
+    ventanas_principales = [
+        r for r in sorted(serie_ventanas, key=lambda r: -float(r.get("uv") or 0.0))[:3]
+        if float(r.get("uv") or 0.0) > 0
+    ]
+
+    # Sostenida, puntual o intermitente. Calculado, no narrado: ver
+    # `ficha_circuito.tipo_de_afectacion` para por que este veredicto no se le pide al
+    # agente. El bloque lleva siempre las dos cifras que lo sostienen.
+    afectacion_html_bloque = afectacion_html(tipo_de_afectacion(serie_ventanas))
     impacto_vanos = vanos_de_mayor_impacto(raw_df, primary_circuit, tope=5)
 
     # Cuales de las once ventanas tienen escenario, diagnostico y plan detras. Sin
@@ -1836,7 +1848,7 @@ def render_llm_analysis(
             # de las subsecciones que vienen despues.
             findings_html += (
                 "<div class='summary-box'><h3 style='margin-top:0;'>"
-                "2.1 Comportamiento del circuito en el período</h3>"
+                "Lectura del comportamiento en el período</h3>"
                 + _text_to_items(" ".join(findings_texts))
                 + "</div>"
             )
@@ -1884,10 +1896,31 @@ def render_llm_analysis(
             + _list_to_items([str(v) for v in ventanas_narradas])
         ) if ventanas_narradas else ""
 
+        # 2.5 y 2.7 son campos OPCIONALES del contrato del historico: las corridas
+        # anteriores a la revision no los traen y esas subsecciones sencillamente no se
+        # dibujan. Degradar en silencio es lo correcto aqui -- un informe archivado se
+        # vuelve a pintar sin ellas, no revienta.
+        variables_relevantes = [
+            str(v).strip() for v in (validation_data.get('variables_relevantes') or [])
+            if str(v).strip()
+        ]
+        variables_relevantes_html = (
+            "<h3>2.5 Análisis de variables relevantes</h3>"
+            f"<div class='content-box'>{_list_to_items(variables_relevantes, max_items=5)}</div>"
+        ) if variables_relevantes else ""
+
+        # `period_synthesis` YA era la evolucion temporal: el contrato lo define como
+        # "el unico campo que habla de trayectoria". Lo que faltaba no era el dato, era
+        # que fuera subseccion propia y no un bloque suelto al final del numeral.
         synthesis = validation_data.get('period_synthesis', '')
         sintesis_periodo_html = (
-            f"<h3>2.5 Conclusión general del período</h3><div class='content-box'>"
+            f"<h3>2.6 Análisis de evolución temporal</h3><div class='content-box'>"
             f"{_text_to_items(synthesis)}</div>" if synthesis else "")
+
+        conclusion = str(validation_data.get('conclusion_general') or '').strip()
+        conclusion_html = (
+            f"<h3>2.7 Conclusión general</h3><div class='content-box'>"
+            f"{_text_to_items(conclusion)}</div>" if conclusion else "")
 
         llm_sections_html = f"""
             <div class="summary-box">
@@ -1898,8 +1931,12 @@ def render_llm_analysis(
 
             <h2>2. Hallazgos del análisis descriptivo</h2>
             {notas_hallazgos_html}
+
+            <h3>2.1 Tipo de afectación</h3>
+            {afectacion_html_bloque}
             {findings_html}
-            <h3>2.2 Ventanas estudiadas</h3>
+
+            <h3>2.2 Ventana de mayor aporte y ventanas estudiadas</h3>
             {tabla_ventanas_html(raw_df, primary_circuit, estudiadas=ventanas_estudiadas)}
             {comparacion_ventanas_html}
             {inferencias_html}
@@ -1911,7 +1948,9 @@ def render_llm_analysis(
                 {char_html}
             </div>
             {characterization_visuals_html}
+            {variables_relevantes_html}
             {sintesis_periodo_html}
+            {conclusion_html}
 
             <div class="summary-box" style="background: #fffbeb; border-left: 5px solid #fbbf24;">
                 <h2 style="margin-top: 0; color: #b45309;">3. Posible Causa Raíz (Hipótesis)</h2>

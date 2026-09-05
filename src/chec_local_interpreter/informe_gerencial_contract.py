@@ -53,6 +53,11 @@ from chec_local_interpreter.batch_report_contract import (
 from chec_local_interpreter.batch_report_contract import normalize_request as _batch_normalize_request
 from chec_local_interpreter.circuit_clustering_contract import RuntimeMetadata, _dataset_date_range
 from chec_local_interpreter.circuit_identity import canonical_circuit_identity
+# La MISMA tabla de clasificacion que el informe por circuito, con el numero de
+# ubicacion. Se importa en vez de reescribirse: dos tablas del mismo ranking se separan
+# en cuanto alguien toca una, y entonces los dos informes ordenan distinto sin que nada
+# lo diga.
+from chec_local_interpreter.ficha_circuito import tabla_clasificacion_html
 from chec_local_interpreter.glosario_variables import (
     nombrar_prosa_en_datos,
     nombre_con_codigo,
@@ -299,6 +304,10 @@ def perfil_de_banda(
         "vanos_flota": n_flota,
         "vanos_criticos_banda": criticos_banda,
         "vanos_criticos_flota": criticos_flota,
+        # El UITI acumulado, que la ficha del grupo necesita y que ninguna otra pieza
+        # del preambulo daba. Sale del mismo marco por vano ya calculado arriba.
+        "uiti_banda": float(de_la_banda["uiti"].sum()),
+        "uiti_flota": float(vanos["uiti"].sum()),
         "pct_criticos_de_la_flota": round(100.0 * criticos_banda / criticos_flota, 2) if criticos_flota else 0.0,
         "pct_vanos_de_la_flota": round(100.0 * n_banda / n_flota, 2) if n_flota else 0.0,
     }
@@ -794,16 +803,19 @@ def _ventanas_html(filas: Sequence[Mapping[str, Any]]) -> str:
     )
     return f"""
 <section class="report-section">
-<h2>Concentración por ventana</h2>
+<h2>3. Concentración por ventana</h2>
 <p class="badge-deterministic">Cálculo determinista</p>
 <p>La unidad del modelo es la celda <em>vano &times; ventana</em>, y cada informe de
 circuito estudia tres ventanas. Aquí se suman las de todos los circuitos muestreados:
 dónde se concentra el problema del grupo en el tiempo, y en cuántos de esos vanos la
 intervención alcanza a sacarlos del grupo crítico.</p>
-<p class="nota-ventanas">Las ventanas <strong>se traslapan quince días</strong> entre
-sí, de manera que sus cifras <strong>no son aditivas</strong> entre filas: una columna
-sumada contabilizaría varias veces los mismos vanos. Cada fila se lee contra las otras,
-nunca sumada con ellas.</p>
+<p class="nota-ventanas">El período se recorre con <strong>ventanas de treinta días que
+avanzan de quince en quince</strong>: se <strong>traslapan quince días</strong> entre sí,
+para que un problema a caballo entre dos meses no quede partido en dos mitades que
+ninguna ventana ve entera. Por eso mismo sus cifras <strong>no son aditivas</strong>
+entre filas: una columna sumada contabilizaría varias veces los mismos
+vanos. Cada fila se lee contra las otras, nunca sumada con ellas. Esta lectura describe
+lo observado y <strong>no anticipa</strong> el comportamiento futuro del grupo.</p>
 {grafica}
 <table class="tabla-ventanas">
 <thead><tr><th>Ventana</th><th>Período</th><th>Circuitos</th>
@@ -1691,7 +1703,7 @@ def _intervention_graph_html(
     cuerpo = "\n".join(bloques)
     return f"""
 <section class="report-section">
-<h2>Causas y estrategias de intervención</h2>
+<h2>4. Causas y estrategias de intervención</h2>
 {cuerpo}
 </section>
 """
@@ -1840,7 +1852,7 @@ def _preambulo_flota_html(
 
     return f"""
 <section class="report-section">
-<h2>Panorama del grupo</h2>
+<h2>1. Panorama del grupo</h2>
 <p class="badge-deterministic">Cálculo determinista</p>
 {''.join(parrafos)}
 {tabla}
@@ -1957,7 +1969,7 @@ def _preambulo_html(
 
     return f"""
 <section class="report-section">
-<h2>Panorama del grupo</h2>
+<h2>1. Panorama del grupo</h2>
 <p class="badge-deterministic">Cálculo determinista</p>
 {''.join(parrafos)}
 {tabla}
@@ -1980,6 +1992,10 @@ def render_managerial_report(
     circuitos_grupo: Sequence[str] | None = None,
     graph_intervencion_html: str | None = None,
     intervention_summary: dict[str, Any] | None = None,
+    # De donde leer lo que costaron las corridas que este informe sintetiza. Es el
+    # mismo `runs_root` que ya usan `find_latest_run` y `load_circuit_content`; entra
+    # como parametro para que una prueba pueda apuntarlo a un `tmp_path`.
+    runs_root: str | Path | None = None,
 ) -> str:
     """Renderiza el unico HTML del informe -- resumen/patrones/atipicos/riesgo/acciones
     mas las barras del RANKING de la flota entera, con solo los `sampled` resaltados.
@@ -2035,6 +2051,19 @@ def render_managerial_report(
     )
     ventanas_section_html = _ventanas_html(ventanas_del_grupo(sampled))
 
+    # La ficha del grupo y la tabla de clasificacion, del mismo comentario del revisor
+    # que las trajo al informe por circuito. La tabla sale del MISMO `ranking_circuitos`
+    # que dibuja las barras de arriba, con los circuitos muestreados marcados.
+    ficha_html = ficha_grupo_html(perfil, universo, label=label)
+    clasificacion_html = tabla_clasificacion_html(
+        raw_df, sampled,
+        start_date=resolved_window.get("fecha_inicio"),
+        end_date=resolved_window.get("fecha_fin"),
+    )
+    # Lo que costaron las corridas que este informe sintetiza. El informe en si no
+    # ejecuta ningun agente.
+    costo_html = costo_corridas_html(costo_de_las_corridas(sampled, runs_root=runs_root))
+
     return f"""<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -2049,27 +2078,30 @@ def render_managerial_report(
 <h1>Informe Gerencial: Circuitos en {_escape(label)}</h1>
 <p class="meta">Ventana: {_escape(resolved_window.get('fecha_inicio'))} a {_escape(resolved_window.get('fecha_fin'))}
 &middot; Circuitos muestreados: {len(sampled)} de {circuit_count}</p>
+{ficha_html}
 {preambulo_html}
+{clasificacion_html}
 <section class="report-section">
-<h2>Resumen ejecutivo del grupo</h2>
+<h2>2. Resumen ejecutivo del grupo</h2>
 {_list_html(synthesis['resumen_ejecutivo'])}
 </section>
 
 {ventanas_section_html}{intervention_section_html}
 <section class="report-section">
-<h2>Riesgo agregado</h2>
+<h2>5. Riesgo agregado</h2>
 {_list_html(synthesis['riesgo_agregado']['items'])}
 </section>
 
 <section class="report-section">
-<h2>Acciones recomendadas</h2>
+<h2>6. Acciones recomendadas</h2>
 {_list_html(synthesis['acciones_recomendadas'])}
 </section>
 
 <section class="report-section">
-<h2>Anexo por circuito</h2>
+<h2>7. Anexo por circuito</h2>
 {_annex_html(synthesis['anexo_por_circuito'])}
 </section>
+{costo_html}
 {pie_agentes_html()}
 </div>
 </body>
@@ -2298,3 +2330,221 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(main())
+
+
+# --------------------------------------------------------------------- ficha del grupo
+
+
+#: Las filas de la ficha del grupo, en el orden en que se leen. Es la misma idea que
+#: `ficha_circuito.tabla_ficha_html` sobre otro sujeto: el informe abria con el ranking,
+#: una figura que situa al grupo entre los demas antes de decir de que grupo se habla.
+_FILAS_FICHA_GRUPO: tuple[tuple[str, str, int], ...] = (
+    ("UITI acumulado del grupo", "uiti_banda", 1),
+    ("UITI acumulado de todos los circuitos", "uiti_flota", 1),
+    ("Vanos probables de causa de falla", "vanos_banda", 0),
+    ("De ellos, en Medio-Alto o Alto", "vanos_criticos_banda", 0),
+    ("Porcentaje de los vanos críticos de la red", "pct_criticos_de_la_flota", 1),
+)
+
+
+def ficha_grupo_html(
+    perfil: Mapping[str, Any],
+    circuitos: Sequence[str],
+    *,
+    label: str,
+) -> str:
+    """Los valores generales del grupo, antes de cualquier figura.
+
+    Mismo comentario del revisor que la ficha del informe por circuito, sobre otro
+    sujeto: cuantos son, cuanto pesan y que parte del problema concentran. Sale del
+    `perfil` que el preambulo ya calcula, sin una sola consulta nueva.
+
+    La longitud y los transformadores NO van aqui. Existen por circuito -- se leen de
+    los shapefiles con `CIRCUITO` -- y sumarlos sobre doce circuitos muestreados daria
+    un kilometraje que no es ni el del grupo ni el de la muestra, sin que nada en
+    pantalla dijera cual de los dos.
+    """
+    if not perfil:
+        return ""
+
+    filas = []
+    for etiqueta, clave, decimales in _FILAS_FICHA_GRUPO:
+        valor = perfil.get(clave)
+        if valor is None:
+            continue
+        sufijo = "%" if clave.startswith("pct_") else ""
+        filas.append(
+            f"<tr><th>{_escape(etiqueta)}</th>"
+            f"<td class='num'>{_num(float(valor), decimales)}{sufijo}</td></tr>"
+        )
+    if not filas:
+        return ""
+
+    total = perfil.get("circuitos_flota") or len(circuitos)
+    filas.insert(
+        0,
+        f"<tr><th>Circuitos del grupo</th>"
+        f"<td class='num'>{_num(float(len(circuitos)), 0)} de "
+        f"{_num(float(total), 0)}</td></tr>",
+    )
+
+    return (
+        f"<div class='ficha-grupo'>"
+        f"<p class='ficha-titular'><b>{_escape(label)}</b></p>"
+        f"<table class='tabla-informe ficha'><tbody>{''.join(filas)}</tbody></table>"
+        f"<p class='muted'>Un <b>vano probable de causa de falla</b> es un vano que "
+        f"aparece en registros de interrupción del período. Es el mismo término que usa "
+        f"el informe por circuito.</p></div>"
+    )
+
+
+# --------------------------------------------------------------- costo de las corridas
+
+
+def costo_de_las_corridas(
+    circuitos: Sequence[str],
+    *,
+    runs_root: str | Path | None = None,
+) -> dict[str, Any]:
+    """Lo que costaron las corridas que este informe sintetiza.
+
+    El gerencial no ejecuta ningun agente -- es Python puro, cero tokens --, asi que su
+    costo real es el de las corridas de `/report` que lee. Esas ya dejaron
+    `stage_timing.json` y `token_usage.json` en disco: agregarlos no gasta nada y
+    contesta la pregunta que el pie del informe abre.
+
+    **La barrera se aplica POR CORRIDA, no a la suma.** Dentro de cada una,
+    `historical` e `inference` van a la vez y `expert-alignment` espera a las dos; entre
+    corridas no hay paralelismo, se lanzan una tras otra. Sumar todas las duraciones y
+    aplicar la barrera al total afirmaria un paralelismo entre circuitos que no existe,
+    y el ahorro saldria varias veces mayor de lo que fue.
+    """
+    from chec_local_interpreter.agentes_linea_tiempo import _CONCURRENTES, _ETAPAS
+
+    raiz = Path(runs_root) if runs_root else PROJECT_ROOT / "reports" / "reportescircuitos" / "runs"
+    if not raiz.exists():
+        return {}
+
+    reloj = 0.0
+    suma = 0.0
+    corridas = 0
+    tokens_por_etapa: dict[str, int] = {}
+    segundos_por_etapa: dict[str, float] = {}
+
+    for circuito in circuitos:
+        carpeta = raiz / str(circuito)
+        if not carpeta.is_dir():
+            continue
+        # La corrida MAS RECIENTE del circuito, que es la que el informe sintetiza.
+        marcas = sorted((d for d in carpeta.iterdir() if d.is_dir()), key=lambda d: d.name)
+        if not marcas:
+            continue
+        run_dir = marcas[-1]
+
+        tiempos = _leer_json_de_corrida(run_dir / "stage_timing.json")
+        usos = _leer_json_de_corrida(run_dir / "token_usage.json")
+        if not tiempos:
+            continue
+
+        duraciones = {}
+        for etapa in _ETAPAS:
+            entrada = tiempos.get(etapa) or {}
+            valor = entrada.get("duration_seconds")
+            if isinstance(valor, (int, float)):
+                duraciones[etapa] = float(valor)
+                segundos_por_etapa[etapa] = segundos_por_etapa.get(etapa, 0.0) + float(valor)
+            total = ((usos.get(etapa) or {}).get("total"))
+            if isinstance(total, int):
+                tokens_por_etapa[etapa] = tokens_por_etapa.get(etapa, 0) + total
+
+        if not duraciones:
+            continue
+        corridas += 1
+        barrera = max((v for k, v in duraciones.items() if k in _CONCURRENTES), default=0.0)
+        secuenciales = sum(v for k, v in duraciones.items() if k not in _CONCURRENTES)
+        reloj += barrera + secuenciales
+        suma += sum(duraciones.values())
+
+    if not corridas:
+        return {}
+
+    return {
+        "corridas": corridas,
+        "reloj_segundos": reloj,
+        "suma_etapas_segundos": suma,
+        "ahorro_segundos": suma - reloj,
+        "tokens_totales": sum(tokens_por_etapa.values()) if tokens_por_etapa else None,
+        "tokens_por_etapa": tokens_por_etapa,
+        "segundos_por_etapa": segundos_por_etapa,
+    }
+
+
+def _leer_json_de_corrida(ruta: Path) -> dict[str, Any]:
+    """Un artefacto de corrida ilegible cuesta ese circuito, nunca la seccion entera."""
+    try:
+        datos = json.loads(ruta.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return datos if isinstance(datos, dict) else {}
+
+
+def _hhmm(segundos: float) -> str:
+    total = int(round(max(segundos, 0.0)))
+    horas, resto = divmod(total, 3600)
+    minutos, segs = divmod(resto, 60)
+    if horas:
+        return f"{horas}:{minutos:02d}:{segs:02d}"
+    return f"{minutos}:{segs:02d}"
+
+
+def costo_corridas_html(costo: Mapping[str, Any]) -> str:
+    """El costo de lo que hay detras del informe, no del informe.
+
+    Va pegada al pie que dice quien lo produjo, porque es la respuesta a esa frase.
+    """
+    if not costo:
+        return ""
+
+    from chec_local_interpreter.agentes_linea_tiempo import _COLOR, _ETAPAS, _QUE_HACE
+
+    filas = []
+    for etapa in _ETAPAS:
+        segundos = (costo.get("segundos_por_etapa") or {}).get(etapa)
+        tokens = (costo.get("tokens_por_etapa") or {}).get(etapa)
+        if segundos is None and tokens is None:
+            continue
+        filas.append(
+            f"<tr><td><span class='punto-etapa' style='background:"
+            f"{_COLOR.get(etapa, '#666')}'></span>{_escape(etapa)}</td>"
+            f"<td>{_escape(_QUE_HACE.get(etapa, ''))}</td>"
+            f"<td class='num'>{_hhmm(segundos) if segundos is not None else 'N/D'}</td>"
+            f"<td class='num'>"
+            f"{_num(float(tokens), 0) if tokens is not None else 'N/D'}</td></tr>"
+        )
+
+    ahorro = float(costo.get("ahorro_segundos") or 0.0)
+    nota_ahorro = (
+        f" Dentro de cada corrida, dos de los tres agentes trabajan "
+        f"<b>en paralelo</b>, lo que ahorró <b>{_hhmm(ahorro)}</b> sobre la suma de "
+        f"sus tiempos."
+        if ahorro > 0 else
+        " Dentro de cada corrida, dos de los tres agentes trabajan <b>en paralelo</b>."
+    )
+
+    return f"""
+<section class="report-section">
+<h2>8. Cómo se construyó este informe</h2>
+<p class="badge-deterministic">Cálculo determinista</p>
+<p>Este informe <strong>no ejecuta agentes</strong>: se arma con Python sobre lo que
+las corridas por circuito ya dejaron en disco, y por sí mismo no consume ni un token.
+Lo que costó es lo que hay detrás: <strong>{_num(float(costo['corridas']), 0)}</strong>
+corridas de análisis por circuito, con
+<strong>{_num(float(costo['tokens_totales']), 0) if costo.get('tokens_totales') is not None else 'N/D'}</strong>
+tokens y <strong>{_hhmm(float(costo.get('reloj_segundos') or 0.0))}</strong> de reloj de
+pared.{nota_ahorro}</p>
+<table class="tabla-informe">
+<thead><tr><th>Agente</th><th>Qué hace</th><th>Tiempo sumado</th><th>Tokens</th></tr></thead>
+<tbody>{''.join(filas)}</tbody>
+</table>
+</section>
+"""
