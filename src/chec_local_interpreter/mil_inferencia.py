@@ -613,19 +613,40 @@ def _clases_observadas(
     return np.asarray(clases)
 
 
+# Los criterios que eligen las ventanas del informe, en el orden en que se aplican. Cada
+# uno contesta una pregunta distinta, y por eso son criterios separados y no una sola
+# lista ordenada con desempates: el UITI mide cuanto DOLIO la ventana, el numero de
+# bolsas mide cuan ANCHA fue -- cuantos vanos del circuito quedaron tocados a la vez --.
+# Una ventana puede concentrar todo su UITI en dos vanos y otra repartir la mitad entre
+# seis; la primera decide la magnitud de la intervencion y la segunda su alcance.
+CRITERIOS_VENTANA_REPORTE: tuple[tuple[str, str], ...] = (
+    ("uiti_total", "la de mayor UITI acumulado"),
+    ("n_bolsas", "la de mas bolsas (vanos tocados)"),
+)
+
+
 def seleccionar_ventanas_reporte(
     recursos: RecursosMIL, *, circuito: str, cuantas: int = VENTANAS_REPORTE
 ) -> list[str]:
-    """Las ventanas que el informe estudia: la ultima, mas las de mayor influencia.
+    """Las ventanas que el informe estudia: la ultima, la de mas UITI y la mas ancha.
 
     La ultima entra SIEMPRE. Es el estado actual del circuito, y un informe que la deja
     fuera porque hubo meses peores describe un pasado: la pregunta operativa es "como
     esta hoy y que lo trajo hasta aqui".
 
-    Las demas se ordenan por bolsas en clase critica y se desempatan por UITI acumulado.
-    El conteo de bolsas criticas va primero porque es la magnitud en la que se decide una
-    intervencion -- cuantos vanos hay que atender --, mientras que el UITI total lo puede
-    inflar un solo vano muy malo.
+    Las otras dos salen de `CRITERIOS_VENTANA_REPORTE`, una por criterio: la de mayor
+    `uiti_total` y la de mayor `n_bolsas`. Cada criterio se aplica sobre lo que queda,
+    asi que una ventana que gana los dos NO se cuenta dos veces -- el informe estudia
+    entonces dos ventanas, que es el resultado honesto, y no la misma repetida.
+
+    El conteo de bolsas en clase critica ya NO ordena esta seleccion. La clase la fija la
+    geometria del 01.4 sobre el par (n_obs, UITI), asi que ordenar por ella repetia en
+    buena parte la lectura que el UITI ya da; cuantos vanos distintos quedaron tocados es
+    en cambio una lectura que ningun otro numero de la seleccion aporta.
+
+    `cuantas` es un tope, no una cuota: nunca se rellena con ventanas que el circuito no
+    tiene ni con criterios inventados. Con menos ventanas que criterios devuelve las que
+    hay.
 
     Devuelve en orden CRONOLOGICO, que es el orden en que se lee el informe.
     """
@@ -634,15 +655,24 @@ def seleccionar_ventanas_reporte(
         return []
 
     ultima = disponibles[-1]
-    seleccion = {ultima}
-    faltan = max(0, int(cuantas) - 1)
-    if faltan:
-        influencia = [i for i in influencia_por_ventana(recursos, circuito=circuito)
-                      if i["ventana"] != ultima]
-        influencia.sort(
-            key=lambda i: (-i["n_bolsas_criticas"], -i["uiti_total"],
-                           _orden_ventana(i["ventana"])))
-        seleccion.update(i["ventana"] for i in influencia[:faltan])
+    seleccion = [ultima]
+    candidatos = [i for i in influencia_por_ventana(recursos, circuito=circuito)
+                  if i["ventana"] != ultima]
+
+    for campo, _ in CRITERIOS_VENTANA_REPORTE:
+        if len(seleccion) >= int(cuantas):
+            break
+        restantes = [i for i in candidatos if i["ventana"] not in seleccion]
+        if not restantes:
+            break
+        # El desempate es cronologico y no arbitrario: con dos ventanas empatadas en el
+        # criterio, la mas reciente es la que el lector reconoce. Va detras del otro
+        # campo para que un empate exacto no lo decida el orden del `bag_index`, que
+        # cambiaria la seleccion sin que cambiara ni un dato.
+        mejor = max(restantes, key=lambda i: (float(i[campo]),
+                                              float(i["uiti_total"]),
+                                              _orden_ventana(i["ventana"])))
+        seleccion.append(mejor["ventana"])
 
     return sorted(seleccion, key=_orden_ventana)
 

@@ -366,9 +366,10 @@ def prepare(
         aplicar_catalogo(recursos_mil, catalogo_de_controles(
             source_path, DEFAULT_VARIABLES_SELECCION_PATH))
 
-    # Las TRES ventanas que el informe estudia: la ultima con eventos del circuito, mas
-    # las dos de mayor influencia. Recorrer las once producia once escenarios que nadie
-    # lee enteros y que el agente tiene que resumir a ojo.
+    # Las TRES ventanas que el informe estudia: la ultima con eventos del circuito, la de
+    # mayor UITI acumulado y la de mas bolsas -- mas vanos distintos tocados a la vez.
+    # Recorrer las once producia once escenarios que nadie lee enteros y que el agente
+    # tiene que resumir a ojo.
     ventanas_estudio = (
         seleccionar_ventanas_reporte(recursos_mil, circuito=circuito)
         if recursos_mil is not None else []

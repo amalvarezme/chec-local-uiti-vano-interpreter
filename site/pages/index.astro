@@ -1340,6 +1340,31 @@ const cronograma = [
           </svg>
         </div>
 
+        <div class="detail-block">
+          <h3>Qué tres ventanas estudia el informe, de las once</h3>
+          <p>
+            El informe no recorre las once ventanas del periodo: analizar una cuesta un barrido de
+            relevancia, un diagnóstico y una simulación, y once escenarios no los lee nadie enteros.
+            La selección es determinista — la hace <code>prepare</code>, no el agente — y toma tres
+            ventanas que responden preguntas distintas:
+          </p>
+          <ul class="func-list">
+            <li><strong>La última con eventos</strong>, siempre. Es cómo está el circuito hoy. Un
+            informe que la deja fuera porque hubo meses peores describe un pasado.</li>
+            <li><strong>La de mayor UITI acumulado.</strong> El momento que más dolió, medido en la
+            magnitud que el modelo predice.</li>
+            <li><strong>La de más bolsas</strong>, es decir más vanos distintos tocados a la vez. El
+            momento más extendido, que rara vez es el mismo: una ventana puede concentrar todo su
+            UITI en dos vanos y otra repartir menos entre veinte. Una cuadrilla no atiende UITI,
+            atiende vanos.</li>
+          </ul>
+          <p>
+            Si una misma ventana gana los dos últimos criterios, el informe estudia dos y no repite
+            una. Las ocho restantes siguen dibujándose en el mapa deslizante del informe, sin
+            diagnóstico detrás.
+          </p>
+        </div>
+
         <div class="diagram-card" tabindex="0">
           <h3>Informe gerencial — <code>/informe-gerencial</code></h3>
           <svg viewBox="0 0 980 244" role="img" aria-label="Flujo del informe gerencial: banda de riesgo, muestreo de 12 circuitos, report por circuito, síntesis y barras del conjunto de circuitos" class="diagrama">
@@ -1390,7 +1415,7 @@ const cronograma = [
           <table>
             <thead><tr><th>Comando</th><th>Salida generada</th><th>Alcance</th></tr></thead>
             <tbody>
-              <tr><td><code>/report</code></td><td>Informe HTML de un circuito, con figuras y trazabilidad por afirmación</td><td>Un circuito, una ventana</td></tr>
+              <tr><td><code>/report</code></td><td>Informe HTML de un circuito, con figuras y trazabilidad por afirmación</td><td>Un circuito, tres ventanas</td></tr>
               <tr><td><code>/reporte-lote</code></td><td>Encadena <code>/report</code> sobre una lista de circuitos</td><td>Varios circuitos</td></tr>
               <tr><td><code>/informe-gerencial</code></td><td>Síntesis por banda de riesgo, con barras del conjunto completo de circuitos y grafo radial</td><td>Hasta 12 circuitos de una banda</td></tr>
               <tr><td><code>/clima</code></td><td>Enriquece los datos con Open-Meteo, con tres validaciones de cuota</td><td>Toda la tabla elegida</td></tr>

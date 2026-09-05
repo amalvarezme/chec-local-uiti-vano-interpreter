@@ -138,42 +138,119 @@ def _recursos_multiventana():
     )
 
 
+def _recursos_para_seleccion():
+    """Un circuito donde los TRES criterios del informe caen en ventanas distintas.
+
+    Sin esa separacion la prueba no distingue una regla de otra: si la ventana de mas
+    UITI fuera tambien la de mas bolsas, cualquier orden pasaria. Aqui cada criterio
+    tiene una sola respuesta posible, y son tres ventanas diferentes.
+
+        V1  1 bolsa     UITI 1,0   0 criticas
+        V2  2 bolsas    UITI 8,0   2 criticas   <- MAS UITI, concentrado en dos vanos
+        V3  6 bolsas    UITI 3,0   0 criticas   <- MAS BOLSAS, repartido y leve
+        V4  3 bolsas    UITI 6,0   3 criticas      la que ganaba con el criterio viejo
+        V5  2 bolsas    UITI 0,4   0 criticas   <- ULTIMA
+
+    V4 esta puesta a proposito: es la de mas bolsas en clase critica, que era el primer
+    criterio hasta ahora. Que NO entre es lo que separa la regla nueva de la vieja.
+    """
+    por_ventana = {
+        "V1": [(1, 1.0)],
+        "V2": [(3, 4.0)] * 2,
+        "V3": [(1, 0.5)] * 6,
+        "V4": [(2, 2.0)] * 3,
+        "V5": [(1, 0.2)] * 2,
+    }
+    etiquetas, fids, counts, y = [], [], [], []
+    for ventana, bolsas in por_ventana.items():
+        for n, (n_obs, uiti) in enumerate(bolsas):
+            etiquetas.append(ventana)
+            fids.append(f"{ventana}_F{n}")
+            counts.append(n_obs)
+            y.append(uiti)
+
+    keys = pd.DataFrame({"CIRCUITO": ["C1"] * len(counts), "FID_VANO": fids,
+                         "VENTANA": etiquetas})
+    offsets = np.cumsum([0] + counts)
+    return RecursosMIL(
+        modelo=_PredictorFalso(_geometria()),
+        X_inst=np.zeros((int(offsets[-1]), 2), dtype=np.float32),
+        features=["u_driver", "otra"],
+        bag_index=_BagIndexFalso(keys=keys, offsets=offsets, counts=counts, y=y),
+        knobs=[_knob("u_driver")],
+    )
+
+
 # --- Las tres ventanas que el informe estudia --------------------------------------------
 
 
-def test_the_report_studies_the_last_window_plus_the_two_most_critical_ones():
-    """El informe no recorre las once ventanas: estudia tres.
+def test_the_report_studies_the_last_window_the_top_uiti_one_and_the_widest_one():
+    """El informe no recorre las once ventanas: estudia tres, y cada una responde algo.
 
-    La ultima SIEMPRE entra -- es el estado actual del circuito, y un informe que no lo
-    incluye describe un pasado --, y las otras dos son las de mayor influencia de UITI,
-    ordenadas por bolsas en clase critica. Aqui V5 entra por ser la ultima aunque no
-    tenga ninguna bolsa critica, y V2/V3 por ser las dos criticas.
+    La ULTIMA es el estado actual del circuito. La de MAYOR UITI es el peor momento
+    medido en la magnitud que el modelo predice. La de MAS BOLSAS es el momento de mayor
+    extension: cuantos vanos distintos del circuito se vieron tocados a la vez, que es
+    una pregunta operativa diferente -- una cuadrilla no atiende UITI, atiende vanos.
+
+    Las dos ultimas no coinciden salvo por casualidad, y por eso son dos criterios y no
+    uno con desempate: V2 concentra 8,0 de UITI en dos vanos y V3 reparte 3,0 entre seis.
     """
-    recursos = _recursos_multiventana()
+    recursos = _recursos_para_seleccion()
 
     assert seleccionar_ventanas_reporte(recursos, circuito="C1") == ["V2", "V3", "V5"]
 
 
+def test_the_widest_window_enters_even_with_no_critical_bags():
+    """V4 tiene MAS bolsas en clase critica que ninguna otra y aun asi queda fuera.
+
+    Es la diferencia exacta con el criterio anterior, que ordenaba por bolsas criticas y
+    la habria metido. La clase critica ya la decide la geometria del 01.4 sobre el par
+    (n_obs, UITI); volver a usarla para elegir ventana no agrega una lectura nueva, solo
+    repite la que el UITI ya da. La extension -- cuantos vanos -- si es una lectura nueva.
+    """
+    recursos = _recursos_para_seleccion()
+
+    influencia = {i["ventana"]: i for i in influencia_por_ventana(recursos, circuito="C1")}
+    assert influencia["V4"]["n_bolsas_criticas"] == 3, "V4 es la mas critica de todas"
+
+    assert "V4" not in seleccionar_ventanas_reporte(recursos, circuito="C1")
+
+
 def test_the_selected_windows_come_back_in_chronological_order():
-    """El orden de lectura del informe es el del tiempo. Devolverlas por criticidad
-    dejaria la ultima ventana -- el estado actual -- en medio del relato."""
-    recursos = _recursos_multiventana()
+    """El orden de lectura del informe es el del tiempo. Devolverlas por UITI dejaria la
+    ultima ventana -- el estado actual -- en medio del relato."""
+    recursos = _recursos_para_seleccion()
 
     seleccion = seleccionar_ventanas_reporte(recursos, circuito="C1")
 
     assert seleccion == sorted(seleccion, key=lambda v: int(v.lstrip("V")))
 
 
-def test_the_last_window_is_never_dropped_for_a_more_critical_one():
-    """Si las tres mas criticas fueran otras, la ultima seguiria entrando: la pregunta
-    del informe es 'como esta hoy y que lo trajo hasta aqui', no 'cuales fueron los
-    tres peores momentos del año'."""
-    recursos = _recursos_multiventana()
-    # V5 pasa a ser la mas tranquila posible y aun asi entra.
-    recursos.bag_index.y = np.zeros_like(recursos.bag_index.y)
-    recursos.bag_index.y[2:6] = [3.0, 3.0, 2.0, 2.0]
+def test_the_last_window_is_never_dropped_for_a_heavier_one():
+    """Aunque la ultima sea la mas tranquila del periodo, entra: la pregunta del informe
+    es 'como esta hoy y que lo trajo hasta aqui', no 'cuales fueron los tres peores
+    momentos del año'."""
+    recursos = _recursos_para_seleccion()
+    # V5 pasa a ser la mas tranquila posible -- cero UITI -- y aun asi entra.
+    recursos.bag_index.y[-2:] = 0.0
 
     assert "V5" in seleccionar_ventanas_reporte(recursos, circuito="C1")
+
+
+def test_the_same_window_is_never_counted_twice():
+    """Cuando la de mayor UITI y la de mas bolsas son LA MISMA, el informe estudia dos
+    ventanas y no repite una. Devolver ["V2", "V2", "V5"] pondria al agente a escribir
+    dos veces el mismo escenario y a citarlos como si fueran momentos distintos."""
+    recursos = _recursos_para_seleccion()
+    # V3 deja de existir: la de mas bolsas pasa a ser V4 (3), pero le subimos el UITI a
+    # V4 por encima de V2 para que gane los DOS criterios a la vez.
+    keys = recursos.bag_index.keys
+    recursos.bag_index.y[keys["VENTANA"] == "V4"] = 9.0
+
+    seleccion = seleccionar_ventanas_reporte(recursos, circuito="C1")
+
+    assert seleccion == sorted(set(seleccion), key=lambda v: int(v.lstrip("V")))
+    assert "V4" in seleccion and "V5" in seleccion
 
 
 def test_a_circuit_with_fewer_windows_than_asked_returns_what_it_has():

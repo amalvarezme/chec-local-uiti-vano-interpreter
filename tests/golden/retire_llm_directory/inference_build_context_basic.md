@@ -229,9 +229,15 @@ Modos CHEC:
 
 Esta habilidad explica qué recibe el agente en cada escenario y cómo debe interpretarlo.
 
-**Un escenario ES una ventana.** El informe estudia tres: la última con eventos del
-circuito, que describe cómo está hoy, y las dos de mayor influencia, que explican qué lo
-trajo hasta aquí. No son percentiles de filas ni recortes por severidad.
+**Un escenario ES una ventana.** El informe estudia tres, y cada una responde una
+pregunta distinta: la **última** con eventos del circuito, que describe cómo está hoy; la
+de **mayor UITI acumulado**, que es el momento que más dolió; y la de **más bolsas**, que
+es el momento más extendido — cuántos vanos distintos quedaron tocados a la vez. Las dos
+últimas rara vez coinciden: una ventana puede concentrar todo su UITI en dos vanos y otra
+repartir menos entre veinte. No son percentiles de filas ni recortes por severidad.
+
+Si una misma ventana gana los dos criterios, el informe estudia **dos** ventanas y no
+repite una: eso es el dato, no un fallo.
 
 ## Unidad de Análisis
 

@@ -2262,6 +2262,34 @@ bóveda que produce cada corrida alimenta la siguiente.}
 \label{fig:report}
 \end{figure}
 
+\paragraph{Qué tres ventanas estudia el informe, de las once.} El informe no recorre las once
+ventanas del período. Analizar una cuesta un barrido de relevancia, un diagnóstico por vano y una
+simulación contrafactual, y once escenarios completos no se leen enteros. La selección la realiza
+\texttt{prepare} de forma determinista --- no la decide el modelo de lenguaje --- y toma tres
+ventanas que responden preguntas distintas:
+
+\begin{enumerate}
+  \item \textbf{La última con eventos del circuito}, que entra siempre. Describe el estado actual:
+        un informe que la omite porque hubo meses peores describe un pasado, y la pregunta operativa
+        es cómo está hoy y qué lo trajo hasta aquí.
+  \item \textbf{La de mayor UITI acumulado}, que es el momento de mayor impacto medido en la
+        magnitud que el modelo predice.
+  \item \textbf{La de mayor número de bolsas}, es decir aquella en la que más vanos distintos del
+        circuito quedaron afectados a la vez. Es el momento de mayor extensión, y rara vez coincide
+        con el anterior: una ventana puede concentrar todo su UITI en dos vanos y otra repartir un
+        valor menor entre veinte. La distinción es operativa, porque una cuadrilla no interviene
+        UITI sino vanos.
+\end{enumerate}
+
+Los dos últimos criterios se aplican sobre lo que queda tras el anterior, de modo que una ventana
+que satisface ambos no se cuenta dos veces: en ese caso el informe estudia dos ventanas, que es el
+resultado correcto y no una omisión. El criterio anterior ordenaba por número de bolsas en clase
+crítica; se sustituyó porque esa clase ya se deriva del par (número de eventos, UITI) sobre la
+geometría del cuaderno 01.4, de manera que reiteraba en buena medida la lectura que el UITI
+acumulado aporta por sí solo, mientras que la extensión --- cuántos vanos distintos --- no la aporta
+ningún otro criterio de la selección. Las ocho ventanas restantes continúan representándose en el
+mapa deslizante del informe, sin diagnóstico ni plan asociados.
+
 \begin{table}[H]
 \centering
 \caption{Roles de agente: insumo, función y producto}
@@ -2272,7 +2300,7 @@ bóveda que produce cada corrida alimenta la siguiente.}
 \textbf{Rol} & \textbf{Insumo} & \textbf{Producto} \\
 \midrule
 \texttt{historical} &
-Selección de circuito y ventana, serie diaria, puntos críticos, causas observadas, variables
+Selección de circuito y ventanas estudiadas, serie diaria, puntos críticos, causas observadas, variables
 disponibles y faltantes, y relaciones del grafo. &
 Objeto JSON con el diagnóstico descriptivo del comportamiento de \texttt{UITI\_VANO}:
 secciones de análisis, referencias a fechas y puntos críticos existentes, hipótesis históricas y
@@ -2318,7 +2346,7 @@ radial de causas reúne los patrones que cruzan circuitos.
 \toprule
 \textbf{Comando} & \textbf{Salida generada} & \textbf{Alcance} \\
 \midrule
-\texttt{/report} & Informe HTML de un circuito, con figuras y trazabilidad por afirmación. & Un circuito, una ventana. \\
+\texttt{/report} & Informe HTML de un circuito, con figuras y trazabilidad por afirmación. & Un circuito, tres ventanas. \\
 \texttt{/reporte-lote} & Encadena \texttt{/report} sobre una lista de circuitos. & Varios circuitos. \\
 \texttt{/informe-gerencial} & Síntesis por banda de riesgo, con barras del conjunto completo de circuitos y grafo radial de causas. & Hasta 12 circuitos de una banda. \\
 \texttt{/clima} & Enriquece los datos con Open-Meteo, bajo tres validaciones de cuota. & Toda la tabla elegida. \\
