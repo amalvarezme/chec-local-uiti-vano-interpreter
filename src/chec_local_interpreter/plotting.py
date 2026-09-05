@@ -1745,8 +1745,10 @@ def render_llm_analysis(
     # informes se separaron la primera vez.
     escudo_html = escudo_chec_html()
     # Como se construyo el informe: la linea de tiempo de los agentes, dibujada
-    # desde el MISMO `stage_breakdown` que ya llega por parametro. Va pegada al
-    # pie que dice quien lo produjo, porque es la respuesta a esa misma frase.
+    # desde el MISMO `stage_breakdown` que ya llega por parametro. Va DENTRO de la
+    # pestaña del informe y no debajo del contenedor de pestañas: ahi quedaba visible
+    # tambien bajo "Comparación con reportes expertos", donde el reloj de la corrida no
+    # explica nada -- esa pestaña se lee contra los PDF de los expertos.
     seccion_agentes = seccion_agentes_html(
         linea_desde_desglose(
             stage_breakdown,
@@ -2099,12 +2101,12 @@ def render_llm_analysis(
                 </div>
                 <section class="tab-panel active" role="tabpanel" id="tab-informe" aria-labelledby="tab-button-informe">
                     {report_tab_html}
+                    {seccion_agentes}
                 </section>
                 <section class="tab-panel" role="tabpanel" id="tab-expertos" aria-labelledby="tab-button-expertos">
                     {html_expert_alignment}
                 </section>
             </div>
-            {seccion_agentes}
             {pie_html}
         </div>
         <script>

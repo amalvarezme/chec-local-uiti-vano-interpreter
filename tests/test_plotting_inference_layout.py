@@ -461,6 +461,38 @@ def test_header_shows_per_stage_rows_when_every_stage_is_measured(tmp_path):
     assert "Tiempo total de ejecución: 12m 33s" in html
 
 
+def test_como_se_construyo_vive_dentro_de_la_pestana_del_informe(tmp_path):
+    """"Cómo se construyó este informe" pertenece al INFORME, no a la comparación.
+
+    Estaba inyectada fuera del contenedor de pestañas, asi que se dibujaba una sola vez
+    pero quedaba visible bajo LAS DOS: quien abria "Comparación con reportes expertos"
+    veia debajo la linea de tiempo de los tres agentes, que no explica nada de esa
+    pestaña -- la comparacion se lee contra los PDF de los expertos, no contra el reloj
+    de la corrida. Es un fallo de pertenencia, no de duplicado: buscar la cadena en el
+    HTML entero no lo habria visto nunca, por eso esta prueba mira POR PANEL.
+    """
+    import re
+
+    html = _render_with_stage_breakdown(
+        tmp_path,
+        stage_breakdown=[{"stage": "historical", "tokens_total": 1000,
+                          "token_source": "measured", "duration_seconds": 77.4,
+                          "duration_source": "measured"}],
+        token_source="measured",
+    )
+
+    def _panel(panel_id):
+        inicio = html.index(f'id="{panel_id}"')
+        fin = html.index("</section>", inicio)
+        return html[inicio:fin]
+
+    assert "Cómo se construyó este informe" in _panel("tab-informe")
+    assert "Cómo se construyó este informe" not in _panel("tab-expertos")
+
+    # Y una sola vez en todo el documento: moverla no puede dejar una copia atras.
+    assert len(re.findall("Cómo se construyó este informe", html)) == 1
+
+
 def test_header_stage_row_shows_na_time_when_duration_missing_for_one_stage(tmp_path):
     stage_breakdown = [
         {
