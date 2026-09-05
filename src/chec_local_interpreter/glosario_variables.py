@@ -150,9 +150,26 @@ def nombre_con_codigo(codigo: str) -> str:
     return clave if nombre == clave else f"{nombre} ({clave})"
 
 
+#: Las cuatro variables de clima NO viven en `NOMBRE_NATURAL` sino en `FAMILIAS_CLIMA`,
+#: asi que la alternancia de la prosa no las veia y salian peladas. `nombre_con_codigo`
+#: si las resolvia -- recibe un codigo suelto y pasa por `nombre_natural` --, de modo que
+#: el fallo se escondia: las TABLAS salian bien y solo la prosa quedaba sin nombrar.
+#: Medido sobre el informe de DON23L13, `PREP_i`, `WIND_SPD_i` y `WIND_GUST_SPD_i`
+#: aparecian una vez cada uno y ninguna con su nombre, en la misma seccion donde `NR_T`
+#: y `DDT` si lo llevaban.
+#:
+#: Entran en sus DOS formas escritas: la familia pelada (`PREP`) y la que usa la
+#: documentacion para nombrar a la familia entera (`PREP_i`), que es la que el agente
+#: escribe porque es la que `domain.variable_groups` le entrega. Los rezagos numerados
+#: (`prep_0`..`prep_24`) no entran: son cien codigos que ningun agente escribe en prosa,
+#: y `nombre_con_codigo` los sigue resolviendo uno a uno donde si aparecen.
+_CODIGOS_CLIMA = [f"{fam}{sufijo}" for fam in FAMILIAS_CLIMA for sufijo in ("_i", "")]
+
 #: Los codigos ordenados de mas largo a mas corto: asi `CNT_VN_SW` se reconoce antes que
-#: `CNT_VN`, y no queda un sufijo suelto detras de un nombre ya expandido.
-_CODIGOS_POR_LONGITUD = sorted(NOMBRE_NATURAL, key=len, reverse=True)
+#: `CNT_VN` -- y `WIND_GUST_SPD_i` antes que `WIND_SPD_i` --, y no queda un sufijo suelto
+#: detras de un nombre ya expandido.
+_CODIGOS_POR_LONGITUD = sorted(
+    set(NOMBRE_NATURAL) | set(_CODIGOS_CLIMA), key=len, reverse=True)
 
 
 def nombrar_en_prosa(texto: str | None) -> str:

@@ -19,6 +19,7 @@ from chec_local_interpreter.ficha_circuito import (
     medidas_fisicas,
     tabla_clasificacion_html,
     tabla_ficha_html,
+    razones_de_estudio,
     tabla_ventanas_html,
     vanos_de_mayor_impacto,
 )
@@ -141,6 +142,89 @@ def test_la_tabla_de_ventanas_advierte_que_no_son_aditivas(flota):
     """
     html = tabla_ventanas_html(flota, "C1")
     assert "no son aditivos" in html or "no se suman" in html
+
+
+class TestRazonesDeEstudio:
+    """Por que entro cada ventana al estudio, con los MISMOS tres criterios que la
+    eligieron: la ultima, la de mayor UITI y la de mas vanos tocados.
+
+    La tabla marcaba "estudiada a fondo" y nada mas, asi que el lector veia tres ventanas
+    señaladas sin saber por que esas tres. Reconstruir el motivo aqui es honesto porque
+    se hace con la misma regla y sobre los mismos numeros que uso el selector: la ventana
+    estudiada con mas UITI ES la de mas UITI de todas, porque el selector eligio el
+    maximo global.
+    """
+
+    def _reg(self, w, uv, vanos, n=1):
+        return {"w": w, "uv": uv, "vanos": vanos, "n": n}
+
+    @property
+    def _serie(self):
+        # V2 concentra el UITI en pocos vanos; V1 lo reparte entre muchos; V5 es la
+        # ultima. Los tres criterios caen en ventanas DISTINTAS a proposito: si
+        # coincidieran, cualquier asignacion pasaria la prueba.
+        return [
+            self._reg("V1", 40.0, 30),    # mas vanos
+            self._reg("V2", 100.0, 5),    # mas UITI
+            self._reg("V3", 10.0, 4),
+            self._reg("V4", 0.0, 0),      # sin eventos
+            self._reg("V5", 8.0, 6),      # la ultima CON eventos
+        ]
+
+    def test_cada_criterio_nombra_su_ventana(self):
+        razones = razones_de_estudio(self._serie, ("V1", "V2", "V5"))
+
+        assert "última" in razones["V5"], razones["V5"]
+        assert "UITI" in razones["V2"], razones["V2"]
+        assert "vanos" in razones["V1"], razones["V1"]
+
+    def test_las_tres_razones_son_distintas(self):
+        """Tres ventanas con el mismo texto no explican nada."""
+        razones = razones_de_estudio(self._serie, ("V1", "V2", "V5"))
+
+        assert len(set(razones.values())) == 3
+
+    def test_una_ventana_no_estudiada_no_recibe_razon(self):
+        razones = razones_de_estudio(self._serie, ("V1", "V2", "V5"))
+
+        assert "V3" not in razones and "V4" not in razones
+
+    def test_la_ultima_se_mide_sobre_las_ventanas_CON_eventos(self):
+        """V4 va despues de V3 pero no registro nada. La ultima del circuito es la ultima
+        en la que hubo algo, que es la que el selector toma."""
+        serie = self._serie + [self._reg("V6", 0.0, 0)]
+
+        razones = razones_de_estudio(serie, ("V5",))
+
+        assert "última" in razones["V5"]
+
+    def test_una_ventana_que_gana_dos_criterios_no_se_cuenta_dos_veces(self):
+        """Si la de mas UITI es tambien la de mas vanos, el informe estudia DOS ventanas
+        y la tercera no existe. La razon de la segunda tiene que ser una sola."""
+        serie = [self._reg("V1", 100.0, 30), self._reg("V2", 5.0, 2)]
+
+        razones = razones_de_estudio(serie, ("V1", "V2"))
+
+        assert len(set(razones.values())) == 2
+        assert "última" in razones["V2"]
+
+    def test_una_ventana_estudiada_sin_criterio_lo_dice_sin_inventar(self):
+        """Una corrida vieja pudo estudiar otras ventanas. Adjudicarle un criterio que no
+        la eligio seria inventar el motivo; se marca y se deja."""
+        razones = razones_de_estudio(self._serie, ("V1", "V2", "V3", "V5"))
+
+        assert razones["V3"] and "UITI" not in razones["V3"]
+        assert "vanos" not in razones["V3"] and "última" not in razones["V3"]
+
+    def test_sin_ventanas_estudiadas_no_devuelve_nada(self):
+        assert razones_de_estudio(self._serie, ()) == {}
+
+
+def test_la_tabla_de_ventanas_dice_por_que_se_estudio_cada_una(flota):
+    """La columna nueva de la seccion 2.2: el motivo, no una marca."""
+    html = tabla_ventanas_html(flota, "C1", estudiadas=("V1",))
+
+    assert "¿Por qué se estudió?" in html
 
 
 def test_la_tabla_de_ventanas_sin_datos_no_dibuja_nada():

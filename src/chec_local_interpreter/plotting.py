@@ -971,6 +971,30 @@ def _hipotesis_html(texto: str) -> str:
             + _texto_a_items(" ".join(frases[1:])))
 
 
+def _cambio_pct_uiti(base, simulado):
+    """Cuanto cambia el UITI de UN vano al simular, en porcentaje de SU propia base.
+
+    Contra su base y no contra el total de la ventana: la pregunta es cuanto baja este
+    vano, y un vano de UITI 900 y otro de 9 pueden bajar el mismo porcentaje con
+    magnitudes que no se parecen. Cuanto PESA el vano ya lo da la columna del UITI base.
+
+    Devuelve `None` -- no 0,0 -- cuando no hay base contra la que comparar. Un cero
+    significaria "no cambio", que es una afirmacion distinta de "no se puede decir", y
+    dividir sin mirar deja la celda en `inf` o `nan` y la tabla entera se lee como rota.
+
+    El signo se conserva: la simulacion no siempre baja, y un aumento tiene que poder
+    leerse como aumento.
+    """
+    try:
+        b = float(base)
+        s = float(simulado)
+    except (TypeError, ValueError):
+        return None
+    if b == 0.0:
+        return None
+    return (s - b) / b * 100.0
+
+
 def render_llm_analysis(
     validation_data: dict,
     raw_df: pd.DataFrame,
@@ -1251,7 +1275,7 @@ def render_llm_analysis(
         aviso = (f"<p class='muted'>Sin mapa: {'; '.join(fallos)}</p>" if fallos else "")
         nota = (
             "<div class='summary-box'>"
-            "<h3 style='margin-top:0;'>Cómo leer el mapa</h3>"
+            "<h3 style='margin-top:0;'>¿Cómo leer el mapa?</h3>"
             "<ul class='report-list'>"
             "<li>Es un solo mapa: el deslizador recorre <b>todas</b> las ventanas del "
             "circuito en orden de tiempo, y la última es cómo está hoy.</li>"
@@ -1370,11 +1394,18 @@ def render_llm_analysis(
             # que no moverse: medido sobre DON23L14 V9, 91 de 93 vanos en Alto reciben un
             # plan que baja el UITI y no cambia el grupo.
             baja = bool(vano.get("baja_de_grupo")) or delta < 0
+            simulado = float(vano.get('u_simulado') or 0.0)
+            # El cambio porcentual contra la base de ESTE vano. Sin el, el lector resta y
+            # divide quince veces para saber cual baja mas, y con bases de 900 y de 9 la
+            # resta sola no permite compararlos.
+            pct = _cambio_pct_uiti(base, simulado)
+            pct_txt = "N/D" if pct is None else f"{pct:+,.1f}%"
             filas.append(
                 "<tr>"
                 f"<td style='text-align:left;'>{_escape(vano.get('fid'))}</td>"
                 f"<td>{base:,.1f}</td>"
-                f"<td>{float(vano.get('u_simulado') or 0.0):,.1f}</td>"
+                f"<td>{simulado:,.1f}</td>"
+                f"<td>{pct_txt}</td>"
                 f"<td>{_escape(_grupo(vano.get('clase_base')))}</td>"
                 f"<td>{_escape(_grupo(vano.get('clase_simulada')))} {marca}</td>"
                 f"<td>{'sí' if baja else 'no'}</td>"
@@ -1391,7 +1422,8 @@ def render_llm_analysis(
             "<h4>Escenario de disminución</h4>"
             "<div class='table-scroll'><table class='compact-table'>"
             f"<thead><tr><th>Vano</th><th>{rotulo_base}</th>"
-            "<th>UITI simulado</th><th>Grupo actual</th><th>Grupo simulado</th>"
+            "<th>UITI simulado</th><th>Cambio de UITI</th>"
+            "<th>Grupo actual</th><th>Grupo simulado</th>"
             "<th>Baja de grupo</th><th>Pasos</th></tr></thead>"
             f"<tbody>{''.join(filas)}</tbody></table></div>{pie}"
         )
@@ -1510,8 +1542,8 @@ def render_llm_analysis(
     # despues -- la tabla de ventanas, el mapa, el diagnostico -- esta contado sobre
     # esta rejilla, y sin ella el lector no tiene como interpretar "V6".
     ventanas_explicacion_html = (
-        "<div class='summary-box'><h3 style='margin-top:0;'>Cómo se construyen las "
-        "ventanas</h3>"
+        "<div class='summary-box'>"
+        "<h3 style='margin-top:0;'>¿Cómo se construyen las ventanas?</h3>"
         "<ul class='report-list'>"
         "<li>El período se recorre con <b>ventanas de treinta días que avanzan de "
         "quince en quince</b>. Cada ventana se solapa media ventana con la anterior y "

@@ -563,7 +563,7 @@ def seccion_agentes_html(linea: dict[str, Any] | None) -> str:
 
     return (
         '<div class="content-box" style="margin-top:26px;">'
-        '<h2 style="margin-top:0;">🤖 Cómo se construyó este informe</h2>'
+        '<h2 style="margin-top:0;">🤖 ¿Cómo se construyó este informe?</h2>'
         # `overflow-x` y no un ancho fluido: el SVG lleva rotulos de 9,5 px que
         # a media escala dejan de leerse. En una pantalla angosta se desplaza,
         # que es peor de lo que se ve pero mejor que ilegible.

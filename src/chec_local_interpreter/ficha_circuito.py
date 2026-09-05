@@ -22,7 +22,7 @@ vanos. Los tres numeros son distintos y el informe los nombra distinto.
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Any
+from typing import Any, Mapping, Sequence
 
 import pandas as pd
 
@@ -358,6 +358,79 @@ def tabla_clasificacion_html(
 # -------------------------------------------------------------------- tabla ventanas
 
 
+#: Por que entra cada ventana al estudio, en el MISMO orden en que las aplica
+#: `mil_inferencia.seleccionar_ventanas_reporte`. El orden importa: los criterios se
+#: aplican sobre lo que queda, asi que una ventana que gana los dos recibe solo el
+#: primero y el informe estudia DOS ventanas, no la misma repetida.
+CRITERIOS_ESTUDIO: tuple[tuple[str, str], ...] = (
+    ("uv", "Mayor UITI acumulado: el momento de mayor impacto del período"),
+    ("vanos", "Más vanos tocados: el episodio más extendido del período"),
+)
+RAZON_ULTIMA = "La última con eventos: cómo está el circuito hoy"
+#: Una corrida anterior pudo estudiar otras ventanas. Adjudicarle un criterio que no la
+#: eligio seria inventar el motivo, que es peor que no darlo.
+RAZON_SIN_CRITERIO = "Estudiada a fondo"
+
+
+def _orden_ventana(etiqueta: str) -> tuple[int, str]:
+    """`V10` va despues de `V9`, no entre `V1` y `V2`.
+
+    Repite la de `mil_inferencia._orden_ventana` a proposito: importarla arrastraria
+    torch -- 1,26 s y cientos de MB -- dentro de un modulo que solo pinta HTML.
+    """
+    resto = str(etiqueta).lstrip("Vv")
+    return (int(resto), "") if resto.isdigit() else (10**9, str(etiqueta))
+
+
+def razones_de_estudio(
+    registros: Sequence[Mapping[str, Any]],
+    estudiadas: Sequence[str] = (),
+) -> dict[str, str]:
+    """Por que entro al estudio cada ventana marcada, con los criterios que la eligieron.
+
+    La tabla marcaba "estudiada a fondo" y nada mas: el lector veia tres ventanas
+    señaladas entre once sin saber por que esas tres, y el criterio solo vivia en el
+    codigo del selector.
+
+    Reconstruirlo aqui es honesto porque usa la MISMA regla sobre los MISMOS numeros. El
+    selector elige el maximo GLOBAL de cada criterio, asi que la ventana estudiada con
+    mas UITI es necesariamente la de mas UITI de todas: restringir la busqueda a las
+    estudiadas da la misma respuesta sin necesidad de volver a abrir el artefacto del
+    modelo.
+
+    Devuelve solo las ventanas estudiadas. Una ventana que no encaja en ningun criterio
+    -- una corrida vieja, otra seleccion -- se marca sin adjudicarle un motivo falso.
+    """
+    marcadas = {str(e) for e in estudiadas or ()}
+    if not marcadas:
+        return {}
+
+    # La ultima del CIRCUITO es la ultima con eventos, que es la que toma
+    # `ventanas_de_circuito`: una ventana sin bolsas no es candidata a nada.
+    con_eventos = [r for r in registros if float(r.get("uv") or 0.0) > 0]
+    razones: dict[str, str] = {}
+    if con_eventos:
+        ultima = str(con_eventos[-1].get("w"))
+        if ultima in marcadas:
+            razones[ultima] = RAZON_ULTIMA
+
+    for campo, texto in CRITERIOS_ESTUDIO:
+        candidatos = [r for r in con_eventos
+                      if str(r.get("w")) in marcadas and str(r.get("w")) not in razones]
+        if not candidatos:
+            break
+        # Mismo desempate que el selector: el criterio, luego el UITI, luego la mas
+        # reciente. Sin el ultimo, un empate exacto lo decidiria el orden de las filas.
+        mejor = max(candidatos, key=lambda r: (float(r.get(campo) or 0.0),
+                                               float(r.get("uv") or 0.0),
+                                               _orden_ventana(r.get("w"))))
+        razones[str(mejor.get("w"))] = texto
+
+    for w in marcadas:
+        razones.setdefault(w, RAZON_SIN_CRITERIO)
+    return razones
+
+
 def tabla_ventanas_html(
     raw_df: pd.DataFrame,
     circuito: str,
@@ -382,13 +455,12 @@ def tabla_ventanas_html(
         return ""
 
     pico = max(registros, key=lambda r: float(r.get("uv") or 0.0))
+    # La ultima columna dice POR QUE se estudio la ventana, no que se estudio. Ver
+    # `razones_de_estudio`: son los mismos tres criterios que la eligieron.
+    razones = razones_de_estudio(registros, estudiadas)
     filas = []
     for r in registros:
-        marcas = []
-        if r.get("estudiada"):
-            marcas.append("estudiada a fondo")
-        if r["w"] == pico["w"]:
-            marcas.append("mayor aporte UITI")
+        motivo = razones.get(str(r["w"]), "")
         destacada = " class='fila-destacada'" if r["w"] == pico["w"] else ""
         filas.append(
             f"<tr{destacada}><td>{_escapar(r['w'])}</td>"
@@ -397,7 +469,7 @@ def tabla_ventanas_html(
             f"<td class='num'>{_num(float(r.get('uv') or 0.0), 1)}</td>"
             f"<td class='num'>{_num(float(r.get('n') or 0))}</td>"
             f"<td class='num'>{_num(float(r.get('vanos') or 0))}</td>"
-            f"<td>{_escapar(', '.join(marcas))}</td></tr>"
+            f"<td>{_escapar(motivo)}</td></tr>"
         )
 
     # El revisor senalo que "ventana pico" y "ventana de mayor impacto" se leian como
@@ -414,7 +486,7 @@ def tabla_ventanas_html(
         "<div class='tabla-ventanas'><table class='tabla-informe'>"
         "<thead><tr><th>Ventana</th><th>Desde</th><th>Hasta</th>"
         "<th>UITI acumulado</th><th>Registros vano-evento</th><th>Vanos</th>"
-        "<th></th></tr></thead>"
+        "<th>¿Por qué se estudió?</th></tr></thead>"
         f"<tbody>{''.join(filas)}</tbody></table>{nota}</div>"
     )
 

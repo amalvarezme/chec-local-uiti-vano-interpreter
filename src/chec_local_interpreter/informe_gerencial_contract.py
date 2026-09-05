@@ -2533,7 +2533,7 @@ def costo_corridas_html(costo: Mapping[str, Any]) -> str:
 
     return f"""
 <section class="report-section">
-<h2>8. Cómo se construyó este informe</h2>
+<h2>8. ¿Cómo se construyó este informe?</h2>
 <p class="badge-deterministic">Cálculo determinista</p>
 <p>Este informe <strong>no ejecuta agentes</strong>: se arma con Python sobre lo que
 las corridas por circuito ya dejaron en disco, y por sí mismo no consume ni un token.

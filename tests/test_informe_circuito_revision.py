@@ -355,6 +355,10 @@ class TestVentanasEstudiadasMarcadas:
     Sin la marca, las once filas de la tabla se leen como equivalentes y quien busque
     en el informe el analisis de la ventana que esta mirando no lo encuentra en ocho
     de los once casos. Es la misma marca que ya lleva el deslizador del mapa.
+
+    La marca dejo de ser un "estudiada a fondo" plano: la ultima columna dice AHORA por
+    que entro cada una -- la ultima, la de mas UITI o la de mas vanos --, que es lo que
+    el lector no podia deducir viendo tres ventanas señaladas entre once.
     """
 
     def test_la_tabla_marca_las_ventanas_con_diagnostico_detras(
@@ -367,11 +371,16 @@ class TestVentanasEstudiadasMarcadas:
                                     "periodo": "2026-01-01 a 2026-01-31"}}
             },
         )
-        assert "estudiada a fondo" in html
+        assert "¿Por qué se estudió?" in html
+        # Una ventana estudiada trae SU motivo, no una marca plana. Con un solo escenario
+        # el motivo es el de la ultima con eventos.
+        assert "La última con eventos" in html
 
     def test_sin_escenarios_ninguna_ventana_se_marca(self, tmp_path, flota, validacion):
         html = _render(tmp_path, flota, validacion)
-        assert "estudiada a fondo" not in html
+        assert "La última con eventos" not in html
+        assert "Mayor UITI acumulado:" not in html
+        assert "Más vanos tocados:" not in html
 
 
 class TestEntidadesHtml:
@@ -437,7 +446,7 @@ class TestOrigenDeLasVentanasEstudiadas:
             tmp_path, flota, validacion,
             inference_analysis={"escenarios": [{"nombre": "Ventana V1", "ventana": "V1"}]},
         )
-        assert "estudiada a fondo" in html
+        assert "La última con eventos" in html
 
     def test_la_ventana_se_lee_del_nombre_del_escenario(self, tmp_path, flota, validacion):
         """Los escenarios archivados no traen clave `ventana`.
@@ -450,7 +459,7 @@ class TestOrigenDeLasVentanasEstudiadas:
             tmp_path, flota, validacion,
             inference_analysis={"escenarios": [{"nombre": "C1 -- ventana V1"}]},
         )
-        assert "estudiada a fondo" in html
+        assert "La última con eventos" in html
 
 
 class TestSubseccionesDelComentario18:

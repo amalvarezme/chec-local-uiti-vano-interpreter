@@ -73,6 +73,46 @@ def test_nombra_el_codigo_la_primera_vez_que_aparece():
         "El riesgo sube con Densidad de descargas a tierra (DDT) en las tres ventanas.")
 
 
+def test_las_familias_de_clima_tambien_se_nombran_en_prosa():
+    """`PREP_i` es un codigo como `NR_T`, y salia pelado en el informe.
+
+    La alternancia se construia solo con las claves de `NOMBRE_NATURAL`, y las cuatro
+    variables de clima no viven ahi sino en `FAMILIAS_CLIMA`. `nombre_con_codigo` SI las
+    resolvia -- se llama por codigo suelto y pasa por `nombre_natural` --, asi que las
+    tablas salian bien y solo la PROSA quedaba sin nombrar: medido sobre el informe de
+    DON23L13, `PREP_i`, `WIND_SPD_i` y `WIND_GUST_SPD_i` aparecian una vez cada uno y
+    ninguna con su nombre, mientras `NR_T` y `DDT` si lo llevaban en la misma seccion.
+
+    La forma con `_i` es la que usa la documentacion para nombrar a la familia entera
+    (`domain.variable_groups` lista `PREP_i`, no los doce rezagos), y es la que el agente
+    escribe.
+    """
+    from chec_local_interpreter.glosario_variables import nombrar_en_prosa
+
+    texto = ("La hipotesis apoya en PREP_i, WIND_SPD_i y WIND_GUST_SPD_i sobre el "
+             "vano, junto a NR_T.")
+
+    salida = nombrar_en_prosa(texto)
+
+    assert "Precipitación (PREP_i)" in salida
+    assert "Velocidad del viento (WIND_SPD_i)" in salida
+    assert "Ráfagas de viento (WIND_GUST_SPD_i)" in salida
+    # Y la que ya funcionaba sigue funcionando.
+    assert "Riesgo por vegetación cercana al vano (NR_T)" in salida
+
+
+def test_la_rafaga_gana_sobre_la_velocidad_del_viento():
+    """`WIND_GUST_SPD_i` y `WIND_SPD_i` comparten cola. La alternancia va de mas largo a
+    mas corto justamente para que la rafaga no acabe nombrada como velocidad con un
+    `GUST_` suelto delante."""
+    from chec_local_interpreter.glosario_variables import nombrar_en_prosa
+
+    salida = nombrar_en_prosa("Solo WIND_GUST_SPD_i pesa aqui.")
+
+    assert "Ráfagas de viento (WIND_GUST_SPD_i)" in salida
+    assert "Velocidad del viento" not in salida
+
+
 def test_no_repite_el_nombre_en_cada_aparicion():
     """Nombrarlo en cada mencion convierte un parrafo en una lista de definiciones. Se
     presenta una vez, como en cualquier texto tecnico, y despues va el codigo."""
