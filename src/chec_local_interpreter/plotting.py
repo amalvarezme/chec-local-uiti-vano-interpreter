@@ -16,10 +16,18 @@ from chec_local_interpreter.agentes_linea_tiempo import (
 from chec_local_interpreter.config import PROJECT_ROOT
 from chec_local_interpreter.event_counts import count_unique_event_dates
 from chec_local_interpreter.domain_context import NOMBRE_LEGIBLE_GRUPO
+from chec_local_interpreter.ficha_circuito import (
+    ficha_general,
+    tabla_clasificacion_html,
+    tabla_ficha_html,
+    tabla_ventanas_html,
+    vanos_de_mayor_impacto,
+)
 from chec_local_interpreter.glosario_variables import (
     nombrar_prosa_en_datos,
     nombre_con_codigo,
 )
+from chec_local_interpreter.vocabulario_informe import normalizar_vocabulario_en_datos
 # La identidad visual que este informe COMPARTE con el gerencial. Se inyecta como
 # valor en la f-string de abajo, asi que sus llaves van SIMPLES y no se vuelven a
 # escanear; las reglas propias de esta plantilla siguen escribiendose dobles.
@@ -78,9 +86,13 @@ def plot_ranking_circuitos(raw_df, circuito_destacado, start_date=None, end_date
         f"<br>Medio-Alto + Alto: <b>{fila.vanos_criticos}</b>"
         f"<br>  Medio-Alto: {fila.vanos_medio_alto}"
         f"<br>  Alto: {fila.vanos_alto}"
-        f"<br>De {fila.vanos_con_eventos} vanos con eventos"
+        f"<br>Vanos probables de causa de falla: {fila.vanos_con_eventos}"
         f"<br>UITI acumulado: <b>{fila.uiti_total:,.1f}</b>"
-        f"<br>Eventos (suma por vano): <b>{fila.eventos_total:,}</b>"
+        # `eventos_total` suma los registros de CADA vano: la misma interrupcion
+        # golpea muchos vanos, asi que este numero es siempre mayor que el de
+        # interrupciones. Llamarlo "eventos" es lo que hacia leer 159.470 donde hay
+        # 6.455 interrupciones sobre 27.390 vanos.
+        f"<br>Registros vano-evento: <b>{fila.eventos_total:,}</b>"
         f"<br><b>{fila.rango}</b>"
         f"<br>Cortes: P50={resultado.cortes[0]:.1f} "
         f"P75={resultado.cortes[1]:.1f} P97={resultado.cortes[2]:.1f}"
@@ -130,14 +142,14 @@ def plot_ranking_circuitos(raw_df, circuito_destacado, start_date=None, end_date
         # Varios destacados: se dicen CUANTOS y de que banda, sin anotar ninguno.
         marcados = int(sum(es_destacado))
         encabezado = (
-            f"Ranking de circuitos por vanos criticos &mdash; {marcados} circuitos "
+            f"Ranking de circuitos por vanos criticos — {marcados} circuitos "
             f"resaltados de {len(tabla)}"
         )
     elif any(es_destacado):
         destacado = destacados[0]
         fila = tabla[tabla["circuito"] == destacado].iloc[0]
         encabezado = (
-            f"Ranking de circuitos por vanos criticos &mdash; {destacado}: "
+            f"Ranking de circuitos por vanos criticos — {destacado}: "
             f"puesto {int(fila['posicion'])} de {len(tabla)} ({fila['rango']}, "
             f"{int(fila['vanos_criticos'])} vanos en Medio-Alto + Alto)"
         )
@@ -156,16 +168,20 @@ def plot_ranking_circuitos(raw_df, circuito_destacado, start_date=None, end_date
                else "periodo completo")
     fig.update_layout(
         title=dict(
-            text=(f"{encabezado}<br><sup>{reparto} &mdash; sin eventos: "
+            text=(f"{encabezado}<br><sup>{reparto} — sin eventos: "
                   f"{resultado.circuitos_sin_eventos} | en cero (sin vanos Medio-Alto "
-                  f"ni Alto): {resultado.circuitos_en_cero} &mdash; {periodo}</sup>"),
+                  f"ni Alto): {resultado.circuitos_en_cero} — {periodo}</sup>"),
             font=dict(size=16, family="Arial, sans-serif"),
         ),
         # Nombres como ticks sobre un eje NUMERICO: ver el comentario de las divisiones.
+        # Cada rotulo lleva delante su PUESTO, que es lo unico que permite saltar de
+        # esta barra a la tabla de clasificacion: el orden de dibujo va de menos a mas
+        # critico y el puesto va al reves, asi que la posicion en el eje no lo dice.
         xaxis=dict(
             type="linear",
             tickvals=posiciones,
-            ticktext=tabla["circuito"].tolist(),
+            ticktext=[f"{int(p)}. {c}" for p, c in
+                      zip(tabla["posicion"], tabla["circuito"])],
             tickangle=-90,
             tickfont=dict(size=8),
             title_text="Circuitos ordenados por vanos en Medio-Alto + Alto",
@@ -935,6 +951,24 @@ def _escapar_html(texto: object) -> str:
     return _html_items.escape("" if texto is None else str(texto))
 
 
+def _hipotesis_html(texto: str) -> str:
+    """La hipotesis de causa: primera frase como parrafo, el resto en vinetas.
+
+    Como lista entera, la primera frase -- que enuncia el marco del que cuelgan las
+    demas -- se leia como una causa mas de la lista, al mismo nivel que las que la
+    desarrollan. Es contexto, y se pinta como contexto.
+    """
+    raw = ("" if texto is None else str(texto)).strip()
+    if not raw:
+        return ""
+    frases = [s.strip() for s in _re_items.split(r"(?<=[.!?])\s+", raw) if s.strip()]
+    if len(frases) < 2:
+        return f"<p class='hipotesis-contexto'>{_escapar_html(_mayuscula_inicial(raw))}</p>"
+    contexto = _escapar_html(_mayuscula_inicial(frases[0]))
+    return (f"<p class='hipotesis-contexto'>{contexto}</p>"
+            + _texto_a_items(" ".join(frases[1:])))
+
+
 def render_llm_analysis(
     validation_data: dict,
     raw_df: pd.DataFrame,
@@ -977,10 +1011,17 @@ def render_llm_analysis(
     # propio `validate` del agente acepto, y reescribirlo lo separaria de su validacion.
     # Las claves de identidad (`variable`, `data_ref`, ...) quedan intactas -- ver
     # `glosario_variables.CLAVES_DE_IDENTIDAD`.
-    validation_data = nombrar_prosa_en_datos(validation_data)
-    inference_analysis = nombrar_prosa_en_datos(inference_analysis) if inference_analysis else inference_analysis
+    # Y el VOCABULARIO del informe unificado en la misma pasada: "circuitos de la
+    # flota" pasa a "circuitos totales" y "ventana pico" a "ventana de mayor aporte
+    # UITI", que era lo que la revision pedia. Al hacerse al pintar, las corridas ya
+    # archivadas se vuelven a dibujar con el vocabulario nuevo sin gastar un token.
+    def _prosa(datos):
+        return normalizar_vocabulario_en_datos(nombrar_prosa_en_datos(datos))
+
+    validation_data = _prosa(validation_data)
+    inference_analysis = _prosa(inference_analysis) if inference_analysis else inference_analysis
     expert_alignment_analysis = (
-        nombrar_prosa_en_datos(expert_alignment_analysis) if expert_alignment_analysis
+        _prosa(expert_alignment_analysis) if expert_alignment_analysis
         else expert_alignment_analysis
     )
 
@@ -1167,7 +1208,7 @@ def render_llm_analysis(
                 f"{f' &mdash; {periodo}' if periodo else ''} &middot; "
                 f"{len(destacados)} vanos de mayor UITI acumulado resaltados"
                 f"{nota_estudiada}</p>"
-                f"{_iframe_srcdoc(dibujado.get_root().render(), height=560)}</div>"
+                f"{_iframe_srcdoc(dibujado.get_root().render(), height=380)}</div>"
             )
 
         if not capas:
@@ -1180,6 +1221,10 @@ def render_llm_analysis(
         #
         # El deslizador solo aparece cuando hay mas de una ventana: un control de una
         # sola posicion no hace nada y se lee como que algo se rompio.
+        #
+        # El deslizador va FLANQUEADO por dos flechas. Saltar de V6 a V7 arrastrando un
+        # control de once posiciones sobre 300 px pide una punteria que no hace falta
+        # pedir: la pregunta habitual es "y la siguiente", y eso es un clic.
         control = ""
         if len(capas) > 1:
             marcas = "".join(
@@ -1189,8 +1234,14 @@ def render_llm_analysis(
                 for e, estudiada in etiquetas)
             control = (
                 "<div class='mapa-control'>"
+                "<div class='mapa-fila-control'>"
+                "<button type='button' class='mapa-flecha mapa-anterior' "
+                "aria-label='Ventana anterior'>&#9664;</button>"
                 f"<input type='range' min='0' max='{len(capas) - 1}' value='0' step='1' "
                 "class='mapa-deslizador' aria-label='Ventana del mapa'>"
+                "<button type='button' class='mapa-flecha mapa-siguiente' "
+                "aria-label='Ventana siguiente'>&#9654;</button>"
+                "</div>"
                 f"<div class='mapa-marcas'>{marcas}</div>"
                 "</div>"
             )
@@ -1216,8 +1267,17 @@ def render_llm_analysis(
             "o se mueve por el circuito.</li>"
             "</ul></div>"
         )
+        # El mapa se dibuja mas bajo que antes (380 px contra 560) y con un boton de
+        # pantalla completa. A 560 px empujaba media pantalla de informe hacia abajo en
+        # cada scroll, y cuando de verdad hace falta mirar el trazado -- localizar un
+        # vano concreto -- 560 px tampoco alcanzaban: la respuesta no era un tamano
+        # intermedio, era poder elegir.
         return (f"<h3>Estado del circuito en las ventanas estudiadas</h3>"
-                f"<div class='visor-mapas'>{control}{''.join(capas)}</div>"
+                f"<div class='visor-mapas'>"
+                f"<div class='mapa-barra'>"
+                f"<button type='button' class='mapa-pantalla-completa'>"
+                f"⤢ Ampliar a pantalla completa</button></div>"
+                f"{control}{''.join(capas)}</div>"
                 f"{aviso}{nota}")
 
     def _orden_ventana(etiqueta):
@@ -1386,7 +1446,7 @@ def render_llm_analysis(
                              _figure_html(resultado.get("fig_barras"), titulo)),
                 _chart_panel(f"UITI medido vs estimado - {titulo}",
                              _figure_html(resultado.get("fig_uiti"), titulo)),
-                _chart_panel(f"Qué variables se mueven juntas &mdash; {titulo}", html_grafo),
+                _chart_panel(f"Qué variables se mueven juntas — {titulo}", html_grafo),
             ]
             partes.append(
                 f"<div class='chart-grid two-col'>{''.join(p for p in paneles if p)}</div>")
@@ -1421,6 +1481,187 @@ def render_llm_analysis(
         return "\n".join(cabecera), (
             "<h2>Diagnóstico y simulación por ventana</h2>" + "\n".join(secciones))
 
+
+    # ------------------------------------------------------------------ cabecera
+    # Los valores generales del circuito, ANTES de la barra del ranking. La barra
+    # situa al circuito entre los demas, y esa pregunta solo tiene sentido cuando ya
+    # se sabe de que circuito se habla -- que tan largo es, cuantos vanos estan
+    # senalados, cuanto pesa. Antes eso no estaba en ninguna parte del informe.
+    #
+    # `all_circuits_df` y no `raw_df`: la ficha es COMPARATIVA (puesto, banda, aporte
+    # al total) y `raw_df` viene ya recortado al circuito estudiado. Con uno solo, el
+    # ranking mete a todo el mundo en la banda mas alta -- que es exactamente como en
+    # su dia TODOS los informes decian "Riesgo Muy Alto".
+    df_comparativo = all_circuits_df if all_circuits_df is not None else raw_df
+    ficha = ficha_general(df_comparativo, primary_circuit,
+                          start_date=start_date, end_date=end_date)
+    ficha_html = tabla_ficha_html(ficha)
+    clasificacion_html = tabla_clasificacion_html(
+        df_comparativo, primary_circuit, start_date=start_date, end_date=end_date)
+
+    # Como se arman las bolsas del modelo. Va al principio porque TODO lo que viene
+    # despues -- la tabla de ventanas, el mapa, el diagnostico -- esta contado sobre
+    # esta rejilla, y sin ella el lector no tiene como interpretar "V6".
+    ventanas_explicacion_html = (
+        "<div class='summary-box'><h3 style='margin-top:0;'>Cómo se construyen las "
+        "ventanas</h3>"
+        "<ul class='report-list'>"
+        "<li>El período se recorre con <b>ventanas de treinta días que avanzan de "
+        "quince en quince</b>. Cada ventana se solapa media ventana con la anterior y "
+        "media con la siguiente.</li>"
+        "<li>Dentro de una ventana, todos los registros de un mismo vano se juntan en "
+        "una <b>bolsa</b>: la unidad que el modelo lee es la pareja "
+        "<b>vano &times; ventana</b>, no el evento suelto.</li>"
+        "<li>El solape existe para que un problema que ocurre a caballo entre dos "
+        "meses no quede partido en dos mitades que ninguna ventana ve entera.</li>"
+        "<li>Por eso mismo, los valores de UITI de las ventanas <b>no son aditivos</b>: "
+        "sumar las once contabiliza varias veces los mismos registros. Cada ventana se "
+        "lee contra las otras, nunca sumada con ellas.</li>"
+        "<li>Las etiquetas <b>V1</b> a <b>V11</b> están fijadas sobre el rango completo "
+        "de la base, no sobre el período de este informe: la <b>V6</b> de aquí es la "
+        "misma V6 del modelo y la del mapa.</li>"
+        "</ul></div>"
+    )
+
+    # Las ventanas y los vanos que mas pesan. El revisor los pidio en dos sitios y a
+    # dos profundidades: nombrados en el resumen ejecutivo, y desglosados dentro de los
+    # hallazgos. Se calculan UNA vez y se pintan en dos formas -- compacta y completa --
+    # en vez de repetir el mismo bloque dos veces, que es como un informe termina
+    # contestando la misma pregunta dos veces con dos numeros distintos.
+    from chec_local_interpreter.ficha_circuito import _num as _numero_local
+
+    def _ventanas_principales() -> list:
+        from chec_local_interpreter.context_builder import window_series_records
+
+        try:
+            serie = window_series_records(raw_df, circuito=primary_circuit)
+        except Exception:
+            return []
+        ordenadas = sorted(serie, key=lambda r: -float(r.get("uv") or 0.0))
+        return [r for r in ordenadas[:3] if float(r.get("uv") or 0.0) > 0]
+
+    ventanas_principales = _ventanas_principales()
+    impacto_vanos = vanos_de_mayor_impacto(raw_df, primary_circuit, tope=5)
+
+    # Cuales de las once ventanas tienen escenario, diagnostico y plan detras. Sin
+    # esta marca, las once filas de la tabla se leen como equivalentes y quien busque
+    # el analisis de la ventana que esta mirando no lo encuentra en ocho de los once
+    # casos.
+    #
+    # TRES fuentes porque las tres existen por separado: `inference_results` trae las
+    # figuras, `inference_analysis` la interpretacion, y el sidecar de mapas la marca
+    # de su deslizador. Un informe rearmado desde los `.out.json` archivados tiene la
+    # segunda y no la primera, y con una sola fuente perdia la marca en silencio.
+    _mapas = ([mapas_ventana] if isinstance(mapas_ventana, dict)
+              else list(mapas_ventana or []))
+    _escenarios = (inference_analysis or {}).get("escenarios") or []
+
+    def _ventana_del_escenario(escenario) -> str:
+        """La etiqueta de ventana de un escenario del analisis.
+
+        Medido sobre una corrida archivada: el escenario NO trae clave `ventana`, solo
+        `nombre: "DON23L13 -- ventana V6"`. Exigir la clave dejaba la marca apagada en
+        todos los informes rearmados desde disco, sin un solo aviso.
+        """
+        if not isinstance(escenario, dict):
+            return ""
+        if escenario.get("ventana"):
+            return str(escenario["ventana"])
+        hallazgo = _re_items.search(r"\bventana\s+(V\d+)\b",
+                                    str(escenario.get("nombre") or ""),
+                                    _re_items.IGNORECASE)
+        return hallazgo.group(1) if hallazgo else ""
+
+    ventanas_estudiadas = tuple(sorted(
+        {str(v) for v in (inference_results or {})}
+        | {v for v in (_ventana_del_escenario(e) for e in _escenarios) if v}
+        | {str(m.get("ventana")) for m in _mapas
+           if isinstance(m, dict) and m.get("estudiada") and m.get("ventana")}
+    ))
+
+    def _items_ricos(items: list[str]) -> str:
+        """Una lista cuyos items YA traen marcado.
+
+        `_envolver_items` escapa cada item, que es lo correcto para prosa de agente y
+        lo contrario de lo que hace falta aqui: pasarle un `<b>` dibuja literalmente
+        `&lt;b&gt;`. Lo variable se escapa en el sitio donde se interpola.
+        """
+        if not items:
+            return ""
+        return ("<ul class='report-list'>"
+                + "".join(f"<li>{i}</li>" for i in items) + "</ul>")
+
+    def _resumen_impacto_html() -> str:
+        """Version compacta, para el resumen ejecutivo: solo los nombres."""
+        partes = []
+        if ventanas_principales:
+            partes.append(
+                "<h4>Ventanas de mayor aporte UITI</h4>"
+                + _items_ricos([
+                    f"<b>{_escape(r['w'])}</b> ({_escape(r.get('periodo', ''))}): "
+                    f"UITI {_numero_local(float(r.get('uv') or 0.0), 1)} sobre "
+                    f"{_numero_local(float(r.get('vanos') or 0))} vanos"
+                    for r in ventanas_principales
+                ])
+            )
+        if impacto_vanos["por_uiti"]:
+            coincidentes = impacto_vanos["coincidentes"]
+            resumen = (
+                f"Vanos señalados por los dos criterios a la vez: "
+                f"{', '.join(_escape(f) for f in coincidentes)}."
+                if coincidentes else
+                "Ningún vano está en las dos listas: el que concentra UITI y el que "
+                "más se repite son vanos distintos."
+            )
+            partes.append(
+                "<h4>Vanos de mayor impacto</h4>"
+                f"<p style='margin:4px 0;'>{resumen} El desglose por criterio está "
+                f"en <b>2.3 Análisis de vanos</b>.</p>"
+            )
+        return "".join(partes)
+
+    def _analisis_vanos_html() -> str:
+        """Version completa, para los hallazgos: los dos criterios y su interseccion.
+
+        Un vano puede concentrar UITI en una sola salida larga y otro aparecer en todas
+        las ventanas con poco cada vez. Son dos problemas distintos y se atienden
+        distinto, asi que el informe no puede quedarse con uno de los dos criterios y
+        llamarlo "los vanos importantes".
+        """
+        if not impacto_vanos["por_uiti"]:
+            return ""
+
+        def _lista(clave, formato):
+            return _items_ricos([formato(v) for v in impacto_vanos[clave]])
+
+        coincidentes = (
+            _items_ricos([f"<b>{_escape(f)}</b>"
+                          for f in impacto_vanos["coincidentes"]])
+            if impacto_vanos["coincidentes"]
+            else "<p class='muted'>Ninguno.</p>"
+        )
+        return (
+            "<h3>2.3 Análisis de vanos</h3>"
+            "<div class='columnas-vanos'>"
+            "<div><h5>Por UITI acumulado</h5>"
+            + _lista("por_uiti",
+                     lambda v: f"{_escape(v['fid'])} — "
+                               f"{_numero_local(v['uiti'], 1)}")
+            + "</div><div><h5>Por número de apariciones</h5>"
+            + _lista("por_apariciones",
+                     lambda v: f"{_escape(v['fid'])} — "
+                               f"{_numero_local(v['apariciones'])} registros")
+            + "</div><div><h5>En las dos listas</h5>"
+            + coincidentes
+            + "</div></div>"
+            "<p class='muted'>Un vano en las <b>dos</b> listas lo está con cualquiera "
+            "de los dos criterios: es el candidato que no depende de cómo se haya "
+            "decidido mirar. Estos vanos se señalan por su historia; cuáles intervenir "
+            "y qué mover en cada uno lo dice el diagnóstico por ventana.</p>"
+        )
+
+    resumen_impacto_html = _resumen_impacto_html()
+    analisis_vanos_html = _analisis_vanos_html()
 
     period_str = f"{start_date or 'Inicio'} a {end_date or 'Fin'}"
     title_str = f"Reporte Criticidad - Circuito: {primary_circuit}"
@@ -1509,12 +1750,20 @@ def render_llm_analysis(
     html_expert_alignment = render_expert_alignment_tab(expert_alignment_analysis)
 
     llm_sections_html = ""
+    # Se declara aqui y no dentro del `if`: lo consume la seccion de diagnostico por
+    # ventana, que se arma pase lo que pase con el analisis descriptivo.
+    inferencias_html = ""
     if validation_data:
         exec_summary = validation_data.get('executive_summary', [])
         if isinstance(exec_summary, list):
             exec_summary = " ".join(exec_summary)
 
-        # Parse circuit characterization
+        # La CARACTERIZACION ya no es una seccion propia. Era el tercer sitio del
+        # informe que describia al circuito -- despues del resumen ejecutivo y de los
+        # hallazgos --, con los mismos numeros redactados de otra manera; la revision
+        # pidio eliminarla. Lo que si aporta -- las justificaciones fisico-logicas por
+        # modo -- se muda a Hallazgos, que es donde el lector ya esta preguntandose
+        # por que ocurre lo que la seccion acaba de describir.
         char_data = validation_data.get('circuit_characterization', {})
         if isinstance(char_data, dict):
             char_text = char_data.get('text', '')
@@ -1526,12 +1775,12 @@ def render_llm_analysis(
             # del 06: tres tablas contestando "cuales vanos" con tres metodos distintos,
             # y quien lee no tiene como saber cual seguir. La respuesta es el diagnostico,
             # que ademas dice QUE mover.
-            ventanas_narradas = char_data.get('ventanas_estudiadas', [])
-            if ventanas_narradas:
-                char_html += (
-                    "<h4>Ventanas estudiadas</h4>"
-                    + _list_to_items([str(v) for v in ventanas_narradas]))
-
+            #
+            # La revision pidio dos cosas para las ventanas: una TABLA con fechas,
+            # aporte UITI, registros y vanos, y el resumen COMPARATIVO entre ellas. La
+            # tabla se calcula (`tabla_ventanas_html`) en vez de pedirsela en prosa a
+            # un agente; la comparacion se queda en prosa, que es lo que la tabla no
+            # puede dar, y se pinta debajo de ella.
             justifications = char_data.get('probable_justifications_rules', [])
             if justifications:
                 char_html += "<h4>🔗 Justificaciones Físico-Lógicas (Análisis por Modos)</h4><ul>"
@@ -1563,57 +1812,115 @@ def render_llm_analysis(
             elif isinstance(f, str):
                 findings_texts.append(f)
 
+        # Las tres notas de lectura que la revision pidio dejar fijas al frente de los
+        # hallazgos. No dependen de lo que el agente escriba: son propiedades de la
+        # rejilla y del alcance del analisis, y sin ellas la tabla de ventanas se lee
+        # como una serie de once medidas independientes que se pueden sumar.
+        notas_hallazgos_html = (
+            "<div class='content-box' style='background:#f8fafc;'>"
+            "<ul class='report-list'>"
+            "<li>Las ventanas se traslapan quince días entre sí, de manera que sus "
+            "valores de UITI <b>no son aditivos</b>.</li>"
+            "<li>La suma de las once ventanas contabiliza varias veces los mismos "
+            "registros vano-evento.</li>"
+            "<li>Esta lectura describe <b>lo observado</b> en el período y "
+            "<b>no anticipa el comportamiento futuro</b> del circuito.</li>"
+            "</ul></div>"
+        )
+
         findings_html = ""
         if findings_texts:
+            # El titulo de este bloque repetia palabra por palabra el de la seccion que
+            # lo contiene. Ahora nombra lo que el bloque hace -- describir el
+            # comportamiento del circuito en el periodo -- que es lo que lo distingue
+            # de las subsecciones que vienen despues.
             findings_html += (
-                "<div class='summary-box'><h3 style='margin-top:0;'>Hallazgos del análisis descriptivo</h3>"
+                "<div class='summary-box'><h3 style='margin-top:0;'>"
+                "2.1 Comportamiento del circuito en el período</h3>"
                 + _text_to_items(" ".join(findings_texts))
                 + "</div>"
             )
 
+        # Las inferencias del modelo bajan a la subseccion de ventanas: estan enfocadas
+        # en la ventana, que es exactamente donde el revisor las pidio. Sueltas entre
+        # los hallazgos abrian un bloque nuevo entre lo observado y lo proyectado sin
+        # decir cual era cual -- justo lo que las notas de arriba acaban de separar.
         inferencias = (inference_analysis or {}).get('inferencias_predictivas', [])
+        inferencias_html = ""
         if inferencias:
-            findings_html += "<div class='summary-box'><h4>Inferencias complementarias del modelo</h4><ul class='report-list'>"
+            inferencias_html = ("<div class='summary-box'><h4 style='margin-top:0;'>"
+                                "Inferencias complementarias del modelo</h4>"
+                                "<p class='muted' style='margin-top:0;'>Lo que el "
+                                "modelo proyecta sobre estas ventanas. A diferencia de "
+                                "lo anterior, esto no describe lo observado.</p>"
+                                "<ul class='report-list'>")
             for inf in inferencias:
                 r = inf.get('riesgo', '')
                 h = inf.get('horizonte', '')
                 j = inf.get('justificacion_modelo', '')
-                findings_html += (
+                inferencias_html += (
                     f"<li><b>{_escape(_mayuscula_inicial(str(h)))}:</b> "
                     f"{_escape(_mayuscula_inicial(str(r)))} &mdash; "
                     f"<i>{_escape(_mayuscula_inicial(str(j)))}</i></li>"
                 )
-            findings_html += "</ul></div>"
+            inferencias_html += "</ul></div>"
+
+        # La lectura comparativa entre ventanas, que es lo que la tabla no da: cual
+        # pesa mas que cual y por que. Va DEBAJO de la tabla, no en su lugar.
+        #
+        # Se filtran los items que son SOLO una etiqueta. El esquema pide
+        # `ventanas_estudiadas` y hay corridas donde el agente entrega `["V6", "V7",
+        # "V11"]`: eso pintaba un titulo y tres vinetas que decian `V6`, `V7` y `V11`,
+        # al lado de una tabla que ya trae las once ventanas con sus cifras. Un bloque
+        # sin contenido se lee como que falta algo, no como que no habia nada.
+        ventanas_narradas = [
+            str(v).strip() for v in
+            ((char_data.get('ventanas_estudiadas', []) or [])
+             if isinstance(char_data, dict) else [])
+            if len(str(v).strip().split()) > 1
+        ]
+        comparacion_ventanas_html = (
+            "<h4>Lectura comparativa entre ventanas</h4>"
+            + _list_to_items([str(v) for v in ventanas_narradas])
+        ) if ventanas_narradas else ""
+
+        synthesis = validation_data.get('period_synthesis', '')
+        sintesis_periodo_html = (
+            f"<h3>2.5 Conclusión general del período</h3><div class='content-box'>"
+            f"{_text_to_items(synthesis)}</div>" if synthesis else "")
 
         llm_sections_html = f"""
             <div class="summary-box">
-                <h2 style="margin-top: 0;">Resumen Ejecutivo</h2>
+                <h2 style="margin-top: 0;">1. Resumen ejecutivo</h2>
                 {_text_to_items(exec_summary)}
-            </div>
-            {findings_html}
-            <div class="summary-box" style="background: #fffbeb; border-left: 5px solid #fbbf24;">
-                <h2 style="margin-top: 0; color: #b45309;">Posible Causa Raíz (Hipótesis)</h2>
-                {_text_to_items(hypothesis)}
+                {resumen_impacto_html}
             </div>
 
-            <h2>📌 Caracterización del Circuito</h2>
+            <h2>2. Hallazgos del análisis descriptivo</h2>
+            {notas_hallazgos_html}
+            {findings_html}
+            <h3>2.2 Ventanas estudiadas</h3>
+            {tabla_ventanas_html(raw_df, primary_circuit, estudiadas=ventanas_estudiadas)}
+            {comparacion_ventanas_html}
+            {inferencias_html}
+
+            {analisis_vanos_html}
+
+            <h3>2.4 Justificaciones y estado del circuito</h3>
             <div class="content-box">
                 {char_html}
             </div>
             {characterization_visuals_html}
-        """
+            {sintesis_periodo_html}
 
-        synthesis = validation_data.get('period_synthesis', '')
-        if synthesis:
-            llm_sections_html += f"""
-            <h2>⏱️ Síntesis del Período</h2>
-            <div class="content-box">
-                {_text_to_items(synthesis)}
+            <div class="summary-box" style="background: #fffbeb; border-left: 5px solid #fbbf24;">
+                <h2 style="margin-top: 0; color: #b45309;">3. Posible Causa Raíz (Hipótesis)</h2>
+                {_hipotesis_html(hypothesis)}
             </div>
-            """
+        """
     elif characterization_visuals_html:
         llm_sections_html = f"""
-            <h2>📌 Caracterización del Circuito</h2>
+            <h2>Estado del circuito</h2>
             {characterization_visuals_html}
         """
 
@@ -1622,7 +1929,13 @@ def render_llm_analysis(
     # el diagnostico del 06 comparten. La serie por ventana de cada escenario ocupa su
     # sitio, y esa si esta en la unidad del resto del informe.
     report_tab_html = f"""
+            {ficha_html}
+
+            {ventanas_explicacion_html}
+
+            <h2>Clasificación de criticidad del circuito</h2>
             <div class="chart-container">{html_clusters}</div>
+            {clasificacion_html}
 
             {llm_sections_html}
 
@@ -1642,6 +1955,38 @@ def render_llm_analysis(
             ul.report-list {{ margin: 6px 0 4px 0; padding-left: 20px; list-style: disc; }}
             ul.report-list li {{ margin-bottom: 5px; line-height: 1.55; font-size: 0.95rem; }}
             .chart-container {{ margin-bottom: 40px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }}
+            /* Las tablas de la revision: ficha del circuito, clasificacion y ventanas.
+               Un solo estilo para las tres, para que el informe no tenga tres tablas
+               con tres aspectos distintos diciendo cosas del mismo orden. */
+            .tabla-informe {{ border-collapse: collapse; width: 100%;
+                              font-size: 0.92rem; margin: 6px 0 4px 0; }}
+            .tabla-informe th, .tabla-informe td {{ border: 1px solid #e2e8f0;
+                              padding: 6px 10px; text-align: left; }}
+            .tabla-informe thead th {{ background: #f1f5f9; color: #1e3a8a;
+                              font-weight: 700; }}
+            .tabla-informe td.num {{ text-align: right;
+                              font-variant-numeric: tabular-nums; }}
+            .tabla-informe tbody tr:nth-child(even) {{ background: #f8fafc; }}
+            .tabla-informe .fila-destacada {{ background: #dbeafe !important;
+                              font-weight: 700; }}
+            .tabla-informe.ficha th {{ background: #f8fafc; width: 62%;
+                              font-weight: 600; }}
+            .ficha-circuito {{ background: #ffffff; border: 1px solid #cbd5e1;
+                              border-left: 5px solid #1e3a8a; border-radius: 6px;
+                              padding: 14px 18px; margin-bottom: 20px; }}
+            .ficha-titular {{ margin: 0 0 10px 0; font-size: 1.05rem; color: #0f172a; }}
+            /* 208 filas abiertas empujan el informe entero: la tabla completa va
+               plegada y con su propio desplazamiento. */
+            .tabla-desplazable {{ max-height: 460px; overflow-y: auto; }}
+            .tabla-clasificacion details {{ margin-top: 8px; }}
+            .tabla-clasificacion summary {{ cursor: pointer; color: #1d4ed8;
+                              font-weight: 600; }}
+            .columnas-vanos {{ display: grid; gap: 14px; margin-top: 6px;
+                              grid-template-columns: repeat(3, minmax(0, 1fr)); }}
+            .columnas-vanos h5 {{ margin: 0 0 4px 0; color: #1e3a8a; font-size: 0.9rem; }}
+            @media (max-width: 900px) {{ .columnas-vanos {{ grid-template-columns: 1fr; }} }}
+            /* La frase que enmarca la hipotesis, como parrafo y no como una vineta mas. */
+            .hipotesis-contexto {{ margin: 0 0 8px 0; line-height: 1.55; }}
             .chart-grid {{ display: grid; gap: 18px; margin-bottom: 28px; }}
             .chart-grid.two-col {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
             .chart-panel {{ border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; background: #ffffff; min-width: 0; }}
@@ -1658,7 +2003,27 @@ def render_llm_analysis(
             .mapa-ventana {{ display: none; }}
             .mapa-ventana.activa {{ display: block; }}
             .mapa-control {{ margin: 0 0 12px 0; }}
-            .mapa-deslizador {{ width: 100%; accent-color: #2563eb; }}
+            .mapa-fila-control {{ display: flex; align-items: center; gap: 8px; }}
+            .mapa-deslizador {{ flex: 1; accent-color: #2563eb; }}
+            .mapa-flecha {{ appearance: none; border: 1px solid #cbd5e1; background: #f8fafc;
+                            color: #1e3a8a; border-radius: 6px; width: 30px; height: 28px;
+                            cursor: pointer; font-size: 12px; line-height: 1; }}
+            .mapa-flecha:hover {{ background: #e2e8f0; }}
+            .mapa-flecha[disabled] {{ opacity: .4; cursor: default; }}
+            .mapa-barra {{ display: flex; justify-content: flex-end; margin-bottom: 8px; }}
+            .mapa-pantalla-completa {{ appearance: none; border: 1px solid #cbd5e1;
+                            background: #f8fafc; color: #1e3a8a; border-radius: 6px;
+                            padding: 5px 10px; cursor: pointer; font-weight: 600;
+                            font-size: 12px; }}
+            .mapa-pantalla-completa:hover {{ background: #e2e8f0; }}
+            /* En pantalla completa el mapa toma el alto real de la pantalla. Sin esto
+               el navegador amplia el marco y deja el iframe en sus 380 px, con el
+               resto en negro: la ampliacion no serviria para nada. */
+            .visor-mapas:fullscreen {{ background: #ffffff; padding: 16px;
+                                       display: flex; flex-direction: column; }}
+            .visor-mapas:fullscreen .mapa-ventana.activa {{ flex: 1; display: flex;
+                                       flex-direction: column; }}
+            .visor-mapas:fullscreen iframe.embedded-map-frame {{ flex: 1; height: auto !important; }}
             .mapa-marcas {{ display: flex; color: #64748b; font-size: 12px;
                             margin-top: 2px; }}
             /* Las tres ventanas que el informe estudia, entre las once del deslizador:
@@ -1743,10 +2108,45 @@ def render_llm_analysis(
             // volver a pedir geometria.
             document.addEventListener('DOMContentLoaded', function() {{
                 document.querySelectorAll('.visor-mapas').forEach(function(visor) {{
+                    // El boton de pantalla completa existe aunque haya UNA sola
+                    // ventana: ampliar el trazado no tiene nada que ver con poder
+                    // recorrer ventanas, y el deslizador si depende de que haya varias.
+                    var ampliar = visor.querySelector('.mapa-pantalla-completa');
+                    if (ampliar) {{
+                        ampliar.addEventListener('click', function() {{
+                            if (document.fullscreenElement === visor) {{
+                                document.exitFullscreen();
+                            }} else if (visor.requestFullscreen) {{
+                                visor.requestFullscreen();
+                            }}
+                        }});
+                        document.addEventListener('fullscreenchange', function() {{
+                            var dentro = document.fullscreenElement === visor;
+                            ampliar.textContent = dentro
+                                ? '⤡ Salir de pantalla completa'
+                                : '⤢ Ampliar a pantalla completa';
+                            // El iframe de Leaflet midio su contenedor al cargarse. Al
+                            // cambiar de tamano hay que decirselo o el mapa se queda
+                            // encuadrado sobre el tamano viejo.
+                            visor.querySelectorAll('iframe.embedded-map-frame').forEach(
+                                function(frame) {{
+                                    try {{
+                                        if (frame.contentWindow) {{
+                                            frame.contentWindow.dispatchEvent(
+                                                new Event('resize'));
+                                        }}
+                                    }} catch (e) {{}}
+                                }});
+                        }});
+                    }}
+
                     var deslizador = visor.querySelector('.mapa-deslizador');
                     if (!deslizador) {{ return; }}
                     var capas = visor.querySelectorAll('.mapa-ventana');
                     var marcas = visor.querySelectorAll('.mapa-marcas span');
+                    var anterior = visor.querySelector('.mapa-anterior');
+                    var siguiente = visor.querySelector('.mapa-siguiente');
+                    var tope = parseInt(deslizador.max, 10);
                     function mostrar() {{
                         var i = parseInt(deslizador.value, 10);
                         capas.forEach(function(capa, k) {{
@@ -1756,6 +2156,21 @@ def render_llm_analysis(
                             marca.style.fontWeight = (k === i) ? '700' : '400';
                             marca.style.color = (k === i) ? '#1e3a8a' : '#64748b';
                         }});
+                        // Una flecha que no lleva a ninguna parte se deshabilita en vez
+                        // de no hacer nada: pulsar sin efecto se lee como una averia.
+                        if (anterior) {{ anterior.disabled = (i <= 0); }}
+                        if (siguiente) {{ siguiente.disabled = (i >= tope); }}
+                    }}
+                    function saltar(paso) {{
+                        var i = parseInt(deslizador.value, 10) + paso;
+                        deslizador.value = Math.min(tope, Math.max(0, i));
+                        mostrar();
+                    }}
+                    if (anterior) {{
+                        anterior.addEventListener('click', function() {{ saltar(-1); }});
+                    }}
+                    if (siguiente) {{
+                        siguiente.addEventListener('click', function() {{ saltar(1); }});
                     }}
                     deslizador.addEventListener('input', mostrar);
                     mostrar();

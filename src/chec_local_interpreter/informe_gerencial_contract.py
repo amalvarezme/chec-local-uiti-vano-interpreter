@@ -345,7 +345,7 @@ def figura_preambulo(
         vertical_spacing=0.155, horizontal_spacing=0.10,
         specs=[[{"colspan": 2}, None], [{}, {}]],
         subplot_titles=(
-            "Ranking de la flota por vanos en Medio-Alto + Alto",
+            "Ranking de todos los circuitos por vanos en Medio-Alto + Alto",
             "Vanos de la banda por grupo",
             "UITI acumulado por vano, dentro de la banda",
         ),
@@ -393,7 +393,7 @@ def figura_preambulo(
             hovertext=[
                 f"<b>{g['grupo']}</b><br>{g['vanos']:,} vanos de la banda"
                 f"<br>{g['pct_banda']:.1f}% de la banda"
-                f"<br>de {g['vanos_flota']:,} en la flota"
+                f"<br>de {g['vanos_flota']:,} en el total de circuitos"
                 for g in grupos
             ],
             hovertemplate="%{hovertext}<extra></extra>",
@@ -429,10 +429,10 @@ def figura_preambulo(
         height=760, template="plotly_white", bargap=0.35, violingap=0.3,
         margin=dict(l=64, r=32, t=76, b=56),
         plot_bgcolor="#f8fafc", paper_bgcolor="#ffffff", hovermode="closest",
-        title=dict(text=f"Panorama del grupo &mdash; {periodo}",
+        title=dict(text=f"Panorama del grupo — {periodo}",
                    font=dict(size=15, family="Arial, sans-serif")),
     )
-    fig.update_xaxes(showticklabels=False, title_text="Circuitos de la flota, de menos a mas criticos",
+    fig.update_xaxes(showticklabels=False, title_text="Todos los circuitos, de menos a mas criticos",
                      row=1, col=1)
     fig.update_yaxes(title_text="Vanos en Medio-Alto + Alto", rangemode="tozero", row=1, col=1)
     fig.update_yaxes(title_text="Vanos", rangemode="tozero", row=2, col=1)
@@ -785,7 +785,7 @@ def _ventanas_html(filas: Sequence[Mapping[str, Any]]) -> str:
                               div_id="grafica-ventanas"))
     renglones = "".join(
         f"<tr><td><strong>{_escape(f['ventana'])}</strong></td>"
-        f"<td>{_escape(f.get('periodo') or '&mdash;')}</td>"
+        f"<td>{_escape(f.get('periodo') or '—')}</td>"
         f"<td>{_escape(f.get('circuitos', 0))}</td>"
         f"<td>{_escape(f.get('vanos_criticos', 0))}</td>"
         f"<td>{_escape(f.get('bajan_de_grupo', 0))}</td>"
@@ -800,6 +800,10 @@ def _ventanas_html(filas: Sequence[Mapping[str, Any]]) -> str:
 circuito estudia tres ventanas. Aquí se suman las de todos los circuitos muestreados:
 dónde se concentra el problema del grupo en el tiempo, y en cuántos de esos vanos la
 intervención alcanza a sacarlos del grupo crítico.</p>
+<p class="nota-ventanas">Las ventanas <strong>se traslapan quince días</strong> entre
+sí, de manera que sus cifras <strong>no son aditivas</strong> entre filas: una columna
+sumada contabilizaría varias veces los mismos vanos. Cada fila se lee contra las otras,
+nunca sumada con ellas.</p>
 {grafica}
 <table class="tabla-ventanas">
 <thead><tr><th>Ventana</th><th>Período</th><th>Circuitos</th>
@@ -1451,7 +1455,7 @@ def _executive_summary(
         top_record = max(sampled_records, key=lambda record: record["vanos_criticos"])
         items.append(
             f"El circuito peor situado de la muestra es {top_record['circuito']}: puesto "
-            f"{top_record['posicion']} de la flota, con {top_record['vanos_criticos']:,} vanos "
+            f"{top_record['posicion']} del total de circuitos, con {top_record['vanos_criticos']:,} vanos "
             f"en Medio-Alto + Alto y {top_record['uiti_total']:,.2f} de UITI_VANO acumulado."
         )
 
@@ -1787,11 +1791,12 @@ def _preambulo_flota_html(
     )
 
     parrafos = [
-        f"<p>Este informe cubre <strong>toda la flota</strong>: los "
+        f"<p>Este informe cubre <strong>todos los circuitos</strong>: los "
         f"<strong>{_num(perfil.get('circuitos_flota') or len(perfil.get('circuitos') or []), 0)}</strong> "
         f"circuitos que el ranking evalúa en esta ventana, con todos sus vanos. "
         f"El reparto por banda es {reparto}.</p>",
-        f"<p>Entre todos suman <strong>{_num(vanos, 0)} vanos</strong> con eventos, de los "
+        f"<p>Entre todos suman <strong>{_num(vanos, 0)} vanos probables de causa de "
+        f"falla</strong>, de los "
         f"cuales <strong>{_num(criticos, 0)}</strong> están en Medio-Alto o Alto: el "
         f"<strong>{_num(pct_criticos)}%</strong> de la red. Esa es la cifra que el resto "
         f"del informe intenta bajar.</p>",
@@ -1815,7 +1820,7 @@ def _preambulo_flota_html(
             f"<p>De esa población, el resto del informe estudia "
             f"<strong>{len(muestreados)}</strong> circuitos representativos, tomados por "
             f"cuota ({cuota}) y dentro de cada banda por mayor número de vanos críticos: "
-            f"{lista}. Los recuentos de arriba son de la flota completa; lo que viene "
+            f"{lista}. Los recuentos de arriba son del total de circuitos; lo que viene "
             f"después es de esos {len(muestreados)}.</p>"
         )
 
@@ -1840,7 +1845,7 @@ def _preambulo_flota_html(
 {''.join(parrafos)}
 {tabla}
 <p class="nota">Las tres lecturas son las del segundo tablero del cuaderno 02, con la misma
-geometría de grupos de vano: el ranking sitúa a cada circuito dentro de la flota, las barras
+geometría de grupos de vano: el ranking sitúa a cada circuito entre todos los demás, las barras
 reparten los vanos de la red entre los cuatro grupos, y el violín muestra cómo de grave es
 cada grupo &mdash; que es lo que el conteo no puede decir.</p>
 {figura_html}
@@ -1900,9 +1905,9 @@ def _preambulo_html(
         pct_criticos = perfil.get("pct_criticos_de_la_flota", 0.0)
         pct_vanos = perfil.get("pct_vanos_de_la_flota", 0.0)
         parrafos.append(
-            f"<p>Entre todos suman <strong>{_num(perfil['vanos_banda'], 0)} vanos</strong> "
-            f"con eventos, el <strong>{_num(pct_vanos)}%</strong> de los "
-            f"{_num(perfil['vanos_flota'], 0)} de la flota. De esos, "
+            f"<p>Entre todos suman <strong>{_num(perfil['vanos_banda'], 0)} vanos "
+            f"probables de causa de falla</strong>, el <strong>{_num(pct_vanos)}%</strong> de los "
+            f"{_num(perfil['vanos_flota'], 0)} del total de circuitos. De esos, "
             f"<strong>{_num(perfil['vanos_criticos_banda'], 0)}</strong> están en "
             f"Medio-Alto o Alto: el <strong>{_num(pct_criticos)}%</strong> de todos los "
             f"vanos críticos de la red.</p>"
@@ -1946,7 +1951,7 @@ def _preambulo_html(
     tabla = (
         "<table class='compact-table'><thead><tr>"
         "<th>Grupo de vano</th><th>Vanos en la banda</th><th>% de la banda</th>"
-        "<th>Vanos en la flota</th><th>% de ese grupo</th>"
+        "<th>Vanos en el total</th><th>% de ese grupo</th>"
         "</tr></thead><tbody>" + filas + "</tbody></table>"
     ) if filas else ""
 
@@ -1957,7 +1962,7 @@ def _preambulo_html(
 {''.join(parrafos)}
 {tabla}
 <p class="nota">Las tres lecturas son las del segundo tablero del cuaderno 02, con la misma
-geometría de grupos de vano: el ranking sitúa a la banda dentro de la flota, las barras
+geometría de grupos de vano: el ranking sitúa a la banda entre todos los circuitos, las barras
 reparten sus vanos entre los cuatro grupos, y el violín muestra cómo de grave es cada
 grupo &mdash; que es lo que el conteo no puede decir.</p>
 {figura_html}

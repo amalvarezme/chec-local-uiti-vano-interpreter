@@ -174,22 +174,64 @@ PLOTTING = (Path(__file__).resolve().parents[1]
             / "src" / "chec_local_interpreter" / "plotting.py")
 
 
-def _lineas_con_li() -> list[str]:
-    return [l.strip() for l in PLOTTING.read_text(encoding="utf-8").splitlines()
-            if "<li>" in l or "<li><b" in l]
+#: Los ENVOLTORIOS genericos: reciben la lista ya armada y solo le ponen el `<ul>`.
+#: No son sitios donde se interpole prosa, asi que exigirles `_mayuscula_inicial` en su
+#: propia linea no verifica nada. `_envolver_items` capitaliza dentro porque envuelve
+#: prosa de agente; `_items_ricos` no puede, porque sus items empiezan por un `<b>` o
+#: por un identificador de vano y capitalizar un FID no significa nada.
+#:
+#: Esto NO abre un hueco nuevo: un `<li>` construido a mano dentro de una llamada a
+#: cualquiera de los dos no lleva `<li>` en su linea y esta guarda nunca lo vio -- ni
+#: con `_envolver_items` ni ahora. Lo que la guarda sigue atrapando es exactamente lo
+#: que la motivo: un `<li>` escrito a mano en la plantilla con un `{...}` dentro.
+_ENVOLTORIOS = ("_envolver_items", "_items_ricos")
+
+
+def _lineas_con_li() -> list[tuple[str, str]]:
+    """Cada linea con un `<li>`, junto al nombre de la funcion que la contiene.
+
+    Hace falta el nombre porque la exencion es por FUNCION y la guarda mira lineas: la
+    linea que arma el `<li>` dentro de un envoltorio no menciona al envoltorio.
+    """
+    pares: list[tuple[str, str]] = []
+    actual = ""
+    for linea in PLOTTING.read_text(encoding="utf-8").splitlines():
+        encabezado = _re_guarda.match(r"\s*def\s+(\w+)", linea)
+        if encabezado:
+            actual = encabezado.group(1)
+        if "<li>" in linea or "<li><b" in linea:
+            pares.append((actual, linea.strip()))
+    return pares
 
 
 class TestNingunItemNuevoSeEscapa:
     def test_toda_linea_que_interpola_prosa_de_agente_capitaliza(self):
+        fuente = PLOTTING.read_text(encoding="utf-8")
+        cuerpos = [f"def {n}" for n in _ENVOLTORIOS if f"def {n}" in fuente]
+        assert len(cuerpos) == len(_ENVOLTORIOS), (
+            "un envoltorio de la lista de exentos ya no existe: revisa la exencion "
+            "antes de dejarla puesta")
+
         sospechosas = []
-        for linea in _lineas_con_li():
+        for funcion, linea in _lineas_con_li():
             interpola = bool(_re_guarda.search(r"\{[^}]+\}", linea))
             rotulo_fijo = "<strong>" in linea          # `<li><strong>Circuito:</strong> ...`
             texto_literal = not interpola              # `<li>Es un solo mapa: ...`
-            if texto_literal or rotulo_fijo:
+            if texto_literal or rotulo_fijo or funcion in _ENVOLTORIOS:
                 continue
             if "_mayuscula_inicial" not in linea:
-                sospechosas.append(linea[:100])
+                sospechosas.append(f"{funcion}: {linea[:100]}")
         assert not sospechosas, (
             "hay `<li>` con prosa de agente sin `_mayuscula_inicial`:\n  "
             + "\n  ".join(sospechosas))
+
+    def test_el_envoltorio_de_items_ricos_no_escapa_su_contenido(self):
+        """Es la diferencia con `_envolver_items`, y la razon de que exista.
+
+        Si alguien le anadiera un escape, los `<b>` que sus llamadores le pasan
+        volverian a dibujarse como `&lt;b&gt;` -- que es el defecto que lo creo.
+        """
+        fuente = PLOTTING.read_text(encoding="utf-8")
+        cuerpo = fuente.split("def _items_ricos", 1)[1].split("\n    def ", 1)[0]
+        assert "_escapar_html" not in cuerpo
+        assert "_escape(" not in cuerpo

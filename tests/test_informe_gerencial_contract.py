@@ -1677,7 +1677,11 @@ def test_el_mapa_de_agrupamiento_sale_porque_ya_esta_arriba():
     assert "Mapa de agrupamiento" not in html
     # Pero el ranking sigue, arriba, dentro del panorama.
     assert "Panorama del grupo" in html
-    assert "Ranking de la flota" in html
+    # El subtitulo de la fila del ranking. Decia "Ranking de la flota"; la revision
+    # unifico el vocabulario con el informe de circuito, que ya decia "circuitos
+    # totales". Lo que la prueba afirma no cambia: que la figura del ranking sigue
+    # ahi arriba, dentro del panorama.
+    assert "Ranking de todos los circuitos" in html
 
 
 def test_las_secciones_que_quedan_van_en_este_orden():
@@ -1977,4 +1981,6 @@ def test_el_panorama_de_flota_no_escupe_el_slug_como_prosa():
     )
 
     assert "<strong>todos</strong>" not in html
-    assert "toda la flota" in html
+    # Decia "toda la flota". Mismo alcance, vocabulario unificado con el informe
+    # de circuito: quien recibe el informe tiene circuitos, no una flota.
+    assert "todos los circuitos</strong>" in html
