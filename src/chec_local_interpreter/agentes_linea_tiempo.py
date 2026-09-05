@@ -101,10 +101,6 @@ def construir_linea_tiempo(run_dir: Path | str) -> dict[str, Any]:
     if not isinstance(estado, dict):
         estado = {}
 
-    presentes = [e for e in _ETAPAS if e in tiempos and _considerada(run_dir, e)]
-
-    # The barrier: the third stage cannot start until BOTH concurrent roles
-    # have finished, so it is the max of their durations -- not their sum.
     def _dur(etapa: str) -> float:
         entrada = tiempos.get(etapa)
         if isinstance(entrada, dict):
@@ -113,26 +109,74 @@ def construir_linea_tiempo(run_dir: Path | str) -> dict[str, Any]:
                 return float(valor)
         return 0.0
 
+    def _tok(etapa: str) -> int | None:
+        bruto = tokens.get(etapa)
+        total = bruto.get("total") if isinstance(bruto, dict) else None
+        return total if isinstance(total, int) else None
+
+    crudas = [
+        {
+            "etapa": etapa,
+            "duracion_segundos": _dur(etapa),
+            "tokens": _tok(etapa),
+            "entrada_bytes": (
+                (run_dir / f"{etapa}.bc.json").stat().st_size
+                if (run_dir / f"{etapa}.bc.json").exists()
+                else None
+            ),
+            "salida_bytes": (
+                (run_dir / f"{etapa}.out.json").stat().st_size
+                if (run_dir / f"{etapa}.out.json").exists()
+                else None
+            ),
+        }
+        for etapa in _ETAPAS
+        if etapa in tiempos and _considerada(run_dir, etapa)
+    ]
+
+    return _armar_horario(
+        crudas,
+        circuito=estado.get("circuito"),
+        fecha_inicio=estado.get("fecha_inicio"),
+        fecha_fin=estado.get("fecha_fin"),
+        ventanas=estado.get("ventanas_estudio") or [],
+    )
+
+
+def _armar_horario(
+    crudas: list[dict[str, Any]],
+    *,
+    circuito: Any = None,
+    fecha_inicio: Any = None,
+    fecha_fin: Any = None,
+    ventanas: Any = None,
+) -> dict[str, Any]:
+    """Place already-resolved stages on the timeline and total the run.
+
+    The one decision that lives here: the barrier. `historical` and
+    `inference` are dispatched concurrently, so both start at 0 and the third
+    stage starts at the LATER of their two ends -- the max of their durations,
+    never their sum. Both constructors share this so the picture cannot drift
+    between the standalone page and the circuit report.
+    """
     barrera = max(
-        (_dur(e) for e in presentes if e in _CONCURRENTES),
+        (c["duracion_segundos"] for c in crudas if c["etapa"] in _CONCURRENTES),
         default=0.0,
     )
 
     etapas: list[dict[str, Any]] = []
-    for etapa in presentes:
-        bruto = tokens.get(etapa)
-        total = bruto.get("total") if isinstance(bruto, dict) else None
-        bc = run_dir / f"{etapa}.bc.json"
-        out = run_dir / f"{etapa}.out.json"
+    for c in crudas:
+        etapa = c["etapa"]
         etapas.append(
             {
                 "etapa": etapa,
                 "que_hace": _QUE_HACE.get(etapa, ""),
                 "inicio_segundos": 0.0 if etapa in _CONCURRENTES else barrera,
-                "duracion_segundos": _dur(etapa),
-                "tokens": total if isinstance(total, int) else None,
-                "entrada_bytes": bc.stat().st_size if bc.exists() else None,
-                "salida_bytes": out.stat().st_size if out.exists() else None,
+                "duracion_segundos": c["duracion_segundos"],
+                "tokens": c.get("tokens"),
+                "token_source": c.get("token_source"),
+                "entrada_bytes": c.get("entrada_bytes"),
+                "salida_bytes": c.get("salida_bytes"),
                 "color": _COLOR.get(etapa, "#666666"),
             }
         )
@@ -142,16 +186,69 @@ def construir_linea_tiempo(run_dir: Path | str) -> dict[str, Any]:
     medidos = [e["tokens"] for e in etapas if e["tokens"] is not None]
 
     return {
-        "circuito": estado.get("circuito"),
-        "fecha_inicio": estado.get("fecha_inicio"),
-        "fecha_fin": estado.get("fecha_fin"),
-        "ventanas": estado.get("ventanas_estudio") or [],
+        "circuito": circuito,
+        "fecha_inicio": fecha_inicio,
+        "fecha_fin": fecha_fin,
+        "ventanas": list(ventanas or []),
         "etapas": etapas,
         "reloj_de_pared_segundos": reloj,
         "suma_de_etapas_segundos": suma,
         "ahorro_segundos": suma - reloj,
         "tokens_totales": sum(medidos) if medidos else None,
     }
+
+
+def linea_desde_desglose(
+    stage_breakdown: list[dict[str, Any]] | None,
+    *,
+    circuito: Any = None,
+    fecha_inicio: Any = None,
+    fecha_fin: Any = None,
+    ventanas: Any = None,
+) -> dict[str, Any]:
+    """Build the same timeline from `report_pipeline._resolve_stage_breakdown`.
+
+    `plotting.render_llm_analysis` already RECEIVES that list, so the circuit
+    report needs no run directory and no new argument to draw the figure. The
+    only thing unavailable by this route is each stage's input/output size,
+    which requires looking at the files; those come back `None`.
+
+    A stage name outside `_ETAPAS` is dropped rather than scheduled: an
+    unknown role has no place in a barrier whose whole meaning is which two
+    run concurrently.
+    """
+    entradas = stage_breakdown or []
+    por_nombre = {
+        e.get("stage"): e for e in entradas if isinstance(e, dict) and e.get("stage")
+    }
+
+    def _num(valor: Any) -> float:
+        return float(valor) if isinstance(valor, (int, float)) else 0.0
+
+    crudas = [
+        {
+            "etapa": etapa,
+            "duracion_segundos": _num(por_nombre[etapa].get("duration_seconds")),
+            "tokens": (
+                por_nombre[etapa].get("tokens_total")
+                if isinstance(por_nombre[etapa].get("tokens_total"), int)
+                else None
+            ),
+            "token_source": por_nombre[etapa].get("token_source"),
+            "entrada_bytes": None,
+            "salida_bytes": None,
+        }
+        for etapa in _ETAPAS
+        if etapa in por_nombre
+    ]
+
+    return _armar_horario(
+        crudas,
+        circuito=circuito,
+        fecha_inicio=fecha_inicio,
+        fecha_fin=fecha_fin,
+        ventanas=ventanas,
+    )
 
 
 def _mmss(segundos: float) -> str:
@@ -391,3 +488,95 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":  # pragma: no cover - envoltura de linea de comandos
     raise SystemExit(main())
+
+
+# Etiqueta de procedencia de los tokens, con el mismo vocabulario que ya usa
+# el informe de circuito (`plotting._token_source_label`): duplicado aqui a
+# proposito para no acoplar este modulo -- que tiene que poder correr suelto,
+# sin pandas ni plotly -- al modulo de graficas.
+_PROCEDENCIA = {
+    "measured": "medidos",
+    "mixed": "parcialmente medidos",
+    "estimated": "estimados",
+}
+
+
+def _celda_tokens(etapa: dict[str, Any]) -> str:
+    """Token count, prefixed with `~` when it is not a measured figure.
+
+    Same convention the report already uses for approximate counts
+    (`plotting._token_source_label`), so the figure does not invent a second
+    vocabulary for the same distinction the old table carried per row.
+    """
+    if etapa.get("tokens") is None:
+        return "N/D"
+    prefijo = "" if etapa.get("token_source") == "measured" else "~"
+    return f'{prefijo}{_miles(etapa["tokens"])}'
+
+
+def seccion_agentes_html(linea: dict[str, Any] | None) -> str:
+    """The block the circuit report embeds, right above "construido por agentes".
+
+    Returns "" when there is nothing to draw, so a visualization-only run
+    (no LLM analysis) does not leave an empty box behind.
+    """
+    if not linea or not linea.get("etapas"):
+        return ""
+
+    etapas = linea["etapas"]
+    procedencias = {
+        _PROCEDENCIA.get(e.get("token_source") or "", "")
+        for e in etapas
+        if e.get("tokens") is not None
+    }
+    procedencias.discard("")
+    nota_tokens = (
+        f" Tokens {' y '.join(sorted(procedencias))}." if procedencias else ""
+    )
+
+    filas = "".join(
+        "<tr>"
+        f'<td style="border-left:4px solid {e["color"]};padding-left:9px;font-weight:600;">'
+        f'{html.escape(e["etapa"])}</td>'
+        f'<td>{html.escape(e["que_hace"])}</td>'
+        f'<td style="text-align:right;">{_mmss(e["duracion_segundos"])}</td>'
+        f'<td style="text-align:right;">{_celda_tokens(e)}</td>'
+        "</tr>"
+        for e in etapas
+    )
+
+    concurrentes = [e for e in etapas if e["inicio_segundos"] == 0.0]
+    if len(concurrentes) > 1:
+        explicacion = (
+            "Las dos primeras barras arrancan juntas porque esos agentes trabajan "
+            "<strong>en paralelo</strong>: uno describe la historia del circuito y el otro "
+            "interpreta el modelo, y ninguno necesita lo que produce el otro. El tercero sí "
+            "espera a los dos, porque su trabajo es contrastarlos."
+        )
+        # La consecuencia solo se afirma cuando se cumple. Si a una etapa le
+        # falta la duracion medida, su barra vale cero y el reloj de pared
+        # IGUALA la suma: decir ahi "es menor" seria describir otra corrida.
+        if linea.get("ahorro_segundos", 0.0) > 0:
+            explicacion += " Por eso el reloj de pared es menor que la suma de los tiempos."
+    else:
+        explicacion = "Cada barra es una etapa de agente, con su tiempo y su consumo medidos."
+
+    return (
+        '<div class="content-box" style="margin-top:26px;">'
+        '<h2 style="margin-top:0;">🤖 Cómo se construyó este informe</h2>'
+        # `overflow-x` y no un ancho fluido: el SVG lleva rotulos de 9,5 px que
+        # a media escala dejan de leerse. En una pantalla angosta se desplaza,
+        # que es peor de lo que se ve pero mejor que ilegible.
+        '<div style="overflow-x:auto;text-align:center;">'
+        f"{render_svg(linea)}"
+        "</div>"
+        '<table style="width:100%;border-collapse:collapse;font-size:0.9em;margin-top:14px;">'
+        '<tr style="color:#64748b;text-align:left;border-bottom:1px solid #e2e8f0;">'
+        "<th>Agente</th><th>Qué hace</th>"
+        '<th style="text-align:right;">Tiempo</th>'
+        '<th style="text-align:right;">Tokens</th></tr>'
+        f"{filas}</table>"
+        f'<p style="margin:14px 0 0;font-size:0.88em;color:#475569;">{explicacion}'
+        f"{html.escape(nota_tokens)}</p>"
+        "</div>"
+    )

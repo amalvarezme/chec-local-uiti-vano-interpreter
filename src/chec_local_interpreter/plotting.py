@@ -9,6 +9,10 @@ from pathlib import Path
 
 import pandas as pd
 
+from chec_local_interpreter.agentes_linea_tiempo import (
+    linea_desde_desglose,
+    seccion_agentes_html,
+)
 from chec_local_interpreter.config import PROJECT_ROOT
 from chec_local_interpreter.event_counts import count_unique_event_dates
 from chec_local_interpreter.domain_context import NOMBRE_LEGIBLE_GRUPO
@@ -1469,44 +1473,12 @@ def render_llm_analysis(
                 f"{tokens_total_part} | {time_part}"
                 "</span>"
             )
-        if stage_breakdown:
-            # Per-stage breakdown (design #327 ADR-2): one row per agent
-            # stage (historical/inference/expert-alignment)
-            # from `report_pipeline._resolve_stage_breakdown`. Additive --
-            # placed AFTER the whole-run tokens_total/elapsed_seconds block
-            # above, never replacing it. Reuses the SAME
-            # measured/mixed/estimated label convention as that block, via
-            # `_token_source_label` (extracted above `render_llm_analysis`
-            # since this is now the third occurrence of the same mapping).
-            rows_html = []
-            for entry in stage_breakdown:
-                stage_token_source = entry.get("token_source", "estimated")
-                stage_label, stage_prefix = _token_source_label(stage_token_source)
-                stage_tokens_total = entry.get("tokens_total")
-                if stage_tokens_total is not None:
-                    tok_cell = f"{stage_prefix}{stage_tokens_total:,} ({stage_label})"
-                else:
-                    tok_cell = "N/D"
-                stage_duration = entry.get("duration_seconds")
-                if stage_duration is not None:
-                    dur_cell = f"{_format_elapsed_seconds(stage_duration)} (medidos)"
-                else:
-                    dur_cell = "N/D"
-                rows_html.append(
-                    "<tr>"
-                    f"<td style='text-align:left;'>{entry.get('stage', '')}</td>"
-                    f"<td>{tok_cell}</td>"
-                    f"<td>{dur_cell}</td>"
-                    "</tr>"
-                )
-            subtitle_info += (
-                "<br><span style='font-size: 0.8em; color: #94a3b8;'>"
-                "Desglose por etapa (agente):"
-                "<table style='display:inline-table; font-size:0.95em; border-collapse:collapse;'>"
-                "<tr><th style='text-align:left;'>Etapa</th><th>Tokens</th><th>Tiempo</th></tr>"
-                f"{''.join(rows_html)}"
-                "</table></span>"
-            )
+        # El desglose por etapa YA NO va aqui. Vivia en el subtitulo como una
+        # tabla gris de 0.8em -- tres filas de numeros donde nada decia que dos
+        # de esas etapas corren A LA VEZ, que es justamente el hecho que
+        # explica por que el reloj de pared es menor que su suma. Ahora se
+        # dibuja como figura al final del informe (`seccion_agentes_html`),
+        # con el mismo `stage_breakdown` y sin datos nuevos.
     else:
         subtitle_info = f"Período de análisis: {period_str} | (Solo visualización, sin análisis LLM)"
 
@@ -1514,6 +1486,18 @@ def render_llm_analysis(
     # informe gerencial. Dos implementaciones del mismo `data:` URI es como los dos
     # informes se separaron la primera vez.
     escudo_html = escudo_chec_html()
+    # Como se construyo el informe: la linea de tiempo de los agentes, dibujada
+    # desde el MISMO `stage_breakdown` que ya llega por parametro. Va pegada al
+    # pie que dice quien lo produjo, porque es la respuesta a esa misma frase.
+    seccion_agentes = seccion_agentes_html(
+        linea_desde_desglose(
+            stage_breakdown,
+            circuito=primary_circuit,
+            fecha_inicio=start_date,
+            fecha_fin=end_date,
+        )
+    )
+
     pie_html = pie_agentes_html()
 
     title_html = f"Reporte Criticidad - Circuito: {primary_circuit}<br><span style='font-size: 0.6em; color: #64748b;'>{subtitle_info}</span>"
@@ -1711,6 +1695,7 @@ def render_llm_analysis(
                     {html_expert_alignment}
                 </section>
             </div>
+            {seccion_agentes}
             {pie_html}
         </div>
         <script>

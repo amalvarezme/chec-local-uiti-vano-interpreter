@@ -433,17 +433,30 @@ def test_header_shows_per_stage_rows_when_every_stage_is_measured(tmp_path):
     ]
     html = _render_with_stage_breakdown(tmp_path, stage_breakdown=stage_breakdown, token_source="measured")
 
-    # Every stage row is present with its token count and its token-source
-    # label, plus its duration labeled "medidos" (never estimated).
-    assert "historical" in html
-    assert "1,000" in html and "medidos" in html
-    assert "inference" in html
-    assert "2,000" in html and "medidos/estimados" in html
-    assert "expert-alignment" in html
-    assert "500" in html and "aproximados" in html
-    for expected_duration in ("1m 17s", "2m 3s", "1m 5s"):
-        assert expected_duration in html
-    # The pre-existing whole-run total line is preserved, not replaced.
+    # El desglose por etapa ya no vive en el subtitulo como tabla gris: ahora
+    # es la figura "Como se construyo este informe" al final del documento
+    # (`agentes_linea_tiempo.seccion_agentes_html`), alimentada por ESTE mismo
+    # `stage_breakdown`. Lo que se verifica sigue siendo lo mismo -- cada etapa
+    # con su cifra y su tiempo -- en el sitio nuevo y con su formato.
+    assert "Cómo se construyó este informe" in html
+
+    # Una etapa por fila, con sus tokens en formato espanol. La procedencia se
+    # marca fila a fila con `~` (la convencion que el informe ya usaba para
+    # "esto es aproximado"): `historical` es measured y va limpia; las otras dos
+    # no lo son y van marcadas.
+    assert "historical" in html and ">1.000<" in html
+    assert "inference" in html and ">~2.000<" in html
+    assert "expert-alignment" in html and ">~500<" in html
+
+    # Duraciones medidas, en el formato mm:ss de la figura.
+    for esperado in ("1:17", "2:03", "1:05"):
+        assert esperado in html
+
+    # Y el hecho que la tabla vieja no podia contar: dos de esas etapas corren
+    # a la vez, asi que el reloj de pared (2:03 + 1:05) es menor que la suma.
+    assert "en paralelo" in html
+
+    # La linea de totales de toda la corrida se conserva, no se reemplaza.
     assert "Tokens totales (todas las etapas, incl. sub-agentes/corridas en paralelo) medidos: 5,000" in html
     assert "Tiempo total de ejecución: 12m 33s" in html
 
@@ -467,11 +480,13 @@ def test_header_stage_row_shows_na_time_when_duration_missing_for_one_stage(tmp_
     ]
     html = _render_with_stage_breakdown(tmp_path, stage_breakdown=stage_breakdown)
 
-    assert "2,000" in html  # inference's tokens still shown normally
-    assert "N/D" in html
-    # historical's own row keeps its measured duration; only inference's
-    # Tiempo cell degrades to N/D.
-    assert "1m 17s" in html
+    # `inference` sigue mostrando sus tokens con normalidad...
+    assert ">2.000<" in html
+    # ...y `historical` conserva su duracion medida. Solo se degrada la barra
+    # de `inference`, que sin duracion se dibuja en su ancho minimo en vez de
+    # inventar uno.
+    assert "1:17" in html
+    assert "0:00" in html
 
 
 def test_header_omits_stage_breakdown_block_when_stage_breakdown_is_none(tmp_path):
@@ -479,7 +494,7 @@ def test_header_omits_stage_breakdown_block_when_stage_breakdown_is_none(tmp_pat
     html = _render_with_stage_breakdown(tmp_path, stage_breakdown=None)
 
     assert _extract_header_h1(html) == _extract_header_h1(baseline_html)
-    assert "Desglose por etapa" not in html
+    assert "Cómo se construyó este informe" not in html
 
 
 def test_header_omits_stage_breakdown_block_when_stage_breakdown_is_empty_list(tmp_path):
@@ -487,7 +502,7 @@ def test_header_omits_stage_breakdown_block_when_stage_breakdown_is_empty_list(t
     html = _render_with_stage_breakdown(tmp_path, stage_breakdown=[])
 
     assert _extract_header_h1(html) == _extract_header_h1(baseline_html)
-    assert "Desglose por etapa" not in html
+    assert "Cómo se construyó este informe" not in html
 
 
 def test_header_default_stage_breakdown_matches_explicit_none_byte_identical(tmp_path):

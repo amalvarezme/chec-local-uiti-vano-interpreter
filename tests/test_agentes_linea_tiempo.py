@@ -238,3 +238,174 @@ def test_el_cli_avisa_si_la_carpeta_no_existe(tmp_path: Path) -> None:
     from chec_local_interpreter.agentes_linea_tiempo import main
 
     assert main([str(tmp_path / "no-existe")]) == 2
+
+
+# --------------------------------------------------------------------------
+# linea_desde_desglose -- el adaptador que usa el informe de circuito
+#
+# `plotting.render_llm_analysis` ya RECIBE `stage_breakdown` (la lista que
+# arma `report_pipeline._resolve_stage_breakdown`), asi que la figura del
+# informe no necesita la carpeta de la corrida ni un parametro nuevo: se
+# construye desde esa misma lista. Lo unico que se pierde son los tamanos de
+# entrada/salida, que solo existen mirando los archivos.
+# --------------------------------------------------------------------------
+
+_DESGLOSE = [
+    {
+        "stage": "historical",
+        "tokens_total": 100714,
+        "token_source": "measured",
+        "duration_seconds": 447.502,
+        "duration_source": "measured",
+    },
+    {
+        "stage": "inference",
+        "tokens_total": 138831,
+        "token_source": "measured",
+        "duration_seconds": 536.193,
+        "duration_source": "measured",
+    },
+    {
+        "stage": "expert-alignment",
+        "tokens_total": 106848,
+        "token_source": "estimated",
+        "duration_seconds": 372.298,
+        "duration_source": "measured",
+    },
+]
+
+
+def test_el_adaptador_produce_el_mismo_horario_que_la_carpeta(corrida: Path) -> None:
+    from chec_local_interpreter.agentes_linea_tiempo import linea_desde_desglose
+
+    desde_disco = construir_linea_tiempo(corrida)
+    desde_lista = linea_desde_desglose(_DESGLOSE, circuito="HER23L16")
+
+    assert [e["etapa"] for e in desde_lista["etapas"]] == [
+        e["etapa"] for e in desde_disco["etapas"]
+    ]
+    for a, b in zip(desde_lista["etapas"], desde_disco["etapas"]):
+        assert a["inicio_segundos"] == pytest.approx(b["inicio_segundos"])
+        assert a["duracion_segundos"] == pytest.approx(b["duracion_segundos"])
+    assert desde_lista["reloj_de_pared_segundos"] == pytest.approx(
+        desde_disco["reloj_de_pared_segundos"]
+    )
+    assert desde_lista["ahorro_segundos"] == pytest.approx(desde_disco["ahorro_segundos"])
+
+
+def test_el_adaptador_conserva_si_los_tokens_son_medidos_o_estimados(corrida: Path) -> None:
+    """El informe ya distingue medidos de estimados; la figura no puede perderlo."""
+    from chec_local_interpreter.agentes_linea_tiempo import linea_desde_desglose
+
+    por_nombre = {e["etapa"]: e for e in linea_desde_desglose(_DESGLOSE)["etapas"]}
+    assert por_nombre["historical"]["token_source"] == "measured"
+    assert por_nombre["expert-alignment"]["token_source"] == "estimated"
+
+
+def test_el_adaptador_aguanta_una_etapa_sin_medidas() -> None:
+    from chec_local_interpreter.agentes_linea_tiempo import linea_desde_desglose
+
+    linea = linea_desde_desglose(
+        [
+            {"stage": "historical", "tokens_total": None, "duration_seconds": None},
+            {"stage": "inference", "tokens_total": 10, "duration_seconds": 60.0},
+        ]
+    )
+    por_nombre = {e["etapa"]: e for e in linea["etapas"]}
+    assert por_nombre["historical"]["duracion_segundos"] == 0.0
+    assert por_nombre["historical"]["tokens"] is None
+    assert linea["reloj_de_pared_segundos"] == pytest.approx(60.0)
+
+
+def test_el_adaptador_ignora_una_etapa_desconocida() -> None:
+    """Una etapa fuera de las tres del contrato no puede colarse en el horario."""
+    from chec_local_interpreter.agentes_linea_tiempo import linea_desde_desglose
+
+    linea = linea_desde_desglose(
+        [
+            {"stage": "historical", "tokens_total": 1, "duration_seconds": 10.0},
+            {"stage": "una-etapa-inventada", "tokens_total": 9, "duration_seconds": 999.0},
+        ]
+    )
+    assert [e["etapa"] for e in linea["etapas"]] == ["historical"]
+
+
+# --------------------------------------------------------------------------
+# seccion_agentes_html -- el bloque que se inserta en el informe de circuito
+# --------------------------------------------------------------------------
+
+
+def test_la_seccion_del_informe_trae_la_figura_y_la_explicacion() -> None:
+    from chec_local_interpreter.agentes_linea_tiempo import (
+        linea_desde_desglose,
+        seccion_agentes_html,
+    )
+
+    bloque = seccion_agentes_html(linea_desde_desglose(_DESGLOSE))
+    assert "<svg" in bloque
+    assert "en paralelo" in bloque
+    for etapa in ("historical", "inference", "expert-alignment"):
+        assert etapa in bloque
+
+
+def test_la_seccion_del_informe_no_trae_red_ni_guion() -> None:
+    from chec_local_interpreter.agentes_linea_tiempo import (
+        linea_desde_desglose,
+        seccion_agentes_html,
+    )
+
+    limpio = _sin_xmlns(seccion_agentes_html(linea_desde_desglose(_DESGLOSE)))
+    for prohibido in ("http://", "https://", "<script", "<link"):
+        assert prohibido not in limpio
+
+
+def test_sin_desglose_la_seccion_es_vacia() -> None:
+    """Una corrida sin analisis LLM no debe dejar un recuadro vacio en el informe."""
+    from chec_local_interpreter.agentes_linea_tiempo import (
+        linea_desde_desglose,
+        seccion_agentes_html,
+    )
+
+    assert seccion_agentes_html(linea_desde_desglose([])) == ""
+    assert seccion_agentes_html(None) == ""
+
+
+def test_la_seccion_marca_con_tilde_los_tokens_que_no_son_medidos() -> None:
+    """La tabla vieja etiquetaba la procedencia FILA A FILA; no se puede perder.
+
+    El informe ya usa `~` para "esto es una aproximacion" (ver
+    `plotting._token_source_label`), asi que la figura reusa esa convencion en
+    vez de inventar otra.
+    """
+    from chec_local_interpreter.agentes_linea_tiempo import (
+        linea_desde_desglose,
+        seccion_agentes_html,
+    )
+
+    bloque = seccion_agentes_html(linea_desde_desglose(_DESGLOSE))
+    # `historical` es measured: su cifra va limpia.
+    assert ">100.714<" in bloque
+    # `expert-alignment` es estimated: su cifra va marcada.
+    assert ">~106.848<" in bloque
+
+
+def test_no_afirma_un_ahorro_cuando_no_lo_hubo() -> None:
+    """Con una sola etapa medida el reloj IGUALA la suma; decir "es menor" mentiria."""
+    from chec_local_interpreter.agentes_linea_tiempo import (
+        linea_desde_desglose,
+        seccion_agentes_html,
+    )
+
+    degradado = linea_desde_desglose(
+        [
+            {"stage": "historical", "tokens_total": 1000, "duration_seconds": 77.4},
+            {"stage": "inference", "tokens_total": 2000, "duration_seconds": None},
+        ]
+    )
+    assert degradado["ahorro_segundos"] == pytest.approx(0.0)
+    bloque = seccion_agentes_html(degradado)
+    assert "en paralelo" in bloque          # el hecho estructural sigue siendo cierto
+    assert "menor que la suma" not in bloque  # la consecuencia, no
+
+    con_ahorro = seccion_agentes_html(linea_desde_desglose(_DESGLOSE))
+    assert "menor que la suma" in con_ahorro
