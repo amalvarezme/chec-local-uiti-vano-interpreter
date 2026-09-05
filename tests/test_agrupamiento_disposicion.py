@@ -90,15 +90,31 @@ def test_el_tablero_de_vanos_no_va_en_dos_columnas():
 # ------------------------------------------------------------------- la rejilla nueva
 
 
-def test_la_rejilla_es_de_dos_por_tres():
-    """Dos filas y tres columnas: cinco paneles y ni una casilla de relleno.
+def test_la_rejilla_es_de_tres_por_tres():
+    """Tres filas y tres columnas: seis paneles y una sola casilla de relleno, (3,1).
 
-    La fila que se fue era la del top 10, que ahora comparte la de arriba con las otras
-    dos lecturas por vano.
+    La tercera fila la abrio el reparto de UITI por circuito, que va debajo de Grupos
+    Circuitos y sobre sus mismas dos columnas. Su columna 1 queda vacia a proposito: el
+    panel es una hilera de 208 barras y el ancho es justo lo que necesita.
     """
     celda = _sin_comentarios(_celda_de_la_figura())
     filas, columnas = _rejilla(celda)
-    assert (filas, columnas) == (2, 3), f"la figura declara {filas}x{columnas}"
+    assert (filas, columnas) == (3, 3), f"la figura declara {filas}x{columnas}"
+
+
+def test_el_reparto_de_uiti_va_de_la_columna_2_en_adelante():
+    """La fila 3 arranca en la columna 2, igual que el ranking de arriba.
+
+    Alinear las dos hileras de circuitos sobre las mismas columnas es lo que deja
+    compararlas de un vistazo: la de arriba ordena por vanos criticos y la de abajo por
+    UITI, y ver que NO coinciden es justamente lo que el panel aporta. Empezarla en la
+    columna 1 la desalinearia y las dos dejarian de leerse como una sola cosa.
+    """
+    celda = _sin_comentarios(_celda_de_la_figura())
+    assert re.search(r"\[None, \{'colspan': 2\}, None\],", celda), (
+        "la fila 3 no deja libre la columna 1 ni pone el panel sobre las dos de la derecha")
+    assert re.findall(r"\), row=3, col=2\)", celda), (
+        "ninguna traza va a (3,2), que es la del reparto de UITI")
 
 
 def test_las_densidades_marginales_ya_no_se_dibujan():
@@ -113,8 +129,8 @@ def test_las_densidades_marginales_ya_no_se_dibujan():
         "los indices de las densidades siguen declarados")
     assert "kdeXeje" not in fuente and "kdeYeje" not in fuente, (
         "sus ejes siguen viajando al JS")
-    assert "assert len(fig_vano.data) == 17" in fuente, (
-        "el numero de trazas de la figura de vanos ya no es 17")
+    assert "assert len(fig_vano.data) == 18" in fuente, (
+        "el numero de trazas de la figura de vanos ya no es 18")
 
 
 def test_cada_panel_esta_en_su_casilla():
@@ -211,20 +227,27 @@ def test_las_filas_miden_la_mitad_y_las_columnas_no_se_tocan():
 
     alto = re.search(r"height=(\d+)", celda)
     assert alto, "la figura no declara `height`"
-    assert int(alto.group(1)) == 1023, (
-        f"el alto es {alto.group(1)}; las filas a la mitad piden 1023")
+    assert int(alto.group(1)) == 1402, (
+        f"el alto es {alto.group(1)}; con tres filas hacen falta 1402")
 
     sep = re.search(r"vertical_spacing=([\d.]+)", celda)
-    assert sep and float(sep.group(1)) == 0.14, (
-        f"la separacion vertical es {sep.group(1) if sep else None}; con el area "
-        f"nueva hace falta 0.14 para conservar los ~110 px que pide el texto")
+    assert sep and float(sep.group(1)) == 0.092, (
+        f"la separacion vertical es {sep.group(1) if sep else None}; con TRES filas la "
+        f"fraccion se cobra DOS veces, y 0.092 es la que vuelve a dar ~110 px por hueco")
 
-    # Y que las cuentas cierren: filas = area - separacion, y cada una la mitad.
-    area = 1023 - 175 - 60
-    filas = area - 0.14 * area
-    assert abs(0.55 * filas - 745 / 2) < 4 and abs(0.45 * filas - 610 / 2) < 4, (
-        f"las filas no quedan a la mitad: {0.55 * filas:.0f} y {0.45 * filas:.0f} "
-        f"contra 372,5 y 305")
+    # Y que las cuentas cierren. Con tres filas hay DOS separaciones, y esa es justamente
+    # la trampa: mantener el 0.14 de dos filas se llevaba 336 px en vez de 220.
+    area = 1402 - 140 - 60
+    huecos = 2 * 0.092 * area
+    filas = area - huecos
+    assert abs(huecos / 2 - 110) < 6, (
+        f"cada separacion mide {huecos / 2:.0f} px y el texto pide ~110")
+    altos = [0.38 * filas, 0.31 * filas, 0.31 * filas]
+    assert abs(altos[0] - 372.5) < 6, f"la fila 1 mide {altos[0]:.0f} y no ~372"
+    assert abs(altos[1] - 305) < 6, f"la fila 2 mide {altos[1]:.0f} y no ~305"
+    assert abs(altos[2] - altos[1]) < 1, (
+        f"la fila 3 mide {altos[2]:.0f} y la 2 {altos[1]:.0f}: son la misma figura, "
+        f"una hilera de 208 barras, y tienen que medir lo mismo")
 
 
 def test_los_titulos_siguen_el_orden_de_lectura_de_la_rejilla():
@@ -239,7 +262,7 @@ def test_los_titulos_siguen_el_orden_de_lectura_de_la_rejilla():
     # Se lee como tupla y no partiendo por comas: 'Top 10 circuitos, clase Alto' lleva una
     # coma dentro y partirla ahi inventa un titulo que no existe.
     textos = list(ast.literal_eval(titulos.group(1)))
-    assert len(textos) == 5, f"son 5 casillas con subplot, hay {len(textos)} titulos"
+    assert len(textos) == 6, f"son 6 casillas con subplot, hay {len(textos)} titulos"
     assert textos[0] == "Vanos por grupo", (
         f"el primer titulo es el de la casilla (1,1), que son las barras: {textos}")
     assert textos[1] == "", (
@@ -250,6 +273,11 @@ def test_los_titulos_siguen_el_orden_de_lectura_de_la_rejilla():
         f"el cuarto es el de (2,1), los violines: {textos}")
     assert textos[4].startswith("Grupos Circuitos"), (
         f"el quinto titulo es el del ranking, en (2,2): {textos}")
+    # La casilla (3,1) es `None` y NO consume titulo: Plotly los reparte solo sobre las
+    # casillas que llevan subplot. Colar un '' para la casilla vacia correria este titulo
+    # al panel equivocado sin dar error.
+    assert textos[5].startswith("Reparto del UITI"), (
+        f"el sexto titulo es el del reparto de UITI, en (3,2): {textos}")
 
 
 def test_el_titulo_del_panel_de_figuras_va_a_la_mitad():

@@ -900,10 +900,11 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     # Misma estructura de trazas que el tablero de circuitos: 1 contorno + 4 scatter +
     # 1 barra de conteo + 1 de porcentaje + 4 del top 10 + 4 violines + 2 del ranking.
     fig_vano = make_subplots(
-        # DOS filas y TRES columnas, con las cinco casillas ocupadas.
+        # TRES filas y TRES columnas, con seis casillas ocupadas y una sola vacia.
         #
         #   fila 1:  barras por grupo | dispersion vano x ventana | top 10 Medio-Alto+Alto
         #   fila 2:  violines de UITI | ranking de circuitos, sobre esas dos columnas
+        #   fila 3:  (vacia)          | reparto del UITI por circuito, sobre esas dos
         #
         # Arriba queda la lectura por VANO -- cuantos hay en cada grupo, donde caen en el
         # plano eventos x UITI, y que circuitos concentran los peores -- y abajo la lectura
@@ -914,10 +915,13 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         # Se fueron las dos densidades marginales -- la curva sobre el eje x y la del eje y --
         # con sus ocho trazas. Repetian en forma lo que la dispersion ya dice con sus puntos,
         # y cada una se llevaba una fila o una columna enteras del tablero.
-        rows=2, cols=3,
+        rows=3, cols=3,
         # La fila de arriba se lleva algo mas: la dispersion es la pieza grande, y el top 10
         # apila cuatro clases sobre diez categorias.
-        row_heights=[0.55, 0.45],
+        # La fila 3 pesa lo mismo que la 2: son las dos la misma figura -- una hilera de
+        # 208 barras por circuito con sus nombres rotados debajo -- y darle menos a una de
+        # ellas la volveria ilegible sin que la otra ganara nada.
+        row_heights=[0.38, 0.31, 0.31],
         # La columna 1 son cuatro categorias (los cuatro grupos) y no necesita ancho; el que
         # sobra se lo lleva la dispersion. El top 10 se queda con 0.34 porque sus nombres de
         # circuito van sobre el eje y, y ese margen lo pide `automargin`.
@@ -927,11 +931,15 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         # bajar el area a la mitad se encogia de 110 px a 55. Lo que tiene que caber
         # ahi -- el rotulo de eje x de la fila 1, el titulo de la fila 2 y su
         # subtitulo -- es TEXTO, y el texto no se encoge: a 55 px se pisaban.
-        # 0.14 sobre los 788 px del area nueva son los mismos ~110 px de antes.
-        horizontal_spacing=0.075, vertical_spacing=0.14,
+        # 0.14 sobre los 788 px del area de dos filas eran ~110 px. Con tres filas hay DOS
+        # separaciones en vez de una, y la fraccion se cobra en las dos: mantener 0.14 se
+        # llevaba 336 px de las filas. 0.092 sobre los 1.202 px del area nueva vuelve a dar
+        # los mismos ~110 px por separacion, que es lo que el texto necesita.
+        horizontal_spacing=0.075, vertical_spacing=0.092,
         specs=[
             [{}, {}, {}],
             [{}, {'colspan': 2}, None],
+            [None, {'colspan': 2}, None],
         ],
         # En orden de lectura sobre las casillas que SI llevan subplot: (1,1) barras,
         # (1,2) dispersion, (1,3) top 10, (2,1) violines, (2,2) ranking. Plotly los reparte
@@ -940,7 +948,8 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         subplot_titles=('Vanos por grupo', '',
                         'Top 10 Medio-Alto + Alto',
                         'UITI acumulado',
-                        'Grupos Circuitos: Vanos en clase Medio-Alto y Alto por circuito'),
+                        'Grupos Circuitos: Vanos en clase Medio-Alto y Alto por circuito',
+                        'Reparto del UITI acumulado por circuito'),
     )
 
     fig_vano.add_trace(go.Contour(                                   # 0: membresia
@@ -1033,6 +1042,26 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         showlegend=False, hoverinfo='skip',
     ), row=2, col=2)
 
+    # --- Fila 3, columnas 2-3: que porcion del UITI se lleva cada circuito ----------------
+    # La hilera de arriba cuenta VANOS criticos; esta reparte el UITI. No son la misma
+    # pregunta y no dan el mismo orden: un circuito puede tener muchos vanos en las clases
+    # criticas con el daño repartido y leve, y otro concentrar una quinta parte del UITI de
+    # la ventana en ocho vanos. La primera dice cuanto trabajo hay; esta, donde esta el
+    # impacto. Verlas desalineadas es el dato, no un error de datos.
+    #
+    # Va en PORCENTAJE y no en UITI absoluto para que dos ventanas de distinta duracion se
+    # puedan comparar: la suma de las barras es 100 sea cual sea el rango elegido.
+    #
+    # El color lo pone la banda de riesgo que la hilera de ARRIBA ya le asigno a cada
+    # circuito. Es la unica forma de ver, de un vistazo, cuando las dos lecturas discrepan:
+    # una barra alta pintada de verde es un circuito que concentra UITI sin tener vanos en
+    # las clases criticas, y eso es justo lo que ninguna de las dos hileras dice sola.
+    fig_vano.add_trace(go.Bar(                                       # 25: % de UITI por circuito
+        x=[], y=[], marker=dict(color=[], line=dict(width=0.4, color='rgba(60,60,60,0.5)')),
+        showlegend=False, cliponaxis=False,
+        hovertext=[], hovertemplate='%{hovertext}<extra></extra>',
+    ), row=3, col=2)
+
     fig_vano.update_layout(
         title=dict(
             text='Agrupamiento de vanos por UITI acumulado y número de eventos'
@@ -1071,7 +1100,14 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         # la mitad -- porque una figura la mitad de alta le paga a los margenes una
         # tajada doble. Y quedarse en 968 (el numero correcto si la separacion pudiera
         # encogerse) pisaba el rotulo del eje x de la fila 1 contra el titulo de la 2.
-        height=1023, template='plotly_white', bargap=0.45, violingap=0.3,
+        #
+        # La fila 3 -- el reparto del UITI -- SUMA su alto, no lo reparte. Dejar 1023 con
+        # tres filas le daba 305 px a las dos hileras de circuitos juntas y sus nombres
+        # rotados se pisaban. La cuenta es la misma de arriba, con una separacion mas:
+        #   filas = 373 (f1) + 304 (f2) + 304 (f3)                        =  981
+        #   area  = 981 + 2 x 110 (DOS separaciones, texto que no encoge) = 1.201
+        #   height = 1.201 + 200 (margenes t=140 + b=60)                  = 1.402
+        height=1402, template='plotly_white', bargap=0.45, violingap=0.3,
     )
     fig_vano.update_xaxes(title_text='Número de eventos por vano', row=1, col=2)
     fig_vano.update_yaxes(title_text='UITI acumulado por vano', row=1, col=2)
@@ -1094,6 +1130,16 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     fig_vano.update_xaxes(title_text='Circuitos ordenados por vanos en Medio-Alto + Alto',
                           tickangle=-90, tickfont_size=8, automargin=True,
                           showgrid=False, row=2, col=2)
+    # Fila 3: mismo tratamiento de eje que la hilera de arriba -- eje x LINEAL con los
+    # nombres puestos como ticks -- por la misma razon, y porque las dos comparten el
+    # adelgazador de rotulos. El eje y va en porcentaje y NO se fija a [0, 100]: el maximo
+    # real ronda el 10%%, y un eje hasta 100 dejaria las 208 barras aplastadas contra el
+    # origen. `ticksuffix` es lo que evita repetir "%%" en cada rotulo.
+    fig_vano.update_yaxes(title_text='% del UITI de la ventana', rangemode='tozero',
+                          ticksuffix='%', ticklabelstandoff=8, row=3, col=2)
+    fig_vano.update_xaxes(title_text='Circuitos ordenados por % de UITI acumulado',
+                          tickangle=-90, tickfont_size=8, automargin=True,
+                          showgrid=False, row=3, col=2)
     fig_vano.update_yaxes(title_text='Vanos', rangemode='tozero', row=1, col=1)
     fig_vano.update_yaxes(title_text='UITI acumulado', row=2, col=1)
     # Titulos de subplot al DOBLE (eran 12): el tablero se mira a pantalla completa y a 12 px
@@ -1118,6 +1164,7 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     for _clave, _texto in [('barras', 'Vanos por grupo'),
                            ('top', 'Top 10 Medio-Alto + Alto'),
                            ('altoCirc', 'Grupos Circuitos: Vanos en clase Medio-Alto y Alto por circuito'),
+                           ('uitiCirc', 'Reparto del UITI acumulado por circuito'),
                            ('violinU', 'UITI acumulado')]:
         _pos = [i for i, _a in enumerate(fig_vano.layout.annotations) if _a.text == _texto]
         assert len(_pos) == 1, (_texto, _pos)
@@ -1129,10 +1176,11 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     # escribe en la traza equivocada sin que nada falle a la vista.
     IDX_VANO = {'contorno': 0, 'mapa': [1, 2, 3, 4], 'barras': 5, 'pct': 6,
                 'barrasTop': [7, 8, 9, 10], 'violinUiti': [11, 12, 13, 14],
-                'altoCircuito': 15, 'cuartiles': 16}
-    assert len(fig_vano.data) == 17
+                'altoCircuito': 15, 'cuartiles': 16, 'uitiCircuito': 17}
+    assert len(fig_vano.data) == 18
     assert fig_vano.data[IDX_VANO['altoCircuito']].type == 'bar'
     assert fig_vano.data[IDX_VANO['cuartiles']].mode == 'lines'
+    assert fig_vano.data[IDX_VANO['uitiCircuito']].type == 'bar'
     assert all(fig_vano.data[i].type == 'bar' and fig_vano.data[i].orientation == 'h'
                for i in IDX_VANO['barrasTop']), 'las 4 del top 10 son barras horizontales'
     assert fig_vano.data[IDX_VANO['contorno']].type == 'contour'
@@ -1149,6 +1197,8 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         'topY': _clave_eje_vano(fig_vano.data[IDX_VANO['barrasTop'][0]], 'y'),
         'altoY': _clave_eje_vano(fig_vano.data[IDX_VANO['altoCircuito']], 'y'),
         'altoX': _clave_eje_vano(fig_vano.data[IDX_VANO['altoCircuito']], 'x'),
+        'uitiY': _clave_eje_vano(fig_vano.data[IDX_VANO['uitiCircuito']], 'y'),
+        'uitiX': _clave_eje_vano(fig_vano.data[IDX_VANO['uitiCircuito']], 'x'),
     }
     print(f'{len(fig_vano.data)} trazas | ejes: {EJES_VANO}')
 
@@ -1243,9 +1293,14 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
   // costaba 200 KB del JSON. Un solo punto de resolucion para no equivocarse.
   function circDe(v) { return CTX.circuitosNombres[CTX.circuitos[v]]; }
 
-  // Circuitos de la fila 5, en el orden dibujado. Vive fuera de aplicar() porque el
-  // handler de resize necesita re-rotular sin recalcular nada.
+  // Circuitos de cada hilera, en el orden dibujado. Viven fuera de aplicar() porque el
+  // handler de resize necesita re-rotular sin recalcular nada. Son DOS listas y no una:
+  // las dos hileras llevan los mismos circuitos en ORDEN DISTINTO -- una por vanos
+  // criticos y la otra por porcentaje de UITI --, que es justamente lo que el panel
+  // muestra. Rotular las dos con una sola lista le pondria a cada barra el nombre del
+  // circuito que ocupa ese puesto en la OTRA hilera.
   var CIRC_FILA5 = [];
+  var CIRC_UITI = [];
 
   // Etiquetas del eje de la fila 5 adelgazadas segun el ancho REAL. Con 184 circuitos en
   // una ventana de 1000 px quedan 5,2 px por categoria y los nombres rotados se pisan;
@@ -1254,19 +1309,27 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
   // completo siempre esta en el hover, que no depende de esto.
   var PX_POR_ETIQUETA = 10;
 
-  function rotularFila5(gd) {
-    if (!CIRC_FILA5.length) { return; }
-    var eje = CTX.ejes.altoX, fl = gd._fullLayout || {};
+  // Una sola implementacion para las dos hileras: el paso sale del ancho REAL del
+  // subplot que se le pase, no de un numero fijo, asi que sirve igual a las dos aunque
+  // sus ejes tengan dominios distintos.
+  function rotularHilera(gd, eje, lista) {
+    if (!lista || !lista.length) { return; }
+    var fl = gd._fullLayout || {};
     var dom = (fl[eje] || {}).domain || [0, 1];
     var anchoPx = (dom[1] - dom[0]) * (fl.width || 1200);
     var caben = Math.max(1, Math.floor(anchoPx / PX_POR_ETIQUETA));
-    var paso = Math.max(1, Math.ceil(CIRC_FILA5.length / caben));
+    var paso = Math.max(1, Math.ceil(lista.length / caben));
     var tv = [], tt = [];
-    for (var k = 0; k < CIRC_FILA5.length; k += paso) { tv.push(k); tt.push(CIRC_FILA5[k]); }
+    for (var k = 0; k < lista.length; k += paso) { tv.push(k); tt.push(lista[k]); }
     var cambio = {};
     cambio[eje + '.tickvals'] = tv;
     cambio[eje + '.ticktext'] = tt;
     Plotly.relayout(gd, cambio);
+  }
+
+  function rotularFila5(gd) {
+    rotularHilera(gd, CTX.ejes.altoX, CIRC_FILA5);
+    rotularHilera(gd, CTX.ejes.uitiX, CIRC_UITI);
   }
 
   function grupoDe(nx, uy, geo) {
@@ -1753,6 +1816,72 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     });
     Plotly.restyle(gd, {x: [lqx], y: [lqy]}, [CTX.idx.cuartiles]);
 
+    // --- Fila 3: reparto del UITI acumulado por circuito -----------------------------
+    // La hilera de arriba cuenta VANOS en las clases criticas; esta reparte el UITI de la
+    // ventana. Un circuito puede tener muchos vanos criticos con el daño repartido y leve,
+    // y otro concentrar una quinta parte del UITI en ocho vanos: la primera hilera dice
+    // cuanto TRABAJO hay, esta dice donde esta el IMPACTO.
+    //
+    // El denominador es la suma de `uitiCirc`, que ya viene calculada con el rango de
+    // fechas elegido. Con un total fijo del periodo entero los porcentajes de una ventana
+    // corta no sumarian 100 y dejarian de ser un reparto.
+    var totalUiti = 0, cUiti;
+    for (i = 0; i < CTX.circuitosNombres.length; i++) {
+      cUiti = CTX.circuitosNombres[i];
+      totalUiti += uitiCirc[cUiti] || 0;
+    }
+    // Una ventana sin un solo evento es un resultado real, no un fallo. Sin esta guarda
+    // cada barra sale NaN y Plotly dibuja el panel vacio sin decir nada, que se lee como
+    // un tablero roto.
+    var pctUiti = {};
+    for (i = 0; i < CTX.circuitosNombres.length; i++) {
+      cUiti = CTX.circuitosNombres[i];
+      pctUiti[cUiti] = totalUiti > 0 ? 100 * uitiCirc[cUiti] / totalUiti : 0;
+    }
+    // ASCENDENTE, igual que la hilera de arriba: los circuitos que concentran el UITI
+    // quedan a la DERECHA, que es donde la vista se detiene, y las dos hileras suben en el
+    // mismo sentido. Ordenarla al reves dejaria la cola larga de circuitos en casi cero
+    // ocupando todo el ancho de la derecha.
+    // .slice() antes de ordenar, por lo mismo que la hilera de arriba: la paleta
+    // CTX.circuitosNombres resuelve circDe() y ordenarla en el sitio desalinea los indices.
+    var ordenUiti = CTX.circuitosNombres.slice();
+    ordenUiti.sort(function (a, b) {
+      return (pctUiti[a] - pctUiti[b]) || (a < b ? -1 : 1);
+    });
+    var posU = [], valsU = [], colsU = [], hovUiti = [];
+    for (i = 0; i < ordenUiti.length; i++) {
+      cUiti = ordenUiti[i];
+      posU.push(i);
+      valsU.push(pctUiti[cUiti]);
+      // El color viene de la banda que la hilera de ARRIBA le puso a este circuito, no de
+      // una banda nueva sobre el porcentaje. Es lo que deja ver la discrepancia entre las
+      // dos lecturas: una barra alta pintada del color mas bajo es un circuito que
+      // concentra UITI sin tener vanos en las clases criticas.
+      colsU.push(CTX.coloresCuartil[
+        Math.max(0, NOMBRE_RANGO_EXCEL.indexOf(rangoPorCirc[cUiti]))]);
+      hovUiti.push('<b>' + cUiti + '</b>' +
+                   '<br>Porcion del UITI de la ventana: <b>' +
+                   pctUiti[cUiti].toFixed(2) + '%%</b>' +
+                   '<br>UITI acumulado: <b>' +
+                   uitiCirc[cUiti].toLocaleString(undefined,
+                       {minimumFractionDigits: 1, maximumFractionDigits: 1}) + '</b>' +
+                   '<br>de ' + totalUiti.toLocaleString(undefined,
+                       {minimumFractionDigits: 1, maximumFractionDigits: 1}) +
+                   ' en la ventana' +
+                   '<br>Puesto ' + (ordenUiti.length - i) + ' de ' + ordenUiti.length +
+                   '<br>Vanos ' + CTX.grupos[ALTO - 1] + ' + ' + CTX.grupos[ALTO] + ': ' +
+                   critDe(cUiti) +
+                   '<br>Banda por vanos criticos: <b>' +
+                   (rangoPorCirc[cUiti] || 'sin banda') + '</b>');
+    }
+    Plotly.restyle(gd, {x: [posU], y: [valsU], 'marker.color': [colsU],
+                        hovertext: [hovUiti]}, [CTX.idx.uitiCircuito]);
+    CIRC_UITI = ordenUiti;
+    // Cuanto se llevan los diez peores es la cifra que resume el reparto: con 208 barras
+    // la concentracion no se puede estimar a ojo.
+    var top10Uiti = 0;
+    for (i = Math.max(0, valsU.length - 10); i < valsU.length; i++) { top10Uiti += valsU[i]; }
+
     var gx = ejeGrilla(minX, maxX, CTX.resolucion, logx);
     var gy = ejeGrilla(minY, maxY, CTX.resolucion, logy);
     var z = [];
@@ -1792,6 +1921,16 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
     cambios[CTX.ejes.altoY + '.range'] = [0, ymaxQ];
     cambios[CTX.ejes.altoX + '.range'] = [-0.7, conAlto.length - 0.3];
     CIRC_FILA5 = conAlto;
+    // El titulo del reparto lleva la concentracion, que es lo que la figura no puede
+    // decir con 208 barras: cuanto del UITI de la ventana se llevan los diez ultimos.
+    cambios['annotations[' + CTX.titulos.uitiCirc[0] + '].text'] =
+      CTX.titulos.uitiCirc[1] + ' (' + ordenUiti.length + ' circuitos)' +
+      '<br><sup>Los 10 de la derecha concentran el ' + top10Uiti.toFixed(1) + '%% del UITI' +
+      ' de la ventana - color: la banda por vanos criticos de la hilera de arriba</sup>';
+    // Un 8%% de aire arriba para que la barra mas alta no toque el titulo.
+    cambios[CTX.ejes.uitiY + '.range'] =
+      [0, (valsU.length ? valsU[valsU.length - 1] : 1) * 1.08];
+    cambios[CTX.ejes.uitiX + '.range'] = [-0.7, ordenUiti.length - 0.3];
     cambios[CTX.ejes.mapaX + '.type'] = tx;
     cambios[CTX.ejes.mapaY + '.type'] = ty;
     cambios[CTX.ejes.violinUiti + '.type'] = ty;
