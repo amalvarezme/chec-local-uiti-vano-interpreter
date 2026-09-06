@@ -2328,8 +2328,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 2
 
 
-if __name__ == "__main__":  # pragma: no cover
-    raise SystemExit(main())
 
 
 # --------------------------------------------------------------------- ficha del grupo
@@ -2548,3 +2546,8 @@ pared.{nota_ahorro}</p>
 </table>
 </section>
 """
+
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())

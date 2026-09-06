@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import html as html_lib
 import json
 import re
@@ -1988,3 +1989,54 @@ def test_el_panorama_de_flota_no_escupe_el_slug_como_prosa():
     # Decia "toda la flota". Mismo alcance, vocabulario unificado con el informe
     # de circuito: quien recibe el informe tiene circuitos, no una flota.
     assert "todos los circuitos</strong>" in html
+
+
+class TestNadaSeDefineDespuesDelPuntoDeEntrada:
+    """Un `def` despues del bloque `__main__` no existe cuando se corre con `python -m`.
+
+    Medido el 2026-09-06: `informe_gerencial_contract` tenia cinco funciones despues de
+    su `if __name__ == "__main__"`, y `render_managerial_report` llamaba a una de ellas.
+    Importado el modulo se ejecuta entero y el nombre aparece, asi que la suite pasaba en
+    verde; ejecutado como `python -m`, `main()` corre en la linea del guard y muere con
+    `NameError: name 'ficha_grupo_html' is not defined`. El unico camino que fallaba era
+    justo el que usan los comandos.
+
+    La guarda es estructural y cubre TODO el paquete: cualquier modulo que gane un
+    `__main__` y despues siga definiendo cosas cae aqui, no solo el que lo estreno.
+    """
+
+    @staticmethod
+    def _guard_de_main(arbol: ast.Module) -> ast.If | None:
+        for nodo in arbol.body:
+            if not isinstance(nodo, ast.If):
+                continue
+            prueba = nodo.test
+            if (isinstance(prueba, ast.Compare)
+                    and isinstance(prueba.left, ast.Name)
+                    and prueba.left.id == "__name__"):
+                return nodo
+        return None
+
+    def _modulos_del_paquete(self):
+        raiz = Path(__file__).resolve().parents[1] / "src" / "chec_local_interpreter"
+        return sorted(raiz.rglob("*.py"))
+
+    def test_el_guard_de_main_es_lo_ultimo_del_modulo(self):
+        ofensores = []
+        for ruta in self._modulos_del_paquete():
+            arbol = ast.parse(ruta.read_text(encoding="utf-8"))
+            guard = self._guard_de_main(arbol)
+            if guard is None:
+                continue
+            despues = [n for n in arbol.body
+                       if getattr(n, "lineno", 0) > guard.lineno
+                       and isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef,
+                                          ast.ClassDef, ast.Assign, ast.AnnAssign))]
+            if despues:
+                nombres = [getattr(n, "name", "<asignacion>") for n in despues]
+                ofensores.append(f"{ruta.name}: {nombres}")
+
+        assert not ofensores, (
+            "Estos modulos definen nombres DESPUES de su bloque __main__, asi que no "
+            "existen al correrlos con `python -m`: " + "; ".join(ofensores)
+        )

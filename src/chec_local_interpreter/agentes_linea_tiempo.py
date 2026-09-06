@@ -486,8 +486,6 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-if __name__ == "__main__":  # pragma: no cover - envoltura de linea de comandos
-    raise SystemExit(main())
 
 
 # Etiqueta de procedencia de los tokens, con el mismo vocabulario que ya usa
@@ -637,3 +635,8 @@ def seccion_agentes_html(
         f"{html.escape(nota_tokens)}</p>"
         "</div>"
     )
+
+
+
+if __name__ == "__main__":  # pragma: no cover - envoltura de linea de comandos
+    raise SystemExit(main())
