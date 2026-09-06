@@ -33,7 +33,7 @@ import html
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 # The two roles the orchestrator dispatches concurrently for one circuit.
 # Order matters: it is the order the bars are stacked in.
@@ -514,14 +514,68 @@ def _celda_tokens(etapa: dict[str, Any]) -> str:
     return f'{prefijo}{_miles(etapa["tokens"])}'
 
 
-def seccion_agentes_html(linea: dict[str, Any] | None) -> str:
+def resumen_corrida_html(resumen: Mapping[str, Any] | None) -> str:
+    """Modelo, tokens y reloj de la corrida, como lista de definiciones.
+
+    Vivia en el SUBTITULO, encima del nombre del circuito: lo primero que leia quien
+    abria el informe eran cifras de consumo de un modelo de lenguaje. El informe trata de
+    un circuito electrico, y el costo de producirlo es una nota al pie -- que es
+    exactamente lo que esta seccion ya era.
+
+    Cada linea se omite si no hay dato. Escribir "N/D" tres veces seguidas ocupa el mismo
+    sitio que el dato y no dice nada que la ausencia no diga mejor.
+    """
+    if not resumen:
+        return ""
+    filas = [(etiqueta, str(valor)) for etiqueta, valor in (
+        ("Modelo", resumen.get("modelo")),
+        ("Tokens totales", resumen.get("tokens_total")),
+        ("Tokens de entrada/salida", resumen.get("tokens_split")),
+        ("Tiempo total de ejecución", resumen.get("tiempo")),
+    ) if valor]
+    if not filas:
+        return ""
+    celdas = "".join(
+        '<tr>'
+        f'<td style="color:#64748b;padding:2px 14px 2px 0;white-space:nowrap;">{html.escape(e)}</td>'
+        f'<td style="color:#0f172a;">{html.escape(v)}</td>'
+        "</tr>"
+        for e, v in filas
+    )
+    return (
+        '<table style="border-collapse:collapse;font-size:0.9em;margin:0 0 16px;">'
+        f"{celdas}</table>"
+    )
+
+
+def seccion_agentes_html(
+    linea: dict[str, Any] | None,
+    *,
+    resumen: Mapping[str, Any] | None = None,
+) -> str:
     """The block the circuit report embeds, right above "construido por agentes".
 
     Returns "" when there is nothing to draw, so a visualization-only run
     (no LLM analysis) does not leave an empty box behind.
+
+    `resumen` trae el modelo, los tokens y el reloj de la corrida. Se dibuja aunque NO
+    haya desglose por etapa: una corrida sin `stage_breakdown` sigue teniendo esos tres
+    datos, y antes se iban con la seccion entera -- que era su unica copia en el informe
+    desde que salieron del subtitulo.
     """
+    cabecera = resumen_corrida_html(resumen)
     if not linea or not linea.get("etapas"):
-        return ""
+        if not cabecera:
+            return ""
+        return (
+            '<div class="content-box" style="margin-top:26px;">'
+            '<h2 style="margin-top:0;">🤖 ¿Cómo se construyó este informe?</h2>'
+            f"{cabecera}"
+            '<p style="margin:0;font-size:0.88em;color:#475569;">'
+            "Esta corrida no dejó el desglose por etapa, así que no hay tiempos ni "
+            "consumo por agente que mostrar.</p>"
+            "</div>"
+        )
 
     etapas = linea["etapas"]
     procedencias = {
@@ -564,6 +618,7 @@ def seccion_agentes_html(linea: dict[str, Any] | None) -> str:
     return (
         '<div class="content-box" style="margin-top:26px;">'
         '<h2 style="margin-top:0;">🤖 ¿Cómo se construyó este informe?</h2>'
+        f"{cabecera}"
         # `overflow-x` y no un ancho fluido: el SVG lleva rotulos de 9,5 px que
         # a media escala dejan de leerse. En una pantalla angosta se desplaza,
         # que es peor de lo que se ve pero mejor que ilegible.

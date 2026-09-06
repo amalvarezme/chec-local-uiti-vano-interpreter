@@ -521,12 +521,91 @@ def test_header_stage_row_shows_na_time_when_duration_missing_for_one_stage(tmp_
     assert "0:00" in html
 
 
+def _seccion_construccion(html: str) -> str:
+    """El bloque «¿Cómo se construyó este informe?», acotado a su propia caja."""
+    marca = "¿Cómo se construyó este informe?"
+    if marca not in html:
+        return ""
+    i = html.index(marca)
+    # La caja abre justo antes del h2 y cierra en el </div> que la cierra a ella.
+    return html[html.rindex("<div class=\"content-box\"", 0, i):html.index("</div>", html.index("</table>", i)) + 6] \
+        if "</table>" in html[i:] else html[i:i + 4000]
+
+
+def test_el_encabezado_ya_no_lleva_tokens_ni_modelo_ni_tiempos(tmp_path):
+    """Esa informacion es sobre la CORRIDA, no sobre el circuito.
+
+    Estaba en el subtitulo, encima del nombre del circuito, donde lo primero que leia
+    quien abre el informe eran cifras de consumo de un modelo de lenguaje. El informe
+    trata de un circuito electrico; el costo de producirlo es una nota al pie, y ese pie
+    ya existe -- la seccion del final de la primera pestaña.
+    """
+    html = _render_with_stage_breakdown(
+        tmp_path,
+        stage_breakdown=[{"stage": "historical", "tokens_total": 1000,
+                          "token_source": "measured", "duration_seconds": 77.4,
+                          "duration_source": "measured"}],
+        token_source="measured",
+    )
+    encabezado = _extract_header_h1(html)
+
+    assert "Período de análisis" in encabezado, "el periodo SI pertenece al encabezado"
+    for fuera in ("Modelo LLM", "Tokens totales", "Tiempo total de ejecución",
+                  "Tokens de entrada/salida"):
+        assert fuera not in encabezado, f"«{fuera}» sigue en el encabezado"
+
+
+def test_la_seccion_de_construccion_recoge_modelo_tokens_y_tiempo(tmp_path):
+    """Lo que sale del encabezado tiene que APARECER abajo, no desaparecer."""
+    html = _render_with_stage_breakdown(
+        tmp_path,
+        stage_breakdown=[{"stage": "historical", "tokens_total": 1000,
+                          "token_source": "measured", "duration_seconds": 77.4,
+                          "duration_source": "measured"}],
+        token_source="measured",
+    )
+    seccion = _seccion_construccion(html)
+
+    assert seccion, "no se encontro la seccion de construccion"
+    assert "Modelo" in seccion
+    assert "Tokens totales" in seccion
+    assert "Tiempo total de ejecución" in seccion
+
+
+def test_sin_desglose_por_etapa_el_resumen_sigue_apareciendo(tmp_path):
+    """Una corrida sin `stage_breakdown` tiene igualmente modelo, tokens y reloj.
+
+    Antes la seccion entera se omitia, y con ella se iba la unica copia de esos datos.
+    Ahora la caja se dibuja con el resumen y SIN la tabla por etapa, que es lo que de
+    verdad falta.
+    """
+    html = _render_with_stage_breakdown(tmp_path, stage_breakdown=None)
+
+    assert "¿Cómo se construyó este informe?" in html
+    assert "Tiempo total de ejecución" in html
+    # La tabla por etapa no se inventa: sin desglose no hay etapas que listar.
+    assert "<th>Agente</th>" not in html
+
+
+def test_una_corrida_solo_de_visualizacion_no_dibuja_la_seccion(tmp_path):
+    """Sin analisis de modelo no hay nada que contar sobre como se construyo."""
+    raw_df = _minimal_raw_df()
+    ruta = render_llm_analysis(
+        validation_data=None, raw_df=raw_df, selected_circuitos=["C1"],
+        output_dir=tmp_path, output_filename="solo_viz.html",
+    )
+    html = ruta.read_text(encoding="utf-8")
+
+    assert "¿Cómo se construyó este informe?" not in html
+
+
 def test_header_omits_stage_breakdown_block_when_stage_breakdown_is_none(tmp_path):
     baseline_html = _render_with_totals(tmp_path, tokens_total=5000, elapsed_seconds=753)
     html = _render_with_stage_breakdown(tmp_path, stage_breakdown=None)
 
     assert _extract_header_h1(html) == _extract_header_h1(baseline_html)
-    assert "Cómo se construyó este informe" not in html
+    # La caja sigue, con el resumen; lo que no se dibuja es la tabla por etapa.
+    assert "<th>Agente</th>" not in html
 
 
 def test_header_omits_stage_breakdown_block_when_stage_breakdown_is_empty_list(tmp_path):
@@ -534,7 +613,8 @@ def test_header_omits_stage_breakdown_block_when_stage_breakdown_is_empty_list(t
     html = _render_with_stage_breakdown(tmp_path, stage_breakdown=[])
 
     assert _extract_header_h1(html) == _extract_header_h1(baseline_html)
-    assert "Cómo se construyó este informe" not in html
+    # La caja sigue, con el resumen; lo que no se dibuja es la tabla por etapa.
+    assert "<th>Agente</th>" not in html
 
 
 def test_header_default_stage_breakdown_matches_explicit_none_byte_identical(tmp_path):

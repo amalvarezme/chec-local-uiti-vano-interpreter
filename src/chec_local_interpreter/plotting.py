@@ -1717,8 +1717,14 @@ def render_llm_analysis(
 
     # Adjust subtitle if no LLM data is present
     model_display = f"{llm_provider} ({llm_model})" if llm_model and llm_model != "Desconocido" else llm_provider
+    # El encabezado se queda SOLO con el periodo. El modelo, los tokens y el reloj son
+    # datos de la CORRIDA, no del circuito, y estaban encima de su nombre: lo primero que
+    # leia quien abria el informe eran cifras de consumo de un modelo de lenguaje. Bajan
+    # a "¿Cómo se construyó este informe?", que es la seccion que ya existia para eso.
+    resumen_corrida: dict[str, str] = {}
     if validation_data:
-        subtitle_info = f"Período de análisis: {period_str} | Modelo LLM: {model_display}"
+        subtitle_info = f"Período de análisis: {period_str}"
+        resumen_corrida["modelo"] = model_display
         if tokens_input is not None or tokens_output is not None:
             # `token_source` (design `reporte-perf-optimization` item 4)
             # labels whether these counts are real (measured), partially
@@ -1735,10 +1741,8 @@ def render_llm_analysis(
                 split_label = (
                     f"Tokens parciales disponibles ({token_label}; no representan el consumo global)"
                 )
-            subtitle_info += (
-                "<br><span style='font-size: 0.85em; color: #94a3b8;'>"
+            resumen_corrida["tokens_split"] = (
                 f"{split_label}: entrada {tokens_in_str} | salida {tokens_out_str}"
-                "</span>"
             )
         if tokens_total is not None or elapsed_seconds is not None:
             # Independent of the entrada/salida block above -- this line
@@ -1750,19 +1754,14 @@ def render_llm_analysis(
             effective_total_source = token_total_source or token_source
             token_label, prefix = _token_source_label(effective_total_source)
             if tokens_total is not None:
-                tokens_total_part = (
+                resumen_corrida["tokens_total"] = (
                     "Tokens totales (todas las etapas, incl. sub-agentes/corridas en paralelo) "
                     f"{token_label}: {prefix}{tokens_total:,}"
                 )
             else:
-                tokens_total_part = "Uso total de tokens: no disponible"
+                resumen_corrida["tokens_total"] = "Uso total de tokens: no disponible"
             time_str = _format_elapsed_seconds(elapsed_seconds) if elapsed_seconds is not None else "N/D"
-            time_part = f"Tiempo total de ejecución: {time_str}"
-            subtitle_info += (
-                "<br><span style='font-size: 0.85em; color: #94a3b8;'>"
-                f"{tokens_total_part} | {time_part}"
-                "</span>"
-            )
+            resumen_corrida["tiempo"] = f"Tiempo total de ejecución: {time_str}"
         # El desglose por etapa YA NO va aqui. Vivia en el subtitulo como una
         # tabla gris de 0.8em -- tres filas de numeros donde nada decia que dos
         # de esas etapas corren A LA VEZ, que es justamente el hecho que
@@ -1787,7 +1786,8 @@ def render_llm_analysis(
             circuito=primary_circuit,
             fecha_inicio=start_date,
             fecha_fin=end_date,
-        )
+        ),
+        resumen=resumen_corrida,
     )
 
     pie_html = pie_agentes_html()
