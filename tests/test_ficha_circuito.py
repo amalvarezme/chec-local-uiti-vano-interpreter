@@ -150,9 +150,11 @@ class TestRazonesDeEstudio:
 
     La tabla marcaba "estudiada a fondo" y nada mas, asi que el lector veia tres ventanas
     señaladas sin saber por que esas tres. Reconstruir el motivo aqui es honesto porque
-    se hace con la misma regla y sobre los mismos numeros que uso el selector: la ventana
-    estudiada con mas UITI ES la de mas UITI de todas, porque el selector eligio el
-    maximo global.
+    se hace con la misma regla y sobre los mismos numeros que uso el selector.
+
+    Ojo con el superlativo: el selector aplica cada criterio sobre LO QUE QUEDA, no sobre
+    la serie entera, asi que el ganador de un criterio puede no ser su maximo global. Ver
+    `TestRazonesNoAfirmanUnMaximoGlobalFalso` mas abajo.
     """
 
     def _reg(self, w, uv, vanos, n=1):
@@ -331,3 +333,68 @@ class TestTablaClasificacionConVariosCircuitos:
     def test_una_lista_vacia_no_marca_nada(self, flota):
         html = tabla_clasificacion_html(flota, [])
         assert "fila-destacada" not in html
+
+
+class TestRazonesNoAfirmanUnMaximoGlobalFalso:
+    """Los criterios se aplican SOBRE LO QUE QUEDA, no sobre las once ventanas.
+
+    `razones_de_estudio` se escribio creyendo lo contrario -- su propio docstring decia
+    que "el selector elige el maximo GLOBAL de cada criterio" -- y por eso rotulaba al
+    ganador con un superlativo absoluto. Medido en HER23L16: la tabla llamaba a V10 "el
+    episodio mas extendido del periodo" con 258 vanos, teniendo V11 (275) y V9 (267) dos
+    filas mas arriba en la MISMA tabla. El lector compara la columna y la explicacion se
+    le cae.
+
+    La ultima ventana entra siempre y se lleva su etiqueta antes que nadie, asi que basta
+    con que la ultima gane un criterio para que el rotulo de ese criterio caiga en una
+    ventana que no es el maximo de la serie.
+    """
+
+    def _reg(self, w, uv, vanos, n=1):
+        return {"w": w, "uv": uv, "vanos": vanos, "n": n}
+
+    @property
+    def _serie_her23l16(self):
+        # Los numeros reales de HER23L16 en la corrida del 2026-09-06: la ultima ventana
+        # es ademas la de mas vanos de todo el periodo.
+        return [
+            self._reg("V8", 135657.31, 197),
+            self._reg("V9", 208852.53, 267),   # mas UITI de todas
+            self._reg("V10", 76246.26, 258),   # tercera en vanos, no primera
+            self._reg("V11", 88325.00, 275),   # la ultima, y la mas ancha de todas
+        ]
+
+    def test_el_rotulo_de_vanos_no_dice_maximo_del_periodo_cuando_no_lo_es(self):
+        razones = razones_de_estudio(self._serie_her23l16, ("V9", "V10", "V11"))
+
+        assert "restantes" in razones["V10"], razones["V10"]
+        assert "del período" not in razones["V10"], razones["V10"]
+
+    def test_el_rotulo_de_uiti_no_dice_maximo_del_periodo_cuando_no_lo_es(self):
+        """Mismo defecto en el primer criterio: si la ultima ventana es ademas la de mas
+        UITI, el rotulo de UITI cae en la segunda y no en el maximo de la serie."""
+        serie = [
+            self._reg("V1", 50.0, 30),
+            self._reg("V2", 40.0, 10),
+            self._reg("V3", 100.0, 12),   # la ultima, y el UITI mas alto de todas
+        ]
+
+        razones = razones_de_estudio(serie, ("V1", "V2", "V3"))
+
+        assert "última" in razones["V3"], razones["V3"]
+        assert "restantes" in razones["V2"], razones["V2"]
+
+    def test_cuando_si_es_el_maximo_de_la_serie_lo_dice_sin_rodeos(self):
+        """La salvedad solo aparece cuando hace falta: rotular de relativo un maximo real
+        le quita fuerza a la unica lectura que la tabla si sostiene."""
+        serie = [
+            self._reg("V1", 100.0, 12),   # mas UITI de todas
+            self._reg("V2", 10.0, 30),    # mas vanos de todas
+            self._reg("V3", 8.0, 5),      # la ultima
+        ]
+
+        razones = razones_de_estudio(serie, ("V1", "V2", "V3"))
+
+        assert "restantes" not in razones["V1"], razones["V1"]
+        assert "restantes" not in razones["V2"], razones["V2"]
+        assert "del período" in razones["V1"] and "del período" in razones["V2"]

@@ -56,7 +56,12 @@ reconciles and that does not line up with the `(vano, ventana)` bag the model sc
 consequences:
 
 - **The report studies THREE windows, not eleven.** The circuit's last window with events (how it
-  stands today) plus the two with the most critical bags (what brought it here). Selection is
+  stands today, always in) plus one per criterion in `mil_inferencia.CRITERIOS_VENTANA_REPORTE`:
+  the largest `uiti_total`, then the largest `n_bolsas` (vanos touched). Critical-bag count no
+  longer orders this selection. Each criterion is applied **over what remains**, so a window picked
+  by a criterion is not necessarily that criterion's maximum over the whole series — the report's
+  own "¿Por qué se estudió?" column says "entre las ventanas restantes" when that is the case.
+  Selection is
   deterministic and costs 6 ms — it reads observed `(n_obs, UITI)` against notebook 01.4's
   geometry, never a model forward pass.
 - **The diagnosis covers at most 15 vanos per window**, first the Alto group and then Medio-Alto.

@@ -233,6 +233,14 @@ es el momento más extendido — cuántos vanos distintos quedaron tocados a la 
 últimas rara vez coinciden: una ventana puede concentrar todo su UITI en dos vanos y otra
 repartir menos entre veinte. No son percentiles de filas ni recortes por severidad.
 
+Los criterios se aplican **en ese orden y sobre las ventanas que van quedando**: la
+última entra siempre y se lleva su etiqueta antes que nadie, así que la ventana elegida
+por un criterio **no es necesariamente el máximo de toda la serie**. Medido en HER23L16:
+V10 entró por «más bolsas» con 258 vanos, teniendo V11 275 y V9 267. Al redactar, nunca
+llames a una ventana «la más extendida del período» ni «la de mayor UITI del período»
+salvo que lo hayas comprobado contra la serie completa; si entró por criterio pero no es
+el máximo, dilo como lo que es: la mayor **entre las que quedaban**.
+
 Si una misma ventana gana los dos criterios, el informe estudia **dos** ventanas y no
 repite una: eso es el dato, no un fallo.
 

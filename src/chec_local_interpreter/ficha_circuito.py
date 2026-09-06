@@ -362,9 +362,15 @@ def tabla_clasificacion_html(
 #: `mil_inferencia.seleccionar_ventanas_reporte`. El orden importa: los criterios se
 #: aplican sobre lo que queda, asi que una ventana que gana los dos recibe solo el
 #: primero y el informe estudia DOS ventanas, no la misma repetida.
-CRITERIOS_ESTUDIO: tuple[tuple[str, str], ...] = (
-    ("uv", "Mayor UITI acumulado: el momento de mayor impacto del período"),
-    ("vanos", "Más vanos tocados: el episodio más extendido del período"),
+CRITERIOS_ESTUDIO: tuple[tuple[str, str, str], ...] = (
+    ("uv",
+     "Mayor UITI acumulado: el momento de mayor impacto del período",
+     "Mayor UITI acumulado entre las ventanas restantes: las de más impacto "
+     "ya entraron por otro criterio"),
+    ("vanos",
+     "Más vanos tocados: el episodio más extendido del período",
+     "Más vanos tocados entre las ventanas restantes: las más extendidas "
+     "ya entraron por otro criterio"),
 )
 #: Va con sus dos signos: lo que sigue a los dos puntos ES la pregunta que esa
 #: ventana contesta, y el informe ya escribe asi sus encabezados.
@@ -394,11 +400,18 @@ def razones_de_estudio(
     señaladas entre once sin saber por que esas tres, y el criterio solo vivia en el
     codigo del selector.
 
-    Reconstruirlo aqui es honesto porque usa la MISMA regla sobre los MISMOS numeros. El
-    selector elige el maximo GLOBAL de cada criterio, asi que la ventana estudiada con
-    mas UITI es necesariamente la de mas UITI de todas: restringir la busqueda a las
-    estudiadas da la misma respuesta sin necesidad de volver a abrir el artefacto del
-    modelo.
+    Reconstruirlo aqui es honesto porque usa la MISMA regla sobre los MISMOS numeros:
+    restringir la busqueda a las estudiadas da la misma respuesta sin volver a abrir el
+    artefacto del modelo.
+
+    Lo que el rotulo NO puede hacer es prometer un maximo global. El selector aplica cada
+    criterio sobre LO QUE QUEDA -- la ultima entra siempre y se lleva su etiqueta primero
+    --, asi que el ganador de un criterio puede no ser el maximo de la serie. Medido en
+    HER23L16: la tabla llamaba a V10 "el episodio mas extendido del periodo" con 258
+    vanos, teniendo V11 (275) y V9 (267) en la misma tabla, dos filas mas arriba. Por eso
+    cada criterio trae dos textos y aqui se elige entre ellos comparando contra el maximo
+    de la serie: el absoluto solo cuando de verdad lo es, y si no uno que dice "entre las
+    restantes" y explica por que las mayores no llevan ese rotulo.
 
     Devuelve solo las ventanas estudiadas. Una ventana que no encaja en ningun criterio
     -- una corrida vieja, otra seleccion -- se marca sin adjudicarle un motivo falso.
@@ -416,7 +429,7 @@ def razones_de_estudio(
         if ultima in marcadas:
             razones[ultima] = RAZON_ULTIMA
 
-    for campo, texto in CRITERIOS_ESTUDIO:
+    for campo, texto_absoluto, texto_relativo in CRITERIOS_ESTUDIO:
         candidatos = [r for r in con_eventos
                       if str(r.get("w")) in marcadas and str(r.get("w")) not in razones]
         if not candidatos:
@@ -426,7 +439,11 @@ def razones_de_estudio(
         mejor = max(candidatos, key=lambda r: (float(r.get(campo) or 0.0),
                                                float(r.get("uv") or 0.0),
                                                _orden_ventana(r.get("w"))))
-        razones[str(mejor.get("w"))] = texto
+        # El maximo se mide sobre TODA la serie con eventos, no sobre las estudiadas: es
+        # justo la comparacion que hace el lector, que tiene las once filas delante.
+        tope = max(float(r.get(campo) or 0.0) for r in con_eventos)
+        es_el_maximo = float(mejor.get(campo) or 0.0) >= tope
+        razones[str(mejor.get("w"))] = texto_absoluto if es_el_maximo else texto_relativo
 
     for w in marcadas:
         razones.setdefault(w, RAZON_SIN_CRITERIO)
