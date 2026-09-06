@@ -2040,3 +2040,88 @@ class TestNadaSeDefineDespuesDelPuntoDeEntrada:
             "Estos modulos definen nombres DESPUES de su bloque __main__, asi que no "
             "existen al correrlos con `python -m`: " + "; ".join(ofensores)
         )
+
+
+class TestFilaDelRepartoDelUiti:
+    """La hilera del tablero de agrupamiento que dice QUE PORCION del impacto se lleva
+    cada circuito.
+
+    El tablero (`src/chec_tableros/agrupamiento.py`, fila 3) lleva las MISMAS 208 barras
+    del ranking en OTRO orden: una cuenta cuanto trabajo concentra el circuito y fija su
+    banda, la otra dice que porcentaje del UITI acumulado se lleva. La diferencia entre
+    los dos ordenes ES el dato -- una barra alta pintada del color de una banda baja
+    delata la discrepancia de un vistazo --, y el preambulo del gerencial la omitia.
+
+    El color viene de la banda del ranking a proposito: repintarlo por el porcentaje
+    borraria justo la comparacion que la fila existe para permitir.
+    """
+
+    def _figura(self):
+        raw_df = _ranking_raw_df({f"C{i:02d}": i * 8 for i in range(1, 13)},
+                                 vanos_por_circuito=110)
+        perfil = informe_contract.perfil_de_banda(raw_df, ["C12"], None, None)
+        return informe_contract.figura_preambulo(raw_df, ["C12"], perfil, None, None)
+
+    def test_hay_una_barra_por_circuito_con_el_porcentaje_del_uiti(self):
+        fig = self._figura()
+
+        de_flota = [t for t in fig.data if t.type == "bar" and len(t.x or []) == 12]
+        assert len(de_flota) >= 2, (
+            "el preambulo trae una sola hilera de 12 barras; falta la del reparto del UITI"
+        )
+
+    def test_los_porcentajes_suman_cien(self):
+        """Es un reparto, no una magnitud: si no suma 100 esta midiendo otra cosa."""
+        fig = self._figura()
+
+        de_flota = [t for t in fig.data if t.type == "bar" and len(t.x or []) == 12]
+        reparto = [t for t in de_flota if abs(sum(t.y) - 100.0) < 0.01]
+        assert reparto, (
+            "ninguna hilera de 12 barras suma 100: "
+            + repr([round(sum(t.y), 2) for t in de_flota])
+        )
+
+    def test_va_ordenada_de_menor_a_mayor_aporte(self):
+        """Mismo sentido de lectura que el ranking de arriba, para poder compararlas."""
+        fig = self._figura()
+
+        de_flota = [t for t in fig.data if t.type == "bar" and len(t.x or []) == 12]
+        reparto = next(t for t in de_flota if abs(sum(t.y) - 100.0) < 0.01)
+        assert list(reparto.y) == sorted(reparto.y)
+
+    def test_el_eje_lo_declara_en_porcentaje(self):
+        fig = self._figura()
+
+        titulos = [str(getattr(eje, "title", "")) for eje in
+                   (fig.layout[k] for k in fig.layout if k.startswith("yaxis"))]
+        assert any("%" in t and "UITI" in t for t in titulos), titulos
+
+
+class TestLaProsaNombraElRepartoDelUiti:
+    """La nota que acompania la figura enumera sus hileras. Con una hilera nueva sin
+    nombrar, el lector ve una grafica que el texto no menciona y no sabe que le dice.
+
+    La prosa tiene que decir lo que la figura NO dice sola: que las dos hileras de barras
+    llevan los mismos circuitos en orden distinto, y que esa diferencia es el aporte.
+    """
+
+    def test_el_preambulo_de_banda_nombra_la_hilera_del_aporte(self):
+        html = informe_contract._preambulo_html(
+            perfil=_perfil_de_flota(), figura_html="<div></div>",
+            label="Riesgo Alto", circuit_count=7,
+        )
+
+        assert "porción del UITI acumulado" in html, html[-1200:]
+        assert "orden distinto" in html, html[-1200:]
+        assert "tres lecturas" not in html, "la nota sigue prometiendo tres hileras"
+
+    def test_el_preambulo_de_flota_nombra_la_hilera_del_aporte(self):
+        html = informe_contract._preambulo_flota_html(
+            perfil=_perfil_de_flota(), figura_html="<div></div>",
+            bandas={"Riesgo Alto": 7, "Riesgo Medio": 52},
+            muestreados=["C1", "C2"],
+        )
+
+        assert "porción del UITI acumulado" in html, html[-1200:]
+        assert "orden distinto" in html, html[-1200:]
+        assert "tres lecturas" not in html, "la nota sigue prometiendo tres hileras"

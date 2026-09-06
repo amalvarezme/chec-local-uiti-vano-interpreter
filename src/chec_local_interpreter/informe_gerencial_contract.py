@@ -320,12 +320,20 @@ def figura_preambulo(
     start_date: Any = None,
     end_date: Any = None,
 ):
-    """Las TRES lecturas del tablero de agrupamiento (cuaderno 02), en una sola figura:
+    """Las lecturas del tablero de agrupamiento (cuaderno 02), en una sola figura:
 
       fila 1  el ranking de la flota entera, con los circuitos de la banda resaltados
-      fila 2  izquierda: como se reparten los vanos de la banda entre los cuatro grupos,
+      fila 2  el reparto del UITI acumulado: que porcion del impacto se lleva cada
+              circuito, en su propio orden y con el color de su banda
+      fila 3  izquierda: como se reparten los vanos de la banda entre los cuatro grupos,
               con el conteo afuera y el porcentaje adentro
               derecha:   el violin del UITI acumulado por grupo de vano
+
+    Las dos primeras llevan los MISMOS circuitos en ORDEN DISTINTO, y esa diferencia es
+    el aporte: una cuenta cuanto trabajo concentra cada circuito y fija su banda, la otra
+    dice que porcion del impacto se lleva. El color de la segunda viene de la banda de la
+    primera, asi que una barra alta en un color bajo delata la discrepancia de un vistazo.
+    Repintarla por el porcentaje borraria justo esa comparacion.
 
     Son las mismas tres del tablero a proposito: quien abre el informe despues de mirar el
     tablero tiene que reconocer la figura, no traducirla. El ranking va arriba porque situa
@@ -348,13 +356,14 @@ def figura_preambulo(
     COLORES_GRUPO_VANO = COLORES_RANGO
 
     fig = make_subplots(
-        rows=2, cols=2,
-        row_heights=[0.52, 0.48],
+        rows=3, cols=2,
+        row_heights=[0.30, 0.30, 0.40],
         column_widths=[0.40, 0.60],
-        vertical_spacing=0.155, horizontal_spacing=0.10,
-        specs=[[{"colspan": 2}, None], [{}, {}]],
+        vertical_spacing=0.135, horizontal_spacing=0.10,
+        specs=[[{"colspan": 2}, None], [{"colspan": 2}, None], [{}, {}]],
         subplot_titles=(
             "Ranking de todos los circuitos por vanos en Medio-Alto + Alto",
+            "Reparto del UITI acumulado entre todos los circuitos",
             "Vanos de la banda por grupo",
             "UITI acumulado por vano, dentro de la banda",
         ),
@@ -385,7 +394,42 @@ def figura_preambulo(
             hovertemplate="%{hovertext}<extra></extra>",
         ), row=1, col=1)
 
-    # --- Fila 2 izquierda: conteo por grupo, con el porcentaje DENTRO ---------------
+    # --- Fila 2: el reparto del UITI acumulado entre los circuitos ------------------
+    # Las mismas barras de arriba, reordenadas por lo que aportan al UITI. El eje NO se
+    # fija a [0, 100]: el maximo real ronda el 10%, y un eje hasta 100 dejaria las barras
+    # aplastadas contra el origen. Mismo tratamiento que la fila 3 del tablero.
+    if not tabla.empty:
+        total_uiti = float(tabla["uiti_total"].sum())
+        if total_uiti > 0:
+            reparto = tabla.assign(
+                pct_uiti=tabla["uiti_total"].astype(float) / total_uiti * 100.0
+            ).sort_values("pct_uiti", kind="mergesort")
+            marcado_reparto = [c in de_la_banda for c in reparto["circuito"]]
+            fig.add_trace(go.Bar(
+                x=list(range(len(reparto))),
+                y=reparto["pct_uiti"].tolist(),
+                marker=dict(
+                    # El color sale de la banda del RANKING, no del porcentaje: es lo
+                    # que deja ver que un circuito de banda baja se lleve un pedazo alto.
+                    color=reparto["color"].tolist(),
+                    line=dict(
+                        width=[2.6 if d else 0.3 for d in marcado_reparto],
+                        color=["#0f172a" if d else "rgba(60,60,60,0.45)"
+                               for d in marcado_reparto],
+                    ),
+                ),
+                showlegend=False, cliponaxis=False,
+                hovertext=[
+                    f"<b>{f.circuito}</b><br>Aporte al UITI: <b>{f.pct_uiti:.2f}%</b>"
+                    f"<br>UITI acumulado: {f.uiti_total:,.1f}"
+                    f"<br>Puesto {int(f.posicion)} de {len(reparto)} por vanos criticos"
+                    f"<br><b>{f.rango}</b>"
+                    for f in reparto.itertuples()
+                ],
+                hovertemplate="%{hovertext}<extra></extra>",
+            ), row=2, col=1)
+
+    # --- Fila 3 izquierda: conteo por grupo, con el porcentaje DENTRO ---------------
     # Dos trazas y no una: una barra tiene un solo par `text`/`textposition`, asi que el
     # conteo de afuera y el porcentaje de adentro no caben en la misma. Es la misma
     # solucion que usa el tablero.
@@ -406,7 +450,7 @@ def figura_preambulo(
                 for g in grupos
             ],
             hovertemplate="%{hovertext}<extra></extra>",
-        ), row=2, col=1)
+        ), row=3, col=1)
         # El porcentaje solo se escribe donde la barra lo puede sostener. Plotly no achica
         # el texto: si no cabe lo saca afuera, y ahi choca con el conteo.
         tope = max(conteos) if conteos else 0
@@ -417,9 +461,9 @@ def figura_preambulo(
             textposition="middle center",
             textfont=dict(size=11, color=["rgb(40,10,12)", "rgb(40,10,12)", "white", "white"]),
             showlegend=False, hoverinfo="skip",
-        ), row=2, col=1)
+        ), row=3, col=1)
 
-    # --- Fila 2 derecha: el violin del UITI por grupo de vano ----------------------
+    # --- Fila 3 derecha: el violin del UITI por grupo de vano ----------------------
     for idx, g in enumerate(grupos):
         if not g.get("uiti"):
             continue
@@ -431,11 +475,11 @@ def figura_preambulo(
             opacity=0.85, box_visible=True, meanline_visible=False,
             points=False, spanmode="hard",
             hovertemplate="%{x} &mdash; UITI acumulado: %{y:,.1f}<extra></extra>",
-        ), row=2, col=2)
+        ), row=3, col=2)
 
     periodo = (f"{start_date} a {end_date}" if start_date and end_date else "periodo completo")
     fig.update_layout(
-        height=760, template="plotly_white", bargap=0.35, violingap=0.3,
+        height=1040, template="plotly_white", bargap=0.35, violingap=0.3,
         margin=dict(l=64, r=32, t=76, b=56),
         plot_bgcolor="#f8fafc", paper_bgcolor="#ffffff", hovermode="closest",
         title=dict(text=f"Panorama del grupo — {periodo}",
@@ -444,10 +488,15 @@ def figura_preambulo(
     fig.update_xaxes(showticklabels=False, title_text="Todos los circuitos, de menos a mas criticos",
                      row=1, col=1)
     fig.update_yaxes(title_text="Vanos en Medio-Alto + Alto", rangemode="tozero", row=1, col=1)
-    fig.update_yaxes(title_text="Vanos", rangemode="tozero", row=2, col=1)
+    fig.update_xaxes(showticklabels=False,
+                     title_text="Todos los circuitos, de menos a mas aporte",
+                     row=2, col=1)
+    fig.update_yaxes(title_text="% del UITI acumulado", rangemode="tozero",
+                     ticksuffix="%", row=2, col=1)
+    fig.update_yaxes(title_text="Vanos", rangemode="tozero", row=3, col=1)
     # El UITI abarca varios ordenes de magnitud: en lineal los grupos bajos se aplastan
     # contra el cero y el violin no muestra nada. Misma escala que usa el tablero.
-    fig.update_yaxes(title_text="UITI acumulado (log)", type="log", row=2, col=2)
+    fig.update_yaxes(title_text="UITI acumulado (log)", type="log", row=3, col=2)
     for anot in fig.layout.annotations:
         anot.font.size = 12
     return fig
@@ -1856,10 +1905,15 @@ def _preambulo_flota_html(
 <p class="badge-deterministic">Cálculo determinista</p>
 {''.join(parrafos)}
 {tabla}
-<p class="nota">Las tres lecturas son las del segundo tablero del cuaderno 02, con la misma
-geometría de grupos de vano: el ranking sitúa a cada circuito entre todos los demás, las barras
-reparten los vanos de la red entre los cuatro grupos, y el violín muestra cómo de grave es
-cada grupo &mdash; que es lo que el conteo no puede decir.</p>
+<p class="nota">Las cuatro lecturas son las del segundo tablero del cuaderno 02, con la
+misma geometría de grupos de vano. Las <strong>dos hileras de barras de arriba llevan los mismos
+circuitos en orden distinto</strong>, y esa diferencia es el dato: la primera cuenta cuántos vanos
+críticos concentra cada uno &mdash; que es lo que fija su banda &mdash; y la segunda dice qué
+porción del UITI acumulado se lleva. El color de la segunda viene de la banda de la primera, así
+que una barra alta pintada de un color bajo delata de un vistazo al circuito que aporta más
+impacto del que su puesto sugiere. Abajo, las barras reparten los vanos de la red entre los
+cuatro grupos y el violín muestra cómo de grave es cada grupo &mdash; que es lo que el conteo no
+puede decir.</p>
 {figura_html}
 </section>
 """
@@ -1973,10 +2027,15 @@ def _preambulo_html(
 <p class="badge-deterministic">Cálculo determinista</p>
 {''.join(parrafos)}
 {tabla}
-<p class="nota">Las tres lecturas son las del segundo tablero del cuaderno 02, con la misma
-geometría de grupos de vano: el ranking sitúa a la banda entre todos los circuitos, las barras
-reparten sus vanos entre los cuatro grupos, y el violín muestra cómo de grave es cada
-grupo &mdash; que es lo que el conteo no puede decir.</p>
+<p class="nota">Las cuatro lecturas son las del segundo tablero del cuaderno 02, con la
+misma geometría de grupos de vano. Las <strong>dos hileras de barras de arriba llevan los mismos
+circuitos en orden distinto</strong>, y esa diferencia es el dato: la primera cuenta cuántos vanos
+críticos concentra cada uno &mdash; que es lo que fija su banda &mdash; y la segunda dice qué
+porción del UITI acumulado se lleva. El color de la segunda viene de la banda de la primera, así
+que una barra alta pintada de un color bajo delata de un vistazo al circuito que aporta más
+impacto del que su puesto sugiere. Los circuitos de la banda van resaltados en las dos.
+Abajo, las barras reparten sus vanos entre los cuatro grupos y el violín muestra cómo de grave es
+cada grupo &mdash; que es lo que el conteo no puede decir.</p>
 {figura_html}
 </section>
 """
