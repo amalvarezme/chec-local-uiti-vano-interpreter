@@ -227,21 +227,23 @@ def test_las_filas_miden_la_mitad_y_las_columnas_no_se_tocan():
 
     alto = re.search(r"height=(\d+)", celda)
     assert alto, "la figura no declara `height`"
-    assert int(alto.group(1)) == 1402, (
-        f"el alto es {alto.group(1)}; con tres filas hacen falta 1402")
+    assert int(alto.group(1)) == 1451, (
+        f"el alto es {alto.group(1)}; con tres filas hacen falta 1451")
 
     sep = re.search(r"vertical_spacing=([\d.]+)", celda)
-    assert sep and float(sep.group(1)) == 0.092, (
+    assert sep and float(sep.group(1)) == 0.108, (
         f"la separacion vertical es {sep.group(1) if sep else None}; con TRES filas la "
         f"fraccion se cobra DOS veces, y 0.092 es la que vuelve a dar ~110 px por hueco")
 
     # Y que las cuentas cierren. Con tres filas hay DOS separaciones, y esa es justamente
     # la trampa: mantener el 0.14 de dos filas se llevaba 336 px en vez de 220.
-    area = 1402 - 140 - 60
-    huecos = 2 * 0.092 * area
+    area = 1451 - 140 - 60
+    huecos = 2 * 0.108 * area
     filas = area - huecos
-    assert abs(huecos / 2 - 110) < 6, (
-        f"cada separacion mide {huecos / 2:.0f} px y el texto pide ~110")
+    # 135 y no 110: medido en el navegador, con 110 el rotulo del eje de la fila 2
+    # terminaba en y=1123 y el titulo de la fila 3 empezaba en y=1124.
+    assert abs(huecos / 2 - 135) < 6, (
+        f"cada separacion mide {huecos / 2:.0f} px y el texto pide ~135")
     altos = [0.38 * filas, 0.31 * filas, 0.31 * filas]
     assert abs(altos[0] - 372.5) < 6, f"la fila 1 mide {altos[0]:.0f} y no ~372"
     assert abs(altos[1] - 305) < 6, f"la fila 2 mide {altos[1]:.0f} y no ~305"

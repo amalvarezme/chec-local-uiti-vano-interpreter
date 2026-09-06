@@ -105,3 +105,48 @@ def test_lo_ambiguo_se_sigue_dejando_pasar():
         assert SIEMPRE_CON_TILDE.get(palabra, "AUSENTE") in (None, "AUSENTE") or True
     assert SIEMPRE_CON_TILDE["periodo"] is None
     assert SIEMPRE_CON_TILDE["calculo"] is None
+
+
+def test_las_cuatro_que_se_colaron_en_la_corrida_de_don23l13():
+    """Cuatro palabras singulares que el agente escribio sin tilde y la guarda dejo pasar.
+
+    Salieron de las tres salidas validadas de una corrida real (DON23L13, 2026-09-06): el
+    agente de inferencia reporto que habia tenido que acentuar a mano lo que la guarda no
+    veia. Ninguna de las cuatro es ambigua -- no existe la forma sin tilde en castellano --,
+    asi que faltaban del diccionario y nada mas.
+    """
+    from chec_local_interpreter.ortografia import palabras_sin_tilde
+
+    texto = ("La composicion del grupo, su exposicion al riesgo, la aparicion del patron "
+             "y su justificacion quedan documentadas.")
+
+    encontradas = dict(palabras_sin_tilde(texto))
+
+    assert encontradas.get("composicion") == "composición"
+    assert encontradas.get("exposicion") == "exposición"
+    assert encontradas.get("aparicion") == "aparición"
+    assert encontradas.get("justificacion") == "justificación"
+
+
+def test_el_plural_de_cion_no_se_marca_porque_NO_lleva_tilde():
+    """`condiciones` y `relaciones` son llanas acabadas en -s: correctas sin tilde.
+
+    Es la trampa de la regla ingenua "toda palabra en -cion lleva tilde". Aplicada a los
+    plurales, la guarda empezaria a exigir una falta de ortografia -- y en las salidas de
+    esta misma corrida habia nueve palabras asi, todas bien escritas.
+    """
+    from chec_local_interpreter.ortografia import palabras_sin_tilde
+
+    texto = ("Las condiciones, las relaciones, las secciones, las intervenciones, las "
+             "limitaciones, las observaciones y las sobretensiones están bien escritas.")
+
+    assert palabras_sin_tilde(texto) == []
+
+
+def test_lo_ambiguo_se_sigue_dejando_pasar():
+    """`criticas` ("tu criticas"), `mas` (= pero) y `pronostico` ("yo pronostico") tienen
+    las dos formas. Decidir por el lector cambiaria el significado, y esa es la politica
+    declarada del modulo -- no un hueco."""
+    from chec_local_interpreter.ortografia import palabras_sin_tilde
+
+    assert palabras_sin_tilde("Tu criticas mas de lo que yo pronostico.") == []

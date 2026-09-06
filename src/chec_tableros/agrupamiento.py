@@ -933,9 +933,16 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         # subtitulo -- es TEXTO, y el texto no se encoge: a 55 px se pisaban.
         # 0.14 sobre los 788 px del area de dos filas eran ~110 px. Con tres filas hay DOS
         # separaciones en vez de una, y la fraccion se cobra en las dos: mantener 0.14 se
-        # llevaba 336 px de las filas. 0.092 sobre los 1.202 px del area nueva vuelve a dar
-        # los mismos ~110 px por separacion, que es lo que el texto necesita.
-        horizontal_spacing=0.075, vertical_spacing=0.092,
+        # llevaba 336 px de las filas.
+        #
+        # Los ~110 px de antes ya NO alcanzan, y esta medido en el navegador: la fila 2
+        # cuelga 208 nombres de circuito ROTADOS bajo su area, y debajo van su rotulo de
+        # eje y el titulo de DOS lineas de la fila 3. Con 110 px el rotulo del eje
+        # terminaba en y=1123 y el titulo empezaba en y=1124 -- un pixel, que no es
+        # traslape pero se lee como un solo bloque. 135 px dejan el aire que el texto
+        # pide. La fraccion se cobra igual en la primera separacion, donde sobra: la fila
+        # 1 tiene marcas numericas, no nombres rotados.
+        horizontal_spacing=0.075, vertical_spacing=0.108,
         specs=[
             [{}, {}, {}],
             [{}, {'colspan': 2}, None],
@@ -1105,9 +1112,9 @@ def construir(*, raiz=None, ruta_html=None, abrir: bool = False) -> Path:
         # tres filas le daba 305 px a las dos hileras de circuitos juntas y sus nombres
         # rotados se pisaban. La cuenta es la misma de arriba, con una separacion mas:
         #   filas = 373 (f1) + 304 (f2) + 304 (f3)                        =  981
-        #   area  = 981 + 2 x 110 (DOS separaciones, texto que no encoge) = 1.201
-        #   height = 1.201 + 200 (margenes t=140 + b=60)                  = 1.402
-        height=1402, template='plotly_white', bargap=0.45, violingap=0.3,
+        #   area  = 981 + 2 x 135 (DOS separaciones, texto que no encoge) = 1.251
+        #   height = 1.251 + 200 (margenes t=140 + b=60)                  = 1.451
+        height=1451, template='plotly_white', bargap=0.45, violingap=0.3,
     )
     fig_vano.update_xaxes(title_text='Número de eventos por vano', row=1, col=2)
     fig_vano.update_yaxes(title_text='UITI acumulado por vano', row=1, col=2)

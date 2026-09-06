@@ -617,12 +617,31 @@ descargan a una hoja de cálculo. Sobre la ventana de referencia, el reparto es 
 en Bajo ($15{,}3$\,\%), 11.449 en Medio ($41{,}8$\,\%), 10.314 en Medio-Alto ($37{,}7$\,\%) y
 1.438 en Alto ($5{,}3$\,\%).
 
+La parte inferior del tablero lleva \textbf{dos hileras con los mismos 208 circuitos en orden
+distinto}, y esa diferencia es el aporte de la pareja. La primera los ordena por número de
+vanos en las clases Medio-Alto y Alto: responde cuánto \emph{trabajo} concentra cada circuito,
+y es la que define su banda de riesgo. La segunda los ordena por el \textbf{porcentaje del UITI
+acumulado} que se lleva cada uno dentro de la ventana seleccionada, de menor a mayor: responde
+dónde está el \emph{impacto}.
+
+Las dos preguntas se parecen y no son la misma. Un circuito puede presentar muchos vanos
+críticos con el daño repartido y leve, mientras otro concentra una porción alta del UITI en
+unos pocos vanos. La distinción es operativa, porque la primera lectura dimensiona la
+intervención y la segunda la prioriza. Para que la discrepancia se vea de un vistazo, las
+barras de la segunda hilera se colorean con la banda de riesgo que le asignó la primera: una
+barra alta pintada con un color de banda baja es exactamente un circuito que concentra impacto
+sin acumular vanos críticos. El denominador es el UITI de la ventana elegida y no un total fijo
+del periodo, de modo que las barras suman $100$\,\% sea cual sea el rango; sobre la ventana de
+referencia, los diez circuitos de la derecha concentran el $29{,}1$\,\% del UITI.
+
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.94\textwidth]{figures/cuadernos/tablero_agrupamiento.png}
 \caption{Agrupamiento de vanos por criticidad: 27.390 vanos con eventos entre noviembre de
 2025 y abril de 2026, agrupados mediante $K$-medias con $k=4$ sobre el plano UITI acumulado
-contra número de eventos.}
+contra número de eventos. Las dos hileras inferiores recorren los mismos 208 circuitos en
+orden distinto: por vanos en clase Medio-Alto y Alto, y por porcentaje del UITI acumulado de
+la ventana.}
 \label{fig:agrupamiento}
 \end{figure}
 

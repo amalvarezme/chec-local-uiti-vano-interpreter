@@ -154,6 +154,7 @@ ya aplicados.
 | 26 | Tokens, modelo y tiempos solo al pie de la primera página, dentro de «¿Cómo se construyó este informe?» | Aplicado | Salen del subtítulo, que los ponía encima del nombre del circuito: lo primero que se leía eran cifras de consumo de un modelo. Son datos de la CORRIDA, no del circuito. La sección se dibuja ahora aunque no haya desglose por etapa, porque si no esos tres datos desaparecían con ella |
 | 27 | «Tiempo total de ejecución» que salga de la suma de etapas | Aplicado | Sale del reloj de pared de las etapas con su barrera — `max(historical, inference) + expert-alignment` —, no de la marca del `run_dir`. Ese medía hasta el momento del render, así que **cada re-render lo inflaba**: una corrida de doce minutos leía «4h 45m» tras cuatro repintados el mismo día. Sin desglose se cae al reloj del `run_dir`, que es peor medida pero es una medida |
 | 28 | En la tabla final: «¿Qué hace?» y «Tiempo [min]» | Aplicado | La primera es una pregunta y lleva sus dos signos. La segunda declara la unidad: las celdas van en mm:ss y un «5:38» sin unidad se puede leer como cinco horas |
+| 29 | Pantallazo y explicación actualizados del tablero de agrupamiento, en la página web y en el informe técnico | Aplicado | Captura nueva del tablero con la tercera fila, tomada con Chrome sin interfaz sobre el panel servido por HTTP, comprobando antes que la fila lleva sus 208 barras. El informe técnico copia la imagen del sitio, como manda `figures/FUENTES.md`. Ver §7 |
 
 ## 5. Por qué las variables de clima salían sin nombre
 
@@ -196,3 +197,40 @@ una ventana que gana dos recibe solo el primero — y entonces el informe estudi
 ventanas, que es el resultado correcto y no la misma repetida. Una ventana estudiada que
 no encaja en ningún criterio (una corrida anterior, otra selección) se marca sin
 adjudicarle un motivo falso.
+
+
+## 7. El hueco de un píxel entre la fila 2 y la fila 3
+
+Al capturar el pantallazo se midieron en el navegador las cajas de los dos textos que se
+tocan en la costura de las dos hileras de circuitos:
+
+| Texto | Arriba | Abajo |
+|---|---|---|
+| Rótulo de eje de la fila 2 (`Circuitos ordenados por vanos…`) | 1106 | **1123** |
+| Título de la fila 3 (`Reparto del UITI acumulado…`, dos líneas) | **1124** | 1156 |
+
+**Un píxel de separación.** No es traslape, pero se lee como un solo bloque, que es
+exactamente contra lo que avisa el comentario que ya estaba en el código («a 55 px se
+pisaban»). La causa: la fila 2 cuelga 208 nombres de circuito rotados bajo su área, y
+debajo van su rótulo de eje y un título de dos líneas.
+
+La separación vertical sube de `0.092` a `0.108` y el alto de 1.402 a 1.451 px, lo que
+lleva cada hueco de ~110 a ~135 px. Vuelto a medir: **26 px**. La fracción se cobra igual
+en la primera separación, donde sobra, porque la fila 1 tiene marcas numéricas y no
+nombres rotados.
+
+## 8. Cuatro palabras que la guarda de tildes no veía
+
+El agente de inferencia reportó seis palabras que había tenido que acentuar a mano pese al
+`exit 0` del validador. Comprobadas una a una contra `ortografia.SIEMPRE_CON_TILDE`:
+
+| Palabra | Veredicto |
+|---|---|
+| `composicion`, `exposicion`, `aparicion`, `justificacion` | **Hueco real.** No existe la forma sin tilde; faltaban del diccionario |
+| `criticas`, `mas`, `pronostico` | **Ambiguas a propósito.** «tú criticas», «mas» = pero, «yo pronostico». La política declarada del módulo es reportar y no decidir |
+
+Un barrido ingenuo sobre las salidas de la corrida propuso además diez palabras en
+`-cion`/`-sion`; nueve eran **falsos positivos**: los plurales (`condiciones`,
+`relaciones`, `secciones`, `intervenciones`, `limitaciones`, `observaciones`,
+`sobretensiones`) son llanas acabadas en `-s` y no llevan tilde. Añadirlas habría puesto a
+la guarda a exigir una falta de ortografía.

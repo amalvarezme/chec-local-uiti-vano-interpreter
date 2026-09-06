@@ -492,8 +492,8 @@ const cronograma = [
         <article class="tablero-card" id="tablero-agrupamiento">
           <h3>Agrupamiento de vanos</h3>
           <figure class="shot">
-            <img src={tableroAgrupamiento.src} alt="Tablero de agrupamiento de vanos con los cuatro grupos de criticidad y el ranking de circuitos" loading="lazy" />
-            <figcaption><strong>Figura 2. Agrupamiento de vanos por criticidad.</strong> 27.390 vanos con eventos entre noviembre de 2025 y abril de 2026, agrupados mediante <code>k-means</code> con k = 4.</figcaption>
+            <img src={tableroAgrupamiento.src} alt="Tablero de agrupamiento de vanos: los cuatro grupos de criticidad, la clasificación de los 208 circuitos por vanos críticos y el reparto del UITI acumulado por circuito" loading="lazy" />
+            <figcaption><strong>Figura 2. Agrupamiento de vanos por criticidad.</strong> 27.390 vanos con eventos entre noviembre de 2025 y abril de 2026, agrupados mediante <code>k-means</code> con k = 4. Las dos hileras inferiores llevan los mismos 208 circuitos en orden distinto: por vanos críticos y por porcentaje de UITI.</figcaption>
           </figure>
           <ul class="func-list">
             <li><strong>k-means (k = 4) sobre el par (UITI acumulado, número de eventos)</strong> de cada vano. Los grupos se <em>nombran</em> según el orden de la mediana del UITI —Bajo, Medio, Medio-Alto, Alto—, nunca según el índice que devuelve el algoritmo.</li>
@@ -501,6 +501,7 @@ const cronograma = [
             <li><strong>Reparto por grupo y distribución del UITI</strong>: 4.189 Bajo (15,3 %), 11.449 Medio (41,8 %), 10.314 Medio-Alto (37,7 %) y 1.438 Alto (5,3 %).</li>
             <li><strong>10 circuitos con mayor porcentaje de vanos</strong> en Medio-Alto + Alto.</li>
             <li><strong>Clasificación de los 208 circuitos</strong> por número de vanos Medio-Alto + Alto, que define el grupo de criticidad del circuito y constituye el insumo del modelo predictivo.</li>
+            <li><strong>Reparto del UITI acumulado por circuito</strong>, en porcentaje del total de la ventana y de menor a mayor. Es una lectura distinta de la anterior, no un reordenamiento: la hilera de arriba cuenta cuántos vanos críticos hay —cuánto <em>trabajo</em>— y esta dice qué porción del impacto se lleva cada circuito. Un circuito puede tener muchos vanos críticos con el daño repartido y leve, y otro concentrar una porción grande del UITI en unos pocos vanos. Las barras se colorean con la banda de riesgo de la hilera de arriba, de modo que una barra alta en color bajo delata precisamente esa discrepancia. Sobre la ventana de referencia, los diez circuitos de la derecha concentran el 29,1 % del UITI.</li>
           </ul>
         </article>
 
