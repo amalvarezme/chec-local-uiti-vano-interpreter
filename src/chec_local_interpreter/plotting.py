@@ -1715,6 +1715,19 @@ def render_llm_analysis(
     period_str = f"{start_date or 'Inicio'} a {end_date or 'Fin'}"
     title_str = f"Reporte Criticidad - Circuito: {primary_circuit}"
 
+    # La linea de tiempo se arma ANTES del resumen porque su reloj de pared es el que
+    # el resumen publica. `_armar_horario` ya compone las etapas con la barrera --
+    # max(historical, inference) + expert-alignment --, que es el unico numero estable:
+    # el de `elapsed_seconds` mide desde que se creo el `run_dir` hasta este render, asi
+    # que cada repintado lo infla (una corrida de doce minutos leia "4h 45m" tras cuatro
+    # renders del mismo dia).
+    linea_agentes = linea_desde_desglose(
+        stage_breakdown,
+        circuito=primary_circuit,
+        fecha_inicio=start_date,
+        fecha_fin=end_date,
+    )
+
     # Adjust subtitle if no LLM data is present
     model_display = f"{llm_provider} ({llm_model})" if llm_model and llm_model != "Desconocido" else llm_provider
     # El encabezado se queda SOLO con el periodo. El modelo, los tokens y el reloj son
@@ -1760,7 +1773,13 @@ def render_llm_analysis(
                 )
             else:
                 resumen_corrida["tokens_total"] = "Uso total de tokens: no disponible"
-            time_str = _format_elapsed_seconds(elapsed_seconds) if elapsed_seconds is not None else "N/D"
+            # Sin etapas no hay nada que componer y se cae al reloj del `run_dir`: es
+            # peor medida -- la infla cada re-render -- pero es una medida, y callarla
+            # perderia el dato.
+            reloj_etapas = float(linea_agentes.get("reloj_de_pared_segundos") or 0.0)
+            segundos = reloj_etapas if linea_agentes.get("etapas") else elapsed_seconds
+            time_str = (_format_elapsed_seconds(segundos)
+                        if segundos is not None else "N/D")
             resumen_corrida["tiempo"] = f"Tiempo total de ejecución: {time_str}"
         # El desglose por etapa YA NO va aqui. Vivia en el subtitulo como una
         # tabla gris de 0.8em -- tres filas de numeros donde nada decia que dos
@@ -1780,15 +1799,7 @@ def render_llm_analysis(
     # pestaña del informe y no debajo del contenedor de pestañas: ahi quedaba visible
     # tambien bajo "Comparación con reportes expertos", donde el reloj de la corrida no
     # explica nada -- esa pestaña se lee contra los PDF de los expertos.
-    seccion_agentes = seccion_agentes_html(
-        linea_desde_desglose(
-            stage_breakdown,
-            circuito=primary_circuit,
-            fecha_inicio=start_date,
-            fecha_fin=end_date,
-        ),
-        resumen=resumen_corrida,
-    )
+    seccion_agentes = seccion_agentes_html(linea_agentes, resumen=resumen_corrida)
 
     pie_html = pie_agentes_html()
 

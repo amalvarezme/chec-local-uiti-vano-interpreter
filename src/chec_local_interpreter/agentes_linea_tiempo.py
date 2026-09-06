@@ -627,8 +627,10 @@ def seccion_agentes_html(
         "</div>"
         '<table style="width:100%;border-collapse:collapse;font-size:0.9em;margin-top:14px;">'
         '<tr style="color:#64748b;text-align:left;border-bottom:1px solid #e2e8f0;">'
-        "<th>Agente</th><th>Qué hace</th>"
-        '<th style="text-align:right;">Tiempo</th>'
+        "<th>Agente</th><th>¿Qué hace?</th>"
+        # La unidad va en la cabecera: las celdas son mm:ss, y un "5:38" sin unidad se
+        # puede leer como cinco horas y treinta y ocho minutos.
+        '<th style="text-align:right;">Tiempo [min]</th>'
         '<th style="text-align:right;">Tokens</th></tr>'
         f"{filas}</table>"
         f'<p style="margin:14px 0 0;font-size:0.88em;color:#475569;">{explicacion}'

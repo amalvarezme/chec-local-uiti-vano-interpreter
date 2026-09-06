@@ -458,7 +458,11 @@ def test_header_shows_per_stage_rows_when_every_stage_is_measured(tmp_path):
 
     # La linea de totales de toda la corrida se conserva, no se reemplaza.
     assert "Tokens totales (todas las etapas, incl. sub-agentes/corridas en paralelo) medidos: 5,000" in html
-    assert "Tiempo total de ejecución: 12m 33s" in html
+    # El tiempo sale de las ETAPAS con su barrera -- max(77,4; 123,1) + 65,0 = 188,1 s --
+    # y no de `elapsed_seconds=753`, que mide desde que nacio el `run_dir` hasta este
+    # render y crece con cada repintado.
+    assert "Tiempo total de ejecución: 3m 8s" in html
+    assert "12m 33s" not in html
 
 
 def test_como_se_construyo_vive_dentro_de_la_pestana_del_informe(tmp_path):
@@ -570,6 +574,63 @@ def test_la_seccion_de_construccion_recoge_modelo_tokens_y_tiempo(tmp_path):
     assert "Modelo" in seccion
     assert "Tokens totales" in seccion
     assert "Tiempo total de ejecución" in seccion
+
+
+def test_el_tiempo_total_sale_de_las_etapas_y_no_del_reloj_del_run_dir(tmp_path):
+    """El reloj del `run_dir` mide desde que se creo la carpeta hasta que se renderiza.
+
+    Eso incluye todo lo que paso en medio -- y, sobre todo, CADA re-render: una corrida
+    de doce minutos leia "4h 45m" despues de repintarla cuatro veces en el dia. El numero
+    se infla sin que cambie nada de la corrida, que es la definicion de una medida que no
+    se puede usar.
+
+    Las duraciones por etapa si son estables, y su composicion con la barrera de
+    paralelismo -- max(historical, inference) + expert-alignment -- es el reloj de pared
+    de los agentes. Aqui: max(100, 200) + 50 = 250 s.
+    """
+    html = _render_with_stage_breakdown(
+        tmp_path,
+        stage_breakdown=[
+            {"stage": "historical", "tokens_total": 1, "token_source": "measured",
+             "duration_seconds": 100.0, "duration_source": "measured"},
+            {"stage": "inference", "tokens_total": 1, "token_source": "measured",
+             "duration_seconds": 200.0, "duration_source": "measured"},
+            {"stage": "expert-alignment", "tokens_total": 1, "token_source": "measured",
+             "duration_seconds": 50.0, "duration_source": "measured"},
+        ],
+        token_source="measured",
+    )
+
+    assert "Tiempo total de ejecución: 4m 10s" in html
+    # El del run_dir es OTRO numero y no puede colarse.
+    assert "4h 45m" not in html
+
+
+def test_no_es_la_suma_de_las_tres_etapas(tmp_path):
+    """Sumarlas daria 350 s y afirmaria que las tres corrieron una detras de otra. Dos
+    van a la vez, y ese es justamente el hecho que la figura existe para contar."""
+    html = _render_with_stage_breakdown(
+        tmp_path,
+        stage_breakdown=[
+            {"stage": "historical", "tokens_total": 1, "token_source": "measured",
+             "duration_seconds": 100.0, "duration_source": "measured"},
+            {"stage": "inference", "tokens_total": 1, "token_source": "measured",
+             "duration_seconds": 200.0, "duration_source": "measured"},
+            {"stage": "expert-alignment", "tokens_total": 1, "token_source": "measured",
+             "duration_seconds": 50.0, "duration_source": "measured"},
+        ],
+        token_source="measured",
+    )
+
+    assert "Tiempo total de ejecución: 5m 50s" not in html
+
+
+def test_sin_desglose_el_tiempo_cae_al_reloj_del_run_dir(tmp_path):
+    """Sin etapas no hay nada que componer, y el reloj del `run_dir` es lo unico que
+    queda. Es peor medida, pero es una medida; callarla seria perder el dato."""
+    html = _render_with_totals(tmp_path, tokens_total=5000, elapsed_seconds=753)
+
+    assert "Tiempo total de ejecución: 12m 33s" in html
 
 
 def test_sin_desglose_por_etapa_el_resumen_sigue_apareciendo(tmp_path):

@@ -332,6 +332,30 @@ def test_el_adaptador_ignora_una_etapa_desconocida() -> None:
 
 # --------------------------------------------------------------------------
 # seccion_agentes_html -- el bloque que se inserta en el informe de circuito
+
+
+def test_la_cabecera_de_la_tabla_pregunta_y_declara_su_unidad():
+    """Dos cosas distintas en la misma fila de encabezados.
+
+    «Qué hace» es una pregunta y va con sus dos signos, igual que los demas encabezados
+    del informe. Y «Tiempo» no dice en que se mide: las celdas van en mm:ss, y sin unidad
+    un «5:38» se puede leer como cinco horas y treinta y ocho minutos.
+    """
+    from chec_local_interpreter.agentes_linea_tiempo import linea_desde_desglose
+
+    linea = linea_desde_desglose([
+        {"stage": "historical", "tokens_total": 10, "token_source": "measured",
+         "duration_seconds": 60.0, "duration_source": "measured"},
+    ])
+
+    from chec_local_interpreter.agentes_linea_tiempo import seccion_agentes_html
+
+    html = seccion_agentes_html(linea)
+
+    assert "<th>¿Qué hace?</th>" in html
+    assert "Tiempo [min]" in html
+    assert "<th>Qué hace</th>" not in html
+
 # --------------------------------------------------------------------------
 
 

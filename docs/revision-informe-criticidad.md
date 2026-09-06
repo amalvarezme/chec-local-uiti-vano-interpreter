@@ -152,6 +152,8 @@ ya aplicados.
 | 24 | «Cómo se construyó este informe» entre `¿ ?` | Aplicado | Igual que el 19. Se cambió también el mismo título en el informe gerencial, para que los dos productos no digan la misma frase de dos maneras |
 | 25 | «cómo está el circuito hoy» entre `¿ ?` | Aplicado | Es la pregunta que contesta la ventana más reciente, y va detrás de los dos puntos en la columna del porqué: `La última con eventos: ¿cómo está el circuito hoy?` |
 | 26 | Tokens, modelo y tiempos solo al pie de la primera página, dentro de «¿Cómo se construyó este informe?» | Aplicado | Salen del subtítulo, que los ponía encima del nombre del circuito: lo primero que se leía eran cifras de consumo de un modelo. Son datos de la CORRIDA, no del circuito. La sección se dibuja ahora aunque no haya desglose por etapa, porque si no esos tres datos desaparecían con ella |
+| 27 | «Tiempo total de ejecución» que salga de la suma de etapas | Aplicado | Sale del reloj de pared de las etapas con su barrera — `max(historical, inference) + expert-alignment` —, no de la marca del `run_dir`. Ese medía hasta el momento del render, así que **cada re-render lo inflaba**: una corrida de doce minutos leía «4h 45m» tras cuatro repintados el mismo día. Sin desglose se cae al reloj del `run_dir`, que es peor medida pero es una medida |
+| 28 | En la tabla final: «¿Qué hace?» y «Tiempo [min]» | Aplicado | La primera es una pregunta y lleva sus dos signos. La segunda declara la unidad: las celdas van en mm:ss y un «5:38» sin unidad se puede leer como cinco horas |
 
 ## 5. Por qué las variables de clima salían sin nombre
 
